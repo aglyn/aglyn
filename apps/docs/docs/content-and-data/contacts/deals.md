@@ -25,18 +25,39 @@ flowchart LR
   N --> L[Lost]
 ```
 
-## The pipeline and its stages
+## Pipelines
 
 Every workspace starts with one pipeline, **Sales**, and a default set of
 stages: *Qualified*, *Contact made*, *Proposal sent*, *Negotiation*, then
 *Won* and *Lost*. The pipeline is created the first time somebody opens the
 Deals section, so there is nothing to set up before the first deal.
 
+A business that sells more than one way — new accounts and renewals, retail
+and wholesale — can run more than one pipeline, each with its own stages and
+its own board. Open **Pipelines** on the Deals section to:
+
+- **Create** a pipeline. Give it a name; it starts with the default stages,
+  which you can then edit. Names are unique among the active pipelines.
+- **Rename** a pipeline.
+- **Set as default**. New deals land in the default pipeline unless the New
+  deal drawer picks another; there is always exactly one default.
+- **Archive** a pipeline that holds no open deal. The default pipeline and the
+  last active one cannot be archived; close or move the open deals first. An
+  archived pipeline is never deleted — the deals it closed still show their
+  stages — and can be **restored** later.
+- **Edit stages** of a pipeline (below).
+
+When there is more than one active pipeline, a **pipeline switcher** appears
+in the section header. The board, the table, the three figures above them
+and the New deal drawer all follow it.
+
+### Stages
+
 Each stage carries a **probability** — the chance a deal in that stage closes —
 which is what the weighted forecast multiplies by. Won is always 100%, Lost is
 always 0%, and the stages in between are yours to set.
 
-Open **Stages** on the Deals section to:
+**Edit stages** on a pipeline lets you:
 
 - **Rename** a stage or change its probability.
 - **Reorder** the open stages with the up and down arrows.
@@ -48,8 +69,8 @@ Open **Stages** on the Deals section to:
 
 ## The board and the table
 
-The section opens as a **board**: one column per open stage, with Won and Lost
-folded away at the end until you expand them. Each card shows the deal's title,
+The section opens as a **board** of the chosen pipeline: one column per open
+stage, with Won and Lost folded away at the end until you expand them. Each card shows the deal's title,
 amount, the contact and company it is with, its owner, and how many days it has
 sat in its current stage. **Drag a card** between columns to move it, or use the
 card's menu to move it, mark it won, or mark it lost from the keyboard.
@@ -59,7 +80,8 @@ Above the board, three figures summarize what is open: the **open count**, the
 value** (each amount multiplied by its stage's probability).
 
 Switch to the **table** for a paged list with the title, stage, amount, owner,
-expected close date and status of every deal, including the closed ones.
+expected close date and status of every deal in the pipeline, including the
+closed ones.
 
 ## Creating a deal
 
@@ -68,8 +90,8 @@ optional:
 
 | Field | What it is |
 | --- | --- |
-| **Pipeline and stage** | Where the deal starts. Defaults to the first open stage of the default pipeline. |
-| **Amount and currency** | What the deal is worth. Currency defaults to US dollars; the amount is stored in minor units, so `1,250.00` is exact. |
+| **Pipeline and stage** | Where the deal starts. The pipeline list holds every active pipeline and opens on the one the board is showing; the stage defaults to its first open stage. |
+| **Amount and currency** | What the deal is worth. Currency defaults to US dollars; the amount is stored in minor units, so `1,250.00` is exact. On a deal with [line items](#line-items) the amount is their sum and is read-only here. |
 | **Expected close** | The date you expect to close it — what a forecast by month reads. |
 | **Owner** | The teammate responsible. Picked from your workspace's members. |
 | **Contact** | The person the deal is with, searched by name or email from your contacts. |
@@ -78,6 +100,31 @@ optional:
 
 A deal is visible to the same sites as a contact captured on this site would
 be, so a site that cannot see the person cannot see the deal.
+
+## Line items
+
+A deal's amount can be a number you type, or the sum of the **products**
+behind it. The **Products** card on a deal's page lists its line items — each
+a name, a quantity and a unit amount in the deal's currency — and **Add line**
+opens a dialog with two doors:
+
+- **From the catalog** searches this site's active products by name and offers
+  each variant at its catalog price. Catalog prices are in US dollars; on a
+  deal in another currency the dialog says so, and the unit amount can be
+  edited before the line is added.
+- **By hand** takes a name and a price with no product behind them. A plan
+  without commerce has no catalog to search, so this is the only door it
+  shows.
+
+Once a deal has a line item, its **amount is the lines' sum**: the Amount field
+in the Edit drawer turns read-only with a caption saying so, and every change
+to the lines — a quantity edited in place, a line removed — writes the new sum
+with it. Remove the last line and the amount is yours to type again, starting
+from the last sum. A deal carries at most fifty lines, all in the deal's
+currency.
+
+Line items travel over the [REST API](/api/resources/deals) as `lineItems`,
+with the same rules.
 
 ## Moving, winning and losing
 
@@ -107,6 +154,8 @@ Opening a deal shows:
   buttons and, on a closed deal, the way to reopen it.
 - **Properties** — the amount and its weighted value, the expected close, the
   owner, links to the contact and the company, and the notes.
+- **Products** — the [line items](#line-items) behind the amount, with the
+  door to add one from the catalog or by hand.
 - **Tasks** and **Activity** — what is owed on this deal and what has happened
   on it.
 
