@@ -79,7 +79,7 @@ const dayLabel = (raw: string): string => {
  * The chips above a CRM list: every clause the list is narrowed by, and
  * the one control that adds another (AGL-2617).
  *
- * A saved view carries several clauses and the community data grid's panel
+ * A saved view carries several clauses and the data grid's own filter panel
  * holds one, so the list needs an editor of its own for the set. Each
  * clause is a chip that reads as a sentence — "Owner is Dana", "Created on
  * or after 1 Jan" — with the clause the query serves marked, because that

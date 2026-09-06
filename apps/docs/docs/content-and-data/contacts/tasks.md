@@ -1,7 +1,7 @@
 ---
 sidebar_position: 10
 title: Tasks & follow-ups
-description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — with overdue and today read off the clock as you look, a snooze, and a morning digest of what is owed.
+description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, and a morning digest of what is owed.
 ---
 
 # Tasks & follow-ups

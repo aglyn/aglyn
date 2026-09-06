@@ -491,15 +491,22 @@ export function matchListFilter(
   if (!raw) return true
 
   /*
-   * An ARRAY is matched by whole member, never by substring of its joined
-   * form. A tag array asked `contains vip` holds the tag `vip` or it does
-   * not — `vip-gold` is a different tag, and the query's `array-contains`
-   * says so too, so the in-memory answer and the served answer agree. An id
-   * array keeps its case (`verbatimTokens`); a word array is folded the way
-   * its writer folded it. `isAnyOf` is any member in the asked list, which
-   * is what a saved segment's "any of these tags" becomes as a view clause.
+   * An array the QUERY serves whole is matched by whole member, never by
+   * substring of its joined form. A tag array asked `contains vip` holds the
+   * tag `vip` or it does not — `vip-gold` is a different tag, and the
+   * query's `array-contains` says so too, so the in-memory answer and the
+   * served answer agree. An id array keeps its case (`verbatimTokens`); a
+   * word array is folded the way its writer folded it. `isAnyOf` is any
+   * member in the asked list, which is what a saved segment's "any of these
+   * tags" becomes as a view clause. A presence map's keys are members too.
+   *
+   * A plain array with no token path is served by nothing, so there is no
+   * query to agree with, and it falls through to the scalar match over its
+   * joined text — the staff account list's providers, where `contains
+   * google` finding `google.com` is the mid-string answer that list
+   * documents (`operators`).
    */
-  if (Array.isArray(value)) {
+  if (Array.isArray(value) && (field.tokensPath || field.keysOf)) {
     const fold = (entry: unknown) =>
       field.verbatimTokens ? String(entry) : String(entry).toLowerCase()
     const members = value.map(fold)

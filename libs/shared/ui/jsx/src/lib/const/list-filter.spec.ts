@@ -122,6 +122,29 @@ describe('an array is matched by whole member', () => {
     ).toBe(true)
   })
 
+  it('a plain array the query never serves is matched as its joined text', () => {
+    // The staff account list's providers: no token path, so no
+    // `array-contains` to agree with, and `contains google` finding
+    // `google.com` is the mid-string answer that list documents.
+    const PLAIN: readonly ListFilterField[] = [
+      { column: 'providers', kind: 'text', path: 'providers' },
+    ]
+    expect(
+      matchListFilter({ providers: ['google.com', 'password'] }, PLAIN, {
+        field: 'providers',
+        op: 'contains',
+        value: 'google',
+      }),
+    ).toBe(true)
+    expect(
+      matchListFilter({ providers: ['password'] }, PLAIN, {
+        field: 'providers',
+        op: 'doesNotContain',
+        value: 'google',
+      }),
+    ).toBe(true)
+  })
+
   it('a presence map is matched on its truthy keys', () => {
     expect(
       matchListFilter(contact, VIEW_FIELDS, { field: 'source', op: 'equals', value: 'form' }),

@@ -686,7 +686,7 @@ export const DOCS_HELP_TOPICS = {
   tasks: {
     path: '/content-and-data/contacts/tasks',
     title: 'Tasks & follow-ups',
-    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — with overdue and today read off the clock as you look, a snooze, and a morning digest of what is owed.',
+    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, and a morning digest of what is owed.',
   },
   team: {
     path: '/workspace-and-billing/teams-and-roles/overview',
