@@ -34,6 +34,7 @@ import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import { DEAL_STATUS_LABELS, formatMoney } from '../model/deal-board-model'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { RecordActivityCard } from './record-activity-card'
+import { CrmSendEmailButton } from './crm-send-email-button'
 import { DealEditDrawer } from './deal-edit-drawer'
 import { DealPropertiesCard } from './deal-properties-card'
 import { DealStageCard } from './deal-stage-card'
@@ -120,14 +121,23 @@ export function DealDetailPage(props: CrmDetailPageProps) {
           loading={!deal && !notFound}
           actions={
             deal ? (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
-                onClick={() => setEditing(true)}
-              >
-                {'Edit'}
-              </Button>
+              <>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
+                  onClick={() => setEditing(true)}
+                >
+                  {'Edit'}
+                </Button>
+                <CrmSendEmailButton
+                  hostId={hostId}
+                  org={org}
+                  dealId={deal.$id}
+                  contactId={deal.contactId}
+                  name={deal.contactName}
+                />
+              </>
             ) : null
           }
           menuItems={

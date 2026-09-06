@@ -179,6 +179,17 @@ export function ActivityRow(props: ActivityRowProps) {
     Aglyn.CRM_ACTIVITY_KIND_LABELS[
       Aglyn.isCrmActivityKind(activity.kind) ? activity.kind : 'other'
     ]
+  /*
+   * A message the platform SENT (AGL-2615) carries a subject, an address
+   * and a delivery state the webhook advances; the state is the chip beside
+   * the kind, red once the message did not land. What was sent is a record
+   * of a fact and offers no edit — a rewritten body would misstate what
+   * left — though whoever may delete a row may still delete this one.
+   */
+  const sent = activity.direction === 'outbound'
+  const deliveryState = Aglyn.isCrmEmailDeliveryState(activity.deliveryState)
+    ? activity.deliveryState
+    : null
   const when = new Date(activity.atMs)
   const detail = [
     activity.outcome ? activity.outcome : null,
@@ -205,6 +216,23 @@ export function ActivityRow(props: ActivityRowProps) {
           sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
         >
           <Chip label={label} size="small" />
+          {deliveryState ? (
+            <Tooltip
+              title={
+                typeof activity.deliveryAtMs === 'number'
+                  ? new Date(activity.deliveryAtMs).toLocaleString()
+                  : ''
+              }
+            >
+              <Chip
+                label={Aglyn.CRM_EMAIL_DELIVERY_STATE_LABELS[deliveryState]}
+                size="small"
+                variant="outlined"
+                color={Aglyn.isCrmEmailDeliveryFailure(deliveryState) ? 'error' : 'default'}
+                data-testid="activity-delivery-state"
+              />
+            </Tooltip>
+          ) : null}
           {subject}
           {detail.length ? (
             <Typography variant="caption" color="text.secondary">
@@ -212,6 +240,9 @@ export function ActivityRow(props: ActivityRowProps) {
             </Typography>
           ) : null}
         </Stack>
+        {activity.subject ? (
+          <Typography variant="subtitle2">{activity.subject}</Typography>
+        ) : null}
         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
           {activity.body}
         </Typography>
@@ -221,16 +252,19 @@ export function ActivityRow(props: ActivityRowProps) {
             color="text.secondary"
             sx={{ alignSelf: 'flex-start' }}
           >
-            {`${authorName(activity)} · ${Aglyn.activityTimeLabel(
-              activity.atMs,
-              nowMs ?? Date.now(),
-            )}`}
+            {[
+              authorName(activity),
+              sent && activity.to ? `to ${activity.to}` : null,
+              Aglyn.activityTimeLabel(activity.atMs, nowMs ?? Date.now()),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </Typography>
         </Tooltip>
       </Stack>
       {editable ? (
         <Stack direction="row" spacing={0.5}>
-          {onEdit ? (
+          {onEdit && !sent ? (
             <IconButton
               size="small"
               aria-label="Edit activity"

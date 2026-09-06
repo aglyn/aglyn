@@ -331,7 +331,7 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
     <>
       <CardDisplay
         header={'Timeline'}
-        help={pluginDocsHelp('contactActivities', { anchor: '#three-kinds-of-history' })}
+        help={pluginDocsHelp('contactActivities', { anchor: '#four-kinds-of-history' })}
         actions={
           <Button
             size="small"

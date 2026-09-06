@@ -81,6 +81,7 @@ import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealStageHandler } from './server-deal-stage'
+import { crmEmailSendHandler } from './server/email-send'
 import { leadConvertHandler } from './server/lead-convert'
 import {
   CONTACT_EMAIL_HISTORY_ROUTE,
@@ -528,4 +529,8 @@ export function registerCrmConsoleApi(): void {
   // The one READ behind a route (AGL-2616): the per-recipient delivery log
   // is closed to clients, so a contact's campaign mail is projected here.
   registerPluginApiRoute(CONTACT_EMAIL_HISTORY_ROUTE, contactEmailHistoryHandler)
+  // One email to one person from their record (AGL-2615): the recipient is
+  // read off the record, the daily cap and both suppression lists are
+  // judged, and the message leaves on the site's sending identity.
+  registerPluginApiRoute(CRM_API_ROUTES.emailSend, crmEmailSendHandler)
 }

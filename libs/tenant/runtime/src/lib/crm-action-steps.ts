@@ -16,6 +16,7 @@
  */
 
 import {
+  buildCrmEmailActivity,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_TAG_MAX_LENGTH,
   contactFacetPath,
@@ -24,7 +25,9 @@ import {
   crmActivityLogHasRoom,
   type CrmActionStep,
   type CrmActivity,
+  type CrmActivityLink,
   type CrmTask,
+  crmEmailDeliveryTags,
   crmScopeTokens,
   normalizeContactEmail,
   parseCrmMemberRef,
@@ -35,7 +38,9 @@ import {
   consentGroupForSite,
   countCrmActivitiesForRecord,
   firebaseAdmin,
+  newCrmActivityRef,
   orgDataQueryForHost,
+  writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -399,4 +404,119 @@ export async function runCrmActionStep(
   }
 
   return { error: `unknown CRM step "${(step as { type: string }).type}"` }
+}
+
+/**
+ * The activity row a `sendEmail` step's message will be logged as, prepared
+ * BEFORE the send (AGL-2615): the minted reference whose id rides the
+ * message as a tag, the links it files under, and the scope it is stamped
+ * with. `null` when the message earns no row.
+ */
+export interface PreparedCrmEmailActivity {
+  ref: FirebaseFirestore.DocumentReference
+  /** The provider tags the delivery webhook finds the row by. */
+  tags: { name: string; value: string }[]
+  link: CrmActivityLink
+  visibleTo: string[]
+}
+
+/**
+ * Whether — and where — an automation's email lands on a timeline.
+ *
+ * A `sendEmail` step is not a CRM step: it mails whatever address the event
+ * carries, to a person who may be nobody the CRM knows. It earns a row on
+ * exactly one condition, that the message is ADDRESSED TO THE CONTACT the
+ * event is about — the person `resolveEventContact` finds, at the address
+ * the row holds. A welcome sequence to a new contact is that; an internal
+ * alert routed to a merchant's own address through `toField` is not, and a
+ * row for it would put the merchant's inbox on a customer's history.
+ *
+ * Prepared ahead of the send, for the reason the console route mints its
+ * id first: the webhook has nothing but the tags on the message to find
+ * the row with. Nothing is written here. A record at the activity ceiling
+ * earns no row — the message still goes, because the ceiling bounds the
+ * log and not the mail — and neither does a site with no org to hold one.
+ *
+ * **Never throws.** The row is bookkeeping beside a send, and a lookup that
+ * fails must not become a message that never left — the posture every
+ * meter beside `sendEmail` takes. A failure here is logged and the message
+ * goes out untagged.
+ */
+export async function prepareCrmEmailActivity(
+  env: CrmStepEnv,
+  to: string,
+  payload: HostEventPayload,
+): Promise<PreparedCrmEmailActivity | null> {
+  if (!env.orgId) return null
+  const address = normalizeContactEmail(to)
+  if (!address) return null
+  try {
+    const contact = await resolveEventContact(env.hostId, payload)
+    if (!contact || normalizeContactEmail(contact.data['email']) !== address) {
+      return null
+    }
+    const group = await consentGroupForSite(env.hostId)
+    const facet = readContactFacet(contact.data, group.groupId)
+    const link: CrmActivityLink = {
+      contactId: contact.id,
+      ...(facet.companyId ? { companyId: facet.companyId } : {}),
+    }
+    const firestore = firebaseAdmin.app().firestore()
+    const orgRef = firestore.collection('orgs').doc(env.orgId)
+    if (!crmActivityLogHasRoom(await countCrmActivitiesForRecord(orgRef, link))) {
+      return null
+    }
+    const ref = newCrmActivityRef(firestore, env.orgId)
+    return {
+      ref,
+      tags: crmEmailDeliveryTags({
+        orgId: env.orgId,
+        hostId: env.hostId,
+        activityId: ref.id,
+      }),
+      link,
+      visibleTo: crmScopeTokens(
+        (env.org ?? null) as Record<string, unknown> | null,
+        group,
+      ),
+    }
+  } catch (error) {
+    console.error('[crm] automation email activity could not be prepared', env.hostId, error)
+    return null
+  }
+}
+
+/**
+ * Writes the prepared row, once the provider has accepted the message.
+ *
+ * The same shape the console route logs — `buildCrmEmailActivity` is the
+ * one builder — with the automation as its source and nobody as its
+ * author. **Never throws**: the message has left, and a row that could not
+ * be written is a gap on the timeline rather than a failed step.
+ */
+export async function logCrmEmailActivity(
+  env: CrmStepEnv,
+  prepared: PreparedCrmEmailActivity,
+  message: { subject: string; body: string; to: string },
+  actionId: string,
+  nowMs = Date.now(),
+): Promise<void> {
+  try {
+    await writeCrmEmailActivity(
+      prepared.ref,
+      buildCrmEmailActivity({
+        subject: message.subject,
+        body: message.body,
+        to: normalizeContactEmail(message.to) ?? message.to,
+        atMs: nowMs,
+        byUid: '',
+        sourceActionId: actionId,
+        link: prepared.link,
+        hostId: env.hostId,
+        visibleTo: prepared.visibleTo,
+      }),
+    )
+  } catch (error) {
+    console.error('[crm] automation email activity write failed', prepared.ref.id, error)
+  }
 }

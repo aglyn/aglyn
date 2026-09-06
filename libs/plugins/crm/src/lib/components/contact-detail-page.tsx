@@ -45,6 +45,7 @@ import ContactCustomFieldsCard from './contact-custom-fields-card'
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
+import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { RecordTasksCard } from './record-tasks-card'
@@ -274,7 +275,16 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         backLabel="Back to contacts"
         actions={
           record ? (
-            <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
+            <>
+              <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
+              <CrmSendEmailButton
+                hostId={hostId}
+                org={org}
+                contactId={id}
+                email={record.email}
+                name={record.name}
+              />
+            </>
           ) : null
         }
         menuItems={overflowItems}

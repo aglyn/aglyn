@@ -268,6 +268,7 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
             ...(link.contactId ? { contactId: link.contactId } : {}),
             ...(link.companyId ? { companyId: link.companyId } : {}),
             ...(link.dealId ? { dealId: link.dealId } : {}),
+            ...(link.leadId ? { leadId: link.leadId } : {}),
             visibleTo: writeTokens,
             hostId,
             byUid: user.uid,
