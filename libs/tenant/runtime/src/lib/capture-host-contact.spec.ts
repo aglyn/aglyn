@@ -212,6 +212,24 @@ describe('captureHostContact decides who follows a new person up', () => {
     )
   })
 
+  it('announces the form the capture came through (AGL-2626)', async () => {
+    mockCreated = created
+    await capture(undefined, { formId: 'form-1' })
+    expect(emitHostEvent).toHaveBeenCalledWith(
+      'site-1',
+      'contactCreated',
+      expect.objectContaining({ contactId: 'contact-9', formId: 'form-1' }),
+    )
+    emitHostEvent.mockClear()
+    mockCreated = created
+    await capture()
+    expect(emitHostEvent).toHaveBeenCalledWith(
+      'site-1',
+      'contactCreated',
+      expect.not.objectContaining({ formId: expect.anything() }),
+    )
+  })
+
   it('leaves an owner the door named alone', async () => {
     mockCreated = created
     await capture({ ownerUid: 'uid-picked' })
@@ -254,6 +272,18 @@ describe('contactCreatedPayload', () => {
     for (const value of Object.values(payload)) {
       expect(['string', 'number', 'boolean']).toContain(typeof value)
     }
+  })
+  it('carries the form the capture came through, and no key at all when it came through none', () => {
+    const created = {
+      contactId: 'c1',
+      hostId: 'site-1',
+      email: 'ada@example.com',
+      source: 'form' as const,
+      campaignIds: [],
+    }
+    expect(contactCreatedPayload(created, 'form-1')['formId']).toBe('form-1')
+    expect('formId' in contactCreatedPayload(created)).toBe(false)
+    expect('formId' in contactCreatedPayload(created, '  ')).toBe(false)
   })
 })
 

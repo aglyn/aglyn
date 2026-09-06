@@ -104,7 +104,7 @@ export async function captureHostContact(
       await emitHostEvent(
         created.hostId,
         'contactCreated',
-        contactCreatedPayload(created),
+        contactCreatedPayload(created, options.interaction.formId),
       )
     },
   })
@@ -122,10 +122,19 @@ export async function captureHostContact(
  * always present, empty when the door had none, so a condition on either
  * never sees a missing key: `lifecycleStage == "lead"` is the filter that
  * picks the form captures out of the sign-ups (AGL-2612).
+ *
+ * `formId` rides the same way `campaignIds` does — present only when the
+ * capture came through a form — because the created-report carries the
+ * person's identity and not the routing, and the form is routing: it is
+ * read off the interaction the door was handed. Present, it is what lets a
+ * condition say `formId` equals this form and no other (AGL-2626); absent,
+ * `notEmpty` on it reads as "came in through a form".
  */
 export function contactCreatedPayload(
   created: HostContactCreated,
+  formId?: string | null,
 ): HostEventPayload {
+  const form = String(formId ?? '').trim()
   return {
     contactId: created.contactId,
     email: created.email,
@@ -136,6 +145,7 @@ export function contactCreatedPayload(
     ...(created.campaignIds.length
       ? { campaignIds: created.campaignIds.join(',') }
       : {}),
+    ...(form ? { formId: form } : {}),
   }
 }
 
