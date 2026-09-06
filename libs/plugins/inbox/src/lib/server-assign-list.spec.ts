@@ -306,6 +306,22 @@ describe('a stored refusal', () => {
     expect(assignmentRows()).toHaveLength(0)
   })
 
+  it('stands when it was recorded under an address a merge folded in (AGL-2633)', async () => {
+    store[`orgs/${ORG_ID}/contacts/c1`] = {
+      email: 'priya@work.example.com',
+      alternateEmails: [SENDER],
+      marketingConsent: false,
+    }
+    store[`orgs/${ORG_ID}/emailIndex/${personKey(SENDER)}`] = {
+      email: SENDER,
+      contactId: 'c1',
+    }
+    const out = await assign({ attestConsent: true })
+    expect(out.code).toBe(409)
+    expect(out.body.reason).toBe('declined')
+    expect(memberRows()).toHaveLength(0)
+  })
+
   it('is refused when the merchant asserts permission anyway', async () => {
     seedContact({ marketingConsent: false })
     const out = await assign({ attestConsent: true })
@@ -404,6 +420,27 @@ describe('a stored opt-in', () => {
 
   it('enrolls with no assertion, as a pass-through', async () => {
     seedContact(grantedHere(OPTED_IN_AT))
+    const out = await assign()
+    expect(out.code).toBe(200)
+    expect(out.body.basis).toBe('contact-opt-in')
+  })
+
+  /*
+   * The person consented under the address they write from, then their two
+   * records were merged with the work address kept. The consent is the
+   * survivor's now, and the address index is what still connects the
+   * sender's address to it (AGL-2633).
+   */
+  it('is found under an address a merge folded into the record', async () => {
+    store[`orgs/${ORG_ID}/contacts/c1`] = {
+      email: 'priya@work.example.com',
+      alternateEmails: [SENDER],
+      ...grantedHere(OPTED_IN_AT),
+    }
+    store[`orgs/${ORG_ID}/emailIndex/${personKey(SENDER)}`] = {
+      email: SENDER,
+      contactId: 'c1',
+    }
     const out = await assign()
     expect(out.code).toBe(200)
     expect(out.body.basis).toBe('contact-opt-in')
