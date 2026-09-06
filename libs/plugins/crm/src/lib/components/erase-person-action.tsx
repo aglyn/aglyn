@@ -72,6 +72,13 @@ export interface ErasePersonAction {
   banner: ReactNode
   /** The dialog. Render it once, anywhere in the page. */
   dialog: ReactNode
+  /**
+   * When the waiting request was filed, or null while none waits: the
+   * record's marker, or the route's answer until the listener carries the
+   * marker. What a page gates its other acts on — Convert, on a lead — so
+   * they close the moment the item does.
+   */
+  pendingSinceMs: number | null
 }
 
 /**
@@ -137,7 +144,7 @@ export function useErasePersonAction(props: UseErasePersonActionProps): ErasePer
     />
   ) : null
 
-  return { menuItems, banner, dialog }
+  return { menuItems, banner, dialog, pendingSinceMs: pendingSince }
 }
 
 export interface ErasurePendingBannerProps {
