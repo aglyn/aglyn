@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  activityTimeLabel,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_SOURCE_LABELS,
   type ContactSource,
@@ -25,7 +26,7 @@ import {
   hiddenFilterColumns,
   listFilterColumn,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { Chip, Stack, Typography } from '@mui/material'
+import { Chip, Stack, Tooltip, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   CONTACT_LIST_FILTER_FIELDS,
@@ -53,9 +54,25 @@ export const CONTACT_FILTER_COLUMNS = [
   'updatedAt',
 ]
 
+/**
+ * The columns that ship HIDDEN, for the grid's visibility model (AGL-2616).
+ *
+ * "Last engaged" is a fact most lists do not need on screen and every list
+ * can turn on from the column menu; shipping it visible would widen a
+ * table that already carries seven columns for a figure only a marketing
+ * reader scans.
+ */
+export const CONTACT_OPTIONAL_COLUMNS = ['lastEmailEngagementAtMs']
+
 export interface ContactListColumnOptions {
   /** The owner's name for a uid — the roster's, or the uid itself. */
   memberName: (uid: string) => string
+  /**
+   * One clock for every row of one paint, so two contacts engaged a second
+   * apart cannot read "just now" and "1 min ago". Defaults to the paint's
+   * own `Date.now()`.
+   */
+  nowMs?: number
 }
 
 /**
@@ -75,6 +92,7 @@ export function contactListColumns(
   options: ContactListColumnOptions,
 ): GridColDef[] {
   const { memberName } = options
+  const nowMs = options.nowMs ?? Date.now()
   return [
     {
       field: 'name',
@@ -201,6 +219,37 @@ export function contactListColumns(
             : '—'}
         </Typography>
       ),
+    },
+    {
+      /*
+       * When the person last opened or clicked one of this holder's
+       * campaigns (AGL-2616). Off the facet like Owner and Stage, so it can
+       * never show another holder's readers; `filterable: false` for the
+       * same reason theirs are — a facet path is not a query the panel can
+       * make. A date column, so a sort on it orders by the instant and an
+       * export gets a date; the cell prints the relative form the timeline
+       * uses and carries the full stamp in its tooltip.
+       */
+      field: 'lastEmailEngagementAtMs',
+      headerName: 'Last engaged',
+      flex: 0.8,
+      minWidth: 140,
+      type: 'date',
+      filterable: false,
+      valueGetter: (_value, row: ContactRecord) =>
+        row.lastEmailEngagementAtMs ? new Date(row.lastEmailEngagementAtMs) : null,
+      renderCell: ({ row }: { row: ContactRecord }) =>
+        row.lastEmailEngagementAtMs ? (
+          <Tooltip title={new Date(row.lastEmailEngagementAtMs).toLocaleString()}>
+            <Typography variant="caption" color="text.secondary">
+              {activityTimeLabel(row.lastEmailEngagementAtMs, nowMs)}
+            </Typography>
+          </Tooltip>
+        ) : (
+          <Typography variant="caption" color="text.secondary">
+            {'—'}
+          </Typography>
+        ),
     },
     ...hiddenFilterColumns(
       CONTACT_LIST_FILTER_FIELDS,

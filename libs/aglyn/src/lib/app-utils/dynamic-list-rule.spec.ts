@@ -720,6 +720,59 @@ describe('which company the person belongs to', () => {
   })
 })
 
+/*
+ * THE RE-ENGAGEMENT AUDIENCE (AGL-2616): opened or clicked one of THIS
+ * holder's campaigns lately. The facet stamp, not the address-level rollup
+ * the `engagement` block reads — the two answer different questions and a
+ * candidate carrying only the other must not match.
+ */
+describe('engaged with one of our campaigns', () => {
+  const rule = { sources: ['contacts'], engagedWithinDays: 30 }
+
+  it('matches a contact whose stamp is inside the window, and holds at the edge', () => {
+    expect(match({ lastEmailEngagementAtMs: NOW - 10 * DAY }, rule)).toBe(true)
+    expect(match({ lastEmailEngagementAtMs: NOW - 30 * DAY }, rule)).toBe(true)
+    expect(match({ lastEmailEngagementAtMs: NOW - 31 * DAY }, rule)).toBe(false)
+  })
+
+  it('excludes a contact with no stamp, whatever the address-level rollup says', () => {
+    expect(match({}, rule)).toBe(false)
+    expect(match({ lastEmailEngagementAtMs: null }, rule)).toBe(false)
+    // An open of somebody else's mail moved the rollup and not our facet.
+    expect(match({ lastOpenedAtMs: NOW - DAY, lastClickedAtMs: NOW - DAY }, rule)).toBe(false)
+  })
+
+  it('is skipped for a silo that carries no facet', () => {
+    expect(
+      match({ silo: 'leads' }, { sources: ['contacts', 'leads'], engagedWithinDays: 30 }),
+    ).toBe(true)
+  })
+
+  it('is a facet read, so the materializer resolves the holder for it', () => {
+    expect(dynamicListRuleNeedsContactFacet(normalizeDynamicListRule(rule))).toBe(true)
+    expect(
+      dynamicListRuleNeedsContactFacet(
+        normalizeDynamicListRule({ sources: ['contacts'], any: [{ engagedWithinDays: 7 }] }),
+      ),
+    ).toBe(true)
+    // And it is not the address-level lookup: no keyed read per candidate.
+    expect(dynamicListRuleNeedsEngagement(normalizeDynamicListRule(rule))).toBe(false)
+  })
+
+  it('keeps a typed window and drops a blank or negative one', () => {
+    expect(normalizeDynamicListRule({ sources: ['contacts'], engagedWithinDays: '14' })).toMatchObject(
+      { engagedWithinDays: 14 },
+    )
+    expect(
+      normalizeDynamicListRule({ sources: ['contacts'], engagedWithinDays: -1 })
+        .engagedWithinDays,
+    ).toBeUndefined()
+    expect(
+      normalizeDynamicListRule({ sources: ['contacts'] }).engagedWithinDays,
+    ).toBeUndefined()
+  })
+})
+
 describe('a custom field', () => {
   const custom = (key: string, op: string, value?: unknown) => ({
     sources: ['contacts'],

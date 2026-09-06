@@ -77,6 +77,7 @@ const FULL_RULE: DynamicListRule = {
     { key: 'seats', op: 'gt', value: 10 },
     { key: 'churned', op: 'unset' },
   ],
+  engagedWithinDays: 45,
 }
 
 /** Every dimension, named so a dropped one is reported BY NAME. */
@@ -98,6 +99,7 @@ const RULE_FIELDS = [
   'lifecycleStages',
   'companyIds',
   'custom',
+  'engagedWithinDays',
 ] as const
 
 const BEHAVIOR_FIELDS = [
@@ -381,8 +383,9 @@ describe('all, any and none', () => {
       lifecycleStages: ['lead'],
       companyIds: ['co_acme'],
       custom: [{ key: 'plan', op: 'eq', value: 'enterprise' }],
+      engagedWithinDays: '14',
     }
-    expect(draftToRule(everything).any).toHaveLength(20)
+    expect(draftToRule(everything).any).toHaveLength(21)
   })
 
   /*

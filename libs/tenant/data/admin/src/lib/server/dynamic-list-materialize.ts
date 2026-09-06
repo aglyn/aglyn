@@ -235,13 +235,17 @@ function crmFieldsFromFacet(
   groupId: string,
 ): Pick<
   DynamicListCandidate,
-  'ownerUid' | 'lifecycleStage' | 'companyId' | 'custom'
+  'ownerUid' | 'lifecycleStage' | 'companyId' | 'custom' | 'lastEmailEngagementAtMs'
 > {
   const facet = readContactFacet(data, groupId)
   const custom =
     facet.custom && typeof facet.custom === 'object' && !Array.isArray(facet.custom)
       ? (facet.custom as Record<string, ContactCustomValue>)
       : undefined
+  // The campaign engagement stamp (AGL-2616), on the same footing as the
+  // owner: this holder's fact about the person, read out of this holder's
+  // facet, absent when the webhook has never stamped one.
+  const engaged = Number(facet.lastEmailEngagementAtMs ?? 0)
   return {
     ...(typeof facet.ownerUid === 'string' && facet.ownerUid
       ? { ownerUid: facet.ownerUid }
@@ -253,6 +257,9 @@ function crmFieldsFromFacet(
       ? { companyId: facet.companyId }
       : {}),
     ...(custom ? { custom } : {}),
+    ...(Number.isFinite(engaged) && engaged > 0
+      ? { lastEmailEngagementAtMs: engaged }
+      : {}),
   }
 }
 

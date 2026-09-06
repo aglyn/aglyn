@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import type {
+  ContactCampaignEmail,
   ContactInteraction,
   ContactSource,
   CrmActivityRow,
@@ -27,6 +28,7 @@ import {
   mdiAccountEditOutline,
   mdiAccountPlusOutline,
   mdiApi,
+  mdiBullhornOutline,
   mdiCalendarCheckOutline,
   mdiCartOutline,
   mdiEmailNewsletter,
@@ -47,6 +49,7 @@ import {
   useCanEditActivity,
 } from './activity-queries'
 import { LogActivityDialog } from './log-activity-dialog'
+import { useContactCampaignEmails } from './use-contact-campaign-emails'
 
 /**
  * One glyph per capture door. Typed against the source union so a door added
@@ -137,6 +140,67 @@ function CapturedRow(props: {
 }
 CapturedRow.displayName = 'CapturedRow'
 
+/**
+ * One campaign email the platform sent this person (AGL-2616): which email,
+ * and what became of it — `sent · delivered · opened ×2 · clicked`.
+ *
+ * Read-only like a captured row, and drawn apart from BOTH the captured and
+ * the logged rows: its glyph is the campaign's, never the envelope a logged
+ * `email` activity carries, and its chips say "Campaign" and "Sent" where
+ * the others say "Captured" and "Logged". The name links to the email's own
+ * report when the page can address it; an email the team has deleted, or
+ * one a sibling site sent, keeps its name and loses the link.
+ */
+function CampaignEmailRow(props: {
+  email: ContactCampaignEmail
+  href: string | null
+  nowMs: number
+}) {
+  const { email, href, nowMs } = props
+  const name = email.campaignName ?? email.subject ?? 'Campaign email'
+  const summary = Aglyn.campaignEmailSummary(email).join(' · ')
+  const when = new Date(email.sentAtMs)
+  return (
+    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+      <Stack
+        sx={{
+          color: 'text.secondary',
+          pt: 0.25,
+          fontSize: (theme) => theme.typography.h6.fontSize,
+        }}
+      >
+        <MdiIcon path={mdiBullhornOutline.path} />
+      </Stack>
+      <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+        >
+          <Chip label="Campaign" size="small" />
+          <Chip label="Sent" size="small" variant="outlined" />
+        </Stack>
+        <Typography variant="body2">
+          {href ? <AppLink href={href}>{name}</AppLink> : name}
+          {` · ${summary}`}
+        </Typography>
+        <Tooltip title={when.toLocaleString()}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            {email.subject && email.subject !== name
+              ? `${Aglyn.activityTimeLabel(email.sentAtMs, nowMs)} · ${email.subject}`
+              : Aglyn.activityTimeLabel(email.sentAtMs, nowMs)}
+          </Typography>
+        </Tooltip>
+      </Stack>
+    </Stack>
+  )
+}
+CampaignEmailRow.displayName = 'CampaignEmailRow'
+
 export interface ContactTimelineCardProps {
   hostId: string
   org: CrmOrg
@@ -148,23 +212,36 @@ export interface ContactTimelineCardProps {
    * through the wrong group.
    */
   contact: Record<string, unknown> | null | undefined
+  /**
+   * Where a campaign entry links to — the email's report — or `null` for
+   * one the page cannot address. Handed in rather than built here because
+   * the report lives on another surface whose path is the MOUNT's to know:
+   * a site's record page reaches its own Emails hub, an org-level mount
+   * holds the org's site list and can reach every site's. No builder means
+   * no links, never a guessed one.
+   */
+  campaignHref?: (email: ContactCampaignEmail) => string | null
 }
 
 /**
  * A person's whole history in one newest-first stream (AGL-2600): what the
- * platform CAPTURED — a form, an order, a booking, a sign-up — and what a
- * person LOGGED beside it — a call, an email, a meeting, a note.
+ * platform CAPTURED — a form, an order, a booking, a sign-up — what a person
+ * LOGGED beside it — a call, an email, a meeting, a note — and, since
+ * AGL-2616, the campaign mail the platform SENT them and what became of it.
  *
  * ## Why one stream
  *
- * The two histories answer one question, "what has happened with this
- * person", and a page showing them as two lists asks the reader to
- * interleave them by eye. The merge is `mergeContactTimeline`, pure and
- * specced: newest first, stable at a tie, an undated entry last.
+ * The histories answer one question, "what has happened with this person",
+ * and a page showing them as separate lists asks the reader to interleave
+ * them by eye. The merge is `mergeContactTimeline`, pure and specced: newest
+ * first, stable at a tie, an undated entry last, a campaign at the instant
+ * it was sent.
  *
  * Each entry says which it is. A captured entry carries the door's label and
  * a "Captured" chip and offers no controls; a logged entry carries its kind
- * and a "Logged" chip, and its author may edit or delete it.
+ * and a "Logged" chip, and its author may edit or delete it; a campaign
+ * entry carries "Campaign" and "Sent", links to the email's report, and is
+ * nobody's to edit.
  *
  * ## What is read
  *
@@ -172,13 +249,15 @@ export interface ContactTimelineCardProps {
  * — THIS group's facet, filtered to the sites the group may see, the same
  * projection the contacts list makes — and costs no read. The logged side is
  * the bounded listener every activity surface uses, filtered to this
- * contact, with a foot for the next hundred. The facet's history is capped
- * at fifty by the platform, so past the window the stream is the logged
- * side alone; the foot says as much by asking for "more activity" rather
- * than "more history".
+ * contact, with a foot for the next hundred. The campaign side is one
+ * request to `crm/contact-email-history`, which reads down this person's
+ * own delivery log, capped, and never a campaign's recipients. The facet's
+ * history is capped at fifty by the platform, so past the window the stream
+ * is the logged side alone; the foot says as much by asking for "more
+ * activity" rather than "more history".
  */
 export function ContactTimelineCard(props: ContactTimelineCardProps) {
-  const { hostId, org, contactId, contact } = props
+  const { hostId, org, contactId, contact, campaignHref } = props
   const scope = useActivityScope(hostId, org)
   const { consentGroup } = scope
   /*
@@ -218,11 +297,13 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
         : null,
     [siteContext, hostId],
   )
+  const campaigns = useContactCampaignEmails(hostId, contactId)
   // One member read for the whole stream, however many rows it has.
   const canEdit = useCanEditActivity(scope.orgId)
   const entries = useMemo(
-    () => Aglyn.mergeContactTimeline(interactions, activities.rows),
-    [interactions, activities.rows],
+    () =>
+      Aglyn.mergeContactTimeline(interactions, activities.rows, campaigns.emails),
+    [interactions, activities.rows, campaigns.emails],
   )
   // One clock for every row of one paint, so two rows logged a second apart
   // cannot read "just now" and "1 min ago" from being rendered across a
@@ -250,7 +331,7 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
     <>
       <CardDisplay
         header={'Timeline'}
-        help={pluginDocsHelp('contactActivities', { anchor: '#two-kinds-of-history' })}
+        help={pluginDocsHelp('contactActivities', { anchor: '#three-kinds-of-history' })}
         actions={
           <Button
             size="small"
@@ -271,11 +352,25 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
               {'Logged activity could not be loaded; what follows is what the platform captured.'}
             </Typography>
           ) : null}
+          {campaigns.status === 'error' || campaigns.lookupFailed ? (
+            // "Unknown", not "none": an empty campaign history and one that
+            // could not be read lead a reader to opposite conclusions.
+            <Typography variant="body2" color="error">
+              {'Campaign email could not be loaded; the stream below may be missing the mail this person was sent.'}
+            </Typography>
+          ) : null}
           {entries.length === 0 ? (
+            campaigns.status === 'loading' ? (
+              // The campaign history is one request on mount; an empty state
+              // before it answers would read as "none" for a person who was mailed.
+              <Typography variant="body2" color="text.secondary">
+                {'Loading…'}
+              </Typography>
+            ) : (
             <EmptyStateComponent
               compact
               label={'No history yet'}
-              description={'What this person does on the site, and what you log about them, shows here.'}
+              description={'What this person does on the site, the campaigns they are sent, and what you log about them, shows here.'}
               action={
                 <Button
                   size="small"
@@ -288,6 +383,7 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
                 </Button>
               }
             />
+            )
           ) : (
             entries.map((entry) =>
               entry.kind === 'captured' ? (
@@ -296,6 +392,13 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
                   interaction={entry.interaction}
                   nowMs={nowMs}
                   href={interactionHref(entry.interaction)}
+                />
+              ) : entry.kind === 'campaign' ? (
+                <CampaignEmailRow
+                  key={entry.key}
+                  email={entry.email}
+                  href={campaignHref ? campaignHref(entry.email) : null}
+                  nowMs={nowMs}
                 />
               ) : (
                 <ActivityRow

@@ -308,6 +308,18 @@ function describeDimensions(
         .join(', ')}.`,
     )
   }
+  /*
+   * "One of your campaigns", against the engagement arms above that say
+   * "one of your emails": those count every message this workspace sent the
+   * address, this counts the campaigns the reading site's group sent — the
+   * sentence is the only place a reader can tell the two windows apart.
+   */
+  if (rule.engagedWithinDays !== undefined) {
+    clauses.push(
+      `Opened or clicked one of your campaigns in the last ` +
+        `${rule.engagedWithinDays} days.`,
+    )
+  }
   for (const clause of rule.custom ?? []) {
     clauses.push(`${describeCustomClause(clause, names)}.`)
   }
@@ -428,6 +440,11 @@ export interface DynamicListRuleDraft {
   lifecycleStages: ContactLifecycleStage[]
   companyIds: string[]
   custom: DynamicListCustomClause[]
+  /**
+   * The re-engagement window (AGL-2616), typed like the purchase windows
+   * — days, as text, so an empty box is not a zero-day window.
+   */
+  engagedWithinDays: string
 }
 
 export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
@@ -455,6 +472,7 @@ export const EMPTY_RULE_DRAFT: DynamicListRuleDraft = {
   lifecycleStages: [],
   companyIds: [],
   custom: [],
+  engagedWithinDays: '',
 }
 
 /** Comma-separated free text → the trimmed, non-empty values. */
@@ -535,6 +553,7 @@ export function ruleToDraft(rule: DynamicListRule): DynamicListRuleDraft {
       (block) => block.lifecycleStages,
     ) as ContactLifecycleStage[],
     companyIds: list((block) => block.companyIds),
+    engagedWithinDays: number((block) => block.engagedWithinDays),
     // Clauses are objects, so the string-set dedupe above cannot hold them;
     // two blocks carrying the same clause are one condition, keyed on its
     // whole shape.
@@ -639,6 +658,8 @@ function draftDimensions(draft: DynamicListRuleDraft): Record<string, unknown>[]
     blocks.push({ lifecycleStages: draft.lifecycleStages })
   }
   if (draft.companyIds.length) blocks.push({ companyIds: draft.companyIds })
+  const engagedWithinDays = typedNumber(draft.engagedWithinDays)
+  if (engagedWithinDays !== undefined) blocks.push({ engagedWithinDays })
   // One block PER CLAUSE, so that "any one of the filters below" reads each
   // condition row as a filter of its own — the same grain the purchase
   // figures get. `mergeDimensions` folds them back into one list for `all`.
@@ -1208,6 +1229,24 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
             />
           )}
           sx={{ minWidth: 260, flexGrow: 1, maxWidth: 420 }}
+        />
+        {/*
+          THE RE-ENGAGEMENT WINDOW (AGL-2616), beside the other facet reads
+          rather than under "Email engagement" below: that section reads the
+          address-level rollup — every message this workspace sent the
+          person — and this reads the stamp the delivery webhook wrote on
+          THIS site's contact for THIS site's campaigns. A contact never
+          stamped is left out, the lean every CRM dimension takes, and the
+          helper says so.
+         */}
+        <TextField
+          type="number"
+          size="small"
+          label="Engaged with a campaign within (days)"
+          helperText="Opened or clicked one of your campaigns. Never engaged is left out."
+          value={draft.engagedWithinDays}
+          onChange={(event) => set('engagedWithinDays', event.target.value)}
+          sx={{ minWidth: 280 }}
         />
       </Stack>
       {/*

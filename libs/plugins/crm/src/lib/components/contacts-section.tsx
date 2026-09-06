@@ -83,7 +83,11 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import RecentActivityFeed from './recent-activity-feed'
-import { CONTACT_FILTER_COLUMNS, contactListColumns } from './contact-list-columns'
+import {
+  CONTACT_FILTER_COLUMNS,
+  CONTACT_OPTIONAL_COLUMNS,
+  contactListColumns,
+} from './contact-list-columns'
 import NewContactDrawer, { type NewContactValues } from './new-contact-drawer'
 import { useCrmApi } from './use-crm-api'
 import { useOrgMembers } from './use-org-members'
@@ -103,11 +107,16 @@ import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
  */
 const SOURCE_LABELS = CONTACT_SOURCE_LABELS
 
-/** The filter-only columns, hidden whatever a view's column list says. */
-const HIDDEN_FILTER_COLUMNS = hiddenFilterVisibility(
-  CONTACT_LIST_FILTER_FIELDS,
-  CONTACT_FILTER_COLUMNS,
-)
+/**
+ * What the list keeps out of sight until a view says otherwise: the
+ * filter-only columns, which never show, and the optional columns
+ * (AGL-2616), which start hidden and come back through the column menu or
+ * a saved view's column list.
+ */
+const HIDDEN_COLUMNS: Readonly<Record<string, boolean>> = {
+  ...hiddenFilterVisibility(CONTACT_LIST_FILTER_FIELDS, CONTACT_FILTER_COLUMNS),
+  ...Object.fromEntries(CONTACT_OPTIONAL_COLUMNS.map((field) => [field, false])),
+}
 
 /**
  * Why a refund found no contact to record itself against (AGL-2329).
@@ -650,7 +659,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * a view says, so a saved arrangement cannot unhide a strip of blank
    * cells.
    */
-  const grid = useCrmViewGrid(views, contactColumns, HIDDEN_FILTER_COLUMNS)
+  const grid = useCrmViewGrid(views, contactColumns, HIDDEN_COLUMNS)
 
   /*
    * A SEGMENT IS A VIEW'S TAG AND SOURCE CLAUSES, kept where a campaign
@@ -797,6 +806,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         'sources',
         'tags',
         'lastInteraction',
+        'lastEngaged',
         'notes',
       ],
       ...visible.map((contact) => [
@@ -813,6 +823,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         (contact.tags ?? []).join('|'),
         contact.interactions?.[0]
           ? new Date(contact.interactions[0].atMs).toISOString()
+          : '',
+        contact.lastEmailEngagementAtMs
+          ? new Date(contact.lastEmailEngagementAtMs).toISOString()
           : '',
         contact.notes ?? '',
       ]),

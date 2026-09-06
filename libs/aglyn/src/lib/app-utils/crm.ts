@@ -532,13 +532,60 @@ export interface CrmActivity extends CrmScoped {
 export type CrmActivityRow = CrmActivity & { $id: string }
 
 /**
- * One entry of a contact's timeline (AGL-2600): something the platform
- * CAPTURED on the contact's facet, or something a person LOGGED beside it.
+ * One campaign email this person was sent, and what became of it (AGL-2616).
  *
- * A tagged union rather than a flattened row, because the two are different
- * facts with different affordances — a captured interaction is read-only and
- * names the door it came through, a logged activity has an author who may
- * edit it — and a surface drawing the stream has to say which is which.
+ * The per-recipient delivery log — `emailDeliveries/{key}/messages` — keeps
+ * one document per MESSAGE with a timestamp per lifecycle state and a count
+ * of opens and clicks, and this is that document as a timeline reads it:
+ * which email, when it went out, and how far it got. A message that bounced
+ * or was complained about carries that state too, because "we mailed them
+ * and it bounced" is part of the history of a relationship and a timeline
+ * that showed only the successes would read as if nothing had been tried.
+ *
+ * The server answers with this shape, never the log record itself: the log
+ * carries the recipient's address, the provider and the links they followed,
+ * and none of that is the timeline's to show.
+ */
+export interface ContactCampaignEmail {
+  /** The provider's message id — distinct per send, and the entry's key. */
+  messageId: string
+  /** The site the campaign went out from. */
+  hostId: string
+  /** `hosts/{hostId}/campaigns/{campaignId}` — the email, whose report the entry links to. */
+  campaignId: string
+  /**
+   * The email as the team named it in the Emails console — its display name,
+   * or its subject when it has none. `null` when the email has since been
+   * deleted, in which case the entry still has the subject it was sent with.
+   */
+  campaignName: string | null
+  /** The subject line the person received. */
+  subject: string | null
+  /** When it went out — the provider's `sent` instant, or the first event seen. */
+  sentAtMs: number
+  deliveredAtMs?: number
+  openedAtMs?: number
+  clickedAtMs?: number
+  bouncedAtMs?: number
+  complainedAtMs?: number
+  openCount: number
+  clickCount: number
+}
+
+/**
+ * One entry of a contact's timeline (AGL-2600): something the platform
+ * CAPTURED on the contact's facet, something a person LOGGED beside it, or
+ * — since AGL-2616 — a CAMPAIGN email the person was sent.
+ *
+ * A tagged union rather than a flattened row, because the three are
+ * different facts with different affordances — a captured interaction is
+ * read-only and names the door it came through, a logged activity has an
+ * author who may edit it, a campaign email is read-only and links to the
+ * campaign's report — and a surface drawing the stream has to say which is
+ * which. A logged activity of kind `email` and a campaign entry are two
+ * different things on purpose: the first is a message a person on the team
+ * sent or recorded, the second is a mailing the platform delivered, and the
+ * two must never share a kind id or a glyph.
  */
 export type ContactTimelineEntry =
   | {
@@ -554,6 +601,35 @@ export type ContactTimelineEntry =
       atMs: number
       activity: CrmActivityRow
     }
+  | {
+      kind: 'campaign'
+      key: string
+      atMs: number
+      email: ContactCampaignEmail
+    }
+
+/**
+ * What became of one campaign email, as the words a timeline row prints
+ * after the email's name: `sent · delivered · opened ×2 · clicked`.
+ *
+ * In lifecycle order, and only the states that happened. `sent` is always
+ * first because the row exists; the counts appear only past one, because
+ * "opened ×1" says nothing "opened" does not. A bounce or a complaint is
+ * printed where it falls, after whatever succeeded before it — a message
+ * delivered and then complained about reads as both, which is what
+ * happened.
+ */
+export function campaignEmailSummary(email: ContactCampaignEmail): string[] {
+  const counted = (word: string, count: number): string =>
+    count > 1 ? `${word} ×${count}` : word
+  const parts = ['sent']
+  if (email.deliveredAtMs) parts.push('delivered')
+  if (email.openedAtMs) parts.push(counted('opened', email.openCount))
+  if (email.clickedAtMs) parts.push(counted('clicked', email.clickCount))
+  if (email.bouncedAtMs) parts.push('bounced')
+  if (email.complainedAtMs) parts.push('marked as spam')
+  return parts
+}
 
 /** A time that can be sorted on; anything that is not one sinks to the bottom. */
 const sortableMs = (value: unknown): number =>
@@ -578,11 +654,17 @@ const sortableMs = (value: unknown): number =>
  *
  * The key is what a list renders by. A captured interaction has no id of its
  * own, so its key is built from what it does carry; a logged activity's is
- * its document id.
+ * its document id; a campaign email's is the provider's message id.
+ *
+ * A campaign email is placed at the instant it was SENT, not at its latest
+ * open. The row tells the whole story of that message in one line, and a
+ * message that moved up the stream every time its reader re-opened it would
+ * be a timeline that reorders itself under the reader.
  */
 export function mergeContactTimeline(
   interactions: readonly ContactInteraction[] | null | undefined,
   activities: readonly CrmActivityRow[] | null | undefined,
+  campaignEmails?: readonly ContactCampaignEmail[] | null,
 ): ContactTimelineEntry[] {
   const entries: ContactTimelineEntry[] = [
     ...(interactions ?? []).map(
@@ -599,6 +681,14 @@ export function mergeContactTimeline(
         key: `logged:${activity.$id}`,
         atMs: activity.atMs,
         activity,
+      }),
+    ),
+    ...(campaignEmails ?? []).map(
+      (email): ContactTimelineEntry => ({
+        kind: 'campaign',
+        key: `campaign:${email.messageId}`,
+        atMs: email.sentAtMs,
+        email,
       }),
     ),
   ]

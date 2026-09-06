@@ -28,7 +28,7 @@ import {
   useHostActivityLogger,
   useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
-import { Stack, Typography } from '@mui/material'
+import { Stack, Tooltip, Typography } from '@mui/material'
 import {
   arrayRemove,
   deleteDoc,
@@ -48,6 +48,7 @@ import { AddToListButton } from './add-to-list-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { RecordTasksCard } from './record-tasks-card'
+import { useEmailsHubPath } from './use-emails-hub-path'
 import { useOrgMembers } from './use-org-members'
 
 const contactDocsHelp = pluginDocsHelp('contacts', {
@@ -148,6 +149,22 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           host: String(params.host),
         }).ordersByCustomer(record.email)
       : null
+
+  /*
+   * Where a campaign entry on the timeline links to: the email's own report
+   * on this site's Emails hub (AGL-2616). Only a campaign THIS site sent can
+   * be addressed — a sibling site in the same consent group has an Emails
+   * hub of its own under a subdomain this page does not know — so the
+   * builder answers `null` for those and the entry draws unlinked.
+   */
+  const emailsHub = useEmailsHubPath()
+  const campaignHref = useCallback(
+    (email: Aglyn.ContactCampaignEmail) =>
+      emailsHub && email.hostId === hostId
+        ? `${emailsHub}/messages/${encodeURIComponent(email.campaignId)}`
+        : null,
+    [emailsHub, hostId],
+  )
 
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
@@ -277,6 +294,23 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 label="Owner"
                 value={record.ownerUid ? members.memberName(record.ownerUid) : undefined}
               />
+              {/*
+                The last time they opened or clicked one of this site's
+                campaigns (AGL-2616) — the relationship's pulse, beside the
+                owner who keeps it.
+              */}
+              <CrmRecordChip
+                label="Last engaged"
+                value={
+                  record.lastEmailEngagementAtMs ? (
+                    <Tooltip title={new Date(record.lastEmailEngagementAtMs).toLocaleString()}>
+                      <span>
+                        {Aglyn.activityTimeLabel(record.lastEmailEngagementAtMs, Date.now())}
+                      </span>
+                    </Tooltip>
+                  ) : undefined
+                }
+              />
               <CrmRecordChip
                 label="Orders"
                 value={
@@ -316,7 +350,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             basePath={basePath}
           />
           <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
-          <ContactTimelineCard hostId={hostId} org={org} contactId={id} contact={row} />
+          <ContactTimelineCard
+            hostId={hostId}
+            org={org}
+            contactId={id}
+            contact={row}
+            campaignHref={campaignHref}
+          />
           <ContactDealsCard
             hostId={hostId}
             org={org}

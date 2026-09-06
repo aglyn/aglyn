@@ -1,7 +1,7 @@
 ---
 sidebar_position: 6
 title: Activities & the timeline
-description: Log calls, emails, meetings and notes against a contact, a company or a deal, and read them in one timeline beside everything the platform captured.
+description: Log calls, emails, meetings and notes against a contact, a company or a deal, and read them in one timeline beside everything the platform captured and every campaign it sent.
 ---
 
 # Activities & the timeline
@@ -9,17 +9,19 @@ description: Log calls, emails, meetings and notes against a contact, a company 
 An **activity** is something a person on your team did about a record — a call
 made, an email sent, a meeting held, a note worth keeping. It is logged by hand,
 from the record it is about, and it sits in one timeline beside everything the
-platform captured about that person on its own.
+platform captured about that person on its own and every campaign email it sent
+them.
 
-## Two kinds of history
+## Three kinds of history
 
-A contact's timeline is one newest-first stream drawn from two sources, and every
-entry says which it is:
+A contact's timeline is one newest-first stream drawn from three sources, and
+every entry says which it is:
 
 | Entry | Where it comes from | Who can change it |
 | --- | --- | --- |
 | **Captured** | The platform recorded it — a form submission, an order, a booking, a member sign-up, a newsletter opt-in, an API or import create, or a contact added by hand. Each carries the door it came through and, for a form, the page the person was on. | Nobody. It is a record of what happened. |
 | **Logged** | A member of your team logged it — a call, an email, a meeting, a note, or something else. | Its author, or an org-wide member. |
+| **Sent** | A campaign email the platform delivered to the person — which email, when it went out, and what became of it. See [Campaign email on the timeline](#campaign-email). | Nobody. It is the delivery record. |
 
 A captured entry from *this* site carries a link to its record: **Open
 submission** lands on the Inbox with the reader open on that submission, **Open
@@ -35,7 +37,57 @@ relationship reaches it, and an automation logging on every event cannot fill
 one person's log without limit. At the ceiling, **Log activity**, the
 **Log a CRM activity** step and `POST /v1/activities` refuse another entry on
 that record and say so; the timeline reads it a hundred entries at a time and
-offers **Show more activity** while older entries remain.
+offers **Show more activity** while older entries remain. Campaign email is
+read from the delivery log the moment the page opens, over the newest fifty
+messages sent to the address.
+
+A logged **Email** activity and a **Sent** campaign entry are different things
+and are drawn differently: the first is a message somebody on your team wrote or
+recorded, the second is a mailing the platform sent to an audience the person
+was in.
+
+## Campaign email on the timeline {#campaign-email}
+
+Every campaign email sent to the person from this site — or from a site
+declared to be one sender with it — appears at the moment it was sent, in one
+line:
+
+> **Spring sale** · sent · delivered · opened ×2 · clicked
+
+The name is the email as your team named it on **Emails › Messages**, or its
+subject when it has no name, and it links to that email's own report. The
+words after it are the states the email reached, in order: **delivered**,
+**opened** (with a count past one), **clicked** (likewise), **bounced**, or
+**marked as spam**. The subject line rides under the entry when it differs from
+the name.
+
+What appears, and what does not:
+
+- **Campaigns only.** A receipt, a booking confirmation, a password reset or an
+  invite is not on a CRM timeline — those are account mail, sent to the person
+  rather than to an audience.
+- **Your sites' campaigns only.** A contact record is shared by every site in
+  your workspace, and other businesses in the same workspace that mail the
+  same person never see each other's campaigns here. A campaign sent by a
+  sibling site in your own consent group is listed, without a link — that
+  site's Emails console is its own.
+- **The newest fifty messages** to the address are read. Somebody mailed
+  heavily by several sites can have older campaign entries fall past the
+  window.
+- **Opens and clicks need the delivery webhook.** An email sent before it was
+  connected shows as *sent* and nothing more, the same gap the campaign report
+  itself reports.
+- **An email your team has deleted** keeps its entry, named by the subject the
+  person received, with no report to link to.
+
+The timeline says so when the delivery log could not be read, rather than
+showing an empty history — the two lead to opposite conclusions about the
+relationship.
+
+The most recent open or click across all of these is the record's
+[**Last engaged**](./contact-record.md#last-engaged) stamp, which a
+re-engagement audience can be
+[built from](../../marketing-and-automation/email-campaigns/overview.md#lists-built-from-a-rule).
 
 ## Logging an activity
 

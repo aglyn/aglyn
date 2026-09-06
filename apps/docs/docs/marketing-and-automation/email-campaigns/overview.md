@@ -603,10 +603,18 @@ minutes. Pick **From a rule** when you create the list, then say who it draws fr
   numbers, a choice field offers its own options, and *is not* requires a value
   that differs — a blank does not count, so excluding one plan does not select
   everyone whose plan was never recorded (use *is not set* for that).
+- **Engaged with a campaign within (days)** — contacts who opened or clicked one
+  of *your* campaigns in the last so-many days, read from the record's
+  [**Last engaged**](../../content-and-data/contacts/contact-record.md#last-engaged)
+  stamp. Contacts only, and a contact never stamped is left out. This is not the
+  **Email engagement** filters further down the form: those count every message
+  this workspace has sent the address, receipts included; this counts your
+  campaigns alone, which is what a re-engagement audience — "readers who opened
+  something of ours in the last 90 days" — is about.
 
 So "everyone who submitted our Contact us form", "contacts tagged `vip`", "site
-members who joined since March", and "customers at Acme on the Enterprise plan"
-are each one rule. The paragraph above the filters reads the rule back in
+members who joined since March", "customers at Acme on the Enterprise plan", and
+"readers who engaged with a campaign in the last 90 days" are each one rule. The paragraph above the filters reads the rule back in
 sentences — naming people, stages and companies rather than ids — so you can
 check it against what you meant.
 
@@ -690,6 +698,23 @@ Two things the report will refuse to show you, and says so on screen:
 **Opens** and **readers who opened** are both shown and are different numbers:
 one person opening an email four times is four opens and one reader. Rates use
 the reader count.
+
+### What one person did {#per-contact-engagement}
+
+The report answers for the campaign; the CRM answers for the person. A
+contact's page under **CRM › Contacts** lists every campaign email they were
+sent on their [timeline](../../content-and-data/contacts/activities.md#campaign-email),
+each as one line — *Spring sale · sent · delivered · opened ×2 · clicked* —
+linking back to that email's report, and the page heading says when they
+[last engaged](../../content-and-data/contacts/contact-record.md#last-engaged)
+with anything you sent. The contacts list offers the same as an optional
+column, and a [list built from a rule](#lists-built-from-a-rule) can select on
+it, so "everyone who opened something of ours in the last 90 days" is an
+audience rather than a spreadsheet.
+
+Only campaigns from your own sites appear on a person's timeline. Another
+business in your workspace mailing the same person sees its own campaigns and
+never yours, and account mail — receipts, confirmations — is not listed at all.
 
 ### Which links were clicked
 

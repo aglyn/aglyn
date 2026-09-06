@@ -260,6 +260,20 @@ export interface DynamicListDimensions {
   companyIds?: string[]
   /** Every clause must hold — AND within the dimension, unlike the lists above. */
   custom?: DynamicListCustomClause[]
+  /**
+   * Opened or clicked a campaign sent by the sweeping holder's sites within
+   * the last N days (AGL-2616) — the re-engagement audience.
+   *
+   * Read from the holder's facet like the four above, and contacts only for
+   * the same reason. It is NOT the {@link engagement} block one field up:
+   * that reads the address-level rollup, which counts every sender's mail
+   * to the address — a receipt, an invite, a sibling business's newsletter —
+   * and a "win back our quiet readers" audience built on it would mail
+   * people who are reading somebody else. This reads what the delivery
+   * webhook stamped on OUR facet from OUR campaigns. A contact with no stamp
+   * does not match, the dated-window lean the CRM dimensions all take.
+   */
+  engagedWithinDays?: number
 }
 
 /** One OR branch: an AND-block that may be inverted. */
@@ -376,6 +390,12 @@ export interface DynamicListCandidate {
   companyId?: string
   /** The holder's custom values, keyed by field key. */
   custom?: Record<string, ContactCustomValue>
+  /**
+   * When the person last opened or clicked one of the holder's campaigns —
+   * the facet stamp, read the way the fields above are. Absent when the
+   * facet carries none, which the matcher reads as "does not match".
+   */
+  lastEmailEngagementAtMs?: number | null
 }
 
 /** A saved segment's filters, resolved by the caller from `segmentId`. */
@@ -546,6 +566,7 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
     .slice(0, DYNAMIC_LIST_MAX_CUSTOM_CLAUSES)
     .map(normalizeCustomClause)
     .filter((clause): clause is DynamicListCustomClause => clause !== null)
+  const engagedWithinDays = asPositiveNumber(value['engagedWithinDays'])
   return {
     ...(tags.length ? { tags } : {}),
     ...(captureSources.length ? { captureSources } : {}),
@@ -565,6 +586,7 @@ function normalizeDimensions(value: Record<string, unknown>): DynamicListDimensi
     ...(lifecycleStages.length ? { lifecycleStages } : {}),
     ...(companyIds.length ? { companyIds } : {}),
     ...(custom.length ? { custom } : {}),
+    ...(engagedWithinDays !== undefined ? { engagedWithinDays } : {}),
   }
 }
 
@@ -859,6 +881,17 @@ function matchesDimensions(
         return false
       }
     }
+    /*
+     * ENGAGED WITH OUR CAMPAIGNS — the facet stamp, on the same lean as
+     * `lastPurchaseWithinDays`: no stamp is no match. This is the one
+     * engagement figure that is about THIS holder's mail; the address-level
+     * arms further down are about the address.
+     */
+    if (rule.engagedWithinDays !== undefined) {
+      const last = candidate.lastEmailEngagementAtMs ?? null
+      if (last === null) return false
+      if (last < options.nowMs - rule.engagedWithinDays * day) return false
+    }
   }
 
   /*
@@ -1021,7 +1054,8 @@ export function dynamicListRuleNeedsContactFacet(rule: DynamicListRule): boolean
       (dimensions.ownerUids?.length ?? 0) > 0 ||
       (dimensions.lifecycleStages?.length ?? 0) > 0 ||
       (dimensions.companyIds?.length ?? 0) > 0 ||
-      (dimensions.custom?.length ?? 0) > 0,
+      (dimensions.custom?.length ?? 0) > 0 ||
+      dimensions.engagedWithinDays !== undefined,
   )
 }
 

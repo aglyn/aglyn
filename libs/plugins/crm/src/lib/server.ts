@@ -82,6 +82,10 @@ import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes
 import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { leadConvertHandler } from './server/lead-convert'
+import {
+  CONTACT_EMAIL_HISTORY_ROUTE,
+  contactEmailHistoryHandler,
+} from './server/contact-email-history'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -521,4 +525,7 @@ export function registerCrmConsoleApi(): void {
   // write a browser cannot make alone, because only the server may create a
   // contact through the dedupe-and-meter door.
   registerPluginApiRoute('crm/lead-convert', leadConvertHandler)
+  // The one READ behind a route (AGL-2616): the per-recipient delivery log
+  // is closed to clients, so a contact's campaign mail is projected here.
+  registerPluginApiRoute(CONTACT_EMAIL_HISTORY_ROUTE, contactEmailHistoryHandler)
 }
