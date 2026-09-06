@@ -105,6 +105,7 @@ import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitio
 import { customFieldColumns } from './contact-custom-columns'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { useCompanyOptions } from './company-picker'
 import CrmFilterBar, { type CrmFilterOption } from './crm-filter-bar'
 import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
@@ -1028,24 +1029,27 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 </Typography>
               ) : null}
               <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} />
-              <ListTable
-                rows={visible}
-                columns={contactColumns}
-                selectable={{ selected: selectedIds, onChange: setSelectedIds }}
-                onOpen={(id) => router.push(routes.contact(id))}
-                /*
-                 * The grid must NOT also filter: the bar above is the one
-                 * editor of the clauses, and the grid's own filter panel
-                 * holds one item where a view holds several. Columns and
-                 * sort are the view's, controlled so a saved arrangement
-                 * is what the grid shows and a change is what it saves.
-                 */
-                disableColumnFilter
-                columnVisibilityModel={grid.columnVisibilityModel}
-                onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                sortModel={grid.sortModel}
-                onSortModelChange={grid.onSortModelChange}
-              />
+              <CrmColumnOrderProvider value={grid.columnOrder}>
+                <ListTable
+                  rows={visible}
+                  columns={grid.columns}
+                  slots={CRM_LIST_SLOTS}
+                  selectable={{ selected: selectedIds, onChange: setSelectedIds }}
+                  onOpen={(id) => router.push(routes.contact(id))}
+                  /*
+                   * The grid must NOT also filter: the bar above is the one
+                   * editor of the clauses, and the grid's own filter panel
+                   * holds one item where a view holds several. Columns and
+                   * sort are the view's, controlled so a saved arrangement
+                   * is what the grid shows and a change is what it saves.
+                   */
+                  disableColumnFilter
+                  columnVisibilityModel={grid.columnVisibilityModel}
+                  onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                  sortModel={grid.sortModel}
+                  onSortModelChange={grid.onSortModelChange}
+                />
+              </CrmColumnOrderProvider>
             </>
           )}
           <RecentActivityFeed hostId={hostId} org={org} basePath={props.basePath} />

@@ -33,6 +33,7 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import CrmViewsControl from './crm-views-control'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
@@ -418,40 +419,43 @@ export function CompaniesSection(props: CompaniesSectionProps) {
           members={members}
           csv={csvOptions}
         />
-        <ListTable
-          rowHeight={TABLE_ROW_HEIGHT}
-          columns={columns}
-          rows={companies}
-          selectable={{ selected: selectedIds, onChange: setSelectedIds }}
-          noRowsLabel="No companies yet"
-          noRowsDescription="A company groups the contacts who work at one business, with its domain, owner and address. Create the first one, or link a contact to a company from their page."
-          noRowsAction={newCompanyButton}
-          onOpen={(id) => openCompany(String(id))}
-          // An empty table while the read is in flight reads as "you have
-          // none" rather than "these are on their way".
-          loading={!scope || status === 'loading'}
-          /*
-           * The grid must NOT also filter. The query answers it, so a client
-           * pass could only drop rows the query already matched.
-           */
-          filterMode="server"
-          filterModel={filterModel}
-          onFilterModelChange={(model) => {
-            const request = gridFilterRequest(model)
-            setFilter(
-              request && request.field === 'ownerUid' && request.op === 'is'
-                ? { ...request, op: 'equals' }
-                : request,
-            )
-          }}
-          // Columns and sort are the view's, controlled (AGL-2617).
-          columnVisibilityModel={grid.columnVisibilityModel}
-          onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-          sortModel={grid.sortModel}
-          onSortModelChange={grid.onSortModelChange}
-          // Paged by the footer below, so the grid must not also slice.
-          hideFooter
-        />
+        <CrmColumnOrderProvider value={grid.columnOrder}>
+          <ListTable
+            rowHeight={TABLE_ROW_HEIGHT}
+            columns={grid.columns}
+            slots={CRM_LIST_SLOTS}
+            rows={companies}
+            selectable={{ selected: selectedIds, onChange: setSelectedIds }}
+            noRowsLabel="No companies yet"
+            noRowsDescription="A company groups the contacts who work at one business, with its domain, owner and address. Create the first one, or link a contact to a company from their page."
+            noRowsAction={newCompanyButton}
+            onOpen={(id) => openCompany(String(id))}
+            // An empty table while the read is in flight reads as "you have
+            // none" rather than "these are on their way".
+            loading={!scope || status === 'loading'}
+            /*
+             * The grid must NOT also filter. The query answers it, so a client
+             * pass could only drop rows the query already matched.
+             */
+            filterMode="server"
+            filterModel={filterModel}
+            onFilterModelChange={(model) => {
+              const request = gridFilterRequest(model)
+              setFilter(
+                request && request.field === 'ownerUid' && request.op === 'is'
+                  ? { ...request, op: 'equals' }
+                  : request,
+              )
+            }}
+            // Columns and sort are the view's, controlled (AGL-2617).
+            columnVisibilityModel={grid.columnVisibilityModel}
+            onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+            sortModel={grid.sortModel}
+            onSortModelChange={grid.onSortModelChange}
+            // Paged by the footer below, so the grid must not also slice.
+            hideFooter
+          />
+        </CrmColumnOrderProvider>
         <ListPagination
           page={page}
           pageSize={pageSize}

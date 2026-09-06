@@ -335,11 +335,12 @@ email address updates the person in **Contacts** at stage Lead, whatever else is
 The switch beneath — **Also create a lead from the address someone gives this form** —
 additionally files a lead in **CRM → Leads** for the sales team to work, and the caption
 under it says what that needs before you flip it: an email field in the published
-design (a submission without an address cannot key a lead, and publishing with the
-switch on would be refused until one exists), and a **Marketing consent field** if the
-lead is to be mailable — a lead exists without one and cannot be emailed. **See the
-contacts this form captured in the CRM** opens the Contacts list narrowed to source
-Form and this form.
+design (a submission without an address cannot key a lead) and a **Marketing consent
+field** (a lead nobody opted in with is one the team cannot email). Publishing with the
+switch on is refused until the design has both; a checkbox named for the opt-in — such
+as *subscribe* or *marketing consent* — counts even before you pick it as the consent
+field. **See the contacts this form captured in the CRM** opens the Contacts list
+narrowed to source Form and this form.
 
 **What this form has collected** carries the counters:
 

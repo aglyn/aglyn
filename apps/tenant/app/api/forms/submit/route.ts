@@ -196,19 +196,12 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
  * claim a refund, and treating any of those as a subscription is exactly the
  * inference the consent arc refused to make.
  *
- * The name list is closed rather than a substring match on "consent": a
- * merchant's field called `consentToTreatment` on a clinic intake form is a
- * different instrument entirely, and matching it would manufacture a
- * marketing basis out of a medical one.
+ * The name list is `MARKETING_CONSENT_FIELD_NAMES`, closed rather than a
+ * substring match on "consent" (a clinic intake form's `consentToTreatment`
+ * is a different instrument), and shared with the publish check: a design
+ * `checkFormContract` accepts as recording consent is one this route reads
+ * an opt-in from.
  */
-const MARKETING_CONSENT_FIELD_NAMES = new Set([
-  'marketingconsent',
-  'marketingoptin',
-  'emailoptin',
-  'newsletteroptin',
-  'subscribe',
-  'subscribetonewsletter',
-])
 
 /** Checkbox values a browser form actually posts for a ticked box. */
 const AFFIRMATIVE = new Set(['true', 'on', 'yes', '1', 'checked'])
@@ -221,8 +214,7 @@ function readDeclaredMarketingConsent(
   // explicitly rather than as one more form field.
   if (payload['marketingConsent'] === true) return true
   for (const [key, value] of Object.entries(fields)) {
-    const name = String(key).toLowerCase().replace(/[^a-z]/g, '')
-    if (!MARKETING_CONSENT_FIELD_NAMES.has(name)) continue
+    if (!Aglyn.isMarketingConsentFieldName(key)) continue
     if (value === true) return true
     if (AFFIRMATIVE.has(String(value ?? '').trim().toLowerCase())) return true
   }

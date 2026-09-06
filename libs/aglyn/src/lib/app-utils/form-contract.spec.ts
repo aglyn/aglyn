@@ -29,10 +29,15 @@
  */
 
 import { extractEmailFromFields } from './contacts'
-import { formFieldDeclsFromNodes, readFormDeclaredConsent } from './forms'
+import {
+  formFieldDeclsFromNodes,
+  isMarketingConsentFieldName,
+  readFormDeclaredConsent,
+} from './forms'
 import {
   checkFormContract,
   formContractIsSatisfied,
+  formFieldsCaptureConsent,
   type FormContractViolation,
 } from './form-contract'
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
@@ -92,8 +97,12 @@ describe('a design that keeps its side of the bargain', () => {
       { id: 'f1', fieldName: 'name' },
       { id: 'f2', fieldName: 'email', fieldType: 'email' },
       { id: 'f3', fieldName: 'message', fieldType: 'textarea' },
+      { id: 'f4', fieldName: 'optIn', fieldType: 'checkbox' },
     ])
-    const violations = check(nodes, { routing: { lead: true } })
+    const violations = check(nodes, {
+      routing: { lead: true },
+      consentFieldName: 'optIn',
+    })
     expect(violations).toEqual([])
     expect(formContractIsSatisfied(violations)).toBe(true)
   })
@@ -182,8 +191,12 @@ describe('field names, which are the submission keys', () => {
   })
 })
 
-describe('lead routing needs somewhere to get an address', () => {
+describe('lead routing needs an address, and an opt-in to go with it', () => {
   it('refuses lead routing on a design with no email field', () => {
+    // This design records no consent either. The field is the gate that
+    // decides first — no address, no lead at all — so it is the one thing
+    // reported; a consent refusal beside it would be about a lead that
+    // could never have existed.
     const nodes = design([
       { id: 'f1', fieldName: 'name' },
       { id: 'f2', fieldName: 'message', fieldType: 'textarea' },
@@ -191,6 +204,51 @@ describe('lead routing needs somewhere to get an address', () => {
     expect(codes(check(nodes, { routing: { lead: true } }))).toEqual([
       'lead-routing-has-no-email-field',
     ])
+  })
+
+  it('refuses lead routing on a design that records no consent, for consent', () => {
+    // The route would file the lead; nobody could email it. The refusal has
+    // to name consent, because "add an email field" — the advice the old
+    // message gave — is advice this form has already taken.
+    const nodes = design([
+      { id: 'f1', fieldName: 'name' },
+      { id: 'f2', fieldName: 'email', fieldType: 'email' },
+    ])
+    const [violation] = check(nodes, { routing: { lead: true } })
+    expect(violation?.code).toBe('lead-routing-has-no-consent-field')
+    expect(violation?.message).toContain('consent')
+    expect(check(nodes, { routing: { lead: true } })).toHaveLength(1)
+  })
+
+  it('accepts an undeclared opt-in the submit route reads by name', () => {
+    // A form that never declared a consent field but draws a "subscribe to
+    // newsletter" box is one the route records consent from; refusing it
+    // would refuse a form that works.
+    const nodes = design([
+      { id: 'f1', fieldName: 'email', fieldType: 'email' },
+      { id: 'f2', fieldName: 'Subscribe to newsletter', fieldType: 'checkbox' },
+    ])
+    expect(check(nodes, { routing: { lead: true } })).toEqual([])
+  })
+
+  it('reports a declared consent field the design lost once, as the loss', () => {
+    // The declaration IS a consent capture on paper; the field missing from
+    // the design is the fact, and `consent-field-missing` already names it.
+    const nodes = design([{ id: 'f1', fieldName: 'email', fieldType: 'email' }])
+    expect(
+      codes(check(nodes, { routing: { lead: true }, consentFieldName: 'optIn' })),
+    ).toEqual(['consent-field-missing'])
+  })
+
+  it('says nothing about consent on a form that does not route', () => {
+    // Consent is a precondition of ROUTING. A contact form with no opt-in
+    // still updates the contact, and the contract has nothing to say.
+    const nodes = design([
+      { id: 'f1', fieldName: 'name' },
+      { id: 'f2', fieldName: 'email', fieldType: 'email' },
+    ])
+    expect(check(nodes, {})).toEqual([])
+    expect(check(nodes, { routing: { lead: false } })).toEqual([])
   })
 
   it('says nothing about the same design when it does NOT route to leads', () => {
@@ -203,16 +261,21 @@ describe('lead routing needs somewhere to get an address', () => {
     expect(check(nodes, {})).toEqual([])
   })
 
+  /** A routed form with its opt-in declared, so only the address is in question. */
+  const routed = { routing: { lead: true }, consentFieldName: 'optIn' }
+  const optIn = { id: 'consent', fieldName: 'optIn', fieldType: 'checkbox' }
+
   it('accepts a field typed as an email even when its name is not', () => {
     const nodes = design([
       { id: 'f1', fieldName: 'contactAddress', fieldType: 'email' },
+      optIn,
     ])
-    expect(check(nodes, { routing: { lead: true } })).toEqual([])
+    expect(check(nodes, routed)).toEqual([])
   })
 
   it('accepts a field NAMED for email even when its type is plain text', () => {
-    const nodes = design([{ id: 'f1', fieldName: 'workEmail' }])
-    expect(check(nodes, { routing: { lead: true } })).toEqual([])
+    const nodes = design([{ id: 'f1', fieldName: 'workEmail' }, optIn])
+    expect(check(nodes, routed)).toEqual([])
   })
 
   it('agrees with the extractor it is standing in for', () => {
@@ -226,6 +289,21 @@ describe('lead routing needs somewhere to get an address', () => {
     )
     // …and one it rejects: no key matching /email/i and no email-shaped value.
     expect(extractEmailFromFields({ name: 'Ada', message: 'hello' })).toBeNull()
+  })
+
+  it('agrees with the route about which undeclared field is an opt-in', () => {
+    // The consent precondition stands in for the route's fallback read the
+    // way the email one stands in for the extractor: a design accepted for
+    // an undeclared opt-in must be one the route finds consent in.
+    const fields = [{ fieldName: 'Subscribe to newsletter' }]
+    expect(formFieldsCaptureConsent(fields, '')).toBe(true)
+    expect(isMarketingConsentFieldName('Subscribe to newsletter')).toBe(true)
+    // A declared name counts whatever it is called; a medical consent does not.
+    expect(formFieldsCaptureConsent([], 'agreeToTerms')).toBe(true)
+    expect(formFieldsCaptureConsent([{ fieldName: 'consentToTreatment' }], '')).toBe(
+      false,
+    )
+    expect(isMarketingConsentFieldName('consentToTreatment')).toBe(false)
   })
 })
 

@@ -124,10 +124,22 @@ await step(tally, page, 'the tiles draw dashes until the aggregates answer', asy
     await page.goto(hostUrl('/crm/reports'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
     // The page header and the section's own heading both read "Reports".
     await page.getByRole('heading', { name: 'Reports' }).first().waitFor({ timeout: TIMEOUT_MS })
-    for (const header of ['Contacts', 'Sources and lifecycle', 'Pipeline', 'Won and lost', 'Tasks']) {
+    // One header per card the section draws, in the section's own order.
+    const headers = [
+      'Contacts',
+      'Sources and lifecycle',
+      'Conversion by source',
+      'Lead funnel',
+      'Pipeline',
+      'Won and lost',
+      'Activity by teammate',
+      'Forecast by close month',
+      'Tasks',
+    ]
+    for (const header of headers) {
       await page.getByText(header, { exact: true }).first().waitFor({ timeout: TIMEOUT_MS })
     }
-    tally.pass('the five cards mount', 'Contacts · Sources and lifecycle · Pipeline · Won and lost · Tasks')
+    tally.pass('the nine cards mount', headers.join(' · '))
     await waitFor(() => Promise.resolve(held.length), (n) => n > 0)
     const pending = await Promise.all(['Total contacts', 'Open deals', 'Open tasks'].map(tileValue))
     tally.check(
