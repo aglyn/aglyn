@@ -64,6 +64,11 @@ import {
   dynamicListRuleListIds,
   dynamicListRuleWithoutListReference,
   dynamicListRuleNeedsContactFacet,
+  dynamicListDimensionsForCrmView,
+  dynamicListPlanningRule,
+  CRM_COLLECTIONS,
+  normalizeCrmViewFilters,
+  type DynamicListDimensions,
   dynamicListRuleNeedsEngagement,
   extractEmailFromFields,
   isContactLifecycleStage,
@@ -508,9 +513,51 @@ export async function collectDynamicListCandidates(options: {
     }
   }
 
-  // Resolved once for the whole scan: it names collections, and re-resolving
-  // the org for every page would be a read per page for an unchanging answer.
-  const enrichment = await planEnrichment(rule, options.hostId)
+  /*
+   * A saved VIEW's filters, resolved ONCE into this language (AGL-2617).
+   *
+   * The same two leans the segment takes, for the same reason: a view that
+   * was deleted narrows to nothing, and so does one whose clauses this
+   * language cannot carry — `dynamicListDimensionsForCrmView` names them
+   * rather than dropping them, and dropping one would make the audience
+   * wider than the view the merchant picked. The picker offers only views
+   * that translate whole, so the second case is a view edited after the
+   * rule named it, and a view of another section — a list of companies is
+   * not an audience of people — reads the same way.
+   */
+  let view: DynamicListDimensions | null = null
+  if (rule.viewId) {
+    const views = await orgDataCollectionForHost(
+      options.hostId,
+      CRM_COLLECTIONS.views,
+    )
+    const snapshot = await views.doc(rule.viewId).get()
+    const translation =
+      snapshot.exists && snapshot.get('section') === 'contacts'
+        ? dynamicListDimensionsForCrmView(
+            normalizeCrmViewFilters(snapshot.get('filters')),
+          )
+        : null
+    if (!translation || translation.unsupported.length) {
+      return {
+        candidates: [],
+        complete: true,
+        cursor: null,
+        empty: true,
+        read: 0,
+      }
+    }
+    view = translation.dimensions
+  }
+
+  /*
+   * Resolved once for the whole scan: it names collections, and re-resolving
+   * the org for every page would be a read per page for an unchanging answer.
+   * Planned with the view's dimensions beside the rule's: a view naming an
+   * owner needs the facet exactly as a rule naming one does.
+   */
+  const planning = dynamicListPlanningRule(rule, view)
+  const enrichment = await planEnrichment(planning, options.hostId)
 
   /*
    * THE HOLDER whose contact facet a campaign or CRM clause is read from.
@@ -523,7 +570,7 @@ export async function collectDynamicListCandidates(options: {
    * pays no org read at all, which is the shape the engagement and list
    * lookups already take.
    */
-  const facetGroupId = dynamicListRuleNeedsContactFacet(rule)
+  const facetGroupId = dynamicListRuleNeedsContactFacet(planning)
     ? (await consentGroupForSite(options.hostId)).groupId
     : null
 
@@ -582,7 +629,11 @@ export async function collectDynamicListCandidates(options: {
       read += await enrichCandidates(pageCandidates, enrichment)
       for (const candidate of pageCandidates) {
         if (
-          !candidateMatchesDynamicListRule(candidate, rule, { segment, nowMs })
+          !candidateMatchesDynamicListRule(candidate, rule, {
+            segment,
+            view,
+            nowMs,
+          })
         ) {
           continue
         }
