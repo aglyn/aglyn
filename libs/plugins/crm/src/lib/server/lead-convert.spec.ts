@@ -255,6 +255,21 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionRef(`orgs/${ORG}/${name}`),
   upsertHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
+  // The records band is not under test here (AGL-2611); always room, in the
+  // real shape, so no refusal below can be it in disguise.
+  crmRecordsQuotaForOrg: async () => ({
+    allowed: true,
+    included: 100,
+    used: 0,
+    remaining: 100,
+    overageRecords: 0,
+    overageMonthlyUsd: 0,
+    overageRateUsd: null,
+    contactsCount: 0,
+    companiesCount: 0,
+    dealsCount: 0,
+    crmRecordsCount: 0,
+  }),
   // The real link writer (AGL-2613): the facet, the mirror and the count as
   // one commit are what the company assertions below read back.
   ...jest.requireActual(

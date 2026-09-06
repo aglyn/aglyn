@@ -225,6 +225,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ...jest.requireActual(
       '../../../libs/tenant/data/admin/src/lib/server/crm-records',
     ),
+    // The REAL link writer (AGL-2613): a PATCH settles the company counts
+    // its link moved, and a body that named no company moves none.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/contact-company-link',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',

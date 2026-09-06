@@ -122,6 +122,24 @@ const contactsRef = {
   },
 }
 
+/*
+ * The records band is the contacts aggregate here — the one company this
+ * file seeds is the link under test, not a record the band would refuse —
+ * so the door's verdict is exactly what these cases were written against.
+ * The three-collection sum has its own spec.
+ */
+jest.mock('./crm-records', () => ({
+  countCrmRecords: async (_orgRef: unknown, contacts: any) => {
+    const contactsCount = (await contacts.count().get()).data().count
+    return {
+      contactsCount,
+      companiesCount: 0,
+      dealsCount: 0,
+      crmRecordsCount: contactsCount,
+    }
+  },
+}))
+
 jest.mock('./firebase-admin', () => ({
   firebaseAdmin: {
     app: () => ({
@@ -152,7 +170,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../../../../aglyn/src/lib/app-utils/campaign-membership'),
   ORG_SCOPE_TOKEN: 'org',
-  checkContactQuota: () => ({ allowed: true }),
+  checkCrmRecordsQuota: () => ({ allowed: true }),
 }))
 
 const capture = (facet?: { companyId?: string }) =>
