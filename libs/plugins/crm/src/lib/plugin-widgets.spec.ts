@@ -47,4 +47,19 @@ describe('crm dashboard widgets', () => {
     expect(glance?.title).toBe('CRM at a glance')
     expect(glance?.Component).toBe(CrmGlanceCard)
   })
+
+  it('gates both dashboard cards on the CRM suite, narrower than the extension (AGL-2611)', () => {
+    registerCrmConsole()
+    const widgets = registered()?.widgets ?? []
+    expect(widgets.map((widget) => widget.widgetId).sort()).toEqual([
+      'crm-glance',
+      'crm-tasks-due',
+    ])
+    for (const widget of widgets) {
+      expect(`${widget.widgetId}: ${widget.featureFlag}`).toBe(`${widget.widgetId}: crm`)
+    }
+    // The extension itself declares none — its contacts list is on every
+    // plan — so the cards' own flag is what keeps them off a Free dashboard.
+    expect(registered()?.featureFlag).toBeUndefined()
+  })
 })

@@ -32,6 +32,14 @@ editor.
 
 ## The steps
 
+:::info Plan availability
+The five CRM steps are part of the **CRM suite**, included from **Starter**. On a
+workspace whose plan does not include it, a step that reaches the CRM does nothing and
+the run history records why — the plan that carries the steps is named — the same way a
+webhook step reports the plan it needs. See
+[The CRM suite](../../workspace-and-billing/billing-and-plans/overview.md#the-crm-suite).
+:::
+
 Five server steps act on the CRM: **Set the contact's lifecycle stage**, **Tag
 the contact**, **Assign the contact an owner**, **Create a CRM task** and **Log
 a CRM activity**. Each acts on the contact the triggering event names — by

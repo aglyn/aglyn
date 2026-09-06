@@ -12,6 +12,13 @@ an owner on your team, an address and notes of its own, and a list of the
 people at it. The Companies section lives in the CRM hub at
 `…/hosts/{site}/crm/companies`.
 
+:::info Plan availability
+Companies are part of the **CRM suite**, included from **Starter**; on Free the
+section is shown locked. A company is a **CRM record**, counted with contacts and
+deals against your plan's records band — see
+[CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
+:::
+
 ## The companies list
 
 The list shows every company your site may see, newest activity first, with

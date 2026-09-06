@@ -30,9 +30,15 @@ import {
   CRM_COLLECTIONS,
   type CrmActivity,
   type CrmActivityKind,
+  CRM_ACTIVITY_LOG_FULL_MESSAGE,
   createResourceUid,
+  crmActivityLogHasRoom,
 } from '@aglyn/aglyn/server'
-import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
+import {
+  apiJson,
+  ApiErrors,
+  countCrmActivitiesForRecord,
+} from '@aglyn/tenant-data-admin'
 import { type ApiV1Context, requireScope } from '../api-v1'
 import {
   CRM_LABEL_MAX,
@@ -190,6 +196,21 @@ async function createActivity(request: Request, ctx: ApiV1Context): Promise<Resp
 
   try {
     const { kind, atMs, byUid, ...rest } = parsed.values
+    // The per-record ceiling (AGL-2611): one aggregate on the record the
+    // activity is filed under. A platform bound rather than a plan one, so
+    // it is a conflict with the record's state, not a plan refusal.
+    const logged = await countCrmActivitiesForRecord(
+      ctx.firestore.collection('orgs').doc(ctx.orgId),
+      parsed.values,
+    )
+    if (!crmActivityLogHasRoom(logged)) {
+      await claim.release()
+      return ApiErrors.conflict({
+        message: CRM_ACTIVITY_LOG_FULL_MESSAGE,
+        code: 'activity_log_full',
+        headers: ctx.headers,
+      })
+    }
     const id = createResourceUid()
     const stamp = crmCreateStamp(ctx, site.siteId)
     await collection.doc(id).create({

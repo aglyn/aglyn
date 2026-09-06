@@ -76,6 +76,101 @@ export const CRM_COLLECTIONS = {
 export type CrmCollection = (typeof CRM_COLLECTIONS)[keyof typeof CRM_COLLECTIONS]
 
 /**
+ * The three collections the CRM RECORDS band counts (AGL-2611), in the order
+ * the billing caption lists them. `contacts` is not in `CRM_COLLECTIONS`
+ * because it predates the hub and is addressed through `orgDataCollection`,
+ * so the band's own list has to name all three itself. Tasks, pipelines,
+ * activities and field definitions are deliberately absent: a band that
+ * counted what a rep does every hour would price the team's effort, not the
+ * audience it holds.
+ */
+export const CRM_RECORD_COLLECTIONS = [
+  'contacts',
+  CRM_COLLECTIONS.companies,
+  CRM_COLLECTIONS.deals,
+] as const
+
+/**
+ * What a create says when the records band refused it, on every surface —
+ * the contacts list's alert, the company and deal drawers, the plugin's
+ * create routes and the lead conversion (AGL-2596, widened in AGL-2611).
+ *
+ * One sentence in one place, because a reader who is refused in the drawer
+ * and then reads the list must be told the same thing, and the remedy is the
+ * same wherever the refusal lands: only Free has a band with no rate, so
+ * "upgrade" is the whole of the answer.
+ */
+export const CRM_RECORDS_BAND_FULL_MESSAGE =
+  'CRM records limit reached — this record was not added. Upgrade in ' +
+  'Billing to keep collecting.'
+
+/**
+ * The most logged activities ONE record may carry (AGL-2611) — a contact's,
+ * a company's or a deal's own log, counted on the link the activity was
+ * filed under.
+ *
+ * A platform ceiling and not a plan dimension, in the family of
+ * `WEBHOOK_MAX_PER_HOST` and `NON_PAGE_SCREEN_MAX_PER_HOST`: activities are
+ * not in the records band because they are bounded by human effort, and
+ * this is the bound. Five thousand is a call a day for fourteen years on one
+ * person, so nobody working a real relationship reaches it — what does is
+ * an automation logging on every event, or an import replaying a history,
+ * and either of those past this line is a document cost with no reader.
+ *
+ * Enforced where an activity is written: the console's log dialog, the
+ * `logCrmActivity` automation step and `POST /v1/activities`, each with one
+ * aggregate read on the record's link before the create. The timeline reads
+ * a hundred at a time and is untouched by the number.
+ */
+export const CRM_ACTIVITIES_PER_RECORD_CEILING = 5_000
+
+/**
+ * What every writer says when a record's log is full — the console's log
+ * dialog, the automation step's run history and `POST /v1/activities`.
+ */
+export const CRM_ACTIVITY_LOG_FULL_MESSAGE =
+  `This record already has ${CRM_ACTIVITIES_PER_RECORD_CEILING.toLocaleString(
+    'en-US',
+  )} activities, which is the most one record can carry.`
+
+/** The record an activity is filed under: its links, of which one leads. */
+export interface CrmActivityLink {
+  contactId?: string | null
+  companyId?: string | null
+  dealId?: string | null
+}
+
+/**
+ * The field the per-record activity ceiling is counted on, or `null` for an
+ * activity that names no record at all.
+ *
+ * The contact leads, then the company, then the deal: an activity logged
+ * from a contact's page carries the company beside it (the automation step
+ * copies the facet's `companyId` onto every record it creates), and a
+ * ceiling counted on the company would let one busy account exhaust every
+ * contact filed under it. The record whose PAGE the log is read on is the
+ * one whose log has the limit. Shared by the client dialog and the two
+ * server writers so they count the same thing.
+ */
+export function crmActivityCeilingLink(
+  link: CrmActivityLink,
+): { field: 'contactId' | 'companyId' | 'dealId'; id: string } | null {
+  if (link.contactId) return { field: 'contactId', id: String(link.contactId) }
+  if (link.companyId) return { field: 'companyId', id: String(link.companyId) }
+  if (link.dealId) return { field: 'dealId', id: String(link.dealId) }
+  return null
+}
+
+/**
+ * Whether ONE MORE activity fits under `CRM_ACTIVITIES_PER_RECORD_CEILING`.
+ * Both halves of the boundary live here so no writer re-derives `>=`.
+ */
+export function crmActivityLogHasRoom(existing: number): boolean {
+  const count = Number(existing)
+  return !(Number.isFinite(count) && count >= CRM_ACTIVITIES_PER_RECORD_CEILING)
+}
+
+/**
  * Where a person sits in the relationship, as one of a fixed list.
  *
  * A fixed list rather than free text so that a report can count people per

@@ -13,6 +13,15 @@ An opportunity — a titled, valued thing a [contact](contacts.md) or a
 Scopes and the site rule are shared with every CRM resource — see
 [companies](companies.md#scopes-and-sites).
 
+:::info Plan availability
+Deals are part of the **CRM suite**, included from Starter — a plan without it answers
+`403 plan_required` with `code: "crm"`. A deal is also a **CRM record**: it counts with
+contacts and companies against the plan's records band, and on a plan that hard-bands
+(Free) a create past the band answers `403 plan_required` with
+`code: "crm_records_quota"`, with the key given back. See
+[companies](companies.md) for the same rule on the other collections.
+:::
+
 ## The deal object
 
 ```json
@@ -159,6 +168,7 @@ it.
 | Status | `type` | When |
 | --- | --- | --- |
 | `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `pipelineId` or `stageId` that does not exist, a `status` that disagrees with the `stageId`, an `amountCents` that is not a whole number `0` or more, a `currency` that is not a three-letter code, an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
+| `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — the CRM records band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such deal"`. |
 | `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/deals`, `GET, PATCH, DELETE` on one deal. |

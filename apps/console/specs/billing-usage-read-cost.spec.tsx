@@ -183,6 +183,10 @@ describe('the meter reads counters, never collections', () => {
     // on the platform and listing it to size it would be ruinous.
     expect(counted).toContain('orgs/org-1/contacts')
     expect(counted).toContain('orgs/org-1/datasets')
+    // The records band's other two parts (AGL-2611): one aggregate each,
+    // never a listing — a company list can be tens of thousands.
+    expect(counted).toContain('orgs/org-1/companies')
+    expect(counted).toContain('orgs/org-1/deals')
   })
 
   it('reads every total by document id', async () => {
@@ -195,6 +199,11 @@ describe('the meter reads counters, never collections', () => {
     expect(byId).toContain('orgs/org-1/counters/campaignEmailSends')
     expect(byId).toContain(
       `orgs/org-1/apiUsage/${new Date().toISOString().slice(0, 7)}`,
+    )
+    // Today's one-to-one email counter (AGL-2611), keyed by UTC day as the
+    // send route keys its write — the document the cap is enforced against.
+    expect(byId).toContain(
+      `orgs/org-1/crmEmailUsage/${new Date().toISOString().slice(0, 10)}`,
     )
   })
 })

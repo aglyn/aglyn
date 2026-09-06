@@ -53,6 +53,7 @@ import {
   createPayload,
   crmCollection,
   crmCreateStamp,
+  crmRecordsBandRefusal,
   crmRefErrors,
   crmTimes,
   crmValidationFailed,
@@ -319,6 +320,13 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
       return crmValidationFailed(ctx, 'deal', {
         pipelineId: 'This pipeline has no stages',
       })
+    }
+    // The records band (AGL-2611), asked last so a refusal past the pipeline
+    // resolution releases the key exactly as a bad stage does.
+    const bandFull = await crmRecordsBandRefusal(ctx)
+    if (bandFull) {
+      await claim.release()
+      return bandFull
     }
     const id = createResourceUid()
     // One clock: the stage move is stamped with the instant the record's own

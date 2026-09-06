@@ -267,7 +267,7 @@ When a plan *does* hard-band, a create past the band is refused:
 
 | `code` | Means |
 | --- | --- |
-| `contact_quota` | Every included contact slot is used and this plan doesn't meter the overage. The message names the limit. |
+| `contact_quota` | The plan's **CRM records band** — contacts, companies and deals together — is full and this plan doesn't meter the overage. The message names the limit. |
 
 **Neither this nor `contact_exists` consumes an `Idempotency-Key.`** Both clear —
 one when somebody upgrades, the other when the duplicate is removed — and the retry
@@ -351,7 +351,7 @@ those are separate records with their own endpoints.
 | `400` | `bad_request` | `code: "validation_failed"` — on a write, a missing or unusable `email`, a non-boolean `marketingConsent`, a `marketingConsent: true` with no
 `consentSiteId` (or one naming a site the organization does not own), a profile field with no `consentSiteId`, a `phone` that does not normalize, a `lifecycleStage` outside the list, a `companyId` that does not exist, an `ownerUid` who is not a member, or an attempt
 to write `email`/`sources`. On the list, an `?email=` that isn't a usable address, a `?lifecycleStage=` outside the list, or a `?consentSiteId=` naming a site the organization does not own. `fields` names each offending key. |
-| `403` | `plan_required` | `code: "contact_quota"` — the audience band is full on a plan that doesn't meter the overage. |
+| `403` | `plan_required` | `code: "contact_quota"` — the CRM records band (contacts, companies and deals together) is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `contacts:read` / `contacts:write`. Checked before the method, so a write attempt with a read-only key returns `403`, not `405`. |
 | `404` | `not_found` | `"No such contact"`. |
 | `405` | `method_not_allowed` | Method not supported on that path. The `Allow` header lists what is: `GET, POST` on `/v1/contacts`, `GET, PATCH, DELETE` on one contact. |

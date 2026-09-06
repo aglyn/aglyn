@@ -29,6 +29,7 @@ this file is the last step, not the decision.
 | `commerce` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `commerceAnalytics` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `contentGating` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `crm` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `customDomain` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `customSendingDomain` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `dataStore` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -57,4 +58,4 @@ this file is the last step, not the decision.
 | `whiteLabel` | — | — | — | — | — | — | ✓ | ✓ |
 | `workflows` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-_36 features across 8 plans._
+_37 features across 8 plans._

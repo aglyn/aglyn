@@ -272,6 +272,24 @@ export interface ConsoleNavSection {
    * link exactly as it is hidden from the rail — one verdict, both places.
    */
   navTabId?: string
+  /**
+   * Entitlement flag gating THIS section, when the org's plan may include
+   * the surface and not the whole of it (AGL-2611). Omit to inherit the
+   * extension's `featureFlag`, which is the common case.
+   *
+   * Composes by AND with the extension's, the way `navTabId` composes with
+   * the nav item's release gate: the shell answers the extension's flag
+   * first and this one inside it, so a section can only ever be NARROWER
+   * than the surface holding it. A section this refuses is resolved
+   * `locked` for the rail and refused on a deep link with the shell's own
+   * upgrade notice — one verdict, both places — and the page body never
+   * mounts, which is the whole of the shell's promise about entitlements.
+   *
+   * The case it exists for is a hub whose first section ships on every
+   * plan and whose others do not: the CRM's contacts list is on Free, and
+   * the sales suite built on that list starts at Starter.
+   */
+  featureFlag?: keyof OrgFeatureFlags
 }
 
 /** A {@link ConsoleNavSection} with the shell's answers filled in. */
@@ -282,6 +300,15 @@ export interface ResolvedConsoleNavSection {
   href: string
   /** False when this section's release flag hides it from this viewer. */
   visible: boolean
+  /**
+   * True when the org's SETTLED plan does not carry the section's
+   * `featureFlag` (AGL-2611). The rail draws it locked and still links it —
+   * the notice behind the link is the way to buy it — and the shell refuses
+   * the body. Never true while the org read is pending: an unsettled plan
+   * is not a refusal, and a lock that appeared for one paint on a paying
+   * workspace would be the AGL-1380 defect in a new place.
+   */
+  locked?: boolean
 }
 
 export interface ConsoleNavItem {
@@ -489,6 +516,19 @@ export interface ConsoleWidget {
    * and for the same reason.
    */
   permission?: string
+  /**
+   * The entitlement THIS card needs, when it is narrower than its
+   * extension's {@link ConsoleExtension.featureFlag} (AGL-2611).
+   *
+   * Composes by AND with the extension's, exactly as `permission` above
+   * does: a card cannot escape its extension's gate by declaring nothing,
+   * and declaring one here can only narrow. The case is an extension whose
+   * surface ships on every plan while one of its cards belongs to a paid
+   * part of it — the CRM's dashboard cards, which read the tasks and the
+   * pipeline a Free workspace does not have. Absent without an upsell, for
+   * the reason `permission` gives.
+   */
+  featureFlag?: keyof OrgFeatureFlags
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Component: ComponentType<any>
 }

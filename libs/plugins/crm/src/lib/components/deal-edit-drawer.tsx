@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, findOrgMember, nameSearchKey } from '@aglyn/aglyn'
+import {
+  CRM_COLLECTIONS,
+  CRM_RECORDS_BAND_FULL_MESSAGE,
+  findOrgMember,
+  nameSearchKey,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
@@ -52,6 +57,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import {
@@ -260,8 +266,27 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
 
   const problem = dealFormProblem(values, mode)
 
+  /*
+   * THE RECORDS BAND (AGL-2611), read only while a CREATE is open: a deal
+   * is a record of the band the contacts list is banded by, and on a Free
+   * org at its hundred this drawer refuses the way `upsertHostContact`
+   * refuses a capture — same number, same sentence. Memoized, because the
+   * tuple is an effect dependency and a fresh one per render would re-read
+   * the three aggregates on every keystroke.
+   */
+  const recordsScope = useMemo(
+    () => (open && mode === 'create' && orgId ? (['orgs', orgId] as const) : null),
+    [open, mode, orgId],
+  )
+  const records = useCrmRecordsQuota(recordsScope, org)
+  const bandFull = mode === 'create' && records.ready && !records.quota.allowed
+
   const handleSave = useCallback(async () => {
     if (problem || !orgId || !user?.uid) return
+    if (bandFull) {
+      enqueueSnackbar(CRM_RECORDS_BAND_FULL_MESSAGE, { variant: 'warning', persist: false })
+      return
+    }
     setBusy(true)
     try {
       const nowMs = Date.now()
@@ -310,6 +335,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     }
   }, [
     problem,
+    bandFull,
     orgId,
     user,
     deal,
@@ -531,10 +557,13 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             fullWidth
             slotProps={{ htmlInput: { maxLength: DEAL_NOTES_MAX } }}
           />
+          {bandFull ? (
+            <Alert severity="warning">{CRM_RECORDS_BAND_FULL_MESSAGE}</Alert>
+          ) : null}
           {problem && values.title ? <Alert severity="warning">{problem}</Alert> : null}
           <Button
             variant="contained"
-            disabled={busy || Boolean(problem) || !orgId}
+            disabled={busy || Boolean(problem) || !orgId || bandFull}
             onClick={() => void handleSave()}
           >
             {deal ? 'Save deal' : 'Create deal'}

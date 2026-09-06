@@ -73,6 +73,9 @@ jest.mock('firebase/firestore', () => ({
   orderBy: (...args: unknown[]): Clause => ({ kind: 'orderBy', args }),
   limit: (...args: unknown[]): Clause => ({ kind: 'limit', args }),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  // The create drawer measures the records band on open (AGL-2611): three
+  // aggregates, all empty here, so nothing below is refused at a band.
+  getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
   setDoc: jest.fn(async (ref: { path: string }, data: Record<string, unknown>) => {
     written.push({ path: ref.path, data })
   }),

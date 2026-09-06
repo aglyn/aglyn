@@ -19,9 +19,10 @@
 import {
   type AglynOrgBilling,
   type AglynPostalAddress,
-  CRM_COLLECTIONS,
-  type CrmCompany,
   createResourceUid,
+  CRM_COLLECTIONS,
+  CRM_RECORDS_BAND_FULL_MESSAGE,
+  type CrmCompany,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
@@ -50,6 +51,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import {
@@ -130,6 +132,16 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   const [draft, setDraft] = useState<CompanyDraft>(EMPTY_COMPANY_DRAFT)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  /*
+   * THE RECORDS BAND (AGL-2611), read only for a CREATE: a company is a
+   * record of the band the contacts list is banded by, and on a Free org at
+   * its hundred this drawer refuses the way `upsertHostContact` refuses a
+   * capture — same number, same sentence. An edit is not a record and pays
+   * for no aggregate. Only a SETTLED refusal refuses: three reads that have
+   * not answered are not a full band.
+   */
+  const records = useCrmRecordsQuota(open && !company ? scope : null, org)
+  const bandFull = !company && records.ready && !records.quota.allowed
 
   /*
    * Seeded when the drawer OPENS, and not on every render of the card
@@ -206,6 +218,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
         enqueueSnackbar('Company saved', { variant: 'success', persist: false })
         onSaved(company.$id)
       } else {
+        if (bandFull) return setError(CRM_RECORDS_BAND_FULL_MESSAGE)
         const id = createResourceUid()
         await setDoc(
           doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, id),
@@ -244,6 +257,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     scope,
     draft,
     company,
+    bandFull,
     firestore,
     seed,
     createTokens,
@@ -288,6 +302,9 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
               'domain is what suggests this company for a person from their ' +
               'email address, so enter the bare hostname.'}
           </Typography>
+          {bandFull ? (
+            <Alert severity="warning">{CRM_RECORDS_BAND_FULL_MESSAGE}</Alert>
+          ) : null}
           <TextField
             size="small"
             label="Name"

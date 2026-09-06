@@ -69,6 +69,8 @@ jest.mock('firebase/firestore', () => ({
   orderBy: () => undefined,
   limit: () => undefined,
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
+  // The per-record ceiling's one aggregate before a log (AGL-2611).
+  getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
   addDoc: jest.fn().mockResolvedValue({ id: 'act-4' }),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),

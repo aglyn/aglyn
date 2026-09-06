@@ -95,18 +95,26 @@ export function registerCrmConsole(): void {
      * card is a glance at the reader's own overdue and due-today work and
      * renders nothing on a workspace that has never made a task; the glance
      * card is four server-counted figures, each a link into the hub.
+     *
+     * Both carry `featureFlag: 'crm'` of their own (AGL-2611): the extension
+     * declares none, because its contacts list is on every plan, but these
+     * two read the tasks and the pipeline a plan without the suite does not
+     * have, so the slot leaves them out on such a plan — absent, not upsold,
+     * the treatment every gated card gets.
      */
     widgets: [
       {
         slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
         widgetId: 'crm-tasks-due',
         title: 'Tasks due',
+        featureFlag: 'crm',
         Component: CrmTasksDueCard,
       },
       {
         slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard,
         widgetId: 'crm-glance',
         title: 'CRM at a glance',
+        featureFlag: 'crm',
         Component: CrmGlanceCard,
       },
     ],

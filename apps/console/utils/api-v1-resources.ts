@@ -23,7 +23,7 @@
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   checkApiRequestQuota,
-  checkContactQuota,
+  checkCrmRecordsQuota,
   checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
@@ -72,10 +72,11 @@ import {
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
-  apiJson,
   ApiErrors,
+  apiJson,
   consumeRateLimit,
   contactCompanyMirrorValue,
+  crmRecordsQuotaForOrg,
   dataStorageRefusal,
   decodeCursor,
   encodeCursor,
@@ -2966,18 +2967,25 @@ async function createContact(
       })
     }
 
-    // One aggregate read, the same one `upsertHostContact` and the monthly
-    // rollup take. Unconditional, matching `createDataset` — the alternative
-    // is a per-plan shape check like `dataStorageEnforcementShape`, and a
-    // `count()` costs one read against a write that costs one anyway.
-    const count = (await collection.count().get()).data().count
-    const quota = checkContactQuota(ctx.org as never, count)
+    // Three aggregate reads, the same ones `upsertHostContact` and the
+    // monthly rollup take — the band counts companies and deals beside the
+    // contacts (AGL-2611). Unconditional, matching `createDataset` — the
+    // alternative is a per-plan shape check like `dataStorageEnforcementShape`,
+    // and a `count()` costs one read against a write that costs one anyway.
+    const quota = await crmRecordsQuotaForOrg(
+      ctx.org as never,
+      ctx.firestore.collection('orgs').doc(ctx.orgId),
+      collection,
+    )
     if (!quota.allowed) {
       await claim.release()
+      // `contact_quota` is the code this endpoint has always answered with
+      // and integrators match on it; the band behind it widened, the code
+      // did not. Companies and deals answer `crm_records_quota`.
       return ApiErrors.planRequired({
         message:
-          `Audience limit reached (${quota.included} contacts). ` +
-          'Upgrade the plan to add more.',
+          `CRM records limit reached (${quota.included} records across ` +
+          'contacts, companies and deals). Upgrade the plan to add more.',
         code: 'contact_quota',
         headers: ctx.headers,
       })
@@ -3518,9 +3526,14 @@ export async function handleUsage(
     ctx.org as never,
     Number(apiSnap.get('count') ?? 0),
   )
-  const contactQuota = checkContactQuota(
+  // The records band is measured on the SUM (AGL-2611); the contacts entry
+  // below keeps reporting the people count against it, so a client that
+  // only ever read `contacts` still sees the headroom that refuses it.
+  const crmRecordsQuota = checkCrmRecordsQuota(
     ctx.org as never,
-    contactsSnap.data().count,
+    contactsSnap.data().count +
+      companiesSnap.data().count +
+      dealsSnap.data().count,
   )
   const datasetQuota = checkDatasetQuota(ctx.org, datasetsSnap.data().count)
   const storageQuota = checkDataStorageQuota(
@@ -3551,10 +3564,23 @@ export async function handleUsage(
         apiQuota.overageRateUsd,
       ),
       contacts: usageBand(
-        contactQuota.used,
-        contactQuota.included,
-        contactQuota.remaining,
-        contactQuota.overageRateUsd,
+        contactsSnap.data().count,
+        crmRecordsQuota.included,
+        crmRecordsQuota.remaining,
+        crmRecordsQuota.overageRateUsd,
+      ),
+      /*
+       * THE BAND ITSELF (AGL-2611): contacts, companies and deals as one
+       * figure against the one band the plan sells. `contacts` above keeps
+       * its shape for the client that only reads it — same band, same
+       * headroom — and this is the number the invoice and the console
+       * meter are computed from. Companies and deals below stay as sizes.
+       */
+      crmRecords: usageBand(
+        crmRecordsQuota.used,
+        crmRecordsQuota.included,
+        crmRecordsQuota.remaining,
+        crmRecordsQuota.overageRateUsd,
       ),
       // Datasets are the one band with no overage RATE — extra slots are an
       // add-on you buy, not usage that meters — so `metered` is always false
@@ -3617,6 +3643,19 @@ export async function handleUsage(
 
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
+/**
+ * The resources the CRM SUITE entitlement gates (AGL-2611). Contacts are not
+ * among them: the contacts list ships on every plan, banded, and its API
+ * has been open since AGL-899.
+ */
+const CRM_SUITE_RESOURCES: ReadonlySet<string> = new Set([
+  'companies',
+  'pipelines',
+  'deals',
+  'tasks',
+  'activities',
+])
+
 /** Route a `/v1/<resource>/...` request to its handler. */
 export async function dispatchResource(
   request: Request,
@@ -3624,6 +3663,21 @@ export async function dispatchResource(
   segments: string[],
 ): Promise<Response> {
   const url = new URL(request.url)
+  // The plan question before the scope one, in front of the five handlers
+  // rather than inside each: `crm:*` is mintable on a Business key whose org
+  // was later moved to a plan without the suite by a staff override, and a
+  // scope that still answered would be the shell's "extensions cannot bypass
+  // entitlements" promise broken over the wire. Same shape as the
+  // `dataStore` refusal on datasets.
+  if (CRM_SUITE_RESOURCES.has(segments[0]) && !checkEntitlement(ctx.org, 'crm')) {
+    return ApiErrors.planRequired({
+      message:
+        'The CRM suite — companies, pipelines, deals, tasks and activities — ' +
+        'is not included in this organization’s plan',
+      code: 'crm',
+      headers: ctx.headers,
+    })
+  }
   switch (segments[0]) {
     case 'datasets':
       return handleDatasets(request, ctx, segments, url)

@@ -45,6 +45,7 @@ import {
   createPayload,
   crmCollection,
   crmCreateStamp,
+  crmRecordsBandRefusal,
   crmTimes,
   crmValidationFailed,
   listCrm,
@@ -230,6 +231,14 @@ async function createCompany(
           headers: ctx.headers,
         })
       }
+    }
+    // The records band (AGL-2611), after the duplicate check for the reason
+    // the claim ordering gives: a refusal that clears when the band is raised
+    // must not burn the key the retry will carry.
+    const bandFull = await crmRecordsBandRefusal(ctx)
+    if (bandFull) {
+      await claim.release()
+      return bandFull
     }
     const id = createResourceUid()
     await collection.doc(id).create({

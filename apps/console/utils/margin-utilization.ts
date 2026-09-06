@@ -131,7 +131,9 @@ export const UTILIZATION_BAND_LABELS: Record<UtilizationBand, string> = {
   formSubmissions: 'Form submissions',
   dataStorageMb: 'Dataset storage',
   apiRequests: 'API requests',
-  contactsCount: 'Contacts',
+  // The band under the rollup's `contactsCount` key widened to contacts,
+  // companies and deals (AGL-2611); the column says what it measures.
+  contactsCount: 'CRM records',
   emailSends: 'Email sends',
   assistCredits: 'Assist credits',
   workflowRuns: 'Workflow runs',
@@ -311,7 +313,10 @@ function bandUsage(
     formSubmissions: finite(rollup?.formSubmissions),
     dataStorageMb: finite(rollup?.dataStorageMb),
     apiRequests: finite(rollup?.apiRequests),
-    contactsCount: finite(rollup?.contactsCount),
+    // The records band's figure (AGL-2611), falling back to contacts alone
+    // only on a row written before the band was widened — the same rule
+    // `orgMonthlyCogsUsd` applies, so utilization and cost read one number.
+    contactsCount: finite(rollup?.crmRecordsCount ?? rollup?.contactsCount),
     emailSends: finite(rollup?.emailSends),
     // Dollars on the rollup, credits on the band. `assistCreditsFromUsd` is
     // the ONE conversion between them, so this figure and the one the customer

@@ -73,7 +73,7 @@ const ORG = {
   plan: 'starter',
   entitlements: { contactsPerHost: 10 },
 } as any
-const OVERAGE_LEAD = "50 contacts over your plan's included 10"
+const OVERAGE_LEAD = "50 CRM records over your plan's included 10"
 /** The figure that must not appear while the flag is off. */
 const ESTIMATE = '0.05'
 

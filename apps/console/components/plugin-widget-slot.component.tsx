@@ -22,7 +22,10 @@ import { useEnabledPluginIds } from './console-plugins-gate.component'
 import { useDashboardWidgetPrefs } from './dashboard-widget-prefs.context'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgPermissions from '../hooks/use-org-permissions'
-import { resolveExtensionEntitlement } from '../utils/extension-entitlement'
+import {
+  composeExtensionEntitlements,
+  resolveExtensionEntitlement,
+} from '../utils/extension-entitlement'
 import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
@@ -104,10 +107,13 @@ export function useSlotWidgets(slots: readonly string[]): {
   const answers = { can, permissions, loaded: permissionsLoaded }
   const resolved = slots.flatMap((slot) =>
     listConsoleWidgets(slot, enabledPluginIds).map(({ extension, widget }) => ({
-      entitlement: resolveExtensionEntitlement(
-        extension.featureFlag,
-        org,
-        orgReady,
+      // The extension's flag AND the widget's own (AGL-2611), exactly as
+      // the permission below composes: a card gated narrower than its
+      // extension — the CRM's dashboard cards, on a plan that has the
+      // contacts list and not the suite — is absent, without an upsell.
+      entitlement: composeExtensionEntitlements(
+        resolveExtensionEntitlement(extension.featureFlag, org, orgReady),
+        resolveExtensionEntitlement(widget.featureFlag, org, orgReady),
       ),
       // The extension's requirement AND the widget's own, exactly as a nav
       // item composes with its extension's: a card cannot escape its

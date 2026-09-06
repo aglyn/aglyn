@@ -92,6 +92,73 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-05 — CRM records band, the CRM suite gate and one-to-one email caps
+
+- **Decided by:** Zach, 2026-09-05, by directive — the CRM must never run negative, must hold an 80% gross margin at full utilization, and is available only from a minimum tier. The figures below were chosen under that directive and are recorded as the decision; the Drive Pricing Decision Log entry of the same date carries the cost model and the arithmetic.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS[*].features.crm` (`false` on Free, `true` from Starter), `PLAN_ENTITLEMENTS[*].crmEmailsPerDay`, `checkCrmRecordsQuota` and `checkCrmEmailQuota` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `countCrmRecords` in `libs/tenant/data/admin/src/lib/server/crm-records.ts`; the CRM-axis margin guard in `apps/console/specs/tier-margin-floor.spec.ts`; AGL-2611.
+
+**No charged price moves.** Plan prices, add-on prices, both fee ladders, the
+three metered pass-through rates and the contacts overage ladder are what the
+2026-08-18 lock and the 2026-08-31 Agency entry left them. What moves is
+**packaging**: which tiers include the CRM suite, what the contacts band
+counts, and one new bounded quantity with a per-plan cap.
+
+### What was decided
+
+1. **The CRM suite is included from Starter.** `features.crm` is `false` on
+   Free and `true` on every other plan. Free keeps the **Contacts** section —
+   the list, tags, notes, segments, CSV import and export, which is the capture
+   projection the email audiences read — and sees Leads, Companies, Deals,
+   Tasks, Reports and Fields locked with the console's standard upgrade
+   affordance. The CRM automation steps refuse into the run history, the
+   `crm:*` REST resources answer `plan_required`, and the two CRM dashboard
+   cards do not render. Starter rather than Pro because the field prices a CRM
+   seat at $14–25 a month and Starter with the suite included is the
+   competitive entry; gating higher hands the small-business buyer to a free
+   CRM elsewhere.
+2. **The contacts band becomes the CRM records band.** `contactsPerHost` keeps
+   its persisted key and its numbers (100 · 1,000 · 10,000 · 50,000 · 100,000 ·
+   150,000 · 500,000 · Unlimited) and now counts **contacts + companies +
+   deals**. Overage meters at the unchanged `extraContactsUsdPer1k` ladder,
+   still withheld from invoices while `release_contacts` is off. Free's hard
+   band refuses the 101st record across the three collections. Tasks and
+   activities are not counted; the activity log is capped at 5,000 entries per
+   record (`CRM_ACTIVITIES_PER_RECORD_CEILING`).
+3. **One-to-one email is capped per organization per UTC day:** Free 0 ·
+   Starter 50 · Pro 150 · Business 200 · Scale 300 · Advanced 500 · Agency
+   1,000 · Enterprise unlimited. A hard pace with no overage rate on any tier;
+   every send still counts on the `emailSends` cost meter. The caps are the
+   counts at which every plan holds an 80% CRM-axis margin at its **annual**
+   price with the whole day spent — not a usability figure.
+4. **No new seat add-on.** A CRM user is an organization member, already
+   priced by the seat and collaborator add-ons; a per-seat CRM SKU would charge
+   the same person twice.
+
+### The guardrail
+
+`apps/console/specs/tier-margin-floor.spec.ts` asserts, over
+`PLAN_ENTITLEMENTS`, `PLAN_PRICING` and `ORG_COGS_UNIT_RATES_USD`, that no
+priced plan's CRM-axis cost at 100% utilization —
+`contactsPerHost × perContactMonth + membersPerHost × $0.06 +
+crmEmailsPerDay × 30 × perEmailSend` — exceeds 20% of its annual monthly
+price, and pins the figures: Starter $1.73 of $16, Pro $6.65 of $39, Business
+$18.40 of $99, Scale $32.60 of $179, Advanced $49.50 of $299, Agency $142.00
+of $1,049. `libs/aglyn/src/lib/app-utils/plan-entitlements.spec.ts` asserts
+that a band with no overage rate is either unlimited or refused at the line,
+so neither the Free records band nor any tier's email cap can be silently
+exceeded.
+
+### What does not change
+
+The Free contacts band, the overage ladder, the `release_contacts` withholding,
+the dynamic-list materializer budget, the 5,000-row import ceiling, the bounded
+report windows and the API rate limits are all as they were. The cost model's
+`perContactMonth` ($0.20 per 1,000) stands; a company or a deal costs less to
+hold than a contact, so counting them at the contacts rate over-covers them.
+
+---
+
 ## 2026-08-31 — The dedicated sending subdomain becomes an entitlement, so one org can be granted one
 
 - **Decided by:** the account owner — the gate moves to the mechanism every other capability uses, which makes a per-org grant real rather than a field nothing reads.

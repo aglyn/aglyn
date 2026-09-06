@@ -34,6 +34,10 @@
  * and the query shape has a pure helper of its own.
  */
 
+import {
+  CRM_ACTIVITIES_PER_RECORD_CEILING,
+  CRM_ACTIVITY_LOG_FULL_MESSAGE,
+} from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { addDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
@@ -118,11 +122,15 @@ jest.mock('firebase/firestore', () => ({
   orderBy: () => undefined,
   limit: () => undefined,
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
+  // The per-record ceiling's one aggregate before a log (AGL-2611).
+  getCountFromServer: async () => ({ data: () => ({ count: mockLogged }) }),
   addDoc: jest.fn().mockResolvedValue({ id: 'act-3' }),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
 
+/** Activities the record already carries, as the ceiling's aggregate answers. */
+let mockLogged = 0
 const enqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
@@ -226,6 +234,30 @@ describe('ContactTimelineCard (AGL-2600)', () => {
     // Filed against the contact and nothing else.
     expect(payload).not.toHaveProperty('companyId')
     expect(payload).not.toHaveProperty('dealId')
+  })
+
+  it('refuses to log onto a record at the activity ceiling, and says so (AGL-2611)', async () => {
+    mockLogged = CRM_ACTIVITIES_PER_RECORD_CEILING
+    try {
+      renderCard()
+      fireEvent.click(screen.getByRole('button', { name: 'Log activity' }))
+      fireEvent.change(screen.getByLabelText('What happened'), {
+        target: { value: 'One too many' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Log' }))
+
+      await waitFor(() =>
+        expect(enqueueSnackbar).toHaveBeenCalledWith(
+          CRM_ACTIVITY_LOG_FULL_MESSAGE,
+          expect.objectContaining({ variant: 'warning' }),
+        ),
+      )
+      // Refused AND unwritten: the count is read before the write, so the
+      // five-thousand-and-first entry never lands.
+      expect(addDoc).not.toHaveBeenCalled()
+    } finally {
+      mockLogged = 0
+    }
   })
 
   it("offers edit and delete on the author's own row and not on a colleague's", () => {

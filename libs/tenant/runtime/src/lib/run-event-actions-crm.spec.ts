@@ -50,6 +50,8 @@ let mockMembers: Record<string, Record<string, any>> = {}
 /** Auth accounts, uid → address, for the roster document that has none. */
 /** The org's billing doc, as the run's gate read it. */
 let mockOrg: Record<string, any> = { plan: 'business' }
+/** Activities the record already carries, as the ceiling's aggregate answers. */
+let mockActivityCount = 0
 /** Every `update()` the run made on the contact, in order. */
 let contactUpdates: Record<string, any>[] = []
 /** Every `add()` by collection path. */
@@ -180,6 +182,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     declared: false,
   }),
   getOrgForHost: async () => ({ orgId: ORG_ID, org: mockOrg }),
+  // The per-record activity ceiling's one read (AGL-2611), answered from the
+  // fixture so a case can stand a record at the ceiling without seeding
+  // five thousand documents.
+  countCrmActivitiesForRecord: async () => mockActivityCount,
   meterHostEmail: async () => ({ allowed: true }),
   notifyHostManagers: async () => undefined,
   orgDataCollectionForHost: async () =>
@@ -214,6 +220,10 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendFailureReason: () => null,
 }))
 
+import {
+  CRM_ACTIVITIES_PER_RECORD_CEILING,
+  CRM_ACTIVITY_LOG_FULL_MESSAGE,
+} from '@aglyn/aglyn/app-utils/crm'
 import { runEventActions } from './run-event-actions'
 
 /** An action on `formSubmission` carrying one CRM step. */
@@ -240,6 +250,7 @@ beforeEach(() => {
   emailLookups = 0
   mockMembers = { 'uid-sam': { email: 'sam@example.com', role: 'editor' } }
   mockOrg = { plan: 'business' }
+  mockActivityCount = 0
   mockContact = {
     id: 'contact-1',
     data: {
@@ -500,6 +511,77 @@ describe('records beside the contact (claim 3)', () => {
     })
     expect(added['crmActivities']?.[0].atMs).toEqual(expect.any(Number))
     expect(mockActivity.at(-1)?.summary).toBe('logged activity note')
+  })
+
+  it('refuses to log onto a record at the activity ceiling, and says so (AGL-2611)', async () => {
+    mockActivityCount = CRM_ACTIVITIES_PER_RECORD_CEILING
+    mockActions = [acting({ type: 'logCrmActivity', kind: 'note', body: 'One more' })]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(added['crmActivities']).toBeUndefined()
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain(CRM_ACTIVITY_LOG_FULL_MESSAGE)
+    // BOTH SIDES: one under the ceiling still writes, so the refusal is the
+    // boundary and not a step that refuses everything.
+    mockActivityCount = CRM_ACTIVITIES_PER_RECORD_CEILING - 1
+    mockActivity = []
+    await run({ email: 'ada@example.com' })
+    expect(added['crmActivities']).toHaveLength(1)
+  })
+})
+
+describe('the CRM suite gate (AGL-2611)', () => {
+  /*
+   * REACHABLE ONLY THROUGH AN OVERRIDE, and that is worth stating. Every
+   * plan that carries `actions` — the gate the whole executor runs behind —
+   * also carries `crm`, and the two plans without the suite (Free, Starter)
+   * run no server automations at all, so a stock plan never reaches this
+   * refusal. A staff override that withdraws the suite from a paid
+   * workspace does, and the executor must answer it the way it answers a
+   * withdrawn `webhooks` flag rather than treat the step as if it ran.
+   */
+  it('refuses every CRM step on an org whose suite was withdrawn, into the run history', async () => {
+    mockOrg = { plan: 'business', entitlements: { features: { crm: false } } }
+    mockActions = [
+      acting({ type: 'setContactStage', lifecycleStage: 'customer' }),
+    ]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(added['crmTasks']).toBeUndefined()
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('CRM steps require the Starter plan')
+  })
+
+  it('CONTROL: the same step on the plan as sold runs', async () => {
+    mockOrg = { plan: 'business' }
+    mockActions = [
+      acting({ type: 'setContactStage', lifecycleStage: 'customer' }),
+    ]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(contactUpdates).toHaveLength(1)
+    expect(mockActivity[0].result).not.toBe('failed')
+  })
+
+  it('never reaches a stock Free or Starter workspace — the actions gate answers first', async () => {
+    // Both halves of the composition: no server automation runs on either
+    // tier, so no history row is written and nothing is touched. A test
+    // that seeded a Free org and expected the suite sentence would be
+    // asserting a refusal the product never issues.
+    for (const plan of ['free', 'starter']) {
+      mockOrg = { plan }
+      mockActions = [
+        acting({ type: 'setContactStage', lifecycleStage: 'customer' }),
+      ]
+      mockActivity = []
+      await run({ email: 'ada@example.com' })
+      expect(contactUpdates).toHaveLength(0)
+      expect(mockActivity).toHaveLength(0)
+    }
   })
 })
 

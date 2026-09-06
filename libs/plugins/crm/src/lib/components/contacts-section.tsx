@@ -18,7 +18,6 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
-  checkContactQuota,
   contactMatchesSegment,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
@@ -41,6 +40,7 @@ import { CONTACT_LIST_FILTER_FIELDS } from '../constants/contact-filters'
 import { type ContactRecord, contactRecordFromDoc } from '../model/contact-record'
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
+import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import ContactsBulkBar from './contacts-bulk-bar'
@@ -71,7 +71,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getCountFromServer,
   limit,
   orderBy,
   query,
@@ -392,39 +391,29 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * answers: one aggregate read per mount, the same call
    * `billing-usage.component.tsx` already makes against the same path.
    *
-   * The counting RULE is untouched — `checkContactQuota` is an entitlement
-   * input and the usage cron is what bills from it. Only this page's input
-   * stopped being a saturated one.
+   * The counting RULE is untouched — `checkCrmRecordsQuota` is an
+   * entitlement input and the usage cron is what bills from it. Only this
+   * page's input stopped being a saturated one.
+   *
+   * THE BAND IS THE RECORDS BAND (AGL-2611): contacts, companies and deals
+   * together, so the alert below is fed the sum of three aggregates while
+   * the readout beside the toolbar keeps the people count — a workspace
+   * whose hundred records are ninety companies is told it holds ten
+   * contacts and that its band is full, which are both true. The three
+   * reads and the fallback rule live in `useCrmRecordsQuota`, shared with
+   * the company and deal drawers so every door on this hub refuses on the
+   * same number.
    */
-  const [serverContactCount, setServerContactCount] = useState<number | null>(
-    null,
-  )
-  useEffect(() => {
-    if (!dataScope) return
-    let active = true
-    void getCountFromServer(
-      collection(firestore, dataScope[0], dataScope[1], 'contacts'),
-    )
-      .then((snapshot) => {
-        if (active) setServerContactCount(snapshot.data().count)
-      })
-      .catch(() => {
-        // Falls back to the listener length below — a LOWER bound, and the
-        // behaviour this page had before. Deliberately not 0: `checkContactQuota`
-        // answers a question from whatever it is handed, and a defaulted 0
-        // would clear the free plan's hard-band alert on an org that is over it.
-      })
-    return () => {
-      active = false
-    }
-  }, [firestore, dataScope])
+  const records = useCrmRecordsQuota(dataScope, org, {
+    contactsFallback: contacts.length,
+  })
   // Pending or denied, the listener length stands in. It can only UNDERSTATE
   // (it is the same collection, capped), never overstate, so no alert this
   // number gates can fire on a count larger than the truth.
-  const contactCount = serverContactCount ?? contacts.length
-  // Audience bands (AGL-890): paid plans meter past the included count
+  const contactCount = records.contactsCount ?? contacts.length
+  // Records bands (AGL-890): paid plans meter past the included count
   // instead of blocking; only free hard-bands (quota.allowed = false).
-  const quota = checkContactQuota(org, contactCount)
+  const quota = records.quota
   // Signups whose CRM record was dropped at the free band (AGL-891) —
   // written by upsert-contact, host-scoped.
   const { data: droppedCounter } = useFirestoreDoc<any>(
@@ -724,8 +713,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   listener grew a `limit(1000)`. */}
               {`${contactCount.toLocaleString()} contacts · ${
                 Number.isFinite(quota.included)
-                  ? `${quota.included.toLocaleString()} included`
-                  : '∞'
+                  ? `${quota.used.toLocaleString()} of ${quota.included.toLocaleString()} CRM records`
+                  : `${quota.used.toLocaleString()} CRM records`
               }`}
             </Typography>
             <ContactImportButton hostId={hostId} org={org} />
@@ -858,14 +847,14 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           </Stack>
           {!quota.allowed ? (
             <Alert severity="warning">
-              {'Contact limit reached — new visitors are no longer ' +
+              {'CRM records limit reached — new visitors are no longer ' +
                 'captured' +
                 (droppedTotal > 0
                   ? ` (${droppedTotal.toLocaleString()} missed so far)`
                   : '') +
                 '. Upgrade in Billing to keep collecting.'}
             </Alert>
-          ) : quota.overageContacts > 0 &&
+          ) : quota.overageRecords > 0 &&
             quota.overageRateUsd != null &&
             // No claim about money until the verdict that decides it has
             // settled (AGL-1662). `release_contacts` is default-off before
@@ -881,7 +870,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   // and customer must not read different sentences about the
                   // same org's money — that applies to WHEN it is measured as
                   // much as to how much.
-                  `${quota.overageContacts.toLocaleString()} contacts over ` +
+                  `${quota.overageRecords.toLocaleString()} CRM records over ` +
                   `your plan's included ${quota.included.toLocaleString()} — ` +
                   `metered at $${quota.overageRateUsd}/1,000 per month ` +
                   `(≈$${quota.overageMonthlyUsd.toFixed(2)} if your list ends ` +
@@ -898,7 +887,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   // about money. The upgrade nudge goes with the total, since
                   // it prompts a purchase premised on a charge that is not
                   // happening.
-                  `${quota.overageContacts.toLocaleString()} contacts over ` +
+                  `${quota.overageRecords.toLocaleString()} CRM records over ` +
                   `your plan's included ${quota.included.toLocaleString()} — ` +
                   'not billed while the Contacts page is unavailable. ' +
                   `The $${quota.overageRateUsd}/1,000 rate applies once ` +
@@ -908,7 +897,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             <Alert severity="info">
               {`${droppedTotal.toLocaleString()} earlier visitor${
                 droppedTotal === 1 ? ' was' : 's were'
-              } not captured while your contact band was full.`}
+              } not captured while your CRM records band was full.`}
             </Alert>
           ) : null}
           {/*

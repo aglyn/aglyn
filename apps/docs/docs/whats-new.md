@@ -167,7 +167,7 @@ for the how-to.
 - **[Unlimited member accounts on every plan](workspace-and-billing/teams-and-roles/overview.md#site-membership)** —
   visitors who sign up to your published site are never metered, capped, or charged per
   account, on any tier including Free.
-- **[Contact audience bands](workspace-and-billing/billing-and-plans/overview.md#audience-contacts)** —
+- **[Contact audience bands](workspace-and-billing/billing-and-plans/overview.md#crm-records)** —
   your contacts CRM is priced as an included band per tier. On paid plans, growing past
   the band **never drops a record**: extra contacts will bill as small metered overage
   ($0.25–$1.00 per 1,000/month, cheaper on higher tiers). The billing page has a new

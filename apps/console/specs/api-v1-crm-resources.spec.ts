@@ -54,6 +54,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   return {
     __esModule: true,
     ...apiHttp,
+    // The REAL records-band measurement and activity ceiling (AGL-2611),
+    // over the same double the creates write to.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/crm-records',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',
@@ -110,7 +115,11 @@ jest.mock('firebase-admin/firestore', () => {
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
-import { crmScopeTokens, DEFAULT_DEAL_STAGES } from '@aglyn/aglyn/app-utils/crm'
+import {
+  CRM_ACTIVITIES_PER_RECORD_CEILING,
+  crmScopeTokens,
+  DEFAULT_DEAL_STAGES,
+} from '@aglyn/aglyn/app-utils/crm'
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
 import {
   childPaths,
@@ -217,6 +226,146 @@ describe('the premise (AGL-899)', () => {
     mockScopes = ['contacts:read']
     expect((await call('GET', 'deals')).status).toBe(403)
     expect((await call('GET', 'pipelines')).status).toBe(403)
+  })
+})
+
+// ── The CRM suite gate ──────────────────────────────────────────────────────
+
+describe('the CRM suite entitlement (AGL-2611)', () => {
+  /** Every plan-gated resource, by a path that resolves on each. */
+  const SUITE_PATHS = ['companies', 'pipelines', 'deals', 'tasks', 'activities']
+
+  it('refuses every CRM resource, on any verb, for an org without the suite', async () => {
+    // API access without the suite is reachable only through a staff
+    // override — Business carries both — so that is the org this asks
+    // about. `plan_required` with the `crm` code, before scope and method
+    // alike, so a key minted while the suite was held stops answering the
+    // day it is withdrawn.
+    mockOrg = { ...mockOrg, entitlements: { features: { crm: false } } }
+    for (const path of SUITE_PATHS) {
+      const read = await call('GET', path)
+      expect(`${path}: ${read.status}`).toBe(`${path}: 403`)
+      expect((await json(read)).error).toMatchObject({ type: 'plan_required', code: 'crm' })
+    }
+    const write = await call('POST', 'companies', { name: 'Acme', consentSiteId: 'host-1' })
+    expect(write.status).toBe(403)
+    expect((await json(write)).error.code).toBe('crm')
+    expect(childPaths(COMPANIES)).toEqual([])
+  })
+
+  it('leaves contacts open — they are not part of the suite', async () => {
+    mockOrg = { ...mockOrg, entitlements: { features: { crm: false } } }
+    mockScopes = ['contacts:read']
+    expect((await call('GET', 'contacts')).status).toBe(200)
+  })
+
+  it('CONTROL: the plan as sold answers, and a per-org grant on a lesser plan answers too', async () => {
+    expect((await call('GET', 'companies')).status).toBe(200)
+    // Starter carries the suite; the API had to be granted, and a REQUEST
+    // band with it — `refuseIfApiQuotaExhausted` walls a zero band with a
+    // null rate before any resource runs, which is the API's own gate and
+    // not this one.
+    mockOrg = {
+      plan: 'starter',
+      subscription: { status: 'active' },
+      hosts: { 'host-1': true },
+      entitlements: { apiRequestsPerMonth: 1_000, features: { apiAccess: true } },
+    }
+    expect((await call('GET', 'companies')).status).toBe(200)
+  })
+})
+
+// ── The records band ────────────────────────────────────────────────────────
+
+describe('the records band on company and deal creates (AGL-2611)', () => {
+  /**
+   * A Free org granted the suite and the API by staff, banded at its stock
+   * hundred by a smaller override so the case stays readable. Free is the
+   * one plan with no overage rate, so it is the one plan that REFUSES; every
+   * paid plan meters the same create onto the invoice instead.
+   */
+  const bandedFree = (contactsPerHost: number) => ({
+    plan: 'free',
+    hosts: { 'host-1': true },
+    entitlements: {
+      contactsPerHost,
+      // The API's own request band, granted beside the flag: a zero band
+      // with no rate is walled before any resource runs.
+      apiRequestsPerMonth: 1_000,
+      features: { crm: true, apiAccess: true },
+    },
+  })
+
+  it('refuses a company when contacts, companies and deals together fill the band', async () => {
+    // One contact is seeded by the suite's beforeEach. One company and one
+    // deal make three: the band is full, and the NEXT record of either
+    // kind is refused with the key given back.
+    mockOrg = bandedFree(3)
+    mockDocs.set(`${COMPANIES}/co-seed`, { name: 'Seed', visibleTo: ['org'] })
+    mockDocs.set(`${DEALS}/d-seed`, { title: 'Seed', visibleTo: ['org'] })
+
+    const company = await call(
+      'POST',
+      'companies',
+      { name: 'Acme', consentSiteId: 'host-1' },
+      'key-company',
+    )
+    expect(company.status).toBe(403)
+    expect((await json(company)).error).toMatchObject({
+      type: 'plan_required',
+      code: 'crm_records_quota',
+    })
+    expect(childPaths(COMPANIES)).toEqual([`${COMPANIES}/co-seed`])
+
+    const deal = await call(
+      'POST',
+      'deals',
+      { title: 'Beans', contactId: 'c-1', consentSiteId: 'host-1' },
+      'key-deal',
+    )
+    expect(deal.status).toBe(403)
+    expect((await json(deal)).error.code).toBe('crm_records_quota')
+    expect(childPaths(DEALS)).toEqual([`${DEALS}/d-seed`])
+
+    // The key is released: the same key, once the band is raised, lands.
+    mockOrg = bandedFree(10)
+    const retry = await call(
+      'POST',
+      'companies',
+      { name: 'Acme', consentSiteId: 'host-1' },
+      'key-company',
+    )
+    expect(retry.status).toBe(201)
+  })
+
+  it('lands the last record inside the band, of either kind', async () => {
+    mockOrg = bandedFree(3)
+    mockDocs.set(`${DEALS}/d-seed`, { title: 'Seed', visibleTo: ['org'] })
+    // Two records held; the third — a company — fits.
+    const company = await call('POST', 'companies', { name: 'Acme', consentSiteId: 'host-1' })
+    expect(company.status).toBe(201)
+    // …and now the band is full, so a deal does not.
+    const deal = await call('POST', 'deals', {
+      title: 'Beans',
+      contactId: 'c-1',
+      consentSiteId: 'host-1',
+    })
+    expect(deal.status).toBe(403)
+  })
+
+  it('CONTROL: a metered plan lands the same create past its band', async () => {
+    mockOrg = {
+      plan: 'starter',
+      subscription: { status: 'active' },
+      hosts: { 'host-1': true },
+      entitlements: {
+        contactsPerHost: 1,
+        apiRequestsPerMonth: 1_000,
+        features: { apiAccess: true },
+      },
+    }
+    const company = await call('POST', 'companies', { name: 'Acme', consentSiteId: 'host-1' })
+    expect(company.status).toBe(201)
   })
 })
 
@@ -482,6 +631,10 @@ describe('?updatedAfter= — the sync filter', () => {
       mockClock.nowMs = 1_760_000_001_000 + index * 1000
       await call('POST', 'companies', { name, consentSiteId: 'host-1' })
     }
+    // The three creates above each measured the records band — three
+    // aggregates apiece (AGL-2611) — and those are not the reads this case
+    // is about. Counted from here: the pages, and nothing else.
+    issued.length = 0
     const seen: string[] = []
     let cursor: string | null = null
     do {
@@ -716,6 +869,29 @@ describe('/v1/tasks', () => {
 })
 
 describe('/v1/activities', () => {
+  it('refuses the record’s 5,001st activity and lands its 5,000th (AGL-2611)', async () => {
+    // The per-record ceiling, counted on the contact the activity names.
+    for (let index = 0; index < CRM_ACTIVITIES_PER_RECORD_CEILING - 1; index += 1) {
+      mockDocs.set(`${ACTIVITIES}/prior-${index}`, { contactId: 'c-1', body: 'x' })
+    }
+    // Another record's log does not count against this one.
+    mockDocs.set(`${ACTIVITIES}/other`, { contactId: 'c-other', body: 'x' })
+    const last = await call('POST', 'activities', {
+      body: 'Five thousandth',
+      contactId: 'c-1',
+      consentSiteId: 'host-1',
+    })
+    expect(last.status).toBe(201)
+    const next = await call('POST', 'activities', {
+      body: 'One too many',
+      contactId: 'c-1',
+      consentSiteId: 'host-1',
+    })
+    expect(next.status).toBe(409)
+    expect((await json(next)).error).toMatchObject({ code: 'activity_log_full' })
+    expect(childPaths(ACTIVITIES)).toHaveLength(CRM_ACTIVITIES_PER_RECORD_CEILING + 1)
+  })
+
   it('must hang off something, defaults at and byUid, and is write-once', async () => {
     const orphan = await call('POST', 'activities', { body: 'Called', consentSiteId: 'host-1' })
     expect(orphan.status).toBe(400)

@@ -98,4 +98,23 @@ describe('crm plugin', () => {
     // and inherit `release_contacts` from the nav item.
     expect(sections?.every((section) => !section.navTabId)).toBe(true)
   })
+
+  /**
+   * The plan splits the rail (AGL-2611): contacts on every plan, the suite
+   * from Starter. Declared per SECTION and not on the extension, because an
+   * extension flag would lock the contacts list with the rest.
+   */
+  it('gates every section but contacts on the CRM suite, and the extension on nothing', () => {
+    registerCrmConsole()
+    const extension = registered()
+    expect(extension?.featureFlag).toBeUndefined()
+    const sections = extension?.navItems?.[0]?.sections ?? []
+    expect(sections.find((section) => section.id === 'contacts')?.featureFlag).toBeUndefined()
+    for (const section of sections.filter((entry) => entry.id !== 'contacts')) {
+      expect(`${section.id}: ${section.featureFlag}`).toBe(`${section.id}: crm`)
+    }
+    // …and the flag really splits the plans the way the decision says.
+    expect(Aglyn.PLAN_ENTITLEMENTS.free.features.crm).toBe(false)
+    expect(Aglyn.PLAN_ENTITLEMENTS.starter.features.crm).toBe(true)
+  })
 })

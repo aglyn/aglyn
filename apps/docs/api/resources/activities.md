@@ -118,7 +118,7 @@ Returns **`201`**, or **`200`** with the original when an `Idempotency-Key` repl
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such activity"`. |
 | `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/activities`, `GET, DELETE` on one activity — a `PATCH` is refused here rather than with a `404` that would read as "no such activity". |
-| `409` | `conflict` | `code: "idempotency_in_progress"`. |
+| `409` | `conflict` | `code: "idempotency_in_progress"`. `code: "activity_log_full"` — the record named already carries 5,000 activities, the most one record can hold; the key is given back. |
 
 See [Conventions → Errors](../conventions.md#errors) for the shared envelope.
 

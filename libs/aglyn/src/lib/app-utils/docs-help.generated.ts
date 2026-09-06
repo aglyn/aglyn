@@ -204,7 +204,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   contactActivities: ['#two-kinds-of-history', '#logging-an-activity', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   contactFields: ['#define-a-field', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#related'],
   contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#what-each-site-keeps-to-itself', '#owner', '#lifecycle-stages', '#where-the-persons-lead-is', '#finding-a-contact', '#related'],
-  contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#the-contacts-page', '#import-from-csv', '#segments', '#who-can-open-the-crm', '#related'],
+  contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#who-can-open-the-crm', '#related'],
   crmLeads: ['#what-makes-a-lead', '#the-leads-list', '#working-a-lead-from-the-row', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#pipeline', '#won-and-lost', '#tasks', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
   crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#related'],
