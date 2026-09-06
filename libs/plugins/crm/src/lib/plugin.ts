@@ -21,6 +21,7 @@ import { lazy } from 'react'
 import { CRM_CONSOLE_SECTIONS } from './components/crm-console-sections'
 import { CrmGlanceCard } from './components/crm-glance-card'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { withCrmOrgMount } from './hooks/use-crm-org-mount'
 
 /** Code-split: the CRM hub only loads when opened. */
 const CrmConsolePage = lazy(
@@ -101,6 +102,13 @@ export function registerCrmConsole(): void {
      * two read the tasks and the pipeline a plan without the suite does not
      * have, so the slot leaves them out on such a plan — absent, not upsold,
      * the treatment every gated card gets.
+     *
+     * The same two cards again on the organization's `orgDashboard` slot
+     * (AGL-2636) — the org's sites page — under the same flag, with the same
+     * ids: the id names the card, and it is one card totaling the whole
+     * organization there instead of one site. The shell hands that slot the
+     * org mount as a prop, and `withCrmOrgMount` is what puts the mount's
+     * provider around each card, since the sites page cannot import one.
      */
     widgets: [
       {
@@ -116,6 +124,20 @@ export function registerCrmConsole(): void {
         title: 'CRM at a glance',
         featureFlag: 'crm',
         Component: CrmGlanceCard,
+      },
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.orgDashboard,
+        widgetId: 'crm-tasks-due',
+        title: 'Tasks due',
+        featureFlag: 'crm',
+        Component: withCrmOrgMount(CrmTasksDueCard),
+      },
+      {
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.orgDashboard,
+        widgetId: 'crm-glance',
+        title: 'CRM at a glance',
+        featureFlag: 'crm',
+        Component: withCrmOrgMount(CrmGlanceCard),
       },
     ],
     navItems: [

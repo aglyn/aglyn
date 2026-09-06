@@ -48,15 +48,39 @@ describe('crm dashboard widgets', () => {
     expect(glance?.Component).toBe(CrmGlanceCard)
   })
 
-  it('gates both dashboard cards on the CRM suite, narrower than the extension (AGL-2611)', () => {
+  it('registers the same two cards, by the same ids, on the organization dashboard slot (AGL-2636)', () => {
+    registerCrmConsole()
+    const onSlot = (slot: string) =>
+      (registered()?.widgets ?? []).filter((widget) => widget.slot === slot)
+    const site = onSlot(Aglyn.CONSOLE_WIDGET_SLOTS.hostDashboard)
+    const org = onSlot(Aglyn.CONSOLE_WIDGET_SLOTS.orgDashboard)
+    // One card, two placements: the id names the card, so the org entry
+    // carries the site entry's id and title — never a second id for the
+    // same card, which would be two switches for one thing if the org row
+    // ever became arrangeable.
+    const ids = (widgets: typeof site) => widgets.map((widget) => widget.widgetId).sort()
+    expect(ids(site)).toEqual(['crm-glance', 'crm-tasks-due'])
+    expect(ids(org)).toEqual(['crm-glance', 'crm-tasks-due'])
+    for (const widget of org) {
+      const twin = site.find((entry) => entry.widgetId === widget.widgetId)
+      expect(widget.title).toBe(twin?.title)
+      // The org placement is the card beneath the org mount's provider —
+      // not the bare card, which under no mount would resolve to no org.
+      expect(widget.Component).not.toBe(twin?.Component)
+      expect((widget.Component as { displayName?: string }).displayName).toMatch(
+        /^CrmOrgMounted\(/,
+      )
+    }
+  })
+
+  it('gates every dashboard card on the CRM suite, narrower than the extension (AGL-2611)', () => {
     registerCrmConsole()
     const widgets = registered()?.widgets ?? []
-    expect(widgets.map((widget) => widget.widgetId).sort()).toEqual([
-      'crm-glance',
-      'crm-tasks-due',
-    ])
+    expect(widgets).toHaveLength(4)
     for (const widget of widgets) {
-      expect(`${widget.widgetId}: ${widget.featureFlag}`).toBe(`${widget.widgetId}: crm`)
+      expect(`${widget.slot}/${widget.widgetId}: ${widget.featureFlag}`).toBe(
+        `${widget.slot}/${widget.widgetId}: crm`,
+      )
     }
     // The extension itself declares none — its contacts list is on every
     // plan — so the cards' own flag is what keeps them off a Free dashboard.
