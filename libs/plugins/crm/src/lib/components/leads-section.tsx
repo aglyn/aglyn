@@ -81,6 +81,7 @@ import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
 import LeadSurfacesNote from './lead-surfaces-note'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
+import OrgLeadSurfacesNote from './org-lead-surfaces-note'
 
 /**
  * How many leads the section reads: the newest by last seen, plus one probe
@@ -406,8 +407,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         contentGutterY
       >
         <Stack spacing={2}>
-          {/* Which surfaces file a lead on this site, by name (AGL-2612) — a site's own note. */}
-          {hostId ? <LeadSurfacesNote hostId={hostId} /> : null}
+          {/* Which surfaces file a lead, by name (AGL-2612) — under a site its own, at the org level every site's (AGL-2638). */}
+          {hostId ? <LeadSurfacesNote hostId={hostId} /> : <OrgLeadSurfacesNote />}
           {status === 'success' && window.length === 0 ? (
             <EmptyStateComponent
               label={'No leads yet'}

@@ -38,6 +38,11 @@
 // organization's activity feed — the feed a site's console never writes and
 // the org hub writes for everything it does.
 //
+// The org-level Leads section opens with what files a lead, grouped by site
+// (AGL-2638): the seeded site's name linking into its own Leads section, its
+// routed form linking to the form's page, and the switch offered beside the
+// form that could route and does not.
+//
 //   node tools/e2e/crm-org-hub.e2e.mjs
 
 import {
@@ -75,6 +80,7 @@ const SITE_NAME = 'Demo Bakery'
 const PERSON = { email: 'org-hub@aglyn.test', name: 'Orla Hubbard' }
 const { maya } = CRM_FIXTURE.contacts
 const { owen } = CRM_FIXTURE.leads
+const { wholesale } = CRM_FIXTURE.forms
 
 const firestore = adminFirestore()
 const orgRef = firestore.collection('orgs').doc(ORG_ID)
@@ -211,6 +217,32 @@ await step(tally, page, 'the record names the site that knows the person, with i
     `"${SITE_NAME} · …" ×${label}`,
   )
   await shot(page, 'crm-org-hub-contact-record')
+})
+
+await step(tally, page, 'the org-level Leads section says what files a lead, by site', async () => {
+  await page.goto(orgUrl('/crm/leads'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  const card = cardNamed(page, 'Leads')
+  await card.waitFor({ timeout: TIMEOUT_MS })
+  // The site is a group of its own, named and linked into its own Leads
+  // section; the form that routes leads is named under it, linked to its page.
+  const site = card.getByRole('link', { name: SITE_NAME, exact: true })
+  await site.waitFor({ timeout: TIMEOUT_MS })
+  const form = card.getByRole('link', { name: wholesale.name, exact: true })
+  await form.waitFor({ timeout: TIMEOUT_MS })
+  const siteHref = await site.getAttribute('href')
+  const formHref = await form.getAttribute('href')
+  // The catering inquiry could route and does not: a live switch, not a refusal.
+  const offered = await card
+    .getByRole('button', { name: 'Turn on lead routing' })
+    .evaluateAll((buttons) => buttons.filter((button) => !button.disabled).length)
+  tally.check(
+    'the org-level Leads section says what files a lead, by site',
+    siteHref === `/${ORG_SLUG}/hosts/${HOST_ID}/crm/leads` &&
+      formHref === `/${ORG_SLUG}/hosts/${HOST_ID}/forms/${wholesale.id}` &&
+      offered >= 1,
+    `${SITE_NAME} → ${siteHref} · ${wholesale.name} → ${formHref} · live switches ×${offered}`,
+  )
+  await shot(page, 'crm-org-hub-lead-surfaces')
 })
 
 await step(tally, page, "a lead's org-level address names its site", async () => {
