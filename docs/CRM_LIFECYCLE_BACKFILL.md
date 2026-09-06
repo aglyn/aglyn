@@ -14,6 +14,8 @@ live in `tools/scripts/lib/crm-lifecycle-backfill.mjs` and are pinned by
 
 **Dry run by default.** The stage pass always runs; `--leads` and
 `--companies` add the other two; `--apply` writes whichever passes ran.
+`--any-form` widens `--leads` to every form the host has ever held — see
+[the backlog from before lead routing](#--any-form-the-backlog-from-before-lead-routing).
 
 ## Running it
 
@@ -45,7 +47,7 @@ project aglyn-main via service account … — DRY RUN
 
 org <orgId>: 42 contact(s), 2 site(s)
   stages: would stamp 12 facet(s) — customer 3, lead 7, subscriber 2; 25 hold a stage; 5 imply none
-  leads (<hostId>): would create 4 — 1 routed form(s); 7 already a lead; 1 erased on this site; 2 already worked past Lead; 3 met through no lead surface (turn routing on and re-run)
+  leads (<hostId>): would create 4 — 1 routed form(s); 7 already a lead; 1 erased on this site; 2 already worked past Lead; 3 met through no lead surface (turn routing on, or pass --any-form, and re-run)
       3f2a9c1b0e7d…  form:<formId>  captures 2  seen 2026-07-03 → 2026-08-14  consent carried
   companies: 1 of 3 would be fixed; 2 in step
       Cedar & Salt (a1b2c3d4e5f6…)  absent → 2
@@ -102,14 +104,68 @@ refuses an existing document besides); `already worked past Lead` — the
 holder's facet stands at marketing-qualified or later, customers included,
 so somebody has worked this person and a queue entry saying nobody has would
 be false; `met through no lead surface` — the site met them through a form
-without lead routing, an order or an opt-in, and turning routing on and
-re-running is what changes that verdict.
+without lead routing, an order or an opt-in. For the form, turning routing on
+and re-running changes that verdict, and so does `--any-form`; for an order
+or an opt-in nothing does.
 
 **The company count** is re-derived from every contact's `companyIds`
 mirror, the quantity `COMPANY_CONTACTS_COUNT_FIELD` is defined over, and SET
 rather than incremented so a re-run cannot compound. An absent count reads as
 zero, as the list reads it, so a company nobody linked gains no write. An id
 the mirrors name that no company answers to is reported and left.
+
+## `--any-form`: the backlog from before lead routing
+
+The default lead pass files a lead only for a form whose author has
+`routing.lead` on today, which is the right verdict for a form somebody
+decided about. It is the wrong verdict for the people captured before lead
+routing existed: they came in through forms nobody could have switched on,
+several of those forms have since been deleted, and the first production dry
+run planned no lead at all — every candidate read `met through no lead
+surface`. Every person who came in through a form and was never worked or
+converted is a historical lead, so `--any-form` (with `--leads`) treats every
+form the host has ever held as a lead surface: a live form with routing off,
+an archived form, and a form deleted outright — a deleted form leaves its
+submissions behind (`hosts/{hostId}/formSubmissions` keeps `formId`), and
+they still name it.
+
+Nothing else widens. The row is the same row; `submissionCount` counts the
+host's submissions for the address on every form the run counts; the
+marketing grant is copied on the same terms; `backfilledAtMs` is stamped;
+no owner, no events. Every skip stands: erased, already a lead, already
+worked past Lead (customers included), and a person the site met only
+through an order or an opt-in is still `met through no lead surface`.
+
+```sh
+GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-lifecycle-stages.mjs --leads --any-form
+GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-lifecycle-stages.mjs --leads --any-form --apply
+```
+
+`--any-form` without `--leads` exits 2 having written nothing. The report
+names every form it counted only because of the flag, with why it would not
+have counted otherwise:
+
+```
+  leads (<hostId>): would create 9 — 1 routed form(s); via --any-form: 3 unrouted form(s); 2 already a lead; 4 already worked past Lead; 1 met through no lead surface (no form, no booking)
+      via --any-form: Contact us (<formId>)  routing off — turn it on
+      via --any-form: Wholesale enquiry (<formId>)  archived
+      via --any-form: <formId>  no form document
+      3f2a9c1b0e7d…  form:<formId>  captures 2  seen 2026-03-11 → 2026-05-02
+…
+Dry run: …; 9 lead(s) created (…); via --any-form: 3 unrouted form(s) counted as lead surfaces; ….
+```
+
+**Run it once, for the backlog.** The flag is a statement about the past —
+that every form capture before routing existed was a lead. A later run with
+it would make the same statement about every capture an unrouted form has
+taken since, which is the decision the form's own page exists to make, one
+form at a time. So, after the apply: switch lead routing on for each
+`routing off` form that still exists — the Leads section offers **Turn on
+lead routing** beside every form that can route — so the doors file the next
+capture themselves. The archived and deleted forms need nothing: their
+captures are filed and they take no new ones. A second dry run with the flag
+proves the backlog is done — every candidate reads `already a lead` — and
+the ordinary run without it is the one to keep using.
 
 ## What it refuses, and why
 
@@ -160,4 +216,7 @@ at all were reported and left.
 
 ## Production runs
 
-None yet. Record the dry-run figures and the apply here when it runs.
+- **2026-09-06, dry run (`--leads --companies`)**: 15 facet stages planned,
+  0 leads — every candidate `met through no lead surface`, because the forms
+  that captured them predate lead routing and several no longer exist. That
+  is what `--any-form` is for; record its dry run and the apply here.
