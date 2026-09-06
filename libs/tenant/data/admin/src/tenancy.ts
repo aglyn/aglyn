@@ -119,5 +119,8 @@ export * from './lib/server/sso-provisioning'
 export * from './lib/server/update-existing'
 export * from './lib/server/upsert-contact'
 export * from './lib/server/crm-records'
+// Where a one-to-one email's activity row lives and how the delivery
+// webhook advances it (AGL-2615).
+export * from './lib/server/crm-email-activity'
 export * from './lib/server/user-profiles'
 export * from './lib/server/legal-acceptance'
