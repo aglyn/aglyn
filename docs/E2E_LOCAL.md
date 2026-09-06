@@ -54,7 +54,7 @@ npm run e2e:crm:leads           # status, owner, convert, already-converted, unq
 npm run e2e:crm:automation      # Contact created / Contact changed stage → tag on the facet, Runs
 npm run e2e:crm:contact-record  # custom field, audience, Properties save, phone search, delete
 npm run e2e:crm:deals           # board → move → won → table; Pipelines dialog, switcher, line items, forecast
-npm run e2e:crm:org-hub         # /{org}/contacts → /{org}/crm/contacts, bare /crm, Known by, a create stamped with the picked site, the lead-surfaces note grouped by site, a lead's site address, a deal moved from the org board + its org activity line, an organization task (no site) filed and completed
+npm run e2e:crm:org-hub         # /{org}/contacts → /{org}/crm/contacts, bare /crm, Known by, a create stamped with the picked site, the lead-surfaces note grouped by site, a lead's site address, a deal moved from the org board + its org activity line, an organization task (no site) filed and completed, the two CRM cards on the org's sites page, a recipe installed from org Settings → stamped on the site, refused twice, shown on the site's Actions page
 ```
 
 They share `tools/e2e/lib/console-session.mjs` (Chrome, the UI sign-in, the

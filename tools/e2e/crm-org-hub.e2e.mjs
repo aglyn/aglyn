@@ -57,6 +57,13 @@
 // the owner's overdue fixture task — the card that renders nothing on a
 // workspace without an open task, so its presence is the org-wide read.
 //
+// A recipe installed from the org hub's Settings (AGL-2639) lands as a
+// stamped action in the site's own actions, the card links to the site's
+// Actions page, a second install of the same recipe on the same site is
+// refused by the route rather than duplicated, and the site's Actions list
+// shows the installed action. The action is removed at the end: it listens
+// for every new contact, and the sibling specs create contacts.
+//
 //   node tools/e2e/crm-org-hub.e2e.mjs
 
 import {
@@ -78,6 +85,7 @@ import {
   OWNER_NAME,
   OWNER_UID,
   pickSelect,
+  postAsUser,
   rowAction,
   shot,
   step,
@@ -99,8 +107,12 @@ const { maya } = CRM_FIXTURE.contacts
 const { owen } = CRM_FIXTURE.leads
 const { wholesale } = CRM_FIXTURE.forms
 
+/** The recipe this run installs, and how the site's Actions list names it. */
+const RECIPE = { id: 'welcomeNewLead', title: 'Welcome a new lead' }
+
 const firestore = adminFirestore()
 const orgRef = firestore.collection('orgs').doc(ORG_ID)
+const hostRef = firestore.collection('hosts').doc(HOST_ID)
 const personDoc = async () => {
   const found = await orgRef.collection('contacts').where('email', '==', PERSON.email).get()
   return found.empty ? null : { id: found.docs[0].id, ...found.docs[0].data() }
@@ -112,6 +124,15 @@ const orgTaskDoc = async () => {
 const removeOrgTask = async () => {
   const found = await orgRef.collection('crmTasks').where('title', '==', ORG_TASK_TITLE).get()
   for (const doc of found.docs) await doc.ref.delete()
+}
+/** The site's actions stamped with this run's recipe, as the install route stamps them. */
+const installedActions = async () =>
+  (await hostRef.collection('actions').where('recipe', '==', RECIPE.id).get()).docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }))
+const removeInstalledActions = async () => {
+  for (const action of await installedActions()) await hostRef.collection('actions').doc(action.id).delete()
 }
 
 // ── Fixture reset ───────────────────────────────────────────────────────────
@@ -129,6 +150,9 @@ await removeContactsAtAddress(firestore, ORG_ID, PERSON.email)
 // added by hand. The list pages at the table default, the fixture's rows are
 // its oldest, and two more people put the row this spec reads on page two.
 await removeSiteContactsOutsideFixture(firestore, ORG_ID, HOST_ID)
+// The recipe this run installs, so the install is an install and not a
+// refusal.
+await removeInstalledActions()
 
 const tally = verdicts()
 const session = await openConsole()
@@ -410,8 +434,82 @@ await step(tally, page, "the organization's sites page carries both CRM cards ov
   await shot(page, 'crm-org-sites-dashboard-row')
 })
 
+await step(tally, page, 'a recipe installed from the org hub’s Settings lands stamped in the site’s actions', async () => {
+  await page.goto(orgUrl('/crm/settings'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  const card = cardNamed(page, 'Recipes')
+  await card.waitFor({ timeout: TIMEOUT_MS })
+  const row = card.getByRole('row', { name: new RegExp(RECIPE.title) })
+  await row.getByText('Not installed on any site yet.').waitFor({ timeout: TIMEOUT_MS })
+  await shot(page, 'crm-org-hub-recipes')
+  await row.getByRole('button', { name: `Install ${RECIPE.title}` }).click({ timeout: TIMEOUT_MS })
+  await page.getByRole('heading', { name: `Install “${RECIPE.title}”` }).waitFor({ timeout: TIMEOUT_MS })
+  // The Site picker starts on the org's only site; against an org with two
+  // sites it is picked by name.
+  const site = page.getByRole('combobox', { name: 'Site' })
+  if (!(await site.textContent())?.includes(SITE_NAME)) await pickSelect(page, 'Site', SITE_NAME)
+  await shot(page, 'crm-org-hub-recipe-install')
+  await page.getByRole('button', { name: 'Install', exact: true }).click({ timeout: TIMEOUT_MS })
+  await expectSnackbar(page, `Installed “${RECIPE.title}” on ${SITE_NAME}`)
+  const landed = await waitFor(installedActions, (actions) => actions.length === 1)
+  const action = landed[0]
+  tally.check(
+    'a recipe installed from the org hub’s Settings lands stamped in the site’s actions',
+    action?.recipe === RECIPE.id &&
+      action?.name === RECIPE.title &&
+      action?.trigger?.event === 'contactCreated' &&
+      action?.enabled === true &&
+      action?.createdBy === OWNER_UID,
+    JSON.stringify({
+      recipe: action?.recipe,
+      name: action?.name,
+      event: action?.trigger?.event,
+      steps: (action?.steps ?? []).map((step) => step.type),
+      createdBy: action?.createdBy,
+    }),
+  )
+  // The card now names the site, linked into its Actions page, and the
+  // success notice offers the same door.
+  const link = row.getByRole('link', { name: SITE_NAME })
+  await link.waitFor({ timeout: TIMEOUT_MS })
+  const href = await link.getAttribute('href')
+  const notice = await page.getByRole('link', { name: 'Open Automation → Actions' }).getAttribute('href')
+  tally.check(
+    'the card links the installed site into its Automation → Actions page',
+    href === `/${ORG_SLUG}/hosts/${HOST_ID}/automation/actions` && notice === href,
+    `${href} · notice ${notice}`,
+  )
+})
+
+await step(tally, page, 'a second install of the same recipe on the same site is refused, not duplicated', async () => {
+  const again = await postAsUser(OWNER_UID, '/api/crm/recipe-install', {
+    orgId: ORG_ID,
+    hostId: HOST_ID,
+    recipeId: RECIPE.id,
+  })
+  const count = (await installedActions()).length
+  tally.check(
+    'a second install of the same recipe on the same site is refused, not duplicated',
+    again.status === 409 && /already installed/i.test(String(again.body?.error)) && count === 1,
+    `${again.status} ${JSON.stringify(again.body)} · ${count} stamped action(s)`,
+  )
+})
+
+await step(tally, page, 'the site’s Actions list shows the installed recipe', async () => {
+  await page.goto(`${BASE_URL}/${ORG_SLUG}/hosts/${HOST_ID}/automation/actions`, {
+    waitUntil: 'domcontentloaded',
+    timeout: TIMEOUT_MS,
+  })
+  await page.getByText(RECIPE.title, { exact: true }).waitFor({ timeout: TIMEOUT_MS })
+  const listed = await page.getByText(RECIPE.title, { exact: true }).count()
+  tally.check('the site’s Actions list shows the installed recipe', listed >= 1, `"${RECIPE.title}" ×${listed}`)
+  await shot(page, 'crm-org-hub-recipe-on-site')
+})
+
 await session.close()
-// Leave no trace of this run's person or task for whoever runs next.
+// Leave no trace of this run's person, its task, or its automation for
+// whoever runs next: the welcome recipe would fire on every contact the
+// sibling specs add.
 await removeContactsAtAddress(firestore, ORG_ID, PERSON.email)
 await removeOrgTask()
+await removeInstalledActions()
 process.exit(tally.finish())

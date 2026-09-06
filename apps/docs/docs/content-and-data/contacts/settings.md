@@ -1,7 +1,7 @@
 ---
 sidebar_position: 13
 title: CRM settings
-description: What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact's work email domain, and who a new contact is assigned to, by default, by rule, or in turn.
+description: What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact's work email domain, who a new contact is assigned to, by default, by rule, or in turn, and the automation recipes installed on each site from the organization.
 ---
 
 # CRM settings
@@ -10,7 +10,10 @@ description: What the CRM does on its own for every site in your workspace — w
 your workspace. A setting here is a fact about how your business files
 people, not about one site, so it is stored on the workspace and applies
 wherever a contact is captured. The section lives in the CRM hub at
-`…/hosts/{site}/crm/settings`, last in the rail.
+`…/hosts/{site}/crm/settings`, last in the rail, and at the
+[organization level](./overview.md#at-the-organization-level) at
+`…/{organization}/crm/settings`, where it also holds the
+[Recipes](#recipes) card.
 
 Only a workspace **owner or admin** can change a setting. Everyone who can
 open the CRM can read the page; a member who cannot change a switch sees it
@@ -128,9 +131,40 @@ reordering a member — never skips or repeats anybody: the next record goes
 to whoever follows the last recipient in the pool as it now stands. A member
 who leaves the workspace is skipped. A pool can hold up to 50 members.
 
+## Recipes
+
+At the **organization level** only — `…/{organization}/crm/settings` —
+the Settings section ends with a **Recipes** card: the four
+[automation recipes](./automations.md#recipes), each with the sites that
+already carry it and an **Install** button. Automation is a site feature,
+and the site's own Actions page opens a recipe in the editor for you to
+change and save; this card is for the organization that runs several sites
+and wants the same automation on more than one of them without building it
+on each.
+
+**Install** opens a drawer: pick the site, and for **Tag by form** one of
+that site's live forms, then confirm. The action the recipe builds is
+written into that site's **Automation → Actions** exactly as the recipe
+defines it — enabled, with the trigger, conditions and steps the
+[recipes table](./automations.md#recipes) describes — and stamped with the
+recipe it came from. The card then links to the site's Actions page, where
+the action can be edited like any other. Installing needs the same
+**Manage data** permission the organization's CRM needs, and the plan that
+carries the actions builder; on a plan without it the buttons are disabled
+and say so.
+
+Each recipe lists the sites it is **installed on**, read from that stamp,
+and links each into the site's Actions page. A site that carries actions
+saved before the stamp existed is listed as **may already have it**: those
+actions could have started from the recipe, and the card will not call the
+site clear. Installing the same recipe on a site that already carries it is
+refused — **Already installed on this site** — rather than installed twice;
+delete the site's copy from its Actions page first if you want a fresh one.
+
 ## Related
 
 - [CRM overview](./overview.md)
+- [Automations for the CRM](./automations.md#recipes) — what each recipe builds
 - [Companies](./companies.md) — the records these settings create and link
 - [The contact record](./contact-record.md) — picking a company or an owner by hand
 - [Leads](./leads.md) — a lead follows its contact's owner

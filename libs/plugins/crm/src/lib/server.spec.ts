@@ -245,4 +245,15 @@ describe('the CRM server entry', () => {
     expect(status).toBe(405)
     expect(headers['Allow']).toBe('POST')
   })
+
+  it('registers the recipe routes under their client-safe constants, POST only (AGL-2639)', async () => {
+    registerCrmConsoleApi()
+    expect(CRM_API_ROUTES.recipeInstall).toBe('crm/recipe-install')
+    expect(CRM_API_ROUTES.recipeStatus).toBe('crm/recipe-status')
+    for (const route of [CRM_API_ROUTES.recipeInstall, CRM_API_ROUTES.recipeStatus]) {
+      const { status, headers } = await call(route, 'GET')
+      expect(status).toBe(405)
+      expect(headers['Allow']).toBe('POST')
+    }
+  })
 })

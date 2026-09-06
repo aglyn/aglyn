@@ -29,6 +29,9 @@ import {
   crmRecipeTagForForm,
   FLOW_TIMED_OUT_FIELD,
   HOST_ACTION_STEP_LABELS,
+  type HostAction,
+  hostActionDocument,
+  hostActionRecipeId,
   hostActionStepsForClient,
   STALE_LEAD_WAIT_MINUTES,
   validateHostAction,
@@ -98,6 +101,102 @@ describe('CRM_ACTION_RECIPES', () => {
     expect(crmActionRecipe('welcomeNewLead')?.title).toBe('Welcome a new lead')
     expect(crmActionRecipe('nope')).toBeNull()
     expect(crmActionRecipe(undefined)).toBeNull()
+  })
+
+  it('stamps every action it builds with its own id, so a writer saving what it was handed keeps the provenance (AGL-2639)', () => {
+    for (const { recipe, action } of built()) {
+      expect(action.recipe).toBe(recipe.id)
+      expect(hostActionRecipeId(action)).toBe(recipe.id)
+    }
+  })
+})
+
+describe('the stored recipe stamp (AGL-2639)', () => {
+  it('reads a known id, null for "no recipe", and UNKNOWN for a document from before the stamp', () => {
+    expect(hostActionRecipeId({ recipe: 'followUpWonDeal' })).toBe('followUpWonDeal')
+    expect(hostActionRecipeId({ recipe: null })).toBeNull()
+    // A retired or mistyped id says nothing usable; it reads as no recipe.
+    expect(hostActionRecipeId({ recipe: 'retiredRecipe' })).toBeNull()
+    // No field at all is the older document: unknown, not absent.
+    expect(hostActionRecipeId({})).toBeUndefined()
+    expect(hostActionRecipeId(undefined)).toBeUndefined()
+  })
+
+  it('refuses a stamp that names no recipe, and passes null and absent alike', () => {
+    const action = crmActionRecipe('followUpWonDeal')!.build()
+    expect(validateHostAction({ ...action, recipe: 'retiredRecipe' as never })).toBe(
+      'Unknown recipe',
+    )
+    expect(validateHostAction({ ...action, recipe: null })).toBeNull()
+    const { recipe: _stamp, ...unstamped } = action
+    expect(validateHostAction(unstamped)).toBeNull()
+  })
+})
+
+describe('hostActionDocument (AGL-2639)', () => {
+  const action: HostAction = {
+    name: 'Nudge',
+    trigger: {
+      event: 'scrollDepth',
+      threshold: 50,
+      oncePerVisitor: true,
+      cooldownMinutes: 30,
+      condition: { field: 'x', op: 'notEmpty' },
+      conditions: [{ field: 'path', op: 'contains', value: '/pricing' }],
+      combinator: 'or',
+    },
+    steps: [{ type: 'siteAlert', message: 'Hi', severity: 'info' }],
+  }
+
+  it('writes every cap and list out, so a merge-set clears what the editor switched off', () => {
+    const stored = hostActionDocument(action)
+    expect(stored.trigger).toEqual({
+      event: 'scrollDepth',
+      threshold: 50,
+      oncePerVisitor: true,
+      oncePerSession: false,
+      cooldownMinutes: 30,
+      everyTime: false,
+      // The legacy single condition is always nulled; the list is canonical.
+      condition: null,
+      conditions: [{ field: 'path', op: 'contains', value: '/pricing' }],
+      combinator: 'or',
+    })
+    expect(stored.enabled).toBe(true)
+    expect(stored.steps).toEqual(action.steps)
+    expect(stored.name).toBe('Nudge')
+    const bare = hostActionDocument({
+      name: 'Bare',
+      trigger: { event: 'formSubmission' },
+      steps: [],
+      enabled: false,
+    })
+    expect(bare.trigger).toEqual({
+      event: 'formSubmission',
+      oncePerVisitor: false,
+      oncePerSession: false,
+      cooldownMinutes: null,
+      everyTime: false,
+      condition: null,
+      conditions: null,
+      combinator: null,
+    })
+    expect(bare.enabled).toBe(false)
+  })
+
+  it('carries the recipe stamp only when the action says something about it', () => {
+    expect('recipe' in hostActionDocument(action)).toBe(false)
+    expect(hostActionDocument({ ...action, recipe: null }).recipe).toBeNull()
+    expect(hostActionDocument(crmActionRecipe('welcomeNewLead')!.build()).recipe).toBe(
+      'welcomeNewLead',
+    )
+  })
+
+  it('is the shape a recipe install writes: the validator accepts it as it accepts the action', () => {
+    for (const recipe of CRM_ACTION_RECIPES) {
+      const built = recipe.build(recipe.needs === 'form' ? { form: FORM } : undefined)
+      expect(validateHostAction(hostActionDocument(built))).toBeNull()
+    }
   })
 })
 

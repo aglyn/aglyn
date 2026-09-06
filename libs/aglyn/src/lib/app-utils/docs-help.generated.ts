@@ -110,7 +110,7 @@ export const PLUGIN_DOCS = {
   crmSettings: {
     path: '/content-and-data/contacts/settings',
     title: 'CRM settings',
-    excerpt: 'What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact\'s work email domain, and who a new contact is assigned to, by default, by rule, or in turn.',
+    excerpt: 'What the CRM does on its own for every site in your workspace — whether a company is created from a captured contact\'s work email domain, who a new contact is assigned to, by default, by rule, or in turn, and the automation recipes installed on each site from the organization.',
   },
   crmTasks: {
     path: '/content-and-data/contacts/tasks',
@@ -212,7 +212,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#at-the-organization-level', '#who-can-open-the-crm', '#related'],
   crmLeads: ['#what-makes-a-lead', '#the-leads-list', '#working-a-lead-from-the-row', '#who-owns-a-lead', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#erasing-the-person', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#pipeline', '#forecast-by-close-month', '#won-and-lost', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
-  crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#related'],
+  crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#recipes', '#related'],
   crmTasks: ['#the-tasks-page', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters-on-the-contacts-list', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
