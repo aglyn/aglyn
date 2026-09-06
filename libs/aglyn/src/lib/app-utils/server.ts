@@ -66,6 +66,11 @@ export * from './crm-company-import'
 // starred, because the two import modules above re-export the custom-target
 // helpers from the same file under their own names.
 export { csvCell, csvDocument } from './csv-import'
+export type {
+  ImportChunkResult,
+  ImportDroppedValue,
+  ImportSkippedRow,
+} from './csv-import'
 // What a VALUE under a custom contact field may be, and the coercion every
 // door applies to one (AGL-2601): a mapped form field, an API `custom` body,
 // and the carry-over that keeps a mapping across a publish. Pure like `crm`.

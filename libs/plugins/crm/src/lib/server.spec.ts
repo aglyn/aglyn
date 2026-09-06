@@ -217,4 +217,12 @@ describe('the CRM server entry', () => {
     expect(status).toBe(405)
     expect(headers['Allow']).toBe('POST')
   })
+
+  /** The companies file's door (AGL-2621), proven the same way. */
+  it('registers crm/companies-import, which answers POST only', async () => {
+    registerCrmConsoleApi()
+    const { status, headers } = await call('crm/companies-import', 'GET')
+    expect(status).toBe(405)
+    expect(headers['Allow']).toBe('POST')
+  })
 })

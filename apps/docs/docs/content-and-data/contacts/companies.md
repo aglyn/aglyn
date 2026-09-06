@@ -43,6 +43,9 @@ is optional:
   protocol, `www.`, a path — is stripped, because the domain is a key: it is
   what suggests a company for a contact from their email address.
 - **Website**, **phone**, **industry**, **address** and **notes**.
+- **Tags** — comma-separated, lowercased, up to 20; the same kind of tag a
+  contact carries, shown in the list and set on many companies at once from
+  the [bulk bar](./bulk-actions.md#companies).
 - **Owner** — the member of your team responsible for the account. It defaults
   to you.
 
@@ -111,12 +114,54 @@ workspace has turned on **Create companies from work email domains** in
 which case the company is created from the domain and the contact linked to
 it.
 
+## Import from CSV
+
+**Import CSV**, above the list, takes a spreadsheet of companies — an export
+from another CRM, an account list — and files each one. A company already in
+your list is **updated** rather than added twice: a row is matched to an
+existing company by its **domain** first, and by its **name** when the row has
+no domain or no company carries it. Importing needs the same **Manage data**
+permission as creating a company.
+
+The three steps are the ones the [contacts import](./import.md) walks:
+choose the file (up to 5,000 rows), match its columns — Aglyn proposes a match
+from the header names and shows the first row's value beside each — check the
+ten-row preview, then import in batches of 200 with a progress bar and a
+result that says how many were **added**, **updated** and **skipped**, with
+the skipped rows downloadable as a CSV that says why. **Download template**
+hands you the export's own header over no rows, so a sheet filled in against
+it maps itself.
+
+| Field | What is read |
+| --- | --- |
+| **Company name** | Required. A row without one is skipped. |
+| **Domain** | The bare hostname (`acme.com`); a URL or `www.` is stripped. What a row is matched on first. A cell that is not a hostname is dropped and reported. |
+| **Website**, **phone**, **industry**, **notes** | As on the company form; a phone that cannot be read is dropped and reported. |
+| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the company without an owner, and the result names those addresses. |
+| **Address line 1, line 2, city, state, postal code, country** | The postal address. Country must be a two-letter code. |
+| **Tags** | Separated by `,` or `\|`, lowercased. Added to any tags the company already has. |
+
+A new company counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
+on a plan whose band is a hard limit, rows past it are skipped as
+**CRM records limit reached** — updates to existing companies still go through.
+
+## Export CSV
+
+**Export CSV**, above the list, downloads the companies on screen as
+`companies.csv`; the [bulk bar's](./bulk-actions.md#companies) **Export CSV**
+downloads the selected rows as `companies-selected.csv`. Both write the same
+file: every column above plus the **contacts** count, with the owner written as
+their email address, under the header the import reads — so an export
+re-imports without a hand mapping, and the count maps to nothing.
+
 ## Deleting a company
 
 Deleting a company unlinks it from every contact first, so no contact is left
 pointing at a record that no longer exists. Up to 500 contacts are unlinked in
 one pass; a company with more than that reports how many remain, and deleting
 again continues from where it stopped. The contacts themselves are untouched.
+The list's [bulk bar](./bulk-actions.md#companies) deletes a selection the same
+way, one company after another.
 
 ## Who can see a company
 

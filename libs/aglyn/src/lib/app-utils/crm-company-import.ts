@@ -160,10 +160,16 @@ export function guessCompanyImportMapping(
  */
 export type CompanyImportRawRow = Partial<Record<CompanyImportField, unknown>>
 
-/** One parsed line under the mapping. Empty cells are left absent. */
+/**
+ * One parsed line under the mapping. Empty cells are left absent.
+ *
+ * Takes the shared drawer's mapping shape, which may name a custom target;
+ * a company has no custom fields, so any such column is dropped here
+ * rather than refused at the type.
+ */
 export function mapCompanyImportRow(
   cells: readonly string[],
-  mapping: CompanyImportMapping,
+  mapping: Record<number, CompanyImportField | `custom:${string}`>,
 ): CompanyImportRawRow {
   const { custom: _custom, ...row } = mapImportRow(cells, mapping)
   return row

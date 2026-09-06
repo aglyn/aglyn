@@ -53,6 +53,7 @@ import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import CompaniesBulkBar from './companies-bulk-bar'
 import CompanyEditDrawer from './company-edit-drawer'
+import { CompanyImportButton } from './company-import-drawer'
 
 export interface CompaniesSectionProps {
   hostId: string
@@ -360,6 +361,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
               'people, its deals and its open tasks, or to link a contact ' +
               'to it.'}
           </Typography>
+          <CompanyImportButton hostId={hostId} />
           <Button size="small" onClick={handleExport} disabled={!companies.length}>
             {'Export CSV'}
           </Button>
