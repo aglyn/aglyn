@@ -18,8 +18,8 @@
 
 import {
   buildRoute,
-  CRM_LEAD_OPEN_STATUSES,
-  CRM_LEAD_STATUSES,
+  CRM_LEAD_CLOSED_STATUSES,
+  openLeadsFromCounts,
   pluginDocsHelp,
   Route,
 } from '@aglyn/aglyn'
@@ -97,7 +97,8 @@ export function InboxGlanceCard(props: { hostId: string }) {
    * absence, the rule `crmLeadStatus` reads — and Firestore can neither
    * count an absent field nor exclude the closed statuses without dropping
    * the unstamped rows too. So the open count is every lead less the ones
-   * closed by a stamped status, and both counts are aggregations that cost
+   * closed by a stamped status — `openLeadsFromCounts`, the subtraction the
+   * CRM's own glance card makes — and both counts are aggregations that cost
    * one read per thousand index entries, not one per lead. `null` until
    * they land, and left null on a refused read so the line is withheld
    * rather than drawn as zero.
@@ -107,16 +108,13 @@ export function InboxGlanceCard(props: { hostId: string }) {
   useEffect(() => {
     let active = true
     const leads = collection(firestore, 'hosts', hostId, 'leads')
-    const closedStatuses = CRM_LEAD_STATUSES.filter(
-      (status) => !CRM_LEAD_OPEN_STATUSES.includes(status),
-    )
     void Promise.all([
       getCountFromServer(query(leads)),
-      getCountFromServer(query(leads, where('status', 'in', closedStatuses))),
+      getCountFromServer(query(leads, where('status', 'in', CRM_LEAD_CLOSED_STATUSES))),
     ])
       .then(([all, closed]) => {
         if (!active) return
-        setOpenLeads(Math.max(0, all.data().count - closed.data().count))
+        setOpenLeads(openLeadsFromCounts(all.data().count, closed.data().count))
       })
       .catch(() => undefined)
     return () => {

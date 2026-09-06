@@ -43,14 +43,6 @@ import { useAggregateRead } from './reports/use-aggregate-read'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
-/**
- * The lead statuses that mean nobody needs to work the lead any more —
- * the operand of the `in` clause the open-lead figure subtracts with.
- */
-const CLOSED_LEAD_STATUSES = Aglyn.CRM_LEAD_STATUSES.filter(
-  (status) => !Aglyn.CRM_LEAD_OPEN_STATUSES.includes(status),
-)
-
 interface GlanceFigures {
   contacts: number
   newThisWeek: number
@@ -136,7 +128,7 @@ export function CrmGlanceCard(props: { hostId: string }) {
         ),
       ),
       countOf(query(leads)),
-      countOf(query(leads, where('status', 'in', CLOSED_LEAD_STATUSES))),
+      countOf(query(leads, where('status', 'in', Aglyn.CRM_LEAD_CLOSED_STATUSES))),
     ]).then(([contacts, newThisWeek, pipelineCents, tasksDue, leads, closedLeads]) => ({
       contacts,
       newThisWeek,
