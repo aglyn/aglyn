@@ -30,6 +30,7 @@ import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { useOrgLeads } from '../hooks/use-org-leads'
 import CrmViewsControl from './crm-views-control'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -419,21 +420,24 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             </Typography>
           ) : (
             <>
-              <ListTable
-                rows={pageRows}
-                columns={columns}
-                loading={status === 'loading'}
-                onOpen={(_id, row: LeadRow) =>
-                  router.push(routes.lead(row.leadId, hostId ? null : row.hostId))
-                }
-                // Columns and sort are the view's, controlled (AGL-2617).
-                columnVisibilityModel={grid.columnVisibilityModel}
-                onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                sortModel={grid.sortModel}
-                onSortModelChange={grid.onSortModelChange}
-                // Paged by the footer below, so the grid must not also slice.
-                hideFooter
-              />
+              <CrmColumnOrderProvider value={grid.columnOrder}>
+                <ListTable
+                  rows={pageRows}
+                  columns={grid.columns}
+                  slots={CRM_LIST_SLOTS}
+                  loading={status === 'loading'}
+                  onOpen={(_id, row: LeadRow) =>
+                    router.push(routes.lead(row.leadId, hostId ? null : row.hostId))
+                  }
+                  // Columns and sort are the view's, controlled (AGL-2617).
+                  columnVisibilityModel={grid.columnVisibilityModel}
+                  onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                  sortModel={grid.sortModel}
+                  onSortModelChange={grid.onSortModelChange}
+                  // Paged by the footer below, so the grid must not also slice.
+                  hideFooter
+                />
+              </CrmColumnOrderProvider>
               <ListPagination
                 page={page}
                 pageSize={pageSize}

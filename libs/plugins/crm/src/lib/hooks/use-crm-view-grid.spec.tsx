@@ -87,6 +87,85 @@ describe('useCrmViewGrid', () => {
     expect(setColumns).toHaveBeenCalledWith([])
   })
 
+  /**
+   * The order is the view's (AGL-2635). `columns` names the visible set IN
+   * ORDER, the grid rebuilds its own order from the array it is handed, and
+   * the column menu's Move left / Move right go through `columnOrder`.
+   */
+  describe('the column order', () => {
+    it('hands the grid the columns in the order the view names them', () => {
+      const { controller: views } = controller(['name', 'email'])
+      const { result } = renderHook(() => useCrmViewGrid(views, COLUMNS, HIDDEN))
+      // The named ones as named, then the rest — hidden here — in list order.
+      expect(result.current.columns.map((column) => column.field)).toEqual([
+        'name',
+        'email',
+        'lastEmailEngagementAtMs',
+        'tags',
+      ])
+      expect(result.current.columnOrder.order).toEqual(['name', 'email'])
+    })
+
+    it('opens on the list order when the view names nothing', () => {
+      const { controller: views } = controller()
+      const { result } = renderHook(() => useCrmViewGrid(views, COLUMNS, HIDDEN))
+      expect(result.current.columns).toBe(result.current.columns)
+      expect(result.current.columns.map((column) => column.field)).toEqual(
+        COLUMNS.map((column) => column.field),
+      )
+      expect(result.current.columnOrder.order).toEqual(['email', 'name'])
+    })
+
+    it('keeps a pinned column in its slot and drops a name the list no longer has', () => {
+      const pinned: readonly GridColDef[] = [
+        { field: 'actions', hideable: false },
+        ...COLUMNS,
+      ]
+      const { controller: views } = controller(['tags', 'retired', 'email'])
+      const { result } = renderHook(() => useCrmViewGrid(views, pinned, HIDDEN))
+      expect(result.current.columns.map((column) => column.field)).toEqual([
+        'actions',
+        'tags',
+        'email',
+        'name',
+        'lastEmailEngagementAtMs',
+      ])
+    })
+
+    it('moves a column past its visible neighbor and stores the order by name', () => {
+      const { controller: views, setColumns } = controller()
+      const { result } = renderHook(() => useCrmViewGrid(views, COLUMNS, HIDDEN))
+      act(() => result.current.columnOrder.move('name', -1))
+      // Not the empty list: the set is the default, the order is not.
+      expect(setColumns).toHaveBeenCalledWith(['name', 'email'])
+      // Nothing to swap with at the front; nothing is written.
+      act(() => result.current.columnOrder.move('email', -1))
+      expect(setColumns).toHaveBeenCalledTimes(1)
+    })
+
+    it('stores the empty list when a move arrives back at the default order', () => {
+      const { controller: views, setColumns } = controller(['name', 'email'])
+      const { result } = renderHook(() => useCrmViewGrid(views, COLUMNS, HIDDEN))
+      act(() => result.current.columnOrder.move('name', 1))
+      expect(setColumns).toHaveBeenCalledWith([])
+    })
+
+    it('keeps the order when a column is shown or hidden', () => {
+      const { controller: views, setColumns } = controller(['name', 'email'])
+      const { result } = renderHook(() => useCrmViewGrid(views, COLUMNS, HIDDEN))
+      act(() => {
+        result.current.onColumnVisibilityModelChange({
+          email: true,
+          name: true,
+          lastEmailEngagementAtMs: true,
+          tags: false,
+        })
+      })
+      // The reader's order survives; the newly shown column joins after it.
+      expect(setColumns).toHaveBeenCalledWith(['name', 'email', 'lastEmailEngagementAtMs'])
+    })
+  })
+
   it('writes the first sort back as the view sort, and none as null', () => {
     const { controller: views, setSort } = controller()
     const { result } = renderHook(() => useCrmViewGrid(views, COLUMNS, HIDDEN))
