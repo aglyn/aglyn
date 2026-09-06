@@ -33,10 +33,12 @@ export function weekLabel(startMs: number): string {
 
 /**
  * The name of a report table's CSV — `crm-activity-30d.csv` — so a folder
- * of downloads says which card and which period each file came from.
+ * of downloads says which card and which period each file came from. The
+ * cards that describe a stock rather than a flow — the open pipeline, the
+ * open tasks — have no period and name none.
  */
-export function reportFilename(card: string, period: CrmReportPeriod): string {
-  return `crm-${card}-${period}.csv`
+export function reportFilename(card: string, period?: CrmReportPeriod): string {
+  return `crm-${card}${period ? `-${period}` : ''}.csv`
 }
 
 /** A date in a table cell, or a dash for none. */
