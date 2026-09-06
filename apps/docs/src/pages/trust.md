@@ -268,6 +268,15 @@ assurance:
 - **Organization erasure** is a genuine recursive delete of documents, files
   and back-references, behind an explicit request and a seven-day hold so an
   accidental or malicious deletion can be reversed.
+- **A person can be erased from a customer's CRM.** When a visitor to a
+  customer's site asks to be forgotten, the customer — the controller of that
+  data — files the erasure from the person's record with a typed
+  confirmation, and the same nightly job that executes organization erasures
+  removes the person from every site in the workspace: the contact, leads,
+  tasks, activities, audience memberships and the campaign delivery log go;
+  orders and bookings are kept as financial records with the person's identity
+  removed. The address is closed to re-capture the moment the request is
+  filed, and the audit trail records counts, never the address.
 - **Audit logging** records administrative actions across roughly thirty write
   sites, including who acted, on what, and what changed.
 

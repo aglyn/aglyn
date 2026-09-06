@@ -356,10 +356,19 @@ The requester is a visitor to a customer's site.
    there. Do not disclose anything about the customer's data to a third party
    verifying nothing — that would itself be a breach.
 2. Tell the customer, via their support channel, that a request arrived.
-3. Assist them under DPA §8. In practice that means showing them where the data
-   lives in their own console — Contacts, form submissions, orders, bookings —
-   and how to delete a record (`/api/resources/erase`, which recursive-deletes
-   a resource and everything under it, AGL-945).
+3. Assist them under DPA §8. In practice that means pointing them at
+   **Erase this person** on the person's record — the overflow menu of a
+   contact's or a lead's page in **CRM**, workspace admins only, with the
+   address typed back (AGL-2623). It files a request that the nightly
+   `run-erasures` job executes: the contact on every site, leads, tasks,
+   activities, audience memberships and the campaign delivery log are removed;
+   orders and bookings are kept as financial records with the person's identity
+   taken off; the address is closed to re-capture the moment it is filed.
+   Two things it does not reach, which the customer finishes by hand: form
+   submissions (the address sits inside the answers, under whatever the form
+   called the field — the Inbox deletes them) and a site member's own login
+   (the site's Members page). For anything else, `/api/resources/erase`
+   recursive-deletes a resource and everything under it (AGL-945).
 4. Do **not** delete a customer's data on a third party's say-so. The
    instruction has to come from the controller.
 

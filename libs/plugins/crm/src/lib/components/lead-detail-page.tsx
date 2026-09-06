@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { pluginDocsHelp, type CrmLeadFields } from '@aglyn/aglyn'
+import {
+  pluginDocsHelp,
+  type CrmLeadFields,
+  normalizeContactEmail,
+  readErasureRequestedAtMs,
+} from '@aglyn/aglyn'
 import {
   useFirestore,
   useFirestoreDoc,
@@ -28,6 +33,7 @@ import { useState } from 'react'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import { CrmRecordHeader } from './crm-record-header'
+import { useErasePersonAction } from './erase-person-action'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { LeadHistoryCard } from './lead-history-card'
 import { LeadPropertiesCard } from './lead-properties-card'
@@ -62,6 +68,15 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
   const roster = useOrgMemberOptions(orgId)
   const [converting, setConverting] = useState(false)
   const [unqualifying, setUnqualifying] = useState(false)
+  // The privacy erasure (AGL-2623), offered from the lead as from the
+  // contact: the same request, filed by the lead's address.
+  const leadEmail = lead ? normalizeContactEmail(lead['email']) : null
+  const erase = useErasePersonAction({
+    hostId,
+    orgId,
+    subject: lead && leadEmail ? { kind: 'lead', id, email: leadEmail } : null,
+    requestedAtMs: readErasureRequestedAtMs(lead),
+  })
 
   const label = lead ? String(lead['name'] || lead['email'] || id) : undefined
 
@@ -111,6 +126,8 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           roster={roster}
           onConvert={() => setConverting(true)}
           onUnqualify={() => setUnqualifying(true)}
+          extraMenuItems={erase.menuItems}
+          banner={erase.banner}
         />
         <LeadHistoryCard hostId={hostId} leadId={id} lead={lead} />
         <RecordActivityCard hostId={hostId} org={org} leadId={id} />
@@ -133,6 +150,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
         leadId={id}
         leadLabel={label ?? id}
       />
+      {erase.dialog}
     </>
   )
 }

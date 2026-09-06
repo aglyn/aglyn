@@ -178,6 +178,30 @@ queued. Read that row before running again.
 Listing is capped, and the card says so when it hits the cap. Treat the length as a
 floor.
 
+### People waiting beside the workspaces
+
+The same run also executes **person erasures** — a request a workspace admin filed
+from a contact's or a lead's page in their CRM, for one person who asked to be
+forgotten. The card shows how many are waiting as a third chip. Three things differ
+from the workspace queue:
+
+- **There is no hold.** A person's request runs with the next scheduled run; the
+  admin who filed it typed the address back, and there is no owner on the other side
+  to reverse it. The number on the chip is the whole fact — nothing is "holding".
+- **It runs second, and in a larger batch.** A person is a few hundred writes where a
+  workspace is a recursive delete, so the run takes the workspaces first, then up to
+  twenty-five people. A run that spent its minute on workspaces has deferred the
+  people to tomorrow, not skipped them.
+- **A failure moves to the back, not the front.** A request whose sweep threw is
+  marked `failed` on its own document, with the reason, and re-queued behind
+  everything filed since — so one broken request cannot lead every run and starve the
+  rest. Find it in Firestore under `personErasures/{orgId}__{hash}`; the address is
+  on the document only while it is pending, and the audit row `person.erased`
+  records counts and the hash, never the address.
+
+**Run due erasures now** runs both queues, with the same reason on the same audit
+row.
+
 ## Idempotency claims {#idempotency-claims}
 
 Money-moving routes take a **claim** before they act and release it after, so a retry —

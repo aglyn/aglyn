@@ -53,6 +53,10 @@ export * from './crm'
 // previews and the server writes, reading the facet shape from `contacts`
 // and the company mirror from `crm`.
 export * from './contact-merge'
+// A person's privacy erasure from one workspace (AGL-2623): the request's
+// shape and id, the marker a record carries while it waits, and the lists
+// the dialog and the docs share. Pure like `crm`; the sweep is server-side.
+export * from './person-erasure'
 // What the CRM's reports compute from what they read — periods, weekly
 // buckets, the lifecycle funnel, pipeline totals (AGL-2604). Pure like `crm`,
 // and beside it because it reads the stage list and the deal weighting from

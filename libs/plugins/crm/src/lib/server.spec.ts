@@ -238,4 +238,11 @@ describe('the CRM server entry', () => {
     expect(status).toBe(405)
     expect(headers['Allow']).toBe('POST')
   })
+
+  it('registers crm/erase-person, which answers POST only (AGL-2623)', async () => {
+    registerCrmConsoleApi()
+    const { status, headers } = await call('crm/erase-person', 'GET')
+    expect(status).toBe(405)
+    expect(headers['Allow']).toBe('POST')
+  })
 })

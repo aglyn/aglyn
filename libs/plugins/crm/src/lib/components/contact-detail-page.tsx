@@ -52,6 +52,7 @@ import { AddToListButton } from './add-to-list-button'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
+import { useErasePersonAction } from './erase-person-action'
 import { RecordTasksCard } from './record-tasks-card'
 import { useEmailsHubPath } from './use-emails-hub-path'
 import { useOrgMembers } from './use-org-members'
@@ -288,6 +289,16 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       onClick: () => void handleRemove(),
     },
   ]
+  // The privacy erasure (AGL-2623): its item joins the overflow, its banner
+  // sits under the header while a request waits, its dialog renders once.
+  const erase = useErasePersonAction({
+    // Filed as the site the page acts as — at the organization level the
+    // person's primary holder (AGL-2630).
+    hostId: siteHostId,
+    orgId,
+    subject: record ? { kind: 'contact', id, email: record.email } : null,
+    requestedAtMs: Aglyn.readErasureRequestedAtMs(row),
+  })
 
   if (notFound) {
     return (
@@ -343,7 +354,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             </>
           ) : null
         }
-        menuItems={overflowItems}
+        menuItems={[...overflowItems, ...erase.menuItems]}
         loading={!record}
         chips={
           record ? (
@@ -394,7 +405,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             </>
           ) : null
         }
-      />
+      >
+        {erase.banner}
+      </CrmRecordHeader>
       {record && row && scope ? (
         <>
           {/*
@@ -463,6 +476,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           />
         </>
       ) : null}
+      {erase.dialog}
     </Stack>
     </CrmCreateSiteDefault>
   )

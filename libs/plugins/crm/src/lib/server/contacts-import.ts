@@ -279,7 +279,9 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
               ? 'audience-band'
               : verdict.refused === 'invalid-email'
                 ? 'invalid-email'
-                : 'write-failed',
+                : verdict.refused === 'erased'
+                  ? 'erased'
+                  : 'write-failed',
         })
         continue
       }

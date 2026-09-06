@@ -81,12 +81,50 @@ person's address. Under it, one card per aspect of the record:
 - **Likely duplicates** — other records that may be the same person, found
   when you ask; see [Merging two records](#merging-two-records).
 
-The overflow menu on the page carries **Merge into…** — see
-[Merging two records](#merging-two-records) — and **Delete contact**. Deleting
-removes the person from *this site's* CRM — its notes, tags and timeline. Other
-sites in your workspace that captured the same person keep their own records,
-and the person's form submissions, orders, bookings and membership records are
-separate and are deleted from their own pages.
+The overflow menu (⋮) on the page carries **Merge into…** — see
+[Merging two records](#merging-two-records) — and two ways of removing a
+person, which are not the same act — see
+[Deleting and erasing](#deleting-and-erasing).
+
+## Deleting and erasing {#deleting-and-erasing}
+
+**Delete contact** removes the person from *this site's* CRM — its notes,
+tags and timeline. Other sites in your workspace that captured the same person
+keep their own records, and the person's form submissions, orders, bookings
+and membership records are separate and are deleted from their own pages. It
+is a housekeeping act, and it is not a privacy erasure.
+
+**Erase this person** is the privacy erasure — what you use when someone asks
+to be forgotten under GDPR, the CCPA or any similar law. It removes the person
+from *every* site in the workspace, whoever captured them, and it cannot be
+undone. Only a workspace admin or owner can do it; for everyone else the item
+is present but disabled, and its tooltip says who can.
+
+Choosing it opens a dialog that lists exactly what will happen, and asks you to
+type the person's email address back before it files anything:
+
+| | |
+| --- | --- |
+| **Removed across the workspace** | The contact record on every site — profile, notes, tags, timeline and custom fields; every lead for the address on every site; the tasks and logged activities filed against the person; the person on any email audience list; the campaign delivery log for the address, with its opens and clicks. |
+| **Kept, with the person taken off** | Orders and bookings stay as financial and appointment records with the name, email, phone and addresses removed. Deals stay on the pipeline, unlinked from the person. Companies stay, with their contact count reduced. |
+| **Not reached — finish these by hand** | Form submissions, which keep the address inside the answers under whatever the form called the field — delete them from the Inbox. A site member account, which is the person's own login — close it from the site's Members page. |
+
+Two things follow the click at once, before anything is deleted. The address
+is **closed to capture** on every site in the workspace: a later form fill,
+order or import cannot quietly recreate the record (a hand-added contact or
+an import row for the address is refused with the reason), and no campaign is
+sent to it. And the record shows an **Erasure pending** banner — on the
+contact's page and on each site's lead — saying when it was requested.
+
+The erasure itself runs with the platform's **nightly erasure job**, the same
+job that executes a workspace's own erasure. Until it runs, the record is kept
+only so the request can be seen; nothing new should be added to it. When the
+job has run, the record and everything listed above are gone, and the
+request is complete. If the person asks what was removed, the workspace's
+audit trail records counts of what the sweep touched — never the address.
+
+Asking twice does no harm: a request already waiting is answered, not filed
+again.
 
 ## What each site keeps to itself
 

@@ -29,6 +29,7 @@ export type CrmApiRoute =
   | 'contact-email-history'
   | 'contacts-merge'
   | 'email-send'
+  | 'erase-person'
 
 /** What one call to the CRM API answered with. */
 export interface CrmApiResult {
