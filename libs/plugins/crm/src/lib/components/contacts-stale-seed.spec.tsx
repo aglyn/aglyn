@@ -159,6 +159,7 @@ jest.mock('./use-org-members', () => ({
 }))
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
+  useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
 }))
 
 beforeEach(() => {

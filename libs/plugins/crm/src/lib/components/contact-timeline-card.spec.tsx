@@ -77,8 +77,19 @@ const contact = {
           atMs: 3_000,
           summary: 'Submitted the contact form',
           path: '/pricing',
+          refId: 'sub-7',
+          hostId: 'host-1',
         },
-        { type: 'order', atMs: 1_000, summary: 'Placed order #12', refId: 'ord-12' },
+        {
+          type: 'order',
+          atMs: 1_000,
+          summary: 'Placed order #12',
+          refId: 'ord-12',
+          hostId: 'host-1',
+        },
+        // Written before the door stamped the site: shown, never linked —
+        // even though a booking's page needs no id to be addressed.
+        { type: 'booking', atMs: 500, summary: 'An older booking', refId: 'bk-1' },
       ],
     },
     // Another holder's history on the same shared row.
@@ -128,6 +139,9 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
+  AppLink: ({ href, children }: { href: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
   CardDisplay: ({
     header,
     actions,
@@ -147,6 +161,10 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
+}))
+
+jest.mock('next/navigation', () => ({
+  useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
 }))
 
 beforeEach(() => {
@@ -183,7 +201,7 @@ describe('ContactTimelineCard (AGL-2600)', () => {
       position('Placed order #12'),
     )
     // Which is which, on every row.
-    expect(screen.getAllByText('Captured')).toHaveLength(2)
+    expect(screen.getAllByText('Captured')).toHaveLength(3)
     expect(screen.getAllByText('Logged')).toHaveLength(2)
     // The door's label and the entry point, on the captured row.
     expect(screen.getByText('Form')).toBeTruthy()
@@ -196,6 +214,26 @@ describe('ContactTimelineCard (AGL-2600)', () => {
   it("reads THIS holder's facet alone — another holder's booking never surfaces", () => {
     renderCard()
     expect(screen.queryByText('Other client booking')).toBeNull()
+  })
+
+  /**
+   * A captured entry opens the record the door left (AGL-2622): the
+   * submission in the Inbox reader, the order in its dialog. Only an entry
+   * stamped with THIS site links — a sibling site's record is read on that
+   * site's console — and one written before the stamp is shown unlinked
+   * rather than pointed at a row this site may not hold.
+   */
+  it('links a captured submission to the Inbox reader and an order to its dialog', () => {
+    renderCard()
+    const submission = screen.getByRole('link', { name: 'Open submission' })
+    expect(submission.getAttribute('href')).toBe(
+      '/acme/hosts/shop/inbox/submissions?submission=sub-7',
+    )
+    const order = screen.getByRole('link', { name: 'Open order' })
+    expect(order.getAttribute('href')).toBe('/acme/hosts/shop/products/orders?order=ord-12')
+    // The unstamped older booking is on screen and carries no link.
+    expect(screen.getByText('An older booking')).toBeTruthy()
+    expect(screen.getAllByRole('link')).toHaveLength(2)
   })
 
   it('logs a new activity against the contact with the full scope stamp', async () => {

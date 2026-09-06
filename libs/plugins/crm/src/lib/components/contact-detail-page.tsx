@@ -47,7 +47,7 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
 import { contactRecordFromDoc } from '../model/contact-record'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
@@ -143,6 +143,21 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   // The roster, for the owner picker and the owner's name — read because a
   // record page is the one place both are shown.
   const members = useOrgMembers(orgId, { enabled: Boolean(record) })
+  /*
+   * Where this person's ORDERS are read (AGL-2622): the site's orders list,
+   * narrowed to their address. The count on the header is the number; the
+   * list is the rows. Built from the route params already in the URL, so
+   * no document is read to draw a link, and absent off a site — the
+   * org-level mount has no orders list to point at.
+   */
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const ordersHref =
+    params?.orgSlug && params?.host && record?.email
+      ? Aglyn.siteRecordLinks({
+          orgSlug: String(params.orgSlug),
+          host: String(params.host),
+        }).ordersByCustomer(record.email)
+      : null
 
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
@@ -289,9 +304,18 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           ) : null}
           {record && record.ordersCount > 0 ? (
             <Typography variant="body2" color="text.secondary">
-              {`${record.ordersCount.toLocaleString()} order${
-                record.ordersCount === 1 ? '' : 's'
-              } · $${(record.ltvCents / 100).toFixed(2)} lifetime`}
+              {ordersHref ? (
+                <AppLink href={ordersHref} color="inherit" underline="hover">
+                  {`${record.ordersCount.toLocaleString()} order${
+                    record.ordersCount === 1 ? '' : 's'
+                  }`}
+                </AppLink>
+              ) : (
+                `${record.ordersCount.toLocaleString()} order${
+                  record.ordersCount === 1 ? '' : 's'
+                }`
+              )}
+              {` · $${(record.ltvCents / 100).toFixed(2)} lifetime`}
             </Typography>
           ) : null}
           {!record ? (
