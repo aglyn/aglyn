@@ -350,6 +350,20 @@ export interface CrmPipeline extends CrmScoped {
   stages: CrmDealStage[]
   /** The pipeline a new deal lands in when nobody picks one. */
   isDefault?: boolean
+  /**
+   * When the pipeline was retired, epoch ms. An archived pipeline takes no
+   * new deal and is offered by no picker, but it is never deleted: the deals
+   * it closed still name it, and a report that could not resolve their
+   * stages would forecast them as orphans. Absent or `null` while active.
+   */
+  archivedAt?: number | null
+}
+
+/** Whether a pipeline has been retired — see {@link CrmPipeline.archivedAt}. */
+export function isPipelineArchived(
+  pipeline: Pick<CrmPipeline, 'archivedAt'> | null | undefined,
+): boolean {
+  return typeof pipeline?.archivedAt === 'number' && pipeline.archivedAt > 0
 }
 
 /**
@@ -370,6 +384,34 @@ export const DEFAULT_DEAL_STAGES: readonly CrmDealStage[] = [
 
 export type CrmDealStatus = 'open' | 'won' | 'lost'
 
+/**
+ * One product on a deal — what is being sold, how many, at what.
+ *
+ * `productId` names a catalog product when the line came from one; a line
+ * typed by hand has none. The name is copied rather than joined, the way a
+ * deal copies its contact's name: a catalog product can be renamed or
+ * deleted after the deal was priced, and the deal has to keep saying what
+ * it was for. `currency` is the deal's — every line on a deal is in one
+ * currency, because their sum is the deal's amount and a sum across
+ * currencies is a number with no unit.
+ */
+export interface CrmDealLineItem {
+  productId?: string
+  name: string
+  /** A whole number of units, one or more. */
+  quantity: number
+  /** Per unit, in the currency's minor unit, zero or more. */
+  unitAmountCents: number
+  /** Lowercase ISO 4217. */
+  currency: string
+}
+
+/** The most lines one deal carries — a quote, not a catalog. */
+export const DEAL_LINE_ITEMS_MAX = 50
+export const DEAL_LINE_ITEM_NAME_MAX = 120
+/** Units per line; past this the number is a data-entry slip. */
+export const DEAL_LINE_ITEM_QUANTITY_MAX = 1_000_000
+
 /** `orgs/{orgId}/deals/{dealId}`. */
 export interface CrmDeal extends CrmScoped {
   title: string
@@ -382,9 +424,18 @@ export interface CrmDeal extends CrmScoped {
    * pipeline to ask what the stage means.
    */
   status: CrmDealStatus
+  /**
+   * What the deal is worth. Typed by hand on a deal with no line items;
+   * on a deal WITH them it is their sum, stored beside them by every
+   * writer (`lineItemsTotalCents`), because the board, the reports and the
+   * REST list all read this one field and none of them can afford to add
+   * up fifty lines per row. A deal with line items refuses a typed amount.
+   */
   amountCents?: number
   /** Lowercase ISO 4217; `'usd'` when absent. */
   currency?: string
+  /** The products behind the amount — see {@link CrmDealLineItem}. */
+  lineItems?: CrmDealLineItem[]
   expectedCloseAtMs?: number | null
   closedAtMs?: number | null
   /** When the deal last moved — what "stuck in stage" reports read. */
@@ -1049,6 +1100,97 @@ export function weightedDealAmountCents(
   if (deal.status === 'lost' || !stage) return 0
   const probability = Math.min(100, Math.max(0, Number(stage.probability) || 0))
   return Math.round((amount * probability) / 100)
+}
+
+/** Whether a deal's amount is derived — it has at least one line item. */
+export function dealHasLineItems(
+  deal: Pick<CrmDeal, 'lineItems'> | null | undefined,
+): boolean {
+  return Array.isArray(deal?.lineItems) && deal.lineItems.length > 0
+}
+
+/**
+ * What a set of line items adds up to, in cents — the amount a deal with
+ * line items stores. Whole cents, never negative: a line's quantity and
+ * unit amount have both been through `readDealLineItems`, but a stored
+ * document from an older writer is trusted no further than that.
+ */
+export function lineItemsTotalCents(
+  items: readonly Pick<CrmDealLineItem, 'quantity' | 'unitAmountCents'>[] | null | undefined,
+): number {
+  let total = 0
+  for (const item of items ?? []) {
+    const quantity = Math.max(0, Math.round(Number(item.quantity) || 0))
+    const unit = Math.max(0, Math.round(Number(item.unitAmountCents) || 0))
+    total += quantity * unit
+  }
+  return total
+}
+
+/**
+ * Line items as a client typed or sent them, validated into the stored
+ * shape, or the one reason they were refused.
+ *
+ * The one reader for both writers — the products card on a deal's page
+ * and `POST`/`PATCH /v1/deals` — so a line the console accepts is a line
+ * the API accepts and the other way round. The rules: at most
+ * {@link DEAL_LINE_ITEMS_MAX} lines; every line a name, a whole quantity
+ * of one or more, a whole unit amount of zero or more; every line in the
+ * DEAL's currency (`currency`), which a line may omit and may not
+ * contradict. An empty list is valid and means "no line items" — the
+ * amount goes back to being typed.
+ */
+export function readDealLineItems(
+  input: unknown,
+  currency: string,
+): { items: CrmDealLineItem[] } | { error: string } {
+  if (input === undefined || input === null) return { items: [] }
+  if (!Array.isArray(input)) return { error: 'Line items must be a list' }
+  if (input.length > DEAL_LINE_ITEMS_MAX) {
+    return { error: `A deal carries at most ${DEAL_LINE_ITEMS_MAX} line items` }
+  }
+  const dealCurrency = String(currency || 'usd').trim().toLowerCase()
+  const items: CrmDealLineItem[] = []
+  for (const [index, raw] of input.entries()) {
+    const at = `Line ${index + 1}`
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { error: `${at} must be an object` }
+    }
+    const line = raw as Record<string, unknown>
+    const name = String(line.name ?? '')
+      .trim()
+      .slice(0, DEAL_LINE_ITEM_NAME_MAX)
+    if (!name) return { error: `${at} needs a name` }
+    const quantity = Number(line.quantity)
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > DEAL_LINE_ITEM_QUANTITY_MAX) {
+      return {
+        error: `${at}: the quantity must be a whole number from 1 to ${DEAL_LINE_ITEM_QUANTITY_MAX.toLocaleString()}`,
+      }
+    }
+    const unitAmountCents = Number(line.unitAmountCents)
+    if (!Number.isInteger(unitAmountCents) || unitAmountCents < 0) {
+      return { error: `${at}: the unit amount must be a whole number of cents, 0 or more` }
+    }
+    const lineCurrency =
+      line.currency === undefined || line.currency === null || line.currency === ''
+        ? dealCurrency
+        : String(line.currency).trim().toLowerCase()
+    if (lineCurrency !== dealCurrency) {
+      return { error: `${at} is in ${lineCurrency.toUpperCase()}; every line must be in the deal's currency, ${dealCurrency.toUpperCase()}` }
+    }
+    const productId =
+      typeof line.productId === 'string' && line.productId.trim()
+        ? line.productId.trim().slice(0, 200)
+        : undefined
+    items.push({
+      ...(productId ? { productId } : {}),
+      name,
+      quantity,
+      unitAmountCents,
+      currency: dealCurrency,
+    })
+  }
+  return { items }
 }
 
 export type TaskDueState = 'overdue' | 'today' | 'upcoming' | 'none' | 'done'

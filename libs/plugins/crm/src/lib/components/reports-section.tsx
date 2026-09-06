@@ -36,6 +36,7 @@ import { crmRoutes } from '../model/crm-routes'
 import { ClosedDealsCard } from './reports/closed-deals-card'
 import { ContactsMixCard } from './reports/contacts-mix-card'
 import { ContactsTrendCard } from './reports/contacts-trend-card'
+import { ForecastCard } from './reports/forecast-card'
 import { PipelineCard } from './reports/pipeline-card'
 import {
   type CrmReportScope,
@@ -50,9 +51,10 @@ import { invalidateAggregateReads, useAggregateRead } from './reports/use-aggreg
 /**
  * `/crm/reports` — the CRM in aggregate (AGL-2604).
  *
- * Five cards, each reading its own collection: contacts over time, contacts
- * by source and stage, the open pipeline, what closed, and the task load.
- * This section resolves what they share and hands it down — see
+ * Six cards, each reading its own collection: contacts over time, contacts
+ * by source and stage, the open pipeline, what closed, the forecast by
+ * close month (AGL-2620, over the pipeline card's own window), and the
+ * task load. This section resolves what they share and hands it down — see
  * `CrmReportScope` — so that every card counts the same reader's records
  * over the same clock.
  *
@@ -60,9 +62,9 @@ import { invalidateAggregateReads, useAggregateRead } from './reports/use-aggreg
  *
  * Nothing on this page reads a year on mount. The picker names the period,
  * the period sizes every read (one count per week of it, the deals closed
- * within it), and the default is thirty days. The two cards that are stocks
- * rather than flows — the open pipeline, the open tasks — ignore the period
- * because "what is open" has no period.
+ * within it), and the default is thirty days. The three cards that are
+ * stocks rather than flows — the open pipeline, its forecast, the open
+ * tasks — ignore the period because "what is open" has no period.
  *
  * ## Scoped like the list
  *
@@ -206,6 +208,9 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
           <ContactsMixCard report={report} totalContacts={totalContacts} />
           <PipelineCard report={report} />
           <ClosedDealsCard report={report} />
+          <Box sx={{ gridColumn: { lg: '1 / -1' } }}>
+            <ForecastCard report={report} />
+          </Box>
           <Box sx={{ gridColumn: { lg: '1 / -1' } }}>
             <TasksCard report={report} />
           </Box>

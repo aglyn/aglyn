@@ -34,6 +34,10 @@ contacts and companies against the plan's records band, and on a plan that hard-
   "status": "open",
   "amountCents": 250000,
   "currency": "usd",
+  "lineItems": [
+    { "productId": "prod_8c1d", "name": "House blend, 5 lb", "quantity": 50, "unitAmountCents": 4500, "currency": "usd" },
+    { "productId": null, "name": "Delivery", "quantity": 1, "unitAmountCents": 25000, "currency": "usd" }
+  ],
   "expectedCloseAt": "2026-12-31T00:00:00.000Z",
   "closedAt": null,
   "stageChangedAt": "2026-09-05T18:23:23.941Z",
@@ -53,11 +57,12 @@ contacts and companies against the plan's records band, and on a plan that hard-
 | `id` | string | Opaque deal id. |
 | `object` | string | Always `"deal"`. |
 | `title` | string | Required. Trimmed, truncated to 200 characters. Writable. |
-| `pipelineId` | string | The [pipeline](pipelines.md) the deal is in. Writable **on create only**: a deal's stages are its pipeline's, and moving one between pipelines is a new deal in the other pipeline, not an edit. Omit it to use the default pipeline — [seeding one](pipelines.md#seeding) if the organization has none. |
+| `pipelineId` | string | The [pipeline](pipelines.md) the deal is in. Writable **on create only**: a deal's stages are its pipeline's, and moving one between pipelines is a new deal in the other pipeline, not an edit. Omit it to use the default among the active pipelines — [seeding one](pipelines.md#seeding) if the organization has none. An [archived](pipelines.md#archived) pipeline is refused. |
 | `stageId` | string | The stage the deal is in, one of its pipeline's `stages[].id`. Writable — see [moving a deal](#moving). |
 | `status` | string | `open`, `won` or `lost`. Follows the stage's `kind`, so the two can never disagree on a stored deal. Writable — see [moving a deal](#moving). |
-| `amountCents` | integer \| null | The value, in the currency's minor unit. A whole number, `0` or more. Writable. |
-| `currency` | string | Three-letter ISO 4217 code, lowercase. `usd` when never set. Writable; `USD` is stored as `usd`. |
+| `amountCents` | integer \| null | The value, in the currency's minor unit. A whole number, `0` or more. Writable **on a deal with no line items**; with line items it is their sum — see [line items](#line-items). |
+| `currency` | string | Three-letter ISO 4217 code, lowercase. `usd` when never set. Writable; `USD` is stored as `usd`. On a deal with line items, changing it needs the `lineItems` resent in the new currency. |
+| `lineItems` | array | The products behind the amount, each `{ productId, name, quantity, unitAmountCents, currency }`. Empty when the amount is typed. Writable — see [line items](#line-items). |
 | `expectedCloseAt` | string \| null | ISO 8601 instant. Writable. |
 | `closedAt` | string \| null | When the deal was won or lost. Set by a move into a closed stage and cleared by a move back to an open one. **Read-only.** |
 | `stageChangedAt` | string \| null | When the deal last moved — what "stuck in stage" reports read. **Read-only.** |
@@ -143,6 +148,39 @@ A deal moves by `stageId`, by `status`, or by both:
 Every move stamps `stageChangedAt`. A move into a `won` or `lost` stage sets
 `closedAt`; a move back to an open stage clears it.
 
+#### Line items {#line-items}
+
+`lineItems` is the list of products behind the amount. Each line is:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `productId` | string \| null | A catalog product the line came from, or `null` for a line priced by hand. Not checked against the catalog. |
+| `name` | string | Required. Trimmed, truncated to 120 characters. Copied rather than joined, so a renamed or deleted product does not change what the deal was for. |
+| `quantity` | integer | A whole number, `1` to `1,000,000`. |
+| `unitAmountCents` | integer | Per unit, in the currency's minor unit. A whole number, `0` or more. |
+| `currency` | string | Optional on write; defaults to the deal's. Must equal the deal's currency — the lines' sum is one number in one unit. |
+
+At most fifty lines. The rules:
+
+- **With one or more lines, `amountCents` is their sum**, written by the
+  server beside them. Sending `amountCents` in the same body is a `400`
+  naming `amountCents`; so is sending it alone to a deal that has lines.
+- **`lineItems: []`** (or `null`) clears the lines and hands the amount back
+  to you. The last sum stays until you retype it.
+- **Changing `currency`** on a deal with lines is a `400` naming `currency`
+  unless the body also carries `lineItems` in the new currency.
+- A refused line is named — `"Line 2: the quantity must be a whole number
+  from 1 to 1,000,000"` — under `fields.lineItems`.
+
+```bash
+curl -X PATCH "https://app.aglyn.com/api/v1/deals/d_3c9a" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Content-Type: application/json" \
+  -d '{"lineItems":[{"productId":"prod_8c1d","name":"House blend, 5 lb","quantity":50,"unitAmountCents":4500},{"name":"Delivery","quantity":1,"unitAmountCents":25000}]}'
+```
+
+The deal comes back with `amountCents: 250000`.
+
 ```bash
 curl -X PATCH "https://app.aglyn.com/api/v1/deals/d_3c9a" \
   -H "Authorization: Bearer aglyn_sk_…" \
@@ -167,7 +205,7 @@ it.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `pipelineId` or `stageId` that does not exist, a `status` that disagrees with the `stageId`, an `amountCents` that is not a whole number `0` or more, a `currency` that is not a three-letter code, an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `pipelineId` or `stageId` that does not exist, an archived `pipelineId`, a `status` that disagrees with the `stageId`, an `amountCents` that is not a whole number `0` or more or that is sent to a deal with line items, a `currency` that is not a three-letter code or that a deal's line items are not in, a line item that fails its [rules](#line-items), an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — the CRM records band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such deal"`. |

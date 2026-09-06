@@ -25,6 +25,10 @@
  * cannot exist without a stage, so the first deal created without naming a
  * pipeline gets a default one built from `DEFAULT_DEAL_STAGES` — the same
  * set a console would seed — stamped for the site that deal names.
+ *
+ * An ARCHIVED pipeline (AGL-2620) is still read — the deals it closed name
+ * it — but it takes no new deal: a create that names one is refused, and
+ * the default is picked among the active ones.
  */
 import {
   CRM_COLLECTIONS,
@@ -34,11 +38,12 @@ import {
   consentGroupForHost,
   crmScopeTokens,
   DEFAULT_DEAL_STAGES,
+  isPipelineArchived,
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
 import { FieldPath } from 'firebase-admin/firestore'
 import { type ApiV1Context, requireScope } from '../api-v1'
-import { crmCollection, crmCreateStamp, crmTimes, listCrm } from './crm-shared'
+import { crmCollection, crmCreateStamp, crmTimes, isoFromMs, listCrm } from './crm-shared'
 
 /** Stages in pipeline order, whatever order the document holds them in. */
 export function orderedStages(pipeline: Pick<CrmPipeline, 'stages'>): CrmDealStage[] {
@@ -53,6 +58,8 @@ export function pipelineView(doc: FirebaseFirestore.DocumentSnapshot) {
     object: 'pipeline',
     name: data.name ?? null,
     isDefault: data.isDefault === true,
+    archived: isPipelineArchived(data),
+    archivedAt: isPipelineArchived(data) ? isoFromMs(data.archivedAt) : null,
     stages: orderedStages({ stages: data.stages ?? [] }).map((stage) => ({
       id: stage.id,
       name: stage.name,
@@ -86,12 +93,17 @@ export async function resolvePipeline(
   ctx: ApiV1Context,
   siteId: string,
   pipelineId: string | undefined,
+  options: { allowArchived?: boolean } = {},
 ): Promise<ResolvedPipeline | { error: string }> {
   const collection = crmCollection(ctx, CRM_COLLECTIONS.pipelines)
   if (pipelineId) {
     const snap = await collection.doc(pipelineId).get()
     if (!snap.exists) return { error: 'No such pipeline in this organization' }
-    return { id: snap.id, pipeline: snap.data() as CrmPipeline }
+    const pipeline = snap.data() as CrmPipeline
+    if (!options.allowArchived && isPipelineArchived(pipeline)) {
+      return { error: 'This pipeline is archived — create the deal in an active one' }
+    }
+    return { id: snap.id, pipeline }
   }
   const org = ctx.org as Record<string, unknown>
   const tokens = crmScopeTokens(org, consentGroupForHost(org, siteId))
@@ -102,7 +114,9 @@ export async function resolvePipeline(
     .orderBy(FieldPath.documentId())
     .limit(50)
     .get()
-  const candidates = [...visible.docs].sort((a, b) => a.id.localeCompare(b.id))
+  const candidates = [...visible.docs]
+    .filter((doc) => !isPipelineArchived(doc.data() as CrmPipeline))
+    .sort((a, b) => a.id.localeCompare(b.id))
   const chosen =
     candidates.find((doc) => doc.get('isDefault') === true) ?? candidates[0]
   if (chosen) return { id: chosen.id, pipeline: chosen.data() as CrmPipeline }
@@ -114,6 +128,7 @@ export async function resolvePipeline(
     // from once a merchant edits this pipeline's stages.
     stages: DEFAULT_DEAL_STAGES.map((stage) => ({ ...stage })),
     isDefault: true,
+    archivedAt: null,
     ...crmCreateStamp(ctx, siteId),
   }
   await collection.doc(id).create(seeded)

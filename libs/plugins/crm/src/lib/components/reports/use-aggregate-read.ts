@@ -70,6 +70,16 @@ interface CacheEntry {
  */
 const cache = new Map<string, CacheEntry>()
 
+/**
+ * The reads still in the air, by key (AGL-2620). Two cards that mount
+ * together and ask the same question — the pipeline card and the forecast
+ * card both want the open-deal window — would each miss the empty cache
+ * and each read a thousand documents; the second joins the first's
+ * promise instead. An entry lives only until its promise settles, so a
+ * refusal is neither remembered nor re-joined.
+ */
+const inflight = new Map<string, Promise<unknown>>()
+
 /** A fresh cached answer under `key`, or undefined. Expired entries are dropped on the way. */
 function readCache(key: string, nowMs: number): CacheEntry | undefined {
   const entry = cache.get(key)
@@ -95,6 +105,7 @@ export function invalidateAggregateReads(prefix: string): void {
 /** Test seam: forget everything. */
 export function resetAggregateReadCache(): void {
   cache.clear()
+  inflight.clear()
 }
 
 /**
@@ -148,9 +159,16 @@ export function useAggregateRead<T>(
       setState({ value: remembered.value as T, status: 'success' })
       return undefined
     }
-    const pending = readRef.current()
+    const joined = cacheKey ? (inflight.get(cacheKey) as Promise<T> | undefined) : undefined
+    const pending = joined ?? readRef.current()
     setState({ value: null, status: 'loading' })
     if (!pending) return undefined
+    if (cacheKey && !joined) {
+      inflight.set(cacheKey, pending)
+      pending.finally(() => {
+        if (inflight.get(cacheKey) === pending) inflight.delete(cacheKey)
+      }).catch(() => undefined)
+    }
     let active = true
     pending
       .then((value) => {

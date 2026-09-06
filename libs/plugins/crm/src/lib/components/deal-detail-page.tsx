@@ -36,6 +36,7 @@ import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { RecordActivityCard } from './record-activity-card'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { DealEditDrawer } from './deal-edit-drawer'
+import { DealProductsCard } from './deal-products-card'
 import { DealPropertiesCard } from './deal-properties-card'
 import { DealStageCard } from './deal-stage-card'
 import { RecordTasksCard } from './record-tasks-card'
@@ -44,12 +45,13 @@ import { RecordTasksCard } from './record-tasks-card'
  * `/crm/deals/{dealId}` — one deal (AGL-2598).
  *
  * The record behind a card: its stage and the controls that move it, what
- * it is worth and who it is with, and the tasks and activity filed against
- * it. One live document read; the pipeline and the roster are the same
- * bounded reads the board makes. Editing opens the same drawer the board
- * creates with, and deleting is the one destructive act here — confirmed,
- * then a client-direct delete the rules allow the same people who could
- * have created it.
+ * it is worth and who it is with, the products behind the amount
+ * (AGL-2620), and the tasks and activity filed against it. One live
+ * document read; the pipeline and the roster are the same bounded reads
+ * the board makes. Editing opens the same drawer the board creates with,
+ * and deleting is the one destructive act here — confirmed, then a
+ * client-direct delete the rules allow the same people who could have
+ * created it.
  */
 export function DealDetailPage(props: CrmDetailPageProps) {
   const { id, basePath, hostId, org } = props
@@ -198,6 +200,16 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                 <RecordTasksCard hostId={hostId} org={org} basePath={basePath} dealId={deal.$id} />
               </Stack>
             </Stack>
+            {scope.orgId ? (
+              <DealProductsCard
+                deal={deal}
+                orgId={scope.orgId}
+                hostId={hostId}
+                org={org}
+                fromCache={fromCache}
+                unreadable={status === 'error'}
+              />
+            ) : null}
             <RecordActivityCard hostId={hostId} org={org} dealId={deal.$id} />
           </>
         ) : null}
@@ -208,7 +220,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
         hostId={hostId}
         org={org}
         deal={deal ?? null}
-        pipelines={pipelineState.pipelines}
+        pipelines={pipelineState.activePipelines}
         defaultPipeline={pipeline ?? pipelineState.pipeline}
         unreadable={status === 'error'}
         fromCache={fromCache}

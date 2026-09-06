@@ -980,3 +980,104 @@ describe('GET /v1/usage', () => {
     })
   })
 })
+
+// ── Line items and archived pipelines (AGL-2620) ────────────────────────────
+
+describe('line items on a deal (AGL-2620)', () => {
+  it('stores the lines and derives the amount, refusing a typed amount beside or over them', async () => {
+    const both = await call('POST', 'deals', {
+      title: 'Beans',
+      consentSiteId: 'host-1',
+      amountCents: 100,
+      lineItems: [{ name: 'Bag', quantity: 2, unitAmountCents: 1_250 }],
+    })
+    expect(both.status).toBe(400)
+    expect((await json(both)).error.fields.amountCents).toMatch(/Derived from lineItems/)
+
+    const deal = await json(
+      await call('POST', 'deals', {
+        title: 'Beans',
+        consentSiteId: 'host-1',
+        currency: 'USD',
+        lineItems: [
+          { productId: 'p-1', name: '  Bag ', quantity: 2, unitAmountCents: 1_250 },
+          { name: 'Delivery', quantity: 1, unitAmountCents: 500, currency: 'usd' },
+        ],
+      }),
+    )
+    expect(deal.amountCents).toBe(3_000)
+    expect(deal.lineItems).toEqual([
+      { productId: 'p-1', name: 'Bag', quantity: 2, unitAmountCents: 1_250, currency: 'usd' },
+      { productId: null, name: 'Delivery', quantity: 1, unitAmountCents: 500, currency: 'usd' },
+    ])
+    expect(mockDocs.get(`${DEALS}/${deal.id}`)).toMatchObject({ amountCents: 3_000 })
+
+    // Over stored lines: neither a typed amount nor a currency the lines are not in.
+    const typed = await call('PATCH', `deals/${deal.id}`, { amountCents: 1 })
+    expect((await json(typed)).error.fields.amountCents).toMatch(/sum of its line items/)
+    const eur = await call('PATCH', `deals/${deal.id}`, { currency: 'eur' })
+    expect((await json(eur)).error.fields.currency).toMatch(/line item/)
+    // A line in another currency names itself.
+    const mixed = await call('PATCH', `deals/${deal.id}`, {
+      lineItems: [{ name: 'Bag', quantity: 1, unitAmountCents: 1, currency: 'eur' }],
+    })
+    expect((await json(mixed)).error.fields.lineItems).toMatch(/Line 1 is in EUR/)
+    // Resending the lines in the new currency moves the deal with them.
+    const moved = await json(
+      await call('PATCH', `deals/${deal.id}`, {
+        currency: 'eur',
+        lineItems: [{ name: 'Bag', quantity: 3, unitAmountCents: 1_000 }],
+      }),
+    )
+    expect(moved).toMatchObject({ currency: 'eur', amountCents: 3_000 })
+    expect(moved.lineItems[0].currency).toBe('eur')
+    // Clearing the lines keeps the last sum and hands the amount back.
+    const cleared = await json(await call('PATCH', `deals/${deal.id}`, { lineItems: [] }))
+    expect(cleared).toMatchObject({ lineItems: [], amountCents: 3_000 })
+    const retyped = await json(await call('PATCH', `deals/${deal.id}`, { amountCents: 1 }))
+    expect(retyped.amountCents).toBe(1)
+    // The grammar names the line.
+    const bad = await call('POST', 'deals', {
+      title: 'B',
+      consentSiteId: 'host-1',
+      lineItems: [{ name: '', quantity: 1, unitAmountCents: 1 }],
+    })
+    expect((await json(bad)).error.fields.lineItems).toMatch(/^Line 1 needs a name/)
+  })
+})
+
+describe('an archived pipeline (AGL-2620)', () => {
+  it('is never the default, takes no new deal, and still resolves the stage of a deal it holds', async () => {
+    const stamp = { visibleTo: tokensFor('host-1'), hostId: 'host-1' }
+    mockDocs.set(`${PIPELINES}/old`, {
+      name: 'Sales 2025',
+      stages: [...DEFAULT_DEAL_STAGES],
+      isDefault: true,
+      archivedAt: 1_700_000_000_000,
+      ...stamp,
+    })
+    mockDocs.set(`${PIPELINES}/sales`, {
+      name: 'Sales',
+      stages: [...DEFAULT_DEAL_STAGES],
+      isDefault: false,
+      archivedAt: null,
+      ...stamp,
+    })
+    const deal = await json(await call('POST', 'deals', { title: 'Beans', consentSiteId: 'host-1' }))
+    expect(deal.pipelineId).toBe('sales')
+    const refused = await call('POST', 'deals', { title: 'Beans', consentSiteId: 'host-1', pipelineId: 'old' })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields.pipelineId).toMatch(/archived/)
+
+    expect(await json(await call('GET', 'pipelines/old'))).toMatchObject({
+      archived: true,
+      archivedAt: new Date(1_700_000_000_000).toISOString(),
+    })
+    expect(await json(await call('GET', 'pipelines/sales'))).toMatchObject({ archived: false, archivedAt: null })
+
+    // A deal closed in the archived pipeline can still be moved: its stages resolve.
+    mockDocs.set(`${DEALS}/d-old`, { title: 'Old', pipelineId: 'old', stageId: 'won', status: 'won', ...stamp })
+    const reopened = await json(await call('PATCH', 'deals/d-old', { status: 'open' }))
+    expect(reopened).toMatchObject({ stageId: 'qualified', status: 'open' })
+  })
+})

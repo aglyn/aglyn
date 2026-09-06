@@ -23,6 +23,8 @@ Scopes and the site rule are shared with every CRM resource — see
   "object": "pipeline",
   "name": "Sales",
   "isDefault": true,
+  "archived": false,
+  "archivedAt": null,
   "stages": [
     { "id": "qualified", "name": "Qualified", "order": 0, "probability": 10, "kind": "open" },
     { "id": "contact-made", "name": "Contact made", "order": 1, "probability": 20, "kind": "open" },
@@ -42,7 +44,9 @@ Scopes and the site rule are shared with every CRM resource — see
 | `id` | string | Opaque pipeline id. Pass it as a deal's `pipelineId`. |
 | `object` | string | Always `"pipeline"`. |
 | `name` | string | As named in the console. |
-| `isDefault` | boolean | The pipeline a new deal lands in when its create names none. |
+| `isDefault` | boolean | The pipeline a new deal lands in when its create names none. Only an active pipeline is ever the default. |
+| `archived` | boolean | Whether the pipeline has been retired in the console — see [below](#archived). |
+| `archivedAt` | string \| null | ISO 8601, when it was; `null` while active. |
 | `stages` | array | In pipeline order. Each has `id` (pass it as a deal's `stageId`), `name`, `order`, `probability` (0–100, the odds of an **open** deal closing from here) and `kind` — `open`, `won` or `lost`. A pipeline has one `won` and one `lost` stage; `open` is everything between. |
 | `siteId` | string | The site the pipeline was created from. |
 | `created` / `updated` | string \| null | ISO 8601. |
@@ -55,6 +59,16 @@ without a stage. So the first [`POST /v1/deals`](deals.md#add-a-deal) that names
 default, and stored for the site the deal names. Every later deal from a site that can
 see it lands in it. You never have to create a pipeline before creating a deal, and
 `GET /v1/pipelines` on a fresh organization legitimately returns an empty list.
+
+### An archived pipeline takes no new deal {#archived}
+
+A pipeline the console has **archived** is still listed and still retrievable:
+the deals it closed name it, and a client resolving their `stageId` needs its
+`stages`. But a [`POST /v1/deals`](deals.md#add-a-deal) that names it is a
+`400` naming `pipelineId`, and a create that names no pipeline lands in the
+default among the **active** ones. A deal already in an archived pipeline can
+still be [moved](deals.md#moving) — reopened, won, lost — because its stages
+resolve.
 
 ## Endpoints
 

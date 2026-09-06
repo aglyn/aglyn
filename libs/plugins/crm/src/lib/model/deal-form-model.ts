@@ -207,13 +207,27 @@ export function dealDocumentFromForm(
  * The patch an edit writes. Never the stage, the status or the scope: the
  * stage goes through the server route so the automations hear it, and the
  * scope is changed only by an org-wide member on purpose.
+ *
+ * Nor the amount or the currency of a deal whose amount is DERIVED
+ * (`amountDerived`, AGL-2620): with line items on the deal the amount is
+ * their sum and the currency is theirs, both owned by the products card. The
+ * form shows them read-only, and a patch that re-wrote the number it was
+ * seeded with would overwrite a line added from another tab meanwhile.
  */
 export function dealPatchFromForm(
   values: DealFormValues,
   nowMs: number,
+  options: { amountDerived?: boolean } = {},
 ): { set: Record<string, unknown>; clear: string[] } {
   const title = values.title.trim().slice(0, DEAL_TITLE_MAX)
   const { set, clear } = optionalFields(values)
+  if (options.amountDerived) {
+    delete set['amountCents']
+    return {
+      set: { title, titleLower: nameSearchKey(title), ...set, updatedAt: new Date(nowMs) },
+      clear: clear.filter((key) => key !== 'amountCents'),
+    }
+  }
   return {
     set: {
       title,

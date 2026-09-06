@@ -167,3 +167,18 @@ describe('the contact picker match', () => {
     })
   })
 })
+
+describe('a deal whose amount is derived (AGL-2620)', () => {
+  it('leaves the amount and the currency out of the patch, whatever the form holds', () => {
+    const form = { ...emptyDealForm(pipeline), title: 'Roaster', amount: '12.00', currency: 'eur' }
+    const patch = dealPatchFromForm(form, context.nowMs, { amountDerived: true })
+    expect(patch.set).not.toHaveProperty('amountCents')
+    expect(patch.set).not.toHaveProperty('currency')
+    expect(patch.set).toMatchObject({ title: 'Roaster' })
+    // A blank amount would have been a clear; on a derived deal it is nothing.
+    const cleared = dealPatchFromForm({ ...form, amount: '' }, context.nowMs, { amountDerived: true })
+    expect(cleared.clear).not.toContain('amountCents')
+    // THE CONTROL: a typed amount is written as before.
+    expect(dealPatchFromForm(form, context.nowMs).set).toMatchObject({ amountCents: 1200, currency: 'eur' })
+  })
+})

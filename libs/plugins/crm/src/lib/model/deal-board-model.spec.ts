@@ -17,8 +17,13 @@
 
 import { DEFAULT_DEAL_STAGES } from '@aglyn/aglyn'
 import {
+  activePipelines,
   addStage,
   boardSummary,
+  defaultPipelineOf,
+  newPipelineDocument,
+  pipelineArchiveRefusal,
+  pipelineNameProblem,
   dateInputMs,
   dateInputValue,
   daysInStage,
@@ -207,5 +212,58 @@ describe('the amount and date inputs', () => {
     expect(daysInStage({ stageChangedAtMs: now + 86_400_000 }, now)).toBe(0)
     expect(daysInStage({ createdAt: { seconds: (now - 2 * 86_400_000) / 1000 } }, now)).toBe(2)
     expect(daysInStage({}, now)).toBe(0)
+  })
+})
+
+describe('more than one pipeline (AGL-2620)', () => {
+  const sales = { $id: 'sales', name: 'Sales', isDefault: true, archivedAt: null }
+  const renewals = { $id: 'renewals', name: 'Renewals', archivedAt: null }
+  const retired = { $id: 'old', name: 'Sales 2025', isDefault: false, archivedAt: 1_700_000_000_000 }
+
+  it('offers only the active pipelines, and defaults to the active one flagged default', () => {
+    expect(activePipelines([sales, renewals, retired]).map((p) => p.$id)).toEqual(['sales', 'renewals'])
+    expect(defaultPipelineOf([renewals, sales, retired])?.$id).toBe('sales')
+    // The flag on an archived pipeline does not make it the default.
+    expect(defaultPipelineOf([renewals, { ...retired, isDefault: true }])?.$id).toBe('renewals')
+    expect(defaultPipelineOf([retired])).toBeNull()
+  })
+
+  it('requires a name that no ACTIVE pipeline already has, without case', () => {
+    expect(pipelineNameProblem('   ', [sales])).toMatch(/needs a name/)
+    expect(pipelineNameProblem('sales', [sales, renewals])).toMatch(/already called "Sales"/)
+    // Renaming a pipeline to its own name is not a collision.
+    expect(pipelineNameProblem('Sales', [sales, renewals], 'sales')).toBeNull()
+    // An archived pipeline's name is free again.
+    expect(pipelineNameProblem('Sales 2025', [sales, retired])).toBeNull()
+    expect(pipelineNameProblem('Partners', [sales, renewals])).toBeNull()
+  })
+
+  it('refuses to archive the default, the last, an archived one, or one holding open deals', () => {
+    expect(pipelineArchiveRefusal(retired, [sales, retired], 0)).toMatch(/already archived/)
+    expect(pipelineArchiveRefusal(renewals, [renewals, retired], 0)).toMatch(/last pipeline/)
+    expect(pipelineArchiveRefusal(sales, [sales, renewals], 0)).toMatch(/default pipeline/)
+    expect(pipelineArchiveRefusal(renewals, [sales, renewals], 3)).toMatch(/^3 open deals are in this pipeline/)
+    expect(pipelineArchiveRefusal(renewals, [sales, renewals], 1)).toMatch(/^1 open deal is/)
+    expect(pipelineArchiveRefusal(renewals, [sales, renewals], 0)).toBeNull()
+  })
+
+  it('creates a pipeline from a COPY of the default stages, active and not default', () => {
+    const document = newPipelineDocument('  Renewals  ', {
+      visibleTo: ['host:shop'],
+      hostId: 'shop',
+      uid: 'u1',
+      nowMs: Date.UTC(2026, 8, 5, 12),
+    })
+    expect(document).toMatchObject({
+      name: 'Renewals',
+      isDefault: false,
+      archivedAt: null,
+      visibleTo: ['host:shop'],
+      hostId: 'shop',
+      createdByUid: 'u1',
+    })
+    const stages = document.stages as Array<{ id: string }>
+    expect(stages.map((stage) => stage.id)).toEqual(DEFAULT_DEAL_STAGES.map((stage) => stage.id))
+    expect(stages[0]).not.toBe(DEFAULT_DEAL_STAGES[0])
   })
 })
