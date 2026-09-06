@@ -72,6 +72,22 @@ function legacyListMemberIds(normalizedEmail: string): string[] {
 }
 
 /**
+ * Every document id one address may be filed under on a list's `members`:
+ * the canonical key first, then the two ids earlier writers minted. A
+ * reader that must find the person wherever they were enrolled — the
+ * erasure sweep (AGL-2623) — asks for all of them with one `getAll`, the
+ * same set `enrollListMember` reads before it writes, so a member enrolled
+ * under an old id is neither missed nor duplicated.
+ */
+export function listMemberDocIds(email: unknown): string[] {
+  const normalized = normalizeContactEmail(email)
+  if (!normalized) return []
+  const key = personKey(normalized)
+  if (!key) return []
+  return [key, ...legacyListMemberIds(normalized).filter((id) => id !== key)]
+}
+
+/**
  * What makes an enrollment mailable, and who is answerable for it.
  *
  * Two values and no third. They are not interchangeable and the difference is
