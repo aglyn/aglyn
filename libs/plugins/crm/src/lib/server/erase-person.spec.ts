@@ -111,6 +111,7 @@ const KEY = createHash('sha256').update(EMAIL).digest('hex')
 
 const mockVerifyIdToken = jest.fn(async () => ({ uid: CALLER, email: 'admin@acme.test' }))
 const mockLogHostActivity = jest.fn(async () => undefined)
+const mockLogOrgActivity = jest.fn(async () => undefined)
 const mockResolveOrgPermissions = jest.fn(async () => ({
   orgId: ORG,
   role: 'admin',
@@ -144,6 +145,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionRef(`orgs/${ORG}/${name}`),
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...(args as [])),
+  logOrgActivity: (...args: unknown[]) => mockLogOrgActivity(...(args as [])),
+  getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG } : null),
   suppressEmailForHostErasure: (input: { hostId: string; email: string }) => mockSuppress(input),
 }))
 
@@ -200,6 +203,7 @@ beforeEach(() => {
   autoId = 0
   mockVerifyIdToken.mockClear()
   mockLogHostActivity.mockClear()
+  mockLogOrgActivity.mockClear()
   mockSuppress.mockClear()
   mockResolveOrgPermissions.mockClear()
   mockResolveOrgPermissions.mockResolvedValue({
@@ -364,5 +368,81 @@ describe('filing from a lead', () => {
       'Requested privacy erasure',
       { type: 'lead', id: KEY },
     )
+  })
+})
+
+/**
+ * THE ORGANIZATION VARIANT (AGL-2634): filed from the org-level hub for a
+ * contact no site need have captured. The same admin-only gate, answered by
+ * the org; the same sweep over every site the org has; the row in the org's
+ * feed rather than a site's.
+ */
+describe('the door at the organization level', () => {
+  const org = { orgId: ORG, contactId: 'c1', email: EMAIL }
+
+  it('files the request from a contact with no site, sweeps every site of the org, and logs the org line', async () => {
+    seed()
+    const { status, body } = await call(org)
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ ok: true, alreadyPending: false })
+    expect(mockResolveOrgPermissions).toHaveBeenCalledWith(CALLER, { orgId: ORG })
+    const request = docs.get(`personErasures/${ORG}__${KEY}`)
+    expect(request).toMatchObject({ orgId: ORG, status: 'pending', contactId: 'c1' })
+    expect(request).not.toHaveProperty('hostId')
+    // Both of the org's sites, and not the other org's.
+    expect(mockSuppress.mock.calls.map((call) => (call as any)[0].hostId).sort()).toEqual(['h1', 'h2'])
+    expect(docs.get(`hosts/${HOST}/leads/${KEY}`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
+    expect(docs.get(`hosts/other/leads/${KEY}`)?.['erasureRequestedAtMs']).toBeUndefined()
+    expect(docs.get(`orgs/${ORG}/contacts/c1`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
+    expect(mockLogOrgActivity).toHaveBeenCalledWith(
+      ORG,
+      { uid: CALLER, email: 'admin@acme.test' },
+      'Requested privacy erasure',
+      { type: 'contact', id: 'c1' },
+    )
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+    expect(audit[0].after).toEqual({ hostId: null, hosts: 2, from: 'contact' })
+  })
+
+  it('refuses an org-wide editor and a site-scoped admin alike, before any read', async () => {
+    seed()
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: ORG,
+      role: 'editor',
+      isOwner: false,
+      permissions: { 'data.manage': true },
+      orgWide: true,
+      hostRole: 'editor',
+    })
+    expect((await call(org)).status).toBe(403)
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: ORG,
+      role: 'admin',
+      isOwner: true,
+      permissions: { 'data.manage': true },
+      orgWide: false,
+      hostRole: 'admin',
+    })
+    expect((await call(org)).status).toBe(403)
+    expect(docs.has(`personErasures/${ORG}__${KEY}`)).toBe(false)
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('needs a site for a lead, and files from one with the org line still the org’s', async () => {
+    seed()
+    expect((await call({ orgId: ORG, leadId: KEY, email: EMAIL })).status).toBe(400)
+    const { status } = await call({ orgId: ORG, hostId: HOST, leadId: KEY, email: EMAIL })
+    expect(status).toBe(200)
+    expect(docs.get(`personErasures/${ORG}__${KEY}`)).toMatchObject({ hostId: HOST, leadId: KEY })
+    expect(mockLogOrgActivity).toHaveBeenCalledWith(ORG, expect.anything(), 'Requested privacy erasure', {
+      type: 'lead',
+      id: KEY,
+    })
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('answers not-found for a contact the org does not hold', async () => {
+    seed()
+    expect((await call({ ...org, contactId: 'nope' })).status).toBe(404)
   })
 })

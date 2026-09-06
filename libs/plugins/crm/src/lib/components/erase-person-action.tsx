@@ -42,6 +42,7 @@ import {
   Typography,
 } from '@mui/material'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCanManageCrmSettings } from './settings-section'
 import { useCrmApi } from './use-crm-api'
 
@@ -54,8 +55,9 @@ export interface UseErasePersonActionProps {
   /**
    * The site the request is filed from — the route logs it on that site's
    * feed. At the organization level the record's own capturing site
-   * (AGL-2630); `null` for a record no site has captured, which cannot be
-   * filed from here.
+   * (AGL-2630), or `null` for a record no site has captured: beneath the
+   * org hub's mount the route's org variant files it anyway (AGL-2634), and
+   * only a surface mounted nowhere holds the item.
    */
   hostId: string | null
   orgId: string | null | undefined
@@ -94,6 +96,8 @@ export interface ErasePersonAction {
 export function useErasePersonAction(props: UseErasePersonActionProps): ErasePersonAction {
   const { hostId, orgId, subject, requestedAtMs } = props
   const { canManage, ready } = useCanManageCrmSettings(orgId ?? undefined)
+  // A site to file from, or the org to file as (AGL-2634).
+  const canFile = Boolean(hostId) || Boolean(useCrmOrgMount())
   const [open, setOpen] = useState(false)
   // The marker arrives on the record's own document, so a request filed on
   // this page shows as pending the moment the listener catches up — and,
@@ -104,7 +108,7 @@ export function useErasePersonAction(props: UseErasePersonActionProps): ErasePer
   const menuItems = useMemo<RowActionsMenuItem[]>(() => {
     const disabledReason = !subject
       ? 'The record has not loaded'
-      : !hostId
+      : !canFile
         ? 'No site has captured this person to file from'
         : pendingSince
           ? 'An erasure is already pending for this person'
@@ -124,10 +128,10 @@ export function useErasePersonAction(props: UseErasePersonActionProps): ErasePer
         onClick: () => setOpen(true),
       },
     ]
-  }, [canManage, hostId, pendingSince, ready, subject])
+  }, [canManage, canFile, pendingSince, ready, subject])
 
   const banner = pendingSince ? <ErasurePendingBanner requestedAtMs={pendingSince} /> : null
-  const dialog = subject && hostId ? (
+  const dialog = subject && canFile ? (
     <ErasePersonDialog
       open={open}
       onClose={() => setOpen(false)}
@@ -166,7 +170,8 @@ ErasurePendingBanner.displayName = 'ErasurePendingBanner'
 export interface ErasePersonDialogProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /** The site the request is filed from, or `null` beneath the org hub's mount. */
+  hostId: string | null
   subject: ErasePersonSubject
   /** Called with the request's queue time once the route has filed it. */
   onFiled: (pendingSinceMs: number) => void
