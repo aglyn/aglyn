@@ -1,7 +1,7 @@
 ---
 sidebar_position: 6
 title: Activities & the timeline
-description: Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, send one person an email from their record, and read it all in one timeline beside everything the platform captured and every campaign it sent.
+description: Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, email one person from their record, and read it all in one timeline beside everything captured and every campaign sent.
 ---
 
 # Activities & the timeline

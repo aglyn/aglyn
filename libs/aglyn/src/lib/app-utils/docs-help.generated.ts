@@ -80,7 +80,7 @@ export const PLUGIN_DOCS = {
   contactActivities: {
     path: '/content-and-data/contacts/activities',
     title: 'Activities & the timeline',
-    excerpt: 'Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, send one person an email from their record, and read it all in one timeline beside everything the platform captured and every campaign it sent.',
+    excerpt: 'Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, email one person from their record, and read it all in one timeline beside everything captured and every campaign sent.',
   },
   contactFields: {
     path: '/content-and-data/contacts/custom-fields',

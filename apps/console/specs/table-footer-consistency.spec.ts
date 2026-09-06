@@ -1207,14 +1207,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'page the choices a person has to scan anyway.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/company-properties-card.tsx',
-    'The detach PROBE behind Delete company (AGL-2597), not a rendered ' +
-      'list: the contacts linked to the company are read one past ' +
-      '`COMPANY_DETACH_LIMIT` to decide whether the delete may proceed, ' +
-      'and the card says how many remain past the bound. Nothing is drawn ' +
-      'as rows; the map the detector sees builds the batch.',
-  ],
-  [
     'libs/plugins/crm/src/lib/components/contact-import-drawer.tsx',
     'The spreadsheet PREVIEW and the skipped-row report in the CSV ' +
       'import (AGL-2602): rows parsed from a file the reader just chose, ' +
@@ -1222,6 +1214,31 @@ const NOT_A_LIST: Array<[string, string]> = [
       'a time as a preview before the import runs. The source is a local ' +
       'array, not a collection, and the full file is what the download ' +
       'offers.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/csv-import-drawer.tsx',
+    'The same PREVIEW and skipped-row report, generalized (AGL-2621): the ' +
+      'walk the contacts drawer and the companies drawer share, each ' +
+      'handing it a vocabulary of columns. The rows are the local array ' +
+      'parsed from the file the reader just chose, capped on the client ' +
+      'and shown ten at a time before the import runs — never a ' +
+      'collection, so there is no cursor a footer could advance.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/deal-products-card.tsx',
+    'A deal’s LINE ITEMS (AGL-2620): rows stored on the deal document ' +
+      'itself and bounded there by `DEAL_LINE_ITEMS_MAX` (50) — the card ' +
+      'refuses a further line at the cap and says so. The bound is what ' +
+      'one sale can carry, not how long the account has existed, and the ' +
+      'row under the items is the deal’s amount, their sum.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/reports/forecast-card.tsx',
+    'An AGGREGATE table in a report (AGL-2620): the open pipeline by ' +
+      'close month, one row per month found in a read capped at ' +
+      '`OPEN_DEAL_CEILING` that the card discloses, sharing the Pipeline ' +
+      'card’s cache. The rows are sums by month, not documents; a pager ' +
+      'would offer to page a grouping whose size is the calendar’s.',
   ],
   [
     'libs/plugins/crm/src/lib/components/lead-surfaces-note.tsx',
