@@ -344,6 +344,22 @@ describe('the forecast by close month (AGL-2620)', () => {
     expect(forecast.total.amountCents).toBe(1_000)
   })
 
+  it('gives an archived pipeline a row only while a deal still sits open in it', () => {
+    const retired = { $id: 'old', name: 'Sales 2025', stages: [...DEFAULT_DEAL_STAGES], archivedAt: 1_700_000_000_000 }
+    const empty = forecastByCloseMonth([], [sales, retired], NOW)
+    expect(empty.pipelines.map((row) => row.pipelineId)).toEqual(['sales'])
+    const holding = forecastByCloseMonth(
+      [{ status: 'open', pipelineId: 'old', stageId: 'qualified', amountCents: 500, expectedCloseAtMs: null }],
+      [sales, retired],
+      NOW,
+    )
+    expect(holding.pipelines.map((row) => [row.pipelineId, row.name])).toEqual([
+      ['sales', 'Sales'],
+      ['old', 'Sales 2025'],
+    ])
+    expect(holding.pipelines[1].undated).toEqual({ count: 1, amountCents: 500, weightedCents: 50 })
+  })
+
   it('puts a deal dated the first of a month in that month, on the local calendar', () => {
     const forecast = forecastByCloseMonth(
       [

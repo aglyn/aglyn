@@ -39,6 +39,7 @@ import {
   type CrmDealStage,
   type CrmPipeline,
   dealStageById,
+  isPipelineArchived,
   weightedDealAmountCents,
 } from './crm'
 
@@ -427,14 +428,16 @@ function addToCell(cell: ForecastCell, amountCents: number, weightedCents: numbe
  * dated before the first month is overdue and a deal dated past the last
  * is "later"; both are reported so the rows add up to the pipeline.
  *
- * A deal in a pipeline the list does not carry (archived, or a pipeline
- * the reader cannot see) is grouped under its id with no name, so the
+ * Every ACTIVE pipeline is a row even with nothing open — an empty
+ * pipeline is a fact about the forecast too — while an archived one is a
+ * row only if a deal still sits open in it. A deal in a pipeline the list
+ * does not carry at all is grouped under its id with no name, so the
  * total still counts it; its stage cannot be resolved, so it weighs
  * nothing, as everywhere else.
  */
 export function forecastByCloseMonth(
   deals: readonly ForecastDeal[],
-  pipelines: ReadonlyArray<Pick<CrmPipeline, 'name' | 'stages'> & { $id: string }>,
+  pipelines: ReadonlyArray<Pick<CrmPipeline, 'name' | 'stages' | 'archivedAt'> & { $id: string }>,
   nowMs: number,
   months = FORECAST_MONTHS,
 ): CloseMonthForecast {
@@ -457,9 +460,9 @@ export function forecastByCloseMonth(
     }
     return row
   }
-  // Every visible pipeline gets a row, in the order given, even with no
-  // open deals: an empty pipeline is a fact about the forecast too.
-  for (const pipeline of pipelines) pipelineRow(pipeline.$id)
+  for (const pipeline of pipelines) {
+    if (!isPipelineArchived(pipeline)) pipelineRow(pipeline.$id)
+  }
 
   const totals: CloseMonthForecast = {
     buckets,
