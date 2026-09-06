@@ -48,6 +48,23 @@ data — and does nothing, with the reason in the run history, when the event
 names nobody this site can see. Fields and behavior are in
 [CRM steps](../../marketing-and-automation/workflows-and-actions/actions-builder.md#crm-steps).
 
+## An automated email on the timeline
+
+The **Send an email** step is not a CRM step — it mails whichever address the
+event carries — but when that address is the contact the event is about, the
+message is logged on the contact's timeline as a sent email, exactly as a
+teammate's **Send email** is: with its subject, the address it went to, and a
+[delivery state](./activities.md#delivery-states) that follows the message. So a
+welcome sequence shows on the person's history beside the calls a rep made.
+
+Nothing is logged when the step writes to somebody else — an internal alert sent
+to your own address through the **To** field — or when the address belongs to
+nobody this site can see. The row needs the CRM suite like the five steps above,
+and a record already at the activity ceiling gets the email without the entry.
+Automated email is metered as usage and is not counted against the
+[one-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email)
+allowance, which is for what people send by hand.
+
 ## Example: tag every new contact from a form
 
 1. Open **Automation → Actions** and choose **Add action**.
