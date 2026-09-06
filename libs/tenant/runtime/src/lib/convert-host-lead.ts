@@ -117,6 +117,11 @@ export interface LeadConvertActor {
    * does. `api`: a key, which cannot own a record — see the header.
    */
   kind: 'member' | 'api'
+  /**
+   * For an `api` actor, the key's name — what the audit line attributes the
+   * conversion to, since a key has no address to be named by.
+   */
+  apiKeyName?: string | null
 }
 
 /** What a conversion is asked to do. Validated by the door before it gets here. */
@@ -542,7 +547,11 @@ export async function convertHostLead(
    */
   await logHostActivity(
     hostId,
-    { uid: actor.uid, email: actor.email ?? null },
+    {
+      uid: actor.uid,
+      email: actor.email ?? null,
+      ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
+    },
     'Converted lead',
     { type: 'lead', id: leadId, name: String(lead['name'] ?? '') || email },
   )

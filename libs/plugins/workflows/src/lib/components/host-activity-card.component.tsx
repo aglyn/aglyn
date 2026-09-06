@@ -38,6 +38,7 @@ import {
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
 import {
+  activityActorLabel,
   activityHref,
   activityPrimaryText,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
@@ -257,7 +258,7 @@ export function HostActivityCard(props: HostActivityCardProps) {
                       )
                     }
                     secondary={
-                      `${entry.actorEmail ?? 'Someone'} · ${
+                      `${activityActorLabel(entry)} · ${
                         entry.createdAt?.toDate?.().toLocaleString() ?? ''
                       }` +
                       // Run-log entries carry duration (wave v6).

@@ -33,6 +33,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
+  activityActorLabel,
   activityHref,
   activityPrimaryText,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
@@ -326,9 +327,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
                         label
                       )
                     }
-                    secondary={`${
-                      entry.actorEmail ?? 'Someone'
-                    } · ${formatWireTimestamp(entry.createdAt)}`}
+                    secondary={`${activityActorLabel(entry)} · ${formatWireTimestamp(entry.createdAt)}`}
                   />
                 </ListItem>
               )

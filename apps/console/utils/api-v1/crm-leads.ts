@@ -479,8 +479,9 @@ async function convertLead(
       org: ctx.org as Record<string, unknown>,
       leadId,
       // A key has no uid; `'api'` is the attribution every REST create
-      // stamps, and a key owns nothing — see the runtime's header.
-      actor: { uid: 'api', email: null, kind: 'api' },
+      // stamps, and a key owns nothing — see the runtime's header. Its name
+      // is what the site's activity feed shows for the conversion.
+      actor: { uid: 'api', email: null, kind: 'api', apiKeyName: ctx.keyName },
       ...(ownerUid ? { ownerUid } : {}),
       ...parsed.plan,
     })

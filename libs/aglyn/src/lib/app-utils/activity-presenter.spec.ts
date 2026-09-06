@@ -16,6 +16,7 @@
  */
 
 import {
+  activityActorLabel,
   activityHref,
   activityPrimaryText,
   activityTargetLabel,
@@ -73,6 +74,25 @@ describe('activityPrimaryText', () => {
 
   it('falls back to the target label when there is no action', () => {
     expect(activityPrimaryText({ target: { type: 'theme' } })).toBe('Theme')
+  })
+})
+
+describe('activityActorLabel', () => {
+  it('names a person by the address the entry recorded', () => {
+    expect(activityActorLabel({ actorEmail: 'person@example.test' })).toBe(
+      'person@example.test',
+    )
+  })
+
+  it('names an API key by its name, never as Someone (AGL-2632)', () => {
+    expect(activityActorLabel({ actorEmail: null, apiKeyName: 'Zapier' })).toBe(
+      'API key Zapier',
+    )
+  })
+
+  it('falls back to Someone for an entry that recorded neither', () => {
+    expect(activityActorLabel({})).toBe('Someone')
+    expect(activityActorLabel({ actorEmail: null })).toBe('Someone')
   })
 })
 

@@ -48,6 +48,8 @@
  */
 
 let mockScopes: string[] = ['crm:read', 'crm:write']
+/** The name the organization gave the key; null models a key the double did not name. */
+let mockKeyName: string | null = null
 let mockOrg: Record<string, unknown> = {}
 let mockUidSeq = 0
 /** Whether the capture door plants a contact; off models a band-full drop. */
@@ -85,6 +87,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       orgId: 'org-1',
       keyId: 'key-1',
       scopes: mockScopes,
+      ...(mockKeyName ? { name: mockKeyName } : {}),
     }),
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,
@@ -245,6 +248,7 @@ beforeEach(() => {
   resetMockFirestore()
   mockUidSeq = 0
   mockScopes = ['crm:read', 'crm:write']
+  mockKeyName = null
   mockOrg = {
     plan: 'business',
     subscription: { status: 'active' },
@@ -689,6 +693,23 @@ describe('POST /v1/leads/{id}/convert', () => {
         dealId: deal.id,
       }),
     })
+  })
+
+  /*
+   * The audit line names the KEY (AGL-2632). `{ uid: 'api', email: null }`
+   * renders as "Someone" in every feed, and three integrations then read as
+   * one nobody; the key's name is what the organization gave it, and the
+   * feed shows it as "API key Zapier".
+   */
+  it('attributes the conversion to the key by name', async () => {
+    mockKeyName = 'Zapier'
+    await convert('lead-a', {})
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      HOST,
+      { uid: 'api', email: null, apiKeyName: 'Zapier' },
+      'Converted lead',
+      { type: 'lead', id: 'lead-a', name: 'Ann Lee' },
+    )
   })
 
   it('hands a named owner to the capture and tells them, by address as by uid', async () => {

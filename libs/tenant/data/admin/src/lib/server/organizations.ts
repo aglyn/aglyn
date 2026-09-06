@@ -46,6 +46,7 @@ import {
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
+import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import {
   nameSearchKey,
   nameSearchReversed,
@@ -1086,7 +1087,7 @@ export interface HostActivityTarget {
  */
 export async function logHostActivity(
   hostId: string,
-  actor: { uid: string; email?: string | null },
+  actor: HostActivityActor,
   action: string,
   target: HostActivityTarget,
 ): Promise<void> {
@@ -1097,6 +1098,9 @@ export async function logHostActivity(
     .add({
       actorId: actor.uid,
       actorEmail: actor.email ?? null,
+      // A key's entry names the key (AGL-2632); a person's carries no such
+      // field, so the two are told apart by its presence.
+      ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
       action,
       target: {
         type: target.type,
