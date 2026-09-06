@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { consentGroupForHost, CRM_COLLECTIONS } from '@aglyn/aglyn'
+import { consentGroupForHost, CRM_COLLECTIONS, findOrgMember } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -121,6 +121,7 @@ function TaskForm(props: TaskEditDrawerProps) {
     // the picker rather than a default that notifies a teammate by accident.
     return { ...base, assigneeUid: user?.uid ?? null, ...prefill }
   })
+  const assignee = findOrgMember(directory.members, fields.assigneeUid)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -267,7 +268,12 @@ function TaskForm(props: TaskEditDrawerProps) {
       <TextField
         select
         label="Assignee"
-        value={fields.assigneeUid ?? ''}
+        // The stored assignee resolved to a member — by uid, or by an
+        // address the roster has — so the picker highlights the person and
+        // a save writes their uid. One the roster does not hold is kept as
+        // its own option: a controlled select whose value is absent from
+        // its options renders empty, which reads as unassigned.
+        value={assignee?.uid ?? fields.assigneeUid ?? ''}
         onChange={(event) => set('assigneeUid', event.target.value || null)}
         size="small"
         disabled={directory.loading}
@@ -279,6 +285,9 @@ function TaskForm(props: TaskEditDrawerProps) {
         }
       >
         <MenuItem value="">{'Unassigned'}</MenuItem>
+        {fields.assigneeUid && !assignee ? (
+          <MenuItem value={fields.assigneeUid}>{directory.nameOf(fields.assigneeUid)}</MenuItem>
+        ) : null}
         {directory.members.map((member) => (
           <MenuItem key={member.uid} value={member.uid}>
             {member.label}

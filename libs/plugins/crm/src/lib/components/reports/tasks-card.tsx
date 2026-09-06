@@ -40,18 +40,15 @@ import {
   where,
 } from 'firebase/firestore'
 import { useMemo } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
-import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   type CrmReportScope,
+  reportCacheKey,
   scopedCollection,
   visibleToClause,
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
-import { useAggregateRead } from './use-aggregate-read'
+import { useAggregateRead, useWindowRead } from './use-aggregate-read'
 
 /**
  * How many open tasks the by-assignee table is grouped from.
@@ -127,22 +124,21 @@ export function TasksCard(props: TasksCardProps) {
         today: today.data().count,
       })),
     [firestore, scope, tokens, day],
+    { cacheKey: reportCacheKey(report, 'tasks:counts') },
   )
 
-  const { data: taskDocs, status: tasksStatus } = useFirestoreCollection<TaskRow>(
+  const taskWindow = useWindowRead<TaskRow>(
     () =>
       query(
         openTasks(),
         orderBy('dueAtMs', 'asc'),
         limit(OPEN_TASK_CEILING + 1),
       ),
-    [firestore, scope, tokens],
-    { idField: '$id' },
+    OPEN_TASK_CEILING,
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'tasks:open') },
   )
-  const taskWindow = useMemo(
-    () => ceilingedWindow(taskDocs ?? undefined, OPEN_TASK_CEILING),
-    [taskDocs],
-  )
+  const tasksStatus = taskWindow.status
 
   const load = useMemo(() => {
     const byAssignee = new Map<string, AssigneeLoad>()
@@ -195,6 +191,7 @@ export function TasksCard(props: TasksCardProps) {
           )
         : Promise.resolve({}),
     [firestore, scope, uidKey],
+    { cacheKey: reportCacheKey(report, `tasks:names:${uidKey}`) },
   )
 
   const figures = counts.value

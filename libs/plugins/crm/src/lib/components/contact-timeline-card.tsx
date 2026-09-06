@@ -34,6 +34,7 @@ import {
   mdiFormSelect,
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { ActivityRow } from './activity-list'
@@ -226,9 +227,22 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
             </Typography>
           ) : null}
           {entries.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No history yet — what this person does on the site, and what you log about them, shows here.'}
-            </Typography>
+            <EmptyStateComponent
+              compact
+              label={'No history yet'}
+              description={'What this person does on the site, and what you log about them, shows here.'}
+              action={
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  onClick={openNew}
+                  disabled={!activities.ready}
+                >
+                  {'Log activity'}
+                </Button>
+              }
+            />
           ) : (
             entries.map((entry) =>
               entry.kind === 'captured' ? (

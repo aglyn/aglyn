@@ -25,6 +25,7 @@ import {
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import {
   mdiArchiveArrowUpOutline,
   mdiArchiveOutline,
@@ -401,9 +402,17 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             {'This site has no organization, so it has no contact fields.'}
           </Typography>
         ) : !ready ? null : definitions.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'No custom fields yet. Add one to start keeping it on every contact.'}
-          </Typography>
+          <EmptyStateComponent
+            label={'No custom fields yet'}
+            description={'A field you define here is kept on every contact and shows on their page.'}
+            action={
+              scope ? (
+                <Button variant="contained" onClick={openCreate}>
+                  {'New field'}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <Table size="small">
             <TableHead>

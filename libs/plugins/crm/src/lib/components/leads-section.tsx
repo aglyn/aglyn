@@ -20,8 +20,11 @@ import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps, CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
 import { mdiAccountArrowRight, mdiAccountCancelOutline, mdiAccountTieOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -55,7 +58,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
 import {
   LEAD_FILTER_LABELS,
@@ -88,6 +91,12 @@ import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
  * is the one order every lead can satisfy (`lastSeenAtMs`, stamped on every
  * capture), and the status filter narrows the loaded window — said out loud
  * beneath the table whenever the window is not the whole collection.
+ *
+ * The window is then PAGED in memory under the shared footer, the way the
+ * workspace pickers page a slice of a window they cannot re-key: the rows
+ * are already in the snapshot, so turning a page costs nothing, and the
+ * footer's count is exact because it counts the filtered window rather than
+ * a collection nobody has measured.
  */
 const LEADS_WINDOW = 200
 
@@ -133,6 +142,17 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const rows = useMemo(
     () => window.filter((lead) => leadMatchesFilter(lead, filter)),
     [window, filter],
+  )
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  // A new filter starts on page one: page three of the open leads is not a
+  // page of the unqualified ones, and an out-of-range page renders empty.
+  useEffect(() => {
+    setPage(0)
+  }, [filter])
+  const pageRows = useMemo(
+    () => rows.slice(page * pageSize, (page + 1) * pageSize),
+    [rows, page, pageSize],
   )
 
   const [assigning, setAssigning] = useState<LeadRow | null>(null)
@@ -303,22 +323,34 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           {/* Which surfaces file a lead on this site, by name (AGL-2612). */}
           <LeadSurfacesNote hostId={hostId} />
           {status === 'success' && window.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No leads yet — sign-ups, bookings and form submissions on your ' +
-                'site become leads automatically.'}
-            </Typography>
+            <EmptyStateComponent
+              label={'No leads yet'}
+              description={'Sign-ups, bookings and form submissions on your site become leads on their own.'}
+            />
           ) : status === 'success' && rows.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {`No ${LEAD_FILTER_LABELS[filter].toLowerCase()} leads among the ` +
                 `${window.length.toLocaleString()} most recently seen.`}
             </Typography>
           ) : (
-            <ListTable
-              rows={rows}
-              columns={columns}
-              loading={status === 'loading'}
-              onOpen={(id) => router.push(routes.lead(id))}
-            />
+            <>
+              <ListTable
+                rows={pageRows}
+                columns={columns}
+                loading={status === 'loading'}
+                onOpen={(id) => router.push(routes.lead(id))}
+                // Paged by the footer below, so the grid must not also slice.
+                hideFooter
+              />
+              <ListPagination
+                page={page}
+                pageSize={pageSize}
+                rowCount={pageRows.length}
+                count={rows.length}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            </>
           )}
           {truncated ? (
             <Alert severity="info">

@@ -42,6 +42,7 @@ import { type ContactRecord, contactRecordFromDoc } from '../model/contact-recor
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import ContactsBulkBar from './contacts-bulk-bar'
 import { ContactImportButton } from './contact-import-drawer'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -959,10 +960,33 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 : 'No contacts match this filter.'}
             </Typography>
           ) : contacts.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No contacts yet — form submissions, member sign-ups, ' +
-                'orders, and bookings all become contacts automatically.'}
-            </Typography>
+            <EmptyStateComponent
+              label={contactsStatus === 'loading' ? 'Loading contacts…' : 'No contacts yet'}
+              description={
+                contactsStatus === 'loading'
+                  ? undefined
+                  : 'Form submissions, member sign-ups, orders and bookings become contacts on their own; add one by hand or bring a list in from a CSV.'
+              }
+              action={
+                contactsStatus === 'loading' ? undefined : (
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="primary"
+                      disabled={!dataScope}
+                      onClick={() => {
+                        setCreateError(null)
+                        setCreateOpen(true)
+                      }}
+                    >
+                      {'New contact'}
+                    </Button>
+                    <ContactImportButton hostId={hostId} org={org} />
+                  </Stack>
+                )
+              }
+            />
           ) : (
             <>
               {/* The segment controls refine the loaded window; the search

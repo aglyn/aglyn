@@ -23,6 +23,8 @@ import {
   activityTimeLabel,
   companyDomainForEmail,
   companyNameForDomain,
+  findOrgMember,
+  parseCrmMemberRef,
   CONTACT_LIFECYCLE_STAGES,
   CRM_AUTO_CREATE_COMPANIES_PATH,
   ORG_CRM_SETTINGS_FIELD,
@@ -32,6 +34,7 @@ import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   advanceContactLifecycleStage,
   contactLifecycleStageAfterPurchase,
+  crmMemberOption,
   CRM_ACTIVITY_KIND_LABELS,
   CRM_ACTIVITY_KINDS,
   CRM_COLLECTIONS,
@@ -649,5 +652,77 @@ describe('activityTimeLabel', () => {
 
   it('says nothing for a time that is not one', () => {
     expect(activityTimeLabel(Number.NaN, now)).toBe('')
+  })
+})
+
+/**
+ * The team, as a record names them (AGL-2614): a reference is a uid or an
+ * address, a member is listed whether or not the document carries an
+ * address, and the roster is the only directory consulted.
+ */
+describe('parseCrmMemberRef', () => {
+  it('reads an address as an address, normalized', () => {
+    expect(parseCrmMemberRef(' Sam@Example.com ')).toEqual({
+      kind: 'email',
+      email: 'sam@example.com',
+    })
+  })
+
+  it('reads anything else as a uid', () => {
+    expect(parseCrmMemberRef('uid-sam')).toEqual({ kind: 'uid', uid: 'uid-sam' })
+  })
+
+  it('names nobody for a blank, and for an address that is not one', () => {
+    expect(parseCrmMemberRef('')).toBeNull()
+    expect(parseCrmMemberRef('   ')).toBeNull()
+    expect(parseCrmMemberRef(null)).toBeNull()
+    expect(parseCrmMemberRef('not@an')).toBeNull()
+  })
+})
+
+describe('crmMemberOption', () => {
+  it('labels by display name, then address, then uid', () => {
+    expect(crmMemberOption({ $id: 'u1', displayName: 'Ada', email: 'ada@example.com' })).toEqual({
+      uid: 'u1',
+      label: 'Ada',
+      email: 'ada@example.com',
+    })
+    expect(crmMemberOption({ $id: 'u2', email: 'sam@example.com' })).toEqual({
+      uid: 'u2',
+      label: 'sam@example.com',
+      email: 'sam@example.com',
+    })
+  })
+
+  it('lists a member whose document has no address, by name or by uid', () => {
+    // The re-granted and the address-less adds: still on the team, still
+    // pickable, never a blank line and never dropped.
+    expect(crmMemberOption({ $id: 'u3', displayName: 'Grace' })).toEqual({
+      uid: 'u3',
+      label: 'Grace',
+    })
+    expect(crmMemberOption({ $id: 'u4', displayName: '' })).toEqual({ uid: 'u4', label: 'u4' })
+  })
+
+  it('refuses a row with no uid', () => {
+    expect(crmMemberOption({ email: 'nobody@example.com' })).toBeNull()
+  })
+})
+
+describe('findOrgMember', () => {
+  const roster = [
+    { uid: 'u1', label: 'Ada', email: 'ada@example.com' },
+    { uid: 'u3', label: 'Grace' },
+  ]
+
+  it('resolves by uid, and by address when the record carries one', () => {
+    expect(findOrgMember(roster, 'u3')?.label).toBe('Grace')
+    expect(findOrgMember(roster, 'Ada@Example.com')?.uid).toBe('u1')
+  })
+
+  it('names nobody for a stranger, a blank, or an address nobody has', () => {
+    expect(findOrgMember(roster, 'u9')).toBeUndefined()
+    expect(findOrgMember(roster, '')).toBeUndefined()
+    expect(findOrgMember(roster, 'ghost@example.com')).toBeUndefined()
   })
 })

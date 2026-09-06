@@ -16,21 +16,21 @@
  */
 'use client'
 
+import { type CrmMemberOption, crmMemberOption, findOrgMember } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useEffect, useMemo, useState } from 'react'
 
 /** One teammate, as an owner picker or an owner column needs them. */
-export interface OrgMemberOption {
-  uid: string
-  /** The name, or the address when the member record carries no name. */
-  label: string
-}
+export type OrgMemberOption = CrmMemberOption
 
 export interface OrgMemberOptions {
   options: OrgMemberOption[]
-  /** Label for a uid, or the uid's own tail when the roster does not know it. */
-  labelFor: (uid: string | null | undefined) => string
+  /**
+   * Label for a stored reference — a uid, or an address the roster has — or
+   * the reference's own tail when the roster does not know it.
+   */
+  labelFor: (ref: string | null | undefined) => string
   /** The roster has answered — with people, or with a refusal. */
   ready: boolean
   /** The roster was refused or unreachable; `options` is then empty. */
@@ -89,15 +89,11 @@ export function useOrgMemberOptions(
           ? payload.members
           : []
         const options = members
-          .map((member) => ({
-            uid: String(member['$id'] ?? member['uid'] ?? ''),
-            label: String(
-              member['displayName'] ?? member['email'] ?? '',
-            ).trim(),
-          }))
-          // A member with no uid cannot own anything; one with no name and
-          // no address would be a blank line in the picker.
-          .filter((option) => option.uid && option.label)
+          .map((member) => crmMemberOption(member))
+          // A member with no uid cannot own anything. One with no name and
+          // no address is still on the team and is listed by uid — dropping
+          // them made them the one member nobody could assign to.
+          .filter((option): option is OrgMemberOption => option !== null)
           .sort((left, right) =>
             left.label.localeCompare(right.label, undefined, {
               sensitivity: 'base',
@@ -130,11 +126,11 @@ export function useOrgMemberOptions(
   // disclosure as well as a mistake.
   const current = state && state.orgId === orgId ? state : null
   const options = useMemo(() => current?.options ?? [], [current])
-  const labelFor = useMemo(() => {
-    const byUid = new Map(options.map((option) => [option.uid, option.label]))
-    return (uid: string | null | undefined) =>
-      uid ? (byUid.get(uid) ?? `Member ${uid.slice(-6)}`) : ''
-  }, [options])
+  const labelFor = useMemo(
+    () => (ref: string | null | undefined) =>
+      ref ? (findOrgMember(options, ref)?.label ?? `Member ${ref.slice(-6)}`) : '',
+    [options],
+  )
 
   // One object per answer, so a column list or a drawer that lists this in
   // its dependencies recomputes when the roster changes and not per render.

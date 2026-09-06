@@ -45,14 +45,20 @@ The company is saved and its page opens.
 
 The page names the company in the heading and the trail, and holds its
 properties, its contacts, its [deals](./deals.md), its open [tasks](./tasks.md)
-and the [activity](./activities.md) logged against it. **Edit** opens the same
-form the company was created with.
+and the [activity](./activities.md) logged against it. The header of the
+first card carries the domain under the company's kind, the industry and the
+owner as chips, **Back to companies**, and **Edit**, which opens the same form
+the company was created with; **Delete company** is in the header's menu (⋮).
+Every CRM record page — contact, company, deal and lead — is headed the same
+way.
 
 ## Contacts at a company
 
-The **Contacts** card lists the people linked to this company, each opening
-their own page. **Add contact** finds a person by email address or by name
-among the contacts your site may see and links them. A contact belongs to one
+The **Contacts** card lists the people linked to this company a page at a
+time, most recently updated first, with the total counted by the database in
+its footer; each row opens the person's page. **Add contact** finds a person
+by email address or by name among the contacts your site may see and links
+them. A contact belongs to one
 company at a time from your site's point of view; linking them to a second
 company moves them.
 

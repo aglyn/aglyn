@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, nameSearchKey } from '@aglyn/aglyn'
+import { CRM_COLLECTIONS, findOrgMember, nameSearchKey } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
@@ -52,7 +52,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { type CrmOrgDoc, useDealScope } from '../hooks/use-deal-scope'
+import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import {
   DEAL_CURRENCIES,
@@ -149,7 +149,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
-  const { orgId, consentGroup, readTokens, createTokens } = useDealScope({
+  const { orgId, consentGroup, visibleTo, createTokens } = useCrmScope({
     hostId,
     org,
   })
@@ -158,6 +158,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const [values, setValues] = useState<DealFormValues>(() =>
     emptyDealForm(defaultPipeline, defaults),
   )
+  const owner = findOrgMember(roster.members, values.ownerUid)
   const [busy, setBusy] = useState(false)
 
   // Re-seeded on every open: an existing deal's stored values, or a blank
@@ -189,15 +190,15 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
    */
   const { data: contactRows } = useFirestoreCollection<Record<string, unknown>>(
     () =>
-      open && orgId && readTokens.length
+      open && orgId && visibleTo.length
         ? query(
             collection(firestore, 'orgs', orgId, 'contacts'),
-            where('visibleTo', 'array-contains-any', readTokens),
+            where('visibleTo', 'array-contains-any', visibleTo),
             orderBy('updatedAt', 'desc'),
             limit(CONTACT_WINDOW),
           )
         : null,
-    [firestore, open, orgId, readTokens],
+    [firestore, open, orgId, visibleTo],
     { idField: '$id' },
   )
   const [contactQuery, setContactQuery] = useState('')
@@ -222,14 +223,14 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const [companyQuery, setCompanyQuery] = useState('')
   const [companyChoices, setCompanyChoices] = useState<CompanyChoice[]>([])
   useEffect(() => {
-    if (!open || !orgId || !readTokens.length) return
+    if (!open || !orgId || !visibleTo.length) return
     const key = nameSearchKey(companyQuery)
     let active = true
     const timer = setTimeout(() => {
       void getDocs(
         query(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.companies),
-          where('visibleTo', 'array-contains-any', readTokens),
+          where('visibleTo', 'array-contains-any', visibleTo),
           orderBy('nameLower'),
           ...(key ? [startAt(key), endAt(`${key}\uf8ff`)] : []),
           limit(COMPANY_MATCHES),
@@ -252,7 +253,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
       active = false
       clearTimeout(timer)
     }
-  }, [firestore, open, orgId, readTokens, companyQuery])
+  }, [firestore, open, orgId, visibleTo, companyQuery])
   const companyValue: CompanyChoice | null = values.companyId
     ? { id: values.companyId, name: values.companyName }
     : null
@@ -288,7 +289,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         const created = await addDoc(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
           dealDocumentFromForm(values, {
-            visibleTo: createTokens,
+            visibleTo: [...createTokens],
             hostId,
             uid: user.uid,
             nowMs,
@@ -431,14 +432,10 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
           <TextField
             select
             label="Owner"
-            value={
-              values.ownerUid &&
-              roster.members.some((member) => member.uid === values.ownerUid)
-                ? values.ownerUid
-                : values.ownerUid
-                  ? '__keep'
-                  : ''
-            }
+            // The stored owner resolved to a member — by uid, or by an
+            // address the roster has — so the picker highlights the person
+            // and a save writes their uid.
+            value={owner ? owner.uid : values.ownerUid ? '__keep' : ''}
             onChange={(event) =>
               update({
                 ownerUid: event.target.value === '__keep' ? values.ownerUid : event.target.value,
@@ -452,8 +449,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             }
           >
             <MenuItem value="">{'Nobody yet'}</MenuItem>
-            {values.ownerUid &&
-            !roster.members.some((member) => member.uid === values.ownerUid) ? (
+            {values.ownerUid && !owner ? (
               // The stored owner is not on the roster the route returned —
               // a member who left, or a roster that failed to load. Shown by
               // uid so the field is never blank while the deal has an owner.

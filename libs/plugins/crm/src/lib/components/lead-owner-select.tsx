@@ -16,17 +16,19 @@
  */
 'use client'
 
-import type { AglynOrgMember } from '@aglyn/aglyn'
+import {
+  type AglynOrgMember,
+  type CrmMemberOption,
+  crmMemberOption,
+  findOrgMember,
+} from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { FormControl, InputLabel, MenuItem, Select } from '@mui/material'
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 
 /** One team member as the owner picker lists them. */
-export interface OrgMemberOption {
-  uid: string
-  label: string
-}
+export type OrgMemberOption = CrmMemberOption
 
 /** The `value` an owner select carries for "nobody". */
 export const UNASSIGNED_OWNER = ''
@@ -50,8 +52,11 @@ export interface OrgMemberOptions {
   options: OrgMemberOption[]
   loading: boolean
   error: string | null
-  /** A uid as a name, `Unassigned` for none, and honest about a uid the roster no longer has. */
-  labelFor: (uid: string | null | undefined) => string
+  /**
+   * A stored reference — a uid, or an address the roster has — as a name,
+   * `Unassigned` for none, and honest about one the roster no longer has.
+   */
+  labelFor: (ref: string | null | undefined) => string
 }
 
 /**
@@ -98,7 +103,8 @@ export function useOrgMemberOptions(
       const list = (Array.isArray(body?.members) ? body.members : []) as AglynOrgMember[]
       setMembers(
         list
-          .map((member) => ({ uid: String(member.$id), label: orgMemberLabel(member) }))
+          .map((member) => crmMemberOption(member as unknown as Record<string, unknown>))
+          .filter((option): option is OrgMemberOption => option !== null)
           .sort((a, b) => a.label.localeCompare(b.label)),
       )
     })()
@@ -109,12 +115,12 @@ export function useOrgMemberOptions(
 
   const options = useMemo(() => members ?? [], [members])
   const labelFor = useCallback(
-    (uid: string | null | undefined) => {
-      if (!uid) return 'Unassigned'
-      // A uid the roster does not carry is a member who has left; naming that
-      // is better than an id nobody recognizes or a blank that reads as
-      // unassigned.
-      return options.find((option) => option.uid === uid)?.label ?? 'Former member'
+    (ref: string | null | undefined) => {
+      if (!ref) return 'Unassigned'
+      // A reference the roster does not carry is a member who has left;
+      // naming that is better than an id nobody recognizes or a blank that
+      // reads as unassigned.
+      return findOrgMember(options, ref)?.label ?? 'Former member'
     },
     [options],
   )
@@ -142,10 +148,13 @@ export interface LeadOwnerSelectProps {
 /**
  * The owner picker: Unassigned, then the roster by name.
  *
- * A value the roster does not hold is kept as its own option rather than
- * dropped, because a controlled `Select` whose value is absent from its
- * options renders empty — which would show a lead owned by somebody who left
- * as owned by nobody, and a save from that state would make it true.
+ * The stored value is resolved to a member first — by uid, or by an address
+ * the roster has — so the picker highlights the person and a save writes
+ * their uid. A value the roster does not hold is kept as its own option
+ * rather than dropped, because a controlled `Select` whose value is absent
+ * from its options renders empty — which would show a lead owned by
+ * somebody who left as owned by nobody, and a save from that state would
+ * make it true.
  */
 export function LeadOwnerSelect(props: LeadOwnerSelectProps) {
   const {
@@ -157,8 +166,9 @@ export function LeadOwnerSelect(props: LeadOwnerSelectProps) {
     disabled,
     fullWidth = true,
   } = props
-  const current = value ?? UNASSIGNED_OWNER
-  const known = roster.options.some((option) => option.uid === current)
+  const resolved = findOrgMember(roster.options, value)
+  const current = resolved?.uid ?? value ?? UNASSIGNED_OWNER
+  const known = Boolean(resolved)
   /*
    * A bare `Select` names its combobox after the VALUE it shows, not after
    * the label beside it — MUI builds `aria-labelledby` from `labelId` and the

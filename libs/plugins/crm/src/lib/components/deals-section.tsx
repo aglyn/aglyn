@@ -31,6 +31,7 @@ import {
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -45,7 +46,7 @@ import {
 import type { GridColDef } from '@mui/x-data-grid'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
-import { useDealScope } from '../hooks/use-deal-scope'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import {
   BOARD_CLOSED_LIMIT,
@@ -104,7 +105,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
   const routes = crmRoutes(basePath ?? '')
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
-  const scope = useDealScope({ hostId, org })
+  const scope = useCrmScope({ hostId, org })
   const pipelineState = usePipeline(scope.orgId, {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
@@ -122,18 +123,18 @@ export function DealsSection(props: ConsolePluginPageProps) {
   // above both views is computed from, and it is already bounded.
   const open = useDealsByStatus(
     scope.orgId,
-    scope.readTokens,
+    scope.visibleTo,
     pipeline?.$id ?? null,
     'open',
     BOARD_OPEN_LIMIT,
   )
   const closedPipelineId =
     view === 'board' && closedExpanded ? (pipeline?.$id ?? null) : null
-  const won = useDealsByStatus(scope.orgId, scope.readTokens, closedPipelineId, 'won', BOARD_CLOSED_LIMIT)
-  const lost = useDealsByStatus(scope.orgId, scope.readTokens, closedPipelineId, 'lost', BOARD_CLOSED_LIMIT)
+  const won = useDealsByStatus(scope.orgId, scope.visibleTo, closedPipelineId, 'won', BOARD_CLOSED_LIMIT)
+  const lost = useDealsByStatus(scope.orgId, scope.visibleTo, closedPipelineId, 'lost', BOARD_CLOSED_LIMIT)
   const paged = usePagedDeals(
     view === 'table' ? scope.orgId : null,
-    scope.readTokens,
+    scope.visibleTo,
     statusFilter,
   )
 
@@ -384,9 +385,22 @@ export function DealsSection(props: ConsolePluginPageProps) {
           ) : view === 'board' && pipeline ? (
             <>
               {open.status === 'success' && open.data.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'No open deals yet. Create one, or drag a card here once you have.'}
-                </Typography>
+                <EmptyStateComponent
+                  compact
+                  label={'No open deals yet'}
+                  description={'A deal is a sale in progress, moved across the stages below as it advances.'}
+                  action={
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                      disabled={!pipeline || !scope.orgId}
+                      onClick={() => setCreating(true)}
+                    >
+                      {'New deal'}
+                    </Button>
+                  }
+                />
               ) : null}
               <DealBoard
                 pipeline={pipeline}
@@ -421,9 +435,27 @@ export function DealsSection(props: ConsolePluginPageProps) {
                 <ToggleButton value="lost">{'Lost'}</ToggleButton>
               </ToggleButtonGroup>
               {paged.status === 'success' && paged.rows.length === 0 && paged.page === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {statusFilter === 'all' ? 'No deals yet.' : `No ${statusFilter} deals.`}
-                </Typography>
+                <EmptyStateComponent
+                  label={statusFilter === 'all' ? 'No deals yet' : `No ${statusFilter} deals`}
+                  description={
+                    statusFilter === 'all'
+                      ? 'A deal is a sale in progress, moved across the pipeline as it advances.'
+                      : undefined
+                  }
+                  action={
+                    statusFilter === 'all' ? (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                        disabled={!pipeline || !scope.orgId}
+                        onClick={() => setCreating(true)}
+                      >
+                        {'New deal'}
+                      </Button>
+                    ) : undefined
+                  }
+                />
               ) : (
                 <>
                   <ListTable
@@ -461,7 +493,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
         pipeline={pipeline}
         fromCache={pipelineState.fromCache}
         unreadable={pipelineState.status === 'error'}
-        visibleToTokens={scope.readTokens}
+        visibleToTokens={scope.visibleTo}
       />
       <LostReasonDialog
         open={Boolean(losing)}

@@ -24,12 +24,7 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
-import {
-  AppLink,
-  CardDisplay,
-  MdiIcon,
-  useConfirmationContext,
-} from '@aglyn/shared-ui-jsx'
+import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Button, Link, Stack, Typography } from '@mui/material'
@@ -53,6 +48,7 @@ import {
 } from '../model/companies'
 import type { CrmRoutes } from '../model/crm-routes'
 import CompanyEditDrawer from './company-edit-drawer'
+import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 
 export interface CompanyPropertiesCardProps {
   company: Partial<CrmCompany> & { $id: string }
@@ -220,8 +216,9 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   }, [scope, deleting, company, confirm, firestore, enqueueSnackbar, onDeleted])
 
   const address = formatAddress(company.address)
+  // The domain, the industry and the owner read on the header — the
+  // subtitle and the chip row — so the rows list what is left.
   const rows: Array<{ label: string; value: ReactNode }> = [
-    { label: 'Domain', value: company.domain },
     {
       label: 'Website',
       value: company.website ? (
@@ -231,50 +228,55 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
       ) : null,
     },
     { label: 'Phone', value: company.phone },
-    { label: 'Industry', value: company.industry },
-    {
-      label: 'Owner',
-      value: company.ownerUid
-        ? members.ready
-          ? members.labelFor(company.ownerUid)
-          : '…'
-        : null,
-    },
     { label: 'Address', value: address },
     { label: 'Notes', value: company.notes },
   ]
 
   return (
-    <CardDisplay
-      header={'Company'}
+    <CrmRecordHeader
+      kind="Company"
+      title={String(company.name || company.$id)}
+      subtitle={company.domain}
       help={pluginDocsHelp('companies', { anchor: '#a-companys-page' })}
-      contentGutterX
-      contentGutterY
-      contentBordered="all"
-      HeaderProps={{
-        action: (
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              color="primary"
-              variant="outlined"
-              startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
-              onClick={() => setEditing(true)}
-            >
-              {'Edit'}
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              disabled={!scope || deleting}
-              startIcon={<MdiIcon path={mdiDeleteOutline.path} size={0.8} />}
-              onClick={() => void handleDelete()}
-            >
-              {deleting ? 'Deleting…' : 'Delete'}
-            </Button>
-          </Stack>
-        ),
-      }}
+      backHref={routes.section('companies')}
+      backLabel="Back to companies"
+      actions={
+        <Button
+          size="small"
+          color="primary"
+          variant="outlined"
+          startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
+          onClick={() => setEditing(true)}
+        >
+          {'Edit'}
+        </Button>
+      }
+      menuItems={[
+        {
+          key: 'delete',
+          label: deleting ? 'Deleting…' : 'Delete company',
+          icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+          destructive: true,
+          disabled: !scope || deleting,
+          disabledReason: deleting ? 'The company is being deleted' : 'The organization has not loaded',
+          onClick: () => void handleDelete(),
+        },
+      ]}
+      chips={
+        <>
+          <CrmRecordChip label="Industry" value={company.industry} />
+          <CrmRecordChip
+            label="Owner"
+            value={
+              company.ownerUid
+                ? members.ready
+                  ? members.labelFor(company.ownerUid)
+                  : '…'
+                : undefined
+            }
+          />
+        </>
+      }
     >
       <Stack spacing={1}>
         {rows.map((row) => (
@@ -313,14 +315,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
           onSaved={() => setEditing(false)}
         />
       ) : null}
-      {/* The way back is a link the trail does not carry: the record is the
-          last crumb and is not linked, so the section is offered here. */}
-      <Stack direction="row" sx={{ mt: 2 }}>
-        <Typography variant="caption" color="text.secondary">
-          <AppLink href={routes.section('companies')}>{'All companies'}</AppLink>
-        </Typography>
-      </Stack>
-    </CardDisplay>
+    </CrmRecordHeader>
   )
 }
 CompanyPropertiesCard.displayName = 'CompanyPropertiesCard'

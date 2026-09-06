@@ -1363,23 +1363,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
       'Bounded by the marketplace rather than by the account, but the ' +
       'marketplace is the thing that grows.',
   ],
-  [
-    'libs/plugins/crm/src/lib/components/company-contacts-card.tsx',
-    'The contacts at one company (AGL-2597): a real list, read under ' +
-      '`CONTACTS_AT_COMPANY_LIMIT` with the count taken from the server ' +
-      'and shown beside it, so the truncation is honest but the ' +
-      'fifty-first contact is unreachable from the card. A shared footer ' +
-      'belongs here once the card takes the paged reader.',
-  ],
-  [
-    'libs/plugins/crm/src/lib/components/leads-section.tsx',
-    'The site’s leads (AGL-2608): a real list on `ListTable`, read as ' +
-      'one window of `LEADS_WINDOW` newest by last seen and filtered by ' +
-      'status in memory — because `addHostLead` writes no status and ' +
-      'Firestore cannot select on a missing field — with a notice when ' +
-      'the window filled. The notice is honest; a footer is owed once the ' +
-      'status is stamped at capture and the query can page.',
-  ],
 ]
 
 describe('a table with rows under it has a footer under those (AGL-2501)', () => {
@@ -1500,7 +1483,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // capture door never stamps — each says when it was cut short, neither
     // can turn a page yet. Both are named so the debt is visible, not so it
     // is excused.
-    expect(OWES_A_FOOTER).toHaveLength(17)
+    //
+    // 15 since both paid (AGL-2614): the company's contacts take the paged
+    // reader, with the server aggregate as the footer's count, and the leads
+    // page their filtered window in memory the way the workspace pickers
+    // page theirs — the window cannot be re-keyed by a status the capture
+    // door never writes, but a slice of it can be turned.
+    expect(OWES_A_FOOTER).toHaveLength(15)
     // 37 since a site's senders became a list the composer picks from: the
     // drawer that edits one carries a picker of teammates, and a picker's
     // option list is a lookup rather than a window a reader pages through.

@@ -20,43 +20,23 @@ import {
   authorizedFetch,
   type TokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
-import { resolveUserName, useUser } from '@aglyn/tenant-feature-instance'
+import { type CrmMemberOption, crmMemberOption, findOrgMember } from '@aglyn/aglyn'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 /** One team member, as an owner picker lists them. */
-export interface OrgMemberOption {
-  uid: string
-  label: string
-}
+export type OrgMemberOption = CrmMemberOption
 
 export interface OrgMembers {
   /** Every member of the workspace, by name. */
   options: OrgMemberOption[]
   /** The roster has answered — an empty list is then a real answer. */
   ready: boolean
-  /** The name to show for a uid: the roster's, or the uid when it is unknown. */
-  memberName: (uid: string) => string
-}
-
-/**
- * A roster row as the picker shows it.
- *
- * The same resolution order `useUserName` uses for the signed-in person:
- * the roster's `displayName` is the profile copy the members surface keeps
- * (SSO accounts carry none on the auth record), the email is what a surface
- * shows when nothing else exists, and the uid is the floor — a row must be
- * NAMED, because an owner picker with a blank entry is a row nobody can pick
- * on purpose.
- */
-function rosterOption(member: Record<string, unknown>): OrgMemberOption | null {
-  const uid = String(member['$id'] ?? member['uid'] ?? '')
-  if (!uid) return null
-  const label =
-    resolveUserName({
-      authDisplayName: member['displayName'] as string | undefined,
-      email: member['email'] as string | undefined,
-    }) || uid
-  return { uid, label }
+  /**
+   * The name to show for a stored reference — a uid, or an address the
+   * roster has — or the reference itself when the roster does not know it.
+   */
+  memberName: (ref: string) => string
 }
 
 /**
@@ -105,7 +85,7 @@ export function useOrgMembers(
         setLoaded({
           orgId,
           options: members
-            .map((member) => rosterOption((member ?? {}) as Record<string, unknown>))
+            .map((member) => crmMemberOption((member ?? {}) as Record<string, unknown>))
             .filter((option): option is OrgMemberOption => option !== null)
             .sort((a, b) => a.label.localeCompare(b.label)),
         })
@@ -122,16 +102,13 @@ export function useOrgMembers(
   }, [enabled, orgId, loadedOrgId])
 
   const current = loaded && loaded.orgId === orgId ? loaded : null
-  const byUid = useMemo(
-    () => new Map((current?.options ?? []).map((option) => [option.uid, option.label])),
-    [current],
-  )
+  const roster = useMemo(() => current?.options ?? [], [current])
   const memberName = useCallback(
-    (uid: string) => byUid.get(uid) ?? uid,
-    [byUid],
+    (ref: string) => findOrgMember(roster, ref)?.label ?? ref,
+    [roster],
   )
   return {
-    options: current?.options ?? [],
+    options: roster,
     ready: current !== null,
     memberName,
   }

@@ -162,6 +162,29 @@ const FLOW_WAIT_PRESETS: ReadonlyArray<{ minutes: number; label: string }> = [
   { minutes: 60 * 24 * 90, label: '90 days' },
 ]
 
+
+/**
+ * The two stored fields a typed teammate reference becomes.
+ *
+ * `ownerEmail`/`assigneeEmail` hold an address and nothing else — the
+ * validator refuses one without an `@`, and the executor matches it on the
+ * roster's `email`. A value with no `@` is a member id, stored in the uid
+ * field the executor verifies against the roster document. Clearing the
+ * text clears both, so a step never carries a stale address beside a uid.
+ */
+function memberRefFields(
+  role: 'owner' | 'assignee',
+  value: string,
+): Record<string, string | undefined> {
+  const text = value.trim()
+  const emailKey = `${role}Email`
+  const uidKey = `${role}Uid`
+  if (!text) return { [emailKey]: undefined, [uidKey]: undefined }
+  return text.includes('@')
+    ? { [emailKey]: value, [uidKey]: undefined }
+    : { [emailKey]: undefined, [uidKey]: text }
+}
+
 function defaultStep(type: HostActionStepType): HostActionStep {
   switch (type) {
     case 'runWorkflow':
@@ -1945,16 +1968,25 @@ export function HostActionsCard(props: {
                   />
                 ) : step.type === 'assignContactOwner' ? (
                   <>
+                    {/*
+                      One field for either way of naming a teammate. An
+                      address is stored as `ownerEmail` and matched on the
+                      roster when the automation runs; anything else is
+                      stored as `ownerUid`, which is how a member whose
+                      account carries no address — an SSO re-grant — is
+                      named at all. The split happens here so the stored
+                      step keeps the two fields the validator and the
+                      executor already read.
+                     */}
                     <TextField
-                      label="Owner’s email"
-                      type="email"
-                      value={(step as any).ownerEmail ?? ''}
+                      label="Owner (email address or member id)"
+                      value={(step as any).ownerEmail || (step as any).ownerUid || ''}
                       onChange={(event) =>
                         patch((previous) => ({
                           ...previous,
                           steps: previous.steps.map((s, index2) =>
                             index2 === index
-                              ? { ...s, ownerEmail: event.target.value }
+                              ? { ...s, ...memberRefFields('owner', event.target.value) }
                               : s,
                           ),
                         }))
@@ -1963,7 +1995,7 @@ export function HostActionsCard(props: {
                       sx={{ flex: 1 }}
                     />
                     <Typography variant="caption" color="text.secondary">
-                      {'Somebody on your team; matched when the automation runs.'}
+                      {'Somebody on your team, matched against the roster when the automation runs.'}
                     </Typography>
                   </>
                 ) : step.type === 'createCrmTask' ? (
@@ -2031,15 +2063,14 @@ export function HostActionsCard(props: {
                       sx={{ width: 130 }}
                     />
                     <TextField
-                      label="Assignee’s email (optional)"
-                      type="email"
-                      value={(step as any).assigneeEmail ?? ''}
+                      label="Assignee (email address or member id, optional)"
+                      value={(step as any).assigneeEmail || (step as any).assigneeUid || ''}
                       onChange={(event) =>
                         patch((previous) => ({
                           ...previous,
                           steps: previous.steps.map((s, index2) =>
                             index2 === index
-                              ? { ...s, assigneeEmail: event.target.value }
+                              ? { ...s, ...memberRefFields('assignee', event.target.value) }
                               : s,
                           ),
                         }))

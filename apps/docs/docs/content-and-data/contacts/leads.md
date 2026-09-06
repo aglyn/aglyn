@@ -62,9 +62,11 @@ views are one status each, and **All** shows everything. A lead nobody has
 touched yet has no status of its own and reads as **New**, so the leads your
 site collected before the CRM existed are already in the Open view.
 
-The list reads the 200 most recently seen leads. When a site holds more, a
-notice says so; the status filter narrows those 200, and older leads are still
-listed in the Inbox and still reached by campaign audiences.
+The list reads the 200 most recently seen leads and shows them a page at a
+time, with the usual footer to turn the page and pick how many rows it holds.
+When a site holds more than 200, a notice says so; the status filter narrows
+those 200, and older leads are still listed in the Inbox and still reached by
+campaign audiences.
 
 ### Working a lead from the row
 
@@ -117,8 +119,9 @@ again — opening the dialog on one simply takes you to its contact.
 
 ## Unqualifying a lead
 
-**Unqualify** closes a lead without converting it. A reason is required, so
-the closed leads can be counted by why they closed. An unqualified lead drops
+**Unqualify** — from the row's menu on the list, or from the menu (⋮) in the
+header of the lead's page — closes a lead without converting it. A reason is
+required, so the closed leads can be counted by why they closed. An unqualified lead drops
 out of the Open view and keeps its reason on its page; set its status back to
 Working to reopen it, which clears the reason.
 

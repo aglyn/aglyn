@@ -17,22 +17,34 @@
 'use client'
 
 import {
-  type AglynOrgBilling,
   type ConsentGroup,
+  type ConsolePluginPageProps,
   consentGroupForHost,
+  crmReadTokens,
   crmScopeTokens,
-  hostScopeToken,
-  MAX_SCOPE_HOSTS,
-  ORG_SCOPE_TOKEN,
   type ScopeToken,
 } from '@aglyn/aglyn'
 import { useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import { useMemo } from 'react'
 
+/**
+ * The org document as a CRM surface receives it: the shell's typed billing
+ * projection on a page, or the plain record a card was handed. Read as a
+ * record at the one seam below, so no component casts it itself.
+ */
+export type CrmOrgDoc =
+  | ConsolePluginPageProps['org']
+  | Record<string, unknown>
+  | null
+  | undefined
+
 export interface CrmScope {
-  /** The org data root, or `null` until the org lookup settles. */
+  /** The org data root, or `null` until the org lookup settles or when there is none. */
   scope: readonly ['orgs', string] | null
-  orgId: string | undefined
+  /** The owning org, or null while the lookup runs or when there is none. */
+  orgId: string | null
+  /** Whether the org lookup has settled — `orgId` null after this means no org. */
+  ready: boolean
   /** The controller this surface is being viewed as. */
   consentGroup: ConsentGroup
   /**
@@ -46,46 +58,48 @@ export interface CrmScope {
 }
 
 /**
- * The three scope facts every CRM surface needs, resolved once (AGL-2597).
+ * The scope facts every CRM surface needs, resolved once (AGL-2597, one
+ * hook since AGL-2614).
  *
- * The contact list resolves its consent group, builds the token list its
- * listener filters on, and looks up the org root in three separate steps.
- * Every CRM section needs the same three, and the company pages need them in
- * four files, so this is the one place the expression lives — a surface
- * that spelled its own could omit the `'org'` token and stop listing the
- * org-wide records the rules would have let it read.
+ * A CRM surface — a list, a record page, a drawer, a card on somebody
+ * else's page — resolves its consent group, builds the token list its
+ * listener filters on, builds the tokens a create stamps, and looks up the
+ * org root. Every section needs the same answers, and for a while the deals
+ * had a hook of their own that answered them under different names
+ * (`readTokens` for `visibleTo`), which is two chances to filter by one set
+ * of tokens and stamp with another. This is the one place the expression
+ * lives: a surface that spelled its own could omit the `'org'` token and
+ * stop listing the org-wide records the rules would have let it read.
  *
  * `visibleTo` and `createTokens` are different questions with different
  * answers. The first is the union of everything this viewer may see; the
  * second is where a new record lands, which `crmScopeTokens` decides from
  * the org's default and is narrower — a group of one site creates for that
  * site, and reads the org-wide rows beside its own.
+ *
+ * Pure over the org document the shell already passed, so it costs no read;
+ * only the org lookup behind `useOrgDataScope` is asynchronous, and `ready`
+ * is how a surface tells "not yet" from "no org".
  */
 export function useCrmScope(props: {
   hostId: string
-  org?: Partial<AglynOrgBilling> | null
+  org?: CrmOrgDoc
 }): CrmScope {
-  const { hostId, org } = props
-  const { scope, orgId } = useOrgDataScope({ hostId })
+  const { hostId } = props
+  const org = (props.org ?? null) as Record<string, unknown> | null
+  const { scope, orgId, ready } = useOrgDataScope({ hostId })
   const consentGroup = useMemo(
-    () => consentGroupForHost((org ?? {}) as Record<string, unknown>, hostId),
+    () => consentGroupForHost(org, hostId),
     [org, hostId],
   )
-  const visibleTo = useMemo(
-    () =>
-      [
-        ORG_SCOPE_TOKEN,
-        ...consentGroup.hostIds.map((id) => hostScopeToken(id)),
-      ].slice(0, MAX_SCOPE_HOSTS),
-    [consentGroup],
-  )
+  const visibleTo = useMemo(() => crmReadTokens(consentGroup), [consentGroup])
   const createTokens = useMemo(
-    () => crmScopeTokens((org ?? {}) as Record<string, unknown>, consentGroup),
+    () => crmScopeTokens(org, consentGroup),
     [org, consentGroup],
   )
   return useMemo(
-    () => ({ scope, orgId, consentGroup, visibleTo, createTokens }),
-    [scope, orgId, consentGroup, visibleTo, createTokens],
+    () => ({ scope, orgId, ready, consentGroup, visibleTo, createTokens }),
+    [scope, orgId, ready, consentGroup, visibleTo, createTokens],
   )
 }
 

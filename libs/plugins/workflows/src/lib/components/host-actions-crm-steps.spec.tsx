@@ -174,7 +174,7 @@ describe('HostActionsCard CRM steps (AGL-2605)', () => {
     fireEvent.change(screen.getByLabelText('Due in (days)'), {
       target: { value: '3' },
     })
-    fireEvent.change(screen.getByLabelText('Assignee’s email (optional)'), {
+    fireEvent.change(screen.getByLabelText('Assignee (email address or member id, optional)'), {
       target: { value: 'sam@example.com' },
     })
 
@@ -187,6 +187,29 @@ describe('HostActionsCard CRM steps (AGL-2605)', () => {
       dueInDays: 3,
       assigneeEmail: 'sam@example.com',
     })
+  })
+
+  it('stores a teammate typed by member id as a uid, never as an address', async () => {
+    // The member whose account carries no address is named this way, and
+    // the stored step must reach the executor's uid slot — an id in the
+    // email slot would be refused by the validator before it got there.
+    startAction('Follow up')
+    pick('Trigger event', 'Contact changed stage')
+
+    pick('Do', 'Create a CRM task')
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Call them back' },
+    })
+    fireEvent.change(screen.getByLabelText('Assignee (email address or member id, optional)'), {
+      target: { value: 'uid-grace' },
+    })
+
+    const payload = await savedPayload()
+    expect(payload.steps[0]).toMatchObject({
+      type: 'createCrmTask',
+      assigneeUid: 'uid-grace',
+    })
+    expect(payload.steps[0].assigneeEmail).toBeUndefined()
   })
 
   it('starts a stage step on a real stage, so the default saves', async () => {

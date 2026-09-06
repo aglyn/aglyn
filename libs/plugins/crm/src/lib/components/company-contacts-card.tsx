@@ -27,11 +27,10 @@ import {
 } from '@aglyn/aglyn'
 import { mdiAccountPlusOutline, mdiLinkOff } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, usePagedCollection } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,
@@ -67,15 +66,6 @@ import {
 } from '../model/companies'
 import type { CrmRoutes } from '../model/crm-routes'
 
-/**
- * How many of a company's contacts the card lists.
- *
- * A company with more people than this is a rare account, and the count
- * beside the table says so — the table is a window and the aggregate is the
- * total, which are different questions with different answers.
- */
-const CONTACTS_AT_COMPANY_LIMIT = 100
-
 /** How many matches a search offers to link. */
 const SEARCH_LIMIT = 8
 
@@ -107,9 +97,13 @@ interface ContactRow {
  *
  * Contacts whose `companyIds` mirror carries this company — see
  * `CONTACT_COMPANY_IDS_FIELD` for why a mirror and not the facet — newest
- * activity first, capped, plus one server aggregate for the total. The
- * membership is PII and one document per person, so it is read HERE, where
- * somebody opened the company, and never on the list that names companies.
+ * activity first, one page at a time under the shared footer, plus one
+ * server aggregate for the total. The aggregate is what the footer counts
+ * with: a company's people are a real list, bounded by how many the account
+ * has met rather than by any taxonomy, and a page the reader can turn is the
+ * only honest answer to the fifty-first. The membership is PII and one
+ * document per person, so it is read HERE, where somebody opened the
+ * company, and never on the list that names companies.
  *
  * ## The scope caveat, stated rather than hidden
  *
@@ -134,22 +128,28 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
 
-  const { data: contactDocs, status } = useFirestoreCollection<
-    Record<string, unknown> & { $id: string }
-  >(
-    () =>
+  const {
+    rows: contactDocs,
+    status,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+  } = usePagedCollection<Record<string, unknown> & { $id: string }>(
+    (pageLimit) =>
       scope
         ? query(
             collection(firestore, scope[0], scope[1], 'contacts'),
             where(CONTACT_COMPANY_IDS_FIELD, 'array-contains', companyId),
             orderBy('updatedAt', 'desc'),
-            limit(CONTACTS_AT_COMPANY_LIMIT),
+            limit(pageLimit),
           )
         : null,
     [firestore, scope, companyId],
     { idField: '$id' },
   )
-  const contacts: ContactRow[] = (contactDocs ?? []).map((row) => ({
+  const contacts: ContactRow[] = contactDocs.map((row) => ({
     $id: row.$id,
     name: contactDisplayName(row, consentGroup.groupId),
     email: String(row['email'] ?? ''),
@@ -420,12 +420,30 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
               'is limited to specific sites, and this list cannot be ' +
               'narrowed to them — an organization administrator can see it.'}
           </Alert>
-        ) : contacts.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {status === 'loading'
-              ? 'Loading contacts…'
-              : 'Nobody is linked to this company yet.'}
-          </Typography>
+        ) : contacts.length === 0 && page === 0 ? (
+          <EmptyStateComponent
+            compact
+            label={status === 'loading' ? 'Loading contacts…' : 'Nobody is linked to this company yet'}
+            description={
+              status === 'loading'
+                ? undefined
+                : 'Find a contact by email address or name and link them here.'
+            }
+            action={
+              status === 'loading' || adding ? undefined : (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  disabled={!scope}
+                  startIcon={<MdiIcon path={mdiAccountPlusOutline.path} size={0.8} />}
+                  onClick={() => setAdding(true)}
+                >
+                  {'Add contact'}
+                </Button>
+              )
+            }
+          />
         ) : (
           <Table size="small">
             <TableHead>
@@ -472,10 +490,21 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
             </TableBody>
           </Table>
         )}
-        {contacts.length >= CONTACTS_AT_COMPANY_LIMIT ? (
-          <Typography variant="caption" color="text.secondary">
-            {`Showing the ${CONTACTS_AT_COMPANY_LIMIT} most recently updated.`}
-          </Typography>
+        {/*
+          The footer counts with the server aggregate when it has arrived —
+          the one number this card knows that the paged window does not —
+          and with the probe row until then.
+         */}
+        {!denied && (contacts.length > 0 || page > 0) ? (
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={contacts.length}
+            count={count ?? undefined}
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         ) : null}
       </Stack>
     </CardDisplay>

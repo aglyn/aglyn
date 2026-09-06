@@ -54,6 +54,28 @@ export interface CrmReportScope {
   routes: CrmRoutes
 }
 
+/**
+ * What every remembered report answer is keyed by: the org, the reader's
+ * tokens, the holder's facet and the period — never the clock. A reopened
+ * section anchors a new `nowMs`, and the whole point of remembering is that
+ * the reopening is the same question; the TTL, not the key, decides when the
+ * answer has aged out. `cardKey` names the read within the card so that two
+ * counts on one card do not overwrite each other.
+ */
+export function reportCacheKey(
+  report: Pick<CrmReportScope, 'scope' | 'tokens' | 'groupId' | 'period'>,
+  cardKey: string,
+): string {
+  return `${reportCachePrefix(report)}${report.period}|${cardKey}`
+}
+
+/** Everything one reader's reports of one org are remembered under — what Refresh forgets. */
+export function reportCachePrefix(
+  report: Pick<CrmReportScope, 'scope' | 'tokens' | 'groupId'>,
+): string {
+  return `crm-report|${report.scope[1]}|${[...report.tokens].sort().join(',')}|${report.groupId}|`
+}
+
 /** One CRM collection under the report's org. */
 export function scopedCollection(
   firestore: Firestore,

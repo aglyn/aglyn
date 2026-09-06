@@ -93,6 +93,9 @@ notify the owner, update the contact's lifecycle stage, or file a task.
 
 Opening a deal shows:
 
+- **The header** — the deal's title in the page heading and the trail, the
+  pipeline and stage under its kind, its status, amount and owner as chips,
+  **Back to deals**, **Edit**, and a menu (⋮) carrying **Delete deal**.
 - **Stage** — a stepper across the open stages, with **Won** and **Lost**
   buttons and, on a closed deal, the way to reopen it.
 - **Properties** — the amount and its weighted value, the expected close, the

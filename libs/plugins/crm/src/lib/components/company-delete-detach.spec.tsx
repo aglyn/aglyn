@@ -126,6 +126,18 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     fromCache: false,
   }),
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
+  // The company's contacts card pages its window; nobody is linked here.
+  usePagedCollection: () => ({
+    data: [],
+    rows: [],
+    status: 'success',
+    fromCache: false,
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+  }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
 }))
@@ -182,9 +194,17 @@ const mount = () =>
     />,
   )
 
+/**
+ * Delete lives behind the record header's overflow menu, never beside Edit
+ * — a destructive act one mis-click from the button next to it is the
+ * arrangement the shared header exists to end — so the menu opens first.
+ */
 const clickDelete = async () => {
   await act(async () => {
-    fireEvent.click(screen.getByText('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: /More actions/ }))
+  })
+  await act(async () => {
+    fireEvent.click(screen.getByText('Delete company'))
   })
 }
 

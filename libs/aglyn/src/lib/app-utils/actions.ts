@@ -423,8 +423,9 @@ export type HostActionStep = (
   | { type: 'setContactStage'; lifecycleStage: ContactLifecycleStage }
   | { type: 'addContactTag'; tag: string }
   /**
-   * The owner by uid when a picker wrote the step, by email when a person
-   * typed it; the executor resolves the email against the org's members.
+   * The owner by uid when a member id was typed or a picker wrote the step,
+   * by email when an address was typed; the executor resolves either against
+   * the org's roster, and only the roster (AGL-2614).
    */
   | { type: 'assignContactOwner'; ownerUid?: string; ownerEmail?: string }
   | {
@@ -434,8 +435,8 @@ export type HostActionStep = (
       /** Days from the run to the due date; `0` is due today. */
       dueInDays: number
       /**
-       * Who gets it — by uid, or by an address the executor resolves against
-       * the roster the way the owner step's is. Neither named, the task goes
+       * Who gets it — by uid or by an address, both resolved against the
+       * roster the way the owner step's are. Neither named, the task goes
        * to the contact's owner, then to nobody.
        */
       assigneeUid?: string

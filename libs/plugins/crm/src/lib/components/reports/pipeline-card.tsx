@@ -40,23 +40,18 @@ import {
   where,
 } from 'firebase/firestore'
 import { useMemo } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
-import {
-  ceilingedWindow,
-  collectionCeiling,
-} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { collectionCeiling } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { ReportBreakdown } from './report-breakdown'
 import { plural, shortDate } from './report-format'
 import {
   type CrmReportScope,
+  reportCacheKey,
   scopedCollection,
   visibleToClause,
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
-import { useAggregateRead } from './use-aggregate-read'
+import { useAggregateRead, useWindowRead } from './use-aggregate-read'
 
 /**
  * How many open deals the by-stage chart, the forecast and the top-deals
@@ -91,7 +86,7 @@ export interface PipelineCardProps {
  */
 export function PipelineCard(props: PipelineCardProps) {
   const { report } = props
-  const { scope, tokens, routes } = report
+  const { scope, tokens, routes, nowMs } = report
   const firestore = useFirestore()
 
   const open = useAggregateRead(
@@ -107,7 +102,8 @@ export function PipelineCard(props: PipelineCardProps) {
         count: Number(snapshot.data().count ?? 0),
         amountCents: Number(snapshot.data().amountCents ?? 0),
       })),
-    [firestore, scope, tokens],
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'pipeline:open') },
   )
 
   /**
@@ -115,7 +111,7 @@ export function PipelineCard(props: PipelineCardProps) {
    * `(visibleTo, status, updatedAt)` index the deals list already uses can
    * serve, so the report adds no index for this read.
    */
-  const { data: dealDocs, status: dealsStatus } = useFirestoreCollection<DealRow>(
+  const dealWindow = useWindowRead<DealRow>(
     () =>
       query(
         scopedCollection(firestore, scope, 'deals'),
@@ -124,10 +120,11 @@ export function PipelineCard(props: PipelineCardProps) {
         orderBy('updatedAt', 'desc'),
         limit(OPEN_DEAL_CEILING + 1),
       ),
-    [firestore, scope, tokens],
-    { idField: '$id' },
+    OPEN_DEAL_CEILING,
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'pipeline:deals') },
   )
-  const { data: pipelineDocs } = useFirestoreCollection<PipelineRow>(
+  const pipelineWindow = useWindowRead<PipelineRow>(
     () =>
       collectionCeiling(
         query(
@@ -136,17 +133,11 @@ export function PipelineCard(props: PipelineCardProps) {
         ),
         PIPELINE_CEILING,
       ),
-    [firestore, scope, tokens],
-    { idField: '$id' },
+    PIPELINE_CEILING,
+    [firestore, scope, tokens, nowMs],
+    { cacheKey: reportCacheKey(report, 'pipeline:pipelines') },
   )
-  const dealWindow = useMemo(
-    () => ceilingedWindow(dealDocs ?? undefined, OPEN_DEAL_CEILING),
-    [dealDocs],
-  )
-  const pipelineWindow = useMemo(
-    () => ceilingedWindow(pipelineDocs ?? undefined, PIPELINE_CEILING),
-    [pipelineDocs],
-  )
+  const dealsStatus = dealWindow.status
 
   const summary = useMemo(() => {
     const byPipeline = new Map<string, DealRow[]>()

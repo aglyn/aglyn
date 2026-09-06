@@ -41,9 +41,11 @@ const CrmTasksDueCard = lazy(
  *
  * The plugin id is `crm` (AGL-2595). It was `contacts` while the surface was
  * one list; the id is persisted in every org's `enabledPlugins` and every
- * host's `disabledPlugins`, so `LEGACY_PLUGIN_IDS` in `enabled-plugins.ts`
- * reads the old value as this one and `backfill-plugin-id-crm.mjs` rewrites
- * the documents.
+ * host's `disabledPlugins`, so the runtime read the old value as this one
+ * until `backfill-plugin-id-crm.mjs` had rewritten the documents, and the
+ * alias was retired once that backfill reported nothing left (AGL-2614). The
+ * `/contacts` address is a URL, not a stored id, and the nav item keeps
+ * redirecting it.
  */
 export function registerCrmConsole(): void {
   Aglyn.registerConsoleExtension({

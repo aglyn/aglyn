@@ -16,17 +16,17 @@
  */
 'use client'
 
-import { PageHeaderRecord, pluginDocsHelp, type CrmLeadFields } from '@aglyn/aglyn'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp, type CrmLeadFields } from '@aglyn/aglyn'
 import {
   useFirestore,
   useFirestoreDoc,
   useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Stack, Typography } from '@mui/material'
+import { Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useState } from 'react'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
+import { CrmRecordHeader } from './crm-record-header'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { LeadHistoryCard } from './lead-history-card'
 import { useOrgMemberOptions } from './lead-owner-select'
@@ -63,56 +63,42 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
   const [unqualifying, setUnqualifying] = useState(false)
 
   const label = lead ? String(lead['name'] || lead['email'] || id) : undefined
-  const backLink = (
-    <Button
-      component={AppLink as any}
-      {...({ componentVariant: 'naked', nativeButton: false } as any)}
-      href={routes.section('leads')}
-      size="small"
-      color="primary"
-    >
-      {'Back to leads'}
-    </Button>
-  )
 
   if (status === 'error' || (status === 'success' && !lead)) {
     return (
-      <CardDisplay
-        header={'Lead'}
+      <CrmRecordHeader
+        kind="Lead"
+        title={undefined}
         help={pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
-        actions={backLink}
-        contentGutterX
-        contentGutterY
+        backHref={routes.section('leads')}
+        backLabel="Back to leads"
       >
         <Typography variant="body2" color="text.secondary">
           {status === 'error'
             ? 'This lead could not be read.'
             : 'This lead no longer exists — it may have been removed from the Inbox.'}
         </Typography>
-      </CardDisplay>
+      </CrmRecordHeader>
     )
   }
   if (!lead) {
     return (
-      <CardDisplay
-        header={'Lead'}
+      <CrmRecordHeader
+        kind="Lead"
+        title={undefined}
         help={pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
-        actions={backLink}
-        contentGutterX
-        contentGutterY
-      >
-        <Typography variant="body2" color="text.secondary">
-          {'Loading…'}
-        </Typography>
-      </CardDisplay>
+        backHref={routes.section('leads')}
+        backLabel="Back to leads"
+        loading
+      />
     )
   }
 
   return (
     <>
-      {/* The page heading and the trail name the person; the cards then say
-          what they hold rather than repeating the name. */}
-      <PageHeaderRecord title={label} />
+      {/* The properties card is the record's lead card: it publishes the
+          page heading and the trail, so the history card under it says what
+          it holds rather than repeating the name. */}
       <Stack spacing={3}>
         <LeadPropertiesCard
           hostId={hostId}

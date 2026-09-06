@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -56,14 +57,24 @@ import {
 } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
 
-/** What an empty view says, by view — "no overdue tasks" is good news. */
+/** What an empty view is headed, by view — "nothing overdue" is good news. */
+const EMPTY_LABEL: Record<CrmTaskView, string> = {
+  mine: 'Nothing is assigned to you',
+  overdue: 'Nothing is overdue',
+  today: 'Nothing is due today',
+  upcoming: 'Nothing is scheduled beyond today',
+  open: 'No open tasks',
+  done: 'No completed tasks yet',
+}
+
+/** The one sentence under it, by view. */
 const EMPTY_COPY: Record<CrmTaskView, string> = {
-  mine: 'Nothing is assigned to you. Tasks you create are yours unless you hand them to someone.',
-  overdue: 'Nothing is overdue.',
-  today: 'Nothing is due today.',
-  upcoming: 'Nothing is scheduled beyond today.',
-  open: 'No open tasks. Create one from a contact, a company, a deal, or here.',
-  done: 'No completed tasks yet.',
+  mine: 'Tasks you create are yours unless you hand them to someone.',
+  overdue: 'Every dated task is on or ahead of schedule.',
+  today: 'Nothing on your calendar day is owed to anyone in the CRM.',
+  upcoming: 'A task with a due date past today would be listed here.',
+  open: 'A task is a call, an email, a meeting or a to-do owed to a contact, a company or a deal.',
+  done: 'Tasks ticked off on their record, or here, are kept for the history.',
 }
 
 /**
@@ -314,9 +325,20 @@ export function TasksSection(props: ConsolePluginPageProps) {
               {'The tasks could not be loaded. Reload to try again.'}
             </Typography>
           ) : status === 'success' && !tasks.length ? (
-            <Typography variant="body2" color="text.secondary">
-              {EMPTY_COPY[view]}
-            </Typography>
+            <EmptyStateComponent
+              label={EMPTY_LABEL[view]}
+              description={EMPTY_COPY[view]}
+              action={
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  onClick={() => setDrawer({ open: true, task: null })}
+                >
+                  {'New task'}
+                </Button>
+              }
+            />
           ) : (
             <>
               {truncated ? (

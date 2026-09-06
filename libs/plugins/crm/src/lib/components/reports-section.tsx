@@ -18,16 +18,20 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
+import { mdiRefresh } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Box,
+  Button,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import { getCountFromServer, query } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
-import { useFirestore, useOrgDataScope } from '@aglyn/tenant-feature-instance'
+import { useCallback, useMemo, useState } from 'react'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { crmRoutes } from '../model/crm-routes'
 import { ClosedDealsCard } from './reports/closed-deals-card'
 import { ContactsMixCard } from './reports/contacts-mix-card'
@@ -35,11 +39,13 @@ import { ContactsTrendCard } from './reports/contacts-trend-card'
 import { PipelineCard } from './reports/pipeline-card'
 import {
   type CrmReportScope,
+  reportCacheKey,
+  reportCachePrefix,
   scopedCollection,
   visibleToClause,
 } from './reports/report-scope'
 import { TasksCard } from './reports/tasks-card'
-import { useAggregateRead } from './reports/use-aggregate-read'
+import { invalidateAggregateReads, useAggregateRead } from './reports/use-aggregate-read'
 
 /**
  * `/crm/reports` — the CRM in aggregate (AGL-2604).
@@ -65,28 +71,24 @@ import { useAggregateRead } from './reports/use-aggregate-read'
  * record its reader could not open — and the total here is the reader's
  * total, not the org's billable audience, which is the head-count the
  * contacts list keeps for the quota.
+ *
+ * ## Read once a minute, not once an arrival
+ *
+ * Every read on this page is keyed by the scope and the period and kept
+ * for `AGGREGATE_READ_TTL_MS` — see `useAggregateRead` — so leaving to open
+ * a deal the report named and coming straight back costs nothing. Refresh
+ * forgets this reader's answers for this org and anchors the period again,
+ * which is what makes every card ask afresh.
  */
 export function ContactsReportsSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath } = props
   const firestore = useFirestore()
-  // Org-shared data root (AGL-237): null until the org lookup settles, and
-  // the page reads nothing until it does.
-  const { scope: dataScope } = useOrgDataScope({ hostId })
-  // The controller this page is viewed as — the same resolution the contacts
-  // list makes, so the facet a stage is read from here is the facet the list
-  // edits it in.
-  const consentGroup = useMemo(
-    () => Aglyn.consentGroupForHost(org as Record<string, unknown>, hostId),
-    [org, hostId],
-  )
-  const tokens = useMemo(
-    () =>
-      [
-        Aglyn.ORG_SCOPE_TOKEN,
-        ...consentGroup.hostIds.map((id) => Aglyn.hostScopeToken(id)),
-      ].slice(0, Aglyn.MAX_SCOPE_HOSTS),
-    [consentGroup],
-  )
+  // The org data root — null until the org lookup settles, and the page
+  // reads nothing until it does — and the controller this page is viewed
+  // as, resolved the way every CRM surface resolves them so the facet a
+  // stage is read from here is the facet the contacts list edits it in.
+  const { scope: dataScope, consentGroup, visibleTo } = useCrmScope({ hostId, org })
+  const tokens = useMemo(() => [...visibleTo], [visibleTo])
   /*
    * The period AND the moment it was chosen, as one value: the range is
    * anchored when the reader picks, not re-derived from a moving `Date.now()`
@@ -101,6 +103,16 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
     [view],
   )
   const routes = useMemo(() => crmRoutes(basePath ?? ''), [basePath])
+  const refresh = useCallback(() => {
+    if (dataScope) {
+      invalidateAggregateReads(
+        reportCachePrefix({ scope: dataScope, tokens, groupId: consentGroup.groupId }),
+      )
+    }
+    // A new anchor is what changes every card's dependencies, so each read
+    // runs again and — its key forgotten — reaches the server.
+    setView((current) => ({ period: current.period, nowMs: Date.now() }))
+  }, [dataScope, tokens, consentGroup.groupId])
 
   const report = useMemo<CrmReportScope | null>(
     () =>
@@ -132,7 +144,10 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
             ),
           ).then((snapshot) => snapshot.data().count)
         : null,
-    [firestore, dataScope, tokens],
+    // The anchor is a dependency so Refresh re-asks; the key, which omits
+    // it, is what answers a reopened section from memory.
+    [firestore, dataScope, tokens, view.nowMs],
+    report ? { cacheKey: reportCacheKey(report, 'contacts:total') } : {},
   )
 
   return (
@@ -149,24 +164,34 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
         <Typography variant="h6" component="h2">
           {'Reports'}
         </Typography>
-        <ToggleButtonGroup
-          exclusive
-          size="small"
-          color="primary"
-          value={view.period}
-          onChange={(_event, next) => {
-            if (next) {
-              setView({ period: next as Aglyn.CrmReportPeriod, nowMs: Date.now() })
-            }
-          }}
-          aria-label="Report period"
-        >
-          {Aglyn.CRM_REPORT_PERIODS.map((period) => (
-            <ToggleButton key={period} value={period}>
-              {Aglyn.CRM_REPORT_PERIOD_LABELS[period]}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            color="primary"
+            value={view.period}
+            onChange={(_event, next) => {
+              if (next) {
+                setView({ period: next as Aglyn.CrmReportPeriod, nowMs: Date.now() })
+              }
+            }}
+            aria-label="Report period"
+          >
+            {Aglyn.CRM_REPORT_PERIODS.map((period) => (
+              <ToggleButton key={period} value={period}>
+                {Aglyn.CRM_REPORT_PERIOD_LABELS[period]}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          <Button
+            size="small"
+            startIcon={<MdiIcon path={mdiRefresh.path} size={0.8} />}
+            disabled={!report}
+            onClick={refresh}
+          >
+            {'Refresh'}
+          </Button>
+        </Stack>
       </Stack>
       {report ? (
         <Box

@@ -349,9 +349,31 @@ describe('facet writes (claim 2)', () => {
     expect(mockActivity.at(-1)?.summary).toBe('assigned owner sam@example.com')
   })
 
-  it('assigns an owner named by uid without a roster read', async () => {
-    mockMembers = {}
+  it('assigns an owner named by uid, once the roster has them', async () => {
+    // A member whose document carries no address: nameable by uid alone,
+    // which is the case the uid slot exists for.
+    mockMembers = { 'uid-direct': { displayName: 'Grace' } }
     mockActions = [acting({ type: 'assignContactOwner', ownerUid: 'uid-direct' })]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(contactUpdates[0][facetPath('ownerUid')]).toBe('uid-direct')
+  })
+
+  it('refuses a uid nobody on the roster has, and stores nothing', async () => {
+    mockMembers = {}
+    mockActions = [acting({ type: 'assignContactOwner', ownerUid: 'uid-stranger' })]
+
+    await run({ email: 'ada@example.com' })
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('no team member with the id')
+  })
+
+  it('reads a uid typed into the address slot as a uid', async () => {
+    mockMembers = { 'uid-direct': { displayName: 'Grace' } }
+    mockActions = [acting({ type: 'assignContactOwner', ownerEmail: 'uid-direct' })]
 
     await run({ email: 'ada@example.com' })
 

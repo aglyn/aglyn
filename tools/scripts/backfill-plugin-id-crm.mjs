@@ -17,13 +17,20 @@
 
 // Rewrite the persisted plugin id `contacts` as `crm` (AGL-2595).
 //
+// THIS HAS RUN. Against the live project it reported zero documents carrying
+// the old id — no org list, no site list, no `pluginSettings/contacts` — and
+// on that report the runtime alias in `enabled-plugins.ts` was retired
+// (AGL-2614): `canonicalPluginId` now reads every id as itself. The script
+// stays because it is the shape the next rename copies, and because a dry
+// run is the one way to re-check the claim it was retired on.
+//
 // The CRM plugin's id was `contacts` while the surface was one list. The id
 // is stored in every org's `enabledPlugins`, every site's `disabledPlugins`
 // and `enabledPlugins`, and as the document id under each `pluginSettings`
-// collection. The runtime reads the old value through `LEGACY_PLUGIN_IDS`
-// (`enabled-plugins.ts`), so nothing breaks before this runs; this is what
-// lets that alias be retired, and it says how many documents still carry the
-// old id so the retirement can be dated.
+// collection. While the rename was in flight the runtime read the old value
+// through an alias, so nothing broke before this ran; this is what let that
+// alias be retired, and it says how many documents still carry the old id so
+// a retirement can be dated.
 //
 //   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-plugin-id-crm.mjs          # dry run
 //   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-plugin-id-crm.mjs --apply  # write

@@ -56,7 +56,7 @@ export const LINKED_DEALS_LIMIT = 25
  */
 export function useDealsByStatus(
   orgId: string | null,
-  readTokens: string[],
+  readTokens: readonly string[],
   pipelineId: string | null,
   status: CrmDealStatus,
   max: number,
@@ -86,7 +86,7 @@ export function useDealsByStatus(
  */
 export function usePagedDeals(
   orgId: string | null,
-  readTokens: string[],
+  readTokens: readonly string[],
   status: CrmDealStatus | 'all',
 ) {
   const firestore = useFirestore()
@@ -112,7 +112,7 @@ export function usePagedDeals(
  */
 export function useLinkedDeals(
   orgId: string | null,
-  readTokens: string[],
+  readTokens: readonly string[],
   link: { contactId: string } | { companyId: string },
 ) {
   const firestore = useFirestore()

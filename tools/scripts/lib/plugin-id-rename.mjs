@@ -21,11 +21,18 @@
 //
 // A first-party plugin id is persisted in three places — `org.enabledPlugins`,
 // `host.disabledPlugins`, `host.enabledPlugins` — and as the DOCUMENT ID under
-// every `pluginSettings` collection. The code reads the old id through
-// `LEGACY_PLUGIN_IDS` (see `enabled-plugins.ts`), which is what makes the
-// deploy safe on its own; this rewrite is what lets that alias be retired.
+// every `pluginSettings` collection. While a rename is in flight the runtime
+// reads the old id through `canonicalPluginId` (see `enabled-plugins.ts`),
+// which is what makes the deploy safe on its own; this rewrite is what lets
+// that alias be retired.
+//
+// The `contacts` → `crm` rename has completed: the backfill reported zero
+// documents carrying the old id and the runtime alias was retired
+// (AGL-2614). The table below is the record of that rename and the shape the
+// next one copies; the test beside this file asserts the runtime no longer
+// aliases it.
 
-/** Old id → current id. Mirror of `LEGACY_PLUGIN_IDS`; kept in sync by test. */
+/** Old id → current id, for the rename this script performed. */
 export const PLUGIN_ID_RENAMES = Object.freeze({ contacts: 'crm' })
 
 /**

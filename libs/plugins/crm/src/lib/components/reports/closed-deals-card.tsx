@@ -36,20 +36,17 @@ import {
   where,
 } from 'firebase/firestore'
 import { useMemo } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
-import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { ReportBarChart } from './report-bar-chart'
 import { weekLabel } from './report-format'
 import {
   type CrmReportScope,
+  reportCacheKey,
   scopedCollection,
   visibleToClause,
 } from './report-scope'
 import { ReportStatTile } from './report-stat-tile'
-import { useAggregateRead } from './use-aggregate-read'
+import { useAggregateRead, useWindowRead } from './use-aggregate-read'
 
 /**
  * How many closed deals of each outcome the weekly chart reads.
@@ -106,36 +103,33 @@ export function ClosedDealsCard(props: ClosedDealsCardProps) {
         ),
       ]).then(([won, lost]) => ({ won, lost })),
     [firestore, scope, tokens, range],
+    { cacheKey: reportCacheKey(report, 'closed:totals') },
   )
 
-  const { data: wonDocs, status: wonStatus } = useFirestoreCollection<DealRow>(
+  const wonWindow = useWindowRead<DealRow>(
     () =>
       query(
         closedInPeriod('won'),
         orderBy('closedAtMs', 'desc'),
         limit(CLOSED_DEAL_CEILING + 1),
       ),
+    CLOSED_DEAL_CEILING,
     [firestore, scope, tokens, range],
-    { idField: '$id' },
+    { cacheKey: reportCacheKey(report, 'closed:won') },
   )
-  const { data: lostDocs, status: lostStatus } = useFirestoreCollection<DealRow>(
+  const lostWindow = useWindowRead<DealRow>(
     () =>
       query(
         closedInPeriod('lost'),
         orderBy('closedAtMs', 'desc'),
         limit(CLOSED_DEAL_CEILING + 1),
       ),
+    CLOSED_DEAL_CEILING,
     [firestore, scope, tokens, range],
-    { idField: '$id' },
+    { cacheKey: reportCacheKey(report, 'closed:lost') },
   )
-  const wonWindow = useMemo(
-    () => ceilingedWindow(wonDocs ?? undefined, CLOSED_DEAL_CEILING),
-    [wonDocs],
-  )
-  const lostWindow = useMemo(
-    () => ceilingedWindow(lostDocs ?? undefined, CLOSED_DEAL_CEILING),
-    [lostDocs],
-  )
+  const wonStatus = wonWindow.status
+  const lostStatus = lostWindow.status
 
   const chart = useMemo(() => {
     const wonWeeks = Aglyn.bucketByWeek(
