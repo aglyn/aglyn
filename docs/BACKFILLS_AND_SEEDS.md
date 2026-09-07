@@ -114,7 +114,6 @@ automation references is the expected state for all of them.
 | Script | State | What to know |
 | --- | --- | --- |
 | `backfill-install-counts.mjs` | Repeatable | Reconciles listing and version install counts from the pins. Not a one-shot: the request path only heals a listing somebody opens, so unvisited listings drift indefinitely. Run `audit-install-counters.mjs` either side of it. |
-| `backfill-plugin-id-crm.mjs` | Converged | The `contacts` → `crm` plugin-id rename. Its header records that it ran against the live project and found zero documents, and the alias it unblocked has since been retired. Kept deliberately: it is the shape the next plugin-id rename copies, and the way to re-check that zero. |
 
 ## What was removed, and the standard for removing more
 
