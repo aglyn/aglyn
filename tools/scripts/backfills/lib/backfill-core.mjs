@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-// Pure transform + planning logic for the four commerce backfills
-// (AGL-1727 buy-now orders, AGL-1745 subscription sales, AGL-1752
-// subscription invoices, AGL-1753 contact LTV). Everything here is pure so
+// Pure transform + planning logic for the commerce backfills (AGL-1745
+// subscription sales, AGL-1752 subscription invoices, AGL-1753 contact
+// LTV). Everything here is pure so
 // the arithmetic is unit-testable without Firestore or Stripe; the scripts
 // in the parent directory do the I/O and hand the docs in.
 //
@@ -91,21 +91,8 @@ export function normalizeContactEmail(input) {
 }
 
 // ---------------------------------------------------------------------------
-// AGL-1727 — buy-now orders: quantity 1 / tax 0 / discount 0 reconstruction
+// Buy-now line + totals reconstruction from a Checkout Session (AGL-1711)
 // ---------------------------------------------------------------------------
-
-/**
- * Is this order doc a buy-now (`commerce-order` branch) online order?
- * Cart orders never carry the legacy flat `productId`; POS and draft carry
- * their own `channel`. Legacy AGL-90 rows (no lineItems at all) qualify too.
- */
-export function isBuyNowOrder(order, orderId) {
-  const channel = order?.channel ?? 'online'
-  if (channel !== 'online') return false
-  if (!order?.productId) return false
-  const sessionId = String(order?.checkoutSessionId ?? orderId ?? '')
-  return sessionId.startsWith('cs_')
-}
 
 /**
  * Rebuild the true line item + totals for a buy-now order from its retrieved
@@ -195,65 +182,6 @@ export function reconstructBuyNowOrder({ order, session, couponPercentOff }) {
     pricedInDiscountCents,
   })
   return { lineItems: [lineItem], totals, notes }
-}
-
-const TOTALS_KEYS = [
-  'itemsCents',
-  'shippingCents',
-  'taxCents',
-  'discountCents',
-  'feeCents',
-  'totalCents',
-]
-
-/**
- * Field-by-field diff between the stored order and the reconstruction.
- * Empty array = the stored record is already correct (single-unit,
- * no-coupon, no-tax purchases are ACCIDENTALLY right — AGL-1727).
- */
-export function diffBuyNowOrder(order, rebuilt) {
-  const diffs = []
-  const stored = order?.lineItems?.[0] ?? {}
-  const next = rebuilt.lineItems[0]
-  if (num(stored.quantity) !== next.quantity) {
-    diffs.push({
-      field: 'lineItems[0].quantity',
-      from: stored.quantity ?? null,
-      to: next.quantity,
-    })
-  }
-  if (num(stored.unitAmountCents) !== next.unitAmountCents) {
-    diffs.push({
-      field: 'lineItems[0].unitAmountCents',
-      from: stored.unitAmountCents ?? null,
-      to: next.unitAmountCents,
-    })
-  }
-  for (const key of TOTALS_KEYS) {
-    const from = num(order?.totals?.[key])
-    const to = rebuilt.totals[key]
-    if (from !== to) diffs.push({ field: `totals.${key}`, from, to })
-  }
-  return diffs
-}
-
-/**
- * Inventory drift a wrong buy-now quantity caused (AGL-1727 consequence 1):
- * the webhook decremented ONE unit however many were sold, so stock is
- * overstated by quantity-1 per affected order. REPORTED only — this backfill
- * does not touch inventory; that reconciliation is its own decision.
- */
-export function inventoryDriftForOrder(order, rebuilt) {
-  const storedQuantity = num(order?.lineItems?.[0]?.quantity ?? 1) || 1
-  const trueQuantity = rebuilt.lineItems[0].quantity
-  if (trueQuantity <= storedQuantity) return null
-  return {
-    productId: rebuilt.lineItems[0].productId,
-    ...(rebuilt.lineItems[0].variantId
-      ? { variantId: rebuilt.lineItems[0].variantId }
-      : {}),
-    overstatedUnits: trueQuantity - storedQuantity,
-  }
 }
 
 // ---------------------------------------------------------------------------

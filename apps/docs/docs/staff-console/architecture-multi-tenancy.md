@@ -120,9 +120,9 @@ The reverse index also carries an `orgWide` mirror of the member doc's scoping, 
 a **site collaborator is an org member doc** with `role: 'viewer'` — indistinguishable
 from a genuine org-wide viewer by role alone. The console routes from the index, so it
 uses the mirror to send a scoped collaborator into their site and drop the org tab strip
-for them. An absent flag reads as org-wide (rows predating the mirror have none;
-`tools/scripts/backfill-org-reach.mjs` stamps them). Navigation only — the rules remain
-the access boundary.
+for them. An absent flag reads as org-wide, so a row without one never hides a real
+member's workspace; the same projection pass that syncs host rows writes the mirror on
+every membership change. Navigation only — the rules remain the access boundary.
 
 ## Workspace subdomains
 

@@ -31,8 +31,7 @@
  * The same file already solves the same problem the same way: see
  * `EMAIL_NODE_ROOT_ID` in `./email-render`, a copy of the besigner's
  * `CANVAS_ROOT_ELEMENT_ID` held here with a drift guard in the console specs.
- * `tools/scripts/backfill-media-refs.mjs` mirrors this same grammar for the
- * same reason. So: copy, name it a copy, and PIN it —
+ * So: copy, name it a copy, and PIN it —
  * `apps/console/specs/email-media-src-drift.spec.ts` runs both implementations
  * over a shared table of inputs and fails if they ever disagree. That spec
  * lives in the console because the console is allowed to import both.

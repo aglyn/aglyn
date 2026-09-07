@@ -17,11 +17,10 @@
 
 // The decision half of the SSO domain attestation backfill (AGL-1887).
 //
-// Separated from the runner, on the same reasoning as
-// `media-content-sha256-backfill.mjs`: the rules that decide whether a
-// domain gets published to an org are unit-tested rather than reasoned
-// about. See `sso-domain-attestation.test.mjs`. The runner does Firestore;
-// everything here is pure.
+// Separated from the runner so the rules that decide whether a domain gets
+// published to an org are unit-tested rather than reasoned about. See
+// `sso-domain-attestation.test.mjs`. The runner does Firestore; everything
+// here is pure.
 //
 // What is at stake is worth restating, because it does not look like a
 // backfill. Writing `attestedBy` onto `orgs/{orgId}/ssoDomains/{domain}`

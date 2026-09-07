@@ -45,8 +45,7 @@
 // publish the DNS TXT challenge and use the normal Verify button. That proves
 // ownership rather than asserting it, and it needs no staff at all.
 //
-// HOW IT IS GATED (the house backfill posture — see
-// `backfill-media-content-sha256.mjs`, whose locks these mirror):
+// HOW IT IS GATED (the house backfill posture, lock for lock):
 //
 //   * Dry run by default. It prints exactly what it would write and touches
 //     nothing. Nothing opts INTO safety; `--apply` opts out of it.
