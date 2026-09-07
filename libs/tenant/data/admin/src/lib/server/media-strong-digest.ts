@@ -140,9 +140,8 @@ export interface StoredObjectDigest {
 /**
  * May an object of this size be digested?
  *
- * A pure predicate so the route, the spec and
- * `tools/scripts/backfill-media-content-sha256.mjs` (AGL-1630) all apply
- * ONE rule rather than three copies that drift.
+ * A pure predicate so the route and the spec (AGL-1630) apply ONE rule
+ * rather than copies that drift.
  *
  * An unknown, zero or non-finite size answers `false`, never `true`. GCS
  * reports no size for a composite object, and guessing "small" there means

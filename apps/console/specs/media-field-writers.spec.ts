@@ -19,12 +19,12 @@
  * AGL-1407: the two console pickers that write a media-bearing document FIELD
  * must write a REFERENCE, and the card that shows one back must resolve it.
  *
- * `logoUrl` on the host document and `coverImage` on a collection entry were
- * converted from raw `firebasestorage` URLs to `media:{scope}/{mediaId}` by
- * `tools/scripts/backfill-media-refs.mjs`. A migration only holds if the
- * writers agree with it: both of these took `media.url` straight off the
- * picked asset, so one visit to either card would have put a raw URL back —
- * silently, and looking exactly like success, because a raw URL still renders.
+ * `logoUrl` on the host document and `coverImage` on a collection entry hold
+ * a `media:{scope}/{mediaId}` reference, not a raw `firebasestorage` URL. A
+ * reference only holds if the writers agree with it: taking `media.url`
+ * straight off the picked asset puts a raw URL back on one visit to either
+ * card — silently, and looking exactly like success, because a raw URL still
+ * renders.
  *
  * A source guard rather than a render. Both surfaces mount live Firestore
  * subscriptions and a picker dialog, and what is being pinned is which

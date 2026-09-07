@@ -103,9 +103,6 @@ automation references is the expected state for all of them.
 
 | Script | State | What to know |
 | --- | --- | --- |
-| `backfill-media-content-sha256.mjs` | Outstanding | The strong digest the quarantine key is built on. A production count on 2026-08-20 found 182 media documents and none carrying it. Writes with `.update()`, so it cannot mint a document or move the storage counter. Guarded by `test:media-sha256-backfill`. |
-| `backfill-media-refs.mjs` | Outstanding | Converts stored media URLs to `media:` references, so an asset survives a folder move. Covers node trees, content-entry covers, the host logo and the favicon. Declines rather than guessing on anything it cannot resolve. |
-| `backfill-intrinsic-media-size.mjs` | Outstanding | The width/height pair that stops a site's media reflowing the page as it loads. `--apply` is refused unless `--project` matches the resolved credential. Proven by an emulator spec. |
 | `backfill-media-variants.mjs` | ⚠️ Outstanding | Generates the WebP variants an asset advertises. It reads the source width from `dimensions.width`, which media documents do not carry — they store `width` at the top level — so the source width is always absent and the documented "an 800px logo is skipped, not upscaled" rule never fires. Nothing is upscaled in fact, but it writes more objects than it reports and labels them with widths the source never had. |
 
 ## Besigner and canvas
@@ -142,7 +139,8 @@ the work it claims.** Each commit carries the evidence.
   its corpus, and reported a clean zero for them. The publish-time rewrite
   replaced it and is storage-form aware.
 - `migrate-blog-covers.mjs` — wrote a media URL where the live picker writes
-  a reference, which `backfill-media-refs.mjs` exists to undo.
+  a `media:` reference, which is the direction stored covers were migrated
+  in, not out of.
 
 They are not archived to a subtree. Git carries them, an archived `.mjs`
 under `tools/` is still discovered by the guards that walk that tree, and
