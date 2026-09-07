@@ -39,8 +39,13 @@
  * migration leaves a marker rather than simply deleting the field: the
  * affordance must not depend on reading the payload it exists to restore.
  *
- * ## ⚠️ Blocked on a rules change, which is NOT in this script
+ * ## ⚠️ TWO preconditions, NEITHER of which is in this script
  *
+ * Both are read out of the tree at run time, and `--apply` is refused until
+ * both hold — a comment about either change does not count, because a guard
+ * on an irreversible run must not be answerable by prose.
+ *
+ * **1. The rules must deny clients the new collection.**
  * `hosts/{hostId}/{subcollection}/{document=**}` is a catch-all that grants
  * create/update/delete to `canWriteHostContent` — admin, editor AND author —
  * for every subcollection name not explicitly excluded. A new
@@ -48,12 +53,16 @@
  * forgeable revert target is a way to push arbitrary CSS onto a live site
  * from the narrowest role we sell. `themeHistory` must be added to all three
  * exclusion lists in `cloud/firebase-firestore.rules` — it has no client
- * writer at all — and that change must be deployed BEFORE this runs.
+ * writer at all — and that change must be deployed BEFORE this runs. The
+ * guard looks for the name inside all three `subcollection in [...]` lists.
  *
- * The script refuses to `--apply` until it can see the name inside all three
- * of those `subcollection in [...]` lists, so the ordering cannot be got wrong
- * by forgetting it — and a comment about the change does not count, because a
- * guard on an irreversible run must not be answerable by prose.
+ * **2. The revert action must read the new location.** `install-theme.ts`
+ * takes the payload off the host document and answers 409 when it is absent,
+ * so a move made while that read stands does not slim the document — it
+ * destroys the undo buffer for every host swept, and the console's "Go back
+ * to the previous theme" with it. The rules half and this half are
+ * independent: satisfying the first says nothing about the second, and it is
+ * the second that decides whether a migrated host can still revert.
  *
  * ## Idempotence and interruption
  *
@@ -212,6 +221,63 @@ function rulesDenyClientWrites(rulesSource) {
       covered.length === DENIED_OPERATIONS.length
         ? 'denied to clients on create, update and delete'
         : `missing from the ${DENIED_OPERATIONS.filter((o) => !covered.includes(o)).join('/')} exclusion list(s)`,
+  }
+}
+
+const REVERT_READER = join(
+  'libs',
+  'plugins',
+  'marketplace',
+  'src',
+  'lib',
+  'server',
+  'install-theme.ts',
+)
+
+/**
+ * The revert action must already read the NEW location.
+ *
+ * The rules guard above answers "may a client forge a revert target"; this one
+ * answers "does the undo buffer survive the move", and they are independent.
+ * `install-theme.ts` reads the payload off the host document and answers 409 —
+ * "There is no previous theme to go back to on this site" — when it is absent,
+ * so moving the field while that read stands takes the undo buffer away from
+ * every host in the sweep, and the console's "Go back to the previous theme"
+ * with it. That is unrecoverable from the site's point of view: the theme it
+ * was wearing before the swap is the thing being relocated.
+ *
+ * Read from the source for the same reason the rules are: the failure being
+ * guarded is "the migration ran and its counterpart did not", and a comment
+ * promising the counterpart is exactly what such a guard must not accept.
+ * Comments are stripped first. A template literal is not tracked, so a name
+ * appearing only inside one reads as absent — a refusal, which is the
+ * direction this guard is allowed to be wrong in.
+ *
+ * Takes the source rather than only reading it so the self-test can hold the
+ * property against texts it stages; production passes nothing.
+ */
+function revertReadsHistory(readerSource) {
+  let source = readerSource
+  if (source === undefined) {
+    try {
+      source = readFileSync(join(REPO_ROOT, REVERT_READER), 'utf8')
+    } catch {
+      return {
+        ok: false,
+        why: `${REVERT_READER} is not where this expects it — find the revert action and re-read it before trusting this guard`,
+      }
+    }
+  }
+
+  const code = stripComments(source)
+  if (!code.includes(SOURCE_FIELD) && code.includes(HISTORY_COLLECTION)) {
+    return { ok: true, why: `reads ${HISTORY_COLLECTION}, not ${SOURCE_FIELD}` }
+  }
+  return {
+    ok: false,
+    why: code.includes(SOURCE_FIELD)
+      ? `still reads \`${SOURCE_FIELD}\` off the host document`
+      : `names neither \`${SOURCE_FIELD}\` nor \`${HISTORY_COLLECTION}\` — this is not the revert action`,
   }
 }
 
@@ -627,6 +693,32 @@ async function runSelfTest(firestore) {
     `(${rulesDenyClientWrites(withSlashStarInLineComment).why})`,
   )
 
+  // --- 7. the reader guard. The rules can be perfect and the migration still
+  //        destroy every undo buffer, so the second precondition is held to
+  //        the same standard: the revert action itself, not a note about it.
+  check(
+    'the reader guard passes once revert reads the history subcollection',
+    revertReadsHistory(
+      `const doc = await hostRef.collection('${HISTORY_COLLECTION}').doc('previous').get()`,
+    ).ok,
+  )
+  check(
+    'CONTROL: a revert still reading the host field is refused',
+    !revertReadsHistory(`const replaced = hostSnapshot.get('${SOURCE_FIELD}')`)
+      .ok,
+  )
+  check(
+    'a comment PROMISING the move does not satisfy it',
+    !revertReadsHistory(
+      `// TODO read ${HISTORY_COLLECTION}/previous instead\n` +
+        `const replaced = hostSnapshot.get('${SOURCE_FIELD}')`,
+    ).ok,
+  )
+  check(
+    'a file naming neither field is refused, not assumed migrated',
+    !revertReadsHistory('export const unrelated = 1').ok,
+  )
+
   console.log(
     failures.length
       ? `\n${failures.length} FAILED: ${failures.join('; ')}\n`
@@ -662,6 +754,24 @@ if (!rules.ok) {
     `\n⚠️  '${HISTORY_COLLECTION}' is denied to clients on ` +
       `${rules.occurrences} of ${DENIED_OPERATIONS.length} operations ` +
       `(${rules.why}). --apply is blocked until the rules deny all three.`,
+  )
+}
+
+const reader = revertReadsHistory()
+if (apply && !reader.ok) {
+  console.error(
+    `REFUSING TO APPLY. ${REVERT_READER} ${reader.why}, so moving the payload ` +
+      `would leave every host in this sweep answering "no previous theme to go ` +
+      `back to" with the theme still sitting in ${HISTORY_COLLECTION}/previous. ` +
+      `Point the revert action at the subcollection, and the console's revert ` +
+      `affordance at '${MARKER_FIELD}', before any host document is rewritten.`,
+  )
+  process.exit(1)
+}
+if (!reader.ok) {
+  console.log(
+    `\n⚠️  ${REVERT_READER} ${reader.why}. --apply is blocked until the revert ` +
+      `action reads ${HISTORY_COLLECTION}/previous.`,
   )
 }
 
