@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.86 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/42d58bdf8...v1.0.0-beta.86)
+
+### Fixed
+
+- **tools:** the dark-scheme invariants tell a pin from a flip ([AGL-2675](https://linear.app/aglyn/issue/AGL-2675))
+- **tools:** two guards that read fields the data moved out from under ([AGL-2675](https://linear.app/aglyn/issue/AGL-2675), [AGL-1028](https://linear.app/aglyn/issue/AGL-1028))
+
 ## v1.0.0-beta.85 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/adeb8670a...v1.0.0-beta.85)
