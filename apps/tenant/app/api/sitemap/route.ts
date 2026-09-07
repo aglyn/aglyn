@@ -25,9 +25,12 @@ import {
   hostPublicOrigin,
   isScreenIndexable,
   isSearchDiscouraged,
+  newestSitemapLastmod,
   parseSitemapSectionPath,
   screenRoutePathToUrl,
   sitemapIndexXml,
+  sitemapLastmod,
+  sitemapLocationLastmod,
   sitemapPageCount,
   sitemapSectionPath,
   sitemapUrlsetXml,
@@ -37,6 +40,7 @@ import {
   SITEMAP_SECTION_PRODUCTS,
   SITEMAP_URLS_PER_FILE,
   type AglynHost,
+  type SitemapLocation,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
@@ -235,10 +239,18 @@ async function readCollections(hostId: string) {
 async function buildSitemapIndex(
   host: AglynHost,
   base: string,
-): Promise<{ locs: string[]; degraded: boolean }> {
+): Promise<{ locs: SitemapLocation[]; degraded: boolean }> {
   let degraded = false
   const hostRef = hostRefOf(host.$id)
-  const sections: Array<{ section: string; pages: number }> = []
+  // A child's `lastmod` is the newest URL inside it (AGL-2647), which only
+  // the screens section can answer here: its URLs are in hand. Every other
+  // section is COUNTED, not swept — that is the whole economy of the index —
+  // and a date the index cannot see is a date it does not claim.
+  const sections: Array<{
+    section: string
+    pages: number
+    lastmodOfPage?: (page: number) => string | undefined
+  }> = []
 
   // Screens are the routing map plus a projection read, which the section
   // itself also does — there is no aggregation that can answer "how many of
@@ -249,6 +261,8 @@ async function buildSitemapIndex(
   sections.push({
     section: SITEMAP_SECTION_PAGES,
     pages: sitemapPageCount(pages.urls.length),
+    lastmodOfPage: (page) =>
+      newestSitemapLastmod(pageOf(pages.urls, page).map(sitemapLocationLastmod)),
   })
 
   try {
@@ -352,10 +366,13 @@ async function buildSitemapIndex(
     degraded = true
   }
 
-  const locs: string[] = []
-  for (const { section, pages: pageCount } of sections) {
+  const locs: SitemapLocation[] = []
+  for (const { section, pages: pageCount, lastmodOfPage } of sections) {
     for (let page = 1; page <= pageCount; page += 1) {
-      locs.push(`${base}${sitemapSectionPath(section, page)}`)
+      locs.push({
+        loc: `${base}${sitemapSectionPath(section, page)}`,
+        lastmod: lastmodOfPage?.(page),
+      })
     }
   }
   return { locs, degraded }
@@ -367,7 +384,7 @@ async function buildSectionUrls(
   base: string,
   section: string,
   page: number,
-): Promise<{ urls: string[]; degraded: boolean }> {
+): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
   if (section === SITEMAP_SECTION_PAGES) {
     const sweep = await buildPageUrls(host, base)
     return { urls: pageOf(sweep.urls, page), degraded: sweep.degraded }
@@ -403,12 +420,16 @@ async function buildSectionUrls(
  *
  * Paged in memory: the roster is bounded by `AUTHORS_MAX_PER_HOST`, so there
  * is nothing to page at the query.
+ *
+ * No `lastmod` (AGL-2647). An author page is dated by the newest entry that
+ * person wrote, which is a collection-group sweep per author; the roster
+ * carries no such date, and the element is omitted rather than guessed.
  */
 async function buildAuthorUrls(
   hostId: string,
   base: string,
   page: number,
-): Promise<{ urls: string[]; degraded: boolean }> {
+): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
   try {
     const authors = await listAuthorPageSlugs({ hostId })
     return {
@@ -431,7 +452,7 @@ async function buildAuthorUrls(
 }
 
 /** The slice of an in-memory list one child sitemap carries. */
-function pageOf(urls: string[], page: number): string[] {
+function pageOf<T>(urls: readonly T[], page: number): T[] {
   const start = (page - 1) * SITEMAP_URLS_PER_FILE
   return urls.slice(start, start + SITEMAP_URLS_PER_FILE)
 }
@@ -444,7 +465,7 @@ function pageOf(urls: string[], page: number): string[] {
 async function buildPageUrls(
   host: AglynHost,
   base: string,
-): Promise<{ urls: string[]; degraded: boolean }> {
+): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
   let degraded = false
   const hostRef = hostRefOf(host.$id)
 
@@ -455,9 +476,18 @@ async function buildPageUrls(
   // members-only and private screens were listed too — URLs that answer a
   // crawler with a gate.
   //
-  // `select('visibility')` keeps this a projection over exactly the field the
-  // predicate reads; the doc id it also needs always travels with a snapshot.
+  // The projection is exactly the fields read here — the predicate's
+  // `visibility` and the two dates — and the doc id, which always travels
+  // with a snapshot.
   const excluded = new Set<string>()
+
+  // `<lastmod>` per screen (AGL-2647). `publishedAt` is stamped by the route
+  // publish and cleared on unpublish, so it is the day the page a crawler
+  // sees last changed. `updatedAt` moves on EVERY save, a draft's included,
+  // so it is only the fallback — for a screen published before `publishedAt`
+  // existed — and never the first choice: a draft edit is not a change to
+  // the published page.
+  const lastmodByScreen = new Map<string, string>()
 
   // Started before the screens read and collected after it, so it overlaps
   // rather than adding a round trip. Never rejects, so a floating promise here
@@ -467,13 +497,18 @@ async function buildPageUrls(
   try {
     const screenDocs = await hostRef
       .collection('screens')
-      .select('visibility')
+      .select('visibility', 'publishedAt', 'updatedAt')
       .limit(1000)
       .get()
     for (const docSnapshot of screenDocs.docs) {
-      if (!isScreenIndexable(docSnapshot.data() as any)) {
+      const raw = docSnapshot.data() as any
+      if (!isScreenIndexable(raw)) {
         excluded.add(docSnapshot.id)
+        continue
       }
+      const lastmod =
+        sitemapLastmod(raw.publishedAt) ?? sitemapLastmod(raw.updatedAt)
+      if (lastmod) lastmodByScreen.set(docSnapshot.id, lastmod)
     }
   } catch {
     // Fail OPEN, matching robots.txt: a read failure must not blank a working
@@ -528,8 +563,13 @@ async function buildPageUrls(
 
   const urls = Object.entries(host.screens ?? {})
     .filter(([screenId]) => !excluded.has(screenId))
-    .map(([, path]) => `${base}${screenRoutePathToUrl(path)}`)
-    .sort()
+    .map(([screenId, path]) => ({
+      loc: `${base}${screenRoutePathToUrl(path)}`,
+      lastmod: lastmodByScreen.get(screenId),
+    }))
+    // Code-unit order, which is what a bare `.sort()` on the strings was:
+    // a page number addresses the same slice on every fetch.
+    .sort((a, b) => (a.loc < b.loc ? -1 : a.loc > b.loc ? 1 : 0))
 
   return { urls, degraded }
 }
@@ -545,8 +585,8 @@ async function buildProductUrls(
   hostId: string,
   base: string,
   page: number,
-): Promise<{ urls: string[]; degraded: boolean }> {
-  const urls: string[] = []
+): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
+  const urls: SitemapLocation[] = []
   try {
     const hostRef = hostRefOf(hostId)
     const storeSettings = await hostRef.collection('settings').doc('store').get()
@@ -563,7 +603,13 @@ async function buildProductUrls(
       // Soft deletes keep `status: 'active'` (see the commerce catalog reader),
       // so this half of the filter has to happen in memory.
       if (raw.deletedAt || !raw.slug) continue
-      urls.push(`${base}/products/${raw.slug}`)
+      // Commerce stamps epoch milliseconds, not Timestamps; a product never
+      // edited since it was created last changed when it was created.
+      urls.push({
+        loc: `${base}/products/${raw.slug}`,
+        lastmod:
+          sitemapLastmod(raw.updatedAtMs) ?? sitemapLastmod(raw.createdAtMs),
+      })
     }
   } catch {
     return { urls, degraded: true }
@@ -576,8 +622,8 @@ async function buildCatalogUrls(
   hostId: string,
   base: string,
   page: number,
-): Promise<{ urls: string[]; degraded: boolean }> {
-  const urls: string[] = []
+): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
+  const urls: SitemapLocation[] = []
   try {
     const hostRef = hostRefOf(hostId)
     const storeSettings = await hostRef.collection('settings').doc('store').get()
@@ -593,7 +639,11 @@ async function buildCatalogUrls(
       .get()
     for (const docSnapshot of collections.docs) {
       const raw = docSnapshot.data() as any
-      if (raw.slug) urls.push(`${base}/collections/${raw.slug}`)
+      if (!raw.slug) continue
+      urls.push({
+        loc: `${base}/collections/${raw.slug}`,
+        lastmod: sitemapLastmod(raw.updatedAt) ?? sitemapLastmod(raw.createdAt),
+      })
     }
   } catch {
     return { urls, degraded: true }
@@ -617,8 +667,8 @@ async function buildContentUrls(
   base: string,
   collectionSlug: string,
   page: number,
-): Promise<{ urls: string[]; degraded: boolean }> {
-  const urls: string[] = []
+): Promise<{ urls: SitemapLocation[]; degraded: boolean }> {
+  const urls: SitemapLocation[] = []
   try {
     const found = await hostRefOf(hostId)
       .collection('collections')
@@ -630,8 +680,55 @@ async function buildContentUrls(
     const raw = docSnapshot.data() as any
     if (hostCollectionKind(raw) !== 'content') return { urls, degraded: false }
 
+    // The projection is an address and a date per entry, and nothing else:
+    // an entry document carries the whole post body, and Firestore bills the
+    // document either way, so this buys no reads — it stops thousands of
+    // articles' worth of prose crossing the wire to build a list of URLs.
+    const entries = await docSnapshot.ref
+      .collection('entries')
+      .where('status', '==', 'published')
+      .orderBy('__name__')
+      .select('slug', 'categoryId', 'publishedAt', 'updatedAt')
+      .offset((page - 1) * SITEMAP_URLS_PER_FILE)
+      .limit(SITEMAP_URLS_PER_FILE)
+      .get()
+    const entryUrls: SitemapLocation[] = []
+    const newestByCategory = new Map<string, string>()
+    for (const entryDoc of entries.docs) {
+      const raw = entryDoc.data() as any
+      if (!raw.slug) continue
+      // The LATER of the two dates (AGL-2647), whichever order they came in.
+      // An edit moves `updatedAt`; a scheduled entry is saved at one time
+      // and becomes a URL at a later one, when only `publishedAt` moves. The
+      // page a crawler sees changed at the later of the two.
+      const lastmod = newestSitemapLastmod([
+        sitemapLastmod(raw.updatedAt),
+        sitemapLastmod(raw.publishedAt),
+      ])
+      entryUrls.push({ loc: `${base}/${collectionSlug}/${raw.slug}`, lastmod })
+      if (lastmod && raw.categoryId) {
+        const categoryId = String(raw.categoryId)
+        newestByCategory.set(
+          categoryId,
+          newestSitemapLastmod([newestByCategory.get(categoryId), lastmod]) ??
+            lastmod,
+        )
+      }
+    }
+
     if (page === 1) {
-      urls.push(`${base}/${collectionSlug}`)
+      // A listing is dated by the newest entry it lists, which this page can
+      // only answer when it holds the WHOLE collection: entries page by id,
+      // so a full first page of a larger collection is not the newest set,
+      // and a date read off it would be a guess. A collection that spans
+      // files gets no listing date rather than a wrong one.
+      const holdsWholeCollection = entries.docs.length < SITEMAP_URLS_PER_FILE
+      urls.push({
+        loc: `${base}/${collectionSlug}`,
+        lastmod: holdsWholeCollection
+          ? newestSitemapLastmod(entryUrls.map(sitemapLocationLastmod))
+          : undefined,
+      })
       // Category listings (AGL-1321). Free: `categories` is a field on the
       // collection doc already read, so no extra round trip — and a filtered
       // listing that no page links to from a crawlable position would
@@ -642,28 +739,15 @@ async function buildContentUrls(
           collectionCategorySlug(category?.id) ||
           collectionCategorySlug(category?.name)
         if (!categorySlug) continue
-        urls.push(`${base}${collectionListUrl({ collectionSlug, categorySlug })}`)
+        urls.push({
+          loc: `${base}${collectionListUrl({ collectionSlug, categorySlug })}`,
+          lastmod: holdsWholeCollection
+            ? newestByCategory.get(String(category?.id))
+            : undefined,
+        })
       }
     }
-
-    // `select('slug')` for the same reason the screens read carries one: a
-    // sitemap needs an address per entry and nothing else, while an entry
-    // document carries the whole post body. Firestore bills the document
-    // either way, so this buys no reads — it stops thousands of articles'
-    // worth of prose crossing the wire and being deserialized to build a list
-    // of URLs.
-    const entries = await docSnapshot.ref
-      .collection('entries')
-      .where('status', '==', 'published')
-      .orderBy('__name__')
-      .select('slug')
-      .offset((page - 1) * SITEMAP_URLS_PER_FILE)
-      .limit(SITEMAP_URLS_PER_FILE)
-      .get()
-    for (const entryDoc of entries.docs) {
-      const entrySlug = (entryDoc.data() as any).slug
-      if (entrySlug) urls.push(`${base}/${collectionSlug}/${entrySlug}`)
-    }
+    urls.push(...entryUrls)
   } catch {
     return { urls, degraded: true }
   }

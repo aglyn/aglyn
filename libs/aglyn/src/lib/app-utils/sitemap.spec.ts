@@ -18,8 +18,11 @@
 import {
   contentSitemapSection,
   contentSitemapSectionSlug,
+  newestSitemapLastmod,
   parseSitemapSectionPath,
   sitemapIndexXml,
+  sitemapLastmod,
+  sitemapLocationLastmod,
   sitemapPageCount,
   sitemapSectionPath,
   sitemapUrlsetXml,
@@ -137,6 +140,94 @@ describe('sitemap addressing (AGL-2520)', () => {
         '<sitemap><loc>https://x.test/sitemaps/pages/1.xml</loc></sitemap>',
       )
       expect(xml).not.toContain('<urlset')
+    })
+  })
+
+  /**
+   * `<lastmod>` per URL (AGL-2647). The 102 URLs the production sitemap
+   * carried had none, so a crawler had no way to tell a page edited this
+   * morning from one untouched since launch, and re-fetched all of them.
+   */
+  describe('lastmod', () => {
+    // 2026-08-30T23:59:59Z — a second before midnight, so a formatter that
+    // read the day in any zone east of UTC would answer the 31st.
+    const LATE_ON_THE_30TH = Date.UTC(2026, 7, 30, 23, 59, 59)
+
+    it('dates a url that carries a lastmod, and only that url', () => {
+      const xml = sitemapUrlsetXml([
+        { loc: 'https://x.test/', lastmod: '2026-08-30' },
+        { loc: 'https://x.test/about' },
+        'https://x.test/contact',
+      ])
+
+      expect(xml).toContain(
+        '<url><loc>https://x.test/</loc><lastmod>2026-08-30</lastmod></url>',
+      )
+      expect(xml).toContain('<url><loc>https://x.test/about</loc></url>')
+      expect(xml).toContain('<url><loc>https://x.test/contact</loc></url>')
+      expect(xml.match(/<lastmod>/g)).toHaveLength(1)
+    })
+
+    it('dates an index child the same way', () => {
+      const xml = sitemapIndexXml([
+        { loc: 'https://x.test/sitemaps/pages/1.xml', lastmod: '2026-09-02' },
+        { loc: 'https://x.test/sitemaps/content-blog/1.xml' },
+      ])
+
+      expect(xml).toContain(
+        '<sitemap><loc>https://x.test/sitemaps/pages/1.xml</loc>' +
+          '<lastmod>2026-09-02</lastmod></sitemap>',
+      )
+      expect(xml).toContain(
+        '<sitemap><loc>https://x.test/sitemaps/content-blog/1.xml</loc></sitemap>',
+      )
+    })
+
+    it('keeps the first occurrence of a duplicated url, date and all', () => {
+      const xml = sitemapUrlsetXml([
+        { loc: 'https://x.test/blog', lastmod: '2026-08-01' },
+        { loc: 'https://x.test/blog', lastmod: '2026-09-01' },
+      ])
+
+      expect(xml.match(/<loc>/g)).toHaveLength(1)
+      expect(xml).toContain('<lastmod>2026-08-01</lastmod>')
+      expect(xml).not.toContain('2026-09-01')
+    })
+
+    it('reads every timestamp shape a document carries, as a UTC day', () => {
+      const seconds = Math.floor(LATE_ON_THE_30TH / 1000)
+
+      expect(sitemapLastmod({ toMillis: () => LATE_ON_THE_30TH })).toBe(
+        '2026-08-30',
+      )
+      expect(sitemapLastmod({ seconds })).toBe('2026-08-30')
+      expect(sitemapLastmod({ _seconds: seconds })).toBe('2026-08-30')
+      expect(sitemapLastmod(LATE_ON_THE_30TH)).toBe('2026-08-30')
+      expect(sitemapLastmod('2026-08-30T23:59:59.000Z')).toBe('2026-08-30')
+    })
+
+    it('answers undefined, never a date, for a timestamp it cannot read', () => {
+      // The element is omitted rather than filled with "now": an invented
+      // date claims a change that did not happen.
+      for (const value of [undefined, null, '', 'yesterday', {}, 0, NaN]) {
+        expect(sitemapLastmod(value)).toBeUndefined()
+      }
+    })
+
+    it('picks the newest date for a listing or an index child', () => {
+      expect(
+        newestSitemapLastmod(['2026-08-01', undefined, '2026-09-02', '2026-08-30']),
+      ).toBe('2026-09-02')
+      expect(newestSitemapLastmod([undefined, undefined])).toBeUndefined()
+      expect(newestSitemapLastmod([])).toBeUndefined()
+      expect(
+        newestSitemapLastmod(
+          [
+            { loc: 'https://x.test/a', lastmod: '2026-08-01' },
+            'https://x.test/b',
+          ].map(sitemapLocationLastmod),
+        ),
+      ).toBe('2026-08-01')
     })
   })
 })

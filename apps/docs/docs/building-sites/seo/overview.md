@@ -163,6 +163,12 @@ The split is what keeps a growing site correct. A single sitemap may hold at mos
 that outgrows one file simply continues into a second (`/sitemaps/content-blog/2.xml`),
 and the index names both.
 
+Every URL with a known date carries a last-modified date (`lastmod`) — the day a
+screen was last published, the day an entry, product or catalog collection last
+changed, and for a listing the day of its newest entry — so a crawler can skip what
+has not moved since its last visit. A URL whose date is not known simply has none;
+the sitemap never invents one.
+
 The sitemap is cached for a few minutes, and every publish refreshes it immediately —
 so a freshly published page never waits on the cache.
 

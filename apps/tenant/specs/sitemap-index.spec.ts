@@ -141,6 +141,8 @@ const BASE = 'https://acme.test'
 const givenSite = (options: {
   seo?: Record<string, unknown>
   screens?: Record<string, string>
+  /** The screen DOCUMENTS, keyed like `screens`; absent means no timestamps. */
+  screenDocs?: Row[]
   store?: Record<string, unknown>
   products?: Row[]
   collections?: Row[]
@@ -158,7 +160,7 @@ const givenSite = (options: {
   mockSite.store = options.store ?? {}
   mockSite.products = options.products ?? []
   mockSite.collections = options.collections ?? []
-  mockSite.screens = []
+  mockSite.screens = options.screenDocs ?? []
 }
 
 const entryRows = (count: number, prefix = 'post'): Row[] =>
@@ -181,6 +183,16 @@ const fetchXml = async (path: string) =>
 
 const locsOf = (xml: string) =>
   [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
+
+/** `loc → lastmod` for every `<url>` or `<sitemap>`; `undefined` when absent. */
+const lastmodsOf = (xml: string): Record<string, string | undefined> =>
+  Object.fromEntries(
+    [
+      ...xml.matchAll(
+        /<(?:url|sitemap)><loc>([^<]+)<\/loc>(?:<lastmod>([^<]+)<\/lastmod>)?<\/(?:url|sitemap)>/g,
+      ),
+    ].map((match) => [match[1], match[2]]),
+  )
 
 describe('sitemap index (AGL-2520)', () => {
   beforeEach(() => jest.clearAllMocks())
@@ -338,5 +350,182 @@ describe('sitemap index (AGL-2520)', () => {
     expect(xml).toContain('<urlset')
     expect(xml).not.toContain('<sitemapindex')
     expect(locsOf(xml)).toEqual([])
+  })
+})
+
+/**
+ * `<lastmod>` per URL (AGL-2647).
+ *
+ * Measured on production 2026-09-07: the index and every child sitemap — 102
+ * URLs — carried no `<lastmod>` at all, so a crawler had no way to tell the
+ * page edited this morning from the one untouched since launch. Each source
+ * has its own date and its own fallback, and each is pinned from both sides:
+ * the date that should appear, and the one that must NOT be invented.
+ */
+describe('sitemap lastmod (AGL-2647)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const stamp = (year: number, month: number, day: number) => ({
+    seconds: Date.UTC(year, month - 1, day, 12) / 1000,
+  })
+  const AUGUST_30 = stamp(2026, 8, 30)
+  const SEPTEMBER_2 = stamp(2026, 9, 2)
+
+  it('dates a screen by its last publish, and leaves an undated screen bare', async () => {
+    givenSite({
+      screens: { home: '', about: 'about' },
+      screenDocs: [
+        // `updatedAt` is NEWER, and must lose: it moves on every save, a
+        // draft's included, and a draft edit is not a change to the page.
+        { id: 'home', data: { publishedAt: AUGUST_30, updatedAt: SEPTEMBER_2 } },
+      ],
+    })
+
+    const xml = await fetchXml('/sitemaps/pages/1.xml')
+
+    expect(lastmodsOf(xml)).toEqual({
+      [`${BASE}/`]: '2026-08-30',
+      [`${BASE}/about`]: undefined,
+    })
+    expect(xml).toContain(`<url><loc>${BASE}/about</loc></url>`)
+  })
+
+  it('falls back to updatedAt for a screen published before publishedAt existed', async () => {
+    givenSite({
+      screens: { home: '' },
+      screenDocs: [{ id: 'home', data: { updatedAt: SEPTEMBER_2 } }],
+    })
+
+    expect(lastmodsOf(await fetchXml('/sitemaps/pages/1.xml'))).toEqual({
+      [`${BASE}/`]: '2026-09-02',
+    })
+  })
+
+  it('dates an index child by the newest URL inside it, and only a child it can see into', async () => {
+    givenSite({
+      screens: { home: '', about: 'about' },
+      screenDocs: [
+        { id: 'home', data: { publishedAt: AUGUST_30 } },
+        { id: 'about', data: { publishedAt: SEPTEMBER_2 } },
+      ],
+      collections: [
+        {
+          id: 'c1',
+          data: { kind: 'content', slug: 'blog' },
+          entries: [
+            {
+              id: 'post-0',
+              data: { status: 'published', slug: 'post-0', publishedAt: SEPTEMBER_2 },
+            },
+          ],
+        },
+      ],
+    })
+
+    const xml = await fetchXml('')
+
+    // The content child is COUNTED by the index, never swept, so its newest
+    // URL is a date the index does not have — and does not claim.
+    expect(lastmodsOf(xml)).toEqual({
+      [`${BASE}/sitemaps/pages/1.xml`]: '2026-09-02',
+      [`${BASE}/sitemaps/content-blog/1.xml`]: undefined,
+    })
+  })
+
+  it('dates an entry by the later of its edit and its publish, and a listing by its newest entry', async () => {
+    givenSite({
+      collections: [
+        {
+          id: 'c1',
+          data: {
+            kind: 'content',
+            slug: 'blog',
+            categories: [
+              { id: 'news', name: 'News' },
+              { id: 'empty', name: 'Empty' },
+            ],
+          },
+          entries: [
+            {
+              id: 'post-0',
+              data: {
+                status: 'published',
+                slug: 'post-0',
+                categoryId: 'news',
+                publishedAt: AUGUST_30,
+                updatedAt: SEPTEMBER_2,
+              },
+            },
+            {
+              id: 'post-1',
+              data: {
+                status: 'published',
+                slug: 'post-1',
+                categoryId: 'news',
+                // Scheduled: saved, then published later by the job, which
+                // moves `publishedAt` alone. The later date wins here too.
+                updatedAt: stamp(2026, 8, 1),
+                publishedAt: stamp(2026, 8, 15),
+              },
+            },
+            { id: 'post-2', data: { status: 'published', slug: 'post-2' } },
+          ],
+        },
+      ],
+    })
+
+    expect(lastmodsOf(await fetchXml('/sitemaps/content-blog/1.xml'))).toEqual({
+      [`${BASE}/blog`]: '2026-09-02',
+      [`${BASE}/blog/category/news`]: '2026-09-02',
+      [`${BASE}/blog/category/empty`]: undefined,
+      [`${BASE}/blog/post-0`]: '2026-09-02',
+      [`${BASE}/blog/post-1`]: '2026-08-15',
+      [`${BASE}/blog/post-2`]: undefined,
+    })
+  })
+
+  it('never dates a listing it cannot see the whole of', async () => {
+    // Entries page by id, so a full first page of a larger collection is not
+    // the newest set; the entries keep their own dates, the listing gets none.
+    const entries = entryRows(SITEMAP_URLS_PER_FILE + 1).map((row) => ({
+      ...row,
+      data: { ...row.data, publishedAt: AUGUST_30 },
+    }))
+    givenSite({
+      collections: [{ id: 'c1', data: { kind: 'content', slug: 'blog' }, entries }],
+    })
+
+    const dates = lastmodsOf(await fetchXml('/sitemaps/content-blog/1.xml'))
+
+    expect(dates[`${BASE}/blog`]).toBeUndefined()
+    expect(dates[`${BASE}/blog/post-0`]).toBe('2026-08-30')
+  })
+
+  it('dates a product by its last change, in the milliseconds commerce stamps', async () => {
+    givenSite({
+      store: { pdpScreenId: 'pdp' },
+      products: [
+        {
+          id: 'p1',
+          data: {
+            status: 'active',
+            slug: 'mug',
+            createdAtMs: Date.UTC(2026, 7, 1),
+            updatedAtMs: Date.UTC(2026, 8, 5),
+          },
+        },
+        {
+          id: 'p2',
+          data: { status: 'active', slug: 'tee', createdAtMs: Date.UTC(2026, 7, 1) },
+        },
+        { id: 'p3', data: { status: 'active', slug: 'cap' } },
+      ],
+    })
+
+    expect(lastmodsOf(await fetchXml('/sitemaps/products/1.xml'))).toEqual({
+      [`${BASE}/products/mug`]: '2026-09-05',
+      [`${BASE}/products/tee`]: '2026-08-01',
+      [`${BASE}/products/cap`]: undefined,
+    })
   })
 })
