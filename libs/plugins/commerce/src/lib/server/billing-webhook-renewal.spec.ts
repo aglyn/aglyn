@@ -1122,8 +1122,9 @@ describe('storefront subscription renewals (AGL-1743)', () => {
     await deliver(RENEWAL_INVOICE)
     expect(feeRepriceCalls()).toHaveLength(1)
     // The rate is recorded, so the next cycle compares two numbers and makes
-    // no network call at all.
-    expect(storedSubscription().appliedFeePct).toBe(0)
+    // no network call at all. Business physical is a 0% take, so what is
+    // recorded is the pass-through alone: 6.34% on $90 of goods (AGL-2655).
+    expect(storedSubscription().appliedFeePct).toBe(6.34)
     await deliver({ ...RENEWAL_INVOICE, id: 'in_second' })
     expect(feeRepriceCalls()).toHaveLength(1)
   })
@@ -1622,8 +1623,16 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
  *
  * A renewal is the only event a subscription raises, so it is the only place
  * this can be corrected.
+ *
+ * Since AGL-2655 the figure re-priced to is the plan's take PLUS Stripe's
+ * processing cost folded into the rate, sized on the cycle's recurring goods.
+ * `RENEWAL_INVOICE` bills $90.00 of goods (`total` 9000, no tax, no shipping),
+ * so at 6% + 30¢ the pass-through is `6 + 0.30 ÷ 90` = 6.33…%, rounded UP to
+ * 6.34%. Business digital (2%) therefore re-prices to 8.34%, and Advanced
+ * (0%) to 6.34% — no longer to "unset", because the pass-through is owed on
+ * every tier.
  */
-describe('the platform fee follows the plan (AGL-2289)', () => {
+describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
   const DIGITAL_SOLD = {
     ...SOLD_SUBSCRIPTION,
     lineItems: [
@@ -1648,29 +1657,120 @@ describe('the platform fee follows the plan (AGL-2289)', () => {
     return String((feeRepriceCalls()[0]?.[1] as any)?.body ?? '')
   }
 
-  it('lowers a stale 5% to the merchant’s current 0%', async () => {
-    // Sold on Starter, merchant is now on Advanced.
+  it('lowers a stale 5% take to the merchant’s current 0% plus the pass-through', async () => {
+    // Sold on Starter, merchant is now on Advanced. The take goes to zero;
+    // the card cost does not, because Aglyn still pays Stripe for the charge.
     sellDigital(5)
     orgFixture = { id: 'org-1', plan: 'advanced', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)
 
     expect(feeRepriceCalls()).toHaveLength(1)
-    // UNSET, not `0`: Stripe rejects a zero `application_fee_percent`, and an
-    // empty value is how its API clears an optional field.
-    expect(repriceBody()).toBe('application_fee_percent=')
-    expect(storedSubscription().appliedFeePct).toBe(0)
+    expect(repriceBody()).toBe('application_fee_percent=6.34')
+    expect(storedSubscription().appliedFeePct).toBe(6.34)
   })
 
-  it('raises a stale 0% to the merchant’s current rate', async () => {
-    // Sold on Advanced (nothing was ever sent), merchant is now on Business.
+  it('raises a stale 0% to the merchant’s current rate plus the pass-through', async () => {
+    // Sold on Advanced before the pass-through existed (nothing was ever
+    // sent), merchant is now on Business.
     sellDigital(0)
     orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)
 
     expect(feeRepriceCalls()).toHaveLength(1)
-    expect(repriceBody()).toBe('application_fee_percent=2')
+    expect(repriceBody()).toBe('application_fee_percent=8.34')
+    expect(storedSubscription().appliedFeePct).toBe(8.34)
+  })
+
+  it('carries a subscription sold at the bare take onto the pass-through', async () => {
+    // Sold on Business before AGL-2655: the 2% take was sent and recorded,
+    // and the plan has not changed. The stored rate still disagrees with the
+    // figure now owed, so the one pass re-prices it — no backfill.
+    sellDigital(2)
+    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(feeRepriceCalls()).toHaveLength(1)
+    expect(repriceBody()).toBe('application_fee_percent=8.34')
+    expect(storedSubscription().appliedFeePct).toBe(8.34)
+  })
+
+  it('sizes the pass-through on the sale’s recurring goods when the invoice bills a fraction', async () => {
+    // A proration invoice bills a slice of the cycle. A percent sized on the
+    // slice would be applied to the NEXT full cycle and over-recover on it,
+    // so the sale's own lines ($50 × 2 = $100) size it instead: 6.30%, not
+    // the 36% a $1 slice would give.
+    sellDigital(undefined)
+    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+
+    await deliver({
+      ...RENEWAL_INVOICE,
+      id: 'in_prorated',
+      billing_reason: 'subscription_update',
+      amount_paid: 100,
+      subtotal: 100,
+      total: 100,
+      application_fee_amount: 2,
+      lines: {
+        data: [
+          {
+            amount: 100,
+            quantity: 2,
+            description: 'Remaining time on 2 × Monthly box',
+            proration: true,
+            price: { unit_amount: 5000, recurring: { interval: 'month' } },
+            period: { start: 1800000000, end: 1802678400 },
+          },
+        ],
+      },
+    })
+
+    expect(repriceBody()).toBe('application_fee_percent=8.3')
+  })
+
+  it('leaves the rate alone when neither the invoice nor the sale can size the pass-through', async () => {
+    // A proration invoice bills a slice, and this sale recorded no lines to
+    // fall back on. A percent sized on nothing is zero, and zero would UNSET
+    // the fee on Stripe — so the stale 2% stands until a full cycle can size
+    // it, rather than being cleared on a doubt.
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly zine',
+      type: 'digital',
+      subscription: { interval: 'month' },
+      variants: [{ id: 'large', priceUsd: 50, inventory: null }],
+    })
+    docs.set('hosts/host-1/subscriptions/sub_1', {
+      ...DIGITAL_SOLD,
+      lineItems: [],
+      appliedFeePct: 2,
+    })
+    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+
+    await deliver({
+      ...RENEWAL_INVOICE,
+      id: 'in_prorated_blind',
+      billing_reason: 'subscription_update',
+      amount_paid: 100,
+      subtotal: 100,
+      total: 100,
+      application_fee_amount: 2,
+      lines: {
+        data: [
+          {
+            amount: 100,
+            quantity: 2,
+            description: 'Remaining time on 2 × Monthly box',
+            proration: true,
+            price: { unit_amount: 5000, recurring: { interval: 'month' } },
+            period: { start: 1800000000, end: 1802678400 },
+          },
+        ],
+      },
+    })
+
+    expect(feeRepriceCalls()).toHaveLength(0)
     expect(storedSubscription().appliedFeePct).toBe(2)
   })
 
@@ -1682,7 +1782,7 @@ describe('the platform fee follows the plan (AGL-2289)', () => {
 
     await deliver(RENEWAL_INVOICE)
 
-    expect(repriceBody()).toBe('application_fee_percent=2')
+    expect(repriceBody()).toBe('application_fee_percent=8.34')
   })
 
   it('treats a malformed stored rate as unknown', async () => {
@@ -1700,7 +1800,7 @@ describe('the platform fee follows the plan (AGL-2289)', () => {
 
     await deliver(RENEWAL_INVOICE)
 
-    expect(repriceBody()).toBe('application_fee_percent=2')
+    expect(repriceBody()).toBe('application_fee_percent=8.34')
   })
 
   /**
@@ -1709,7 +1809,7 @@ describe('the platform fee follows the plan (AGL-2289)', () => {
    * feature would be satisfied by a handler that POSTs on every single cycle.
    */
   it('POSITIVE CONTROL: an agreeing rate makes no Stripe call at all', async () => {
-    sellDigital(2)
+    sellDigital(8.34)
     orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)

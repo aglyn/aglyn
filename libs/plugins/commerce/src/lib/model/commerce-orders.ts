@@ -929,6 +929,8 @@ export interface SubscriptionInvoiceSource {
   total_discount_amounts?: readonly { amount?: unknown }[] | null
   shipping_cost?: { amount_total?: unknown } | null
   application_fee_amount?: unknown
+  /** Why Stripe raised it: `subscription_cycle`, `subscription_update`, … */
+  billing_reason?: unknown
   lines?: { data?: readonly SubscriptionInvoiceLine[] | null } | null
 }
 
@@ -1005,6 +1007,47 @@ export function subscriptionInvoiceItemsOnlyFeeCents(
   // byte-identical to today, which is what makes this safe inside the freeze.
   if (basisCents >= totalCents) return chargedCents
   return Math.max(1, Math.round((chargedCents * basisCents) / totalCents))
+}
+
+/**
+ * The recurring goods a storefront subscription's `application_fee_percent`
+ * is sized against when a paid invoice re-prices it (AGL-2655).
+ *
+ * The percent carries Stripe's fixed 30¢ folded into a rate, so it depends
+ * on the amount it will be applied to — and the amount that matters is the
+ * NEXT cycle's, which nobody has yet. The best predictor is this cycle's
+ * items-only basis, for a cycle that bills the full recurring price:
+ * `subscription_cycle`, and `subscription_create` for the opening charge.
+ * Any other reason — a `subscription_update` proration, a threshold
+ * invoice — bills a fraction, and a percent sized on a fraction would be
+ * applied to the following full cycle and over-recover on it. Those, and a
+ * $0 opening invoice (a trial converts later), fall back to what the sale
+ * recorded: the sold lines' price × quantity, the stable figure the
+ * subscription bills every cycle it is not being adjusted.
+ *
+ * Zero when neither source knows — and the caller then leaves the rate as it
+ * stands rather than sizing a percent on nothing.
+ */
+export function subscriptionRecurringBasisCents(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+  soldLineItems:
+    | readonly Pick<OrderLineItem, 'quantity' | 'unitAmountCents'>[]
+    | null
+    | undefined,
+): number {
+  const reason = String(invoice?.billing_reason ?? '')
+  const billsTheFullPrice =
+    reason === 'subscription_cycle' || reason === 'subscription_create'
+  const cycleBasis = billsTheFullPrice
+    ? subscriptionInvoiceFeeBasisCents(invoice)
+    : 0
+  if (cycleBasis > 0) return cycleBasis
+  return (soldLineItems ?? []).reduce((sum, line) => {
+    const unit = Math.round(Number(line?.unitAmountCents ?? 0))
+    const quantity = Math.round(Number(line?.quantity ?? 0))
+    if (!Number.isFinite(unit) || !Number.isFinite(quantity)) return sum
+    return sum + Math.max(0, unit) * Math.max(0, quantity)
+  }, 0)
 }
 
 /** Sum of an `[{ amount }]` list, ignoring anything unreadable. */

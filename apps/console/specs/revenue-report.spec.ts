@@ -301,22 +301,33 @@ describe('storefront commission excludes the processing pass-through', () => {
     expect(out.applicationFeeCents).toBeGreaterThan(0)
   })
 
-  it('keeps a subscription renewal whole take, which recovers no cost', () => {
-    // A storefront SUBSCRIPTION renewal carries `subscriptionId` and its fee
-    // is items-only with no processing folded in. Subtracting a pass-through
-    // never charged would report this real take as zero.
+  it('nets the pass-through out of a subscription cycle too (AGL-2655)', () => {
+    // A storefront SUBSCRIPTION cycle carries `subscriptionId`, and since
+    // AGL-2655 its fee carries the card cost folded into
+    // `application_fee_percent`. Reporting that fee whole would book Stripe's
+    // charge as margin on every cycle, the AGL-2152 mistake over again.
+    const chargeCents = 20000
+    const passThrough = storefrontProcessingCostCents(chargeCents)
     const out = commerceSettledSummary([
-      { id: 'o1', amountCents: 20000, feeCents: 400, subscriptionId: 'sub_1' },
+      {
+        id: 'o1',
+        amountCents: chargeCents,
+        feeCents: 400 + passThrough,
+        subscriptionId: 'sub_1',
+      },
     ])
     expect(out.commissionCents).toBe(400)
-    expect(out.processingPassThroughCents).toBe(0)
+    expect(out.processingPassThroughCents).toBe(passThrough)
     expect(out.subscriptionOrders).toBe(1)
-    // The negative control: the same row WITHOUT the marker loses its take to
-    // the pass-through clamp, which is exactly the bug the marker prevents.
-    const misread = commerceSettledSummary([
-      { id: 'o1', amountCents: 20000, feeCents: 400 },
+    // The one cycle this understates, stated rather than hidden: a cycle
+    // billed at the bare take, before the renewal re-price carried the
+    // subscription onto the pass-through, clamps to no take at all. It is
+    // still COUNTED, which is how the page shows how much of the book that is.
+    const legacy = commerceSettledSummary([
+      { id: 'o1', amountCents: chargeCents, feeCents: 400, subscriptionId: 'sub_1' },
     ])
-    expect(misread.commissionCents).toBe(0)
+    expect(legacy.commissionCents).toBe(0)
+    expect(legacy.subscriptionOrders).toBe(1)
   })
 
   it('reverses a refunded order pro-rata', () => {

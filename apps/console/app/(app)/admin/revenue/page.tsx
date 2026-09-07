@@ -858,7 +858,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       size="small"
                       variant="outlined"
                       color="warning"
-                      label={`${commerce.subscriptionOrders} storefront subscription renewals recover no card cost — ${PLATFORM_BRAND_NAME} absorbs it`}
+                      label={`${commerce.subscriptionOrders} storefront subscription cycles — one billed before its re-price reports no take`}
                     />
                   ) : null}
                 </Stack>

@@ -442,6 +442,14 @@ that same digital line rather than carrying a rate of its own; see
 [Bookings](../../commerce-and-bookings/bookings/overview.md#payments-and-fees).
 Selling requires a paid plan with commerce.
 
+**Stripe's processing cost is passed through at cost**, on every tier, alongside the
+platform fee above. On a one-time sale it is a cents amount inside the application fee.
+On a recurring membership it is folded into the fee percentage, because a Stripe
+subscription accepts only a percentage: the fixed per-transaction part becomes a share
+of the recurring price, rounded up to two decimals, so a $10-a-month membership carries
+a higher percentage than a $100-a-month one. The platform take itself does not move,
+and a 0% tier still takes 0%.
+
 **In-person sales carry the same rate.** The fee is charged on the sale, not on the
 tender, so a cash sale or a charge-to-room sale at the register is priced exactly like
 a card sale. Card sales have the fee deducted from the Stripe payout; cash and
