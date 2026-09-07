@@ -115,9 +115,14 @@ const PLANS = [
   { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 5, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1 },
   // Pricing v3 (2026-07): Scale fills the $139→$399 gap; Agency sits above
   // Advanced for high-volume multi-site orgs. Keep in sync with PLAN_PRICING.
-  { plan: 'scale', name: 'Aglyn Scale', usd: 249, yearlyUsd: 179 * 12, extraHostUsd: 5, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
-  { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 4, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
-  { plan: 'agency', name: 'Aglyn Agency', usd: 799, yearlyUsd: 649 * 12, extraHostUsd: 3, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
+  // The extra host is a flat $8 from Scale up rather than a ladder that keeps
+  // descending: a host grants the tier's per-host storage and form bands, so
+  // the tiers granting the most per host would charge the least for one.
+  // Agency's annual is $1,049/mo because the live yearly price charges
+  // $12,588 and a Stripe price is immutable.
+  { plan: 'scale', name: 'Aglyn Scale', usd: 249, yearlyUsd: 179 * 12, extraHostUsd: 8, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
+  { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 8, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
+  { plan: 'agency', name: 'Aglyn Agency', usd: 1299, yearlyUsd: 1049 * 12, extraHostUsd: 8, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
 ]
 
 async function stripe(path, params) {

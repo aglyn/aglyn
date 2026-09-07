@@ -793,32 +793,16 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * ⚠️ THE ONE ROW WHERE THE PAGE AND THE CODE STILL DISAGREE — on purpose,
-     * pending the owner's decision in AGL-2652.
-     *
-     * The descending ladder was inverted against its own cost: an extra host
-     * adds that tier's per-host storage and form-submission bands to the
-     * org's included allowance, so the tiers granting the most were charging
-     * the least — 24% margin at Advanced and 6% at Agency. The code went to
-     * a flat $8 above Starter, Business staying at $5 because it genuinely
-     * grants the smallest bands of the four; but raising a shipped price
-     * needs a decision, and the change that made it (`a1e8aaaca`) recorded
-     * none. The 2026-09-07 republish therefore left the page at $5 · $4 · $3,
-     * the figures the Drive Source of Truth still records, and the gap stays
-     * pinned here as data. Collapse this into one `toEqual` when AGL-2652
-     * closes it, in whichever direction.
+     * Flat $8 from Scale up, not a ladder that keeps descending. Storage and
+     * form submissions are per-HOST bands, so an extra host adds that tier's
+     * bands to the org's included allowance — under a descending ladder the
+     * tiers granting the most per host charged the least for one. Business
+     * stays $5 because it grants the smallest bands of the four; Starter $10
+     * and Pro $8 sit above it as they always did.
      */
-    it('Extra site, per month — the page says $5 · $4 · $3 where the code says $8 (AGL-2652)', () => {
-      const PUBLISHED = [10, 8, 5, 5, 4, 3]
-      const CODE = [10, 8, 5, 8, 8, 8]
-      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual(CODE)
-      expect(
-        PAID.map((plan, column) => [plan, PUBLISHED[column], CODE[column]])
-          .filter(([, was, now]) => was !== now),
-      ).toEqual([
-        ['scale', 5, 8],
-        ['advanced', 4, 8],
-        ['agency', 3, 8],
+    it('Extra site, per month — $10 · $8 · $5 · $8 · $8 · $8', () => {
+      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual([
+        10, 8, 5, 8, 8, 8,
       ])
     })
 
@@ -841,13 +825,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * THE PAGE CAUGHT UP ON 2026-09-07. $0.25 against a
-     * `dataStoragePerGbMonth` cost of $0.18 is a 28% line margin — close
-     * enough to the infrastructure pass-through's 23% that the two looked
-     * like the same kind of number while being sold as opposites. $0.36 is
-     * the 50% retail floor, and it is what `checkDataStorageQuota` already
-     * billed, which is why the republish carried it even though the move
-     * itself (`a1e8aaaca`, no decision on record) is still open in AGL-2652.
+     * $0.36 is the 50% retail floor against a `dataStoragePerGbMonth` cost
+     * of $0.18 — the rate `checkDataStorageQuota` bills and the figure the
+     * page carries. $0.25 was a 28% line margin, close enough to the
+     * infrastructure pass-through's 23% that a retail add-on and a cost
+     * pass-through looked like the same kind of number while being sold as
+     * opposites.
      *
      * ⛔ This is the DATASET add-on line, not the metered storage
      * pass-through: `/pricing` carries two per-GB-month figures and the other
