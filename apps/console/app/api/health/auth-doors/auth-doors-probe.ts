@@ -27,12 +27,18 @@
  *
  * ## Nothing is created and no account is touched
  *
- * Every probe here is a question whose answer is a known refusal. The mint
- * asks about an address at `.invalid`, a TLD RFC 2606 reserves so it can
- * never be registered; the redemption probes present a code that is not a
- * code. A refusal is the SUCCESS — the same trick the root health check plays
- * on Firestore by reading a document meant to be missing. No org, no site, no
- * user, no email, no slug, nothing metered.
+ * Every probe that reaches a provider is a question whose answer is a known
+ * refusal. The mint asks about an address at `.invalid`, a TLD RFC 2606
+ * reserves so it can never be registered; the redemption probes present a code
+ * that is not a code. A refusal is the SUCCESS — the same trick the root health
+ * check plays on Firestore by reading a document meant to be missing. No org,
+ * no site, no user, no email, no slug, nothing metered.
+ *
+ * The delivery arm (AGL-2673) is the one that asks about real accounts rather
+ * than an impossible one, because an OUTCOME cannot be established from a
+ * synthetic subject. It still creates nothing and sends nothing: it lists
+ * accounts that already exist and reads a log somebody else wrote, and only
+ * counts come back out.
  *
  * ## What leaves this file
  *
@@ -51,6 +57,12 @@ import {
   firebaseAdmin,
 } from '@aglyn/tenant-data-admin'
 import { isEmailConfigured } from '@aglyn/shared-util-email'
+// From the LEAF rather than the barrel, the rule the delivery log's other
+// callers follow: a spec that mocks `@aglyn/tenant-data-admin` wholesale —
+// which it must, because that graph reaches the admin SDK — would otherwise
+// replace the delivery reader with whatever the factory happened to list, and
+// a stub there is a green on the one fact this arm exists to establish.
+import { readEmailDeliveryHistory } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { memoizeWithTtl } from '@aglyn/aglyn/server'
 
 import {
@@ -71,6 +83,10 @@ import {
   passwordResetDoorHealth,
   passwordSignInDoorHealth,
   ssoDoorHealth,
+  MIN_ACCOUNTS_FOR_DELIVERY_VERDICT,
+  VERIFICATION_DELIVERY_SETTLE_MINUTES,
+  VERIFICATION_DELIVERY_WINDOW_MINUTES,
+  verificationDeliveryHealth,
   type AuthDoorCheck,
   type ProviderAnswer,
   type RedemptionAnswer,
@@ -399,6 +415,345 @@ export const emailVerificationProbe = memoizeWithTtl<AuthDoorCheck>(
   },
 )
 
+/**
+ * How long the delivery arm's answer is held.
+ *
+ * Longer than the five minutes its siblings use, because the window it grades
+ * is a DAY: re-asking every five minutes cannot move an answer computed over
+ * 1,440 of them, and this is by far the most expensive arm on the endpoint —
+ * one admin listing plus one delivery read per sampled account. Fifteen is the
+ * uptime workflow's own sampling interval, so at worst a red shows up one
+ * sample later than it otherwise would, against a window measured in a day.
+ */
+const DELIVERY_PROBE_TTL_MS = 15 * 60_000
+
+/**
+ * One bounded page of accounts, newest first.
+ *
+ * Bounded so a large user base costs the same as a small one. When a whole
+ * page lands inside the window the count is a FLOOR rather than a total,
+ * which can only make the denominator smaller and the verdict quieter —
+ * never louder, so it cannot invent an outage.
+ */
+const ACCOUNTS_QUERY_PAGE = 200
+
+/**
+ * The most accounts one verdict looks up in the delivery log.
+ *
+ * The cost that grows with signup volume is this one, so it is capped well
+ * above the floor a verdict needs and well below anything a signup flood
+ * could turn into a bill. The newest are sampled, because a live outage shows
+ * up in them first.
+ */
+const VERIFICATION_DELIVERY_SAMPLE = 20
+
+/**
+ * The most delivery rows read per address. A brand-new account has one or
+ * two; a cap this far above that costs nothing and bounds the pathological
+ * case where an address is also on a mailing list.
+ */
+const DELIVERY_ROWS_PER_ADDRESS = 10
+
+/**
+ * The sender label the verification mail carries, stamped as a Resend
+ * `context` tag on every send and read back off the webhook event.
+ *
+ * Matched EXACTLY. A row with no context is one the history import wrote —
+ * the provider's list endpoint returns no tags, so an imported row cannot say
+ * which sender produced it — and counting it would let an imported receipt
+ * pass for a verification mail. Such a row still counts toward
+ * `withAnyDelivery`, which is where its evidence actually belongs: it proves
+ * the log has something for this person, not what it was.
+ */
+const VERIFICATION_SEND_CONTEXT = 'email-verification'
+
+/**
+ * `VERIFICATION_DELIVERY_MIN_ACCOUNTS` overrides the floor without a code
+ * change — the same knob shape the signup checks carry.
+ *
+ * It is also this arm's forced-failure lever, and like the drought check's it
+ * works the opposite way round from a threshold: set it to **0** and every
+ * window is graded, so an ordinary quiet one with no accounts in it reports
+ * red and the alert path can be proven end to end without breaking mail for
+ * anybody. Unset or unparsable means the default.
+ */
+function configuredMinimumAccounts(): number {
+  const raw = process.env['VERIFICATION_DELIVERY_MIN_ACCOUNTS']
+  if (!raw) return MIN_ACCOUNTS_FOR_DELIVERY_VERDICT
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : MIN_ACCOUNTS_FOR_DELIVERY_VERDICT
+}
+
+/**
+ * Is the delivery feed connected on this deployment?
+ *
+ * The webhook that writes every delivery row refuses to run without this
+ * secret and answers `501` instead, so with it unset the log is empty for
+ * reasons that have nothing to do with mail. Without this gate the arm would
+ * report a total outage on every self-host, every preview deployment and
+ * every local run — an alarm that is wrong everywhere except one deployment
+ * is an alarm nobody keeps.
+ *
+ * Read only for PRESENCE, and it is deliberately weak evidence in one
+ * direction only: a secret that is set does not prove a webhook is registered
+ * with the provider or reaching us, while a secret that is absent does prove
+ * nothing can be recorded. That asymmetry is the right way round for a gate
+ * whose only job is to keep this arm quiet when its evidence is meaningless.
+ */
+function deliveryFeedConfigured(): boolean {
+  return Boolean(process.env['RESEND_WEBHOOK_SECRET'])
+}
+
+/** One account as the Identity Toolkit listing describes it. */
+export interface ProbeAccountRecord {
+  /** Epoch ms, as a string. */
+  createdAt?: string | number
+  email?: string
+  providerUserInfo?: { providerId?: string }[]
+}
+
+/**
+ * The accounts a verification mail was OWED to, newest first.
+ *
+ * Pure, and exported so the window arithmetic and the eligibility rule are
+ * driven by a spec rather than by waiting for a quiet Tuesday to disagree
+ * with them. Addresses leave this function but never leave the process: they
+ * are the key the delivery log is read by, and only counts reach the body.
+ *
+ * Two filters, and each of them exists to stop a false alarm:
+ *
+ *  - **the password provider.** An account created through Google arrives
+ *    already verified and is never sent a link, and an SSO account lives in
+ *    its own per-org pool that this project-level listing does not return at
+ *    all. Counting either in the denominator would manufacture a drought out
+ *    of mail that was correctly never sent.
+ *  - **the settle margin.** The window ENDS `settleMinutes` in the past. A
+ *    delivery row is written by a provider webhook, so an account created a
+ *    minute ago has no row yet and grading it would report an outage every
+ *    time somebody signs up.
+ *
+ * Verification state is deliberately NOT a filter. An account that has since
+ * verified still received the mail, and dropping it would leave a denominator
+ * made only of accounts that had not clicked yet — which is the numerator's
+ * complement, not its denominator.
+ */
+export function accountsOwedVerificationMail(
+  records: readonly ProbeAccountRecord[] | null | undefined,
+  nowMs: number,
+  options?: { windowMinutes?: number; settleMinutes?: number },
+): string[] {
+  const windowMinutes =
+    options?.windowMinutes ?? VERIFICATION_DELIVERY_WINDOW_MINUTES
+  const settleMinutes =
+    options?.settleMinutes ?? VERIFICATION_DELIVERY_SETTLE_MINUTES
+  const endsAt = nowMs - settleMinutes * 60_000
+  const startsAt = endsAt - windowMinutes * 60_000
+  const owed: { at: number; email: string }[] = []
+  for (const record of records ?? []) {
+    // `Number(...)` on a field the provider sends as a string, and a
+    // non-finite one is dropped BEFORE the bounds rather than by them: NaN
+    // compares false against both, so a corrupt record would sail through the
+    // window test and be counted as a signup that never happened.
+    const at = Number(record?.createdAt)
+    if (!Number.isFinite(at) || at <= 0) continue
+    if (at > endsAt || at < startsAt) continue
+    const email = String(record?.email ?? '').trim()
+    if (!email) continue
+    const hasPassword = (record?.providerUserInfo ?? []).some(
+      (provider) => provider?.providerId === 'password',
+    )
+    if (!hasPassword) continue
+    owed.push({ at, email })
+  }
+  // Newest first, so the sample below is the freshest evidence rather than
+  // whatever order the provider happened to answer in.
+  owed.sort((a, b) => b.at - a.at)
+  return owed.map((entry) => entry.email)
+}
+
+/**
+ * The accounts listing, with "this deployment cannot list accounts" kept
+ * separate from "the listing failed".
+ *
+ * The two need opposite answers and the distinction is the whole reason this
+ * shape exists: an install with no admin credential has nothing to grade and
+ * must not be reported as an outage, while a credential that is present and
+ * then cannot mint a token, or a call that is refused, is exactly the state
+ * somebody should look at.
+ */
+interface AccountListing {
+  /** False only when there is no credential or no project id to use at all. */
+  configured: boolean
+  /** Null when the listing was attempted and did not answer. */
+  records: ProbeAccountRecord[] | null
+}
+
+/**
+ * One newest-first page of Identity Toolkit accounts.
+ *
+ * The same call `check-funnel-conversions.mjs` makes, for the same reason: it
+ * reads account creation from the system of record, with no processing lag,
+ * no consent gate and no analytics vendor in the path.
+ *
+ * ⚠️ The success body carries EVERY account's address and password hash. It
+ * is never logged, never summarised and never returned — the addresses are
+ * used in-process as delivery-log keys and nothing but counts leaves.
+ */
+async function listRecentAccounts(): Promise<AccountListing> {
+  let projectId: string | undefined
+  let token: string | undefined
+  let credentialPresent = false
+  try {
+    // `getApp()`, not the facade: the facade narrows the app to its accessors
+    // and drops `options`, which is where the credential and the project id
+    // live. Same acquisition path the lockdown trigger read uses.
+    void firebaseAdmin
+    const app = getApp()
+    projectId = (app.options?.projectId ??
+      process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID']) as string | undefined
+    const credential = app.options?.credential
+    credentialPresent = Boolean(credential && projectId)
+    token = (await credential?.getAccessToken?.())?.access_token
+  } catch {
+    token = undefined
+  }
+  // Nothing to list WITH. The only silent state on this arm, and it is narrow
+  // on purpose: a credential that exists and then fails to mint falls through
+  // to `records: null`, which is degraded.
+  if (!credentialPresent) return { configured: false, records: null }
+  if (!token) return { configured: true, records: null }
+  try {
+    const response = await fetch(
+      `${identityToolkitBase()}/v1/projects/${encodeURIComponent(
+        projectId,
+      )}/accounts:query`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          returnUserInfo: true,
+          sortBy: 'CREATED_AT',
+          order: 'DESC',
+          limit: ACCOUNTS_QUERY_PAGE,
+        }),
+        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      },
+    )
+    if (!response.ok) return { configured: true, records: null }
+    const payload = (await response.json()) as {
+      userInfo?: ProbeAccountRecord[]
+    }
+    return { configured: true, records: payload?.userInfo ?? [] }
+  } catch {
+    return { configured: true, records: null }
+  }
+}
+
+/** What the delivery log knows about a sample of addresses. */
+interface DeliveryTally {
+  sampled: number
+  withVerificationDelivery: number
+  withAnyDelivery: number
+  /** True when a read FAILED, which is not the same as coming back empty. */
+  unreadable: boolean
+}
+
+const NO_DELIVERIES_READ: DeliveryTally = {
+  sampled: 0,
+  withVerificationDelivery: 0,
+  withAnyDelivery: 0,
+  unreadable: false,
+}
+
+/**
+ * How many of these people have a delivery event, and how many have any mail
+ * recorded at all.
+ *
+ * `readEmailDeliveryHistory` rather than the plain reader, because it keeps a
+ * failed read apart from an empty one — and those lead to opposite verdicts
+ * here for the same reason they lead a staffer to opposite next actions.
+ *
+ * In parallel and over a capped sample: the endpoint is public, so its cost
+ * is bounded by the cap and by the probe memo rather than by how many people
+ * signed up today.
+ */
+async function tallyVerificationDeliveries(
+  addresses: readonly string[],
+): Promise<DeliveryTally> {
+  const sample = addresses.slice(0, VERIFICATION_DELIVERY_SAMPLE)
+  if (sample.length === 0) return NO_DELIVERIES_READ
+  const reads = await Promise.all(
+    sample.map((address) =>
+      readEmailDeliveryHistory(address, { limit: DELIVERY_ROWS_PER_ADDRESS }),
+    ),
+  )
+  let withVerificationDelivery = 0
+  let withAnyDelivery = 0
+  let unreadable = false
+  for (const read of reads) {
+    if (read.lookupFailed) {
+      unreadable = true
+      continue
+    }
+    if (read.rows.length > 0) withAnyDelivery += 1
+    if (read.rows.some((row) => row.context === VERIFICATION_SEND_CONTEXT)) {
+      withVerificationDelivery += 1
+    }
+  }
+  return {
+    sampled: sample.length,
+    withVerificationDelivery,
+    withAnyDelivery,
+    unreadable,
+  }
+}
+
+/**
+ * The outcome arm: did the mail this door lets be SENT actually get recorded
+ * as delivered? (AGL-2673)
+ *
+ * Reads nothing a person could steer and writes nothing at all — one admin
+ * listing of accounts that already exist, and one delivery-log read per
+ * sampled address.
+ */
+export const verificationDeliveryProbe = memoizeWithTtl<AuthDoorCheck>(
+  DELIVERY_PROBE_TTL_MS,
+  async () => {
+    const startedAt = Date.now()
+    const feedConfigured = deliveryFeedConfigured()
+    const listing = await listRecentAccounts()
+    const owed =
+      listing.records === null
+        ? null
+        : accountsOwedVerificationMail(listing.records, Date.now())
+    // No delivery reads when nothing could have recorded an answer, and none
+    // when there is no address to ask about. Both are states the verdict
+    // already decides on the counts it has.
+    const tally =
+      feedConfigured && owed !== null
+        ? await tallyVerificationDeliveries(owed)
+        : NO_DELIVERIES_READ
+    return verificationDeliveryHealth(
+      {
+        accountListingConfigured: listing.configured,
+        deliveryFeedConfigured: feedConfigured,
+        accountsCreated: owed === null ? null : owed.length,
+        accountsSampled: tally.sampled,
+        withVerificationDelivery: tally.withVerificationDelivery,
+        withAnyDelivery: tally.withAnyDelivery,
+        deliveryLogUnreadable: tally.unreadable,
+        minimumAccounts: configuredMinimumAccounts(),
+        windowMinutes: VERIFICATION_DELIVERY_WINDOW_MINUTES,
+        settleMinutes: VERIFICATION_DELIVERY_SETTLE_MINUTES,
+      },
+      Date.now() - startedAt,
+    )
+  },
+)
+
 export const googleOauthProbe = memoizeWithTtl<AuthDoorCheck>(PROBE_TTL_MS, async () => {
   const startedAt = Date.now()
   // The first step of a real Google sign-in: ask Identity Platform to build
@@ -605,11 +960,12 @@ export const passwordSignInProbe = memoizeWithTtl<AuthDoorCheck>(
   },
 )
 
-/** The six checks the route reports, gathered in one place. */
+/** The seven checks the route reports, gathered in one place. */
 export interface AuthDoorsProbeResult {
   passwordSignIn: AuthDoorCheck
   passwordReset: AuthDoorCheck
   emailVerification: AuthDoorCheck
+  verificationDelivery: AuthDoorCheck
   googleOauth: AuthDoorCheck
   sso: AuthDoorCheck
   passkey: AuthDoorCheck
@@ -622,19 +978,28 @@ export interface AuthDoorsProbeResult {
  * endpoint's worst case is one round of calls rather than six in series.
  */
 export async function probeAuthDoors(): Promise<AuthDoorsProbeResult> {
-  const [passwordSignIn, passwordReset, emailVerification, googleOauth, sso, passkey] =
-    await Promise.all([
-      passwordSignInProbe(),
-      passwordResetProbe(),
-      emailVerificationProbe(),
-      googleOauthProbe(),
-      ssoProbe(),
-      passkeyProbe(),
-    ])
+  const [
+    passwordSignIn,
+    passwordReset,
+    emailVerification,
+    verificationDelivery,
+    googleOauth,
+    sso,
+    passkey,
+  ] = await Promise.all([
+    passwordSignInProbe(),
+    passwordResetProbe(),
+    emailVerificationProbe(),
+    verificationDeliveryProbe(),
+    googleOauthProbe(),
+    ssoProbe(),
+    passkeyProbe(),
+  ])
   return {
     passwordSignIn,
     passwordReset,
     emailVerification,
+    verificationDelivery,
     googleOauth,
     sso,
     passkey,

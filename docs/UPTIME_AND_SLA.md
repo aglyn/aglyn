@@ -45,7 +45,9 @@ GET  https://app.aglyn.com/api/health/auth-doors
                                                password SIGN-IN (AGL-2583),
                                                password recovery, the
                                                verification link, Google, SSO,
-                                               passkeys (AGL-2586)
+                                               passkeys (AGL-2586), and whether
+                                               the verification mail was
+                                               DELIVERED (AGL-2673)
 GET  https://app.aglyn.com/api/health/journeys
                                                create + publish stay AUTHORIZED,
                                                and published cache drops land
@@ -73,6 +75,7 @@ it deliberately does not, is in the docblocks:
 | `passwordSignIn` | Identity Platform refuses a sign-in for an address that cannot exist — so the endpoint is reachable, the public key and App Check are accepted, and the **password provider is still enabled**. With a probe identity configured, it also signs in for real | the password provider is switched off (`provider-not-configured`) — which locks out every customer who uses an email and a password — the key or App Check is rejected, nothing answers, the absent account is *admitted*, or the configured probe identity cannot sign in |
 | `passwordReset` | the reset link is built on an allowlisted console origin, email is configured, and the redemption endpoint refuses an invalid code | the console URL is malformed or non-TLS, the resolver starts honoring request-supplied origins, email transport is unconfigured, or `accounts:resetPassword` stops answering |
 | `emailVerification` | the link mint path answers, the AGL-1112 rewrite still lands on a console handler URL carrying the code, redemption refuses an invalid code, and **the auto-send cooldown admits a first arrival** — asked on a uid nothing has seen before, which is the question a brand-new account asks | the mint answers anything but `auth/user-not-found` for an unclaimable address, the rewrite drifts off our origin or drops the code, `accounts:update` stops answering, or the cooldown refuses a uid it has never seen (`auto-send-suppressed`) or cannot be asked at all (`auto-send-gate-unavailable`) |
+| `verificationDelivery` | of the accounts created in a settled trailing window that were owed a verification link, **at least one carries a delivery event**. The only OUTCOME check of the seven: the arm above asserts a send is possible, this one asserts a mail was recorded | not one of at least 3 sampled accounts has a verification delivery event, with other mail to those same accounts still being recorded (`verification-delivery-missing`) or with nothing recorded at all (`no-delivery-events`); the account listing is refused (`accounts-unavailable`); a delivery-log read fails rather than comes back empty (`delivery-log-unavailable`) |
 | `googleOauth` | Identity Platform builds a Google authorization URL for the console origin, carrying a client id | the provider is disabled or its client id was removed (`OPERATION_NOT_ALLOWED`), the console origin fell off the authorized-domain list (`INVALID_CONTINUE_URI`), App Check refuses, or the web API key is rejected |
 | `sso` | the per-org GCIP tenant pools list, and a bounded sample still carries an enabled SAML or OIDC provider | the tenant manager stops answering — which locks out every enterprise customer at once — or a sampled pool's provider config was deleted or disabled |
 | `passkey` | the console origin resolves to a relying-party context and a discoverable-credential challenge can be issued | the deployment's workspace domain is wrong, which `400`s every registration and every sign-in and is otherwise invisible |
@@ -87,11 +90,67 @@ request, no delivery row to be missing from. The uid must be fresh on every
 probe — reused, it asks whether a REVISIT may send, which is the case the
 cooldown exists to refuse, and would read green precisely when the door is shut.
 
-Every probe is a question whose answer is a known refusal: the mint asks about
-an address at `.invalid`, a TLD RFC 2606 reserves so it can never be
-registered, and the redemption probes present a code that is not a code. A
-refusal is the *success*, the same trick the root check plays on Firestore. One
-sweep is memoized for five minutes per instance.
+`verificationDelivery` is the other half of that lesson (AGL-2673). `sendGate`
+proves the send was ALLOWED; everything after it — the transport, the provider,
+the address, the inbox — was watched by nothing, so a provider outage, a
+suspended sending domain or a template that throws while rendering was
+invisible to every check on the board. This arm asks the outcome instead: of
+the accounts created in a settled trailing window, how many carry a
+verification delivery event.
+
+- **Accounts created** come from Identity Toolkit `accounts:query` sorted on
+  `CREATED_AT`, one bounded page, the same read `check-funnel-conversions.mjs`
+  makes — the system of record, with no processing lag and no analytics vendor
+  in the path. Only accounts with the **password** provider count: a Google
+  account arrives already verified and an SSO account lives in a per-org pool
+  this listing never returns, so counting either would manufacture a drought
+  out of mail that was correctly never sent.
+- **Delivery events** come from the per-recipient log the staff user page
+  reads, matched on the `email-verification` send tag.
+- **The window is a day, ending 15 minutes ago.** A delivery row is written by
+  a provider webhook, so an account created a minute ago has none yet and
+  grading it would report an outage every time somebody signs up.
+
+**It is a DROUGHT detector, and that is the whole design.** The check named
+"signups" measured an abuse FLOOD, so zero signups was its healthiest possible
+reading and it stayed green through three days of every account being refused
+(AGL-2583). A drought needs a denominator and a floor: below **3** sampled
+accounts the arm answers `not-enough-accounts` — an explicit unknown carried in
+the body beside the counts, never a silent pass — and a window with no signups
+in it can never read as healthy.
+
+**An absent delivery row is not proof that nothing was sent,** and the verdict
+says so rather than dropping the log's own caveat on the way. Two clauses carry
+it. With `RESEND_WEBHOOK_SECRET` unset nothing can be recorded at all, so the
+arm reports `delivery-feed-not-configured` and has no opinion — otherwise every
+self-host and every preview deployment would report a total mail outage. And
+the two red codes name what was OBSERVED rather than the conclusion:
+`verification-delivery-missing` is the strong one, where other mail to those
+same accounts IS being recorded and the feed is therefore demonstrably alive,
+while `no-delivery-events` is the weak one, where the delivery feed itself is
+still a candidate cause and is the first thing to rule out. Both are red,
+because a feed that records nothing is an outage of the only thing that can see
+mail leave the building.
+
+⚠️ **This arm needs `RESEND_WEBHOOK_SECRET` in the CONSOLE's environment**, not
+only in whichever deployment Resend posts its webhook to. Without it the arm
+answers `delivery-feed-not-configured` forever, which is a check that cannot go
+red. `curl -s https://app.aglyn.com/api/health/auth-doors` shows which state it
+is in on the first request after a deploy.
+
+Forced failure, to prove the alert path: set
+`VERIFICATION_DELIVERY_MIN_ACCOUNTS=0` in the console's Vercel env. Every
+window is then graded, so an ordinary quiet one reports red → expect the
+Slack `#ci` post → unset. It sends no mail and breaks mail for nobody.
+
+Every probe that reaches a provider is a question whose answer is a known
+refusal: the mint asks about an address at `.invalid`, a TLD RFC 2606 reserves
+so it can never be registered, and the redemption probes present a code that is
+not a code. A refusal is the *success*, the same trick the root check plays on
+Firestore. The delivery arm is the exception and has to be — an outcome cannot
+be established from a synthetic subject — but it still creates nothing and
+sends nothing, and only counts come back out of it. One sweep is memoized for
+five minutes per instance, fifteen for the delivery arm.
 
 **The body carries codes, never messages,** and that matters more here than on
 the siblings: the Identity Platform surfaces behind these probes return the
@@ -114,12 +173,15 @@ names a customer. Every verdict is computed from booleans and counts in
 - **A full round trip through a redeemed code.** Same reason: following a real
   verification link end to end needs an account whose address we control.
 - **A customer's own identity provider.** Theirs, not ours to probe.
-- **That a verification mail was DELIVERED.** `sendGate` asserts the cooldown
-  lets the send be MADE; everything after that — the transport, the provider,
-  the inbox — is unwatched by this door. The check that would see a failure
-  downstream of the gate is an outcome one: of the accounts created in a
-  trailing window, how many carry a verification delivery event. Tracked as the
-  open half of AGL-2668.
+- **That any PARTICULAR person got their verification mail.** The
+  `verificationDelivery` arm is a drought detector, not a per-account audit: it
+  fires when not one of a sampled window's accounts has a delivery event, so a
+  partial failure — one domain rejecting, half the sends bouncing — passes it.
+  Raising it to a coverage RATIO needs a denominator this platform does not yet
+  produce in a day; at single-digit volume a ratio threshold measures noise.
+- **That a mail reached an INBOX.** A delivery event is the provider saying it
+  handed the message over. Spam foldering, a silent enterprise filter and a
+  forwarding loop all look like a delivered message from here.
 
 **If a probe identity is ever added** it is a decision about production, not a
 side effect of adding a check, and it is not made here. It would need: a
