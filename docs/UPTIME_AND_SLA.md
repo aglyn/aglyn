@@ -129,6 +129,38 @@ variable in the repo with the value in the secret store, exactly as
 `AGLYN_PROBE_TOKEN` is handled; and its own line in the table above saying what
 the extra coverage buys.
 
+### The funnel — what `/api/health/funnel` grades
+
+| Check | Green means | Goes red when |
+| --- | --- | --- |
+| `intake` | every gate `/api/forms/submit` clears before its first write says yes — the alias resolves to a host, no platform, org or host lockdown is refusing visitor writes, the monthly submission quota and the abuse ceiling both have room — and somebody would be told a submission arrived | a gate refuses (`submissions-paused`, `quota-exhausted`, `abuse-ceiling-tripped`), no host is configured or the alias resolves to nothing (`not-configured`, `host-unresolved`), the notification would reach nobody (`no-notification-recipient`), or none of it could be determined (`intake-unavailable`) |
+| `routing` | the site's LIVE lead surfaces — published, non-retired forms declaring `routing.lead` — number exactly `required`, and each still carries the design it published, records an opt-in the submit route's own reader can read, and is filed under a campaign | there are fewer than expected (`lead-forms-below-floor`), there are more (`lead-form-expectation-stale`), one is faulty (`forms-misrouted`, with `faults` counting `design-missing`, `consent-undeclared`, `consent-unreadable` and `campaign-unlinked`), or the forms read failed (`routing-unavailable`) |
+
+**The graded set is the LIVE funnel, and two exclusions decide it** (AGL-2672).
+A retired form leaves, which is what retiring one is for. A form with **no
+published version** leaves as well: it has no design to place, no fields
+derived from one, and no page can render it, so grading it reports about a
+surface no prospect can reach — which is how a single unpublished form took the
+whole funnel red (AGL-2669). That exclusion is safe only because it is one-way.
+Nothing clears `versionId`, so a form cannot leave the set by losing its
+publication; a form that **was** published and whose design is now gone stays
+graded and reports `design-missing`, which is a real outage — every page
+placing it falls back to whatever it drew inline, and for a form built as an
+entity that is an empty form answering `200`. `unpublished` is reported beside
+`leadForms` so the count reconciles with the console's forms list.
+
+**`required` is graded in both directions, and it is hand-set on purpose.**
+`AGLYN_FUNNEL_MIN_LEAD_FORMS`, defaulting to the three forms AGL-2586 names.
+The surplus over it is exactly how many forms may stop routing before a count
+can notice, so an expectation sitting below the truth is not a weaker check —
+it is a check that is not running, and it is silent for as long as that lasts.
+It is deliberately **not** derived from the forms in front of it: an
+expectation that tracks its own subject agrees with every reality it could be
+handed and can never fail. So a funnel carrying more live lead surfaces than
+the number is red too, under its own code, and the repair is to make the number
+say what the funnel now is — the same reasoning that grades an unconfigured
+render canary as `not-configured` rather than as healthy.
+
 **A red now reaches a person.** The `Uptime probe` workflow watched every
 endpoint above for weeks and told nobody — its own header says *"the run
 history IS the record"*, which is exactly how `/api/health/crons` answered 503

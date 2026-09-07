@@ -24,10 +24,12 @@
  *  - `intake` — would the next submission be ACCEPTED, and is there anybody
  *    to tell? Every gate `/api/forms/submit` clears before its first write,
  *    asked of the real documents through the real functions.
- *  - `routing` — do the site's lead-routing forms still file a lead, record
- *    consent through a field that exists, and belong to a campaign? And are
- *    there still as many of them as there are supposed to be, which is the
- *    only way a form that stopped routing can be seen at all.
+ *  - `routing` — do the site's LIVE lead surfaces still file a lead, record
+ *    consent through a field that exists, carry the design they published,
+ *    and belong to a campaign? And are there exactly as many of them as the
+ *    funnel is recorded as having — the only way a form that stopped routing
+ *    can be seen at all, and, graded the other way, the only way an
+ *    expectation that has stopped describing the funnel can be.
  *
  * NOTHING IS WRITTEN. See `funnel-probe.ts` for why a synthetic submission
  * would have been an abuse vector of our own making, and for what this
