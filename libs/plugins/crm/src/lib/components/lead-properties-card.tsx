@@ -54,7 +54,7 @@ const NOTES_MAX = 4000
  * Why Convert is refused while an erasure waits on the person — the same
  * sentence shape the overflow's items carry, so the two read as one state.
  */
-const CONVERT_PENDING_ERASURE_REASON = 'An erasure is pending for this person'
+export const CONVERT_PENDING_ERASURE_REASON = 'An erasure is pending for this person'
 
 /** A label over a value — the record page's one row shape. */
 function Fact(props: { label: string; children: React.ReactNode }) {
