@@ -386,8 +386,9 @@ export interface CommerceSettled {
   /** Take net of reversals. */
   commissionNetCents: number
   /**
-   * Storefront SUBSCRIPTION renewals in this period, whose fee recovers no
-   * processing cost — see `commerceSettledSummary`.
+   * Storefront SUBSCRIPTION cycles in this period. Counted because a cycle
+   * billed before its subscription was re-priced onto the pass-through
+   * reports no take at all — see `commerceSettledSummary`.
    */
   subscriptionOrders: number
   /**
@@ -584,16 +585,23 @@ export function marketplaceCommissionCents(
  * the safe direction, and it is stated on the page rather than left to be
  * discovered.
  *
- * ## The one order shape where the pass-through must NOT be subtracted
+ * ## Subscription cycles, and the one cycle this understates
  *
- * A storefront SUBSCRIPTION renewal carries a `subscriptionId`. Stripe
- * subscriptions accept only `application_fee_percent`, which cannot express a
- * fixed 30¢, so that path never got the AGL-2152 recovery: its `feeCents` is
- * the items-only take with no processing cost folded in, and Aglyn absorbs
- * the card cost. Subtracting a pass-through that was never charged would
- * report a real take as zero on every renewal. So renewals contribute their
- * fee as take in full — and they are COUNTED, because the cost they absorb is
- * uncovered and someone should be able to see how much of the book it is.
+ * A storefront SUBSCRIPTION cycle carries a `subscriptionId`. Since AGL-2655
+ * its fee carries the same pass-through, folded into
+ * `application_fee_percent` as a rate because a Stripe subscription cannot
+ * express a fixed 30¢ — so it is netted out here exactly as a one-time
+ * sale's is. The percent is sized on the recurring goods and the recomputed
+ * cost here is sized on the whole amount paid, tax included, so a taxed
+ * cycle subtracts slightly more than was recovered: understated, the safe
+ * direction, like the card-rate case above.
+ *
+ * A subscription sold before the pass-through existed is carried onto it by
+ * the renewal re-price (AGL-2289) at its next paid invoice — but THAT
+ * invoice was billed at the bare take, so its row's `feeCents` holds no
+ * pass-through and the clamp reports its take as zero. One cycle per
+ * legacy subscription, and the count beside the figure is how a reader
+ * sees how much of the book that is.
  */
 /**
  * Whether this order row was a test-mode rehearsal.
@@ -660,8 +668,8 @@ export function commerceSettledSummary(
  * there is no take to attribute, and inventing one from the gross would
  * report a merchant's money as Aglyn's.
  *
- * See `commerceSettledSummary` for why the pass-through is subtracted on a
- * one-time sale and NOT on a subscription renewal.
+ * See `commerceSettledSummary` for why a subscription cycle billed before its
+ * re-price reports no take.
  */
 export function commerceOrderTake(row: CommerceOrderRowInput | null): {
   gross: number
@@ -687,13 +695,11 @@ export function commerceOrderTake(row: CommerceOrderRowInput | null): {
       takeNet: 0,
     }
   }
-  // A one-time sale's fee bundles the recovery; a renewal's does not. Clamped
-  // to the fee itself: the recomputed cost can exceed a fee charged under an
-  // older rate, and a negative take would subtract from another order's real
-  // margin.
-  const passThrough = isSubscriptionOrder
-    ? 0
-    : Math.min(fee, storefrontProcessingCostCents(gross))
+  // Every fee bundles the recovery — a one-time sale's in cents, a
+  // subscription cycle's as a rate (AGL-2655). Clamped to the fee itself: the
+  // recomputed cost can exceed a fee charged under an older rate, and a
+  // negative take would subtract from another order's real margin.
+  const passThrough = Math.min(fee, storefrontProcessingCostCents(gross))
   const take = fee - passThrough
   const refunded = Math.min(gross, Math.max(0, cents(row?.refundedCents)))
   const takeRefunded = gross > 0 ? Math.round((refunded * take) / gross) : 0

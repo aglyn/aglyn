@@ -2960,6 +2960,80 @@ export function resolveTransactionFeeCents(
 }
 
 /**
+ * Stripe's processing cost on a RECURRING charge of `amountCents`, as the
+ * percent a Subscription's `application_fee_percent` can carry (AGL-2655).
+ *
+ * A Stripe Subscription accepts no `application_fee_amount` — only
+ * `application_fee_percent`, a rate with at most two decimal places — so the
+ * fixed 30¢ that `storefrontProcessingCostCents` adds in cents has to be
+ * folded into the rate. `(rate × amount + fixed) ÷ amount` is, with the
+ * amount cancelled,
+ *
+ *     percent = rate + fixed ÷ amount
+ *
+ * which is why a smaller recurring price carries a HIGHER percent: the 30¢
+ * is a bigger share of it. At 6% + 30¢ a $10 price carries 9%, $25 carries
+ * 7.2% and $100 carries 6.3%.
+ *
+ * Computed in hundredths of a percent on integers and rounded UP to the next
+ * hundredth. Up, for the reason the one-time helper rounds its percentage
+ * up: rounding to nearest would leave the recovery a fraction of a cent
+ * short of what Stripe debits half the time, and Stripe rejects a third
+ * decimal outright, so the only honest direction is over. Integers, because
+ * `0.09 * 100` is not `9` in floating point and a percent one ulp above a
+ * whole hundredth would round up to the next one. The same two constants as
+ * the one-time path, so repointing `STOREFRONT_PROCESSING_PERCENT` moves
+ * both surfaces together. Zero for a charge that is not a charge.
+ */
+export function storefrontProcessingPassThroughPercent(
+  amountCents: number,
+): number {
+  const amount =
+    Number.isFinite(amountCents) && amountCents > 0 ? Math.round(amountCents) : 0
+  if (amount <= 0) return 0
+  const rateHundredths = Math.round(STOREFRONT_PROCESSING_PERCENT * 100)
+  // 30¢ ÷ amount is a fraction; × 100 makes it a percent, × 100 again makes
+  // it hundredths of one.
+  const fixedHundredths = (STOREFRONT_PROCESSING_FIXED_CENTS * 10_000) / amount
+  return Math.min(100, Math.ceil(rateHundredths + fixedHundredths) / 100)
+}
+
+/**
+ * The `application_fee_percent` for ONE storefront subscription (AGL-2655):
+ * the plan's advertised take PLUS Stripe's processing cost as a percent —
+ * the recurring twin of `resolveTransactionFeeCents`, under the same rule.
+ * Every tier carries the pass-through, a 0% tier included, because the
+ * tier's 0% is a platform take and the pass-through is not one; it is what
+ * Stripe charges to take the payment, which on a destination charge is
+ * debited from the platform's balance whatever the tier.
+ *
+ * `amountCents` is the recurring items the percent will be applied to —
+ * the goods after any discount, tax and shipping excluded, the AGL-2317
+ * basis. Stripe applies the percent to the whole invoice and the paid-invoice
+ * correction scales it back to items, so sizing on items is what makes the
+ * recovery come out at cost rather than under.
+ *
+ * Composed in hundredths so two decimals stay two decimals (`2 + 6.34` is
+ * not always `8.34` in floating point), and capped at 100, Stripe's ceiling
+ * for the parameter — the recurring twin of the clamp to the charge.
+ */
+export function resolveSubscriptionFeePercent(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  productType: 'physical' | 'digital' | 'service',
+  amountCents: number,
+): number {
+  const amount =
+    Number.isFinite(amountCents) && amountCents > 0 ? Math.round(amountCents) : 0
+  if (amount <= 0) return 0
+  const take = resolveTransactionFeePct(org, productType)
+  const passThrough = storefrontProcessingPassThroughPercent(amount)
+  return Math.min(
+    100,
+    (Math.round(take * 100) + Math.round(passThrough * 100)) / 100,
+  )
+}
+
+/**
  * Platform take rate % for a MARKETPLACE listing sale (AGL-1543), priced
  * off the SELLER org. Resolved through `resolveOrgEntitlements` — so a
  * dead subscription prices as free-plan (30%) even while the stale `plan`

@@ -383,16 +383,12 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       )
       appliedCoupon = couponCode
     }
-    // Platform fee (AGL-284): per-plan ladder from the entitlement matrix
-    // (AGL-278) by product type — 0% plans genuinely charge no fee.
-    const feePct = Aglyn.resolveTransactionFeePct(
-      ownerOrg.org as any,
-      lifted.type ?? 'physical',
-    )
-    // `feeCents` is NOT computed here any more (AGL-2152): Stripe's processing
-    // cost is charged on the whole card total, so the fee cannot be known until
-    // the manual tax and the shipping options are resolved below. See the
-    // `resolveTransactionFeeCents` call after the shipping plan.
+    // The platform fee is NOT computed here (AGL-2152): Stripe's processing
+    // cost is charged on the whole card total, so the fee cannot be known
+    // until the manual tax and the shipping options are resolved below. The
+    // per-plan ladder (AGL-284, AGL-278) is read inside the two resolvers
+    // called after the shipping plan — `resolveTransactionFeeCents` for a
+    // one-time sale and `resolveSubscriptionFeePercent` for a subscription.
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`
     const backUrl = referer.startsWith('http') ? referer : origin
@@ -735,18 +731,36 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       (most, option) => Math.max(most, Math.max(0, Number(option.amountCents ?? 0))),
       0,
     )
-    // A SUBSCRIPTION keeps the old items-only figure. Stripe offers a
-    // Subscription no `application_fee_amount`, only
-    // `application_fee_percent`, which cannot carry a fixed 30¢ — so the
-    // recurring path cannot recover the card cost this way and is left exactly
-    // as it was rather than half-changed. It is still an uncovered cost; see
-    // the AGL-2152 note. This branch never reaches
-    // `payment_intent_data[application_fee_amount]` (the emission below is
-    // gated on `!isSubscription`); it feeds `metadata[feeCents]`, the figure
-    // the webhook records as what Aglyn keeps.
+    // A SUBSCRIPTION carries the same pass-through AS A PERCENT (AGL-2655).
+    // Stripe offers a Subscription no `application_fee_amount`, only
+    // `application_fee_percent`, which cannot carry a fixed 30¢ as cents — so
+    // the 30¢ is folded into the rate: `(rate × amount + fixed) ÷ amount`,
+    // rounded UP to the two decimals the parameter allows, on top of the
+    // plan's own percent. `resolveSubscriptionFeePercent` owns that
+    // arithmetic and its rounding. Sized on the recurring goods alone: Stripe
+    // applies the percent to the whole invoice, and the paid-invoice
+    // correction (`chargeSubscriptionFeeOnItemsOnly`, AGL-2317) scales it
+    // back to the items, so the goods are the base the recovery has to come
+    // out at cost on.
+    //
+    // This branch never reaches `payment_intent_data[application_fee_amount]`
+    // (the emission below is gated on `!isSubscription`); the percent goes
+    // out on `subscription_data` further down, and `feeCents` here is what
+    // that percent takes of the opening cycle's goods — the figure
+    // `metadata[feeCents]` records as what Aglyn keeps.
+    const subscriptionFeePercent = isSubscription
+      ? Aglyn.resolveSubscriptionFeePercent(
+          ownerOrg.org as any,
+          lifted.type ?? 'physical',
+          amountCents,
+        )
+      : 0
     const feeCents = isSubscription
-      ? feePct > 0
-        ? Math.max(1, Math.round((amountCents * feePct) / 100))
+      ? subscriptionFeePercent > 0
+        ? Math.max(
+            1,
+            Math.round((amountCents * subscriptionFeePercent) / 100),
+          )
         : 0
       : Aglyn.resolveTransactionFeeCents(
           ownerOrg.org as any,
@@ -834,10 +848,19 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
             // (AGL-2317), which refunds the part taken on tax and shipping
             // back to the merchant. `metadata[feeCents]` below — the
             // items-only figure — is therefore what Aglyn ends up keeping.
-            ...(feePct > 0
+            //
+            // The percent is the plan's take PLUS the card cost as a rate
+            // (AGL-2655), so it is non-zero on every tier, a 0% tier
+            // included; the guard only still fires for a recurring amount
+            // that resolved to nothing. Stripe rejects a zero here, and
+            // omitting the key is how the parameter is left unset. A
+            // renewal re-derives the same figure against the merchant's
+            // CURRENT plan (AGL-2289), so this is the opening value, not a
+            // permanent one.
+            ...(subscriptionFeePercent > 0
               ? {
                   'subscription_data[application_fee_percent]':
-                    String(feePct),
+                    String(subscriptionFeePercent),
                 }
               : {}),
             'subscription_data[metadata][type]': 'commerce-subscription',

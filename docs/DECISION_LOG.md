@@ -92,6 +92,31 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-07 — Storefront membership subscriptions carry the processing pass-through
+
+- **Decided by:** the account owner (AGL-2655) — the pass-through at cost that `/pricing` promises for one-time sales applies to recurring sales too
+- **Scope:** pricing
+- **Evidence:** `resolveSubscriptionFeePercent` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `libs/aglyn/src/lib/app-utils/subscription-processing-pass-through.spec.ts` and `libs/plugins/commerce/src/lib/server/checkout-subscription-fee-pass-through.spec.ts`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log
+
+**No advertised platform rate moves** — a 0% tier is still a 0% platform take. What
+changes is that a storefront **subscription** now recovers Stripe's processing cost
+the way a one-time sale has since 2026-08-19 (AGL-2152). Until now a membership sold
+on a 0% tier went out with no fee parameter at all, and Aglyn paid Stripe's cost on
+every cycle out of its own balance.
+
+A Stripe Subscription accepts only `application_fee_percent` (two decimals, no cents
+amount), so the fixed 30¢ is folded into the rate: `(rate × amount + fixed) ÷ amount`,
+rounded **up** to the next hundredth of a percent, on top of the plan's own percent,
+and sized on the recurring goods (tax and shipping excluded, the AGL-2317 basis). The
+constants are the one-time path's own (`STOREFRONT_PROCESSING_PERCENT`, 6% + 30¢), so
+repointing them moves both surfaces together. At those rates a $10 membership carries
+9%, $25 carries 7.2% and $100 carries 6.3%; Business digital (2%) at $100 carries 8.3%.
+Every tier carries it, mirroring the one-time rule exactly.
+
+A subscription sold before this is carried onto the new figure by the renewal
+re-price (AGL-2289) at its next paid invoice — no backfill. The staff revenue page
+nets the pass-through out of subscription cycles as it does one-time sales.
+
 ## 2026-09-07 — Reconciliation note: `aglyn.com/pricing` republished to the bands the code enforces (not a decision)
 
 - **Decided by:** nobody — a record; the session that republished the page, under the 2026-09-05 rule that the code is authoritative where an older figure disagrees. No charged price moves and nothing here is a new decision.

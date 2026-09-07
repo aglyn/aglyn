@@ -786,7 +786,9 @@ async function stripeGet(
 
 /**
  * Re-price a storefront subscription's platform fee to the merchant's CURRENT
- * plan (AGL-2289).
+ * plan (AGL-2289) — and since AGL-2655 that figure is the plan's take plus
+ * the card cost as a rate, so the same pass carries a subscription sold
+ * before the pass-through existed onto it at its next paid invoice.
  *
  * `checkout.ts` sets `subscription_data[application_fee_percent]` ONCE, at the
  * sale, and nothing has ever revisited it. `application_fee_percent` lives on
@@ -2799,17 +2801,39 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           //
           // `snapshot.productType` is the sale's own recorded type, never a
           // default — the same field `shipsPhysically` refuses to guess.
-          await repriceStorefrontSubscriptionFee(
-            subscriptionRef,
-            subscriptionId,
-            Aglyn.resolveTransactionFeePct(
-              renewalOrg as any,
-              (snapshot.productType ?? 'physical') as
-                | 'physical'
-                | 'digital'
-                | 'service',
-            ),
-          )
+          //
+          // The plan's take PLUS the card cost as a rate (AGL-2655), the
+          // same figure `checkout.ts` sent at the sale — re-derived here so
+          // a plan change re-adds the pass-through rather than reverting the
+          // subscription to a bare take. The pass-through depends on the
+          // recurring goods it will be applied to, and
+          // `subscriptionRecurringBasisCents` says which figure that is for
+          // this invoice's shape. When neither the invoice nor the sale can
+          // name it, the rate stands as it is: a percent sized on nothing is
+          // zero, and zero UNSETS the fee on Stripe — which would turn "could
+          // not size it" into "charge nothing", the wrong direction for a
+          // doubt. The next full cycle sizes it.
+          const recurringBasisCents =
+            CommerceModel.subscriptionRecurringBasisCents(
+              object,
+              soldSnapshot.get('lineItems') as
+                | CommerceModel.OrderLineItem[]
+                | undefined,
+            )
+          if (recurringBasisCents > 0) {
+            await repriceStorefrontSubscriptionFee(
+              subscriptionRef,
+              subscriptionId,
+              Aglyn.resolveSubscriptionFeePercent(
+                renewalOrg as any,
+                (snapshot.productType ?? 'physical') as
+                  | 'physical'
+                  | 'digital'
+                  | 'service',
+                recurringBasisCents,
+              ),
+            )
+          }
         }
         if (!recorded) return
         // Inventory per cycle (AGL-1750, the AGL-281 semantics): the box that
