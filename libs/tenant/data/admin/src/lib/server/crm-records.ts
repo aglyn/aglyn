@@ -17,11 +17,13 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation'
 import {
+  checkCrmEmailQuota,
   checkCrmRecordsQuota,
   CRM_COLLECTIONS,
   CRM_EMAIL_USAGE_COLLECTION,
   type CrmActivityLink,
   crmActivityCeilingLink,
+  type CrmEmailQuotaResult,
   crmEmailUsageDayKey,
   type CrmRecordsQuotaResult,
 } from '@aglyn/aglyn/server'
@@ -117,74 +119,152 @@ export async function countCrmActivitiesForRecord(
 }
 
 /**
- * `orgs/{orgId}/crmEmailUsage/{YYYY-MM-DD}` — today's one-to-one email
+ * `orgs/{orgId}/crmEmailUsage/{day}` — one UTC day's one-to-one email
  * counter, the document `checkCrmEmailQuota` is enforced against and the
  * billing page reads.
  */
-export function crmEmailUsageRef(
+function crmEmailUsageRefForDay(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
-  now: Date = new Date(),
+  day: string,
 ): FirebaseFirestore.DocumentReference {
   return firestore
     .collection('orgs')
     .doc(orgId)
     .collection(CRM_EMAIL_USAGE_COLLECTION)
-    .doc(crmEmailUsageDayKey(now))
+    .doc(day)
+}
+
+/** Today's counter document — {@link crmEmailUsageRefForDay} keyed by `now`. */
+export function crmEmailUsageRef(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  now: Date = new Date(),
+): FirebaseFirestore.DocumentReference {
+  return crmEmailUsageRefForDay(firestore, orgId, crmEmailUsageDayKey(now))
 }
 
 /**
- * How many one-to-one emails the org has sent today, for the cap.
+ * The counter a day-document holds, clamped.
  *
  * A malformed or absent counter reads as ZERO SENT, which is the permissive
  * direction — deliberately, and the same clamp `checkApiRequestQuota`'s
  * reader applies: a counter that cannot be read must not refuse a rep who
  * has sent nothing, and the cap is a pace rather than a cost.
  */
-export async function crmEmailsSentToday(
-  firestore: FirebaseFirestore.Firestore,
-  orgId: string,
-  now: Date = new Date(),
-): Promise<number> {
-  const snapshot = await crmEmailUsageRef(firestore, orgId, now).get()
+function crmEmailCount(snapshot: { get(field: string): unknown }): number {
   const value = Number(snapshot.get('count') ?? 0)
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
 }
 
 /**
- * One delivered one-to-one email, onto today's counter (AGL-2611).
- *
- * `FieldValue.increment` under `{ merge: true }`, exactly as `recordApiRequest`
- * writes the API counter: no read-then-write, so two reps sending in the
- * same second both count, and a day-doc that does not exist yet is conjured
- * by the first send. `day` is stored beside the count so the document says
- * what it is when read back off a backup.
- *
- * **Never throws.** The message has already left when this runs — the send
- * route reads the counter and refuses BEFORE sending, and records AFTER —
- * so a counter write that fails must not turn a delivered email into an
- * error for the rep, the posture `recordEmailSends` takes for the cost
- * meter this send also lands on. Undercounting by one on a failed write is
- * the permissive direction for a pace cap, and it is logged.
+ * How many one-to-one emails the org has sent today, for a meter — never
+ * for the cap, which {@link reserveCrmEmailSend} judges inside the
+ * transaction that also takes the slot.
  */
-export async function recordCrmEmailSend(
+export async function crmEmailsSentToday(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
-  count = 1,
   now: Date = new Date(),
-): Promise<void> {
-  const sends = Math.floor(Number(count))
-  if (!orgId || !Number.isFinite(sends) || sends <= 0) return
-  try {
-    await crmEmailUsageRef(firestore, orgId, now).set(
-      {
-        count: FieldValue.increment(sends),
-        day: crmEmailUsageDayKey(now),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
+): Promise<number> {
+  return crmEmailCount(await crmEmailUsageRef(firestore, orgId, now).get())
+}
+
+/** One slot on one day's counter, held from the reservation to the send. */
+export interface CrmEmailSendReservation {
+  orgId: string
+  /**
+   * The UTC day the slot was taken on, so a release after midnight gives
+   * the slot back to the day that lent it rather than to the new day.
+   */
+  day: string
+}
+
+export type ReserveCrmEmailSendResult =
+  | { ok: true; reservation: CrmEmailSendReservation; quota: CrmEmailQuotaResult }
+  | { ok: false; quota: CrmEmailQuotaResult }
+
+/**
+ * Claims ONE one-to-one send against today's cap, ATOMICALLY (AGL-2645).
+ *
+ * The counter used to be read before the send and incremented after
+ * delivery, so two reps sending in the same window both passed the same
+ * reading and both sent — `CRM_EMAIL_SENDS_PER_MINUTE` past the cap per
+ * sender, in exactly the conditions the cap exists for. **A read-then-write
+ * cap is not a cap**, the lesson `reserveCampaignEmailSends` learned for
+ * campaigns; this is the same shape on the day counter.
+ *
+ * The transaction reads the counter, judges it with `checkCrmEmailQuota` —
+ * the real plan table, `UNLIMITED` on Enterprise, zero on a tier with no
+ * suite — and writes an ABSOLUTE value derived from that read, deliberately
+ * not `FieldValue.increment`. Firestore aborts and re-runs the callback
+ * when a document the transaction read has moved, so a second sender that
+ * starts inside the first one's window re-reads the raised figure and is
+ * refused. An increment would be atomic on the number and useless for the
+ * decision, because the decision is made from a value the write never
+ * proves it still held.
+ *
+ * A refused reservation writes NOTHING. A taken one is the count the cap
+ * enforces and the billing page shows, from the moment it is taken: a send
+ * the provider then refuses hands the slot back through
+ * {@link releaseCrmEmailSend}, and a process that dies between the two
+ * leaves the org one send short for the rest of the UTC day — conservative
+ * in the direction a cap cares about, and healed at midnight, because each
+ * day is its own document.
+ */
+export async function reserveCrmEmailSend(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  org: Partial<AglynOrgBilling> | null | undefined,
+  now: Date = new Date(),
+): Promise<ReserveCrmEmailSendResult> {
+  const day = crmEmailUsageDayKey(now)
+  const ref = crmEmailUsageRefForDay(firestore, orgId, day)
+  return firestore.runTransaction(async (tx) => {
+    const quota = checkCrmEmailQuota(org, crmEmailCount(await tx.get(ref)), now)
+    if (!quota.allowed) return { ok: false, quota }
+    tx.set(
+      ref,
+      { count: quota.used + 1, day, updatedAt: FieldValue.serverTimestamp() },
       { merge: true },
     )
+    return { ok: true, reservation: { orgId, day }, quota }
+  })
+}
+
+/**
+ * Gives back a slot the provider did not use.
+ *
+ * Also a transaction, and also an absolute write from its own read: a
+ * decrement computed from a stale figure would undo a slot another rep took
+ * in the meantime, which is the same defect one direction over. Never
+ * drives the counter below zero.
+ *
+ * **Never throws.** This runs on the failure path of a send that was
+ * already refused, and the answer the rep gets is the provider's refusal; a
+ * bookkeeping failure on top of it is logged, and its cost is one slot the
+ * org does not get back until midnight — the safe direction.
+ */
+export async function releaseCrmEmailSend(
+  firestore: FirebaseFirestore.Firestore,
+  reservation: CrmEmailSendReservation | null | undefined,
+): Promise<void> {
+  if (!reservation?.orgId || !reservation.day) return
+  const ref = crmEmailUsageRefForDay(firestore, reservation.orgId, reservation.day)
+  try {
+    await firestore.runTransaction(async (tx) => {
+      const used = crmEmailCount(await tx.get(ref))
+      tx.set(
+        ref,
+        {
+          count: Math.max(0, used - 1),
+          day: reservation.day,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    })
   } catch (error) {
-    console.error('crm email counter write failed', error)
+    console.error('crm email reservation release failed', error)
   }
 }
