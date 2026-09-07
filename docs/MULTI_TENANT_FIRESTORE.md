@@ -6,7 +6,7 @@ Author: Aglyn LLC, 2026-07-09
 > **2026-07-09 update:** the product is pre-launch, so the dual-write
 > machinery in §10 was dropped in favor of a direct cutover. Implemented:
 > org model + APIs (AGL-233), membership/invites (AGL-234), rules v2
-> (AGL-235), the `backfill-orgs.mjs` one-shot script, and the org switcher
+> (AGL-235), the one-shot tenants-to-orgs backfill, and the org switcher
 > (AGL-236 partial; orgs are the permanent model — the release flag that
 > briefly gated the workspace UX was removed). Host content
 > authorization uses a role-aware `memberRoles` projection on the host doc
