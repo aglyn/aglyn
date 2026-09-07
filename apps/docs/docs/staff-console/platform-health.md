@@ -104,13 +104,20 @@ These exist to make one decision answerable: **can this directive be flipped fro
 report-only to enforcing?** A directive with zero rows across a window of real traffic
 is one that can be flipped. A directive with rows is a list of what would break.
 
-Two things to read carefully:
+Three things to read carefully:
 
 - **Zero rows is a finding, not an absence.** It is the evidence a flip needs — provided
   the window is long enough to have seen real traffic through it.
 - **A truncated window is not evidence of anything.** If the read hit its row cap the
   page says so, and the missing rows are the oldest days. Narrow the window rather than
   concluding a directive is clean.
+- **An enforced row whose blocked origin is `inline` is first-party code.** The
+  collector drops a browser extension's injected script by its source file before
+  anything is counted, so what remains under `inline` is one of the console's own
+  inline scripts rendered without the request nonce — the enforcing policy refuses it
+  while the library beside it loads. That is what the console's advertising boot shipped
+  as, and why no conversion fired. The blocked alert says how many of the enforced
+  violations are inline; treat any number above zero as a defect to fix, not noise.
 
 Unlike the health probes, this data is staff-only rather than public: the rows carry
 customer site hostnames and page paths.

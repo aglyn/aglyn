@@ -629,6 +629,20 @@ your own.
 | `GA4_API_SECRET` | Optional | Runtime | The measurement-protocol API secret for that stream. Both are needed; with either missing, every server-side hit is dropped silently — no log, no throw. Note this path has no consent gate, and its custom dimensions must be registered in GA4 or the events land unreportable. |
 | `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD` | Development only | Build | Re-enables analytics on a non-production build. A build using it stamps `traffic_type: internal` on every hit unconditionally, so it cannot be used to collect real traffic. Leave unset. |
 
+**Inline vendor boots need the CSP nonce.** Every advertising tag the console
+mounts is a pair — an inline boot that declares the consent state and configures
+the account, then the vendor's library — and the console enforces a nonce'd
+`script-src`. The library has a `src` the policy allows; the boot has nothing but
+the nonce, and Next stamps one onto a `<Script>` only when it is handed one,
+because the pairs mount after hydration where its automatic stamping never
+reaches. So the root layout reads the per-request nonce the middleware minted
+and passes it down to the mount, which stamps both halves of every pair. Keep
+that path intact if you customize the layout: a mount that drops it loads every
+library and runs no boot, so the account is never configured, no conversion ever
+fires, and the only trace is a CSP violation — on the
+[health board](../staff-console/platform-health.md#csp-violations) as an
+enforced `script-src-elem` row whose blocked origin is `inline`.
+
 `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` is different in kind — it belongs to your
 own Firebase project. See [Firebase client config](#firebase-client).
 
