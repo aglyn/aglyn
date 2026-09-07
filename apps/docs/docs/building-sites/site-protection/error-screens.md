@@ -49,7 +49,10 @@ Assigning a designed screen is still the better answer for any site that cares h
 moment looks. The fallback is the floor beneath it.
 
 Assigned error screens are automatically kept out of search results, so a 404 page can't
-itself turn up in a search.
+itself turn up in a search. A missing address also answers with a real `404` status and a
+server-rendered page title — your 404 screen's SEO title when you've set one, otherwise
+*Page not found* followed by your site's title — so the browser tab and search engines
+know what the page is before any script runs.
 
 ## Error screens are free
 
