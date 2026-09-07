@@ -225,7 +225,7 @@ with no refund shows one figure and no caption. Reconciling against a Stripe pay
 means reading the caption, not assuming the big number is what was charged.
 
 Clicking a row opens the order's dialog. When the order carries the buyer's address,
-the dialog offers **View customer in CRM** — the [CRM's](../../content-and-data/contacts/overview.md)
+the dialog offers **View customer in CRM** — the [CRM's](../../content-and-data/crm/overview.md)
 Contacts list asked for that address, which moves straight on to the person's record.
 The CRM links back: **Open order** on a captured entry of a contact's timeline opens
 this list with that order's dialog already open (`?order={id}`), reading the order on

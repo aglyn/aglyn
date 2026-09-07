@@ -89,7 +89,7 @@ and appear only where that plugin is enabled for your workspace (they're inserte
 why — enable the plugin under **Organization → Plugins**.
 
 **CRM** is the exception: it's a release-flagged feature still
-[rolling out](../content-and-data/contacts/overview.md), so there is no switch for it
+[rolling out](../content-and-data/crm/overview.md), so there is no switch for it
 under **Organization → Plugins** and looking for one is a dead end. It appears on its
 own once the rollout reaches your workspace.
 :::
@@ -225,7 +225,7 @@ sends you one notification and one email listing your overdue and due-today task
 the leads nobody has worked, across every workspace you belong to. Switch it off to stop
 both. It is account-wide, like the category mutes; muting **Forms & bookings** silences
 the digest's console notification but not its email. What it counts, and when, is in
-[Tasks & follow-ups](../content-and-data/contacts/tasks.md#the-daily-digest).
+[Tasks & follow-ups](../content-and-data/crm/tasks.md#the-daily-digest).
 
 ### Alerts on this device
 

@@ -186,7 +186,7 @@ warning you against the new number straight away.
 ## CRM records {#crm-records}
 
 :::caution Rolling out
-The **[CRM](../../content-and-data/contacts/overview.md)** in the console isn't
+The **[CRM](../../content-and-data/crm/overview.md)** in the console isn't
 available yet. Contacts are still captured from your sites and readable over the
 [REST API](/api/resources/contacts), and the Free band below still applies — but while
 the page is unavailable, **paid records overage is not billed**. The rates below are
@@ -235,7 +235,7 @@ whatever the plan.
 
 A **one-to-one email** is a message a teammate writes to one person from a CRM record
 — **Send email** on a contact's, a lead's or a deal's page, described under
-[Activities & the timeline](../../content-and-data/contacts/activities.md#sending-an-email)
+[Activities & the timeline](../../content-and-data/crm/activities.md#sending-an-email)
 — as against a [campaign](../../marketing-and-automation/email-campaigns/overview.md),
 which is one send over an audience, or the transactional mail your site sends on its
 own. It is capped **per organization per day (UTC)**: Free 0, Starter 50, Pro 150,

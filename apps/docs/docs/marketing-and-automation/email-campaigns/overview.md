@@ -6,7 +6,7 @@ description: Campaigns to audiences built from your contacts. Campaign email sta
 
 # Email Campaigns
 
-**Email campaigns** let you reach the people in your [CRM](../../content-and-data/contacts/overview.md).
+**Email campaigns** let you reach the people in your [CRM](../../content-and-data/crm/overview.md).
 Build an audience, compose a send, and Aglyn handles delivery, caps, and unsubscribes.
 
 ```mermaid
@@ -36,9 +36,9 @@ two are treated differently.
 1. **Create a campaign** on **Marketing → Campaigns** — a name, the dates it runs
    between, and the lists it is aimed at.
 2. Open it and **write an email** inside it. Pick the audience for that email — leads,
-   site members, [segments](../../content-and-data/contacts/overview.md#segments), or an
+   site members, [segments](../../content-and-data/crm/overview.md#segments), or an
    email list. An audience built from a rule can also reuse a
-   [saved Contacts view](../../content-and-data/contacts/views.md#segments-and-views)
+   [saved Contacts view](../../content-and-data/crm/views.md#segments-and-views)
    beside a segment.
 3. Send — subject to your plan's **send cap**.
 
@@ -77,7 +77,7 @@ You set it from the record itself, never from the campaign:
 - **A screen** — open it from Screens and pick its campaigns on the **Campaigns** card.
 - **A form** — open it from Forms and pick its campaigns under **Details**.
 - **A contact** — open the contact under **CRM → Contacts** and pick its campaigns on
-  the **Relationship** card of [their page](../../content-and-data/contacts/contact-record.md#the-record-page).
+  the **Relationship** card of [their page](../../content-and-data/crm/contact-record.md#the-record-page).
 
 Each of them can be in **more than one campaign**, because the same landing page and the
 same signup form are usually re-run for the next push. Clearing every campaign takes the
@@ -605,7 +605,7 @@ minutes. Pick **From a rule** when you create the list, then say who it draws fr
   everyone whose plan was never recorded (use *is not set* for that).
 - **Engaged with a campaign within (days)** — contacts who opened or clicked one
   of *your* campaigns in the last so-many days, read from the record's
-  [**Last engaged**](../../content-and-data/contacts/contact-record.md#last-engaged)
+  [**Last engaged**](../../content-and-data/crm/contact-record.md#last-engaged)
   stamp. Contacts only, and a contact never stamped is left out. This is not the
   **Email engagement** filters further down the form: those count every message
   this workspace has sent the address, receipts included; this counts your
@@ -703,10 +703,10 @@ the reader count.
 
 The report answers for the campaign; the CRM answers for the person. A
 contact's page under **CRM › Contacts** lists every campaign email they were
-sent on their [timeline](../../content-and-data/contacts/activities.md#campaign-email),
+sent on their [timeline](../../content-and-data/crm/activities.md#campaign-email),
 each as one line — *Spring sale · sent · delivered · opened ×2 · clicked* —
 linking back to that email's report, and the page heading says when they
-[last engaged](../../content-and-data/contacts/contact-record.md#last-engaged)
+[last engaged](../../content-and-data/crm/contact-record.md#last-engaged)
 with anything you sent. The contacts list offers the same as an optional
 column, and a [list built from a rule](#lists-built-from-a-rule) can select on
 it, so "everyone who opened something of ours in the last 90 days" is an
@@ -949,6 +949,6 @@ sending reputation, so the confirmation names the reason before you do it.
 
 ## Related
 
-- [CRM](../../content-and-data/contacts/overview.md)
+- [CRM](../../content-and-data/crm/overview.md)
 - [Forms & lead capture](../../content-and-data/forms/overview.md)
 - [Marketing overlays](../marketing-overlays/overview.md) (email capture popups)

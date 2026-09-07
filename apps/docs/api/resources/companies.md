@@ -18,7 +18,7 @@ domain already held, and offers `?domain=` as the lookup a sync starts with.
 
 :::note The API is ahead of the console
 These endpoints are live. The console's **CRM** pages are still
-[rolling out](/content-and-data/contacts/overview), so until they open this API is the
+[rolling out](/content-and-data/crm/overview), so until they open this API is the
 way to work with companies, deals and tasks.
 :::
 
