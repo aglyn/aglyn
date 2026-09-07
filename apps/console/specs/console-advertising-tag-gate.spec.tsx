@@ -135,10 +135,10 @@ function executeMountedBoots(): void {
   }
 }
 
-async function renderGate() {
+async function renderGate(nonce?: string) {
   let result!: ReturnType<typeof render>
   await act(async () => {
-    result = render(<PlatformAdvertisingTags />)
+    result = render(<PlatformAdvertisingTags nonce={nonce} />)
   })
   return result
 }
@@ -268,6 +268,32 @@ describe("the console's advertising-tag gate", () => {
       expect(boots).toContain(`fbq('init', '${PIXEL_ID}')`)
       expect(boots).toContain(`gtag('config', '${ADS_ID}')`)
       expect(boots).toContain(`window._linkedin_partner_id='${PARTNER_ID}'`)
+    })
+
+    it('stamps the request nonce onto every boot and library it mounts', async () => {
+      // The console enforces a nonce'd `script-src`, and every boot here is
+      // inline (AGL-2640). Measured on production: the Google Ads boot
+      // rendered with no nonce and was refused, the library beside it loaded,
+      // and no conversion ever fired — silently, because the enforcing header
+      // is the one that acted. The nonce reaches this component as a prop
+      // from the root layout; this proves it reaches the elements, the layer
+      // the browser reads — the three vendor pairs AND the container pair.
+      const nonce = 'c0ffee0123456789'
+      storePlatformConsent({
+        status: 'accepted',
+        country: 'US',
+        advertising: true,
+      })
+      await renderGate(nonce)
+
+      // Non-emptiness first, then every element — a nonce reaching only the
+      // shared mount would leave the container's inline boot refused.
+      const scripts = adScripts()
+      expect(scripts).toHaveLength(8)
+      expect(vendorScripts('gtm')).toHaveLength(2)
+      for (const element of scripts) {
+        expect(element.getAttribute('nonce')).toBe(nonce)
+      }
     })
 
     it('grants all three Consent Mode v2 advertising signals to the Ads tag', async () => {

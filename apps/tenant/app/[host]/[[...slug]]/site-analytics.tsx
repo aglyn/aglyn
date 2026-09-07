@@ -267,11 +267,30 @@ export interface SiteAnalyticsProps {
   host?: (VisitorConsentHost & { $id?: string }) | null
   /** Per-screen attribution for the beacon (AGL-151). */
   screenId?: string
+  /**
+   * The request's CSP nonce, stamped onto every inline boot and library this
+   * component mounts — the GA pair, the container pair and the advertising
+   * pairs (AGL-2640).
+   *
+   * A prop rather than a read, because a client component has no request to
+   * read and because Next's automatic stamping never reaches these elements:
+   * they mount after hydration from the client head manager, which carries no
+   * nonce. The console learned this the expensive way — its enforcing policy
+   * refused the inline boots while the libraries beside them loaded.
+   *
+   * The tenant hands nothing down today. It sends no `script-src` at all
+   * (AGL-1228: a per-request nonce cannot match ISR-cached bytes), so there is
+   * no nonce to hand and nothing that refuses an unnonced script. The prop is
+   * the seam for the day that changes: the page passes a value here and every
+   * element below is covered, with no second retrofit of this file.
+   */
+  nonce?: string
 }
 
 export default function SiteAnalytics({
   host,
   screenId,
+  nonce,
 }: SiteAnalyticsProps): ReactElement {
   const hostId = host?.$id
   // Strict format check — the id lands inside an inline script (AGL-138).
@@ -471,7 +490,7 @@ export default function SiteAnalytics({
       */}
       {gaMeasurementId && analyticsAllowed && analyticsMayEmit() ? (
         <>
-          <Script id="ga-init" strategy="afterInteractive">
+          <Script id="ga-init" strategy="afterInteractive" nonce={nonce}>
             {'window.dataLayer=window.dataLayer||[];' +
               'function gtag(){dataLayer.push(arguments);}' +
               (consentRequired
@@ -507,6 +526,7 @@ export default function SiteAnalytics({
           <Script
             id="ga-src"
             strategy="afterInteractive"
+            nonce={nonce}
             src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
           />
         </>
@@ -541,7 +561,7 @@ export default function SiteAnalytics({
       */}
       {gtmContainerId && analyticsAllowed && analyticsMayEmit() ? (
         <>
-          <Script id="gtm-init" strategy="afterInteractive">
+          <Script id="gtm-init" strategy="afterInteractive" nonce={nonce}>
             {'window.dataLayer=window.dataLayer||[];' +
               'function gtag(){dataLayer.push(arguments);}' +
               (consentRequired
@@ -554,6 +574,7 @@ export default function SiteAnalytics({
           <Script
             id="gtm-src"
             strategy="afterInteractive"
+            nonce={nonce}
             src={`https://www.googletagmanager.com/gtm.js?id=${gtmContainerId}`}
           />
         </>
@@ -590,6 +611,7 @@ export default function SiteAnalytics({
         host={host}
         stored={consent.stored}
         ready={consent.ready}
+        nonce={nonce}
       />
       {/* Visitor consent surfaces (AGL-1498): only when the machinery is
           live — the tool is active AND the site uses a gated feature. A

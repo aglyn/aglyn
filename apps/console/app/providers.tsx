@@ -44,8 +44,20 @@ import ConsolePluginsGate from '../components/console-plugins-gate.component'
  * then firebase init, loading gate, confirmation dialogs, snackbars, and the
  * host-id context. Wraps every app route under the root layout.
  */
+/** The props the root layout hands the client stack. */
+interface ProvidersProps {
+  children?: ReactNode
+  /**
+   * The request's CSP nonce, read by the root layout from the header the
+   * middleware set. Threaded to the advertising mount and nowhere else: it is
+   * the one place this stack renders an inline script of its own after
+   * hydration, which is the one shape Next's automatic nonce never reaches.
+   */
+  nonce?: string
+}
+
 const ThemeStack = withThemeCssVarProvider(
-  ({ children }: { children?: ReactNode }) => (
+  ({ children, nonce }: ProvidersProps) => (
     <FirebaseAppLayout>
       {/* White-label chrome effects (White-Label Phase 2): favicon + MUI
           primary color for a white-label-entitled org. Inside FirebaseAppLayout
@@ -86,8 +98,12 @@ const ThemeStack = withThemeCssVarProvider(
           It renders nothing at all until the visitor's record is resolved, and
           nothing ever unless that record grants the category. The enforcement
           is structural: an ungranted visitor gets no `<Script>`, so no request
-          reaches a vendor — not loaded and then suppressed. */}
-      <PlatformAdvertisingTags />
+          reaches a vendor — not loaded and then suppressed.
+
+          The nonce rides down from the root layout: every boot in there is
+          inline, and the console's `script-src` refuses an inline script
+          without one (AGL-2640). */}
+      <PlatformAdvertisingTags nonce={nonce} />
       <LoadingLayoutAppComponent>
         <ConfirmationProviderComponent>
           <SnackbarProvider>
@@ -102,6 +118,6 @@ const ThemeStack = withThemeCssVarProvider(
   { theme: { light: consoleThemeLight, dark: consoleThemeDark } },
 )
 
-export default function Providers({ children }: { children?: ReactNode }) {
-  return <ThemeStack>{children}</ThemeStack>
+export default function Providers({ children, nonce }: ProvidersProps) {
+  return <ThemeStack nonce={nonce}>{children}</ThemeStack>
 }
