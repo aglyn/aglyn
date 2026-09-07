@@ -92,6 +92,61 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-07 — The three `a1e8aaaca` rates are ratified: extra site $8 above Starter, dataset storage $0.36, CRM records $0.40 on Advanced and Agency
+
+- **Decided by:** the account owner, 2026-09-07, asked whether to keep the three rates `a1e8aaaca` shipped on 2026-08-30 without an entry or to revert them to the 2026-08-18 lock's figures. Keep them; the Drive Pricing Decision Log entry of the same date carries the line-margin arithmetic behind each.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING[*].extraHostMonthlyUsd` (10 · 8 · 5 · 8 · 8 · 8, Starter → Agency), `extraDataGbMonthlyUsd` (0.36 on every paid plan) and `extraContactsUsdPer1k` (1 · 0.75 · 0.5 · 0.4 · 0.4 · 0.4) in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`, set by `a1e8aaaca` and `82c10f0f7`; `npm run check:pricing-drift` 92/92 in sync at 15:30Z, Stripe live `aglyn_{scale,advanced,agency}_extra_host` at $8; `tools/scripts/setup-stripe.mjs` and `apps/console/specs/published-pricing-table-parity.spec.ts` brought onto the same figures; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2652.
+
+**Three charged rates are confirmed where the code and Stripe already have
+them.** Nothing moves in code or in Stripe; what moves is the record, and the
+one surface that still said otherwise — the extra-site row of
+`aglyn.com/pricing`, which the reconciliation note below had left at $5 · $4
+· $3 as the single row where the page and the code disagreed.
+
+| Rate | Lock (2026-08-18) | Ratified |
+|---|---|---|
+| Extra site, per month (Starter → Agency) | $10 · $8 · $5 · $5 · $4 · $3 | $10 · $8 · $5 · **$8 · $8 · $8** |
+| Extra dataset storage, per GB-month | $0.25 | **$0.36** |
+| CRM records, per 1,000 over the band (Starter → Agency) | $1 · $0.75 · $0.50 · $0.40 · $0.25 · — | $1 · $0.75 · $0.50 · $0.40 · **$0.40 · $0.40** |
+
+### Why each rate is where it is
+
+- **The extra-site ladder stops descending because it was inverted against
+  its own cost.** Storage and form submissions are per-host bands, so buying
+  a host adds that tier's bands to the org's included allowance; under a
+  ladder that descends with the tier, the tiers granting the most per host
+  charged the least for one. Business stays $5 because it grants the
+  smallest bands of the four.
+- **$0.36 is the 50% line margin on dataset storage** against the $0.18 per
+  GB-month Firestore stored-data cost; $0.25 carried 28%, close enough to the
+  infrastructure pass-through's 23% that a retail add-on and a cost
+  pass-through read as the same kind of number. This is the dataset line;
+  the $0.0338 metered storage rate is untouched.
+- **$0.40 is the floor of the records ladder, not another step down.**
+  Against `perContactMonth` of $0.20 per 1,000, $0.25 was a 20% line margin
+  on a retail price. Agency carries a rate because its band became finite
+  in `82c10f0f7`, and a finite band with no rate is usage past a bound that
+  is silently free — the 2026-08-21 rule run in reverse.
+
+### What this changes, and what it does not
+
+- **Stripe: nothing.** The live price objects have charged $8 since
+  2026-08-31 and the drift check has said so on every run. `setup-stripe.mjs`
+  still carried $5 / $4 / $3 and Agency $799 / $649, and is corrected in the
+  same commit so a re-run cannot re-mint retired prices.
+- **`aglyn.com/pricing`:** the extra-site cells go $5 · $4 · $3 → $8 · $8 ·
+  $8 on Scale, Advanced and Agency. The parity spec's was/now assertion for
+  that row collapses into one `toEqual`; `docs/PRICING_SURFACES.md` records
+  the republish.
+- **Existing customers:** no stored price changes hands. Live Stripe holds
+  no Scale, Advanced or Agency subscription carrying an extra-host item; the
+  dataset-storage overage has billed at $0.36 since the rollup first read
+  the constant, and the records overage is still withheld from invoices
+  while `release_contacts` is off.
+
+---
+
 ## 2026-09-07 — Reconciliation note: `aglyn.com/pricing` republished to the bands the code enforces (not a decision)
 
 - **Decided by:** nobody — a record; the session that republished the page, under the 2026-09-05 rule that the code is authoritative where an older figure disagrees. No charged price moves and nothing here is a new decision.
