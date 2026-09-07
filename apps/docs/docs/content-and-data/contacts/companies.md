@@ -76,7 +76,9 @@ The link can be made from either side. On a contact's own page the
 **Company** field of the Properties card is a picker over the companies your
 site may see — type to search by name or domain, choose one, or type a name
 nobody has filed yet and choose **Create** to make the company on the spot.
-Clearing the field unlinks the person. A contact whose record carries a
+A company made this way is a new record like one made from the list: it counts
+against the records band, and on Free it is refused at the band with the same
+message. Clearing the field unlinks the person. A contact whose record carries a
 company **name** but no link — from an import, or from before the picker
 existed — is offered that name as the company to link or create. The
 contacts table's [bulk bar](./bulk-actions.md) has **Set company** for many

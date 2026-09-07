@@ -24,8 +24,53 @@ import {
   type CrmRecordsQuotaResult,
 } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { collection, getCountFromServer } from 'firebase/firestore'
+import { collection, type Firestore, getCountFromServer } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
+
+/**
+ * One aggregate for one counted collection, or `null` when the read was
+ * denied or unavailable — the fallback rule every reader of the band
+ * shares, so a count that could not be taken stands in as nothing rather
+ * than as a zero that clears an alert.
+ */
+async function countCrmCollection(
+  firestore: Firestore,
+  scope: readonly ['orgs', string],
+  name: string,
+): Promise<number | null> {
+  try {
+    const snapshot = await getCountFromServer(
+      collection(firestore, scope[0], scope[1], name),
+    )
+    return snapshot.data().count
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The band's verdict, measured ONCE and now — for a write that happens on
+ * a click rather than inside a drawer that stays open (AGL-2644).
+ *
+ * The company picker's "Create …" row lives on every contact page and in
+ * the bulk bar, mounted long before anyone types a new name, so a hook that
+ * read the three aggregates on mount would charge every page view for a
+ * create that mostly never comes. This is the same three reads and the same
+ * fallback as {@link useCrmRecordsQuota}, taken at the moment they decide
+ * something. A read that failed counts as nothing, which is the permissive
+ * direction: a Free org is refused only by a band that was measured full.
+ */
+export async function readCrmRecordsQuota(
+  firestore: Firestore,
+  scope: readonly ['orgs', string],
+  org: Partial<AglynOrgBilling> | null | undefined,
+): Promise<CrmRecordsQuotaResult> {
+  const counts = await Promise.all(
+    CRM_RECORD_COLLECTIONS.map((name) => countCrmCollection(firestore, scope, name)),
+  )
+  const crmRecordsCount = counts.reduce<number>((sum, count) => sum + (count ?? 0), 0)
+  return checkCrmRecordsQuota(org, crmRecordsCount)
+}
 
 export interface CrmRecordsQuotaState {
   /** The contacts aggregate, or `null` while pending or denied. */
@@ -88,14 +133,9 @@ export function useCrmRecordsQuota(
           : { ...current, [name]: value },
       )
     for (const name of CRM_RECORD_COLLECTIONS) {
-      void getCountFromServer(collection(firestore, scope[0], scope[1], name))
-        .then((snapshot) => {
-          if (active) record(name, snapshot.data().count)
-        })
-        .catch(() => {
-          // Denied or unavailable: `null`, and the fallback stands in.
-          if (active) record(name, null)
-        })
+      void countCrmCollection(firestore, scope, name).then((count) => {
+        if (active) record(name, count)
+      })
     }
     return () => {
       active = false
