@@ -72,10 +72,20 @@ it deliberately does not, is in the docblocks:
 | --- | --- | --- |
 | `passwordSignIn` | Identity Platform refuses a sign-in for an address that cannot exist — so the endpoint is reachable, the public key and App Check are accepted, and the **password provider is still enabled**. With a probe identity configured, it also signs in for real | the password provider is switched off (`provider-not-configured`) — which locks out every customer who uses an email and a password — the key or App Check is rejected, nothing answers, the absent account is *admitted*, or the configured probe identity cannot sign in |
 | `passwordReset` | the reset link is built on an allowlisted console origin, email is configured, and the redemption endpoint refuses an invalid code | the console URL is malformed or non-TLS, the resolver starts honoring request-supplied origins, email transport is unconfigured, or `accounts:resetPassword` stops answering |
-| `emailVerification` | the link mint path answers, the AGL-1112 rewrite still lands on a console handler URL carrying the code, and redemption refuses an invalid code | the mint answers anything but `auth/user-not-found` for an unclaimable address, the rewrite drifts off our origin or drops the code, or `accounts:update` stops answering |
+| `emailVerification` | the link mint path answers, the AGL-1112 rewrite still lands on a console handler URL carrying the code, redemption refuses an invalid code, and **the auto-send cooldown admits a first arrival** — asked on a uid nothing has seen before, which is the question a brand-new account asks | the mint answers anything but `auth/user-not-found` for an unclaimable address, the rewrite drifts off our origin or drops the code, `accounts:update` stops answering, or the cooldown refuses a uid it has never seen (`auto-send-suppressed`) or cannot be asked at all (`auto-send-gate-unavailable`) |
 | `googleOauth` | Identity Platform builds a Google authorization URL for the console origin, carrying a client id | the provider is disabled or its client id was removed (`OPERATION_NOT_ALLOWED`), the console origin fell off the authorized-domain list (`INVALID_CONTINUE_URI`), App Check refuses, or the web API key is rejected |
 | `sso` | the per-org GCIP tenant pools list, and a bounded sample still carries an enabled SAML or OIDC provider | the tenant manager stops answering — which locks out every enterprise customer at once — or a sampled pool's provider config was deleted or disabled |
 | `passkey` | the console origin resolves to a relying-party context and a discoverable-credential challenge can be issued | the deployment's workspace domain is wrong, which `400`s every registration and every sign-in and is otherwise invisible |
+
+The `sendGate` arm is the only clause here that is OURS rather than a
+provider's, and it is the only one whose refusal is invisible (AGL-2668). For
+three days in September 2026 every clause above was green while no new account
+received a verification mail: the cooldown in front of the send refused first
+arrivals, and a suppressed send is answered `200 {alreadySent: true}`, which
+renders the ordinary "we sent a verification link" screen. No error, no failed
+request, no delivery row to be missing from. The uid must be fresh on every
+probe — reused, it asks whether a REVISIT may send, which is the case the
+cooldown exists to refuse, and would read green precisely when the door is shut.
 
 Every probe is a question whose answer is a known refusal: the mint asks about
 an address at `.invalid`, a TLD RFC 2606 reserves so it can never be
@@ -104,6 +114,12 @@ names a customer. Every verdict is computed from booleans and counts in
 - **A full round trip through a redeemed code.** Same reason: following a real
   verification link end to end needs an account whose address we control.
 - **A customer's own identity provider.** Theirs, not ours to probe.
+- **That a verification mail was DELIVERED.** `sendGate` asserts the cooldown
+  lets the send be MADE; everything after that — the transport, the provider,
+  the inbox — is unwatched by this door. The check that would see a failure
+  downstream of the gate is an outcome one: of the accounts created in a
+  trailing window, how many carry a verification delivery event. Tracked as the
+  open half of AGL-2668.
 
 **If a probe identity is ever added** it is a decision about production, not a
 side effect of adding a check, and it is not made here. It would need: a

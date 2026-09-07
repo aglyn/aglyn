@@ -125,11 +125,36 @@ describe('the routing verdict', () => {
     expect(check.faults).toEqual({ 'consent-unreadable': 1 })
   })
 
-  it('goes red when a lead form declares no consent field at all', () => {
-    const undeclared = { ...WIRED, consentFieldName: undefined }
+  it('goes red when NOTHING on a lead form records an opt-in', () => {
+    // Neither a declared field nor one the submit route recognizes by name.
+    const undeclared = {
+      ...WIRED,
+      consentFieldName: undefined,
+      fieldNames: ['name', 'email', 'message'],
+    }
     const check = funnelRoutingHealth([undeclared, WIRED, WIRED], 3, 1)
     expect(check.ok).toBe(false)
     expect(check.faults).toEqual({ 'consent-undeclared': 1 })
+  })
+
+  /**
+   * The FALSE red this check used to produce (AGL-2669).
+   *
+   * Consent is recorded from the declared field or, when a form declares
+   * none, from an undeclared field the submit route recognizes by name —
+   * `formFieldsCaptureConsent`, which is also what the publish gate refuses
+   * on. This check demanded a declared name, so it called a form the platform
+   * itself publishes and routes correctly `consent-undeclared`, and took the
+   * whole funnel red with it.
+   */
+  it('stays green when a form declares nothing but carries a recognized consent field', () => {
+    const byName = { ...WIRED, consentFieldName: undefined }
+    expect(byName.fieldNames).toContain('marketingOptIn')
+
+    const check = funnelRoutingHealth([byName, WIRED, WIRED], 3, 1)
+
+    expect(check.faults).toEqual({})
+    expect(check.ok).toBe(true)
   })
 
   /** Captured and never contacted: the form belongs to no campaign. */

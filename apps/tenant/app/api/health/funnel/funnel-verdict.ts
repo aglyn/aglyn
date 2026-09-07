@@ -125,7 +125,12 @@ export function funnelIntakeHealth(
  * the incident, not a per-form audit, and the endpoint is public.
  */
 export type FormFault =
-  /** `routing.lead` is on but no field is declared as the opt-in. */
+  /**
+   * `routing.lead` is on and NOTHING on the form records an opt-in — neither
+   * a declared consent field nor one the submit route recognizes by name.
+   * Not "no declared field": a form carrying `marketingOptIn` and declaring
+   * nothing is correctly wired, and the publish gate lets it through.
+   */
   | 'consent-undeclared'
   /**
    * A consent field IS declared and the real reader cannot read it: either
@@ -196,18 +201,35 @@ export function funnelRoutingHealth(
 /**
  * The first thing wrong with one lead-routing form, or null.
  *
- * The consent arm drives `readFormDeclaredConsent` — the function the submit
- * route itself calls — against a ticked value under the declared name,
- * rather than re-deriving what "ticked" means here. A second opinion about
- * the affirmative values would drift from the real one, and would then
- * report healthy about a rule it no longer shares.
+ * Both consent arms are asked through the SHARED contract rather than
+ * re-derived here, because a second opinion drifts from the real one and then
+ * reports about a rule it no longer shares:
+ *
+ *  - whether the form records consent AT ALL is `formFieldsCaptureConsent`,
+ *    the same function `checkFormContract` refuses a publish on and the Leads
+ *    section offers from. Consent comes from the field a form DECLARES or,
+ *    when it declares none, from an undeclared field the submit route
+ *    recognizes by name — so an undeclared form that carries `marketingOptIn`
+ *    is correctly wired, and a check that demanded a declared name would call
+ *    a healthy funnel broken;
+ *  - whether a ticked value under a declared name READS as consent is
+ *    `readFormDeclaredConsent`, the function the submit route itself calls.
+ *
+ * The declared-name arms are conditional for the same reason: a form that
+ * captures consent by recognized name has no declared name to lose, and
+ * `consent-unreadable` is about a declaration that no longer resolves.
  */
 function firstFault(form: FunnelFormFacts): FormFault | null {
   const declared = String(form.consentFieldName ?? '').trim()
-  if (!declared) return 'consent-undeclared'
-  if (!form.fieldNames.includes(declared)) return 'consent-unreadable'
-  if (!Aglyn.readFormDeclaredConsent({ consentFieldName: declared }, { [declared]: 'yes' })) {
-    return 'consent-unreadable'
+  const fields = form.fieldNames.map((fieldName) => ({ fieldName }))
+  if (!Aglyn.formFieldsCaptureConsent(fields, declared)) {
+    return 'consent-undeclared'
+  }
+  if (declared) {
+    if (!form.fieldNames.includes(declared)) return 'consent-unreadable'
+    if (!Aglyn.readFormDeclaredConsent({ consentFieldName: declared }, { [declared]: 'yes' })) {
+      return 'consent-unreadable'
+    }
   }
   if (form.campaignCount <= 0) return 'campaign-unlinked'
   return null
