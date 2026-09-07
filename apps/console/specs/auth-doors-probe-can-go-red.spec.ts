@@ -53,6 +53,7 @@
 
 import {
   AUTH_DOOR_PROBE_ADDRESS,
+  AUTH_DOOR_PROBE_UID_PREFIX,
   classifyIdentityToolkitFailure,
   emailVerificationDoorHealth,
   googleOauthDoorHealth,
@@ -81,6 +82,14 @@ let mockListTenants: () => Promise<{ tenants: { tenantId: string }[] }>
 let mockProviderConfigs: { enabled: boolean }[]
 let mockEmailConfigured: boolean
 let mockAppCheckMints: boolean
+/**
+ * What the auto-send cooldown answers the send-gate probe (AGL-2668).
+ *
+ * A function rather than a value so a test can also make it THROW, which is
+ * the one thing the real cooldown does not do and therefore the one thing the
+ * probe has to be defensive about.
+ */
+let mockAutoSendGate: (uid: string) => Promise<{ allowed: boolean }>
 /** Keyed by Identity Toolkit method, so a route calling the wrong one fails. */
 let mockToolkitReplies: Record<string, { status: number; body: unknown }>
 let mockRequestedMethods: string[]
@@ -103,6 +112,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // `_lib/passkeys` reaches for this at import time; the probe never calls it
   // because it stores no challenge.
   consumeOnce: jest.fn(),
+  consumeVerifyEmailAutoSend: (uid: string) => mockAutoSendGate(uid),
 }))
 
 jest.mock('firebase-admin/app', () => ({
@@ -169,6 +179,7 @@ beforeEach(() => {
   mockProviderConfigs = [{ enabled: true }]
   mockEmailConfigured = true
   mockAppCheckMints = true
+  mockAutoSendGate = async () => ({ allowed: true })
   mockToolkitReplies = healthyReplies()
   mockRequestedMethods = []
   ;(global as unknown as { fetch: unknown }).fetch = jest.fn(
@@ -495,6 +506,51 @@ describe('email-verification goes red', () => {
       code: 'redeem-api-key-rejected',
     })
   })
+
+  // The whole point of AGL-2668: the outage this door slept through is one
+  // where every clause above passes and no mail is sent anyway.
+  it('when the cooldown refuses to let a brand-new account send', async () => {
+    mockAutoSendGate = async () => ({ allowed: false })
+    const { status, body } = await invoke()
+    expect(status).toBe(503)
+    expect(doorOf(body, 'emailVerification')).toMatchObject({
+      ok: false,
+      code: 'auto-send-suppressed',
+    })
+  })
+
+  it('when the cooldown cannot be asked at all', async () => {
+    mockAutoSendGate = async () => {
+      throw new Error('gate is broken')
+    }
+    const { status, body } = await invoke()
+    expect(status).toBe(503)
+    expect(doorOf(body, 'emailVerification')).toMatchObject({
+      ok: false,
+      code: 'auto-send-gate-unavailable',
+    })
+  })
+
+  // The probe must ask about a uid nothing has seen before. Asked twice about
+  // the SAME uid it would be asking whether a revisit may send — which is the
+  // case the cooldown exists to refuse — and would then go red on a perfectly
+  // healthy gate, or green on a shut one, depending on which way it drifted.
+  it('asks about a different account every time it runs', async () => {
+    const asked: string[] = []
+    mockAutoSendGate = async (uid: string) => {
+      asked.push(uid)
+      return { allowed: true }
+    }
+    await invoke()
+    // The probe memoises for its TTL, so a second run needs a fresh module
+    // registry — which is also what a new instance gives it in production.
+    jest.resetModules()
+    await invoke()
+
+    expect(asked).toHaveLength(2)
+    expect(asked[0]).not.toBe(asked[1])
+    expect(asked[0]).toContain(AUTH_DOOR_PROBE_UID_PREFIX)
+  })
 })
 
 describe('sso goes red', () => {
@@ -639,10 +695,49 @@ describe('email-verification door', () => {
     linkOnConsoleOrigin: true,
     linkCarriesCode: true,
     redemption: REDEEMS,
+    sendGate: 'admits' as const,
   }
 
   it('is green when the mint refuses a nonexistent address and the rewrite is sound', () => {
     expect(emailVerificationDoorHealth(green, 9).ok).toBe(true)
+  })
+
+  /**
+   * RED PROOF for AGL-2668, and the one this door was missing.
+   *
+   * Every other clause here is the provider's. All of them held for three
+   * days while no new account received a verification mail, because the
+   * cooldown in front of the send refused first arrivals — and refused them
+   * behind a 200, so nothing anywhere reported a failure.
+   */
+  it('goes red when the cooldown suppresses a first arrival, with every provider clause green', () => {
+    const check = emailVerificationDoorHealth(
+      { ...green, sendGate: 'suppresses' },
+      9,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('auto-send-suppressed')
+  })
+
+  // A different repair from a gate that answers and refuses, so it gets its
+  // own code rather than being folded into the one above.
+  it('goes red, distinctly, when the gate cannot be asked at all', () => {
+    const check = emailVerificationDoorHealth(
+      { ...green, sendGate: 'unavailable' },
+      9,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('auto-send-gate-unavailable')
+  })
+
+  // A provider fault outranks the gate: the gate clause only means anything
+  // once the things it sits in front of are known to work.
+  it('reports the provider fault, not the gate, when both are broken', () => {
+    const check = emailVerificationDoorHealth(
+      { ...green, mintVerdict: 'unreachable', sendGate: 'suppresses' },
+      9,
+    )
+    expect(check.code).toBe('mint-unreachable')
   })
 
   // RED PROOF: the mint path is what actually died in the signup incident's

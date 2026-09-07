@@ -52,11 +52,27 @@ import { consumeRateLimit } from './rate-limit-store'
  *
  * Its window is fixed rather than rolling, so a link minted near a boundary
  * can be followed by another as soon as the next window opens — the cooldown
- * holds for somewhere between zero and its full length. It cannot err the
- * other way: the FIRST ask on a uid always lands in a window with room, so a
- * first arrival never waits for its mail. And where a window does end early
- * the outcome is exactly what shipped before this — one extra mint, which the
- * route reports as the throttle it is rather than as a failure.
+ * holds for somewhere between zero and its full length. Where a window does
+ * end early the outcome is one extra mint, which the route reports as the
+ * throttle it is rather than as a failure.
+ *
+ * ## It may only suppress on evidence, never on silence
+ *
+ * The limiter refuses for two unrelated reasons, and only one of them is a
+ * counted overage. `contended` means the counter could not be read and
+ * written inside its budget, and the budget is spent by any slowness at all —
+ * a cold instance paying for Admin SDK startup and two Firestore round trips
+ * reaches it without another caller in sight, which on a low-traffic
+ * deployment is the ordinary case rather than the rare one.
+ *
+ * That refusal carries no information about whether a link was recently
+ * minted, so it may not be read as one. The asymmetry is the whole argument:
+ * a duplicate mail is a nuisance the route already reports correctly, while a
+ * suppressed FIRST mail is an account that never receives the link it is
+ * waiting for — and because a suppressed send is answered 200, the account
+ * holder is told a mail is on its way that nobody ever sent. A cooldown whose
+ * purpose is politeness does not get to fail that way, so an unanswered gate
+ * sends.
  */
 
 /**
@@ -102,6 +118,11 @@ export async function consumeVerifyEmailAutoSend(
       ? {}
       : { firestore: options.firestore }),
   })
+  // A refusal the limiter could not count is silence, not evidence of a
+  // recent mail, and this cooldown suppresses only on evidence.
+  if (result.contended) {
+    return { allowed: true, retryAfterSeconds: 0, degraded: result.degraded }
+  }
   return {
     allowed: result.allowed,
     retryAfterSeconds: result.allowed

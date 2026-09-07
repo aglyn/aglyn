@@ -46,7 +46,10 @@ import { getAppCheck } from 'firebase-admin/app-check'
 import { generateAuthenticationOptions } from '@simplewebauthn/server'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, exactly like the sibling health route.
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  consumeVerifyEmailAutoSend,
+  firebaseAdmin,
+} from '@aglyn/tenant-data-admin'
 import { isEmailConfigured } from '@aglyn/shared-util-email'
 import { memoizeWithTtl } from '@aglyn/aglyn/server'
 
@@ -59,6 +62,7 @@ import { resolveRpContext } from '../../_lib/passkeys'
 import {
   AUTH_DOOR_PROBE_ADDRESS,
   AUTH_DOOR_PROBE_OOB_CODE,
+  AUTH_DOOR_PROBE_UID_PREFIX,
   classifyIdentityToolkitFailure,
   emailVerificationDoorHealth,
   googleOauthDoorHealth,
@@ -339,18 +343,57 @@ function verificationRewrite(): {
   }
 }
 
+/**
+ * Is the automatic verification send still allowed to HAPPEN? (AGL-2668)
+ *
+ * Everything else this door asserts is the provider's: minting answers, the
+ * link is rebuilt correctly, redemption refuses a bad code. All of it can be
+ * working while no account receives anything, because one gate of our own
+ * sits in front of the send — the per-uid cooldown that stops a reopened
+ * `/verify-email` tab minting a second link.
+ *
+ * That gate is the only step whose refusal is invisible. A suppressed
+ * automatic send is answered 200 `alreadySent` and renders the ordinary "we
+ * sent a verification link" screen, so it produces no error for the account
+ * holder to report, no failed request in a console, and no delivery row to be
+ * missing from. Asked on a uid nothing has seen before, the cooldown has
+ * exactly one correct answer, and any other one means signups are completing
+ * into accounts that never get their link.
+ *
+ * Costs one counter write and read per probe TTL, on a key that expires on
+ * its own. It creates no account and sends no mail — the uid is synthetic and
+ * belongs to nobody, so the answer is about the gate and never about a person.
+ */
+async function probeVerificationSendGate(): Promise<
+  'admits' | 'suppresses' | 'unavailable'
+> {
+  const uid = `${AUTH_DOOR_PROBE_UID_PREFIX}${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
+  try {
+    const { allowed } = await consumeVerifyEmailAutoSend(uid)
+    return allowed ? 'admits' : 'suppresses'
+  } catch {
+    // The cooldown answers rather than throws, including when its store is
+    // unreachable. Arriving here is the gate itself being broken, which is a
+    // different repair from a gate that answers and refuses.
+    return 'unavailable'
+  }
+}
+
 export const emailVerificationProbe = memoizeWithTtl<AuthDoorCheck>(
   PROBE_TTL_MS,
   async () => {
     const startedAt = Date.now()
-    const [mintVerdict, redemption] = await Promise.all([
+    const [mintVerdict, redemption, sendGate] = await Promise.all([
       probeVerificationMint(),
       // `accounts:update` is what `applyActionCode` calls — the endpoint that
       // turns a clicked verification link into a verified address.
       probeRedemption('accounts:update'),
+      probeVerificationSendGate(),
     ])
     return emailVerificationDoorHealth(
-      { mintVerdict, ...verificationRewrite(), redemption },
+      { mintVerdict, ...verificationRewrite(), redemption, sendGate },
       Date.now() - startedAt,
     )
   },
