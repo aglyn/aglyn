@@ -93,7 +93,7 @@ automation references is the expected state for all of them.
 | `backfill-marketing-consent.mjs` | Outstanding, stage one | Asserts an operator basis over the pre-release corpus and stamps provenance, so a backfilled grant stays distinguishable from one a person gave. It writes the **unscoped** field, which grants to no host on its own — `backfill-consent-host.mjs` is stage two and scopes it. Never touches a stored refusal. `test:deploy-args` reads this file to prove it parses its own arguments. |
 | `backfill-crm-lifecycle-stages.mjs` | Outstanding | Stages, historical leads and company counts — [`CRM_LIFECYCLE_BACKFILL.md`](CRM_LIFECYCLE_BACKFILL.md), which records the production dry runs. The apply has not been made. Guarded by `test:crm-lifecycle-backfill`. |
 | `backfill-form-ids.mjs` | Outstanding | Stamps `formId` onto the submissions an adopted form already collected, matching on the `(formName, path)` pair and leaving anything ambiguous alone. The lifecycle backfill's form attribution reads what this stamps. |
-| `backfills/` (4 scripts) | Outstanding | The commerce money-record repairs — [`COMMERCE_BACKFILLS.md`](COMMERCE_BACKFILLS.md). Dry run recorded, nothing applied. Run order is 1745 → 1752 → 1753. Guarded by `test:backfill-core`. |
+| `backfills/` (3 scripts) | Outstanding | The commerce money-record repairs — [`COMMERCE_BACKFILLS.md`](COMMERCE_BACKFILLS.md). Dry run recorded, nothing applied. Run order is 1745 → 1752 → 1753. Guarded by `test:backfill-core`. AGL-1727 had a fourth and no longer needs one: its population is zero and AGL-1711 closed the shape. |
 
 ## Media
 
