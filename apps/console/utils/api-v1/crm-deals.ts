@@ -34,6 +34,17 @@
  * stage" reports read, and a move into or out of a closed stage sets or
  * clears `closedAtMs`.
  *
+ * ## A won deal makes its contact a customer
+ *
+ * The console's stage route floors the linked contact's lifecycle stage at
+ * `customer` when a deal is won (AGL-2641), and this resource is the same
+ * writer with a different door: a `PATCH` that moves a deal into its `won`
+ * stage, or a `POST` that creates one there, applies the same floor to the
+ * contact the deal names, in the facet of the deal's site — filling an
+ * empty stage, advancing an earlier one, never moving anybody back. The
+ * deal's own write is not undone by a contact write that fails; the deal
+ * is what the integrator asked for, and the floor is what the win implies.
+ *
  * ## The line items own the amount
  *
  * A deal may carry `lineItems` (AGL-2620) — the products behind its value,
@@ -57,7 +68,7 @@ import {
   lineItemsTotalCents,
   readDealLineItems,
 } from '@aglyn/aglyn/server'
-import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
+import { apiJson, ApiErrors, floorContactLifecycleStage } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, requireScope } from '../api-v1'
 import { orderedStages, type ResolvedPipeline, resolvePipeline } from './crm-pipelines'
@@ -322,6 +333,34 @@ function placeLineItems(
   }
 }
 
+/**
+ * The customer floor a win applies to the deal's contact (AGL-2641), after
+ * the deal itself is written. A contact write that fails is logged and
+ * swallowed: the deal is already won, and a `500` would tell the integrator
+ * the move they can see in the console did not happen.
+ */
+async function floorWonDealContact(
+  ctx: ApiV1Context,
+  deal: { contactId?: string | null; hostId?: string | null },
+): Promise<void> {
+  const contactId = String(deal.contactId ?? '').trim()
+  if (!contactId) return
+  try {
+    await floorContactLifecycleStage({
+      contactRef: ctx.firestore
+        .collection('orgs')
+        .doc(ctx.orgId)
+        .collection('contacts')
+        .doc(contactId),
+      org: ctx.org as Record<string, unknown>,
+      hostId: deal.hostId ?? null,
+      floor: 'customer',
+    })
+  } catch (error) {
+    console.error('[api-v1] deals: the customer floor failed', contactId, error)
+  }
+}
+
 /** The fields a stage move writes, beside the stage itself. */
 function stageMove(stage: CrmDealStage, nowMs: number) {
   return {
@@ -417,6 +456,10 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
       }),
       ...stamp,
     })
+    // A deal created won is a won deal: its contact is a customer from birth.
+    if (stage.kind === 'won') {
+      await floorWonDealContact(ctx, { contactId: rest.contactId, hostId: site.siteId })
+    }
     const view = dealView(await collection.doc(id).get())
     await claim.record(200, view)
     return apiJson(view, { status: 201, headers: ctx.headers })
@@ -464,6 +507,7 @@ async function updateDeal(
   // The write's one instant: `updatedAt`, and the stage move if there is one,
   // so a deal closed at T reads updated at T.
   const now = Timestamp.now()
+  let won = false
   if (stageId !== undefined || status !== undefined) {
     const current = snap.data() as CrmDeal
     const resolved = await resolvePipeline(ctx, current.hostId, current.pipelineId, {
@@ -478,10 +522,19 @@ async function updateDeal(
     if ('errors' in placed) return crmValidationFailed(ctx, 'deal', placed.errors)
     if (placed.stage && placed.stage.id !== current.stageId) {
       Object.assign(update, stageMove(placed.stage, now.toMillis()))
+      // The transition INTO won, not a won deal edited: a deal already
+      // closed won floored its contact when it closed.
+      won = placed.stage.kind === 'won' && current.status !== 'won'
     }
   }
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: now })
+  }
+  if (won) {
+    await floorWonDealContact(ctx, {
+      contactId: rest.contactId !== undefined ? rest.contactId : stored.contactId,
+      hostId: stored.hostId,
+    })
   }
   return apiJson(dealView(await ref.get()), { headers: ctx.headers })
 }

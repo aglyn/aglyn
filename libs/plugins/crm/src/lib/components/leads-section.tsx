@@ -18,7 +18,12 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps, CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
-import { mdiAccountArrowRight, mdiAccountCancelOutline, mdiAccountTieOutline } from '@aglyn/shared-data-mdi'
+import {
+  mdiAccountArrowRight,
+  mdiAccountCancelOutline,
+  mdiAccountConvertOutline,
+  mdiAccountTieOutline,
+} from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
@@ -76,8 +81,10 @@ import {
   type LeadFilter,
   leadMatchesFilter,
 } from '../model/lead-filters'
+import { LeadConvertDialog } from './lead-convert-dialog'
 import { leadSourceLabel, leadSources, leadTimeLabel } from './lead-history-card'
 import { LeadOwnerSelect } from './lead-owner-select'
+import { CONVERT_PENDING_ERASURE_REASON } from './lead-properties-card'
 import { LeadStatusChip } from './lead-status-chip'
 import LeadSurfacesNote from './lead-surfaces-note'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
@@ -224,6 +231,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
 
   const [assigning, setAssigning] = useState<LeadRow | null>(null)
   const [unqualifying, setUnqualifying] = useState<LeadRow | null>(null)
+  // The row whose conversion dialog is open (AGL-2641) — the same dialog
+  // the lead's page opens, fed the row so the list is one click shorter.
+  const [converting, setConverting] = useState<LeadRow | null>(null)
 
   const writeLead = useCallback(
     async (lead: LeadRow, fields: Record<string, unknown>, done: string) => {
@@ -336,40 +346,65 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         sortable: false,
         filterable: false,
         disableColumnMenu: true,
-        renderCell: ({ row }: { row: LeadRow }) => (
-          <Box
-            onClick={(event) => event.stopPropagation()}
-            sx={{ display: 'flex', alignItems: 'center', height: '100%' }}
-          >
-            <RowActionsMenu
-              label={String(row['email'] ?? row.$id)}
-              items={[
-                {
-                  key: 'open',
-                  label: 'Open lead',
-                  icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
-                  href: routes.lead(row.leadId, hostId ? null : row.hostId),
-                },
-                {
-                  key: 'assign',
-                  label: 'Assign owner',
-                  icon: <MdiIcon path={mdiAccountTieOutline.path} size={0.8} />,
-                  onClick: () => setAssigning(row),
-                },
-                {
-                  key: 'unqualify',
-                  label: 'Unqualify',
-                  icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
-                  onClick: () => setUnqualifying(row),
-                  disabled: !Aglyn.isCrmLeadOpen(row) || Boolean(row.convertedContactId),
-                  disabledReason: row.convertedContactId
-                    ? 'This lead was converted'
-                    : 'This lead is already closed',
-                },
-              ]}
-            />
-          </Box>
-        ),
+        renderCell: ({ row }: { row: LeadRow }) => {
+          /*
+           * Why Convert is refused, in the order the lead's page refuses it:
+           * a converted lead has its contact already, a closed one was
+           * judged not real, and a person with an erasure pending must not
+           * be captured again — a conversion is a capture (AGL-2623).
+           */
+          const converted = Boolean(row.convertedContactId)
+          const erasurePending = Aglyn.readErasureRequestedAtMs(row) !== null
+          const convertRefusal = converted
+            ? 'This lead was converted'
+            : !Aglyn.isCrmLeadOpen(row)
+              ? 'This lead was unqualified'
+              : erasurePending
+                ? CONVERT_PENDING_ERASURE_REASON
+                : null
+          return (
+            <Box
+              onClick={(event) => event.stopPropagation()}
+              sx={{ display: 'flex', alignItems: 'center', height: '100%' }}
+            >
+              <RowActionsMenu
+                label={String(row['email'] ?? row.$id)}
+                items={[
+                  {
+                    key: 'open',
+                    label: 'Open lead',
+                    icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
+                    href: routes.lead(row.leadId, hostId ? null : row.hostId),
+                  },
+                  {
+                    key: 'convert',
+                    label: 'Convert…',
+                    icon: <MdiIcon path={mdiAccountConvertOutline.path} size={0.8} />,
+                    onClick: () => setConverting(row),
+                    disabled: convertRefusal !== null,
+                    disabledReason: convertRefusal ?? undefined,
+                  },
+                  {
+                    key: 'assign',
+                    label: 'Assign owner',
+                    icon: <MdiIcon path={mdiAccountTieOutline.path} size={0.8} />,
+                    onClick: () => setAssigning(row),
+                  },
+                  {
+                    key: 'unqualify',
+                    label: 'Unqualify',
+                    icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
+                    onClick: () => setUnqualifying(row),
+                    disabled: !Aglyn.isCrmLeadOpen(row) || Boolean(row.convertedContactId),
+                    disabledReason: row.convertedContactId
+                      ? 'This lead was converted'
+                      : 'This lead is already closed',
+                  },
+                ]}
+              />
+            </Box>
+          )
+        },
       },
     ],
     [roster, routes, writeLead, hostId, mount],
@@ -478,6 +513,20 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         hostId={unqualifying?.hostId ?? hostId ?? ''}
         leadId={unqualifying?.leadId ?? ''}
         leadLabel={String(unqualifying?.['name'] || unqualifying?.['email'] || '')}
+      />
+      {/* The row's site, not the mounted one: at the organization level a
+          lead is its own site's record, and the conversion is that site's
+          capture (AGL-2641). Under a site the two are the same. */}
+      <LeadConvertDialog
+        open={Boolean(converting)}
+        onClose={() => setConverting(null)}
+        hostId={converting?.hostId ?? hostId ?? ''}
+        orgId={orgId}
+        org={org as Record<string, unknown> | undefined}
+        leadId={converting?.leadId ?? ''}
+        lead={converting ?? {}}
+        basePath={basePath ?? ''}
+        roster={roster}
       />
     </>
   )

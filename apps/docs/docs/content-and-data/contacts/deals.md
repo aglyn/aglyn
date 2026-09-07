@@ -152,7 +152,28 @@ that automations can hear them. Three events fire, and each can trigger a
 
 Every event carries the deal's id, title, amount and currency, its new and
 previous stage, and the owner, contact and company ids, so a workflow can
-notify the owner, update the contact's lifecycle stage, or file a task.
+notify the owner, file a task, or act on the person.
+
+### A won deal makes its contact a customer {#a-won-deal-makes-its-contact-a-customer}
+
+Marking a deal **won** sets the linked contact's
+[lifecycle stage](./contact-record.md#lifecycle-stages) to **Customer** — the
+same rule an order applies: a person with no stage or an earlier one becomes a
+customer, and nobody is ever moved back, so an **Evangelist** who closes
+another deal stays an evangelist and a stage of **Other** is never overwritten.
+It happens on the move into the won stage itself, whichever way the deal got
+there — the board, a card's menu, the deal's page, the bulk bar, the
+organization-level board, or the [REST API](/api/resources/deals#moving) — and
+there is nothing to switch on: a won deal is a customer by definition. The
+stage is written for the site the deal was made on, so a sibling site that
+also knows the person keeps its own reading of them.
+
+When the stage did move, a **Contact changed stage** event follows the **Deal
+won** event, so an automation that starts when somebody becomes a customer
+hears it; the organization's activity feed line for the win says *contact now
+a customer*. An automation on **Deal won** is for what happens next — the
+[Follow up a won deal](./automations.md#recipes) recipe books a check-in call
+and sets no stage, because the win already did.
 
 ## A deal's page
 
@@ -180,6 +201,6 @@ with a **New deal** shortcut that starts a deal already linked to them.
 - [Tasks & follow-ups](./tasks.md) and [Activities & the timeline](./activities.md) — what is owed on a deal and what has happened on it
 - [Bulk actions](./bulk-actions.md#deals) — stage, owner, loss, export and delete over a selection
 - [Reports](./reports.md) — the open pipeline, its weighted forecast, and won against lost
-- [Automations for the CRM](./automations.md) — the three deal events
+- [Automations for the CRM](./automations.md) — the three deal events, and what a won deal does on its own
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)
 - [REST API — deals](/api/resources/deals) and [pipelines](/api/resources/pipelines)

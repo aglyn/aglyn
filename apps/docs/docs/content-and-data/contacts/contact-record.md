@@ -233,10 +233,11 @@ column and a Stage filter; the record page lets you set it.
 Every capture on your site sets the earliest stage that describes what
 happened, and never moves anyone back: a form submission makes a **Lead**, a
 newsletter opt-in or a member sign-up makes a **Subscriber**, a booking makes
-a **Lead** — a **Customer** once it is paid — and an order makes a
-**Customer**. A subscriber who then submits a form becomes a lead; a customer
-who submits one stays a customer. A contact you add by hand, import, or
-create over the API gets the stage you give it, or none, and a contact
+a **Lead** — a **Customer** once it is paid — an order makes a
+**Customer**, and so does a [deal marked won](./deals.md#a-won-deal-makes-its-contact-a-customer)
+with the person on it. A subscriber who then submits a form becomes a lead; a
+customer who submits one stays a customer. A contact you add by hand, import,
+or create over the API gets the stage you give it, or none, and a contact
 captured before this rule carries the stage its earlier captures imply.
 
 | Stage | Meaning |
@@ -246,7 +247,7 @@ captured before this rule carries the stage its earlier captures imply.
 | **Marketing qualified** | Engaged enough for marketing to hand over. |
 | **Sales qualified** | A real prospect somebody is working. |
 | **Opportunity** | There is a deal on the table. |
-| **Customer** | Has bought. A purchase on your site sets this automatically for anyone at an earlier stage, and never moves anyone back. |
+| **Customer** | Has bought. A purchase on your site, or a deal with them marked **won**, sets this automatically for anyone at an earlier stage, and never moves anyone back. |
 | **Evangelist** | A customer who sends others your way. |
 | **Other** | A step of your own that none of the names fit. A sale never overwrites it. |
 

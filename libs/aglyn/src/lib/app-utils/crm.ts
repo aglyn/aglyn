@@ -412,7 +412,20 @@ export const DEAL_LINE_ITEM_NAME_MAX = 120
 /** Units per line; past this the number is a data-entry slip. */
 export const DEAL_LINE_ITEM_QUANTITY_MAX = 1_000_000
 
-/** `orgs/{orgId}/deals/{dealId}`. */
+/**
+ * `orgs/{orgId}/deals/{dealId}`.
+ *
+ * A WON DEAL MAKES ITS CONTACT A CUSTOMER (AGL-2641). A win is the same
+ * fact as a purchase — the business has decided this person bought — and an
+ * order already floors a contact's lifecycle stage at `customer` on
+ * capture. So every writer of `status` — the console's stage route at both
+ * levels and the REST resource — applies the same floor to the contact
+ * `contactId` names on the transition into `won`, in the facet of the site
+ * the deal was made on (`hostId`), with `advanceContactLifecycleStage`'s
+ * rule: an empty stage is filled, an earlier one advanced, and nobody is
+ * ever moved back. Behind no setting, because a won deal is a customer by
+ * definition; an automation on `dealWon` is for what happens NEXT.
+ */
 export interface CrmDeal extends CrmScoped {
   title: string
   titleLower?: string
