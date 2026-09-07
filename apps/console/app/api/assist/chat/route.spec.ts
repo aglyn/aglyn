@@ -554,18 +554,29 @@ describe('the gate ladder — every guard forced red once', () => {
     }
   })
 
+  /** The Pro org with its own hard cap switched on (AGL-2653). */
+  function stopProAtItsBand(): void {
+    mockDocs.set(`orgs/${PRO_ORG}`, {
+      ...(mockDocs.get(`orgs/${PRO_ORG}`) ?? {}),
+      assistOverage: { hardCap: true },
+    })
+  }
+
   it('NEVER SHIPS OUR PROVIDER BILL to the client', async () => {
     // The reservation carries `costUsd`, `costLimitUsd` and `budgetUsd`, all
     // three of which are what the model cost US at list rates. Returning the
     // reservation itself would publish our model choice and our margin, and
-    // would move under customers on every model swap.
+    // would move under customers on every model swap. The org's hard cap is
+    // on so the band refuses; the 402 body is held to the same rule as any
+    // 429's.
     seedOrgs()
+    stopProAtItsBand()
     mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
       messages: 5,
       estCostUsd: 41.5,
     })
     const response = await POST(post(QUESTION_BODY(PRO_ORG)))
-    expect(response.status).toBe(429)
+    expect(response.status).toBe(402)
     const wire = JSON.stringify(await response.json())
     for (const leak of ['costUsd', 'costLimitUsd', 'budgetUsd', '41.5']) {
       expect(wire).not.toContain(leak)
@@ -574,13 +585,16 @@ describe('the gate ladder — every guard forced red once', () => {
     expect(wire).toContain('credits')
   })
 
-  it('THE DEFAULT IS ARMED: the same spend is refused with NOTHING set', async () => {
-    // Bounded with NOTHING configured — a fresh deployment, or a self-hoster
-    // who has never heard of the variable. What refuses this workspace is
-    // Pro's own band of 2,750 credits, which is far tighter than the operator
-    // backstop; $41.50 of provider spend against a subscription that did not
-    // move is refused before a token is bought. This is the test that fails
-    // if anyone restores the unset default, or drops the band.
+  it('THE BAND IS SOLD PAST BY DEFAULT: the same spend with NOTHING set reaches the model', async () => {
+    // Nothing configured — a fresh deployment, or a self-hoster who has never
+    // heard of the variable — and no switch on the org. Pro's band of 2,750
+    // credits is far behind this workspace, and since 2026-09-07 the credits
+    // past it are SOLD at the plan's rate rather than refused: the exchange
+    // proceeds and `report-usage` bills the excess. This is the test that
+    // fails if anyone restores the band as a default wall.
+    //
+    // FORCED RED against a build whose `assistBandRefuses` answered true:
+    // 429, `refusedBy: 'band'`, and the model was never called.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     seedOrgs()
     armUpstream()
@@ -589,12 +603,43 @@ describe('the gate ladder — every guard forced red once', () => {
       estCostUsd: 41.5,
     })
     const response = await POST(post(QUESTION_BODY(PRO_ORG)))
-    expect(response.status).toBe(429)
-    await expect(response.json()).resolves.toMatchObject({
-      reason: 'quota',
-      quota: { refusedBy: 'budget', credits: { limit: 2_750, remaining: 0 } },
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(mockFetch).toHaveBeenCalled()
+  })
+
+  it('THE ORG’S OWN SWITCH: the same spend is refused with a 402 that names the switch', async () => {
+    // The one refusal that is a 402 rather than a 429: this would proceed if
+    // the org chose to pay, and it chose not to. The sentence names the
+    // control by its console label, says where it lives, and quotes what
+    // turning it off costs, so the user is sent to a switch and not to
+    // support. Same `reason: 'quota'` and the same credit standing as a 429,
+    // so the panel's handling is unchanged.
+    //
+    // FORCED RED by returning 429 for every `!quota.allowed` in the route:
+    // the status assertion failed first, then the error text.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    seedOrgs()
+    stopProAtItsBand()
+    mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 41.5,
     })
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(402)
+    const payload = await response.json()
+    expect(payload).toMatchObject({
+      reason: 'quota',
+      quota: { refusedBy: 'band', credits: { limit: 2_750, remaining: 0 } },
+    })
+    expect(String(payload.error)).toContain('"Stop AI assist at the included band"')
+    expect(String(payload.error)).toContain('Billing → Usage')
+    expect(String(payload.error)).toContain('$3.00 per 1,000 credits')
     expect(mockFetch).not.toHaveBeenCalled()
+    // Nothing moved: a refused exchange must not count.
+    expect(mockDocs.get(`orgs/${PRO_ORG}/assistUsage/${MONTH}`)).toMatchObject({
+      messages: 5,
+    })
   })
 
   it('THE PAIRED CONTROL: an ordinary paid month still reaches the model', async () => {

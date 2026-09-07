@@ -99,7 +99,8 @@ Nothing here guarantees that a price or feature set will remain the same.
 
 - The **billing page** shows meters for every quota — storage, bandwidth, datasets, seats,
   sends, CRM records (with the contacts, companies and deals beneath the total),
-  one-to-one emails sent today, and more — with redesigned plan cards.
+  one-to-one emails sent today, [AI assist credits](#assist-overage), and more — with
+  redesigned plan cards.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
 - Org admins also get an in-app **notification** when email sends, dataset count, data
   storage, or [bandwidth](bandwidth.md) crosses 80% or 100% — once per threshold per month,
@@ -149,6 +150,34 @@ of your allowance mean nobody first learns about overage from an invoice. The op
 **cap** means anyone who wants a hard ceiling can have one, at a number they choose.
 :::
 
+## AI assist overage {#assist-overage}
+
+Paid plans include a monthly band of **AI assist credits** — the **Aglyn Assist credits**
+meter on the billing page shows how much of it this month's assistant use has drawn. On a
+plan that sells credits past the band, reaching it is not a wall:
+
+- **The assistant keeps answering.** Nothing stops because you reached your included
+  credits.
+- **The extra credits are billed** on your monthly invoice, per 1,000 credits over the
+  band, at your plan's rate — the exact figure is on
+  [the pricing page](https://aglyn.com/pricing) and in **Billing → Usage → AI assist
+  overage**.
+
+### If you would rather the assistant stopped {#stop-ai-assist-at-the-included-band}
+
+Turn on **Stop AI assist at the included band** in **Billing → Usage → AI assist
+overage**. This is optional and off unless you choose it. Once it is on, the assistant
+refuses once the included credits are used — the refusal names this switch and where it
+lives — and you are never billed for AI assist. Turn it off at any time to keep going at
+your plan's rate; either change takes effect on the next message. Changing it needs the
+**Manage billing** permission.
+
+:::info Plans that sell no overage
+Free and Starter include no AI assist credits, so there is nothing to stop at. Enterprise
+credits are set by agreement and are never billed past the band, so the assistant stops
+there on its own and the switch is not offered.
+:::
+
 ## Usage budget
 
 A **usage budget** is a monthly amount you choose, plus the percentages of it you want to
@@ -157,8 +186,9 @@ hear about — the same shape as a Google Cloud billing budget. Set it in
 
 - **It warns, it never limits.** Passing a budget sends a notification and an email.
   Nothing stops, no upload is refused, and your bill is unaffected. If you want usage to
-  actually stop, that is the [storage cap](#storage-overage) above — a different control,
-  deliberately kept separate.
+  actually stop, that is the [storage cap](#storage-overage) or the
+  [AI assist stop](#assist-overage) above — different controls, deliberately kept
+  separate.
 - **You choose the alert points.** The default is **50%, 90% and 100%**; you can set your
   own, including percentages above 100 so a runaway month keeps speaking. Up to six.
 - **One alert per percentage per month.** Crossing 50% tells you once, not once an hour.

@@ -183,9 +183,10 @@ export interface AssistCreditOveragePrice {
  * `priceEmailSendOverage` omits an `allowed` field because email has two
  * gates and a transactional sender consulting the wrong one drops a password
  * reset. Assist omits it because it has exactly ONE gate and this is not it:
- * the refusal happens inside `reserveAssistMessage`, before a token is spent.
- * A second answer to "may this proceed", computed after the fact from a
- * rounded credit figure, would be a second gate to drift from the first.
+ * whether the band refuses is `assistBandRefuses`, applied inside
+ * `reserveAssistMessage` before a token is spent. A second answer to "may
+ * this proceed", computed after the fact from a rounded credit figure, would
+ * be a second gate to drift from the first.
  *
  * ## Takes the overage, does not recompute it
  *
@@ -266,4 +267,133 @@ export function publicAssistCredits(
   if (ceilingUsd === null) return { used, limit: null, remaining: null }
   const limit = assistCreditsFromUsd(ceilingUsd)
   return { used, limit, remaining: Math.max(0, limit - used) }
+}
+
+/**
+ * The console's name for the org's hard-cap switch (AGL-2653), quoted by the
+ * refusal so the words on the 402 and the words beside the switch are one
+ * string. Change it here and both move.
+ */
+export const ASSIST_HARD_CAP_CONTROL_LABEL = 'Stop AI assist at the included band'
+
+/** Where the switch lives, in the words the refusal uses. */
+export const ASSIST_HARD_CAP_CONTROL_LOCATION = 'Billing → Usage'
+
+/**
+ * Whether the org asked to be stopped at its assist band (AGL-2653).
+ *
+ * Strictly `=== true`: the map is absent on every org that has not touched
+ * the switch, and absent is the selling default. A truthy string or a `1`
+ * written by hand must not switch an assistant off at the band, so nothing
+ * short of the boolean counts.
+ */
+export function resolveAssistHardCap(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return org?.assistOverage?.hardCap === true
+}
+
+/**
+ * Is the org's assist band a WALL, or a line past which credits are sold?
+ *
+ * Two things make it a wall, and only two:
+ *
+ * - **The org asked.** `assistOverage.hardCap` is the customer's own ceiling,
+ *   the `storageOverage.capUsd` of this meter.
+ * - **There is nothing to sell past it at.** A plan whose
+ *   `extraAssistCreditsUsdPer1k` is `null` has no rate to bill, so credits
+ *   past its band would be provider spend with no invoice line — the silent
+ *   free overage `plan-entitlements.spec.ts` forbids. Enterprise is the
+ *   case: its band is contractual and the switch changes nothing there.
+ *
+ * Everything else sells past the band by default, which is the 2026-09-07
+ * decision this function encodes. A plan with no band at all (Free, Starter)
+ * answers the same as Enterprise, harmlessly: `resolveAssistBudgetUsd` is
+ * `null` for them and the reservation never measures against a band.
+ */
+export function assistBandRefuses(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  if (resolveAssistHardCap(org)) return true
+  return (
+    PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k === null
+  )
+}
+
+/**
+ * Whether a refusal at the band was the org's OWN doing — the switch is on
+ * AND turning it off would have let the exchange through. The refusal that
+ * names the switch has to be the one the switch caused: on a plan with no
+ * rate the band refuses whatever the switch says, and telling that customer
+ * to turn it off would send them to a control that does nothing.
+ */
+export function assistRefusedByHardCap(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  refusedBy: 'messages' | 'budget' | 'band' | null,
+): boolean {
+  return (
+    refusedBy === 'band' &&
+    resolveAssistHardCap(org) &&
+    PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k !== null
+  )
+}
+
+/**
+ * The sentence a workspace is told when its own hard cap refused it. ONE
+ * string for both assist entrypoints, so the console panel and the besigner
+ * cannot describe the same control in two ways. It names the switch by its
+ * label, says where it lives, and quotes the plan's rate so the reader knows
+ * what turning it off costs.
+ */
+export function assistHardCapRefusalText(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): string {
+  const rate = PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k
+  const rateClause =
+    rate === null ? '' : ` at $${rate.toFixed(2)} per 1,000 credits`
+  return (
+    `This workspace used its assistant credits for the month, and ` +
+    `"${ASSIST_HARD_CAP_CONTROL_LABEL}" is on. Turn it off under ` +
+    `${ASSIST_HARD_CAP_CONTROL_LOCATION} to keep going${rateClause}.`
+  )
+}
+
+export interface AssistMonthOverage extends AssistCreditOveragePrice {
+  /** Credits drawn this month, rounded up from the measured spend. */
+  usedCredits: number
+  /** The band those credits were measured against, or `null` for no band. */
+  bandCredits: number | null
+}
+
+/**
+ * A month's assist overage from its measured spend — the ONE derivation the
+ * invoice and every meter read (AGL-2653).
+ *
+ * Takes `estCostUsd` as the rollup reads it and composes the three steps
+ * that already existed — credits from spend, overage past the band, price at
+ * the plan's rate — so `report-usage` cannot assemble them in a different
+ * order from a console readout and arrive at a different figure. The
+ * rounding is the other overage terms' rounding: `priceAssistCreditOverage`
+ * rounds to the cent, and the rollup turns dollars into cents with the same
+ * `Math.round(usd * 100)` it applies to contacts, API and dataset storage.
+ *
+ * A non-finite or negative spend is zero credits, for the reason
+ * `assistCreditsFromUsd` gives; a plan with no band or no rate prices zero
+ * structurally, so Free, Starter and Enterprise bill nothing here without a
+ * check that could be forgotten.
+ */
+export function assistMonthOverage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  estCostUsd: number,
+): AssistMonthOverage {
+  const usedCredits = assistCreditsFromUsd(estCostUsd)
+  const bandCredits = resolveAssistCreditBudget(org)
+  return {
+    usedCredits,
+    bandCredits,
+    ...priceAssistCreditOverage(
+      org,
+      assistCreditOverage(usedCredits, bandCredits),
+    ),
+  }
 }

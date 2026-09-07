@@ -12,6 +12,11 @@ for the how-to.
 
 ## September 2026 — the CRM (newest)
 
+- **[AI assist past the included band](workspace-and-billing/billing-and-plans/overview.md#assist-overage)** —
+  on a paid plan the assistant now keeps answering once your included credits are used,
+  and the extra credits are billed at your plan's per-1,000 rate on the monthly invoice.
+  A switch under **Billing → Usage → AI assist overage**, **Stop AI assist at the
+  included band**, stops it there instead; it is off unless you choose it.
 - **[The CRM hub](content-and-data/crm/overview.md)** *(rolling out)* — what was
   the **Contacts** tab is now **CRM**: one tab, seven sections at `…/crm/<section>`.
   [Contacts](content-and-data/crm/contact-record.md) get their own record pages and

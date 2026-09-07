@@ -172,6 +172,55 @@ A subscription sold before this is carried onto the new figure by the renewal
 re-price (AGL-2289) at its next paid invoice — no backfill. The staff revenue page
 nets the pass-through out of subscription cycles as it does one-time sales.
 
+## 2026-09-07 — AI assist credits past the included band are sold at the plan rate; an org may refuse at the band instead
+
+- **Decided by:** the account owner, 2026-09-07, by directive, answering AGL-2653 — sell the overage by default and give the org a control to refuse at the band.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING.extraAssistCreditsUsdPer1k` ($3.00 Pro → $2.00 Agency, unchanged; `null` on Free, Starter and Enterprise); `libs/aglyn/src/lib/app-utils/assist-credits.ts` (`assistBandRefuses`, `assistMonthOverage`); `libs/tenant/data/admin/src/lib/server/assist-usage.ts` (`reserveAssistMessage`); `apps/console/app/api/billing/report-usage/route.ts`; `apps/console/app/api/billing/assist-overage/route.ts`; `cloud/firebase-firestore.rules`; `libs/aglyn/src/lib/app-utils/plan-entitlements.spec.ts` (the band-with-rate guard); the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2653.
+
+**No charged rate moves.** The per-1,000 assist overage rates have been on
+`PLAN_PRICING` and on `aglyn.com/pricing` ("AI assist, per 1,000 credits over
+the included band") since the assist bands were sized; what changes is that
+the platform now collects them. Until this entry `reserveAssistMessage`
+refused every plan at its band, so the advertised rate was never billed.
+
+### What was decided
+
+- **Sold by default.** On every plan with a rate — Pro, Business, Scale,
+  Advanced, Agency — an exchange past the included band is reserved, answered,
+  and its credits are billed on the monthly invoice at
+  `extraAssistCreditsUsdPer1k`, rounded to the cent beside the contacts, API
+  and dataset-storage overages. The provider spend itself stays out of
+  `billedCents`, priced into COGS exactly as before.
+- **The org may refuse at the band.** `orgs/{orgId}.assistOverage.hardCap`
+  (absent by default, read strictly as `=== true`) is the org's own switch.
+  On, the assistant refuses at the band with a **402** that names the switch
+  — "Stop AI assist at the included band", under Billing → Usage — and quotes
+  the plan's rate. Written only through `/api/billing/assist-overage`
+  (`billing.manage`, Admin SDK, audited to `adminAudit`), and denied to every
+  client in the rules beside `storageOverage`.
+- **Plans with no rate are unchanged.** Enterprise's band is contractual and
+  stays a wall whatever the switch says; Free and Starter have no band. The
+  switch cannot be turned on there (409), so a control that does nothing is
+  never offered. Turning it off is always available.
+- **The switch is read at the gate, never at the sweep.** `report-usage`
+  bills what landed past the band; with the switch on that is at most the one
+  exchange that crossed the line. A flip on the 1st cannot erase a month.
+- **The operator ceiling.** `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` still binds
+  when set explicitly, on both sides of the switch, and refuses in its own
+  words. The $40 repo default remains a backstop for orgs with no band only;
+  an org buying overage is bounded by the entitled monthly message cap.
+
+### The guard, widened
+
+`plan-entitlements.spec.ts` now pairs `assistCreditsPerMonth` with
+`extraAssistCreditsUsdPer1k` and `emailSendsPerMonth` with
+`extraEmailSendsUsdPer1k`: a positive band on a self-serve plan requires a
+rate, a band of zero forbids one, and Enterprise carries none. Email had the
+same shape and the same rate table, so it was covered in the same pass.
+
+---
+
 ## 2026-09-07 — Reconciliation note: `aglyn.com/pricing` republished to the bands the code enforces (not a decision)
 
 - **Decided by:** nobody — a record; the session that republished the page, under the 2026-09-05 rule that the code is authoritative where an older figure disagrees. No charged price moves and nothing here is a new decision.

@@ -545,7 +545,14 @@ export function AssistPanelComponent() {
               `${branding.productName} Assist has not been fully switched on here. ` +
               `Try asking in different words, or ask whoever set up this workspace to finish enabling the assistant.`,
           )
-        } else if (response.status === 429 && payload?.reason === 'quota') {
+        } else if (
+          (response.status === 429 || response.status === 402) &&
+          payload?.reason === 'quota'
+        ) {
+          // 402 is the org's own hard cap (AGL-2653): the band would sell
+          // past itself and this workspace switched the sale off. The
+          // sentence names the switch, and the credit standing beside it is
+          // as real as a 429's, so it lands on the same line.
           if (payload.quota) setQuota(payload.quota as AssistQuotaInfo)
           failAnswer(String(payload?.error ?? 'Message limit reached.'))
         } else {

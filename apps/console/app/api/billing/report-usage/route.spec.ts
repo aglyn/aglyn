@@ -1151,3 +1151,90 @@ describe('contacts and dataset storage bill the month, not the sweep (AGL-2399)'
     expect(rollup['formSubmissions']).toBe(4_000)
   })
 })
+
+describe('assist credits past the band bill the month at the plan rate (AGL-2653)', () => {
+  /**
+   * The measured spend `report-usage` reads is `estCostUsd` on the month's
+   * `assistUsage` document — 1,000 credits to the dollar, so the fixtures are
+   * written in dollars at the credit count they mean. Pro includes 2,750
+   * credits at $3.00 per 1,000 over; Agency 58,000 at $2.00.
+   */
+  function seedAssist(
+    plan: 'pro' | 'agency',
+    estCostUsd: number,
+    assistOverage?: { hardCap: boolean },
+  ) {
+    seedOrg()
+    mockDocs.set('orgs/org-1', {
+      plan,
+      subscription: { status: 'active' },
+      ...(assistOverage ? { assistOverage } : {}),
+    })
+    mockDocs.set(`orgs/org-1/assistUsage/${CLOSED}`, { estCostUsd })
+  }
+
+  async function sweepClosed(): Promise<Record<string, any>> {
+    const response = await runSweep(loadRoute())
+    expect(response.status).toBe(200)
+    return mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+  }
+
+  it('at band + 2,500 credits on Pro: $7.50 enters billedCents, and the count sits beside it', async () => {
+    // FORCED RED by dropping `Math.round(assistOverage.overageMonthlyUsd *
+    // 100)` from `billedCents`: the two sweeps then billed the same cents.
+    seedAssist('pro', 2.75)
+    const atBand = await sweepClosed()
+    expect(atBand['assistOverageUsd']).toBe(0)
+    expect(atBand['assistCreditsOverage']).toBe(0)
+    expect(atBand['assistCredits']).toBe(2_750)
+    expect(atBand['assistCreditsBand']).toBe(2_750)
+    expect(atBand['assistOverageRateUsd']).toBe(3)
+    const cents = Number(atBand['billedCents'])
+
+    seedAssist('pro', 5.25)
+    const over = await sweepClosed()
+    expect(over['assistCreditsOverage']).toBe(2_500)
+    // LITERAL, not 2.5 x the rate — a guard that recomputes the expression it
+    // tests cannot fail when the expression is wrong.
+    expect(over['assistOverageUsd']).toBe(7.5)
+    expect(Number(over['billedCents'])).toBe(cents + 750)
+    // The provider spend is still recorded beside it, priced into COGS and
+    // NOT into the invoice — the subscription bought the band.
+    expect(over['assistCostUsd']).toBe(5.25)
+  })
+
+  it('at band + 1 credit: one credit over, $0.00 — the invoice rounds to the cent as it does for contacts', async () => {
+    seedAssist('pro', 2.75)
+    const cents = Number((await sweepClosed())['billedCents'])
+    seedAssist('pro', 2.751)
+    const over = await sweepClosed()
+    expect(over['assistCreditsOverage']).toBe(1)
+    expect(over['assistOverageUsd']).toBe(0)
+    expect(Number(over['billedCents'])).toBe(cents)
+  })
+
+  it('on Agency the same 2,500 credits bill $5.00, at ITS rate', async () => {
+    seedAssist('agency', 58)
+    const cents = Number((await sweepClosed())['billedCents'])
+    seedAssist('agency', 60.5)
+    const over = await sweepClosed()
+    expect(over['assistCreditsBand']).toBe(58_000)
+    expect(over['assistCreditsOverage']).toBe(2_500)
+    expect(over['assistOverageUsd']).toBe(5)
+    expect(over['assistOverageRateUsd']).toBe(2)
+    expect(Number(over['billedCents'])).toBe(cents + 500)
+  })
+
+  it('the hard-cap switch does NOT change what a closed month bills', async () => {
+    // The switch lives at the gate. What landed past the band is what bills,
+    // whichever way the switch was set when the sweep ran — otherwise a flip
+    // on the 1st would erase a month's overage, which is AGL-2399 on a
+    // different meter.
+    seedAssist('pro', 5.25, { hardCap: true })
+    const stopped = await sweepClosed()
+    seedAssist('pro', 5.25, { hardCap: false })
+    const selling = await sweepClosed()
+    expect(stopped['assistOverageUsd']).toBe(7.5)
+    expect(stopped['billedCents']).toBe(selling['billedCents'])
+  })
+})
