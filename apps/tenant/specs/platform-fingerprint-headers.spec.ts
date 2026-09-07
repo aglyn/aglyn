@@ -59,13 +59,24 @@ type HeaderRule = { source: string; headers: { key: string; value: string }[] }
  * `try`/`catch` or an optional call around it would turn this whole file into a
  * suite that passes because it measured nothing.
  */
-const shippedHeaderKeys = async (): Promise<string[]> => {
+const shippedHeaderRules = async (): Promise<HeaderRule[]> => {
   const config = await nextConfigPhase('phase-production-build', {
     defaultConfig: {},
   })
-  const rules = (await config.headers()) as HeaderRule[]
-  return rules.flatMap((rule) => rule.headers.map((header) => header.key))
+  return (await config.headers()) as HeaderRule[]
 }
+
+const shippedHeaderKeys = async (): Promise<string[]> =>
+  (await shippedHeaderRules()).flatMap((rule) =>
+    rule.headers.map((header) => header.key),
+  )
+
+/** The value the rule covering EVERY path sends for one header, or `''`. */
+const shippedSiteWideValue = async (key: string): Promise<string> =>
+  (await shippedHeaderRules())
+    .find((rule) => rule.source === '/(.*)')
+    ?.headers.find((header) => header.key.toLowerCase() === key.toLowerCase())
+    ?.value ?? ''
 
 describe('the static header config (AGL-2088)', () => {
   it('CONTROL — it still emits the security headers', async () => {
@@ -93,6 +104,88 @@ describe('the static header config (AGL-2088)', () => {
     const keys = await shippedHeaderKeys()
 
     expect(keys.filter((key) => /^x-aglyn-/i.test(key))).toEqual([])
+  })
+})
+
+/**
+ * `Referrer-Policy` and `Permissions-Policy` on every published page
+ * (AGL-2646).
+ *
+ * Measured on 2026-09-07: `aglyn.com` and the console sent HSTS, `nosniff`,
+ * `X-XSS-Protection`, `X-DNS-Prefetch-Control`, COOP and the CSP, and neither
+ * of these two. Both belong in the static block because both are the same on
+ * every host — there is nothing per-site in "no camera" — and the middleware
+ * sets neither, so the config is the only source and this is where a
+ * regression would have to happen.
+ *
+ * The Permissions-Policy cases are asserted from BOTH sides. "Denies the
+ * camera" passes against `camera=(), payment=(), fullscreen=()`, which would
+ * silently break Stripe's PaymentElement and the Video block's fullscreen
+ * button: a parent document that lacks a feature cannot delegate it to an
+ * iframe, `allow` attribute or not. So the features an embed relies on are
+ * pinned as NOT denied, and the Video block's own `allow` list is read from
+ * its source so the two cannot drift apart.
+ */
+describe('referrer and permissions policies (AGL-2646)', () => {
+  it('sends a Referrer-Policy on every path', async () => {
+    expect(await shippedSiteWideValue('Referrer-Policy')).toBe(
+      'strict-origin-when-cross-origin',
+    )
+  })
+
+  it('denies the features nothing on a published page reads', async () => {
+    const policy = await shippedSiteWideValue('Permissions-Policy')
+
+    for (const feature of ['camera', 'microphone', 'geolocation', 'usb']) {
+      expect(policy).toContain(`${feature}=()`)
+    }
+  })
+
+  it('keeps the Payment Request API for the Stripe PaymentElement', async () => {
+    // The storefront cart mounts `<PaymentElement>`, whose iframe asks for
+    // `payment` through `allow`; the delegation is only honoured when this
+    // document holds the feature itself.
+    const policy = await shippedSiteWideValue('Permissions-Policy')
+
+    expect(policy).toContain('payment=(self)')
+    expect(policy).not.toContain('payment=()')
+  })
+
+  it('keeps every feature the Video block delegates to its iframe', async () => {
+    const policy = await shippedSiteWideValue('Permissions-Policy')
+    const block = readFileSync(
+      resolve(
+        __dirname,
+        '../../../libs/plugins/mui/src/lib/components/blocks.tsx',
+      ),
+      'utf8',
+    )
+    const delegated = /allow="([^"]+)"/.exec(block)?.[1]
+    // Premise guard: a Video block that stopped delegating anything would
+    // make the loop below vacuous.
+    expect(delegated).toBeTruthy()
+
+    for (const feature of String(delegated).split(';')) {
+      expect(policy).not.toContain(`${feature.trim()}=()`)
+    }
+    // `allowFullScreen` is the boolean attribute, not part of `allow`.
+    expect(block).toContain('allowFullScreen')
+    expect(policy).not.toContain('fullscreen=()')
+  })
+
+  it('the middleware neither strips nor contradicts them', async () => {
+    // Static `headers()` rules are applied by the router AFTER the middleware
+    // returns, so the middleware cannot remove them — but a header it SET
+    // would win, and a stricter `Referrer-Policy` set here would blank
+    // `Origin` on a page's own form POST. Either it sets nothing, or it sets
+    // the same value.
+    givenVerdict({ locked: false, attribution: true })
+    const headers = await middlewareHeaders()
+
+    for (const key of ['Referrer-Policy', 'Permissions-Policy']) {
+      const set = headers.get(key)
+      if (set !== null) expect(set).toBe(await shippedSiteWideValue(key))
+    }
   })
 })
 
