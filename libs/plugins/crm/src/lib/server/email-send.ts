@@ -19,7 +19,6 @@ import {
   type AglynOrgBilling,
   type AglynOrgMember,
   buildCrmEmailActivity,
-  checkCrmEmailQuota,
   contactCaptureHostIds,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   CRM_COLLECTIONS,
@@ -49,7 +48,6 @@ import {
   consentGroupForSite,
   consumeRateLimit,
   countCrmActivitiesForRecord,
-  crmEmailsSentToday,
   filterSendableForHost,
   firebaseAdmin,
   getOrgForHost,
@@ -58,8 +56,9 @@ import {
   memberHasOrgPermission,
   newCrmActivityRef,
   orgDataCollectionForHost,
-  recordCrmEmailSend,
   recordEmailSends,
+  releaseCrmEmailSend,
+  reserveCrmEmailSend,
   resolveOrgMembership,
   writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
@@ -119,12 +118,15 @@ import {
  *
  * Cheap and certain first. A malformed body and a missing token cost
  * nothing; the per-user pace is one counter; the record is one read and
- * decides everything after it; the daily cap is one read; the ceiling one
- * aggregate; the two suppression lists two keyed reads; the sending
- * identity last, because it is the most expensive and the one a workspace
- * fixes once. Nothing is written until the provider has accepted the
- * message, and then three things are, none of which can fail the send: the
- * activity row, today's counter, and the org's cost meter.
+ * decides everything after it; the ceiling one aggregate; the two
+ * suppression lists two keyed reads; the sending identity next, because it
+ * is the most expensive and the one a workspace fixes once. The daily cap
+ * comes LAST and is the one gate that writes before the provider is called
+ * (AGL-2645): the send is reserved on today's counter inside a transaction,
+ * so two reps at the last slot cannot both pass one reading of it, and a
+ * message the provider refuses gives the slot back. After the provider has
+ * accepted, two more things are written, neither able to fail the send:
+ * the activity row and the org's cost meter.
  */
 
 /** How many one-to-one emails one person may send in one minute. */
@@ -520,27 +522,6 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
       if (facet.companyId) recipient.link.companyId = facet.companyId
     }
 
-    // THE DAILY CAP (AGL-2611): today's counter, refused before a message
-    // leaves — the contract on `checkCrmEmailQuota`.
-    const quota = checkCrmEmailQuota(org, await crmEmailsSentToday(firestore, orgId))
-    if (!quota.allowed) {
-      return answer(
-        res,
-        refuse(
-          409,
-          quota.included > 0
-            ? crmEmailCapReachedMessage(quota.included)
-            : CRM_EMAIL_NOT_INCLUDED_MESSAGE,
-          {
-            reason: 'quota',
-            included: quota.included,
-            used: quota.used,
-            resetsAtMs: quota.resetsAt.getTime(),
-          },
-        ),
-      )
-    }
-
     // The per-record ceiling, before the send: an email that could not be
     // logged would be a message the timeline never shows, and the timeline
     // is the reason the send lives on the record.
@@ -574,21 +555,56 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
       )
     }
 
+    // THE DAILY CAP (AGL-2611), taken as a slot rather than read as a
+    // figure (AGL-2645): the transaction reads today's counter, judges it
+    // with `checkCrmEmailQuota` and raises it in one step, so the count the
+    // cap enforces is the count this send was admitted on.
+    const claim = await reserveCrmEmailSend(firestore, orgId, org)
+    if (!claim.ok) {
+      const { quota } = claim
+      return answer(
+        res,
+        refuse(
+          409,
+          quota.included > 0
+            ? crmEmailCapReachedMessage(quota.included)
+            : CRM_EMAIL_NOT_INCLUDED_MESSAGE,
+          {
+            reason: 'quota',
+            included: quota.included,
+            used: quota.used,
+            resetsAtMs: quota.resetsAt.getTime(),
+          },
+        ),
+      )
+    }
+
     // The row's id, minted before the send so the delivery webhook can find
     // it from the tags alone; written only once the message has left.
     const activityRef = newCrmActivityRef(firestore, orgId)
-    const result = await sendEmail({
-      to: recipient.email,
-      subject,
-      text,
-      sendingIdentity: identity,
-      audience: 'tenant',
-      context: CRM_EMAIL_CONTEXT,
-      replyTo: sender.email,
-      ...(sender.name ? { fromName: sender.name } : {}),
-      tags: crmEmailDeliveryTags({ orgId, hostId, activityId: activityRef.id }),
-    })
-    if (!result.sent) return answer(res, sendRefusal(result))
+    let result: SendEmailResult
+    try {
+      result = await sendEmail({
+        to: recipient.email,
+        subject,
+        text,
+        sendingIdentity: identity,
+        audience: 'tenant',
+        context: CRM_EMAIL_CONTEXT,
+        replyTo: sender.email,
+        ...(sender.name ? { fromName: sender.name } : {}),
+        tags: crmEmailDeliveryTags({ orgId, hostId, activityId: activityRef.id }),
+      })
+    } catch (error) {
+      // The provider never answered, so no message left: the slot goes
+      // back before the failure is reported.
+      await releaseCrmEmailSend(firestore, claim.reservation)
+      throw error
+    }
+    if (!result.sent) {
+      await releaseCrmEmailSend(firestore, claim.reservation)
+      return answer(res, sendRefusal(result))
+    }
 
     const sentAtMs = Date.now()
     let logged = true
@@ -625,10 +641,8 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
       console.error('[crm] email activity write failed', orgId, activityRef.id, error)
       logged = false
     }
-    // The count enforced is the count billed — one document for the cap and
-    // the org's cost meter for COGS, both after delivery and neither able
-    // to fail the send.
-    await recordCrmEmailSend(firestore, orgId)
+    // The cap's count was taken with the reservation; the org's cost meter
+    // for COGS is stamped after delivery, unable to fail the send.
     await recordEmailSends({
       scope: { kind: 'org', orgId },
       count: 1,

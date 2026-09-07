@@ -19,18 +19,23 @@
  * `crm/email-send` (AGL-2615): one email to one person from their record.
  *
  * WHAT THE DOUBLES MODEL. The Firestore store is real enough for the reads
- * the route makes — `doc().get()` by path — and every write the route owes
- * goes through a named seam that is a spy here: the activity row, today's
- * counter, the cost meter, the provider send. `@aglyn/aglyn/server` is the
- * REAL module, so the daily cap is judged by `checkCrmEmailQuota` against
- * the real plan table, the `declined` basis by `readMarketingBasis`, the
- * scope by `crmScopeTokens` and the row by `buildCrmEmailActivity` — the
- * rules under test, which a double would only restate.
+ * the route makes — `doc().get()` by path — and for the one transaction it
+ * runs, the daily cap's reservation (AGL-2645), which is the REAL
+ * `reserveCrmEmailSend` over a `runTransaction` that serializes its
+ * callers the way Firestore's optimistic concurrency does: the second
+ * transaction reads what the first committed. Every other write the route
+ * owes goes through a named seam that is a spy here: the activity row, the
+ * cost meter, the provider send. `@aglyn/aglyn/server` is the REAL module,
+ * so the daily cap is judged by `checkCrmEmailQuota` against the real plan
+ * table, the `declined` basis by `readMarketingBasis`, the scope by
+ * `crmScopeTokens` and the row by `buildCrmEmailActivity` — the rules under
+ * test, which a double would only restate.
  *
  * The claims: the recipient comes off the RECORD and never the body; every
  * gate refuses BEFORE the provider is called and nothing is written on a
- * refusal; a send the provider accepted is logged, counted and metered, in
- * that order, and a send it refused is none of those.
+ * refusal; the cap is a slot taken before the send, so two sends racing at
+ * the last slot yield one send; a send the provider accepted is logged and
+ * metered, and a send it refused is neither and gives the slot back.
  */
 
 const verifyIdToken = jest.fn()
@@ -38,8 +43,6 @@ const getOrgForHost = jest.fn()
 const resolveOrgMembership = jest.fn()
 const memberHasOrgPermission = jest.fn()
 const consumeRateLimit = jest.fn()
-const crmEmailsSentToday = jest.fn()
-const recordCrmEmailSend = jest.fn()
 const recordEmailSends = jest.fn()
 const filterSendableForHost = jest.fn()
 const hostSendingIdentity = jest.fn()
@@ -73,6 +76,31 @@ const collectionHandle = (path: string) => ({
   doc: (id: string) => docHandle(`${path}/${id}`),
 })
 
+/**
+ * Transactions run one after another, each reading the store the previous
+ * one committed — the observable guarantee Firestore gives two transactions
+ * over one document, which a fake that let both read the same figure would
+ * not model. A spy, so a gate can prove no transaction ran before it.
+ */
+let transactionQueue: Promise<unknown> = Promise.resolve()
+const runTransaction = jest.fn(async (body: (tx: any) => Promise<unknown>) => {
+  const run = transactionQueue.then(async () => {
+    const writes: Array<{ path: string; data: Record<string, any>; merge: boolean }> = []
+    const tx = {
+      get: async (ref: { path: string }) => snapshotFor(ref.path),
+      set: (ref: { path: string }, data: Record<string, any>, options?: { merge?: boolean }) =>
+        writes.push({ path: ref.path, data, merge: Boolean(options?.merge) }),
+    }
+    const result = await body(tx)
+    for (const write of writes) {
+      store[write.path] = write.merge ? { ...store[write.path], ...write.data } : write.data
+    }
+    return result
+  })
+  transactionQueue = run.catch(() => undefined)
+  return run
+})
+
 const firestoreHandle = {
   collection: (name: string) => ({
     doc: (id: string) => ({
@@ -88,8 +116,13 @@ const firestoreHandle = {
       }),
     }),
   }),
+  runTransaction: (body: (tx: any) => Promise<unknown>) => runTransaction(body),
 }
 
+jest.mock('firebase-admin/firestore', () => ({
+  __esModule: true,
+  FieldValue: { serverTimestamp: () => 'server-timestamp' },
+}))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: (...args: unknown[]) => resolveOrgPermissions(...args),
 }))
@@ -107,8 +140,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   consumeRateLimit: (...args: unknown[]) => consumeRateLimit(...args),
-  crmEmailsSentToday: (...args: unknown[]) => crmEmailsSentToday(...args),
-  recordCrmEmailSend: (...args: unknown[]) => recordCrmEmailSend(...args),
+  // The cap's reservation and its release are the real helpers over the
+  // store above: the transaction is what this file has to prove.
+  reserveCrmEmailSend: (...args: unknown[]) =>
+    jest
+      .requireActual('@aglyn/tenant-data-admin/server/crm-records')
+      .reserveCrmEmailSend(...args),
+  releaseCrmEmailSend: (...args: unknown[]) =>
+    jest
+      .requireActual('@aglyn/tenant-data-admin/server/crm-records')
+      .releaseCrmEmailSend(...args),
   recordEmailSends: (...args: unknown[]) => recordEmailSends(...args),
   filterSendableForHost: (...args: unknown[]) => filterSendableForHost(...args),
   hostSendingIdentity: (...args: unknown[]) => hostSendingIdentity(...args),
@@ -140,6 +181,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 import {
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
   CRM_ACTIVITIES_PER_RECORD_CEILING,
+  crmEmailUsageDayKey,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
@@ -160,6 +202,12 @@ const LEAD = `hosts/${HOST_ID}/leads/lead-1`
 /** A plan that carries the suite; the cap is read off the real table. */
 const PLAN = 'starter'
 const INCLUDED = resolveOrgEntitlements({ plan: PLAN } as never).crmEmailsPerDay
+/** Today's counter document, the one the reservation reads and raises. */
+const USAGE = `orgs/${ORG_ID}/crmEmailUsage/${crmEmailUsageDayKey()}`
+const sentToday = (count: number) => {
+  store[USAGE] = { count, day: crmEmailUsageDayKey() }
+}
+const countedToday = () => Number(store[USAGE]?.['count'] ?? 0)
 
 async function call(
   body: Record<string, unknown>,
@@ -230,7 +278,6 @@ beforeEach(() => {
   })
   logOrgActivity.mockResolvedValue(undefined)
   consumeRateLimit.mockResolvedValue({ allowed: true, resetMs: Date.now() + 60_000 })
-  crmEmailsSentToday.mockResolvedValue(0)
   countCrmActivitiesForRecord.mockResolvedValue(0)
   filterSendableForHost.mockImplementation(async (_host: string, emails: string[]) => emails)
   hostSendingIdentity.mockResolvedValue({
@@ -243,7 +290,6 @@ beforeEach(() => {
   isEmailConfigured.mockReturnValue(true)
   sendEmail.mockResolvedValue({ sent: true, id: 'msg-1' })
   writeCrmEmailActivity.mockResolvedValue(undefined)
-  recordCrmEmailSend.mockResolvedValue(undefined)
   recordEmailSends.mockResolvedValue(undefined)
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
@@ -252,12 +298,15 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
-/** Nothing left the building, nothing was written. */
-const expectNothingSent = () => {
+/**
+ * Nothing left the building, nothing was written, and no slot was kept:
+ * the day's counter still reads `counted`, whatever earlier sends left it at.
+ */
+const expectNothingSent = (counted = 0) => {
   expect(sendEmail).not.toHaveBeenCalled()
   expect(writeCrmEmailActivity).not.toHaveBeenCalled()
-  expect(recordCrmEmailSend).not.toHaveBeenCalled()
   expect(recordEmailSends).not.toHaveBeenCalled()
+  expect(countedToday()).toBe(counted)
 }
 
 describe('the request', () => {
@@ -320,7 +369,7 @@ describe('the per-user pace', () => {
     expect(status).toBe(429)
     expect(body).toMatchObject({ error: CRM_EMAIL_RATE_MESSAGE, reason: 'rate' })
     expect(Number(headers['Retry-After'])).toBeGreaterThanOrEqual(41)
-    expect(crmEmailsSentToday).not.toHaveBeenCalled()
+    expect(runTransaction).not.toHaveBeenCalled()
     expectNothingSent()
   })
 })
@@ -388,15 +437,15 @@ describe('the recipient comes off the record', () => {
   })
 })
 
-describe('the daily cap (AGL-2611)', () => {
+describe('the daily cap (AGL-2611), reserved in a transaction (AGL-2645)', () => {
   it('sends the last email inside the cap and refuses the next', async () => {
     expect(INCLUDED).toBeGreaterThan(0)
-    crmEmailsSentToday.mockResolvedValue(INCLUDED - 1)
+    sentToday(INCLUDED - 1)
     expect((await call(MESSAGE)).status).toBe(200)
     expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(countedToday()).toBe(INCLUDED)
 
     jest.clearAllMocks()
-    crmEmailsSentToday.mockResolvedValue(INCLUDED)
     const { status, body } = await call(MESSAGE)
     expect(status).toBe(409)
     expect(body).toMatchObject({
@@ -406,7 +455,11 @@ describe('the daily cap (AGL-2611)', () => {
       used: INCLUDED,
     })
     expect(body.resetsAtMs).toEqual(expect.any(Number))
-    expectNothingSent()
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(writeCrmEmailActivity).not.toHaveBeenCalled()
+    expect(recordEmailSends).not.toHaveBeenCalled()
+    // A refusal writes nothing: the counter stands where it was.
+    expect(countedToday()).toBe(INCLUDED)
   })
 
   it('tells a plan with no one-to-one email to upgrade, at zero', async () => {
@@ -415,6 +468,31 @@ describe('the daily cap (AGL-2611)', () => {
     expect(status).toBe(409)
     expect(body).toMatchObject({ error: CRM_EMAIL_NOT_INCLUDED_MESSAGE, included: 0 })
     expectNothingSent()
+  })
+
+  it('takes the slot BEFORE the provider is called, and keeps it once accepted', async () => {
+    await call(MESSAGE)
+    expect(runTransaction).toHaveBeenCalledTimes(1)
+    expect(runTransaction.mock.invocationCallOrder[0]).toBeLessThan(
+      sendEmail.mock.invocationCallOrder[0],
+    )
+    expect(store[USAGE]).toMatchObject({ count: 1, day: crmEmailUsageDayKey() })
+  })
+
+  /**
+   * THE ISSUE, reproduced and closed. Two reps send at the last slot; each
+   * passes every gate before the cap. Exactly one message may leave.
+   */
+  it('CANNOT be raced: two sends at the last slot yield one send and one refusal', async () => {
+    sentToday(INCLUDED - 1)
+    const answers = await Promise.all([call(MESSAGE), call(MESSAGE)])
+    expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409])
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(writeCrmEmailActivity).toHaveBeenCalledTimes(1)
+    expect(recordEmailSends).toHaveBeenCalledTimes(1)
+    expect(countedToday()).toBe(INCLUDED)
+    const refused = answers.find((answer) => answer.status === 409)
+    expect(refused?.body).toMatchObject({ reason: 'quota', used: INCLUDED })
   })
 })
 
@@ -498,7 +576,7 @@ describe('a send the provider accepted', () => {
     })
   })
 
-  it('logs the row under the minted id, then counts it, then meters it', async () => {
+  it('logs the row under the minted id, then meters it', async () => {
     await call(MESSAGE)
     const [ref, row] = writeCrmEmailActivity.mock.calls[0]
     expect(ref.id).toBe('act-new')
@@ -517,38 +595,48 @@ describe('a send the provider accepted', () => {
       visibleTo: [`host:${HOST_ID}`],
     })
     expect(row.atMs).toEqual(expect.any(Number))
-    expect(recordCrmEmailSend).toHaveBeenCalledWith(firestoreHandle, ORG_ID)
     expect(recordEmailSends).toHaveBeenCalledWith({
       scope: { kind: 'org', orgId: ORG_ID },
       count: 1,
       sendClass: 'transactional',
       firestore: firestoreHandle,
     })
-    const order = [writeCrmEmailActivity, recordCrmEmailSend, recordEmailSends].map(
-      (spy) => spy.mock.invocationCallOrder[0],
+    expect(writeCrmEmailActivity.mock.invocationCallOrder[0]).toBeLessThan(
+      recordEmailSends.mock.invocationCallOrder[0],
     )
-    expect(order).toEqual([...order].sort((a, b) => a - b))
   })
 
-  it('still counts and answers when the row could not be written, and says so', async () => {
+  it('still keeps the slot and answers when the row could not be written, and says so', async () => {
     writeCrmEmailActivity.mockRejectedValue(new Error('unavailable'))
     const { status, body } = await call(MESSAGE)
     expect(status).toBe(200)
     expect(body.logged).toBe(false)
-    expect(recordCrmEmailSend).toHaveBeenCalledTimes(1)
+    expect(countedToday()).toBe(1)
     expect(recordEmailSends).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('a send the provider refused', () => {
-  it('writes and counts nothing, and names the failure', async () => {
+  it('writes nothing, gives the slot back, and names the failure', async () => {
+    sentToday(5)
     sendEmail.mockResolvedValue({ sent: false, reason: 'rejected', status: 422, detail: 'bad' })
     const { status, body } = await call(MESSAGE)
     expect(status).toBe(502)
     expect(body.reason).toBe('send-failed')
     expect(writeCrmEmailActivity).not.toHaveBeenCalled()
-    expect(recordCrmEmailSend).not.toHaveBeenCalled()
     expect(recordEmailSends).not.toHaveBeenCalled()
+    // Reserved, then released: the day's figure is what it was.
+    expect(runTransaction).toHaveBeenCalledTimes(2)
+    expect(countedToday()).toBe(5)
+  })
+
+  it('gives the slot back when the provider never answered', async () => {
+    sentToday(5)
+    sendEmail.mockRejectedValue(new Error('socket hang up'))
+    const { status } = await call(MESSAGE)
+    expect(status).toBe(500)
+    expect(writeCrmEmailActivity).not.toHaveBeenCalled()
+    expect(countedToday()).toBe(5)
   })
 
   it('relays a provider rate limit as a retry, not a fault', async () => {
@@ -625,7 +713,8 @@ describe('at the organization level', () => {
     const { status, body } = await call(MESSAGE, asOrg())
     expect(status).toBe(409)
     expect(body).toMatchObject({ error: CRM_EMAIL_PICK_SITE_MESSAGE, reason: 'site' })
-    expectNothingSent()
+    // The first send's slot stands; the refused one took none.
+    expectNothingSent(1)
     expect(logOrgActivity).not.toHaveBeenCalled()
   })
 
