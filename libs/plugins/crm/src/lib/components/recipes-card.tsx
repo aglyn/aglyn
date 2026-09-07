@@ -446,14 +446,20 @@ export function RecipesCard(props: RecipesCardProps) {
             onClose={() => setLastInstall(null)}
             action={
               lastInstallHref ? (
-                <AppLink
-                  componentVariant="button"
+                // A link dressed as a button: the anchor carries its own
+                // href, so it keeps the link role a navigation door has.
+                <Button
+                  component={AppLink as any}
+                  {...({
+                    componentVariant: 'naked',
+                    nativeButton: false,
+                  } as any)}
+                  href={lastInstallHref}
                   size="small"
                   color="inherit"
-                  href={lastInstallHref}
                 >
                   {'Open Automation → Actions'}
-                </AppLink>
+                </Button>
               ) : undefined
             }
           >
