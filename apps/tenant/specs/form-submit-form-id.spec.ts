@@ -327,11 +327,11 @@ describe('a retired form collects nothing', () => {
     expect(written()).toBeUndefined()
   })
 
-  it('is decided by a positive timestamp, so a cleared field still collects', async () => {
-    // What Restore writes. `null` is "in use", and so is a `0` or a value of
-    // the wrong type — the safe reading of an unusable timestamp is that the
-    // form is still collecting.
-    for (const archivedAt of [null, 0, 'yesterday']) {
+  it('collects again once the marker is cleared', async () => {
+    // What Restore writes, plus the `0` that has never meant retirement.
+    // Anything else present is a marker, whatever clock wrote it — the list
+    // filter and the funnel probe both read it that way.
+    for (const archivedAt of [null, 0]) {
       mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
         displayName: 'Contact',
         slug: 'contact',
