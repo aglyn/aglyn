@@ -53,6 +53,13 @@ the gap made visible. **When you republish the page, update those literals in
 the same commit** — otherwise the spec goes on describing a gap that no longer
 exists, and the next reader believes it.
 
+The page was last republished on 2026-09-07, to version `zj-21jtrPG` of
+screen `v0clP6xQl-`, and now matches `PLAN_ENTITLEMENTS` on every row except
+the extra-site add-on, which stays at the published $5 · $4 · $3 against the
+code's $8 pending AGL-2652. The parity spec's literals were updated the same
+day, and the 2026-09-07 entry in `docs/DECISION_LOG.md` records the was → now
+of every row that moved.
+
 **#9 quotes the price in prose and nothing reads it.** `/pricing`'s
 description is a plain-text field on the screen's detail page, separate from
 the body, and it propagates into `<meta name="description">`,
