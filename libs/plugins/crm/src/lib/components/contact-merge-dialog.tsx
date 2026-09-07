@@ -181,9 +181,10 @@ export function ContactMergeDialog(props: ContactMergeDialogProps) {
   const callCrm = useCrmApi(hostId)
   const { enqueueSnackbar } = useSnackbar()
   const groupId = consentGroup.groupId
+  const orgMount = useCrmOrgMount()
   // A site to run as, or the org to run as (AGL-2634): one of the two is
   // what the route authorizes against, and with neither there is no door.
-  const canMerge = Boolean(hostId) || Boolean(useCrmOrgMount())
+  const canMerge = Boolean(hostId) || Boolean(orgMount)
 
   const [other, setOther] = useState<ContactPick | null>(props.other)
   const [keep, setKeep] = useState<ContactMergeKeep>(props.keep)

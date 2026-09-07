@@ -103,8 +103,9 @@ export interface ErasePersonAction {
 export function useErasePersonAction(props: UseErasePersonActionProps): ErasePersonAction {
   const { hostId, orgId, subject, requestedAtMs } = props
   const { canManage, ready } = useCanManageCrmSettings(orgId ?? undefined)
+  const orgMount = useCrmOrgMount()
   // A site to file from, or the org to file as (AGL-2634).
-  const canFile = Boolean(hostId) || Boolean(useCrmOrgMount())
+  const canFile = Boolean(hostId) || Boolean(orgMount)
   const [open, setOpen] = useState(false)
   // The marker arrives on the record's own document, so a request filed on
   // this page shows as pending the moment the listener catches up — and,
