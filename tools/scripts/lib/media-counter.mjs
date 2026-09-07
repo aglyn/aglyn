@@ -45,9 +45,9 @@
 //   count  += the document did not exist ? 1 : 0
 //   bytes  += (effective new sizeBytes) - (stored sizeBytes, or 0 if new)
 //
-// That one rule covers every caller, including `migrate-blog-covers`, which
-// does not create anything — it overwrites an existing asset's bytes, so its
-// count delta is 0 and its byte delta is signed.
+// That one rule covers every caller, including one that creates nothing and
+// only replaces an existing asset's bytes: its count delta is 0 and its byte
+// delta is signed.
 //
 // ## The effective size
 //

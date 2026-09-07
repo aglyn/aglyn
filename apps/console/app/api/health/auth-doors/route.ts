@@ -18,13 +18,24 @@
 /**
  * Can a person still get IN? (AGL-2586)
  *
- * Six checks — `passwordSignIn`, `passwordReset`, `emailVerification`,
- * `googleOauth`, `sso`, `passkey` — over every way a person gets in. Signup
- * was dead for every visitor from launch day to 2026-09-04 with every
- * component check green, because a platform can have every dependency working
- * and still be one nobody can get into. `/api/health/signup-volume` watches
- * account CREATION and `/api/health/journeys` watches what a customer does
- * once inside; this is the way in.
+ * Seven checks — `passwordSignIn`, `passwordReset`, `emailVerification`,
+ * `verificationDelivery`, `googleOauth`, `sso`, `passkey` — over every way a
+ * person gets in. Signup was dead for every visitor from launch day to
+ * 2026-09-04 with every component check green, because a platform can have
+ * every dependency working and still be one nobody can get into.
+ * `/api/health/signup-volume` watches account CREATION and
+ * `/api/health/journeys` watches what a customer does once inside; this is the
+ * way in.
+ *
+ * `verificationDelivery` is the only OUTCOME check of the seven, and it is
+ * here rather than on an endpoint of its own (AGL-2673). Six of these ask
+ * whether a step of the journey is POSSIBLE; that one asks whether the mail
+ * the verification door lets be sent was actually recorded as delivered, for
+ * the accounts that were owed one. It shares this endpoint because it shares
+ * the subject and the first responder — a person cannot get in without the
+ * link — and because a separate URL would buy a second row on the uptime
+ * board, a second docs table row and a second live monitor for one question
+ * about one door.
  *
  * `passwordSignIn` joined the five later (AGL-2583). The original set was
  * deliberately the doors that are NOT email and password, on the reading that
@@ -37,9 +48,9 @@
  * `auth-doors-verdict.ts`, where a spec drives every red branch with no
  * network and no admin credential.
  *
- * ONE endpoint for the six rather than six, because they share a subject and
- * a first responder: the body's `checks` says which door is shut, and six
- * separate URLs would put five more rows on the uptime board for one
+ * ONE endpoint for the seven rather than seven, because they share a subject
+ * and a first responder: the body's `checks` says which door is shut, and
+ * seven separate URLs would put six more rows on the uptime board for one
  * question.
  *
  * Same contract as every sibling: the STATUS CODE is the signal (200 / 503),
@@ -84,6 +95,7 @@ export async function GET(): Promise<Response> {
     passwordSignIn,
     passwordReset,
     emailVerification,
+    verificationDelivery,
     googleOauth,
     sso,
     passkey,
@@ -92,6 +104,7 @@ export async function GET(): Promise<Response> {
     passwordSignIn,
     passwordReset,
     emailVerification,
+    verificationDelivery,
     googleOauth,
     sso,
     passkey,

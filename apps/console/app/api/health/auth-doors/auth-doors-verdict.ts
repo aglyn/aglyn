@@ -56,6 +56,7 @@ export type AuthDoor =
   | 'password-sign-in'
   | 'password-reset'
   | 'email-verification'
+  | 'verification-delivery'
   | 'google-oauth'
   | 'sso'
   | 'passkey'
@@ -306,6 +307,219 @@ export function emailVerificationDoorHealth(
   }
   if (facts.sendGate === 'unavailable') {
     return { ...base, ok: false, code: 'auto-send-gate-unavailable' }
+  }
+  return { ...base, ok: true }
+}
+
+/**
+ * WAS THE VERIFICATION MAIL ACTUALLY DELIVERED? (AGL-2673)
+ *
+ * Every clause of the door above is about whether a send is POSSIBLE: the
+ * mint answers, the link is rebuilt on our own handler, redemption refuses a
+ * bad code, and the cooldown admits a first arrival. Not one of them observes
+ * a mail. Everything downstream of the gate — the transport, the provider,
+ * the address, the inbox — is watched by nothing, so a provider outage, a
+ * suspended sending domain, a bounced-back sender or a template that throws
+ * while rendering is invisible to every check on the board.
+ *
+ * This is the OUTCOME rather than the component: of the accounts created in a
+ * settled trailing window, how many carry a verification delivery event.
+ *
+ * ## Zero only means something next to a denominator
+ *
+ * The check named "signups" measured an abuse FLOOD, so zero signups was its
+ * healthiest possible reading, and it stayed green through three days of
+ * every account being refused (AGL-2583). The name said one property and the
+ * assertion measured another. This one is a DROUGHT detector by construction
+ * — "accounts were created and their mail is missing" is the alarm — and a
+ * drought needs a denominator: a window with no accounts in it proves
+ * nothing, and grading it would be the same mistake pointed the other way.
+ *
+ * So below {@link MIN_ACCOUNTS_FOR_DELIVERY_VERDICT} the answer is
+ * `not-enough-accounts`, an explicit unknown carried in the body beside the
+ * counts it was computed from, rather than a silent pass a reader would take
+ * for "mail is flowing".
+ *
+ * ## An absent row is not proof that nothing was sent
+ *
+ * The delivery log is honest about that limit itself, and the caveat has to
+ * survive into the verdict rather than being dropped on the way here. Two
+ * clauses carry it:
+ *
+ *  - **The feed has to be CONNECTED before its silence means anything.** With
+ *    no webhook secret on the deployment nothing is ever recorded, so every
+ *    window would read as a total outage — an alarm that is wrong on every
+ *    self-host, every preview and every local run.
+ *    `delivery-feed-not-configured` says that instead, and it is the one
+ *    state in which this door has no opinion to spend.
+ *  - **The red codes name what was OBSERVED, never the conclusion.**
+ *    `verification-delivery-missing` is the strong one: other mail to these
+ *    same accounts is being recorded, so the feed is demonstrably live and
+ *    the verification mail specifically is not landing. `no-delivery-events`
+ *    is the weaker one — nothing at all was recorded for any of them, which
+ *    is either the mail path or the feed, and
+ *    {@link VERIFICATION_DELIVERY_CAVEAT} tells a responder to rule out the
+ *    feed first. Both are red, because a delivery feed that records nothing
+ *    is an outage of the only thing that can see mail leave the building, and
+ *    "we cannot tell" reported as calm is what cost AGL-2667 three days.
+ *
+ * COUNTS ONLY leave this function. The account listing behind it answers with
+ * every account's address and password hash, and this endpoint is public.
+ */
+export interface VerificationDeliveryCheck extends AuthDoorCheck {
+  /**
+   * Accounts created inside the settled window that should have been sent a
+   * verification link. Null when the listing itself could not be read.
+   */
+  accountsCreated: number | null
+  /**
+   * How many of those were looked up in the delivery log — the denominator
+   * the verdict is graded against. The sample rather than the population,
+   * because a public endpoint's cost must not grow with the business.
+   */
+  accountsSampled: number
+  /** Of the sampled accounts, how many carry a verification delivery event. */
+  withVerificationDelivery: number
+  /**
+   * Of the sampled accounts, how many carry ANY delivery event at all.
+   *
+   * The one number that separates the two repairs. Above zero it proves the
+   * feed is recording for these very accounts, so a missing verification
+   * event is about the mail rather than about the webhook.
+   */
+  withAnyDelivery: number
+  /** The trailing window both numbers cover, so the body is self-describing. */
+  windowMinutes: number
+  /** How far back the window ENDS, leaving the newest signups ungraded. */
+  settleMinutes: number
+  /** Accounts below which a missing delivery event means nothing. */
+  minimumAccounts: number
+  /** A fixed literal: what a red here does NOT prove. */
+  caveat: string
+}
+
+/**
+ * The trailing window, a full day.
+ *
+ * Long enough that the denominator clears its floor at the volume this
+ * platform actually signs up — an hour-long window would spend nearly all of
+ * its life below the floor, which is an alarm that is essentially never armed
+ * — and short enough that three days of silence is caught on the first one.
+ */
+export const VERIFICATION_DELIVERY_WINDOW_MINUTES = 24 * 60
+
+/**
+ * How far back the window ends.
+ *
+ * A delivery event arrives through a provider webhook, so an account created
+ * forty seconds ago has no row yet and is evidence of nothing. Grading it
+ * would make this check flap on every busy minute, and a flapping check is a
+ * muted one. Fifteen minutes is far more than the feed's ordinary latency and
+ * costs only that much detection delay against a window measured in a day.
+ */
+export const VERIFICATION_DELIVERY_SETTLE_MINUTES = 15
+
+/**
+ * Accounts in the window below which a missing delivery event proves nothing.
+ *
+ * Three, and the shape of the verdict is what sets it: the alarm is that NOT
+ * ONE of them got a delivery event, so the floor only has to be high enough
+ * that zero coverage cannot be ordinary bounce noise. At a delivery rate
+ * anywhere near healthy, three accounts in a row with nothing recorded is not
+ * a coincidence — and a higher floor would leave the check disarmed on most
+ * days at current volume, which is the worse failure of the two.
+ */
+export const MIN_ACCOUNTS_FOR_DELIVERY_VERDICT = 3
+
+/**
+ * What a red on this door does not establish, carried in every response.
+ *
+ * A fixed literal, like `asserts` and for the same reason: a reader who
+ * cannot tell what a check's silence is worth will assume it covers more than
+ * it does. The delivery log records nothing while its feed is down, so this
+ * names the feed as the first thing to rule out rather than letting a code
+ * that says "missing" be read as "never sent".
+ */
+export const VERIFICATION_DELIVERY_CAVEAT =
+  'an absent delivery row is not proof that nothing was sent — mail sent ' +
+  'while the delivery feed is down leaves no row, so rule the feed out ' +
+  'before the mail path; withAnyDelivery above zero already rules it out'
+
+export function verificationDeliveryHealth(
+  facts: {
+    /** Whether this deployment can list accounts at all. */
+    accountListingConfigured: boolean
+    /** Whether the feed is connected, so that its silence can mean anything. */
+    deliveryFeedConfigured: boolean
+    accountsCreated: number | null
+    accountsSampled: number
+    withVerificationDelivery: number
+    withAnyDelivery: number
+    /** True when a delivery-log read FAILED rather than came back empty. */
+    deliveryLogUnreadable: boolean
+    minimumAccounts: number
+    windowMinutes: number
+    settleMinutes: number
+  },
+  ms: number,
+): VerificationDeliveryCheck {
+  const base = {
+    door: 'verification-delivery' as const,
+    ms,
+    asserts:
+      'of the accounts created in a settled trailing window, at least one ' +
+      'carries a verification delivery event — the outcome, not the send',
+    caveat: VERIFICATION_DELIVERY_CAVEAT,
+    accountsCreated: facts.accountsCreated,
+    accountsSampled: facts.accountsSampled,
+    withVerificationDelivery: facts.withVerificationDelivery,
+    withAnyDelivery: facts.withAnyDelivery,
+    windowMinutes: facts.windowMinutes,
+    settleMinutes: facts.settleMinutes,
+    minimumAccounts: facts.minimumAccounts,
+  }
+  // The two "no opinion" states first, so a deployment that was never wired
+  // for this is never reported as an outage of it. Ahead of the read failures
+  // below, because an unconfigured deployment has nothing that can fail.
+  //
+  // The FEED leads the pair: with nothing recording deliveries, the accounts
+  // half of the ratio can be read perfectly and still answer no question at
+  // all, so which of the two is missing does not change the verdict — but
+  // naming the feed points at the thing that has to be fixed first.
+  if (!facts.deliveryFeedConfigured) {
+    return { ...base, ok: true, code: 'delivery-feed-not-configured' }
+  }
+  if (!facts.accountListingConfigured) {
+    return { ...base, ok: true, code: 'account-listing-not-configured' }
+  }
+  // Configured and then unreadable is the opposite case and takes the
+  // opposite answer: an alarm that cannot see the thing it watches must not
+  // report calm, the rule every sibling on this endpoint follows.
+  if (facts.accountsCreated === null) {
+    return { ...base, ok: false, code: 'accounts-unavailable' }
+  }
+  if (facts.deliveryLogUnreadable) {
+    return { ...base, ok: false, code: 'delivery-log-unavailable' }
+  }
+  // Graded on the SAMPLE, which is what was actually looked up. Grading on a
+  // population larger than the sample would let a flood of signups arm a
+  // verdict computed from a handful of them.
+  if (facts.accountsSampled < facts.minimumAccounts) {
+    return { ...base, ok: true, code: 'not-enough-accounts' }
+  }
+  if (facts.withVerificationDelivery === 0) {
+    return {
+      ...base,
+      ok: false,
+      // Which of the two reds is a question about the FEED rather than about
+      // the mail: other recorded mail to these same accounts is the witness
+      // that the webhook is alive, and only with that witness may this door
+      // say the verification mail in particular went missing.
+      code:
+        facts.withAnyDelivery > 0
+          ? 'verification-delivery-missing'
+          : 'no-delivery-events',
+    }
   }
   return { ...base, ok: true }
 }

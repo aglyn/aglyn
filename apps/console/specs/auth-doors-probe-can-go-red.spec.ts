@@ -120,6 +120,20 @@ jest.mock('firebase-admin/app', () => ({
   getApp: () => ({}),
 }))
 
+/**
+ * The delivery log the AGL-2673 arm reads, mocked at the LEAF.
+ *
+ * Not for what it answers — this app carries no credential, so that arm
+ * reports it has nothing to grade and never reaches a read — but because the
+ * real module pulls in the admin SDK's initialization at import time, and
+ * `firebase-admin/app` above is narrowed to `getApp`. `verification-delivery-
+ * can-go-red.spec.ts` is where that arm is actually driven.
+ */
+jest.mock('@aglyn/tenant-data-admin/server/email-delivery-log', () => ({
+  __esModule: true,
+  readEmailDeliveryHistory: async () => ({ lookupFailed: false, rows: [] }),
+}))
+
 jest.mock('firebase-admin/app-check', () => ({
   __esModule: true,
   getAppCheck: () => ({
@@ -220,6 +234,7 @@ describe('every door open', () => {
       'passwordReset',
       'passwordSignIn',
       'sso',
+      'verificationDelivery',
     ])
     expect((body as { service: string }).service).toBe('console-auth-doors')
   })

@@ -9,6 +9,32 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.84 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/3faca558b...v1.0.0-beta.84)
+
+### Added
+
+- **health:** assert the verification mail was delivered, not just allowed ([AGL-2673](https://linear.app/aglyn/issue/AGL-2673))
+
+### Fixed
+
+- **tools:** the theme-history migration checks the reader, not only the rules ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670))
+- **tenant:** the funnel grades the live lead surfaces, and its count grades both ways ([AGL-2672](https://linear.app/aglyn/issue/AGL-2672), [AGL-2669](https://linear.app/aglyn/issue/AGL-2669))
+
+### Documentation
+
+- **tools:** an index that says which backfill, migration and seed still runs ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-1839](https://linear.app/aglyn/issue/AGL-1839))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **tools:** delete the blog-cover migration that rewrites a reference as a URL ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-826](https://linear.app/aglyn/issue/AGL-826), [AGL-1215](https://linear.app/aglyn/issue/AGL-1215))
+- **tools:** delete the binding-token migration that cannot see its own corpus ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-188](https://linear.app/aglyn/issue/AGL-188), [AGL-1397](https://linear.app/aglyn/issue/AGL-1397))
+- **tools:** delete the two org backfills whose source schema is retired ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-238](https://linear.app/aglyn/issue/AGL-238), [AGL-233](https://linear.app/aglyn/issue/AGL-233), [AGL-1038](https://linear.app/aglyn/issue/AGL-1038), [AGL-237](https://linear.app/aglyn/issue/AGL-237), [AGL-1839](https://linear.app/aglyn/issue/AGL-1839), [AGL-1061](https://linear.app/aglyn/issue/AGL-1061), [AGL-1050](https://linear.app/aglyn/issue/AGL-1050))
+
+</details>
+
 ## v1.0.0-beta.83 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/b7ca99abe...v1.0.0-beta.83)
