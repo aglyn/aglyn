@@ -136,7 +136,7 @@ const nameSearchTokens = (name) => {
   return [...tokens]
 }
 
-// ── Admin init (same pattern as migrate-blog-covers.mjs) ────────────────────
+// ── Admin init ─────────────────────────────────────────────────────────────
 const projectId = process.env.FIREBASE_PROJECT_ID
 if (!projectId) {
   console.error('Missing FIREBASE_PROJECT_ID env var')

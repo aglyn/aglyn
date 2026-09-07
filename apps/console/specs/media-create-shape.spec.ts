@@ -263,14 +263,13 @@ const SCRIPT_MEDIA_WRITERS = walk(
 
 describe('AGL-1488 · every script that writes media moves `counters/media`', () => {
   it('discovers the script writers rather than trusting a list', () => {
-    // Four when this was filed — the demo seed (shared by the host and org
-    // demo scripts), the e2e seed, the scope fixture and the blog-cover
-    // migration — plus the lockdown e2e probe. A fifth arriving lands here.
+    // Three seeds mint media — the demo seed (shared by the host and org demo
+    // scripts), the e2e seed and the scope fixture — plus the lockdown e2e
+    // probe. A fourth arriving lands here.
     expect(SCRIPT_MEDIA_WRITERS.length).toBeGreaterThanOrEqual(4)
     expect(SCRIPT_MEDIA_WRITERS).toContain('tools/scripts/lib/seed-demo.mjs')
     expect(SCRIPT_MEDIA_WRITERS).toContain('tools/scripts/seed-e2e.mjs')
     expect(SCRIPT_MEDIA_WRITERS).toContain('tools/scripts/seed-scope-fixture.mjs')
-    expect(SCRIPT_MEDIA_WRITERS).toContain('tools/scripts/migrate-blog-covers.mjs')
   })
 
   it('a read-only media consumer is not held to the counter', () => {
