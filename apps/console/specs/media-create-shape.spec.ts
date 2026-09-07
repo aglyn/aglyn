@@ -210,12 +210,11 @@ const MEDIA_MINTING_TOKENS = ['.set(', '.add(']
  * nor is left open-ended. Two shapes qualify, and both are live in the tree:
  *
  *  * **Read.** `collection('media').get()`, or a query in between —
- *    `.orderBy(…).get()`, `.where(…).get()`. `backfill-media-refs.mjs` reads
- *    media to repair `nodes` on screens and forms and must not be held to a
- *    counter it never moves.
+ *    `.orderBy(…).get()`, `.where(…).get()`. A script that reads media to
+ *    repair something else must not be held to a counter it never moves.
  *  * **Patch.** `collection('media')` … `.update(` with no mint token in the
- *    chain, which is `backfill-media-content-sha256.mjs` (AGL-1630) adding
- *    `contentSha256` to documents that already exist.
+ *    chain — a one-field patch onto documents that already exist, such as the
+ *    `contentSha256` a strong digest adds (AGL-1630).
  *
  * The window examined is bounded rather than "the rest of the file" so a mint
  * three hundred lines later, in an unrelated function, does not condemn a
@@ -231,6 +230,19 @@ function cannotMintMedia(source: string): boolean {
     if (MEDIA_MINTING_TOKENS.some((token) => chain.includes(token))) return false
     return chain.includes('.get(') || chain.includes('.update(')
   })
+}
+
+/**
+ * The whole discovery rule, applied to one file's source.
+ *
+ * Named so the controls below can drive it with a source they supply. A
+ * control that instead names a file passes the day that file stops existing,
+ * which makes it a statement about the tree rather than about the rule.
+ */
+function isScriptMediaWriter(source: string): boolean {
+  const reachesByHand =
+    source.includes(MEDIA_COLLECTION_MJS) && !cannotMintMedia(source)
+  return reachesByHand || source.includes(SHARED_MEDIA_WRITER)
 }
 
 /**
@@ -253,10 +265,7 @@ const SCRIPT_MEDIA_WRITERS = walk(
 )
   .filter((file) => {
     if (file.includes(MEDIA_WRITER_MODULE)) return false
-    const source = read(file)
-    const reachesByHand =
-      source.includes(MEDIA_COLLECTION_MJS) && !cannotMintMedia(source)
-    return reachesByHand || source.includes(SHARED_MEDIA_WRITER)
+    return isScriptMediaWriter(read(file))
   })
   .map(repoPath)
   .sort()
@@ -275,21 +284,33 @@ describe('AGL-1488 · every script that writes media moves `counters/media`', ()
   it('a read-only media consumer is not held to the counter', () => {
     // The negative control. Without it the rule above could be satisfied by a
     // predicate that matches everything, and "all writers comply" would be a
-    // statement about nothing.
-    expect(SCRIPT_MEDIA_WRITERS).not.toContain(
-      'tools/scripts/backfill-media-refs.mjs',
-    )
+    // statement about nothing. A script that reads media to repair something
+    // else moves no counter, so it owes none.
+    expect(
+      isScriptMediaWriter("const assets = await db.collection('media').get()"),
+    ).toBe(false)
   })
 
   it('a script that only PATCHES an existing document is not either', () => {
-    // AGL-1630's `contentSha256` backfill reaches media by hand and writes to
-    // it — with `.update()`, which throws on a missing document and therefore
-    // cannot mint one. It lands no bytes, so there is no counter to move, and
-    // routing a one-field patch through `putMediaDocument()` would mean
-    // calling a creator to avoid creating.
-    expect(SCRIPT_MEDIA_WRITERS).not.toContain(
-      'tools/scripts/backfill-media-content-sha256.mjs',
-    )
+    // A one-field patch reaches media by hand and writes to it — with
+    // `.update()`, which throws on a missing document and therefore cannot
+    // mint one. It lands no bytes, so there is no counter to move, and
+    // routing a patch through `putMediaDocument()` would mean calling a
+    // creator to avoid creating.
+    expect(
+      isScriptMediaWriter(
+        "await db.collection('media').doc(id).update({ contentSha256 })",
+      ),
+    ).toBe(false)
+  })
+
+  it('THE CONTROL: the same predicate does catch a writer', () => {
+    // Otherwise both controls above are satisfied by a predicate that answers
+    // false to everything, which would empty the discovery walk silently.
+    expect(
+      isScriptMediaWriter("await db.collection('media').doc(id).set(doc)"),
+    ).toBe(true)
+    expect(isScriptMediaWriter('await putMediaDocument(db, doc)')).toBe(true)
   })
 
   it('the widened rule still catches every minting shape', () => {

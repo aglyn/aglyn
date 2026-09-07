@@ -35,9 +35,9 @@ export interface FirstPartyPlugin {
    *
    * Renaming one is therefore a data change, not a code change, and it is
    * done in two halves that must both ship: the old id is read through
-   * {@link canonicalPluginId} so every stored list still resolves, and
-   * `tools/scripts/backfill-plugin-id-crm.mjs` (the shape to copy) rewrites
-   * the documents so the alias can be retired once it reads nothing.
+   * {@link canonicalPluginId} so every stored list still resolves, and a
+   * backfill rewrites the stored documents so the alias can be retired once
+   * it reads nothing.
    */
   id: string
   /** Console-facing display name. */
@@ -216,11 +216,12 @@ export const DEFAULT_ENABLED_PLUGINS: readonly string[] =
  * before a rename keeps meaning what it meant while the backfill runs.
  *
  * Nothing is aliased today. `contacts` read as `crm` from the CRM's rename
- * (AGL-2595) until `tools/scripts/backfill-plugin-id-crm.mjs` reported zero
- * documents carrying the old id, and the alias was retired (AGL-2614) — an
- * alias that outlives its backfill is a second name for the plugin that
- * nothing writes and every reader must keep honoring. The next rename adds
- * its pair here, ships the backfill, and removes the pair the same way.
+ * (AGL-2595) until its backfill reported zero documents carrying the old id,
+ * and the alias was retired (AGL-2614) — an alias that outlives its backfill
+ * is a second name for the plugin that nothing writes and every reader must
+ * keep honoring. The next rename adds its pair here, ships a backfill over
+ * `org.enabledPlugins`, `host.disabledPlugins`, `host.enabledPlugins` and the
+ * `pluginSettings` document ids, and removes the pair the same way.
  */
 export function canonicalPluginId(pluginId: string): string {
   return pluginId

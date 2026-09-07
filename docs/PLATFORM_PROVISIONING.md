@@ -43,18 +43,14 @@ Sections (each skips with instructions when its credential is absent):
   unavoidable customer-side step)
 - Billing: Stripe Checkout/webhook run entirely on platform keys
 
-## Switcher search needs a backfill (AGL-835/837)
+## Switcher search reads a stamped key (AGL-835/837)
 
 The site, screen and org switchers search by name prefix over a `nameLower`
-field, which is stamped **on write**. Two consequences on any environment with
-data older than AGL-835:
-
-- Screens and hosts created before it exist but are **invisible to switcher
-  search** until they're renamed (which re-stamps) or backfilled. They still
-  appear in the recent-first idle list, so this reads as "search is broken for
-  old sites" rather than as missing data.
-- Run `node tools/scripts/backfill-name-lower.mjs` once per environment to
-  stamp them.
+field, which is stamped **on write** — by every path that sets a name,
+including import. A record whose `nameLower` is absent is **invisible to
+switcher search** while still appearing in the recent-first idle list, so the
+symptom reads as "search is broken for old sites" rather than as missing data.
+A write path that sets a name without the key is the defect to look for.
 
 Search also needs the composite indexes in `cloud/firebase-firestore.indexes.json`
 deployed — see [`docs/FIRESTORE_MANUAL_CONFIG.md`](FIRESTORE_MANUAL_CONFIG.md),

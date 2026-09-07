@@ -108,10 +108,10 @@ async function handler(request: Request): Promise<Response> {
      * edge of doing this without a search service; see `nameSearchTokens`.
      *
      * ⚠️ Ordering by `nameLower` DROPS documents that lack it, and the
-     * `array-contains` drops any that lack `nameTokens`. Both fields are
-     * written by every `name` writer and backfilled by
-     * `tools/scripts/backfill-name-lower.mjs` — an organization missing
-     * either would be invisible to search while still listing normally.
+     * `array-contains` drops any that lack `nameTokens`. Every writer of an
+     * org `name` writes both — an organization missing either would be
+     * invisible to search while still listing normally, so a write path that
+     * sets `name` alone is the defect to look for, not a missing sweep.
      */
     const search = nameSearchToken(String(query['search'] ?? ''))
     const orgsRef = db.collection('orgs')

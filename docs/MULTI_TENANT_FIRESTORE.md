@@ -208,9 +208,11 @@ Org roles (org-wide), then per-host refinement:
     site collaborator (`grantHostAccess` writes `role: 'viewer'`) from a
     genuine org-wide viewer. A scoped member is redirected out of the org
     pages into their site and gets no org tab strip; an ABSENT `orgWide`
-    reads as org-wide, so an unbackfilled row never hides a real member's
-    workspace (`tools/scripts/backfill-org-reach.mjs` stamps it). This is
-    chrome, not a boundary — the rules above are the boundary.
+    reads as org-wide, so a row that lost the mirror never hides a real
+    member's workspace. `syncMemberOrgReach()` rides the projection pass, so
+    every path that changes a member's reach writes the flag and a stale row
+    self-heals. This is chrome, not
+    a boundary — the rules above are the boundary.
 - **Custom roles.** A member's effective permissions resolve through three
   layers — the role default, then `roles/{roleId}`, then the member's own
   `permissions` overrides — and rules can follow none of that: `roleId`

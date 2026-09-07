@@ -1,7 +1,8 @@
-# Commerce backfills (AGL-1727 / 1745 / 1752 / 1753 / 1821)
+# Commerce backfills (AGL-1745 / 1752 / 1753, with 1727 and 1821 closed)
 
 Five historical-data gaps in commerce money records, each filed as a "backfill
-decision" issue because rewriting merchant-facing financial history is the account owner's call, not an agent's. All five were authorized on **2026-08-20**.
+decision" issue because rewriting merchant-facing financial history is the account owner's call, not an agent's. All five were authorized on **2026-08-20**. Two
+of the five have no script: their population is zero and cannot grow again.
 
 **Nothing here has been applied to production.** Every script dry runs by
 default; the apply gate is double-keyed and deliberately awkward.
@@ -10,7 +11,7 @@ default; the apply gate is double-keyed and deliberately awkward.
 
 | Issue | Script | Repairs |
 | --- | --- | --- |
-| AGL-1727 | `tools/scripts/backfills/backfill-agl1727-buy-now-orders.mjs` | Pre-AGL-1711 buy-now orders: `quantity: 1`, tax folded into the unit price, `taxCents`/`discountCents` 0 |
+| AGL-1727 | *(no script — see below)* | Pre-AGL-1711 buy-now orders: `quantity: 1`, tax folded into the unit price, `taxCents`/`discountCents` 0 |
 | AGL-1745 | `tools/scripts/backfills/backfill-agl1745-subscription-sales.mjs` | Pre-AGL-1732 subscription sales with no `lineItems` / `totals` / `interval` |
 | AGL-1752 | `tools/scripts/backfills/backfill-agl1752-subscription-invoices.mjs` | Pre-AGL-1743 renewals, recorded nowhere: creates the invoice ledger and the subscription roll-up |
 | AGL-1753 | `tools/scripts/backfills/backfill-agl1753-contact-ltv.mjs` | Pre-AGL-1748/1755 contacts: `ltvCents` understated, some buyers missing entirely |
@@ -27,13 +28,13 @@ Dry run — the default, writes nothing, prints every planned change:
 ```sh
 FIREBASE_PROJECT_ID=… FIREBASE_CLIENT_EMAIL=… FIREBASE_PRIVATE_KEY=… \
 STRIPE_SECRET_KEY=sk_live_… \
-  node tools/scripts/backfills/backfill-agl1727-buy-now-orders.mjs
+  node tools/scripts/backfills/backfill-agl1745-subscription-sales.mjs
 ```
 
 Apply — requires **both** flags. `--apply` alone stays in dry run, loudly:
 
 ```sh
-  … node tools/scripts/backfills/backfill-agl1727-buy-now-orders.mjs \
+  … node tools/scripts/backfills/backfill-agl1745-subscription-sales.mjs \
       --apply --yes-i-mean-production
 ```
 
@@ -46,7 +47,7 @@ Run **1745 → 1752 → 1753**. AGL-1745 gives a subscription its opening amount
 AGL-1752 needs that for a richer line-item snapshot and builds the invoice
 ledger; AGL-1753 reads orders ∪ subscriptions ∪ invoices, so it under-counts
 every subscriber if the first two have not run. Each script says so in its
-output when it detects the dependency. AGL-1727 is independent.
+output when it detects the dependency.
 
 ## The safety properties, and why they hold
 
@@ -75,7 +76,7 @@ destroying the real value under a partial write) therefore does not apply.
 correct value and writes only if it differs from what is stored, so a second
 run plans zero operations. `ltvCents` is a `FieldValue.increment` on the live
 path; the backfill **SETs** it, which is the whole reason a re-run cannot
-compound. Proven by four `idempotence …` tests that apply a plan against the
+compound. Proven by the `idempotence …` tests, which apply a plan against the
 Firestore double and then re-plan *from the mutated document*.
 
 **Every rewritten document is stamped**, so a later reader can tell a
@@ -83,7 +84,6 @@ reconstructed value from a measured one:
 
 | Document | Marker |
 | --- | --- |
-| `hosts/{h}/orders/{id}` | `backfills.agl1727AtMs` |
 | `hosts/{h}/subscriptions/{id}` | `backfills.agl1745AtMs` |
 | `…/subscriptions/{id}/invoices/{id}` | `backfilledAtMs` |
 | `orgs/{orgId}/contacts/{id}` | `backfills.agl1753AtMs` |
@@ -93,7 +93,7 @@ absent session, an anonymous POS sale and a subscription with no opening
 amount are all *reported* in a "manual review / cannot reconstruct" block and
 excluded from the plan. No constant is written where a measured value belongs.
 
-**Test-mode sales are excluded** by AGL-1727/1745/1752 (a `cs_test_…` id, or
+**Test-mode sales are excluded** by AGL-1745/1752 (a `cs_test_…` id, or
 a subscription id that 404s under the live key). **AGL-1753 does not filter
 test mode** — see the caveat below.
 
@@ -126,12 +126,31 @@ AGL-1753 would update `e2e-member-1@example.com` in org `hz_KgetqSq`: set
 `lastPurchaseAtMs` back 899 ms, from the write-time clock to the order's own
 `paidAt`. `ltvCents` and `ordersCount` already match and are not rewritten.
 
-That $18.00 came from a **test-mode** checkout session. AGL-1727/1745/1752
+That $18.00 came from a **test-mode** checkout session. AGL-1745/1752
 exclude test-mode sales; AGL-1753 does not, because it aggregates Firestore
 order documents and the live contact writer counted that order too. Excluding
 it would make the backfill disagree with the live path permanently — so the
 inconsistency is recorded here rather than papered over. It is moot today:
 the only affected row is an e2e fixture, not a customer.
+
+## AGL-1727 — no repair script, the population is zero
+
+A buy-now order written before AGL-1711 recorded `quantity: 1` however many
+units were sold, folded the manual tax line into the unit price, and left
+`taxCents` and `discountCents` at 0. The parts of such a record still sum to
+Stripe's `amount_total`, which is why it reads as correct.
+
+**The population is zero, and it is closed.** The 2026-08-20 dry run below
+scanned 6 hosts and found one order, test-mode, needing nothing; a re-scan of
+3 orders plans the same nothing. AGL-1711 shipped the quantity, unit price and
+tax split onto the session metadata, so no new order of this shape can be
+written — the count can only shrink, exactly as with AGL-1821.
+
+The reconstruction argument itself survives where it is still used:
+`reconstructBuyNowOrder` in `lib/backfill-core.mjs` rebuilds a line and totals
+from a Checkout Session for AGL-1745, and its worked example is pinned in
+`lib/backfill-core.test.mjs`. If an affected order is ever found, that is the
+transform a repair would be built on.
 
 ## AGL-1821 — no repair script, deliberately
 
@@ -163,10 +182,9 @@ If it ever returns non-zero, the repair is a Stripe `POST` to
 ## Consequences these backfills do NOT fix
 
 - **Inventory drift** (AGL-1727): the same hardcoded `1` under-decremented
-  stock, so a host that sold multi-unit buy-now orders has counts that are too
-  high and silently oversellable. The script *reports* the drift per order and
-  writes nothing — that reconciliation is a separate decision.
-- **Dropship supplier notices** (AGL-1727): already sent, telling suppliers to
-  ship one unit. Outbound and unrewritable.
+  stock, so a host that sold multi-unit buy-now orders would have counts that
+  are too high and silently oversellable. No such order was found, and stock
+  reconciliation would be a separate decision from repairing a money record
+  in any case.
 - **Refund netting** (AGL-1754): `ltvCents` is gross by definition; AGL-1753
   writes `refundedCents` beside it, never netted into it.

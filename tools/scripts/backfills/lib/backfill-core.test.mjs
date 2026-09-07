@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-// Unit tests for the backfill transforms (AGL-1727/1745/1752/1753).
+// Unit tests for the backfill transforms (AGL-1745/1752/1753).
 //
 //   node --test tools/scripts/backfills/lib/backfill-core.test.mjs
 //
@@ -33,10 +33,7 @@ import {
   aggregateContactPurchases,
   applyPlan,
   computeSubscriptionInvoiceOrder,
-  diffBuyNowOrder,
-  inventoryDriftForOrder,
   invoiceDocFromStripeInvoice,
-  isBuyNowOrder,
   normalizeContactEmail,
   planContactUpdate,
   reconstructBuyNowOrder,
@@ -86,7 +83,7 @@ function fakeFirestore(seed = {}) {
   }
 }
 
-// --- AGL-1727: the worked example from the AGL-1711 docstring -------------
+// --- The worked example from the AGL-1711 docstring -----------------------
 // 3 × $100 units, 10% host coupon, manual destination tax at 8.25%.
 // Stripe was sent unit 9000 (post-coupon) ×3 plus a 2228c tax line.
 
@@ -130,7 +127,7 @@ const preFixOrder = {
   },
 }
 
-test('AGL-1727 red: the pre-fix 1×29228 record is detected and rebuilt to 3×10000 with tax and discount', () => {
+test('a 1×29228 record rebuilds to 3×10000 with the tax and discount split back out', () => {
   const rebuilt = reconstructBuyNowOrder({
     order: preFixOrder,
     session: workedSession,
@@ -139,6 +136,8 @@ test('AGL-1727 red: the pre-fix 1×29228 record is detected and rebuilt to 3×10
   assert.equal(rebuilt.error, undefined)
   assert.equal(rebuilt.lineItems[0].quantity, 3)
   assert.equal(rebuilt.lineItems[0].unitAmountCents, 10000)
+  // The dangerous property AGL-1711 named: a wrong record's parts still sum,
+  // so it is the COMPONENTS that move here and never the total.
   assert.deepEqual(rebuilt.totals, {
     itemsCents: 30000,
     shippingCents: 0,
@@ -147,28 +146,10 @@ test('AGL-1727 red: the pre-fix 1×29228 record is detected and rebuilt to 3×10
     feeCents: 0,
     totalCents: 29228, // Stripe's amount_total, verbatim — the invariant.
   })
-  const diffs = diffBuyNowOrder(preFixOrder, rebuilt)
-  // The dangerous property AGL-1711 named: the wrong record's parts sum, so
-  // the diff must flag the COMPONENTS, not the total.
-  assert.ok(diffs.some((diff) => diff.field === 'lineItems[0].quantity'))
-  assert.ok(diffs.some((diff) => diff.field === 'totals.taxCents'))
-  assert.ok(diffs.some((diff) => diff.field === 'totals.discountCents'))
-  assert.ok(!diffs.some((diff) => diff.field === 'totals.totalCents'))
+  assert.equal(rebuilt.totals.totalCents, preFixOrder.totals.totalCents)
 })
 
-test('AGL-1727 red: inventory drift reports the 2 units the webhook never decremented', () => {
-  const rebuilt = reconstructBuyNowOrder({
-    order: preFixOrder,
-    session: workedSession,
-    couponPercentOff: 10,
-  })
-  assert.deepEqual(inventoryDriftForOrder(preFixOrder, rebuilt), {
-    productId: 'prod1',
-    overstatedUnits: 2,
-  })
-})
-
-test('AGL-1727 green: a single-unit no-coupon no-tax order is accidentally correct — zero diffs, no drift', () => {
+test('a single-unit no-coupon no-tax order rebuilds to exactly what it already says', () => {
   const session = {
     amount_total: 5000,
     total_details: { amount_tax: 0, amount_shipping: 0, amount_discount: 0 },
@@ -195,11 +176,17 @@ test('AGL-1727 green: a single-unit no-coupon no-tax order is accidentally corre
     },
   }
   const rebuilt = reconstructBuyNowOrder({ order, session, couponPercentOff: 0 })
-  assert.deepEqual(diffBuyNowOrder(order, rebuilt), [])
-  assert.equal(inventoryDriftForOrder(order, rebuilt), null)
+  // The green control: a purchase with nothing to split back out reconstructs
+  // to the stored record, so the transform is not rewriting correct money.
+  assert.equal(rebuilt.lineItems[0].quantity, order.lineItems[0].quantity)
+  assert.equal(
+    rebuilt.lineItems[0].unitAmountCents,
+    order.lineItems[0].unitAmountCents,
+  )
+  assert.deepEqual(rebuilt.totals, order.totals)
 })
 
-test('AGL-1727: a post-fix session metadata snapshot is authoritative over line reconstruction', () => {
+test('a post-fix session metadata snapshot is authoritative over line reconstruction', () => {
   const session = {
     ...workedSession,
     metadata: {
@@ -219,7 +206,7 @@ test('AGL-1727: a post-fix session metadata snapshot is authoritative over line 
   assert.equal(rebuilt.totals.taxCents, 2228)
 })
 
-test('AGL-1727: an unresolvable coupon is REPORTED, not silently zeroed', () => {
+test('an unresolvable coupon is REPORTED, not silently zeroed', () => {
   const rebuilt = reconstructBuyNowOrder({
     order: preFixOrder,
     session: workedSession,
@@ -230,16 +217,6 @@ test('AGL-1727: an unresolvable coupon is REPORTED, not silently zeroed', () => 
   assert.equal(rebuilt.lineItems[0].unitAmountCents, 9000)
   // …and the note says so, which is what the dry run surfaces.
   assert.ok(rebuilt.notes.some((note) => note.includes('CANNOT')))
-})
-
-test('AGL-1727: buy-now classification — cart, POS and draft orders are excluded', () => {
-  assert.equal(isBuyNowOrder(preFixOrder, 'cs_x'), true)
-  // Cart orders carry no legacy flat productId.
-  assert.equal(isBuyNowOrder({ channel: 'online', amountCents: 100 }, 'cs_x'), false)
-  assert.equal(isBuyNowOrder({ channel: 'pos', productId: 'p' }, 'abc'), false)
-  assert.equal(isBuyNowOrder({ channel: 'draft', productId: 'p' }, 'cs_x'), false)
-  // Legacy AGL-90 rows: no lineItems, doc id IS the session id.
-  assert.equal(isBuyNowOrder({ productId: 'p', amountCents: 100 }, 'cs_live_1'), true)
 })
 
 // --- AGL-1745/1752: invoice decomposition and roll-up ---------------------
@@ -470,11 +447,11 @@ test('applyPlan: dotted marker paths update nested fields without clobbering sib
     {
       type: 'update',
       path: 'hosts/h1/orders/cs_1',
-      data: { 'backfills.agl1727AtMs': 42 },
+      data: { 'backfills.agl1753AtMs': 42 },
     },
   ])
   const doc = db.docs.get('hosts/h1/orders/cs_1')
-  assert.equal(doc.backfills.agl1727AtMs, 42)
+  assert.equal(doc.backfills.agl1753AtMs, 42)
   assert.equal(doc.backfills.other, 5) // sibling survives — update, not set
 })
 
@@ -495,44 +472,39 @@ test('applyPlan: an unknown op type is refused outright', async () => {
 // double, then re-plan FROM THE MUTATED DOC — and assert run 2 plans zero
 // operations. A backfill that double-counts money fails here and only here.
 
-test('idempotence AGL-1727: re-planning from the rewritten order yields no diffs', async () => {
+test('idempotence: the buy-now rebuild is a fixed point over its own output', async () => {
   const path = 'hosts/h1/orders/cs_test_worked'
   const db = fakeFirestore({ [path]: structuredClone(preFixOrder) })
-  const plan = (order) => {
-    const rebuilt = reconstructBuyNowOrder({
+  const rebuild = (order) =>
+    reconstructBuyNowOrder({
       order,
       session: workedSession,
       couponPercentOff: 10,
     })
-    const diffs = diffBuyNowOrder(order, rebuilt)
-    return diffs.length
-      ? [
-          {
-            type: 'update',
-            path,
-            data: {
-              lineItems: rebuilt.lineItems,
-              totals: rebuilt.totals,
-              'backfills.agl1727AtMs': 1_700_000_000_000,
-            },
-          },
-        ]
-      : []
-  }
 
-  const run1 = plan(db.docs.get(path))
-  assert.equal(run1.length, 1) // red: there IS something to fix
-  assert.equal(await applyPlan(db, run1), 1)
+  const first = rebuild(db.docs.get(path))
+  assert.equal(first.lineItems[0].quantity, 3) // red: there IS something to fix
+  assert.equal(
+    await applyPlan(db, [
+      {
+        type: 'update',
+        path,
+        data: { lineItems: first.lineItems, totals: first.totals },
+      },
+    ]),
+    1,
+  )
 
   const rewritten = db.docs.get(path)
   assert.equal(rewritten.lineItems[0].quantity, 3)
   assert.equal(rewritten.totals.taxCents, 2228)
-  assert.equal(rewritten.backfills.agl1727AtMs, 1_700_000_000_000)
 
-  const run2 = plan(rewritten) // re-derived from the MUTATED doc
-  assert.deepEqual(run2, []) // no-op — quantity is not multiplied again
-  assert.equal(await applyPlan(db, run2), 0)
-  assert.deepEqual(db.docs.get(path), rewritten) // byte-for-byte unchanged
+  // Re-derived from the MUTATED doc. The quantity is read off the SESSION, so
+  // a second pass produces the same line rather than multiplying by three
+  // again — which is the shape a money backfill gets wrong and only here.
+  const second = rebuild(rewritten)
+  assert.deepEqual(second.lineItems, first.lineItems)
+  assert.deepEqual(second.totals, first.totals)
 })
 
 test('idempotence AGL-1753: a rebuilt contact re-plans to null — LTV is SET, never incremented', async () => {

@@ -163,6 +163,39 @@ const onlyHost = flag('host')
 
 /** The document field the basis itself lives on. */
 const CONSENT_FIELD = 'marketingConsent'
+
+/**
+ * Where a basis lives once it has been given a controller.
+ *
+ * `backfill-consent-host` moves a top-level basis to
+ * `marketingConsentByHost.{hostId}` and DELETES the top-level field, because
+ * a grant naming no host grants to nobody. So a record that pass has touched
+ * carries real, person-given consent that is invisible to anything reading
+ * only {@link CONSENT_FIELD} — and this script asserting an operator basis
+ * over it would replace a date somebody earned with the date a script ran,
+ * which is the one thing it must never do.
+ */
+const BY_HOST_FIELD = 'marketingConsentByHost'
+
+/**
+ * The decision any host entry holds for this person, or `undefined`.
+ *
+ * A refusal under ANY host wins outright and is returned first: a person who
+ * said no to one brand has said something, and no backfill may mail over it
+ * on the grounds that another brand never asked. A grant under any host means
+ * a real basis exists, so there is nothing here to assert.
+ */
+function hostScopedDecision(data) {
+  const byHost = data?.[BY_HOST_FIELD]
+  if (!byHost || typeof byHost !== 'object') return undefined
+  let granted = false
+  for (const entry of Object.values(byHost)) {
+    const value = entry?.[CONSENT_FIELD]
+    if (value === false) return false
+    if (value === true) granted = true
+  }
+  return granted ? true : undefined
+}
 /** Its timestamp, in epoch millis. */
 const CONSENT_AT_FIELD = 'marketingConsentAtMs'
 /**
@@ -322,7 +355,51 @@ function readerUnderstandsProvenance(moduleSource) {
 }
 
 /**
- * PRECONDITION 1 — nobody is paying for this product yet.
+ * The hosts and orgs this run will actually touch.
+ *
+ * ONE resolution, shared by the sweep and by the billing precondition, so the
+ * set a guard judges and the set the writes reach cannot drift apart. Two
+ * independent filters were the defect: the sweep scoped hosts by `--host` and
+ * orgs by `--org`, while the precondition looked only at `--org`, so
+ * `--org=<a seed org>` satisfied a check about that org and then swept every
+ * host on the platform — including a paying customer's. A guard scoped
+ * narrower than what it guards is worse than no guard, because it reads as
+ * one.
+ *
+ * `--org` therefore means the WHOLE org: its own records and its hosts'. That
+ * is what makes the precondition coextensive with the writes by construction
+ * rather than by two call sites agreeing.
+ *
+ * `--host` without `--org` leaves the org set wide, which keeps the check
+ * conservative: one host is named, and every org is still asked whether it is
+ * billing. Narrowing that to the host's owner would be defensible and is not
+ * done here, because the failure it would introduce is silent and the cost of
+ * the conservative answer is a refusal somebody can read.
+ */
+async function resolveScope(firestore) {
+  const orgs = onlyOrg
+    ? [await firestore.collection('orgs').doc(onlyOrg).get()]
+    : (await firestore.collection('orgs').get()).docs
+  let hosts
+  if (onlyHost) {
+    hosts = [await firestore.collection('hosts').doc(onlyHost).get()]
+  } else if (onlyOrg) {
+    // A host names its owner; the org does not list its hosts. Scoping from
+    // this side is what lets `--org` mean everything belonging to that org.
+    hosts = (
+      await firestore.collection('hosts').where('orgId', '==', onlyOrg).get()
+    ).docs
+  } else {
+    hosts = (await firestore.collection('hosts').get()).docs
+  }
+  return {
+    hosts: hosts.filter((doc) => doc.exists),
+    orgs: orgs.filter((doc) => doc.exists),
+  }
+}
+
+/**
+ * PRECONDITION 1 — nobody in scope is paying for this product yet.
  *
  * The same test `isBillingSubscription` applies for MRR: a plan that is not
  * free AND a subscription status Stripe still considers live. The status is
@@ -332,9 +409,7 @@ function readerUnderstandsProvenance(moduleSource) {
  * check that exists to catch exactly that.
  */
 async function billingCustomers(firestore) {
-  const orgs = onlyOrg
-    ? [await firestore.collection('orgs').doc(onlyOrg).get()]
-    : (await firestore.collection('orgs').get()).docs
+  const { orgs } = await resolveScope(firestore)
   const paying = []
   for (const org of orgs) {
     if (!org.exists) continue
@@ -362,9 +437,7 @@ async function billingCustomers(firestore) {
  */
 async function collectRecords(firestore) {
   const found = []
-  const hosts = onlyHost
-    ? [await firestore.collection('hosts').doc(onlyHost).get()]
-    : (await firestore.collection('hosts').get()).docs
+  const { hosts, orgs } = await resolveScope(firestore)
   for (const host of hosts) {
     if (!host.exists) continue
     for (const silo of ['leads', 'siteMembers']) {
@@ -373,9 +446,6 @@ async function collectRecords(firestore) {
       }
     }
   }
-  const orgs = onlyOrg
-    ? [await firestore.collection('orgs').doc(onlyOrg).get()]
-    : (await firestore.collection('orgs').get()).docs
   for (const org of orgs) {
     if (!org.exists) continue
     for (const doc of (await org.ref.collection('contacts').get()).docs) {
@@ -406,12 +476,19 @@ export const SILOS = ['leads', 'siteMembers', 'contacts', 'listMembers']
  */
 function planFor(data, { excluded }) {
   const consent = data?.[CONSENT_FIELD]
-  if (consent === false) return { action: 'skip', why: 'declined' }
+  const scoped = hostScopedDecision(data)
+  if (consent === false || scoped === false) {
+    return { action: 'skip', why: 'declined' }
+  }
   if (consent === true) {
     return data?.[SOURCE_FIELD]?.kind === SOURCE_KIND
       ? { action: 'skip', why: 'already backfilled' }
       : { action: 'skip', why: 'already granted' }
   }
+  // A basis that `backfill-consent-host` has already given a home to. The
+  // top-level field is gone by then, so a reader that looked only there would
+  // see a person who consented as one who never did.
+  if (scoped === true) return { action: 'skip', why: 'already granted' }
   if (consent !== undefined && consent !== null) {
     return { action: 'skip', why: 'malformed consent value' }
   }
@@ -664,6 +741,44 @@ async function runSelfTest(firestore) {
     SILOS.every((silo) => dry.tally[silo].granted >= 1) &&
       dry.tally.contacts.granted === 2,
     `(${SILOS.map((s) => `${s}=${dry.tally[s].granted}`).join(' ')})`,
+  )
+
+  // --- 1b. a basis that has already been given a controller is still a basis.
+  //
+  //        `backfill-consent-host` moves a grant to
+  //        `marketingConsentByHost.{hostId}` and deletes the top level, so
+  //        after that pass a consented person looks unconsented to anything
+  //        reading only the flat field — and this script would assert an
+  //        operator basis over evidence somebody earned. Measured against
+  //        production before this existed: 18 of 25 "need a basis" were
+  //        records that had already consented.
+  //
+  //        Pure, so these run wherever the file does.
+  check(
+    'a host-scoped grant reads as already granted, not as missing',
+    planFor(
+      { marketingConsentByHost: { 'host-1': { marketingConsent: true } } },
+      { excluded: new Set() },
+    ).why === 'already granted',
+  )
+  check(
+    '⛔ a host-scoped REFUSAL is a refusal, whatever other hosts hold',
+    planFor(
+      {
+        marketingConsentByHost: {
+          'host-1': { marketingConsent: false },
+          'host-2': { marketingConsent: true },
+        },
+      },
+      { excluded: new Set() },
+    ).why === 'declined',
+  )
+  check(
+    'CONTROL: an empty by-host map still needs a basis',
+    planFor(
+      { email: 'someone@example.com', marketingConsentByHost: {} },
+      { excluded: new Set() },
+    ).action === 'grant',
   )
 
   // --- 2. the apply run

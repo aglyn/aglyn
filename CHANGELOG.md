@@ -9,6 +9,36 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.85 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/adeb8670a...v1.0.0-beta.85)
+
+### Added
+
+- **forms:** the forms readout says a retired form keeps its slot ([AGL-2674](https://linear.app/aglyn/issue/AGL-2674), [AGL-2671](https://linear.app/aglyn/issue/AGL-2671))
+
+### Fixed
+
+- **tools:** the consent backfill judges the orgs it will actually touch ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670))
+- **tools:** a restricted live Stripe key is a live key ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670))
+
+### Documentation
+
+- **tools:** record the three one-shots that stay and why ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-1839](https://linear.app/aglyn/issue/AGL-1839))
+
+<details>
+<summary>Also in this release: 7 chore</summary>
+
+- **commerce:** delete the AGL-1727 buy-now repair, whose population is zero ([AGL-1727](https://linear.app/aglyn/issue/AGL-1727), [AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-1711](https://linear.app/aglyn/issue/AGL-1711), [AGL-1821](https://linear.app/aglyn/issue/AGL-1821), [AGL-1745](https://linear.app/aglyn/issue/AGL-1745))
+- **plugins:** delete the contacts to crm plugin-id rename ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-2614](https://linear.app/aglyn/issue/AGL-2614))
+- **besigner:** delete the node-interactions backfill, which has run ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670))
+- **tools:** delete the list-member and campaign-date backfills ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670))
+- **tools:** delete the org reach and name-key backfills ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-835](https://linear.app/aglyn/issue/AGL-835))
+- **tools:** delete the three media backfills that report zero ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670))
+- **tools:** drain three backfills and delete five that have converged ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670))
+
+</details>
+
 ## v1.0.0-beta.84 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/3faca558b...v1.0.0-beta.84)

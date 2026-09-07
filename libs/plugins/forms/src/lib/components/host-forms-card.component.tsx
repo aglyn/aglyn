@@ -41,7 +41,7 @@ import ListTable, {
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
-import { Alert, Button, Stack } from '@mui/material'
+import { Alert, Button, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection, doc, updateDoc } from 'firebase/firestore'
 import {
@@ -476,6 +476,25 @@ export function HostFormsCard(props: HostFormsCardProps) {
             limit={Aglyn.checkQuota(org, 'formsPerHost', formsUsed).limit}
             noun="form"
           />
+          {/*
+            A retired form keeps its slot, and the readout says so rather than
+            leaving a merchant to work out why a catalog of three is using five
+            (AGL-2674). The count comes from the same aggregate
+            `/api/hosts/resources` enforces on, which subtracts deleted forms
+            and nothing else — so retirement is deliberately not a way to buy
+            room back, and the number here is the number the server will
+            refuse a create at.
+
+            Shown only when a retirement is actually in the loaded page: the
+            line answers a question nobody is asking on a site that has never
+            retired anything. It makes no numeric claim, because one page is a
+            lower bound on how many there are.
+          */}
+          {formWindow.some((form: any) => isFormArchived(form)) ? (
+            <Typography variant="caption" color="text.secondary">
+              {'Retired forms keep their slot'}
+            </Typography>
+          ) : null}
           {/*
             The only route back to a retired form (AGL-2671). Retiring one
             removes its row, so without this the Restore action would exist on

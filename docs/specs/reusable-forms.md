@@ -877,10 +877,11 @@ members, introduce a `personId`, or infer consent from anything. Does not touch
 
 ✅ **Settled.** D4 shipped first, so `personKey` already exists as `memberKey`'s
 derivation and this phase imports it from `@aglyn/aglyn/server`. **It must not
-add a second copy** — `tools/scripts/backfill-list-member-keys.mjs` restates the
-derivation out of necessity (it is a plain module and the helper is TypeScript)
-and guards it by refusing `--apply` when the two disagree. A lead backfill that
-needs the same restatement should carry the same guard.
+add a second copy.** A plain `.mjs` script cannot import the TypeScript helper
+and has to restate the derivation; the house rule for that is the one the CRM
+lifecycle backfill follows — read the helper's source, refuse `--apply` when
+the restatement and the original disagree, and never write on a key two
+implementations derive differently.
 
 ### Phase 4 — Per-form performance
 

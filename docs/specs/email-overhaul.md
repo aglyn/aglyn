@@ -459,13 +459,11 @@ and stays in `contacts.ts`, which is what the helper composes.
 `enrollListMember` resolves the canonical id and both legacy ids in one
 `getAll` and writes to whichever row already exists, so a person enrolled under
 a legacy id keeps their one document — including the consent-bearing fields on
-it — and no re-subscribe creates a second. `tools/scripts/backfill-list-member-keys.mjs`
-reports the people who hold BOTH rows and, under `--apply`, completes the
-canonical row from the legacy one (earliest `addedAt` wins) and marks the
-legacy row `supersededBy`. **It deletes nothing**, so a split person still
-counts twice on the console's list card until a separate, deliberate pass
-removes superseded rows — a wrong count being the recoverable failure and a
-deleted enrollment not being one.
+it — and no re-subscribe creates a second. The lookup IS the migration: no
+sweep runs behind it, and a person who arrived by both routes before it landed
+would hold two rows that only a deliberate pass may merge. **Nothing deletes an
+enrollment**, because a wrong count on the console's list card is the
+recoverable failure and a deleted enrollment is not one.
 
 ### 3e. Evaluation cadence for dynamic lists
 
