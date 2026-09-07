@@ -79,7 +79,7 @@ of popups. The single always-on default popup card still offers only **Re-show a
 
 The latest popup adds:
 
-- **Email capture** — collect emails straight into your [contacts](../../content-and-data/contacts/overview.md)
+- **Email capture** — collect emails straight into your [contacts](../../content-and-data/crm/overview.md)
   and [campaigns](../email-campaigns/overview.md).
 - **Overlay metrics** — impressions and conversions for each overlay.
 - A **media picker** so popups can use images from your [media library](../../content-and-data/media/overview.md).
@@ -111,5 +111,5 @@ you can segment sessions by overlay engagement.
 ## Related
 
 - [Email campaigns](../email-campaigns/overview.md)
-- [CRM](../../content-and-data/contacts/overview.md)
+- [CRM](../../content-and-data/crm/overview.md)
 - [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md)

@@ -28,6 +28,81 @@
           "value": "status.aglyn.com"
         }
       ]
+    },
+    {
+      "source": "/content-and-data/contacts",
+      "destination": "/content-and-data/crm/overview",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/overview",
+      "destination": "/content-and-data/crm/overview",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/contact-record",
+      "destination": "/content-and-data/crm/contact-record",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/import",
+      "destination": "/content-and-data/crm/import",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/bulk-actions",
+      "destination": "/content-and-data/crm/bulk-actions",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/views",
+      "destination": "/content-and-data/crm/views",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/activities",
+      "destination": "/content-and-data/crm/activities",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/leads",
+      "destination": "/content-and-data/crm/leads",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/companies",
+      "destination": "/content-and-data/crm/companies",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/deals",
+      "destination": "/content-and-data/crm/deals",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/tasks",
+      "destination": "/content-and-data/crm/tasks",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/reports",
+      "destination": "/content-and-data/crm/reports",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/custom-fields",
+      "destination": "/content-and-data/crm/custom-fields",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/settings",
+      "destination": "/content-and-data/crm/settings",
+      "permanent": true
+    },
+    {
+      "source": "/content-and-data/contacts/automations",
+      "destination": "/content-and-data/crm/automations",
+      "permanent": true
     }
   ],
   "headers": [

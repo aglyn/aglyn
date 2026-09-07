@@ -103,8 +103,13 @@ describe('status.aglyn.com redirects', () => {
     expect(catchAll?.permanent).toBe(true)
   })
 
-  it('scopes every redirect to the status host, leaving docs.aglyn.com untouched', () => {
-    expect(redirects.every(forStatusHost)).toBe(true)
+  it('never sends docs.aglyn.com traffic off-host: a rule not scoped to the status host stays relative', () => {
+    // The docs-section moves (`crm-section-redirects.spec.ts`) fire on every
+    // hostname, so they may only ever point at a path on the same host. The
+    // status host's own rules are the one place an absolute destination is
+    // the point.
+    const unscoped = redirects.filter((rule) => !forStatusHost(rule))
+    expect(unscoped.every((rule) => rule.destination.startsWith('/'))).toBe(true)
   })
 
   it.each([

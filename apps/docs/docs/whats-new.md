@@ -12,29 +12,29 @@ for the how-to.
 
 ## September 2026 — the CRM (newest)
 
-- **[The CRM hub](content-and-data/contacts/overview.md)** *(rolling out)* — what was
+- **[The CRM hub](content-and-data/crm/overview.md)** *(rolling out)* — what was
   the **Contacts** tab is now **CRM**: one tab, seven sections at `…/crm/<section>`.
-  [Contacts](content-and-data/contacts/contact-record.md) get their own record pages and
-  can be added by hand; [leads](content-and-data/contacts/leads.md) are worked and
-  converted into a contact, a [company](content-and-data/contacts/companies.md) and a
-  deal; the [deals pipeline](content-and-data/contacts/deals.md) is a board with a
-  weighted forecast; [tasks](content-and-data/contacts/tasks.md),
-  [reports](content-and-data/contacts/reports.md) and
-  [custom fields](content-and-data/contacts/custom-fields.md) each have a section. The
-  list gains [CSV import](content-and-data/contacts/import.md),
-  [bulk actions](content-and-data/contacts/bulk-actions.md) and a
-  [timeline](content-and-data/contacts/activities.md) of logged calls and meetings;
+  [Contacts](content-and-data/crm/contact-record.md) get their own record pages and
+  can be added by hand; [leads](content-and-data/crm/leads.md) are worked and
+  converted into a contact, a [company](content-and-data/crm/companies.md) and a
+  deal; the [deals pipeline](content-and-data/crm/deals.md) is a board with a
+  weighted forecast; [tasks](content-and-data/crm/tasks.md),
+  [reports](content-and-data/crm/reports.md) and
+  [custom fields](content-and-data/crm/custom-fields.md) each have a section. The
+  list gains [CSV import](content-and-data/crm/import.md),
+  [bulk actions](content-and-data/crm/bulk-actions.md) and a
+  [timeline](content-and-data/crm/activities.md) of logged calls and meetings;
   every section's table selects, acts and exports as a CSV that re-imports, and
-  [companies import](content-and-data/contacts/companies.md#import-from-csv) too; and
-  automations gain [CRM events and steps](content-and-data/contacts/automations.md).
+  [companies import](content-and-data/crm/companies.md#import-from-csv) too; and
+  automations gain [CRM events and steps](content-and-data/crm/automations.md).
   Links to the older `/contacts` address still open the hub. Still release-flagged: it
   appears on its own once the rollout reaches your workspace.
-- **[Saved views in the CRM](content-and-data/contacts/views.md)** — every CRM list keeps
+- **[Saved views in the CRM](content-and-data/crm/views.md)** — every CRM list keeps
   its filters, columns and sort under a name: open a view from the views menu or from
   its link, share it with the team, make it your default for the section. The Contacts
   list gains a filter bar with owner, stage, source, company, tags, dates, purchases and
   one filter per custom field; a saved contacts view can be an
-  [email audience](content-and-data/contacts/views.md#segments-and-views) beside a
+  [email audience](content-and-data/crm/views.md#segments-and-views) beside a
   segment.
 - **[Companies, pipelines, deals, tasks and activities over the REST API](/api/resources/companies)** —
   the CRM's records join contacts on `/v1`, under one pair of scopes, `crm:read` and
@@ -181,7 +181,7 @@ for the how-to.
   the band **never drops a record**: extra contacts will bill as small metered overage
   ($0.25–$1.00 per 1,000/month, cheaper on higher tiers). The billing page has a new
   Contacts meter with a live estimate. **Overage is not billed yet** — the
-  [Contacts page](content-and-data/contacts/overview.md) is still rolling out, and
+  [CRM page](content-and-data/crm/overview.md) is still rolling out, and
   nobody is charged for an audience they can't open.
 - **Clearer seat language** — what plan cards used to call "members per host" is now
   **site collaborators**: per-site teammate seats. Member accounts were never seats.
@@ -388,7 +388,7 @@ The newest round tightened every marketing, billing, and operations loop:
 
 - **[Forms & lead capture](content-and-data/forms/overview.md)** — form components, an inbox reader, and
   dataset-backed submissions.
-- **[CRM](content-and-data/contacts/overview.md)** *(rolling out)* — unified ingestion from forms,
+- **[CRM](content-and-data/crm/overview.md)** *(rolling out)* — unified ingestion from forms,
   members, orders, and bookings, with tags, notes, CSV export, and **segments**. Capture
   and the [REST API](/api/resources/contacts) are live; the console tab is still on its
   way.

@@ -112,7 +112,7 @@ notification settings.
 
 ## Related
 
-- [Contacts](./overview.md) — the hub and its sections
+- [CRM](./overview.md) — the hub and its sections
 - [Bulk actions](./bulk-actions.md) — act on the rows a view shows
 - [Custom fields](./custom-fields.md) — each becomes a filter and a column
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md) — segments and views as audiences
