@@ -1202,8 +1202,9 @@ export interface PlanPricing {
   extraDataGbMonthlyUsd: number | null
   /**
    * Metered overage per 1,000 customer REST API requests beyond
-   * `apiRequestsPerMonth` (AGL-634). Only Business/Advanced carry API
-   * access, so lower tiers are null (no API to meter).
+   * `apiRequestsPerMonth` (AGL-634). API access starts at Business and every
+   * tier above it carries it, so Free, Starter and Pro are null (no API to
+   * meter).
    */
   extraApiRequestsUsdPer1k: number | null
   /**
@@ -3726,8 +3727,9 @@ export interface ApiRequestQuotaResult {
 
 /**
  * Customer REST API request meter (AGL-634): the monthly request count for an
- * org. Business/Advanced carry `apiAccess` and an `extraApiRequestsUsdPer1k`
- * rate, so requests past the included quota meter onto the monthly invoice
+ * org. Business and every tier above it carry `apiAccess` and an
+ * `extraApiRequestsUsdPer1k` rate, so requests past the included quota meter
+ * onto the monthly invoice
  * (cost-plus, like storage overage — never a hard wall mid-integration); plans
  * without API access have `included: 0` and always block.
  */
