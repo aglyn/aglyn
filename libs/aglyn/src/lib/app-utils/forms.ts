@@ -153,7 +153,16 @@ export interface FormDocument<N = AglynNodeSchema> {
   routing?: FormRouting
   legacyMatch?: FormLegacyMatch
   stats?: FormStats
-  archivedAt?: unknown
+  /**
+   * When this form was RETIRED, or absent while it is in use (AGL-2671).
+   *
+   * A retired form is kept, never deleted: its submissions, its leads and the
+   * contact timeline they built are the reason it still exists, and a form is
+   * the key those rows are filed under. What retirement changes is that it
+   * stops being a live lead surface — it leaves the forms list, it stops
+   * being graded by `/api/health/funnel`, and `/api/forms/submit` refuses it.
+   */
+  archivedAt?: number | null
   /*
    * ── THE DESIGN ───────────────────────────────────────────────────────────
    *
@@ -179,6 +188,25 @@ export interface FormDocument<N = AglynNodeSchema> {
    * `versionId` key for components and this document is governed the same way.
    */
   versionId?: string
+}
+
+/**
+ * Whether a form has been retired — see {@link FormDocument.archivedAt}.
+ *
+ * Shaped exactly like `isPipelineArchived`, and deliberately so: retirement
+ * means the same thing for both, and two predicates that disagreed about what
+ * a timestamp of `0` means would disagree in the two places least likely to
+ * be read together. A positive number and nothing else — absent, `null`, `0`
+ * and a value of the wrong type are all "in use", because the safe reading of
+ * an unusable timestamp is that a form is still collecting.
+ *
+ * ⚠️ Asked of the STORED document. A caller that has already filtered a list
+ * must not re-derive this from a display flag; the timestamp is the fact.
+ */
+export function isFormArchived(
+  form: Pick<FormDocument, 'archivedAt'> | null | undefined,
+): boolean {
+  return typeof form?.archivedAt === 'number' && form.archivedAt > 0
 }
 
 /**

@@ -402,6 +402,29 @@ export async function POST(request: Request): Promise<Response> {
       : null
     const form = formSnapshot?.exists ? formSnapshot : null
     /*
+     * A RETIRED form collects nothing (AGL-2671).
+     *
+     * Retirement is what a merchant does with a form they have finished with
+     * but must keep — the submissions, the leads and the contact timeline
+     * those built are filed under it. Leaving it able to collect would make
+     * the retirement a UI illusion: the row would be gone from the list and
+     * out of the funnel's grading while a form still placed on a published
+     * page kept filing leads nobody was looking at, which is the quiet half
+     * of a lost lead rather than a retirement.
+     *
+     * Refused HERE, on the verified entity, rather than by unpublishing the
+     * page: a form is placed by whoever placed it, on any number of pages, and
+     * the document is the one place that knows it is retired.
+     *
+     * 404 rather than a 4xx that explains: the visitor's honest answer is that
+     * this form is not here any more, and the shape matches `Unknown site`
+     * above. Only ever for a BOUND form — a submission carrying no `formId`
+     * has no entity to be retired and is untouched.
+     */
+    if (Aglyn.isFormArchived(form?.data() as { archivedAt?: number } | undefined)) {
+      return json({ error: 'This form is no longer accepting submissions' }, 404)
+    }
+    /*
      * The caption follows the entity once one is bound.
      *
      * `formName` stays written either way: it is what the pre-entity `?form=`

@@ -22,6 +22,7 @@ import {
   formFieldDeclsFromNodes,
   formPeriodKey,
   formPeriodSeries,
+  isFormArchived,
   formStatsTotals,
   formStatsWindow,
   discoverFormNodes,
@@ -605,5 +606,36 @@ describe('a total says which months it covers', () => {
     expect(formPeriodKey(Date.UTC(2026, 1, 15))).toBe('2026-02')
     expect(formPeriodKey(null)).toBeNull()
     expect(formPeriodKey(Number.NaN)).toBeNull()
+  })
+})
+
+/**
+ * AGL-2671 — retirement is a positive timestamp and nothing else.
+ *
+ * Shaped to match `isPipelineArchived` deliberately: retirement means the
+ * same thing for a form and a pipeline, and two predicates that disagreed
+ * about what `0` means would disagree in the two places least likely to be
+ * read together.
+ *
+ * The asymmetry that matters: everything unusable reads as IN USE. A form
+ * whose flag is absent, null, zero or the wrong type is still collecting,
+ * because the alternative — treating a malformed value as retirement — would
+ * silently stop a live funnel.
+ */
+describe('isFormArchived', () => {
+  it('is true for a positive timestamp, and nothing else', () => {
+    expect(isFormArchived({ archivedAt: 1_757_000_000_000 })).toBe(true)
+    expect(isFormArchived({ archivedAt: 1 })).toBe(true)
+  })
+
+  it('reads every unusable value as still collecting', () => {
+    expect(isFormArchived({ archivedAt: null })).toBe(false)
+    expect(isFormArchived({ archivedAt: 0 })).toBe(false)
+    expect(isFormArchived({})).toBe(false)
+    expect(isFormArchived(null)).toBe(false)
+    expect(isFormArchived(undefined)).toBe(false)
+    // A Firestore timestamp that was never converted, or a stray string.
+    expect(isFormArchived({ archivedAt: 'yesterday' } as never)).toBe(false)
+    expect(isFormArchived({ archivedAt: Number.NaN })).toBe(false)
   })
 })

@@ -20,12 +20,18 @@ import * as Aglyn from '@aglyn/aglyn'
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import {
   buildRoute,
+  isFormArchived,
   PageHeaderActions,
   pluginDocsHelp,
   Route,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
-import { mdiEyeOutline, mdiVectorSquare } from '@aglyn/shared-data-mdi'
+import {
+  mdiArchiveArrowDownOutline,
+  mdiArchiveArrowUpOutline,
+  mdiEyeOutline,
+  mdiVectorSquare,
+} from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListTable, {
@@ -37,7 +43,7 @@ import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { Alert, Button, Stack } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { collection } from 'firebase/firestore'
+import { collection, doc, updateDoc } from 'firebase/firestore'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -130,6 +136,42 @@ export function HostFormsCard(props: HostFormsCardProps) {
   const [createOpen, setCreateOpen] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [retireError, setRetireError] = useState<string | null>(null)
+
+  /**
+   * Retire a form, or put it back (AGL-2671).
+   *
+   * A write of one field, client-side like every other edit on this document:
+   * the rules already admit it for a host writer, fencing off only `stats`.
+   *
+   * ⛔ NOT a delete, and the difference is the whole feature. The submissions,
+   * the leads and the contact timeline they built are filed under this form,
+   * so the document is what makes that history readable; deleting it to stop
+   * collection would throw away the reason the merchant kept the form.
+   *
+   * `Date.now()` is the browser's clock rather than `serverTimestamp()`
+   * because {@link isFormArchived} asks for a number greater than zero, and a
+   * server sentinel reads as `null` on the local echo — the row would stay
+   * looking live until the write round-tripped. The value is a marker, never
+   * an audit fact: nothing computes a duration from it.
+   */
+  const setRetired = useCallback(
+    async (formId: string, retired: boolean) => {
+      setRetireError(null)
+      try {
+        await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
+          archivedAt: retired ? Date.now() : null,
+        })
+      } catch {
+        setRetireError(
+          retired
+            ? 'Could not retire that form. Try again shortly.'
+            : 'Could not restore that form. Try again shortly.',
+        )
+      }
+    },
+    [firestore, hostId],
+  )
 
   /**
    * The list PAGES, over an ordered walk.
@@ -161,13 +203,21 @@ export function HostFormsCard(props: HostFormsCardProps) {
     { idField: '$id' },
   )
   /*
-   * An archived form is a TOMBSTONE, not a row. Client-side because it has to
-   * be: Firestore cannot ask for the ABSENCE of a field, so a form created
-   * through the resources route (which carries no `archivedAt` at all) and one
-   * archived later are not one value to filter on. The cost is that a tombstone
-   * spends a slot in whichever page it falls in.
+   * A retired form is a TOMBSTONE, not a row — unless the reader asks for the
+   * tombstones (AGL-2671). Client-side because it has to be: Firestore cannot
+   * ask for the ABSENCE of a field, so a form created through the resources
+   * route (which carries no `archivedAt` at all) and one archived later are
+   * not one value to filter on. The cost is that a tombstone spends a slot in
+   * whichever page it falls in.
+   *
+   * The toggle is not decoration. Retiring a form removes it from this list,
+   * and a retirement with no way to see what has been retired is a one-way
+   * door: the row is the only route back to Restore.
    */
-  const forms = formWindow.filter((form: any) => !form.archivedAt)
+  const [showArchived, setShowArchived] = useState(false)
+  const forms = showArchived
+    ? formWindow
+    : formWindow.filter((form: any) => !isFormArchived(form))
 
   /*
    * The COUNT is a server aggregate, not the length of a page. `forms` is one
@@ -367,6 +417,29 @@ export function HostFormsCard(props: HostFormsCardProps) {
                     })
                   : formHref(form.$id),
             },
+            /*
+             * Retire / Restore (AGL-2671). Last in the menu, and the only item
+             * here that writes.
+             *
+             * The label says what it DOES to the form rather than what it does
+             * to this list — "Archive" reads like a filing action, and the
+             * consequence a merchant needs to weigh is that the form stops
+             * collecting. `/api/forms/submit` refuses a retired form, so one
+             * still placed on a published page will turn visitors away.
+             */
+            isFormArchived(form)
+              ? {
+                  key: 'restore',
+                  label: 'Restore — start collecting again',
+                  icon: <MdiIcon path={mdiArchiveArrowUpOutline.path} size={0.8} />,
+                  onClick: () => void setRetired(form.$id, false),
+                }
+              : {
+                  key: 'retire',
+                  label: 'Retire — stop collecting, keep the history',
+                  icon: <MdiIcon path={mdiArchiveArrowDownOutline.path} size={0.8} />,
+                  onClick: () => void setRetired(form.$id, true),
+                },
           ]}
         />
       )
@@ -403,6 +476,22 @@ export function HostFormsCard(props: HostFormsCardProps) {
             limit={Aglyn.checkQuota(org, 'formsPerHost', formsUsed).limit}
             noun="form"
           />
+          {/*
+            The only route back to a retired form (AGL-2671). Retiring one
+            removes its row, so without this the Restore action would exist on
+            a row nobody could reach again.
+
+            A plain toggle rather than a filter control: there are exactly two
+            states, and the retired set is expected to be small and rarely
+            looked at.
+          */}
+          <Button
+            size="small"
+            variant={showArchived ? 'outlined' : 'text'}
+            onClick={() => setShowArchived((shown) => !shown)}
+          >
+            {showArchived ? 'Hide retired' : 'Show retired'}
+          </Button>
           <Button
             size="small"
             variant="contained"
@@ -425,10 +514,15 @@ export function HostFormsCard(props: HostFormsCardProps) {
             'drawn in the besigner like any other artifact.',
         })}
       >
+        {retireError ? (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {retireError}
+          </Alert>
+        ) : null}
         <ListTable
           rowHeight={TABLE_ROW_HEIGHT}
           columns={columns}
-          noRowsLabel="No forms yet"
+          noRowsLabel={showArchived ? 'No forms' : 'No forms yet'}
           noRowsDescription="A form collects submissions, dedupes the people who send them, and can route them to a lead. Its design is drawn in the besigner and published like any other artifact."
           noRowsAction={
             <Button variant="contained" onClick={() => setCreateOpen(true)}>
