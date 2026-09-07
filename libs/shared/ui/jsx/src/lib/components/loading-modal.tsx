@@ -26,20 +26,35 @@ import {
   styled,
   Typography,
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import { forwardRef, Fragment } from 'react'
 import { AglynLogoFull } from '../const/svg-icons'
 import { LoadingContext } from '../contexts/loading.context'
 import LoadingTextComponent from './loading-text.component'
 
 const LoadingOverlayModal = styled(Modal)(({ theme }) => {
-  const tv = (theme as any).vars || theme
+  // The overlay has two homes. The console's theme is built with
+  // `cssVariables`, so `theme.vars` carries a `*Channel` triplet for every
+  // palette color and `rgba(var(--…Channel) / a)` stays bound to the
+  // variable: it follows a scheme switch without a re-render. A published
+  // site renders under a plain `createTheme()` — no `vars`, no channel
+  // triplets — where that template would spell `rgba(undefined / a)`, an
+  // invalid declaration the browser drops. There the tint is composed from
+  // the literal palette value instead.
+  const backdropTint = theme.vars
+    ? `rgba(${theme.vars.palette.background.paperChannel} / 0.48)`
+    : alpha(theme.palette.background.paper, 0.48)
+  const progressTint = theme.vars
+    ? `rgba(${theme.vars.palette.primary.mainChannel} / 0.86)`
+    : alpha(theme.palette.primary.main, 0.86)
+
   return {
     zIndex: theme.zIndex.max,
-    color: tv.palette.text.primary,
+    color: (theme.vars || theme).palette.text.primary,
 
     ['& .MuiBackdrop-root']: {
       backdropFilter: 'blur(5px)',
-      backgroundColor: `rgba(${tv.palette.background.paperChannel} / 0.48)`,
+      backgroundColor: backdropTint,
     },
     ['& .wrapper']: {
       position: 'absolute',
@@ -58,7 +73,7 @@ const LoadingOverlayModal = styled(Modal)(({ theme }) => {
       position: 'absolute',
       top: 0,
       left: 0,
-      backgroundColor: `rgba(${tv.palette.primary.mainChannel} / 0.86)`,
+      backgroundColor: progressTint,
       width: '100%',
     },
     ['& .status-text']: {
