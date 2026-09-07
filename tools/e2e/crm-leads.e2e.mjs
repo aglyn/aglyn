@@ -18,12 +18,15 @@
 // Leads, worked the way a person works them (AGL-2610, AGL-2608).
 //
 // The section's open view, a status moved in the row, an owner assigned from
-// the row menu, a lead opened from its row, and the conversion — company
-// created from the address's domain, a deal opened with it — landing on the
-// contact it made. Then the two things a converted lead must do afterwards:
-// answer a second conversion with `alreadyConverted` rather than a second
-// contact, and read as Qualified with links to what it became. Then the
-// other way out — unqualified, with a reason — and the Inbox's way in.
+// the row menu, a lead opened from its row, and the conversion — chosen from
+// the ROW MENU (AGL-2641), the one-click path, into the same dialog the page
+// opens; company created from the address's domain, a deal opened with it —
+// landing on the contact it made. Then the two things a converted lead must
+// do afterwards: answer a second conversion with `alreadyConverted` rather
+// than a second contact, and read as Qualified with links to what it became.
+// Then the other way out — unqualified, with a reason, after which the row
+// menu's Convert… is disabled with the reason as its tooltip — and the
+// Inbox's way in.
 //
 // Re-runnable: the two leads are re-seeded without their working state, and
 // what the last conversion created — the contact at the address, the
@@ -128,7 +131,11 @@ await step(tally, page, 'a row opens the lead page', async () => {
 
 let contactId = ''
 await step(tally, page, 'Convert makes a contact, a company and a deal', async () => {
-  await page.getByRole('button', { name: 'Convert' }).click()
+  // From the list's row menu (AGL-2641): the page's Convert button, seen
+  // above, opens the same dialog; the row is the one-click path.
+  await page.goto(hostUrl('/crm/leads'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  await rowOf(owen).waitFor({ state: 'visible', timeout: TIMEOUT_MS })
+  await rowAction(page, owen.email, 'Convert…')
   const dialog = page.getByRole('dialog', { name: `Convert ${owen.name}` })
   await dialog.waitFor({ state: 'visible', timeout: TIMEOUT_MS })
   // The address's domain proposes a company; the converter names it properly.
@@ -215,6 +222,14 @@ await step(tally, page, 'Unqualify closes a lead with its reason', async () => {
   await pickSelect(page, 'Show', 'Unqualified')
   await rowOf(june).waitFor({ state: 'visible', timeout: TIMEOUT_MS })
   tally.check('the open view drops it and the Unqualified view lists it', openStill === 0, `open rows for June: ${openStill}`)
+  // The row menu refuses to convert her, and says why (AGL-2641).
+  await page.getByRole('button', { name: `More actions for ${june.email}`, exact: true }).click({ timeout: TIMEOUT_MS })
+  const convert = page.locator('[role="menu"]').last().getByRole('menuitem', { name: 'Convert…' })
+  await convert.waitFor({ timeout: TIMEOUT_MS })
+  const disabled = (await convert.getAttribute('aria-disabled')) === 'true'
+  const reason = await page.locator('[aria-label="This lead was unqualified"]').count()
+  await page.keyboard.press('Escape')
+  tally.check('an unqualified lead’s row menu disables Convert… with the reason', disabled && reason > 0, `disabled ${disabled} · reason ${reason}`)
 })
 
 await step(tally, page, 'the Inbox opens a lead in the CRM', async () => {

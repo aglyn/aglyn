@@ -26,7 +26,10 @@
 //
 // Every write is asserted on the document as well as on the page: a stage
 // move lands in `stageId`/`status`, a line lands in `lineItems` with the
-// sum in `amountCents`, an archive lands in `archivedAt`.
+// sum in `amountCents`, an archive lands in `archivedAt`. A win is asserted
+// on the CONTACT too (AGL-2641): the deal's person is floored at `customer`
+// in the site's facet — raised from an earlier stage, and left alone when
+// already there.
 //
 // Re-runnable: the fixtures are re-seeded first (the moved and won deals
 // come back open), and the pipeline this script creates is removed before
@@ -66,6 +69,9 @@ const firestore = adminFirestore()
 const orgRef = firestore.collection('orgs').doc(ORG_ID)
 const dealRef = (id) => orgRef.collection('deals').doc(id)
 const dealDoc = async (id) => (await dealRef(id).get()).data() ?? {}
+/** The stage the site's facet holds for a fixture contact. */
+const contactStage = async (contact) =>
+  (await orgRef.collection('contacts').doc(contact.id).get()).get(`facets.${HOST_ID}.lifecycleStage`)
 const pipelinesNamed = (name) => orgRef.collection('pipelines').where('name', '==', name).get()
 const money = (cents) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
@@ -125,6 +131,24 @@ await step(tally, page, 'Mark won closes the deal and the Won column shows it', 
     'Mark won closes the deal and the Won column shows it',
     stored.status === 'won' && stored.stageId === 'won' && typeof stored.closedAtMs === 'number',
     `${stored.status} · closed ${stored.closedAtMs}`,
+  )
+  // Maya was a customer before the win (twelve orders); the floor holds her there.
+  const maya = await contactStage(F.contacts.maya)
+  tally.check('a win leaves a contact already a customer as one', maya === 'customer', `maya reads ${maya}`)
+})
+
+await step(tally, page, 'a win makes a prospect a customer (AGL-2641)', async () => {
+  // Nadia is Sales qualified; her deal's win must raise her, and the
+  // stage lands in the site's facet, which is what the contact list reads.
+  const before = await contactStage(F.contacts.nadia)
+  await rowAction(page, F.boardDeals.cedar.title, 'Mark won')
+  await expectSnackbar(page, 'Deal won')
+  await waitFor(() => dealDoc(F.boardDeals.cedar.id), (d) => d.status === 'won')
+  const after = await waitFor(() => contactStage(F.contacts.nadia), (stage) => stage === 'customer')
+  tally.check(
+    'a win makes a prospect a customer (AGL-2641)',
+    before === 'sales-qualified' && after === 'customer',
+    `nadia ${before} → ${after}`,
   )
 })
 

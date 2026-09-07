@@ -50,10 +50,10 @@ through the emulator-side Admin SDK:
 E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all seven, in order
 npm run e2e:crm:bulk-bar        # tick two rows → tag, stage, owner, audience, CSV, remove
 npm run e2e:crm:reports         # /crm/reports (dashes until read) + the two dashboard cards
-npm run e2e:crm:leads           # status, owner, convert, already-converted, unqualify, Inbox → CRM
+npm run e2e:crm:leads           # status, owner, convert from the row menu, already-converted, unqualify (+ Convert… disabled), Inbox → CRM
 npm run e2e:crm:automation      # Contact created / Contact changed stage → tag on the facet, Runs
 npm run e2e:crm:contact-record  # custom field, audience, Properties save, phone search, delete
-npm run e2e:crm:deals           # board → move → won → table; Pipelines dialog, switcher, line items, forecast
+npm run e2e:crm:deals           # board → move → won (the contact floored at customer) → table; Pipelines dialog, switcher, line items, forecast
 npm run e2e:crm:org-hub         # /{org}/contacts → /{org}/crm/contacts, bare /crm, Known by, a create stamped with the picked site, a lead's site address, a deal moved from the org board + its org activity line
 ```
 

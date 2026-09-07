@@ -76,7 +76,11 @@ campaign audiences.
 
 - **Status** — click the status chip to change it to New or Working.
   Choosing **Unqualified…** asks for a reason first.
-- **Row menu** (⋮) — **Open lead**, **Assign owner**, or **Unqualify**.
+- **Row menu** (⋮) — **Open lead**, **Convert…**, **Assign owner**, or
+  **Unqualify**. **Convert…** opens the same dialog as the lead's page (see
+  [Converting a lead](#converting-a-lead)) without opening the page first; on
+  a lead already converted, unqualified, or whose person has an erasure
+  pending, it is disabled with the reason as its tooltip.
 - Click anywhere else on the row to open the lead's page.
 
 Every change here is saved immediately; there is no separate save step.
@@ -113,7 +117,9 @@ there is one.
 
 ## Converting a lead
 
-When a lead is real, click **Convert**. The dialog asks three things:
+When a lead is real, click **Convert** on the lead's page, or choose
+**Convert…** from its row's menu on the list — the same dialog either way,
+from the list in one click. The dialog asks three things:
 
 1. **Contact.** The lead becomes a contact at the **Sales qualified**
    lifecycle stage, owned by whoever you pick — the lead's owner by default.
