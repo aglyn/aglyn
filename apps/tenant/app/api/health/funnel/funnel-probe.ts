@@ -88,6 +88,7 @@ import {
 import { marketingHost } from '../render/canary'
 import {
   configuredLeadFormFloor,
+  funnelFormFacts,
   funnelIntakeHealth,
   funnelRoutingHealth,
   type FunnelFormFacts,
@@ -241,7 +242,16 @@ async function probeIntake(
   }
 }
 
-/** The site's lead-routing forms, reduced to the facts the verdict needs. */
+/**
+ * The site's lead-routing forms, reduced to the facts the verdict needs.
+ *
+ * The whole catalog is read and `funnelFormFacts` decides what each document
+ * is: which forms are lead surfaces, and which of those a visitor can
+ * actually reach. That reduction is pure and lives beside the verdict rather
+ * than here, so the red-proof can drive real stored shapes — a document with
+ * no `versionId`, a published one whose design went missing — without an
+ * admin credential.
+ */
 async function probeRouting(
   hostId: string,
   required: number,
@@ -259,23 +269,8 @@ async function probeRouting(
       .get()
     const forms: FunnelFormFacts[] = []
     for (const doc of snapshot.docs) {
-      const data = doc.data() as Record<string, unknown>
-      if (data['archivedAt']) continue
-      const routing = data['routing'] as { lead?: unknown } | undefined
-      if (routing?.lead !== true) continue
-      const declaredFields = Array.isArray(data['fields'])
-        ? (data['fields'] as { fieldName?: unknown }[])
-        : []
-      forms.push({
-        consentFieldName:
-          typeof data['consentFieldName'] === 'string'
-            ? data['consentFieldName']
-            : undefined,
-        fieldNames: declaredFields.map((field) => String(field?.fieldName ?? '')),
-        // Read through the shared reader the submit route stamps rows with,
-        // so "filed under a campaign" means here exactly what it means there.
-        campaignCount: Aglyn.readCampaignIds(data).length,
-      })
+      const facts = funnelFormFacts(doc.data() as Record<string, unknown>)
+      if (facts) forms.push(facts)
     }
     return funnelRoutingHealth(forms, required, elapsed())
   } catch {

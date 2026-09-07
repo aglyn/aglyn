@@ -38,6 +38,7 @@
 import { HEALTH_NO_STORE } from '@aglyn/aglyn/server'
 
 import {
+  funnelFormFacts,
   funnelIntakeHealth,
   funnelRoutingHealth,
   type FunnelFormFacts,
@@ -57,6 +58,31 @@ const WIRED: FunnelFormFacts = {
   consentFieldName: 'marketingOptIn',
   fieldNames: ['name', 'email', 'message', 'marketingOptIn'],
   campaignCount: 1,
+  published: true,
+  hasDesign: true,
+}
+
+/**
+ * A stored form document, in the shape `hosts/{hostId}/forms/{formId}` holds
+ * one: the declaration the submission path reads, and the published snapshot
+ * a page grafts. Written out rather than reduced to facts because the
+ * partition under test is over the DOCUMENT — which of its fields say a
+ * visitor can reach this form.
+ */
+function storedForm(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    displayName: 'Contact',
+    routing: { lead: true },
+    consentFieldName: 'marketingOptIn',
+    fields: [{ fieldName: 'email' }, { fieldName: 'marketingOptIn' }],
+    campaignIds: ['welcome'],
+    versionId: 'v1',
+    rootId: 'root',
+    nodes: { root: { $id: 'root', componentId: 'div' } },
+    ...overrides,
+  }
 }
 
 /**
@@ -109,6 +135,57 @@ describe('the routing verdict', () => {
     expect(check.code).toBe('lead-forms-below-floor')
     expect(check.leadForms).toBe(2)
     expect(check.required).toBe(3)
+  })
+
+  /**
+   * THE FAILURE THE OTHER DIRECTION IS FOR (AGL-2672). A hand-set expectation
+   * sitting below the truth absorbs a departure per surplus form, so a funnel
+   * carrying four against a three could lose one entirely with the arm above
+   * still passing. An expectation nobody revisited is a check that is not
+   * running, and it must say so rather than quietly grade nothing.
+   */
+  it('goes red when the funnel carries more lead forms than are expected', () => {
+    const check = funnelRoutingHealth([WIRED, WIRED, WIRED, WIRED], 3, 1)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('lead-form-expectation-stale')
+    expect(check.leadForms).toBe(4)
+    expect(check.required).toBe(3)
+  })
+
+  /**
+   * A form nobody has published has no design, no fields derived from one and
+   * no page that can render it, so it is not a lead surface a prospect can
+   * reach — and it neither carries faults into this verdict nor stands in for
+   * a live form against the expectation. The count is reported so the number
+   * still reconciles with the console's forms list.
+   */
+  it('does not grade a lead form that has never been published', () => {
+    const draft: FunnelFormFacts = {
+      ...WIRED,
+      published: false,
+      hasDesign: false,
+      campaignCount: 0,
+    }
+    const check = funnelRoutingHealth([WIRED, WIRED, WIRED, draft], 3, 1)
+    expect(check.ok).toBe(true)
+    expect(check.faults).toEqual({})
+    expect(check.leadForms).toBe(3)
+    expect(check.unpublished).toBe(1)
+  })
+
+  /**
+   * And the failure that must survive the exclusion above: a form that WAS
+   * published and whose design is no longer on the document. Every page
+   * placing it falls back to what it drew inline, which for a form built as
+   * an entity is an empty form that answers 200 and collects nothing.
+   */
+  it('goes red when a published form has lost its design', () => {
+    const gutted = { ...WIRED, hasDesign: false }
+    const check = funnelRoutingHealth([gutted, WIRED, WIRED], 3, 1)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('forms-misrouted')
+    expect(check.faults).toEqual({ 'design-missing': 1 })
+    expect(check.unpublished).toBe(0)
   })
 
   /**
@@ -181,6 +258,73 @@ describe('the routing verdict', () => {
   })
 })
 
+/**
+ * WHICH FORMS ARE GRADED AT ALL (AGL-2672).
+ *
+ * A form with no published version took the whole funnel red while being
+ * reachable by nobody, and the honest repair is not "skip forms that look
+ * empty" — it is telling a form that was NEVER published apart from one that
+ * was and has lost its design, because the second is a real outage that looks
+ * identical from a count. `versionId` is what the stored document lets those
+ * two be told apart by: it records a promotion, and no path clears it.
+ */
+describe('which stored documents are lead surfaces', () => {
+  it('reads a published, lead-routing form as one', () => {
+    const facts = funnelFormFacts(storedForm())
+    expect(facts?.published).toBe(true)
+    expect(facts?.hasDesign).toBe(true)
+    expect(facts?.campaignCount).toBe(1)
+    expect(facts?.fieldNames).toEqual(['email', 'marketingOptIn'])
+  })
+
+  it('is not a lead surface once it is retired', () => {
+    expect(funnelFormFacts(storedForm({ archivedAt: 1_757_000_000_000 }))).toBeNull()
+    // The marker in production is not always a number, so presence is what is
+    // asked, never its shape.
+    expect(funnelFormFacts(storedForm({ archivedAt: { seconds: 1 } }))).toBeNull()
+  })
+
+  it('is not a lead surface when it does not route leads', () => {
+    expect(funnelFormFacts(storedForm({ routing: { lead: false } }))).toBeNull()
+    expect(funnelFormFacts(storedForm({ routing: undefined }))).toBeNull()
+  })
+
+  /**
+   * A form is created with a canvas already seeded on it, so the presence of
+   * `rootId` and `nodes` says an author has somewhere to draw — never that
+   * anything was published. Reading the design as the publication would grade
+   * every form the moment it was made.
+   */
+  it('reads a created-but-unpublished form as unpublished, seeded canvas and all', () => {
+    const facts = funnelFormFacts(
+      storedForm({ versionId: undefined, fields: [] }),
+    )
+    expect(facts).not.toBeNull()
+    expect(facts?.published).toBe(false)
+    expect(facts?.hasDesign).toBe(false)
+  })
+
+  /** A pointer at a version, and nothing on the document to render. */
+  it('reads a published form whose design is gone as published without one', () => {
+    const facts = funnelFormFacts(
+      storedForm({ rootId: undefined, nodes: undefined }),
+    )
+    expect(facts?.published).toBe(true)
+    expect(facts?.hasDesign).toBe(false)
+  })
+
+  /**
+   * The same predicate the renderer's forms read applies: a `rootId` absent
+   * from its own nodes is a tree the graft cannot resolve, so the placement
+   * renders the page's own copy and the entity contributes nothing.
+   */
+  it('reads a root missing from its own nodes as no design', () => {
+    const facts = funnelFormFacts(storedForm({ rootId: 'elsewhere' }))
+    expect(facts?.published).toBe(true)
+    expect(facts?.hasDesign).toBe(false)
+  })
+})
+
 describe('the intake verdict', () => {
   it('passes a site that would accept the next submission and tell somebody', () => {
     expect(funnelIntakeHealth({ kind: 'open' }, 2, 1).ok).toBe(true)
@@ -228,6 +372,18 @@ describe('/api/health/funnel', () => {
     const response = await route.GET()
     expect(response.status).toBe(503)
     expect((await response.json()).checks.routing.code).toBe('lead-forms-below-floor')
+  })
+
+  it('answers 503 when the funnel outgrew the count it is graded against', async () => {
+    const route = await routeWith({
+      intake: HEALTHY.intake,
+      routing: funnelRoutingHealth([WIRED, WIRED, WIRED, WIRED], 3, 1),
+    })
+    const response = await route.GET()
+    expect(response.status).toBe(503)
+    expect((await response.json()).checks.routing.code).toBe(
+      'lead-form-expectation-stale',
+    )
   })
 
   it('answers 503 on HEAD too — the method a monitor may be using', async () => {
