@@ -16,6 +16,8 @@
  */
 
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
+import type { Metadata } from 'next'
+import { NOT_FOUND_PAGE_NAME } from '../utils/not-found-title'
 
 /**
  * Root not-found boundary (AGL-2074).
@@ -30,6 +32,16 @@ import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-pla
  * white-label defect described in `site-status-screen.component.tsx`. Being
  * unstyled by our theme is fine; being branded as somebody else is not.
  */
+
+/**
+ * The document's title (AGL-2648). This boundary is also the app's
+ * `/_not-found` page — the one Next prerenders to `404.html` and serves for a
+ * URL that matches no route at all — and that document had no `<title>`. The
+ * same white-label rule as the body: the page's name and nothing else, because
+ * at this level there is no site to name and no operator to admit to.
+ */
+export const metadata: Metadata = { title: NOT_FOUND_PAGE_NAME }
+
 export default function RootNotFound() {
   return (
     <StatusScreenPlain
