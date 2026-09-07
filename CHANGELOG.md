@@ -9,6 +9,30 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.78 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.77...v1.0.0-beta.78)
+
+### Fixed
+
+- **tenant:** a tenant 404 serves a server-rendered title for the site and its screen ([AGL-2648](https://linear.app/aglyn/issue/AGL-2648))
+- **seo:** every sitemap URL with a known date carries a lastmod ([AGL-2647](https://linear.app/aglyn/issue/AGL-2647))
+- **crm:** the one-to-one email cap is a slot reserved in a transaction ([AGL-2645](https://linear.app/aglyn/issue/AGL-2645))
+- **security:** every response carries a Referrer-Policy and a Permissions-Policy ([AGL-2646](https://linear.app/aglyn/issue/AGL-2646))
+- **crm:** the company picker's create refuses at the records band ([AGL-2644](https://linear.app/aglyn/issue/AGL-2644))
+- **shared-ui-jsx:** the loading overlay tints survive a theme without CSS variables ([AGL-2643](https://linear.app/aglyn/issue/AGL-2643))
+
+### Documentation
+
+- **pricing:** the repo records the 2026-09-07 republish of aglyn.com/pricing ([AGL-2656](https://linear.app/aglyn/issue/AGL-2656), [AGL-2652](https://linear.app/aglyn/issue/AGL-2652))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear ceiling reads AGL-2664 for the beta.77 audit follow-ups ([AGL-2664](https://linear.app/aglyn/issue/AGL-2664), [AGL-2642](https://linear.app/aglyn/issue/AGL-2642))
+
+</details>
+
 ## v1.0.0-beta.77 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.76...v1.0.0-beta.77)
