@@ -31,15 +31,20 @@
  *     a loss keeps the reason and puts it on the event.
  *  4. A STAGE THE PIPELINE DOES NOT HAVE is 400, and a drop onto the stage
  *     the deal is already in is a no-op that fires nothing.
+ *  5. A WIN MAKES THE CONTACT A CUSTOMER (AGL-2641): the transition into
+ *     `won` floors the linked contact's stage at `customer` in the facet of
+ *     the deal's site, never demotes a later stage, announces
+ *     `contactStageChanged` only when the stage moved, and leaves the
+ *     contact alone on every other transition.
  *
  * The Admin SDK, the org resolver and the event emitter are doubled; the
- * route's own resolution — roles, permission, scope, stage lookup — runs
- * for real.
+ * route's own resolution — roles, permission, scope, stage lookup — and the
+ * stage floor itself run for real.
  */
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
-  FieldValue: { delete: () => '__delete' },
+  FieldValue: { delete: () => '__delete', serverTimestamp: () => '__now' },
 }))
 
 const emitted: Array<{
@@ -63,7 +68,10 @@ const state = {
   permitted: true,
   deals: {} as Record<string, Record<string, unknown>>,
   pipelines: {} as Record<string, Record<string, unknown>>,
+  contacts: {} as Record<string, Record<string, unknown>>,
   updates: [] as Array<{ id: string; patch: Record<string, unknown> }>,
+  /** Every write to a contact — the customer floor's, and nothing else's (AGL-2641). */
+  contactUpdates: [] as Array<{ id: string; patch: Record<string, unknown> }>,
   /** What the org resolver answers the ORG variant (AGL-2634). */
   orgPermissions: {} as Record<string, unknown>,
   orgLines: [] as Array<{ orgId: string; actor: unknown; action: string; target: unknown }>,
@@ -73,16 +81,26 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: async () => state.orgPermissions,
 }))
 
-const docHandle = (store: Record<string, Record<string, unknown>>, id: string) => ({
-  get: async () => ({
-    exists: Boolean(store[id]),
-    data: () => store[id],
-  }),
-  update: async (patch: Record<string, unknown>) => {
-    state.updates.push({ id, patch })
-    Object.assign(store[id], patch)
-  },
-})
+const docHandle = (
+  store: Record<string, Record<string, unknown>>,
+  id: string,
+  sink: Array<{ id: string; patch: Record<string, unknown> }>,
+) => {
+  const ref = {
+    id,
+    get: async () => ({
+      id,
+      exists: Boolean(store[id]),
+      data: () => store[id],
+      ref,
+    }),
+    update: async (patch: Record<string, unknown>) => {
+      sink.push({ id, patch })
+      Object.assign(store[id], patch)
+    },
+  }
+  return ref
+}
 
 const fakeFirestore = {
   collection: (name: string) => {
@@ -93,7 +111,9 @@ const fakeFirestore = {
         return {
           collection: (sub: string) => ({
             doc: (id: string) =>
-              docHandle(sub === 'deals' ? state.deals : state.pipelines, id),
+              sub === 'contacts'
+                ? docHandle(state.contacts, id, state.contactUpdates)
+                : docHandle(sub === 'deals' ? state.deals : state.pipelines, id, state.updates),
           }),
         }
       },
@@ -102,6 +122,11 @@ const fakeFirestore = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The REAL floor (AGL-2641), over the contacts store above: what the
+  // route proves is that it calls it, on the right site, on a win alone.
+  floorContactLifecycleStage: jest.requireActual(
+    '@aglyn/tenant-data-admin/server/contact-lifecycle-floor',
+  ).floorContactLifecycleStage,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -180,6 +205,7 @@ async function call(
 beforeEach(() => {
   emitted.length = 0
   state.updates.length = 0
+  state.contactUpdates.length = 0
   state.orgLines.length = 0
   state.member = { role: 'editor', allHosts: true }
   state.permitted = true
@@ -206,6 +232,15 @@ beforeEach(() => {
       contactId: 'c1',
       visibleTo: ['host:shop'],
       hostId: 'shop',
+    },
+  }
+  // The deal's contact: a prospect the shop holds, one stage short of a sale.
+  state.contacts = {
+    c1: {
+      email: 'maya@example.com',
+      hostId: 'shop',
+      visibleTo: ['host:shop'],
+      facets: { shop: { sources: { form: true }, interactions: [], lifecycleStage: 'sales-qualified' } },
     },
   }
 })
@@ -308,6 +343,67 @@ describe('the deal-stage route (AGL-2598)', () => {
     expect(emitted[0].payload['previousStageId']).toBe('proposal-sent')
   })
 
+  /*
+   * THE CUSTOMER FLOOR (AGL-2641). A won deal is a purchase the business
+   * decided on, and the contact's stage says so from this write on.
+   */
+  it('makes the contact a customer on a win — the site’s facet, then contactStageChanged', async () => {
+    const { body } = await call({ hostId: 'shop', dealId: 'd1', status: 'won' })
+    expect(state.contactUpdates).toEqual([
+      { id: 'c1', patch: { 'facets.shop.lifecycleStage': 'customer', updatedAt: '__now' } },
+    ])
+    expect(body.customer).toEqual({ contactId: 'c1', lifecycleStage: 'customer', advanced: true })
+    // The cause first, then its effect, both to the deal's own site.
+    expect(emitted.map((entry) => [entry.hostId, entry.event])).toEqual([
+      ['shop', 'dealWon'],
+      ['shop', 'contactStageChanged'],
+    ])
+    expect(emitted[1].payload).toEqual({
+      contactId: 'c1',
+      email: 'maya@example.com',
+      lifecycleStage: 'customer',
+      previousStage: 'sales-qualified',
+    })
+  })
+
+  it.each(['customer', 'evangelist', 'other'])(
+    'never demotes a contact already at %s, and announces no stage change',
+    async (stage) => {
+      ;(state.contacts['c1']['facets'] as any).shop.lifecycleStage = stage
+      const { body } = await call({ hostId: 'shop', dealId: 'd1', status: 'won' })
+      expect(state.contactUpdates).toEqual([])
+      expect(body.customer).toEqual({ contactId: 'c1', lifecycleStage: stage, advanced: false })
+      expect(emitted.map((entry) => entry.event)).toEqual(['dealWon'])
+    },
+  )
+
+  it('leaves the contact alone on a move, a loss and a reopen', async () => {
+    await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' })
+    const lost = await call({ hostId: 'shop', dealId: 'd1', status: 'lost', lostReason: 'Budget' })
+    const reopened = await call({ hostId: 'shop', dealId: 'd1', stageId: 'qualified' })
+    expect(state.contactUpdates).toEqual([])
+    expect(lost.body.customer).toBeNull()
+    expect(reopened.body.customer).toBeNull()
+    expect(emitted.map((entry) => entry.event)).toEqual([
+      'dealStageChanged',
+      'dealLost',
+      'dealStageChanged',
+    ])
+  })
+
+  it('wins a deal that names no contact, or whose contact is gone, with customer null', async () => {
+    delete state.deals['d1']['contactId']
+    const orphan = await call({ hostId: 'shop', dealId: 'd1', status: 'won' })
+    expect(orphan.status).toBe(200)
+    expect(orphan.body.customer).toBeNull()
+    state.deals['d1'] = { ...state.deals['d1'], stageId: 'qualified', status: 'open', contactId: 'gone' }
+    const missing = await call({ hostId: 'shop', dealId: 'd1', status: 'won' })
+    expect(missing.status).toBe(200)
+    expect(missing.body.customer).toBeNull()
+    expect(state.contactUpdates).toEqual([])
+    expect(emitted.map((entry) => entry.event)).toEqual(['dealWon', 'dealWon'])
+  })
+
   it('loses through status, keeping the reason and putting it on dealLost', async () => {
     const { status, body } = await call({
       hostId: 'shop',
@@ -375,6 +471,8 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
   })
 
   it('names the win and the loss in the org line', async () => {
+    // A contact already a customer: the win raised nobody, and the line says only the win.
+    ;(state.contacts['c1']['facets'] as any).shop.lifecycleStage = 'customer'
     await call({ ...ORG, status: 'won' })
     expect(state.orgLines[0].action).toBe('Marked deal won')
     state.deals['d1']['stageId'] = 'proposal-sent'
@@ -406,6 +504,33 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
     expect(body.event).toBe('dealStageChanged')
     expect(emitted).toEqual([])
     expect(state.orgLines).toHaveLength(1)
+  })
+
+  it('floors the contact in the deal’s own site’s facet on an org-level win, and the line says so', async () => {
+    state.member = null
+    const { body } = await call({ ...ORG, status: 'won' })
+    expect(state.contactUpdates).toEqual([
+      { id: 'c1', patch: { 'facets.shop.lifecycleStage': 'customer', updatedAt: '__now' } },
+    ])
+    expect(body.customer).toEqual({ contactId: 'c1', lifecycleStage: 'customer', advanced: true })
+    expect(emitted.map((entry) => [entry.hostId, entry.event])).toEqual([
+      ['shop', 'dealWon'],
+      ['shop', 'contactStageChanged'],
+    ])
+    expect(state.orgLines[0].action).toBe('Marked deal won — contact now a customer')
+  })
+
+  it('wins a deal no site captured through the contact’s own site — no dealWon, but the stage still moves', async () => {
+    delete state.deals['d1']['hostId']
+    state.deals['d1']['visibleTo'] = ['org']
+    const { body } = await call({ ...ORG, status: 'won' })
+    expect(body.customer).toEqual({ contactId: 'c1', lifecycleStage: 'customer', advanced: true })
+    expect(state.contactUpdates[0].patch).toHaveProperty(['facets.shop.lifecycleStage'], 'customer')
+    // Nobody hears the win, but the site that holds the person hears the stage change.
+    expect(emitted.map((entry) => [entry.hostId, entry.event])).toEqual([
+      ['shop', 'contactStageChanged'],
+    ])
+    expect(state.orgLines[0].action).toBe('Marked deal won — contact now a customer')
   })
 
   it('answers a no-op with no line, and an unknown deal with 404', async () => {

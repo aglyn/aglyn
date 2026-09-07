@@ -658,13 +658,20 @@ export const CRM_ACTION_RECIPES: readonly CrmActionRecipe[] = [
     id: 'followUpWonDeal',
     title: 'Follow up a won deal',
     description:
-      'When a deal is won: move the contact to Customer and book a check-in ' +
-      'call a week out.',
+      'When a deal is won — which makes the contact a Customer on its own — ' +
+      'book a check-in call a week out.',
+    /*
+     * No stage step (AGL-2641): the win itself floors the contact at
+     * `customer` before `dealWon` is announced, so a step setting the stage
+     * here would at best repeat the write and at worst move an evangelist
+     * back to customer — a SET, which is what the step is, and not the
+     * floor the win applies. The recipe books the follow-up and nothing
+     * else.
+     */
     build: () => ({
       name: 'Follow up a won deal',
       trigger: { event: 'dealWon' },
       steps: [
-        { type: 'setContactStage', lifecycleStage: 'customer' },
         {
           type: 'createCrmTask',
           title: 'Check in with the new customer',

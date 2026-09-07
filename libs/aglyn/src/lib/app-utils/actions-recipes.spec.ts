@@ -137,11 +137,11 @@ describe('Welcome a new lead', () => {
 })
 
 describe('Follow up a won deal', () => {
-  it('moves the contact to Customer and books a call a week out', () => {
-    const action = crmActionRecipe('followUpWonDeal')!.build()
+  it('books a call a week out, and sets no stage — the win itself makes the contact a customer (AGL-2641)', () => {
+    const recipe = crmActionRecipe('followUpWonDeal')!
+    const action = recipe.build()
     expect(action.trigger).toEqual({ event: 'dealWon' })
     expect(action.steps).toEqual([
-      { type: 'setContactStage', lifecycleStage: 'customer' },
       {
         type: 'createCrmTask',
         title: 'Check in with the new customer',
@@ -149,6 +149,10 @@ describe('Follow up a won deal', () => {
         dueInDays: 7,
       },
     ])
+    // A stage step here would be a SET after the win's floor: a repeat at
+    // best, a demotion of an evangelist at worst.
+    expect(action.steps.some((step) => step.type === 'setContactStage')).toBe(false)
+    expect(recipe.description).toMatch(/Customer on its own/)
   })
 })
 

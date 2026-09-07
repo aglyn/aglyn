@@ -67,6 +67,21 @@
  * `lostReason` (kept on a loss, removed on anything else). A move to the
  * stage the deal is already in writes nothing and emits nothing — an
  * automation must not fire twice because a card was dropped where it was.
+ *
+ * ## A won deal makes its contact a customer (AGL-2641)
+ *
+ * A win is the same fact as a purchase — the business has decided this
+ * person bought — and an order already floors a contact's lifecycle stage
+ * at `customer` on capture. So the transition INTO `won` applies the same
+ * floor to the contact the deal names, in the same write path, behind no
+ * setting: `floorContactLifecycleStage` fills an empty stage or advances an
+ * earlier one inside the facet of the site the deal was made on, and never
+ * moves anybody back — a customer stays a customer, an evangelist an
+ * evangelist. When the stage did move, `contactStageChanged` is announced
+ * after `dealWon`, so an automation keyed on "became a customer" hears it,
+ * and the org's activity line says so. A failure to write the contact does
+ * not undo the win: the deal is already closed, and the response reports
+ * `customer: null` rather than a 500 for a stage change that did happen.
  */
 
 import {
@@ -81,7 +96,9 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   consentGroupForSite,
+  type ContactLifecycleFloor,
   firebaseAdmin,
+  floorContactLifecycleStage,
   getOrgForHost,
   logOrgActivity,
   memberHasOrgPermission,
@@ -255,6 +272,29 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
   // organization level the deal's own — a deal no site captured has none.
   const eventHostId =
     routeScope.level === 'site' ? routeScope.hostId : String(deal.hostId ?? '').trim()
+
+  /*
+   * The customer floor, on the transition into `won` alone: a move between
+   * open stages, a loss and a reopen say nothing about whether the person
+   * bought. The facet written is the site's the deal was made on — under
+   * a site the mounted one, at the organization level the deal's own, and
+   * for a deal no site captured the person's own capturing site.
+   */
+  let customer: ContactLifecycleFloor | null = null
+  const contactId = String(deal.contactId ?? '').trim()
+  if (nextStatus === 'won' && contactId) {
+    customer = await floorContactLifecycleStage({
+      contactRef: orgRef.collection('contacts').doc(contactId),
+      org,
+      hostId: eventHostId || null,
+      floor: 'customer',
+    }).catch((error: unknown) => {
+      console.error('[crm] deal-stage: the customer floor failed', dealId, contactId, error)
+      return null
+    })
+  }
+  const becameCustomer = customer?.outcome === 'advanced'
+
   if (eventHostId) {
     await emitHostEvent(
       eventHostId,
@@ -270,12 +310,25 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
       ),
     )
   }
+  if (customer?.outcome === 'advanced') {
+    // The stage change is the win's effect, announced after its cause, to
+    // the site whose facet moved — the same site as the win's, unless no
+    // site captured the deal and the person's own site holds the stage.
+    await emitHostEvent(customer.hostId, 'contactStageChanged', {
+      contactId: customer.contactId,
+      email: customer.email,
+      lifecycleStage: customer.lifecycleStage,
+      previousStage: customer.previousStage,
+    })
+  }
   if (actor) {
     await logOrgActivity(
       orgId,
       actor,
       nextStatus === 'won'
-        ? 'Marked deal won'
+        ? becameCustomer
+          ? 'Marked deal won — contact now a customer'
+          : 'Marked deal won'
         : nextStatus === 'lost'
           ? 'Marked deal lost'
           : `Moved deal to ${target.name}`,
@@ -290,5 +343,18 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     status: nextStatus,
     previousStageId,
     event,
+    /*
+     * What the win did to the contact: the stage it now holds and whether
+     * this call raised it. `null` on anything but a win, on a deal that
+     * names no contact, and on a contact write that failed.
+     */
+    customer:
+      customer && (customer.outcome === 'advanced' || customer.outcome === 'held')
+        ? {
+            contactId: customer.contactId,
+            lifecycleStage: customer.lifecycleStage,
+            advanced: customer.outcome === 'advanced',
+          }
+        : null,
   })
 }
