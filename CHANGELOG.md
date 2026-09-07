@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.83 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/b7ca99abe...v1.0.0-beta.83)
+
+### Fixed
+
+- **forms:** retirement is a marker, not a number ([AGL-2671](https://linear.app/aglyn/issue/AGL-2671), [AGL-2669](https://linear.app/aglyn/issue/AGL-2669))
+
 ## v1.0.0-beta.82 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/7143cd301...v1.0.0-beta.82)
