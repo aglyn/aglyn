@@ -9,6 +9,25 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.79 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.78...v1.0.0-beta.79)
+
+### Added
+
+- **console:** the verification door asserts a new account may actually send ([AGL-2668](https://linear.app/aglyn/issue/AGL-2668), [AGL-2667](https://linear.app/aglyn/issue/AGL-2667), [AGL-2581](https://linear.app/aglyn/issue/AGL-2581), [AGL-2583](https://linear.app/aglyn/issue/AGL-2583))
+
+### Fixed
+
+- **auth:** a verification mail is withheld only on evidence one was sent ([AGL-2667](https://linear.app/aglyn/issue/AGL-2667), [AGL-2584](https://linear.app/aglyn/issue/AGL-2584), [AGL-2581](https://linear.app/aglyn/issue/AGL-2581))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** raise the Linear issue ceiling to AGL-2668 ([AGL-2668](https://linear.app/aglyn/issue/AGL-2668), [AGL-2665](https://linear.app/aglyn/issue/AGL-2665), [AGL-2666](https://linear.app/aglyn/issue/AGL-2666), [AGL-2667](https://linear.app/aglyn/issue/AGL-2667))
+
+</details>
+
 ## v1.0.0-beta.78 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.77...v1.0.0-beta.78)
