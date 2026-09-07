@@ -142,11 +142,10 @@ export interface EmailsListCardProps {
  * bounded window in document-id order and probes one past the ceiling, so the
  * rows are sorted here and the reader is told when there are more.
  *
- * Every writer now stamps a `createdAtMs`, which is the field this list could
- * eventually be ordered on in Firestore — but not yet, and for the same
- * reason: messages written before that stamp existed do not carry it, and
- * `orderBy` would drop every one of them. Server ordering waits on
- * `tools/scripts/backfill-email-created-at.mjs` having run.
+ * Every writer stamps a `createdAtMs`, which is the field this list could be
+ * ordered on in Firestore. Moving it there is a query change with the same
+ * hazard as the two above — `orderBy` drops a document missing the field —
+ * so it needs the corpus proven to carry one, not just the writers.
  *
  * The page is therefore a SLICE of a window this card already holds, not a
  * query: paging an id-ordered walk and re-sorting each page by date would run

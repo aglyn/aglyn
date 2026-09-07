@@ -77,11 +77,10 @@ export const EMAIL_CREATED_AT_FIELD = 'createdAtMs'
 /**
  * When a message was created, for the records that carry it.
  *
- * `null` — not 0 — for a message written before every writer stamped
- * {@link EMAIL_CREATED_AT_FIELD}, because 0 is a real instant at the far end
- * of the sort and "we do not know" is not "1970". The backfill in
- * `tools/scripts/backfill-email-created-at.mjs` fills these in; until it is
- * run they order by their send time, which is the ordering they had.
+ * `null` — not 0 — for a record carrying no {@link EMAIL_CREATED_AT_FIELD},
+ * because 0 is a real instant at the far end of the sort and "we do not know"
+ * is not "1970". A null orders by the record's send time instead, so the list
+ * is correct for a record from any era.
  */
 export function emailCreatedAtMs(
   record: Record<string, any> | null | undefined,
