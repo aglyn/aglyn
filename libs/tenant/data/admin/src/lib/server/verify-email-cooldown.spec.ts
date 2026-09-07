@@ -133,4 +133,44 @@ describe('consumeVerifyEmailAutoSend', () => {
       expect(again.allowed).toBe(false)
     }
   })
+
+  /**
+   * AGL-2667 — the counter that could not answer must not be read as a mail.
+   *
+   * The limiter refuses on two unrelated grounds and reports which: a counted
+   * overage, and a counter it could not read and write inside its budget. The
+   * second says nothing about whether a link was minted, and any slowness
+   * spends that budget — a cold instance paying for Admin SDK startup and two
+   * Firestore round trips reaches it with nobody else on the key, which on a
+   * quiet deployment is the ordinary case.
+   *
+   * Suppressing on it withheld the FIRST mail of brand-new accounts and,
+   * because the route answers a suppressed send 200, told them it was on its
+   * way. Signups completed into accounts that could never be verified, with
+   * no error anywhere: the only visible trace was a resend working.
+   */
+  it('sends when the counter cannot answer, rather than assuming a mail', async () => {
+    const store = fakeFirestore()
+    const contended = {
+      ...store,
+      collection: () => ({
+        doc: (id: string) => ({
+          ...store.collection().doc(id),
+          // What a Firestore round trip that runs out of budget surfaces as,
+          // and what the limiter classifies as contention.
+          set: async () => {
+            throw Object.assign(new Error('deadline exceeded'), { code: 4 })
+          },
+        }),
+      }),
+    }
+
+    const first = await consumeVerifyEmailAutoSend('uid-cold-start', {
+      now: NOW,
+      firestore: contended,
+    })
+
+    expect(first.allowed).toBe(true)
+    expect(first.retryAfterSeconds).toBe(0)
+  })
 })

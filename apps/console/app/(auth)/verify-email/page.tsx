@@ -123,9 +123,15 @@ function VerifyEmail() {
    * minted from a phone, a second browser, or a private window.
    */
   const sendLink = useCallback(
-    async ({ automatic = false }: { automatic?: boolean } = {}) => {
+    async ({
+      automatic = false,
+    }: { automatic?: boolean } = {}): Promise<boolean> => {
       const user = firebaseAuth.currentUser
-      if (!user || loading) return
+      // False means nothing was asked of the route — no session to sign with
+      // yet, or another request already holds the loading queue. The mount
+      // send below reads it to tell "sent, and here is the outcome" apart
+      // from "never left the browser", which are the same silence on screen.
+      if (!user || loading) return false
       setError(null)
       const dequeueLoading = queueLoading()
       try {
@@ -150,20 +156,20 @@ function VerifyEmail() {
           setError(
             'Too many requests — wait a moment before requesting another link.',
           )
-          return
+          return true
         }
         if (!response.ok) {
           setError(
             payload.error ??
               'We couldn’t send the verification email. Try again shortly.',
           )
-          return
+          return true
         }
         // Verified in another tab while this page sat open. Sending a mail
         // whose link is already a no-op would read as the flow being stuck.
         if (payload.alreadyVerified) {
           await goToApp()
-          return
+          return true
         }
         setSent(true)
       } catch (e: any) {
@@ -172,6 +178,7 @@ function VerifyEmail() {
       } finally {
         dequeueLoading()
       }
+      return true
     },
     [firebaseAuth, goToApp, loading, queueLoading],
   )
@@ -270,8 +277,15 @@ function VerifyEmail() {
   useEffect(() => {
     if (applying || authLoading || !signedIn || sessionVerified) return
     if (!sentOnceRef.current) {
+      // Marked before the await so a dependency change mid-flight cannot
+      // start a second send, and released again when `sendLink` reports it
+      // asked the route for nothing: the mount send is spent by a request,
+      // never by a pass that arrived before there was a session to sign it
+      // with. A later pass makes it, once auth and the loading queue settle.
       sentOnceRef.current = true
-      void sendLink({ automatic: true })
+      void sendLink({ automatic: true }).then((asked) => {
+        if (!asked) sentOnceRef.current = false
+      })
     }
     const timer = setInterval(() => void checkNow(), POLL_MS)
     return () => clearInterval(timer)
