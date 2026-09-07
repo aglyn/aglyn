@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.80 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/9003ebffb...v1.0.0-beta.80)
+
+### Fixed
+
+- **tenant:** the funnel asks the shared contract whether a form records consent ([AGL-2669](https://linear.app/aglyn/issue/AGL-2669))
+
+### Documentation
+
+- **uptime:** the verification door's send gate, and what it still does not watch ([AGL-2668](https://linear.app/aglyn/issue/AGL-2668))
+
 ## v1.0.0-beta.79 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.78...v1.0.0-beta.79)
