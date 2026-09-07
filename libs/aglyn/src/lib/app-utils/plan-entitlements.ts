@@ -3877,17 +3877,20 @@ export interface CrmEmailQuotaResult {
  *
  * ## The contract for the send route
  *
- * The route that sends a one-to-one email (a companion of this issue) reads
- * `orgs/{orgId}/crmEmailUsage/{crmEmailUsageDayKey()}.count`, calls this
- * with that figure and REFUSES with the plan reason when `allowed` is false
- * — before a message leaves, never after. On a delivered send it increments
- * that same document by one (`recordCrmEmailSend` in `@aglyn/tenant-data-admin`
- * is the writer; `FieldValue.increment`, `{ merge: true }`, never a read-
- * then-write) and records the send on the org's `emailSends` cost meter
- * through `recordEmailSends` as `transactional`, because every message the
- * provider charged for is priced into COGS and the campaign cap does not
- * govern it. The count enforced is the count billed, from one document, the
- * way the API meter works.
+ * The route that sends a one-to-one email takes the send as a SLOT on
+ * `orgs/{orgId}/crmEmailUsage/{crmEmailUsageDayKey()}` inside one Firestore
+ * transaction — `reserveCrmEmailSend` in `@aglyn/tenant-data-admin` reads
+ * `count`, calls this with that figure, REFUSES with the plan reason when
+ * `allowed` is false and otherwise writes `used + 1` in the same transaction
+ * (AGL-2645). A read-then-write cap let two reps at the last slot both pass
+ * one reading of it; the transaction re-runs the second on the raised
+ * figure. The slot is taken before the message leaves and handed back by
+ * `releaseCrmEmailSend` when the provider refuses it. A delivered send is
+ * then recorded on the org's `emailSends` cost meter through
+ * `recordEmailSends` as `transactional`, because every message the provider
+ * charged for is priced into COGS and the campaign cap does not govern it.
+ * The count enforced is the count billed, from one document, the way the
+ * API meter works.
  *
  * Read the counter with `used` from the server: the console meter on the
  * billing page reads the same document, member-readable, so a rep is never

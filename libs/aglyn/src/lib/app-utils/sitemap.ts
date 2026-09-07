@@ -34,6 +34,8 @@
  * shape exactly, and so must the tests.
  */
 
+import { toEpochMs } from './lockdown'
+
 /** Where a site's sitemap index lives; what `robots.txt` advertises. */
 export const SITEMAP_INDEX_PATH = '/sitemap.xml'
 
@@ -147,28 +149,106 @@ export function escapeSitemapXml(value: string): string {
 }
 
 /**
- * A `<urlset>` document. De-duplicated (AGL-582): a collection slug can shadow
- * a screen path, and the same URL twice in one sitemap is a submission of a
- * duplicate, not a stronger signal.
+ * One address in a sitemap document. A bare string is an address with no
+ * known modification date; the object form carries a `lastmod` when the
+ * builder could derive one.
  */
-export function sitemapUrlsetXml(urls: readonly string[]): string {
+export type SitemapLocation = string | { loc: string; lastmod?: string }
+
+/**
+ * A `<lastmod>` value from whatever timestamp shape a document carries
+ * (AGL-2647): a Firestore `Timestamp` (`toMillis()`), the `{seconds}` object
+ * a serialized one decays into, epoch milliseconds, or an ISO string.
+ *
+ * The DAY only, in UTC. `YYYY-MM-DD` is a complete W3C datetime, and a date a
+ * crawler can compare is worth more than a time it cannot: a value that moved
+ * with every render would be a `lastmod` crawlers learn to discount, and the
+ * whole point of the element is to be believed.
+ *
+ * `undefined` for anything that does not decode, and the caller omits the
+ * element. Never "now": an invented date claims a change that did not
+ * happen, and a sitemap whose dates are consistently wrong is read as having
+ * none at all.
+ */
+export function sitemapLastmod(value: unknown): string | undefined {
+  const ms = toEpochMs(value)
+  if (ms === undefined || ms <= 0) return undefined
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+/** The `lastmod` a location carries, if any. */
+export function sitemapLocationLastmod(
+  location: SitemapLocation,
+): string | undefined {
+  return typeof location === 'string' ? undefined : location.lastmod
+}
+
+/**
+ * The newest of some `lastmod` values, or `undefined` when none is known.
+ *
+ * What a listing page and an index entry are dated by: a listing changed when
+ * its newest entry did, and a child sitemap changed when its newest URL did.
+ * Comparison is on the string, which is sound because every value is the
+ * fixed-width `YYYY-MM-DD` {@link sitemapLastmod} produces.
+ */
+export function newestSitemapLastmod(
+  lastmods: Iterable<string | undefined>,
+): string | undefined {
+  let newest: string | undefined
+  for (const lastmod of lastmods) {
+    if (lastmod && (!newest || lastmod > newest)) newest = lastmod
+  }
+  return newest
+}
+
+/**
+ * De-duplicated (AGL-582): a collection slug can shadow a screen path, and
+ * the same URL twice in one sitemap is a submission of a duplicate, not a
+ * stronger signal. The FIRST occurrence keeps its date — the routing order
+ * that decides which page a shadowed URL serves is the order the builders
+ * emit in, so the first source is the one whose date describes the page.
+ */
+function uniqueSitemapLocations(
+  locations: readonly SitemapLocation[],
+): Array<{ loc: string; lastmod?: string }> {
+  const byLoc = new Map<string, { loc: string; lastmod?: string }>()
+  for (const location of locations) {
+    const entry = typeof location === 'string' ? { loc: location } : location
+    if (!byLoc.has(entry.loc)) {
+      byLoc.set(entry.loc, { loc: entry.loc, lastmod: entry.lastmod })
+    }
+  }
+  return [...byLoc.values()]
+}
+
+/** `<url>` or `<sitemap>`; the `<lastmod>` child only when a date is known. */
+function sitemapLocationXml(
+  tag: 'url' | 'sitemap',
+  { loc, lastmod }: { loc: string; lastmod?: string },
+): string {
+  const date = lastmod ? `<lastmod>${escapeSitemapXml(lastmod)}</lastmod>` : ''
+  return `  <${tag}><loc>${escapeSitemapXml(loc)}</loc>${date}</${tag}>`
+}
+
+/** A `<urlset>` document. */
+export function sitemapUrlsetXml(urls: readonly SitemapLocation[]): string {
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    [...new Set(urls)]
-      .map((item) => `  <url><loc>${escapeSitemapXml(item)}</loc></url>`)
+    uniqueSitemapLocations(urls)
+      .map((item) => sitemapLocationXml('url', item))
       .join('\n') +
     '\n</urlset>\n'
   )
 }
 
 /** A `<sitemapindex>` document — the children of `/sitemap.xml`. */
-export function sitemapIndexXml(locs: readonly string[]): string {
+export function sitemapIndexXml(locs: readonly SitemapLocation[]): string {
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    [...new Set(locs)]
-      .map((item) => `  <sitemap><loc>${escapeSitemapXml(item)}</loc></sitemap>`)
+    uniqueSitemapLocations(locs)
+      .map((item) => sitemapLocationXml('sitemap', item))
       .join('\n') +
     '\n</sitemapindex>\n'
   )

@@ -83,6 +83,20 @@ export interface HostBrand {
    * `AdminBarSlot`'s `host` prop.
    */
   hostKey?: string
+  /**
+   * The site's title as `buildMetadata` composes it — `seo.title`, else the
+   * display name — and the host's title separator (AGL-2648).
+   *
+   * Published for the same single reader as `hostKey`: the not-found
+   * boundary's client half writes `document.title` on a client-side
+   * navigation to a missing URL, and it has to compose the SAME string the
+   * server put in the `<head>` of a full document load, or the tab flips a
+   * moment after hydration. `brandName` is not enough for that — the served
+   * title joins the site's SEO title, which is what every routed page's does.
+   * See `utils/not-found-title.ts` for the one rule both halves share.
+   */
+  siteTitle?: string
+  titleSeparator?: string
 }
 
 const HostBrandContext = createContext<HostBrand>({})
@@ -92,11 +106,20 @@ export function HostBrandProvider({
   brandLogoUrl,
   siteLinks,
   hostKey,
+  siteTitle,
+  titleSeparator,
   children,
 }: HostBrand & { children: ReactNode }) {
   const value = useMemo(
-    () => ({ brandName, brandLogoUrl, siteLinks, hostKey }),
-    [brandName, brandLogoUrl, siteLinks, hostKey],
+    () => ({
+      brandName,
+      brandLogoUrl,
+      siteLinks,
+      hostKey,
+      siteTitle,
+      titleSeparator,
+    }),
+    [brandName, brandLogoUrl, siteLinks, hostKey, siteTitle, titleSeparator],
   )
   return (
     <HostBrandContext.Provider value={value}>

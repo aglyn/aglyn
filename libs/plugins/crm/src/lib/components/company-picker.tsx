@@ -20,6 +20,7 @@ import {
   type AglynOrgBilling,
   createResourceUid,
   CRM_COLLECTIONS,
+  CRM_RECORDS_BAND_FULL_MESSAGE,
 } from '@aglyn/aglyn'
 import {
   useFirestore,
@@ -45,6 +46,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
+import { readCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 import {
   type CompanyOption,
@@ -142,6 +144,13 @@ export type CreateCompany = (name: string) => Promise<CompanyOption>
  * address and the rest are the company page's to add. The person filing it
  * owns it, as the drawer seeds too. `null` until the org has resolved, so a
  * picker offered before the scope is known offers no create.
+ *
+ * A company is a record of the band the drawers refuse on (AGL-2644): a
+ * Free org at its hundred is refused here with the drawers' sentence, and
+ * the picker shows it beneath the field the way it shows any create that
+ * failed. Measured on the click and not on the mount — see
+ * `readCrmRecordsQuota` — and never for an edit, because linking an
+ * existing company adds no record.
  */
 export function useCreateCompany(props: {
   /** The site whose console is creating, or `null` at the organization level. */
@@ -165,6 +174,8 @@ export function useCreateCompany(props: {
         ownerUid: uid,
       })
       if (result.ok === false) throw new Error(result.error)
+      const quota = await readCrmRecordsQuota(firestore, scope, org)
+      if (!quota.allowed) throw new Error(CRM_RECORDS_BAND_FULL_MESSAGE)
       const id = createResourceUid()
       await setDoc(
         doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, id),
@@ -179,7 +190,7 @@ export function useCreateCompany(props: {
       )
       return { id, name: String(result.set['name']), domain: null }
     }
-  }, [scope, createTokens, firestore, createHostId, uid])
+  }, [scope, createTokens, firestore, createHostId, uid, org])
 }
 
 /** The sentinel id of the "Create …" row the list grows when nothing matches. */

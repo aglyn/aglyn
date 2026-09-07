@@ -259,9 +259,12 @@ describe('the host key actually reaches the boundary (AGL-2342)', () => {
 
 /**
  * A 404 with no `<title>` at all (AGL-2291), measured across the live
- * marketing routes. `notFound()` serves Next's empty `__next_error__`
- * document, so there is no head for `generateMetadata` to fill — this is the
- * one surface that has to write its own tab, after mount.
+ * marketing routes. `notFound()` serves Next's `__next_error__` document,
+ * whose HEAD the `not-found` convention's own `generateMetadata` now fills on
+ * a full document load (AGL-2648, `not-found-server-head.spec.ts`). What a
+ * client-side navigation to a missing URL still lacks is any head at all —
+ * the router keeps the previous page's — so this is the surface that writes
+ * its own tab, after mount, and it must write the same string the server does.
  */
 describe('the tab title (AGL-2291)', () => {
   beforeEach(() => {
@@ -273,10 +276,12 @@ describe('the tab title (AGL-2291)', () => {
 
     renderBoundary()
 
+    // The same string the server puts in the served `<head>` of a full
+    // document load (AGL-2648, `not-found-server-head.spec.ts`): the page's
+    // NAME joined to the site's, through the one shared rule. A fixture with
+    // no published site title names the site by its display name.
     await waitFor(() =>
-      expect(document.title).toBe(
-        'We can’t find that page – Northwind Coffee',
-      ),
+      expect(document.title).toBe('Page not found – Northwind Coffee'),
     )
     // The whole white-label rule in one assertion: a 404 on somebody else's
     // site must not read as ours.

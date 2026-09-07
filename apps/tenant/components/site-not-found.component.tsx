@@ -16,12 +16,12 @@
  */
 'use client'
 
-import { resolveSeoTitle } from '@aglyn/aglyn'
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import { Suspense, useEffect, useState } from 'react'
 import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
 import type { Props } from '../app/[host]/[[...slug]]/types'
 import { useHostBrand } from '../app/[host]/host-brand.context'
+import { resolveNotFoundTitle } from '../utils/not-found-title'
 import SiteStatusScreen from './site-status-screen.component'
 
 /**
@@ -34,15 +34,21 @@ import SiteStatusScreen from './site-status-screen.component'
  *
  * ## Why the screen is fetched instead of rendered with the page
  *
- * Two framework facts, both measured on `next@16.2.11` rather than assumed, and
- * together they leave exactly one place for this to live.
+ * Two framework facts, measured on `next@16.2.11` and re-read in the
+ * `next@16.3.3` source rather than assumed, and together they leave exactly
+ * one place for this to live.
  *
  *  1. **`notFound()` is the only way to emit a `404` status, and it discards
- *     the document.** The served HTML is `<html id="__next_error__">` with an
- *     empty `<body>`; the boundary is rendered by the client off the flight
- *     payload. Reproduced in a bare Next app with no middleware, no ISR and a
- *     plain route, so it is not something about this app. (The one escape,
- *     `experimental.cacheComponents`, is the Cache Components rewrite.)
+ *     the document's BODY.** The served HTML is `<html id="__next_error__">`
+ *     whose `<body>` is a hard-coded empty seed (`getErrorRSCPayload` in
+ *     `app-render.js`), and the boundary is rendered by the client off the
+ *     flight payload. React's streaming renderer runs no error boundary, so
+ *     the shell errors and Next recovers with that seed; there is no userland
+ *     hook on the way. Reproduced in a bare Next app with no middleware, no
+ *     ISR and a plain route, so it is not something about this app. (The one
+ *     escape, `experimental.cacheComponents`, is the Cache Components rewrite.)
+ *     The `<head>` of that seed IS rendered, from the `not-found` convention's
+ *     own metadata — which is where the title comes from; see `[host]/not-found.tsx`.
  *  2. **A `not-found` boundary is rendered into every SUCCESSFUL response
  *     too.** A 200 page carries its boundary's fully rendered output in the
  *     payload. So composing a screen inside the boundary would put a screen
@@ -77,7 +83,7 @@ export interface SiteNotFoundProps {
 }
 
 export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
-  const { hostKey, brandName } = useHostBrand()
+  const { hostKey, brandName, siteTitle, titleSeparator } = useHostBrand()
   // `undefined` is PENDING and `null` is "no designed screen" — two different
   // states that must not collapse, or the fallback renders for a moment on
   // every site that has a 404 screen.
@@ -103,21 +109,22 @@ export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
   }, [hostKey])
 
   /**
-   * The tab says what the page is (AGL-2291).
+   * The tab says what the page is (AGL-2291), on a CLIENT-SIDE arrival.
    *
-   * A 404 shipped with NO `<title>` at all — measured across the live
-   * marketing routes — and the reason is fact (1) in the docblock above: the
-   * served document is Next's empty `__next_error__` shell, so there is no
-   * head for `generateMetadata` to fill and no server-rendered `<title>` to
-   * inherit. Every other page's title is composed in `buildMetadata`; this is
-   * the one surface that has to write its own, and it can only do so here,
-   * after mount, for exactly the same reason the body is fetched here.
+   * A full document load no longer needs this: the served `<head>` carries
+   * the title, written by `[host]/not-found.tsx`'s `generateMetadata` (AGL-2648)
+   * — the one part of the `__next_error__` shell Next does render on the
+   * server. What still arrives with no title is a client-side navigation to a
+   * missing URL: no document is loaded, the router carries the previous page's
+   * head across, and the page's own metadata answers nothing for a path that
+   * resolved nothing. This effect is that case's writer.
    *
-   * Composed through the SAME resolver as every other page (AGL-1341): the
-   * designed screen's authored SEO title wins verbatim, otherwise the visible
-   * heading joins the site's name. `brandName` is the SITE's name, never the
-   * platform's — a white-label 404 must not read "Aglyn" any more than a
-   * white-label homepage may.
+   * It composes the SAME string as the server, through the same shared rule
+   * and from the same host fields, published for it by `HostBrandProvider`.
+   * Anything less and the tab reads one title on arrival and another a
+   * moment after hydration. The site's name stands in for its title only
+   * when no title was published at all — the layout publishes both, so that
+   * is a provider older than this field, never a site without a name.
    *
    * Waits for the fetch to settle so the tab is not written twice; `null` (no
    * designed screen) is a settled answer, `undefined` is still pending.
@@ -127,13 +134,12 @@ export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
     const designed = screen?.data?.screen?.data as
       | { seo?: { title?: string } }
       | undefined
-    document.title = resolveSeoTitle({
-      title: designed?.seo?.title,
-      name: title,
-      siteTitle: brandName,
-      fallback: title,
+    document.title = resolveNotFoundTitle({
+      designedTitle: designed?.seo?.title,
+      siteTitle: siteTitle ?? brandName,
+      separator: titleSeparator,
     })
-  }, [screen, title, brandName])
+  }, [screen, brandName, siteTitle, titleSeparator])
 
   const fallback = (
     <SiteStatusScreen

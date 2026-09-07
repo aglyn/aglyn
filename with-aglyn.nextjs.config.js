@@ -149,6 +149,67 @@ const SECURITY_HEADERS = [
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
   },
+
+  /**
+   * How much of the current URL travels in `Referer` (AGL-2646). The full URL
+   * to our own origin, the origin alone to anyone else, nothing on an
+   * https→http downgrade. A published page's path and query are the
+   * visitor's — a slug, a search, a signed link — and no third party needs
+   * them; the measurement vendors and every checkout redirect need only the
+   * origin, which this still sends.
+   *
+   * NOT `no-referrer`, site-wide. A page under `no-referrer` sends
+   * `Origin: null` on its OWN top-level form POST, which the plugin API
+   * refuses as opaque (`plugin-api-cross-origin.ts`). The
+   * recipient-facing email pages opt into `no-referrer` per page with a
+   * `<meta name="referrer">`, which wins over this header for that document
+   * alone — the header is the floor every page inherits, not the ceiling.
+   */
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+
+  /**
+   * Which powerful browser features a document — and anything it frames —
+   * may use (AGL-2646). Every feature denied with `()` is one no surface in
+   * this repo reads: there is no `getUserMedia`, no `navigator.geolocation`,
+   * and no WebUSB, Web Serial, Web Bluetooth, WebHID, Web MIDI or motion
+   * sensor anywhere in the console, the tenant or a plugin.
+   *
+   * ⚠️ This header is the CEILING for iframe delegation, not only a policy for
+   * our own scripts: an `<iframe allow="…">` can hand a feature to its child
+   * only if the parent document holds it, so a feature denied here is
+   * silently withheld from every embed, `allow` attribute or not. That is
+   * why the list is short and why the two named for `self` are named:
+   *
+   *   - `payment=(self)`: both apps mount Stripe's `PaymentElement` (the
+   *     console's billing card form, the storefront cart), whose iframes ask
+   *     for the Payment Request API through `allow`. `self` is the browser
+   *     default, restated so a future tightening has to read this.
+   *   - `fullscreen=(self)`: the Video block's iframe carries
+   *     `allowFullScreen`.
+   *   - `accelerometer`, `encrypted-media` and `picture-in-picture` are NOT
+   *     named at all, for the same reason: that same iframe delegates them
+   *     (`libs/plugins/mui/src/lib/components/blocks.tsx`). Extending its
+   *     `allow` list means extending this header first.
+   *   - `clipboard-write` is not named: the console copies API keys, webhook
+   *     secrets and asset URLs with `navigator.clipboard.writeText`.
+   */
+  {
+    key: 'Permissions-Policy',
+    value: [
+      'camera=()',
+      'microphone=()',
+      'geolocation=()',
+      'usb=()',
+      'serial=()',
+      'bluetooth=()',
+      'hid=()',
+      'midi=()',
+      'magnetometer=()',
+      'gyroscope=()',
+      'payment=(self)',
+      'fullscreen=(self)',
+    ].join(', '),
+  },
 ]
 
 /**

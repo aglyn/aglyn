@@ -22,6 +22,7 @@ import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import type { ReactNode } from 'react'
 import getSiteNav from '../../utils/get-site-nav'
+import { hostSeoTitleParts } from '../../utils/not-found-title'
 import AdminBarSlot from './admin-bar/admin-bar-slot'
 import getOrgBilling from '../../utils/get-org-billing'
 import { getHostCached } from './host-data'
@@ -136,6 +137,7 @@ export default async function HostLayout({
     }),
     org: orgRes.org,
   })
+  const titleParts = hostSeoTitleParts(hostRes.host)
   return (
     <HostThemeProviders
       hostTheme={hostTheme}
@@ -143,6 +145,11 @@ export default async function HostLayout({
       brandName={hostRes.host?.displayName}
       siteLinks={siteLinks}
       hostKey={host}
+      // The title parts the not-found boundary's client half composes with
+      // on a client-side navigation (AGL-2648) — the same two fields its
+      // `generateMetadata` reads on the server, so both halves agree.
+      siteTitle={titleParts.siteTitle}
+      titleSeparator={titleParts.separator}
     >
       {/* Per-host manifest (AGL-1252). A relative href on purpose: the
           browser resolves it against the site's own origin, so one link tag

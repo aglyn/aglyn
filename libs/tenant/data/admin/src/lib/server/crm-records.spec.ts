@@ -36,7 +36,6 @@ import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   FieldValue: {
-    increment: (by: number) => ({ __increment: by }),
     serverTimestamp: () => 'server-timestamp',
   },
 }))
@@ -46,7 +45,8 @@ import {
   countCrmRecords,
   crmEmailsSentToday,
   crmRecordsQuotaForOrg,
-  recordCrmEmailSend,
+  releaseCrmEmailSend,
+  reserveCrmEmailSend,
 } from './crm-records'
 
 /** Documents by collection path, the way the aggregate counts them. */
@@ -55,6 +55,21 @@ const seeded = new Map<string, Array<Record<string, unknown>>>()
 const writes: Array<{ path: string; data: Record<string, unknown>; merge: boolean }> = []
 /** What a `get()` of a document answers, by path. */
 const docs = new Map<string, Record<string, unknown>>()
+/**
+ * How many times each document has been written, for the transaction
+ * double: a transaction whose read moved before its commit is re-run, the
+ * way Firestore's optimistic concurrency re-runs it, which is the only
+ * reason a second sender can observe the first one's slot.
+ */
+const versions = new Map<string, number>()
+/** Runs once, between the first transaction's read and its commit. */
+let afterRead: (() => Promise<void>) | null = null
+let aborts = 0
+
+const writeDoc = (path: string, data: Record<string, unknown>, merge: boolean) => {
+  docs.set(path, merge ? { ...(docs.get(path) ?? {}), ...data } : { ...data })
+  versions.set(path, (versions.get(path) ?? 0) + 1)
+}
 
 const seed = (collection: string, howMany: number, data: Record<string, unknown> = {}) => {
   seeded.set(collection, Array.from({ length: howMany }, () => ({ ...data })))
@@ -89,13 +104,54 @@ function docHandle(path: string): any {
   }
 }
 
-const firestore: any = { collection: (name: string) => collectionHandle(name) }
+const firestore: any = {
+  collection: (name: string) => collectionHandle(name),
+  runTransaction: async (body: (tx: any) => Promise<unknown>) => {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const read = new Map<string, number>()
+      const pending: Array<{ path: string; data: Record<string, unknown>; merge: boolean }> = []
+      const tx = {
+        get: async (ref: { path: string }) => {
+          read.set(ref.path, versions.get(ref.path) ?? 0)
+          return {
+            exists: docs.has(ref.path),
+            get: (field: string) => docs.get(ref.path)?.[field],
+          }
+        },
+        set: (ref: { path: string }, data: Record<string, unknown>, options?: { merge?: boolean }) =>
+          pending.push({ path: ref.path, data, merge: Boolean(options?.merge) }),
+      }
+      const result = await body(tx)
+      if (afterRead && attempt === 0) {
+        const hook = afterRead
+        afterRead = null
+        await hook()
+      }
+      const stale = [...read.entries()].some(
+        ([path, version]) => (versions.get(path) ?? 0) !== version,
+      )
+      if (stale) {
+        aborts += 1
+        continue
+      }
+      for (const write of pending) {
+        writeDoc(write.path, write.data, write.merge)
+        writes.push(write)
+      }
+      return result
+    }
+    throw Object.assign(new Error('ABORTED'), { code: 10 })
+  },
+}
 const orgRef = () => firestore.collection('orgs').doc('org-1')
 
 beforeEach(() => {
   seeded.clear()
   writes.length = 0
   docs.clear()
+  versions.clear()
+  afterRead = null
+  aborts = 0
 })
 
 describe('countCrmRecords', () => {
@@ -214,9 +270,12 @@ describe('countCrmActivitiesForRecord', () => {
 
 describe('the one-to-one email counter', () => {
   const NOON = new Date('2026-09-05T12:00:00Z')
+  const TODAY = 'orgs/org-1/crmEmailUsage/2026-09-05'
+  const STARTER = { plan: 'starter' } as const
+  const INCLUDED = PLAN_ENTITLEMENTS.starter.crmEmailsPerDay
 
   it('reads today’s count off orgs/{orgId}/crmEmailUsage/{YYYY-MM-DD}', async () => {
-    docs.set('orgs/org-1/crmEmailUsage/2026-09-05', { count: 17 })
+    docs.set(TODAY, { count: 17 })
     await expect(crmEmailsSentToday(firestore, 'org-1', NOON)).resolves.toBe(17)
     // Yesterday's document is not today's pace.
     docs.clear()
@@ -225,52 +284,120 @@ describe('the one-to-one email counter', () => {
   })
 
   it('reads a malformed counter as zero sent — the permissive direction', async () => {
-    docs.set('orgs/org-1/crmEmailUsage/2026-09-05', { count: 'seventeen' })
+    docs.set(TODAY, { count: 'seventeen' })
     await expect(crmEmailsSentToday(firestore, 'org-1', NOON)).resolves.toBe(0)
-    docs.set('orgs/org-1/crmEmailUsage/2026-09-05', { count: -4 })
+    docs.set(TODAY, { count: -4 })
     await expect(crmEmailsSentToday(firestore, 'org-1', NOON)).resolves.toBe(0)
   })
 
-  it('records a send as an increment under merge, on today’s document', async () => {
-    await recordCrmEmailSend(firestore, 'org-1', 1, NOON)
-    expect(writes).toEqual([
-      {
-        path: 'orgs/org-1/crmEmailUsage/2026-09-05',
-        merge: true,
-        data: {
-          count: { __increment: 1 },
-          day: '2026-09-05',
-          updatedAt: 'server-timestamp',
+  /**
+   * THE RESERVATION (AGL-2645): the cap is a slot taken inside the
+   * transaction that reads the counter, judged by the real plan table.
+   */
+  describe('reserveCrmEmailSend', () => {
+    it('takes one slot on today’s document, as an absolute figure under merge', async () => {
+      docs.set(TODAY, { count: 4 })
+      const result = await reserveCrmEmailSend(firestore, 'org-1', STARTER, NOON)
+      expect(result).toEqual({
+        ok: true,
+        reservation: { orgId: 'org-1', day: '2026-09-05' },
+        quota: expect.objectContaining({ allowed: true, used: 4, included: INCLUDED }),
+      })
+      expect(writes).toEqual([
+        {
+          path: TODAY,
+          merge: true,
+          data: { count: 5, day: '2026-09-05', updatedAt: 'server-timestamp' },
         },
-      },
-    ])
+      ])
+    })
+
+    it('conjures the day’s document on the first send', async () => {
+      const result = await reserveCrmEmailSend(firestore, 'org-1', STARTER, NOON)
+      expect(result.ok).toBe(true)
+      expect(docs.get(TODAY)).toMatchObject({ count: 1, day: '2026-09-05' })
+    })
+
+    it('admits the last slot inside the cap and refuses the next, writing nothing', async () => {
+      docs.set(TODAY, { count: INCLUDED - 1 })
+      expect((await reserveCrmEmailSend(firestore, 'org-1', STARTER, NOON)).ok).toBe(true)
+      expect(docs.get(TODAY)?.['count']).toBe(INCLUDED)
+
+      writes.length = 0
+      const refused = await reserveCrmEmailSend(firestore, 'org-1', STARTER, NOON)
+      expect(refused).toEqual({
+        ok: false,
+        quota: expect.objectContaining({ allowed: false, used: INCLUDED, included: INCLUDED }),
+      })
+      expect(writes).toHaveLength(0)
+      expect(docs.get(TODAY)?.['count']).toBe(INCLUDED)
+    })
+
+    it('refuses a tier with no suite at zero, and admits everything on Enterprise', async () => {
+      const free = await reserveCrmEmailSend(firestore, 'org-1', { plan: 'free' }, NOON)
+      expect(free).toMatchObject({ ok: false, quota: { included: 0, used: 0 } })
+      expect(writes).toHaveLength(0)
+
+      docs.set(TODAY, { count: 1_000_000 })
+      const enterprise = await reserveCrmEmailSend(firestore, 'org-1', { plan: 'enterprise' }, NOON)
+      expect(enterprise.ok).toBe(true)
+      expect(docs.get(TODAY)?.['count']).toBe(1_000_001)
+    })
+
+    /**
+     * THE ISSUE, reproduced and closed. Two reps reserve at the last slot;
+     * the second commits inside the first one's window. Exactly one passes,
+     * and the first is re-run rather than trusted on its stale read.
+     */
+    it('CANNOT be raced: two reservations at the last slot yield one slot', async () => {
+      docs.set(TODAY, { count: INCLUDED - 1 })
+      let second: Awaited<ReturnType<typeof reserveCrmEmailSend>> | null = null
+      afterRead = async () => {
+        second = await reserveCrmEmailSend(firestore, 'org-1', STARTER, NOON)
+      }
+      const first = await reserveCrmEmailSend(firestore, 'org-1', STARTER, NOON)
+      expect(second).toMatchObject({ ok: true })
+      expect(first).toMatchObject({ ok: false, quota: { used: INCLUDED } })
+      expect(aborts).toBe(1)
+      expect(docs.get(TODAY)?.['count']).toBe(INCLUDED)
+    })
   })
 
-  it('writes nothing for a send that did not happen, and never throws', async () => {
-    await recordCrmEmailSend(firestore, 'org-1', 0, NOON)
-    await recordCrmEmailSend(firestore, '', 1, NOON)
-    await recordCrmEmailSend(firestore, 'org-1', Number.NaN, NOON)
-    expect(writes).toHaveLength(0)
-    // A failing write is logged and swallowed: the message has already left.
-    const failing: any = {
-      collection: () => ({
-        doc: () => ({
-          collection: () => ({
-            doc: () => ({
-              set: async () => {
-                throw new Error('unavailable')
-              },
-            }),
-          }),
-        }),
-      }),
-    }
-    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
-    try {
-      await expect(recordCrmEmailSend(failing, 'org-1', 1, NOON)).resolves.toBeUndefined()
-      expect(error).toHaveBeenCalled()
-    } finally {
-      error.mockRestore()
-    }
+  describe('releaseCrmEmailSend', () => {
+    it('gives the slot back on the day it was taken, never below zero', async () => {
+      docs.set(TODAY, { count: 5 })
+      await releaseCrmEmailSend(firestore, { orgId: 'org-1', day: '2026-09-05' })
+      expect(docs.get(TODAY)).toMatchObject({ count: 4, day: '2026-09-05' })
+      // A send that straddled midnight releases to the day that lent it.
+      docs.set('orgs/org-1/crmEmailUsage/2026-09-06', { count: 9 })
+      await releaseCrmEmailSend(firestore, { orgId: 'org-1', day: '2026-09-05' })
+      expect(docs.get(TODAY)?.['count']).toBe(3)
+      expect(docs.get('orgs/org-1/crmEmailUsage/2026-09-06')?.['count']).toBe(9)
+
+      docs.set(TODAY, { count: 0 })
+      await releaseCrmEmailSend(firestore, { orgId: 'org-1', day: '2026-09-05' })
+      expect(docs.get(TODAY)?.['count']).toBe(0)
+    })
+
+    it('releases nothing for no reservation, and never throws', async () => {
+      await releaseCrmEmailSend(firestore, null)
+      await releaseCrmEmailSend(firestore, { orgId: '', day: '2026-09-05' })
+      expect(writes).toHaveLength(0)
+      const failing: any = {
+        collection: firestore.collection,
+        runTransaction: async () => {
+          throw new Error('unavailable')
+        },
+      }
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      try {
+        await expect(
+          releaseCrmEmailSend(failing, { orgId: 'org-1', day: '2026-09-05' }),
+        ).resolves.toBeUndefined()
+        expect(error).toHaveBeenCalled()
+      } finally {
+        error.mockRestore()
+      }
+    })
   })
 })

@@ -29,11 +29,18 @@
  * link is offered as the company to link or create.
  */
 
+import { checkCrmRecordsQuota, CRM_RECORDS_BAND_FULL_MESSAGE } from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { CompanyPicker, useCompanyOptions } from './company-picker'
+import { type ReactNode, useState } from 'react'
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
+import { CompanyPicker, useCompanyOptions, useCreateCompany } from './company-picker'
 
 /** The options listen, as the hook builds it. */
 let builtQuery: { path: string; clauses: unknown[] } | null = null
+/** What the three aggregates answer, by collection name. */
+let counts: Record<string, number> = {}
+/** Every company document written. */
+const setDoc = jest.fn(async (_ref: { path: string }, _data: Record<string, unknown>) => undefined)
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -47,6 +54,12 @@ jest.mock('firebase/firestore', () => ({
   where: (...args: unknown[]) => ({ kind: 'where', args }),
   orderBy: (...args: unknown[]) => ({ kind: 'orderBy', args }),
   limit: (...args: unknown[]) => ({ kind: 'limit', args }),
+  doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  serverTimestamp: () => 'server-timestamp',
+  setDoc: (ref: { path: string }, data: Record<string, unknown>) => setDoc(ref, data),
+  getCountFromServer: async (ref: { path: string }) => ({
+    data: () => ({ count: counts[ref.path.slice(ref.path.lastIndexOf('/') + 1)] ?? 0 }),
+  }),
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -245,5 +258,122 @@ describe('useCompanyOptions (AGL-2597)', () => {
     expect(screen.getByText('complete')).toBeTruthy()
     expect(screen.getByText('Acme:acme.com')).toBeTruthy()
     expect(screen.getByText('Globex:')).toBeTruthy()
+  })
+})
+
+/**
+ * THE RECORDS BAND AT THE PICKER'S DOOR (AGL-2644).
+ *
+ * The drawers refuse a Free org's hundred-and-first record; the picker's
+ * "Create …" row is the same write with one field, and used to be the one
+ * door with no band on it. The band is measured on the click: the three
+ * aggregates, summed, judged by the real quota arithmetic against the real
+ * plan table — so both sides of the boundary are proved, under a site and
+ * at the organization level, where the picker creates for the org's one
+ * site.
+ */
+describe('useCreateCompany consults the records band (AGL-2644)', () => {
+  const FREE_BAND = checkCrmRecordsQuota({ plan: 'free' }, 0).included
+  const PRO_BAND = checkCrmRecordsQuota({ plan: 'pro' }, 0).included
+
+  /** What the picker selected, as the form holding it would learn. */
+  const onChange = jest.fn()
+
+  /** The picker wired to the hook, as a contact's form mounts it. */
+  function CreateProbe(props: { hostId: string | null; org: { plan: string } }) {
+    const create = useCreateCompany({ hostId: props.hostId, org: props.org as never })
+    const [picked, setPicked] = useState<string | null>(null)
+    return (
+      <CompanyPicker
+        options={OPTIONS}
+        value={picked}
+        onChange={(companyId, company) => {
+          onChange(companyId, company)
+          setPicked(companyId)
+        }}
+        onCreate={create}
+      />
+    )
+  }
+
+  function OrgHub({ children }: { children: ReactNode }) {
+    return (
+      <CrmOrgMountProvider
+        mount={{
+          orgId: 'org-1',
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+          hosts: [{ id: 'host-1', name: 'Site One', subdomain: 'one' }],
+        }}
+      >
+        {children}
+      </CrmOrgMountProvider>
+    )
+  }
+
+  const createInitech = async () => {
+    type('Initech')
+    fireEvent.click(await screen.findByText('Create “Initech”'))
+  }
+
+  beforeEach(() => {
+    setDoc.mockClear()
+    onChange.mockClear()
+    counts = {}
+  })
+
+  it('refuses a Free org at its band with the drawers’ sentence, and writes nothing', async () => {
+    expect(FREE_BAND).toBeGreaterThan(0)
+    counts = { contacts: FREE_BAND - 30, companies: 20, deals: 10 }
+    render(<CreateProbe hostId="host-1" org={{ plan: 'free' }} />)
+    await createInitech()
+
+    expect(await screen.findByText(CRM_RECORDS_BAND_FULL_MESSAGE)).toBeTruthy()
+    expect(setDoc).not.toHaveBeenCalled()
+    // Nothing was selected either: the form learned of no company.
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('creates the last record inside a Free band, stamped for the site', async () => {
+    counts = { contacts: FREE_BAND - 31, companies: 20, deals: 10 }
+    render(<CreateProbe hostId="host-1" org={{ plan: 'free' }} />)
+    await createInitech()
+
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const [ref, data] = setDoc.mock.calls[0]
+    expect(ref.path).toMatch(/^orgs\/org-1\/companies\/.+/)
+    expect(data).toMatchObject({ name: 'Initech', hostId: 'host-1', createdByUid: 'uid-1' })
+    expect(data['visibleTo']).toEqual(expect.arrayContaining([expect.any(String)]))
+    // Selected once made, under the id the document was written at.
+    const id = ref.path.slice(ref.path.lastIndexOf('/') + 1)
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith(id, { id, name: 'Initech', domain: null }),
+    )
+    expect(screen.queryByText(CRM_RECORDS_BAND_FULL_MESSAGE)).toBeNull()
+  })
+
+  it('creates past the band on a paid plan, whose band bills rather than refuses', async () => {
+    counts = { contacts: PRO_BAND, companies: 5, deals: 0 }
+    render(<CreateProbe hostId="host-1" org={{ plan: 'pro' }} />)
+    await createInitech()
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+    expect(setDoc).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(CRM_RECORDS_BAND_FULL_MESSAGE)).toBeNull()
+  })
+
+  it('refuses at the organization level too, where the picker creates for the picked site', async () => {
+    counts = { contacts: FREE_BAND, companies: 0, deals: 0 }
+    render(<CreateProbe hostId={null} org={{ plan: 'free' }} />, { wrapper: OrgHub })
+    await createInitech()
+
+    expect(await screen.findByText(CRM_RECORDS_BAND_FULL_MESSAGE)).toBeTruthy()
+    expect(setDoc).not.toHaveBeenCalled()
+
+    counts = { contacts: FREE_BAND - 1, companies: 0, deals: 0 }
+    await createInitech()
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+    expect(setDoc).toHaveBeenCalledTimes(1)
+    expect(setDoc.mock.calls[0][1]).toMatchObject({ hostId: 'host-1' })
   })
 })
