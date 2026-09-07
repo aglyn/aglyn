@@ -302,7 +302,7 @@
               "name": "Frame",
               "cells": [
                 "For high-growth stores and multi-site teams that have outgrown Business.",
-                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 700 GB bandwidth"
+                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 290 GB bandwidth"
               ]
             },
             {
@@ -502,7 +502,7 @@
               "name": "row",
               "cells": [
                 "Bandwidth / mo",
-                "225 GB"
+                "125 GB"
               ]
             },
             {

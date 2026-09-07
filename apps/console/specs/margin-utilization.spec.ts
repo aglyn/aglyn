@@ -443,13 +443,17 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     }
   })
 
-  it('reproduces Agency’s pinned $1,122.29 at full utilization', () => {
-    // The one figure `tier-margin-floor.spec.ts` pins to the cent. Reaching it
-    // through this module's band table and `orgMonthlyCogsUsd` is what says
-    // the two files agree about the most expensive self-serve tier — the one
-    // whose uncapped band made it read as the cheapest.
+  it('reproduces the metered part of Agency’s pinned $967.13 at full utilization', () => {
+    // `tier-margin-floor.spec.ts` pins Agency at $967.13 a month with every
+    // band at 100%. $867.13 of that is the eight metered axes this module
+    // prices; the $100 between them is the two CRM decision terms — a seat a
+    // month per collaborator and the one-to-one email cap — that the rollup
+    // has no meter for. Reaching the metered part through this module's band
+    // table and `orgMonthlyCogsUsd` is what says the two files agree about
+    // the most expensive self-serve tier — the one whose uncapped band once
+    // made it read as the cheapest.
     const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    expect(cogs.cogsUsd).toBeCloseTo(1122.29, 2)
+    expect(cogs.cogsUsd).toBeCloseTo(867.13, 2)
     expect(cogs.basis).toBe('measured')
   })
 
@@ -540,7 +544,10 @@ describe('the realised margin', () => {
     const ladder = [0.03, 0.25, 0.5, 1].map(at)
     expect(ladder).toEqual([...ladder].sort((a, b) => b - a))
     // …and it really does reach a bad number, so the surface can find one.
-    expect(at(1)).toBeLessThan(0.4)
+    // 44% on Pro at the monthly price, over the metered axes alone — the
+    // 2026-09-07 bandwidth resize lifted it from 7%; the whole-plan figure at
+    // the annual price is under 1% (`tier-margin-floor.spec.ts`).
+    expect(at(1)).toBeLessThan(0.5)
     expect(at(0.03)).toBeGreaterThan(0.9)
   })
 

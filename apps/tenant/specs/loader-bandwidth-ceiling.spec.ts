@@ -30,8 +30,8 @@
  * ## The two-plan pair, and why 150,000
  *
  * Free's ceiling is `BANDWIDTH_ABUSE_CEILING_FLOOR` = 100,000 page views
- * (10× its 5 GB band is only ~87,381, so the floor wins and gives a hobby
- * site real headroom). Starter's is 10× its 50 GB band = 873,813. 150,000
+ * (3× its 2 GB band is only ~10,486, so the floor wins and gives a hobby
+ * site real headroom). Starter's is 3× its 50 GB band = 262,144. 150,000
  * views sits between the two, so the same count on the two plans takes
  * opposite branches — the negative control is the same number, not a smaller
  * one.
@@ -202,7 +202,7 @@ describe('the ceiling arithmetic the loader is driven by', () => {
     expect(free.ceiling).toBe(100_000)
     expect(free.exceeded).toBe(true)
     expect(free.degraded).toBe(true)
-    expect(starter.ceiling).toBe(873_813)
+    expect(starter.ceiling).toBe(262_144)
     expect(starter.exceeded).toBe(false)
     // The metered plan never degrades even past its OWN ceiling.
     expect(tripFor('starter', 1_000_000).exceeded).toBe(true)

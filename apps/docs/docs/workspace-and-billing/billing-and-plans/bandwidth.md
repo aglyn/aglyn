@@ -22,15 +22,15 @@ until the start of the next month.
 |---|---|---|
 | Free | 2 GB | Sites are **paused** until the start of next month |
 | Starter | 50 GB | Keeps serving; the extra is billed |
-| Pro | 225 GB | Keeps serving; the extra is billed |
-| Business | 400 GB | Keeps serving; the extra is billed |
-| Scale | 700 GB | Keeps serving; the extra is billed |
-| Advanced | 1,000 GB | Keeps serving; the extra is billed |
-| Agency | 3,000 GB | Keeps serving; the extra is billed |
+| Pro | 125 GB | Keeps serving; the extra is billed |
+| Business | 185 GB | Keeps serving; the extra is billed |
+| Scale | 290 GB | Keeps serving; the extra is billed |
+| Advanced | 345 GB | Keeps serving; the extra is billed |
+| Agency | 1,540 GB | Keeps serving; the extra is billed |
 | Enterprise | Unlimited | Nothing to pass |
 
 The allowance is per **organization**, across every site in it — not per site. If you run
-four sites on one Business plan, they share the 400 GB.
+four sites on one Business plan, they share the 185 GB.
 
 ## Where to see your usage {#where-to-see-it}
 
@@ -157,7 +157,7 @@ mentions only one of them is incomplete.
 | | Bandwidth cap | Abuse ceiling |
 |---|---|---|
 | Applies to | Free organizations only | Any plan |
-| Trips at | 1× the plan's band | 10× the plan's band (minimum 100,000 page views) |
+| Trips at | 1× the plan's band | 3× the plan's band (minimum 100,000 page views) |
 | Decided by | The analytics beacon, sampled — plus the daily usage job organization-wide | The analytics beacon, sampled |
 | Recorded on | `orgs/{orgId}.bandwidthCap` | `hosts/{hostId}.bandwidthCeiling` |
 | Enforced at | Edge middleware **and** the page loader | The page loader |

@@ -92,6 +92,74 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-07 — The margin invariant is held at the annual price, net of Stripe, with the CRM terms; five bandwidth bands come down to what that price carries; the bandwidth abuse ceiling is 3× the band
+
+- **Decided by:** Zach, 2026-09-07, by directive, on the pricing soundness audit of the same day — the platform's invariant, that a customer cannot cost more than they pay by using exactly what they were sold, is held at the **annual** price (the yearly price ÷ 12), net of Stripe's 2.9% + 30¢ (the fixed part amortized over the one annual charge), with the CRM seat term ($0.06 a collaborator-month) and the one-to-one email term (the daily cap × 30 × $0.0009) counted, at the modeled page-view rate — the 627 KB `perPageView` calibration stays as it is. The Drive Pricing Decision Log entry of the same date carries the cost model and the arithmetic.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS[*].bandwidthGb` and `BANDWIDTH_ABUSE_CEILING_MULTIPLE` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; the whole-plan guard in `apps/console/specs/tier-margin-floor.spec.ts`, which now prices the annual price net of Stripe with the two CRM terms, pins every tier at both prices, and carries the mutation at the 2026-09-05 bands; `apps/console/specs/published-pricing-table-parity.spec.ts` → *Bandwidth / mo*; `tools/marketing/pricing-copy/tables.json` (regenerated); `apps/docs/docs/workspace-and-billing/billing-and-plans/bandwidth.md`; AGL-2651.
+
+**No charged price moves.** Plan prices, add-on prices, both fee ladders, the
+three metered pass-through rates and every retail overage ladder are what the
+2026-08-18 lock and the 2026-08-31 Agency entry left them. What moves is
+**packaging**: five included bandwidth bands, and a containment multiple that
+was never a price.
+
+### What was decided
+
+1. **The invariant is stated at the annual price, net of Stripe, over every
+   cost the platform can name.** The guard that stood until today judged the
+   monthly price, gross of the processing fee, and summed the metered axes
+   alone; it read +10.0 / +10.9 / +8.3 / +6.7 / +9.1% on Pro through Agency.
+   At the annual price, net of the fee, with the seat and one-to-one email
+   terms of the 2026-09-05 decision added, the same bands read −44.1 / −36.5 /
+   −37.5 / −33.9 / −19.4%, and at the monthly price Pro and Advanced were
+   already negative (−1.7%, −1.2%).
+2. **Bandwidth comes down to what the annual price carries.** Pro 225 → 125
+   GB, Business 400 → 185 GB, Scale 700 → 290 GB, Advanced 1,000 → 345 GB,
+   Agency 3,000 → 1,540 GB (the page reads "1.54 TB"). Free (2 GB) and Starter
+   (50 GB) do not move — Starter was never under water. Bandwidth is 58–70% of
+   every paid tier's cost and the only lever that moves the number; every
+   other band stays where the 2026-08-30 and 2026-09-05 entries put it.
+   Metered plans keep serving past the band and bill at the unchanged $0.13
+   per 1,000 views.
+3. **The bandwidth abuse ceiling is 3× the band, from 10×.** A cap, not a
+   price: it flags a site and pages staff, and on a metered plan it changes
+   nothing a visitor sees. Lower because the meter under it is priced for a
+   627 KB page while the platform serves 1,054 KB — past the band every 1,000
+   views bills $0.13 and costs about $0.17 — so the tail a plan can run up
+   before anyone looks is a loss that grows with the traffic; at 10× that tail
+   was open-ended on Agency. The 100,000-view floor and the form ceiling's 10×
+   are unchanged.
+
+### The guardrail
+
+`apps/console/specs/tier-margin-floor.spec.ts` asserts, over
+`PLAN_ENTITLEMENTS`, `PLAN_PRICING`, `ORG_COGS_UNIT_RATES_USD` and
+`netOfProcessorFee`, that no paid tier is negative at 100% of every band at
+the annual price, and pins the figures at both prices. With every band at
+100%: Starter 30.0% annual / 53.1% monthly, Pro 0.7 / 29.5, Business 1.5 /
+28.8, Scale 2.5 / 29.0, Advanced 4.4 / 27.5, Agency 4.9 / 22.6. Thin on
+purpose — the bands were cut to what the price carries and no further,
+because every gigabyte cut is capacity the customer no longer has.
+
+The same guard pins what the OTHER page-view rate says: at the 1,054 KB page
+the platform actually serves ($0.000168 a view at the calibration's own
+per-KB basis) every paid tier is negative at the annual price again — Starter
+−7.2%, Pro −37.5%, Business −20.8%, Scale −16.8%, Advanced −9.4%, Agency
+−12.6% — and positive at the monthly one. Recorded as a fact beside the
+decision, not as a decision: the bands were sized at the modeled rate, and
+closing that gap is a page-weight or a rate decision that this entry does not
+make.
+
+### What does not change
+
+Every price. `perPageView` and the two other pass-through rates, and the
++30% markup on them. The Free and Starter bands. The storage, form, records,
+campaign email, one-to-one email, seat, dataset, API and assist bands on every
+tier. `meteredInfraPassThrough` on every plan. The form abuse ceiling.
+
+---
+
 ## 2026-09-07 — Reconciliation note: `aglyn.com/pricing` republished to the bands the code enforces (not a decision)
 
 - **Decided by:** nobody — a record; the session that republished the page, under the 2026-09-05 rule that the code is authoritative where an older figure disagrees. No charged price moves and nothing here is a new decision.

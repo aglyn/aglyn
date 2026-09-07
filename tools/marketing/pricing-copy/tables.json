@@ -120,11 +120,11 @@
             "values": {
               "free": "2 GB",
               "starter": "50 GB",
-              "pro": "225 GB",
-              "business": "400 GB",
-              "scale": "700 GB",
-              "advanced": "1 TB",
-              "agency": "3 TB",
+              "pro": "125 GB",
+              "business": "185 GB",
+              "scale": "290 GB",
+              "advanced": "345 GB",
+              "agency": "1.54 TB",
               "enterprise": "Talk to us"
             }
           },
@@ -817,7 +817,7 @@
           "1% commerce fees",
           "300k API requests/mo",
           "25,000 products per site",
-          "700 GB bandwidth"
+          "290 GB bandwidth"
         ],
         "cta": "CHOOSE",
         "byInterval": {

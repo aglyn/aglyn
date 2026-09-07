@@ -512,16 +512,20 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 5,
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
-    // Page views are 78% of this tier's modeled COGS — one GB is 1,748 views
-    // at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.175 of measured cost — so the
-    // bandwidth band is what decides whether the tier survives a customer
-    // spending the whole allowance it was sold. At 225 GB the $56
-    // subscription holds a 10.0% gross margin with every band at 100%;
-    // `tier-margin-floor.spec.ts` carries the model and pins the figure.
+    // Page views are the largest term of this tier's modeled COGS — one GB
+    // is 1,748 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.175 of
+    // measured cost — so the bandwidth band is what decides whether the tier
+    // survives a customer spending the whole allowance it was sold.
+    //
+    // The invariant the band is sized against is the ANNUAL price ($39 a
+    // month) net of Stripe's fee, with every band at 100% and the CRM seat
+    // and one-to-one email terms counted — the 2026-09-07 pricing decision.
+    // At 225 GB that price was 44% under water; 125 GB is what it carries.
+    // `tier-margin-floor.spec.ts` holds the model and pins the figure.
     //
     // `meteredInfraPassThrough` is true here, so traffic past the band BILLS
     // at the page-view pass-through rather than being refused or absorbed.
-    bandwidthGb: 225,
+    bandwidthGb: 125,
     formSubmissionsPerMonth: 1000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 100,
@@ -622,7 +626,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 15,
     maxManagersPerOrg: 100,
     maxMembersPerHost: 100,
-    bandwidthGb: 400,
+    // Sized by the same annual-price invariant as Pro's — see that band.
+    bandwidthGb: 185,
     formSubmissionsPerMonth: 8000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 1000,
@@ -701,7 +706,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 25,
     maxManagersPerOrg: 150,
     maxMembersPerHost: 150,
-    bandwidthGb: 700,
+    bandwidthGb: 290,
     formSubmissionsPerMonth: 25000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: 5000,
@@ -777,7 +782,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 50,
     maxManagersPerOrg: 250,
     maxMembersPerHost: 250,
-    bandwidthGb: 1000,
+    bandwidthGb: 345,
     formSubmissionsPerMonth: 40000,
     formsPerHost: FORMS_PER_HOST_CEILING,
     variablesPerHost: UNLIMITED,
@@ -859,7 +864,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     managersPerOrg: 100,
     maxManagersPerOrg: 500,
     maxMembersPerHost: 1000,
-    bandwidthGb: 3000,
+    bandwidthGb: 1540,
     // FINITE, where every other capacity row on this tier is unbounded.
     // `formSubmissionsPerMonth` is multiplied by `hostLimit` to get the
     // org-wide band, so at 100 hosts an unbounded figure was not merely
@@ -4165,34 +4170,40 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
 
 /**
  * How far past a plan's own included bandwidth the abuse ceiling sits
- * (AGL-2155) — the same posture, and the same number, as
- * {@link FORM_ABUSE_CEILING_MULTIPLE}. Ten times the bandwidth the customer
- * bought is not growth; it is an upgrade conversation, or it is not the
- * customer's traffic at all.
+ * (AGL-2155). Three times the bandwidth the customer bought is not growth; it
+ * is an upgrade conversation, or it is not the customer's traffic at all.
+ *
+ * It is a CAP, not a price, and it is lower than {@link
+ * FORM_ABUSE_CEILING_MULTIPLE} because the meter under it is priced for a
+ * 627 KB page while the page the platform serves measures 1,054 KB
+ * (`usage-metering.ts` records the gap). Past the band, every 1,000 views
+ * bills $0.13 and costs about $0.17, so the tail a metered plan can run up
+ * before staff look at it is a loss that grows with the traffic. At 10× the
+ * band that tail was open-ended on Agency; at 3× it is bounded.
  */
-export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 10
+export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 3
 
 /**
  * Absolute floor for the bandwidth ceiling, in PAGE VIEWS per month, so the
  * small plans get real headroom instead of a second, tighter plan limit
  * wearing a different name.
  *
- * Free includes 5 GB ≈ 8,738 views; 10× would be ~87,381, which a genuinely
+ * Free includes 2 GB ≈ 3,495 views; 3× would be ~10,486, which a genuinely
  * successful hobby site (a post that lands on Hacker News) reaches in an
  * afternoon and would be a miserable first experience of the platform.
  * 100,000 views/month ≈ 57.2 GB ≈ **$10 of real COGS** at
- * `METERED_UNIT_RATES_USD.perPageView` — an order of magnitude above the free
- * band, and an order of magnitude below the $100 a million views costs. It is
- * the number that makes "free stays free" true without making it stingy.
+ * `METERED_UNIT_RATES_USD.perPageView` — well above the free band, and an
+ * order of magnitude below the $100 a million views costs. It is the number
+ * that makes "free stays free" true without making it stingy.
  */
 export const BANDWIDTH_ABUSE_CEILING_FLOOR = 100_000
 
 /**
- * Ceiling for plans whose bandwidth band is UNLIMITED (Enterprise), where a
- * multiple has nothing to multiply. Kept at or above the ceiling of every
- * finite plan below it — Agency includes 20,000 GB ≈ 35.0M views, so its
- * ceiling is ~350M — so the ladder never inverts and a bigger plan never
- * inherits a smaller ceiling.
+ * Ceiling for an org whose bandwidth band resolves to UNLIMITED — a
+ * contracted per-org override, since no plan row carries the sentinel any
+ * more — where a multiple has nothing to multiply. Kept at or above the
+ * ceiling of every finite band below it so the ladder never inverts and a
+ * bigger plan never inherits a smaller ceiling.
  */
 export const BANDWIDTH_ABUSE_CEILING_UNLIMITED = 500_000_000
 
