@@ -17,6 +17,7 @@ import * as logger from 'firebase-functions/logger'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { signupsCreationVerdict } from './signups-lock'
+import { EDGE_CHALLENGE_RETRY_DELAY_MS, isEdgeChallenge } from './edge-challenge'
 
 /**
  * Shared secret for the tenant's job runner. Must match `PLUGIN_JOBS_SECRET`
@@ -295,20 +296,47 @@ async function postConsoleCron(
     nextCursor: null,
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    // The routes treat a bodyless POST as their normal invocation; a body is
-    // how `report-usage` and friends resume a sweep.
-    body: cursor ? JSON.stringify({ cursor }) : '{}',
-    // AGL-786. fetch would follow the redirect and drop `x-cron-secret` doing
-    // it, turning a misconfigured origin into a request that 200s having
-    // authenticated as nobody. Manual, so a 3xx is a status we can name.
-    redirect: 'manual',
-    signal: AbortSignal.timeout(240_000),
-  })
+  const attempt = async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      // The routes treat a bodyless POST as their normal invocation; a body is
+      // how `report-usage` and friends resume a sweep.
+      body: cursor ? JSON.stringify({ cursor }) : '{}',
+      // AGL-786. fetch would follow the redirect and drop `x-cron-secret` doing
+      // it, turning a misconfigured origin into a request that 200s having
+      // authenticated as nobody. Manual, so a 3xx is a status we can name.
+      redirect: 'manual',
+      signal: AbortSignal.timeout(240_000),
+    })
+    const text = await response.text().catch(() => '')
+    return { response, text }
+  }
 
-  const text = await response.text().catch(() => '')
+  let { response, text } = await attempt()
+  // ONE retry, and only for the edge's challenge page (AGL-2642). The Vercel
+  // firewall answers an automated client it does not recognise with a
+  // Security Checkpoint page before the request reaches the console at all,
+  // and that verdict is per attempt: the same POST a few seconds later is
+  // routinely let through. A route's own refusal — 401, 501, 500 — is not
+  // retried, because repeating it repeats the refusal, and for a sweep that
+  // meters into Stripe a blind repeat is worse than a miss. The second answer,
+  // whatever it is, goes through the handling below unchanged, so a second
+  // challenge is reported as `console cron refused` exactly as a first one
+  // was before this.
+  if (
+    isEdgeChallenge(response.status, response.headers.get('content-type'), text)
+  ) {
+    logger.warn('console cron challenged by the edge — retrying once', {
+      route,
+      status: response.status,
+      retryInMs: EDGE_CHALLENGE_RETRY_DELAY_MS,
+    })
+    await new Promise((resolve) =>
+      setTimeout(resolve, EDGE_CHALLENGE_RETRY_DELAY_MS),
+    )
+    ;({ response, text } = await attempt())
+  }
   if (response.status >= 300 && response.status < 400) {
     logger.error('console cron redirected — AGLYN_CONSOLE_URL is not the host that serves the console', {
       route,
@@ -544,6 +572,11 @@ const CONSOLE_DAILY_CRONS = {
  * `/api/health/crons` well inside its six-hour grace. That visibility is the
  * signal that matters — a retry that quietly succeeded would hide a route
  * that is refusing every other call.
+ *
+ * The one thing that IS retried — once, inside the same invocation — is the
+ * edge's challenge page, in `postConsoleCron` (AGL-2642). That is not a
+ * Scheduler retry: the route never ran, so there is nothing to duplicate,
+ * and a second challenge is reported as a refusal like any other.
  */
 function consoleDailyCron(job: keyof typeof CONSOLE_DAILY_CRONS) {
   const { schedule, route } = CONSOLE_DAILY_CRONS[job]
