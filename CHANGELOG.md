@@ -11,15 +11,11 @@ content on the marketing site and is written separately.
 
 ## v1.0.0-beta.82 — 2026-09-07
 
-[Compare with the previous release](https://github.com/aglyn/aglyn/compare/8dcc21579...v1.0.0-beta.82)
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/7143cd301...v1.0.0-beta.82)
 
 ### Added
 
 - **forms:** a form can be retired without losing what it collected ([AGL-2671](https://linear.app/aglyn/issue/AGL-2671))
-
-## v1.0.0-beta.81 — 2026-09-07
-
-[Compare with the previous release](https://github.com/aglyn/aglyn/compare/7143cd301...v1.0.0-beta.81)
 
 ### Fixed
 
