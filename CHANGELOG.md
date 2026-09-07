@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.82 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/7143cd301...v1.0.0-beta.82)
+
+### Added
+
+- **forms:** a form can be retired without losing what it collected ([AGL-2671](https://linear.app/aglyn/issue/AGL-2671))
+
+### Fixed
+
+- **tools:** give the linear-id guard the key it already knows how to use ([AGL-2670](https://linear.app/aglyn/issue/AGL-2670), [AGL-2563](https://linear.app/aglyn/issue/AGL-2563))
+
 ## v1.0.0-beta.80 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/9003ebffb...v1.0.0-beta.80)

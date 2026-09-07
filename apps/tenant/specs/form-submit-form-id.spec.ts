@@ -297,6 +297,63 @@ describe('the id in a public body is verified, never trusted', () => {
   })
 })
 
+/**
+ * AGL-2671 — a retired form collects nothing.
+ *
+ * Retirement is what a merchant does with a form they have finished with but
+ * must keep, because the submissions and leads filed under it are the history
+ * they are keeping it FOR. If a retired form kept collecting, the retirement
+ * would be a UI illusion: the row gone from the list and out of the funnel's
+ * grading while a form still placed on a published page went on filing leads
+ * nobody was looking at.
+ *
+ * ⚠️ Deliberately the opposite posture from a bogus id above, which degrades
+ * to an unstamped row rather than a refusal. That rule exists so a lost lead
+ * is never the outcome; here NOT collecting is the outcome that was asked
+ * for, and storing the row anyway would be the defect.
+ */
+describe('a retired form collects nothing', () => {
+  it('refuses the submission, and writes nothing at all', async () => {
+    mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
+      displayName: 'Launch notification',
+      slug: 'launch-notification',
+      fields: [{ fieldName: 'email', fieldType: 'email' }],
+      archivedAt: 1_757_000_000_000,
+    }
+
+    const response = await submit({ formId: 'form-1' })
+
+    expect(response.status).toBe(404)
+    expect(written()).toBeUndefined()
+  })
+
+  it('is decided by a positive timestamp, so a cleared field still collects', async () => {
+    // What Restore writes. `null` is "in use", and so is a `0` or a value of
+    // the wrong type — the safe reading of an unusable timestamp is that the
+    // form is still collecting.
+    for (const archivedAt of [null, 0, 'yesterday']) {
+      mockStore[`hosts/${HOST_ID}/forms/form-1`] = {
+        displayName: 'Contact',
+        slug: 'contact',
+        fields: [{ fieldName: 'email', fieldType: 'email' }],
+        archivedAt,
+      }
+
+      const response = await submit({ formId: 'form-1' })
+
+      expect(response.status).toBe(200)
+      expect(written()).toBeDefined()
+    }
+  })
+
+  it('leaves an unbound submission alone', async () => {
+    // Nothing to be retired: a submission carrying no `formId` has no entity.
+    const response = await submit()
+    expect(response.status).toBe(200)
+    expect(written()).toBeDefined()
+  })
+})
+
 describe('consent comes from the field the form declares', () => {
   it('reads the declared field under whatever name the author gave it', async () => {
     mockStore[`hosts/${HOST_ID}/forms/form-1`] = {

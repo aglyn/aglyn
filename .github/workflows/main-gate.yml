@@ -214,6 +214,15 @@ jobs:
       # hard failure rather than an empty green phase.
       - if: steps.moved.outputs.skip != 'true'
         run: node tools/scripts/run-guards.mjs --concurrency 4
+        # `check:linear-ids` is one of the guards derived above, and it asks
+        # Linear for the highest issue that exists — an answer that can only
+        # ever RAISE its checked-in floor (AGL-2670). Without the key it reds
+        # on a citation of any issue filed since the floor was last edited,
+        # which is bookkeeping rather than a defect. Fails soft in every
+        # direction, so the guard still runs, and still refuses a fabricated
+        # id, wherever the secret is empty.
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
 
       # Which commits this verdict covers. On a red, this is the suspect list,
       # and its length is the whole point of gating on a short timer: a day's
@@ -302,6 +311,9 @@ jobs:
       - run: npx nx run docs:typecheck
       - run: npx nx run-many -t lint --all --parallel=3
       - run: node tools/scripts/run-guards.mjs --concurrency 4
+        # Same reason as the fast job above (AGL-2670).
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
       # The test run, REDIRECTED to a file (AGL-1617). It used to be `| tee`,
       # and the tee was the reason the artifact was useless: a pipe makes
       # nx's stdout ASYNCHRONOUS, and nx ends a failed run with

@@ -367,8 +367,16 @@ export function overallExitCode(sweeps) {
  */
 export function remedy(ceilingPath, ceiling) {
   return (
-    '\nIF THESE IDS ARE REAL, the ceiling is behind the workspace. Raise it by\n' +
-    `hand-editing ${ceilingPath}:\n\n` +
+    '\nIF THESE IDS ARE REAL, the ceiling is behind the workspace.\n\n' +
+    'FIRST, set the credential rather than editing anything. This check already\n' +
+    'asks Linear for the highest issue on every run, and the answer can only\n' +
+    'ever RAISE the cached number — so with a key there is nothing to bump:\n\n' +
+    '    export LINEAR_API_KEY=…    # then re-run\n\n' +
+    '   It must be EXPORTED, not put in `.env`: nothing here reads env files,\n' +
+    '   and `tools/gate.sh` runs from a fresh worktree that has no `.env` in it.\n' +
+    '   In CI the secret is supplied to this step by `tools-guards.yml`.\n\n' +
+    'ONLY IF YOU HAVE NO KEY, raise the floor by hand-editing\n' +
+    `${ceilingPath}:\n\n` +
     '    "highest": <the highest issue that ACTUALLY exists>,\n' +
     `    "verifiedAt": "<today, ISO>",\n\n` +
     '⛔ Read that number off Linear — newest-first, `includeArchived: true` —\n' +
@@ -376,9 +384,11 @@ export function remedy(ceilingPath, ceiling) {
     '   ceiling from the citation being checked makes every fabrication\n' +
     '   self-approving and disarms this guard permanently.\n' +
     `   Current ceiling: AGL-${ceiling.highest}, verified ${ceiling.verifiedAt}.\n` +
-    '\nIF THESE IDS ARE NOT REAL, fix the citation. An issue-creation freeze is\n' +
-    'in force, so a fabricated id may NOT be made real by creating it —\n' +
-    'retag the work to the issue that genuinely covers it, or drop the tag.\n' +
+    '\nIF THESE IDS ARE NOT REAL, fix the citation: retag the work to the issue\n' +
+    'that genuinely covers it, or drop the tag. Issue creation is allowed again\n' +
+    '(the freeze lifted 2026-09-02), so filing the issue the work really needs\n' +
+    'is also a fix — but file it because the work needs tracking, never to make\n' +
+    'a number you already typed come true.\n' +
     'See docs/DECISION_LOG.md → 2026-08-28, "Fourteen commits cited issue\n' +
     'ids that never existed".\n'
   )

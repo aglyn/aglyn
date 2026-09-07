@@ -947,8 +947,21 @@ jobs:
       # check prints the ceiling's age on every run and the exact hand-edit
       # that raises it. Refresh it deliberately, from the workspace — NEVER to
       # whatever number just failed.
+      #
+      # `LINEAR_API_KEY` is what closes the staleness window (AGL-2670). The
+      # check already asks Linear for the highest issue on every run and can
+      # only ever RAISE the cached number with the answer, so supplying the key
+      # removes a class of red that was never about the code — a citation of a
+      # real issue filed since the last hand-bump — without weakening anything:
+      # the query fails SOFT in every direction (no key, timeout, HTTP error,
+      # unusable shape all leave the cached ceiling in charge), so this step
+      # still runs, and still refuses a fabricated id, on a fork PR where the
+      # secret is empty. The cached file remains the floor and the offline
+      # answer.
       - run: npm run test:linear-ids
       - run: npm run check:linear-ids
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
 
       # AGL-1489. The four deploy scripts all SHIP SOMETHING when they run, and
       # three of them read a single flag with `process.argv.includes(...)` and
