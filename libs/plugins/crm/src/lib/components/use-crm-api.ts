@@ -32,6 +32,8 @@ export type CrmApiRoute =
   | 'email-send'
   | 'erase-person'
   | 'org-activity'
+  | 'recipe-install'
+  | 'recipe-status'
 
 /** What one call to the CRM API answered with. */
 export interface CrmApiResult {

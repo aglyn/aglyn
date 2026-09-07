@@ -546,6 +546,20 @@ export interface CspReportView {
   }>
   /** Newest ENFORCED violation in the window, or null when there is none. */
   lastBlockedMs: number | null
+  /**
+   * Enforced violations whose blocked origin is `inline` — first-party code.
+   *
+   * The collector drops an extension's injected script by its `source-file`
+   * before anything is counted, so an `inline` row that survived to the
+   * counters is one of OUR inline scripts rendered without the request nonce.
+   * That is a specific defect with a specific fix, and it is the one the
+   * console's advertising boot shipped with (AGL-2640): the enforcing policy
+   * refused the boot, the vendor library beside it loaded, and no conversion
+   * fired — with nothing to show for it but this row. A reader who sees
+   * "script-src-elem: 13 blocked" cannot tell that from a blocked CDN; a
+   * reader told that all 13 are inline can.
+   */
+  blockedInline: number
 }
 
 /**
@@ -567,6 +581,7 @@ export function readCspReport(
   >()
   let total = 0
   let lastBlockedMs: number | null = null
+  let blockedInline = 0
   for (const row of rows) {
     const count = Number(row?.count ?? 0)
     const safe = Number.isFinite(count) ? count : 0
@@ -583,6 +598,9 @@ export function readCspReport(
     // disposition must not be able to invent an incident.
     if (row?.disposition === 'enforce') {
       entry.blocked += safe
+      // The aggregate keys an inline refusal on the bare keyword, the same
+      // string the browser reports as `blocked-uri`.
+      if (row?.blockedOrigin === 'inline') blockedInline += safe
       const seen = Number(row?.lastSeenMs ?? 0)
       if (Number.isFinite(seen) && seen > 0) {
         entry.lastBlockedMs = Math.max(entry.lastBlockedMs ?? 0, seen)
@@ -606,5 +624,6 @@ export function readCspReport(
       // outranks a thousand measured ones.
       .sort((a, b) => b.blocked - a.blocked || b.count - a.count),
     lastBlockedMs,
+    blockedInline,
   }
 }

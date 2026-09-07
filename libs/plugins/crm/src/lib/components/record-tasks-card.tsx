@@ -34,6 +34,7 @@ import {
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { crmRoutes } from '../model/crm-routes'
 import { completeCrmTask } from '../model/task-api'
+import { crmTaskCallScope } from '../model/task-routes'
 import { TaskDueText, TaskKindCell, TaskPriorityChip } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
 import TaskSnoozeMenu from './task-snooze-menu'
@@ -109,8 +110,11 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
             },
           )
         } else {
-          // The mounted site, or at the organization level the task's own.
-          await completeCrmTask(user, { hostId: hostId ?? task.hostId, taskId: task.$id })
+          // The mounted site, or at the organization level the org — whose
+          // variant emits on the task's own site, or nowhere for an org task.
+          const callScope = crmTaskCallScope(hostId, orgId)
+          if (!callScope) return
+          await completeCrmTask(user, { ...callScope, taskId: task.$id })
           enqueueSnackbar('Task completed', { variant: 'success' })
         }
       } catch (cause) {
@@ -122,7 +126,7 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
         setBusyId(null)
       }
     },
-    [scope, busyId, firestore, user, hostId, enqueueSnackbar],
+    [scope, busyId, firestore, user, hostId, orgId, enqueueSnackbar],
   )
 
   return (

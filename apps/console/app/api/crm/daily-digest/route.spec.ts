@@ -443,6 +443,54 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
     )
   })
 
+  it('opens on the organization hub for a member whose only owed task has no site (AGL-2637)', async () => {
+    // An editor who reaches no site — so no site's leads count for them —
+    // owed nothing but an organization task.
+    seed('orgs/org-a/members/oli', {
+      role: 'editor',
+      email: 'oli@acme.com',
+      allHosts: false,
+      hostAccess: {},
+    })
+    seed('users/oli', {})
+    seed('orgs/org-a/crmTasks/t-oli-org', {
+      status: 'open',
+      kind: 'todo',
+      title: 'Renew the insurance',
+      dueAtMs: NOW - DAY,
+      assigneeUid: 'oli',
+      hostId: null,
+    })
+    // Ann's digest anchors on her first task WITH a site, past an
+    // organization task listed ahead of it.
+    seed('orgs/org-a/crmTasks/t-ann-org', {
+      status: 'open',
+      kind: 'todo',
+      title: 'Chase the invoice',
+      dueAtMs: NOW - 3 * DAY,
+      assigneeUid: 'ann',
+      hostId: null,
+    })
+    const response = await post()
+    expect(response.status).toBe(200)
+    const oli = mockNotified.find((entry) => entry.uids[0] === 'oli')
+    expect(oli?.payload).toEqual({
+      type: 'content.crmDailyDigest',
+      title: 'Your CRM today',
+      body: '1 task overdue',
+      link: '/org/crm/tasks',
+      orgId: 'org-a',
+    })
+    const oliMail = mockSent.find((mail) => mail.to[0] === 'oli@acme.com')
+    expect(oliMail?.text).toContain('Open your tasks: https://app.aglyn.com/acme/crm/tasks')
+    const ann = mockNotified.find((entry) => entry.uids[0] === 'ann')
+    expect(ann?.payload).toMatchObject({
+      body: '1 task due today, 2 overdue, 1 unworked lead',
+      link: '/site-a/crm/tasks',
+      hostId: 'site-a',
+    })
+  })
+
   it('says nothing twice on the same day', async () => {
     await post()
     const again = await (await post()).json()

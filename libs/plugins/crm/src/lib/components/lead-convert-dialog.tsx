@@ -110,13 +110,17 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
 
   /*
    * The scope this reader may see — the same tokens every CRM listener
-   * filters on, and the rules refuse a list without them.
+   * filters on, and the rules refuse a list without them. The Leads list
+   * mounts the dialog closed at the organization level with no site at all
+   * (the row it converts brings one), and a consent group must name a site,
+   * so until then the scope is the organization's token alone — nothing reads
+   * it while the dialog is closed.
    */
   const visibleToTokens = useMemo(() => {
-    const group = Aglyn.consentGroupForHost(org ?? {}, hostId)
+    const group = hostId ? Aglyn.consentGroupForHost(org ?? {}, hostId) : null
     return [
       Aglyn.ORG_SCOPE_TOKEN,
-      ...group.hostIds.map((id) => Aglyn.hostScopeToken(id)),
+      ...(group?.hostIds ?? []).map((id) => Aglyn.hostScopeToken(id)),
     ].slice(0, Aglyn.MAX_SCOPE_HOSTS)
   }, [org, hostId])
   const tokensKey = visibleToTokens.join(',')

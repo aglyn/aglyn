@@ -40,6 +40,8 @@ import {
   HOST_ACTION_STEP_LABELS,
   HOST_EVENT_TYPES,
   type HostAction,
+  hostActionDocument,
+  hostActionRecipeId,
   type HostActionStep,
   type HostActionStepType,
   hostEventLabel,
@@ -143,9 +145,12 @@ interface ActionDraft extends HostAction {
   conditionCombinator: TriggerCombinator
   /**
    * The recipe this draft started from (AGL-2626), so the editor can say
-   * so; null for an action begun blank or opened from the list.
+   * so, and what Save writes back as the action's stamp (AGL-2639): null
+   * for an action begun blank, and `undefined` for a stored action from
+   * before the stamp existed — which Save leaves as it found it, so an
+   * edit never turns "unknown" into "no recipe".
    */
-  recipe: CrmActionRecipeId | null
+  recipe: CrmActionRecipeId | null | undefined
 }
 
 /**
@@ -287,7 +292,6 @@ function defaultStep(type: HostActionStepType): HostActionStep {
 function draftFromAction(
   action: Record<string, any>,
   id: string | null,
-  recipe: CrmActionRecipeId | null = null,
 ): ActionDraft {
   const builtIn =
     HOST_EVENT_TYPES.includes(action.trigger?.event) ||
@@ -320,7 +324,9 @@ function draftFromAction(
     customEvent: builtIn ? '' : (action.trigger?.event ?? ''),
     conditionRows: rows.length ? rows : [EMPTY_CONDITION_ROW],
     conditionCombinator: action.trigger?.combinator === 'or' ? 'or' : 'and',
-    recipe,
+    // A recipe stamps what it builds, and a stored action carries what it
+    // was saved with — one reader for both doors, unknown kept unknown.
+    recipe: hostActionRecipeId(action),
   }
 }
 
@@ -723,7 +729,7 @@ export function HostActionsCard(props: {
         setFormPickFor(recipe)
         return
       }
-      setDraft(draftFromAction(recipe.build(), null, recipe.id))
+      setDraft(draftFromAction(recipe.build(), null))
     },
     [actionsEntitled],
   )
@@ -733,7 +739,7 @@ export function HostActionsCard(props: {
     const form = formOptions.find((option) => option.id === pickedFormId)
     if (!recipe || !form) return
     setFormPickFor(null)
-    setDraft(draftFromAction(recipe.build({ form }), null, recipe.id))
+    setDraft(draftFromAction(recipe.build({ form }), null))
   }, [formPickFor, formOptions, pickedFormId])
 
   // Run log + test runs (AGL-266).
@@ -823,6 +829,9 @@ export function HostActionsCard(props: {
       },
       steps: draft.steps,
       enabled: draft.enabled !== false,
+      // The stamp travels only when the draft knows one way or the other;
+      // an older action's silence is kept (see hostActionRecipeId).
+      ...(draft.recipe !== undefined ? { recipe: draft.recipe } : {}),
     }
     const problem = validateHostAction(candidate)
     if (problem) {
@@ -890,25 +899,13 @@ export function HostActionsCard(props: {
           await setDoc(
             doc(firestore, 'hosts', hostId, 'actions', id),
             {
-              ...candidate,
-              // Frequency caps overwrite explicitly (AGL-274): a merge-set
-              // keeps omitted keys, so switching one off must write it out.
-              // Conditions follow suit (AGL-557/565): the list + combinator
-              // write null when cleared, and the legacy single `condition`
-              // is always nulled — `conditions` is canonical from now on.
-              trigger: {
-                ...candidate.trigger,
-                oncePerVisitor: draft.trigger.oncePerVisitor === true,
-                oncePerSession: draft.trigger.oncePerSession === true,
-                cooldownMinutes:
-                  Number(draft.trigger.cooldownMinutes) >= 1
-                    ? Number(draft.trigger.cooldownMinutes)
-                    : null,
-                everyTime: draft.trigger.everyTime === true,
-                condition: null,
-                conditions: candidate.trigger.conditions ?? null,
-                combinator: candidate.trigger.combinator ?? null,
-              },
+              // The stored shape (AGL-2639), shared with the recipe-install
+              // route: frequency caps overwrite explicitly (AGL-274) because
+              // a merge-set keeps omitted keys, so switching one off must
+              // write it out; conditions follow suit (AGL-557/565) — the
+              // list + combinator write null when cleared, and the legacy
+              // single `condition` is always nulled.
+              ...hostActionDocument(candidate),
               updatedAt: Timestamp.now(),
               ...(draft.id ? {} : { createdAt: Timestamp.now() }),
             },

@@ -167,7 +167,7 @@ back out to the record that put the person there.
 | **Products → Orders** | An order's dialog: **View customer in CRM**. | The contact header's order count opens the orders list narrowed to the person's address; a timeline entry opens the order itself. |
 | **Bookings** | Each upcoming booking: **View in CRM**. | A timeline entry for a booking opens the Bookings page. |
 | **Users** | A site user's row menu: **Open in CRM**. | A timeline entry for a sign-up opens the Users page. |
-| **Dashboard** | The **Inbox** card counts the site's open leads and links to **Leads**; the **CRM at a glance** card's figures open Contacts, Deals and Tasks. | — |
+| **Dashboard** | The **Inbox** card counts the site's open leads and links to **Leads**; the **CRM at a glance** card's figures open Contacts, Deals and Tasks. The organization's **Sites** page carries **CRM at a glance** and **Tasks due** above the site grid, totaling every site and opening the [organization-level hub](#at-the-organization-level). | — |
 | **Marketing** | — | The Relationship card's campaign attribution opens the campaign's page. |
 | **Setup → Activity** | — | Adding, deleting or converting a contact, company, deal or lead is logged, and each entry opens the record. |
 
@@ -187,13 +187,16 @@ listed there, and opening it edits the same record the site's own hub edits.
 
 What differs from a site's hub:
 
-- **Every create names a site.** A contact, company, deal, task or logged
-  activity is always captured *by* a site — that is what decides which of your
-  sites may see it and whose marketing consent a contact's checkbox records —
-  so **New contact**, **New company**, **New deal**, **New task**, **Log
-  activity** and **Import CSV** each begin with a required **Site** picker. The
-  pick is remembered for the session, and an organization with exactly one site
-  never sees the field. The REST API asks the same question as `consentSiteId`.
+- **Every create names a site.** A contact, company, deal or logged activity
+  is always captured *by* a site — that is what decides which of your sites may
+  see it and whose marketing consent a contact's checkbox records — so **New
+  contact**, **New company**, **New deal**, **Log activity** and **Import CSV**
+  each begin with a required **Site** picker. The pick is remembered for the
+  session, and an organization with exactly one site never sees the field. The
+  REST API asks the same question as `consentSiteId`. A **task** is the one
+  exception: **New task** offers **This organization (no site)** beside the
+  sites, for work the organization itself owes — see
+  [Organization tasks](./tasks.md#organization-tasks).
 - **The cross-site facts.** The contacts list gains a **Known by** column — the
   sites that have captured each person — and a contact's page gains a **Known
   by** card listing those sites, each with the person's marketing consent
@@ -217,6 +220,13 @@ What differs from a site's hub:
   records what is done on that site's hub, as before.
 - **Settings** are the organization's, as they always were; the **Default
   owner** card lists one picker per site.
+- **The dashboard cards total the organization too.** The organization's
+  **Sites** page (**Organization → Sites**) carries **CRM at a glance** and
+  **Tasks due** above the site grid — every figure a total over every site,
+  the tasks your own across every site — and each link opens the matching
+  section of this hub. The row appears for the same readers this hub admits
+  and is absent, not empty, for anyone else; it is not customizable, unlike a
+  site's own dashboard.
 
 **Who may open it:** an organization **owner, admin or editor** — a member of
 the whole organization holding the *manage data* permission. A collaborator

@@ -36,6 +36,12 @@ export interface DealStageResponse {
   previousStageId: string
   /** The host event that was emitted, or `null` for a move to the same stage. */
   event: 'dealStageChanged' | 'dealWon' | 'dealLost' | null
+  /**
+   * What a win did to the deal's contact (AGL-2641): the lifecycle stage
+   * the person now holds and whether this call raised it to `customer`.
+   * `null` on anything but a win, and on a deal that names no contact.
+   */
+  customer: { contactId: string; lifecycleStage: string; advanced: boolean } | null
 }
 
 /**

@@ -509,6 +509,22 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                             : 'The enforced rows below are a past incident ' +
                               'still inside the window, not a live one. They ' +
                               'age out on their own.'}
+                          {/* An `inline` origin that reached the counters is
+                              OUR code: the collector drops extension
+                              injections by source file before counting. So
+                              it is named as the specific defect it is — a
+                              first-party inline script rendered without the
+                              request nonce — rather than left to read as a
+                              blocked third-party host. */}
+                          {csp.blockedInline > 0
+                            ? ` ${csp.blockedInline} of the enforced ` +
+                              'violations are inline scripts on our own ' +
+                              'pages — first-party code rendered without ' +
+                              'the request nonce, which the policy refuses ' +
+                              'while the library beside it loads. Extension ' +
+                              'injections are filtered out before they are ' +
+                              'counted, so this is not noise.'
+                            : null}
                         </Alert>
                       ) : null}
                       <Typography variant="body2" color="text.secondary">

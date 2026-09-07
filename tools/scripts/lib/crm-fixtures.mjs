@@ -17,8 +17,9 @@
 
 // The CRM's e2e fixtures (AGL-2610): one small business's book of contacts,
 // the company, two pipelines and their deals, a catalog product, tasks,
-// activity, custom fields, leads and audience that sit around them — written by `seed-e2e.mjs` and re-written by the CRM specs
-// under `tools/e2e/` when a spec has changed what it drove.
+// activity, custom fields, leads, audience and the two forms that sit around
+// them — written by `seed-e2e.mjs` and re-written by the CRM specs under
+// `tools/e2e/` when a spec has changed what it drove.
 //
 // ## One module, two callers
 //
@@ -159,6 +160,16 @@ export const CRM_FIXTURE = {
   },
   listId: 'seed-crm-list-wholesale',
   listName: 'Wholesale accounts',
+  /**
+   * The site's forms, as the Leads section's note names them (AGL-2612,
+   * AGL-2638): the inquiry that routes leads — the source the seeded lead
+   * carries and the visit the wholesale contacts made — and the catering
+   * inquiry that could route and does not, so the note has a switch to offer.
+   */
+  forms: {
+    wholesale: { id: 'seed-wholesale-inquiry', name: 'Wholesale inquiry' },
+    catering: { id: 'seed-catering-inquiry', name: 'Event catering inquiry' },
+  },
   contacts: {
     /** The customer with a phone number: the search-by-digits target. */
     maya: {
@@ -278,7 +289,7 @@ export async function seedCrmFixtures(options) {
     atMs: at(daysAgo),
     summary,
     hostId,
-    formId: 'seed-wholesale-inquiry',
+    formId: F.forms.wholesale.id,
     path,
   })
 
@@ -644,6 +655,37 @@ export async function seedCrmFixtures(options) {
     }),
   ]
   for (const { ref, data } of leads) await write(ref, data)
+
+  /*
+   * The two forms those visits and that lead's source name, as the form
+   * route stores one: the published field list, the consent field the author
+   * declared, and `routing.lead` on the inquiry that files leads. Both carry
+   * an email field and a consent field, so the note's verdict on the one
+   * that does not route is "could" — the switch is offered, not refused.
+   */
+  const form = ({ id, name }, slug, routing) => ({
+    ref: hostRef.collection('forms').doc(id),
+    data: {
+      displayName: name,
+      slug,
+      fields: [
+        { fieldName: 'name', fieldType: 'text', label: 'Name' },
+        { fieldName: 'email', fieldType: 'email', label: 'Email', required: true },
+        { fieldName: 'message', fieldType: 'text', label: 'Message' },
+        { fieldName: 'marketingConsent', fieldType: 'checkbox', label: 'Send me the roast calendar' },
+      ],
+      consentFieldName: 'marketingConsent',
+      routing,
+      hostId,
+      createdAt: stamp(at(40)),
+      updatedAt: stamp(at(40)),
+    },
+  })
+  const forms = [
+    form(F.forms.wholesale, 'wholesale', { lead: true }),
+    form(F.forms.catering, 'catering', {}),
+  ]
+  for (const { ref, data } of forms) await write(ref, data)
 }
 
 /**

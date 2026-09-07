@@ -9,6 +9,60 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.77 — 2026-09-07
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.76...v1.0.0-beta.77)
+
+### Added
+
+- **crm:** the Leads row menu converts a lead in one click ([AGL-2641](https://linear.app/aglyn/issue/AGL-2641))
+- **console:** the health board names a blocked inline script as first-party code ([AGL-2640](https://linear.app/aglyn/issue/AGL-2640))
+- **crm:** the org hub's Settings offers the recipes, installable per site ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+- **console:** the organization's sites page carries the org dashboard row ([AGL-2636](https://linear.app/aglyn/issue/AGL-2636))
+- **crm:** the org hub files organization tasks and works the tasks bar in one request ([AGL-2637](https://linear.app/aglyn/issue/AGL-2637))
+- **crm:** the org hub installs a recipe on a site through the server ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+- **crm:** the tasks-due card reads the reader's tasks across the organization ([AGL-2636](https://linear.app/aglyn/issue/AGL-2636))
+- **crm:** the task routes take an organization variant with a batch form ([AGL-2637](https://linear.app/aglyn/issue/AGL-2637))
+- **workflows:** the site editor saves and keeps an action's recipe stamp ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+- **crm:** both dashboard cards register on the org dashboard slot under the mount ([AGL-2636](https://linear.app/aglyn/issue/AGL-2636))
+- **aglyn:** the widget catalog gains the organization's dashboard zone ([AGL-2636](https://linear.app/aglyn/issue/AGL-2636))
+- **crm:** the org-level Leads section says what files a lead, grouped by site ([AGL-2638](https://linear.app/aglyn/issue/AGL-2638))
+- **aglyn:** an action carries the recipe it was built from ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+
+### Fixed
+
+- **crm:** the convert dialog holds the org token alone until a row names its site ([AGL-2641](https://linear.app/aglyn/issue/AGL-2641))
+- **crm:** the Leads row-menu spec stubs the organization's lead-surfaces note ([AGL-2641](https://linear.app/aglyn/issue/AGL-2641))
+- **crm:** a won deal floors its contact's lifecycle stage at customer ([AGL-2641](https://linear.app/aglyn/issue/AGL-2641))
+- **crm:** the org mount is read before a site is weighed against it ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+- **tenant:** the analytics mounts accept a nonce for every inline boot they render ([AGL-2640](https://linear.app/aglyn/issue/AGL-2640))
+- **crm:** the recipe notice's door keeps its link role ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+- **console:** the root layout hands the request nonce to the advertising mount ([AGL-2640](https://linear.app/aglyn/issue/AGL-2640))
+- **aglyn:** the advertising mount stamps the request nonce on every vendor pair ([AGL-2640](https://linear.app/aglyn/issue/AGL-2640))
+- **crm:** the consolidated org-level tree clears every guard ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+- **crm:** the task scope model names its imports beneath the barrel ([AGL-2637](https://linear.app/aglyn/issue/AGL-2637))
+
+### Documentation
+
+- **docs:** a won deal makes its contact a customer, and Convert… sits on the lead row ([AGL-2641](https://linear.app/aglyn/issue/AGL-2641))
+- **docs:** the advertising and health pages name the nonce an inline vendor boot needs ([AGL-2640](https://linear.app/aglyn/issue/AGL-2640))
+- **crm:** organization tasks, the digest anchors past a no-site task, the org-hub e2e ([AGL-2637](https://linear.app/aglyn/issue/AGL-2637))
+- **docs:** the CRM manual says the dashboard cards appear on the organization's sites page ([AGL-2636](https://linear.app/aglyn/issue/AGL-2636))
+- **docs:** recipes install per site from the organization's CRM Settings ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+- **docs:** the leads guide says the note appears at the organization level, by site ([AGL-2638](https://linear.app/aglyn/issue/AGL-2638))
+
+<details>
+<summary>Also in this release: 4 test, 2 chore</summary>
+
+- **tools:** the Linear ceiling reads AGL-2641 for the CRM page follow-ups ([AGL-2641](https://linear.app/aglyn/issue/AGL-2641))
+- **e2e:** the org hub installs a recipe on the seed site ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+- **tools:** the org hub e2e asserts both CRM cards mount on the sites page ([AGL-2636](https://linear.app/aglyn/issue/AGL-2636))
+- **crm:** the site-level lead-surfaces note is pinned after its pieces were shared ([AGL-2638](https://linear.app/aglyn/issue/AGL-2638))
+- **tools:** the org-hub run asserts the lead-surfaces note names the site and a form ([AGL-2638](https://linear.app/aglyn/issue/AGL-2638))
+- **tools:** the Linear ceiling reads AGL-2639 for the org-level CRM gaps ([AGL-2639](https://linear.app/aglyn/issue/AGL-2639))
+
+</details>
+
 ## v1.0.0-beta.76 — 2026-09-06
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.75...v1.0.0-beta.76)

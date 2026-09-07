@@ -1250,6 +1250,15 @@ const NOT_A_LIST: Array<[string, string]> = [
       'section twice.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/recipes-card.tsx',
+    'The organization’s automation RECIPE catalog (AGL-2639) — one row per ' +
+      'recipe in `CRM_ACTION_RECIPES`, a constant the plugin ships, each ' +
+      'naming the sites of the org it is installed on as the status route ' +
+      'answered. The count is the catalog’s, not the account’s: no query ' +
+      'feeds the rows, and a pager would offer to page a list the reader ' +
+      'can see in full.',
+  ],
+  [
     'libs/plugins/crm/src/lib/components/deal-edit-drawer.tsx',
     'The contact and company SEARCH pickers inside the New deal drawer ' +
       '(AGL-2598): bounded reads (`CONTACT_WINDOW`, `COMPANY_MATCHES`) ' +
@@ -1610,7 +1619,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // disclosed ceiling — the likely-duplicates list a button reads under
     // `CONTACT_DUPLICATES_LIMIT` to act on, and the merge dialog's search
     // picker with its per-field preview of what the merge keeps.
-    expect(NOT_A_LIST).toHaveLength(52)
+    //
+    // 53 since the org hub's Settings offers the automation RECIPE catalog
+    // (AGL-2639): one row per recipe the plugin ships, naming the sites it is
+    // installed on.
+    expect(NOT_A_LIST).toHaveLength(53)
   })
 })
 

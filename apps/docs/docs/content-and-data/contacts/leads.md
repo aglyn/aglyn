@@ -42,6 +42,19 @@ those earlier submissions and bookings, so a person who wrote in through a
 lead-routed form before lead routing existed is in the Open view too,
 unassigned.
 
+At the [organization level](./overview.md#at-the-organization-level) —
+**CRM → Leads** from the organization's own tab, where every site's leads
+are one list — the same note opens the section
+**grouped by site**. Sign-ups and bookings are named once, since they create
+a lead on every site; then each site is a group of its own, named and linking
+to that site's Leads section, with its lead-routed forms by name, **Turn on
+lead routing** beside the forms that could route, and the reason as the
+control's tooltip beside the ones that cannot. A site with no forms says so
+in one line. The first three sites open with their forms showing; the rest
+wait behind **Show N more sites**, and their forms are not read until you
+open them. Turning routing on from here switches that site's form and names
+the site in the confirmation.
+
 The contact's own page links back: **Lead on this site** on the
 [Relationship card](./contact-record.md#where-the-persons-lead-is) opens the
 lead when this site holds one for the address.
@@ -76,7 +89,11 @@ campaign audiences.
 
 - **Status** — click the status chip to change it to New or Working.
   Choosing **Unqualified…** asks for a reason first.
-- **Row menu** (⋮) — **Open lead**, **Assign owner**, or **Unqualify**.
+- **Row menu** (⋮) — **Open lead**, **Convert…**, **Assign owner**, or
+  **Unqualify**. **Convert…** opens the same dialog as the lead's page (see
+  [Converting a lead](#converting-a-lead)) without opening the page first; on
+  a lead already converted, unqualified, or whose person has an erasure
+  pending, it is disabled with the reason as its tooltip.
 - Click anywhere else on the row to open the lead's page.
 
 Every change here is saved immediately; there is no separate save step.
@@ -113,7 +130,9 @@ there is one.
 
 ## Converting a lead
 
-When a lead is real, click **Convert**. The dialog asks three things:
+When a lead is real, click **Convert** on the lead's page, or choose
+**Convert…** from its row's menu on the list — the same dialog either way,
+from the list in one click. The dialog asks three things:
 
 1. **Contact.** The lead becomes a contact at the **Sales qualified**
    lifecycle stage, owned by whoever you pick — the lead's owner by default.

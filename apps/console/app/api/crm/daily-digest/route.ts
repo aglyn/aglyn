@@ -244,9 +244,14 @@ interface SweepContext {
   origin: string
 }
 
-/** The console path a notification opens — the legacy `/{hostDocId}/rest` shape every host notification uses. */
+/**
+ * The console path a notification opens — the legacy `/{hostDocId}/rest`
+ * shape every host notification uses, or the `/org/rest` shape the console
+ * rewrites onto the organization's own hub when nothing owed names a site:
+ * an organization task (AGL-2637) has none.
+ */
 function notificationLink(hostId: string, section: 'tasks' | 'leads'): string {
-  return `/${hostId}/crm/${section}`
+  return hostId ? `/${hostId}/crm/${section}` : `/org/crm/${section}`
 }
 
 async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport> {
@@ -365,6 +370,10 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
     if (!orgSlug || !subdomain) return null
     return `${ctx.origin}${buildRoute(Route.HOST_DASHBOARD, { orgSlug, host: subdomain })}/crm`
   }
+  // The organization's own hub, for a member whose owed tasks name no site.
+  const orgHubUrl = orgSlug
+    ? `${ctx.origin}${buildRoute(Route.ORG_HOME, { orgSlug })}/crm`
+    : null
   const settingsUrl = `${ctx.origin}${buildRoute(Route.MANAGE_NOTIFICATIONS)}`
   const supportLine = brandSupportLine(branding)
 
@@ -403,11 +412,16 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
       continue
     }
 
-    // The site the links open on: where the first task lives, else where
-    // the first lead was captured.
-    const anchorHostId = digest.overdue[0]?.hostId || digest.today[0]?.hostId || digest.leads[0]?.hostId || ''
+    // The site the links open on: where the first task THAT HAS A SITE
+    // lives, else where the first lead was captured. An organization task
+    // (AGL-2637) names no site, and a digest owed nothing but those opens
+    // on the organization's hub.
+    const anchorHostId =
+      [...digest.overdue, ...digest.today].find((task) => task.hostId)?.hostId ||
+      digest.leads[0]?.hostId ||
+      ''
     const section = counts.overdue + counts.today > 0 ? 'tasks' : 'leads'
-    const hub = hubUrl(anchorHostId)
+    const hub = anchorHostId ? hubUrl(anchorHostId) : orgHubUrl
 
     /*
      * THE EMAIL FIRST. A refusal from the send-rate governor stops the run

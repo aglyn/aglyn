@@ -32,6 +32,10 @@
  *     the permission resolver, `notifyUsers` — are spies with the shapes the
  *     real functions answer. `emitHostEvent` is a spy because the workflow
  *     runner is somebody else's suite.
+ *  4. The ORGANIZATION variant (AGL-2637) is authorized by the real
+ *     `authorizeOrgCaller` over a spied `resolveOrgPermissions` and
+ *     `getOrgDoc` — the two facts it reads — so a refusal here is the org
+ *     gate refusing, not a double of it.
  */
 
 const verifyIdToken = jest.fn()
@@ -40,6 +44,8 @@ const resolveOrgMembership = jest.fn()
 const memberHasOrgPermission = jest.fn()
 const notifyUsers = jest.fn()
 const emitHostEvent = jest.fn()
+const resolveOrgPermissions = jest.fn()
+const getOrgDoc = jest.fn()
 
 let store: Record<string, Record<string, any>> = {}
 let autoId = 0
@@ -98,6 +104,11 @@ jest.mock('@aglyn/tenant-runtime', () => ({
   emitHostEvent: (...args: unknown[]) => emitHostEvent(...args),
 }))
 
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  __esModule: true,
+  resolveOrgPermissions: (...args: unknown[]) => resolveOrgPermissions(...args),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -107,6 +118,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: (...args: unknown[]) => getOrgForHost(...args),
+  getOrgDoc: (...args: unknown[]) => getOrgDoc(...args),
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   notifyUsers: (...args: unknown[]) => notifyUsers(...args),
@@ -115,6 +127,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './task-routes'
 
 const HOST_ID = 'site-1'
+/** A site some OTHER organization owns. */
+const FOREIGN_HOST = 'foreign-site'
 const ORG_ID = 'org-1'
 const TASKS = `orgs/${ORG_ID}/crmTasks`
 const WRITER = 'editor-uid'
@@ -190,7 +204,21 @@ beforeEach(() => {
     [TEAMMATE]: { role: 'editor' },
   }
   verifyIdToken.mockReset().mockResolvedValue({ uid: WRITER })
-  getOrgForHost.mockReset().mockImplementation(async () => ({ orgId: ORG_ID, org }))
+  getOrgForHost
+    .mockReset()
+    .mockImplementation(async (hostId: string) =>
+      hostId === FOREIGN_HOST ? { orgId: 'org-2', org: {} } : { orgId: ORG_ID, org },
+    )
+  getOrgDoc
+    .mockReset()
+    .mockImplementation(async (orgId: string) => (orgId === ORG_ID ? org : null))
+  // An org-wide admin holding the permission, unless a test says otherwise.
+  resolveOrgPermissions.mockReset().mockResolvedValue({
+    orgId: ORG_ID,
+    orgWide: true,
+    role: 'admin',
+    permissions: { 'data.manage': true },
+  })
   resolveOrgMembership
     .mockReset()
     .mockImplementation(async (uid: string, orgId: string) =>
@@ -508,5 +536,296 @@ describe('crm/task-complete', () => {
     })
     expect(status).toBe(200)
     expect(store[`${TASKS}/t-1`].completedByUid).toBe('staff-uid')
+  })
+})
+
+/**
+ * THE ORGANIZATION VARIANT (AGL-2637): `orgId` in the body instead of a
+ * site. Authorized by the org — an org-wide member holding `data.manage`,
+ * never a site collaborator — with no reach check against the task, since
+ * an org-wide member reads every row. A new task names the site it is
+ * filed from beside the org, or none and is the organization's own; a
+ * completion emits on the task's OWN site, and an organization task emits
+ * nothing. The batch forms answer each task on their own.
+ */
+describe('crm/task-save at the organization level (AGL-2637)', () => {
+  it('refuses a site-scoped member, and an org-wide one without data.manage, writing nothing', async () => {
+    resolveOrgPermissions.mockResolvedValue({
+      orgId: ORG_ID,
+      orgWide: false,
+      role: 'editor',
+      permissions: { 'data.manage': true },
+    })
+    const scoped = await call(crmTaskSaveHandler, { body: { orgId: ORG_ID, task: task() } })
+    expect(scoped.status).toBe(403)
+    resolveOrgPermissions.mockResolvedValue({
+      orgId: ORG_ID,
+      orgWide: true,
+      role: 'admin',
+      permissions: { 'data.manage': false },
+    })
+    const revoked = await call(crmTaskSaveHandler, { body: { orgId: ORG_ID, task: task() } })
+    expect(revoked.status).toBe(403)
+    expect(stored()).toEqual([])
+    // The site path was never consulted: no site, no site role.
+    expect(getOrgForHost).not.toHaveBeenCalled()
+  })
+
+  it('creates an ORGANIZATION task — no site, the org token alone — and links its notification to the org hub', async () => {
+    const { status, body } = await call(crmTaskSaveHandler, {
+      body: { orgId: ORG_ID, task: task({ assigneeUid: TEAMMATE, contactId: 'c-1' }) },
+    })
+    expect(status).toBe(200)
+    expect(body).toEqual({ ok: true, taskId: 'auto-1', notified: true })
+    const [row] = stored()
+    expect(row).toMatchObject({
+      hostId: null,
+      visibleTo: ['org'],
+      createdByUid: WRITER,
+      status: 'open',
+      contactId: 'c-1',
+    })
+    const [recipients, payload] = notifyUsers.mock.calls[0]
+    expect(recipients).toEqual([TEAMMATE])
+    // The `/org` shape the console rewrites onto the organization's hub,
+    // and no `hostId` on the notification, because there is none.
+    expect(payload.link).toBe('/org/crm/contacts/c-1')
+    expect(payload.orgId).toBe(ORG_ID)
+    expect('hostId' in payload).toBe(false)
+  })
+
+  it("files a task from a site named beside the org, stamped as that site's console would", async () => {
+    // No membership on the roster at all: the org variant reads the org
+    // gate, not a site role.
+    roster = { [TEAMMATE]: { role: 'editor' } }
+    const { status } = await call(crmTaskSaveHandler, {
+      body: { orgId: ORG_ID, hostId: HOST_ID, task: task({ assigneeUid: TEAMMATE }) },
+    })
+    expect(status).toBe(200)
+    expect(stored()[0]).toMatchObject({ hostId: HOST_ID, visibleTo: ['host:site-1'] })
+    const payload = notifyUsers.mock.calls[0][1]
+    expect(payload.link).toBe(`/${HOST_ID}/crm/tasks`)
+    expect(payload.hostId).toBe(HOST_ID)
+  })
+
+  it("refuses a site that is not the organization's own, and writes nothing", async () => {
+    const { status, body } = await call(crmTaskSaveHandler, {
+      body: { orgId: ORG_ID, hostId: FOREIGN_HOST, task: task() },
+    })
+    expect(status).toBe(400)
+    expect(body.error).toMatch(/not one of this organization/)
+    expect(stored()).toEqual([])
+  })
+
+  describe('updating', () => {
+    beforeEach(() => {
+      roster['third-uid'] = { role: 'editor' }
+      store[`${TASKS}/t-1`] = {
+        title: 'Old title',
+        kind: 'todo',
+        priority: 'normal',
+        dueAtMs: null,
+        notes: '',
+        assigneeUid: TEAMMATE,
+        status: 'open',
+        completedAtMs: null,
+        // A site the org-level caller holds no site role on.
+        visibleTo: ['host:site-2'],
+        hostId: 'site-2',
+        createdByUid: 'somebody-else',
+      }
+      store[`${TASKS}/t-org`] = {
+        title: 'Renew the insurance',
+        kind: 'todo',
+        priority: 'normal',
+        dueAtMs: null,
+        notes: '',
+        status: 'open',
+        completedAtMs: null,
+        visibleTo: ['org'],
+        hostId: null,
+        createdByUid: WRITER,
+      }
+    })
+
+    it("rewrites a task whatever site captured it, and links a new assignee to the task's OWN site", async () => {
+      const { status } = await call(crmTaskSaveHandler, {
+        body: {
+          orgId: ORG_ID,
+          taskId: 't-1',
+          task: task({ title: 'New title', assigneeUid: 'third-uid' }),
+        },
+      })
+      expect(status).toBe(200)
+      const row = store[`${TASKS}/t-1`]
+      expect(row.title).toBe('New title')
+      expect(row.visibleTo).toEqual(['host:site-2'])
+      expect(row.hostId).toBe('site-2')
+      const payload = notifyUsers.mock.calls[0][1]
+      expect(payload.link).toBe('/site-2/crm/tasks')
+      expect(payload.hostId).toBe('site-2')
+    })
+
+    it('links a new assignee of an organization task to the org hub', async () => {
+      await call(crmTaskSaveHandler, {
+        body: { orgId: ORG_ID, taskId: 't-org', task: task({ assigneeUid: 'third-uid' }) },
+      })
+      const payload = notifyUsers.mock.calls[0][1]
+      expect(payload.link).toBe('/org/crm/tasks')
+      expect('hostId' in payload).toBe(false)
+    })
+
+    it('saves a batch in one request, answering each task on its own, asking the roster once', async () => {
+      const { status, body } = await call(crmTaskSaveHandler, {
+        body: {
+          orgId: ORG_ID,
+          tasks: [
+            { taskId: 't-1', task: task({ assigneeUid: 'third-uid' }) },
+            { taskId: 'gone', task: task({ assigneeUid: 'third-uid' }) },
+            { taskId: 't-org', task: task({ assigneeUid: 'third-uid' }) },
+          ],
+        },
+      })
+      expect(status).toBe(200)
+      expect(body).toEqual({
+        ok: true,
+        results: [
+          { taskId: 't-1', ok: true, notified: true },
+          { taskId: 'gone', ok: false, error: 'That task no longer exists.' },
+          { taskId: 't-org', ok: true, notified: true },
+        ],
+      })
+      expect(store[`${TASKS}/t-1`].assigneeUid).toBe('third-uid')
+      expect(store[`${TASKS}/t-org`].assigneeUid).toBe('third-uid')
+      // One roster question for one assignee across three tasks.
+      expect(resolveOrgMembership).toHaveBeenCalledTimes(1)
+      expect(notifyUsers).toHaveBeenCalledTimes(2)
+    })
+
+    it('refuses a batch under a site, an empty one, one beyond the cap, and one with an unreadable entry — whole', async () => {
+      const entry = { taskId: 't-1', task: task({ title: 'Touched' }) }
+      expect(
+        (await call(crmTaskSaveHandler, { body: { hostId: HOST_ID, tasks: [entry] } })).status,
+      ).toBe(400)
+      expect((await call(crmTaskSaveHandler, { body: { orgId: ORG_ID, tasks: [] } })).status).toBe(
+        400,
+      )
+      expect(
+        (
+          await call(crmTaskSaveHandler, {
+            body: { orgId: ORG_ID, tasks: Array.from({ length: 201 }, () => entry) },
+          })
+        ).status,
+      ).toBe(400)
+      const unreadable = await call(crmTaskSaveHandler, {
+        body: { orgId: ORG_ID, tasks: [entry, { taskId: 't-org', task: task({ title: ' ' }) }] },
+      })
+      expect(unreadable.status).toBe(400)
+      expect(unreadable.body).toEqual({ error: 'A task needs a title.' })
+      expect(store[`${TASKS}/t-1`].title).toBe('Old title')
+    })
+  })
+})
+
+describe('crm/task-complete at the organization level (AGL-2637)', () => {
+  const open = (id: string, over: Record<string, unknown> = {}) => {
+    store[`${TASKS}/${id}`] = {
+      title: 'Send the deck',
+      kind: 'email',
+      priority: 'high',
+      dueAtMs: 1757062800000,
+      notes: '',
+      assigneeUid: TEAMMATE,
+      status: 'open',
+      completedAtMs: null,
+      visibleTo: ['host:site-origin'],
+      hostId: 'site-origin',
+      createdByUid: WRITER,
+      ...over,
+    }
+  }
+
+  it("completes a task from the org hub, emitting on the task's OWN site", async () => {
+    open('t-1')
+    const { status, body } = await call(crmTaskCompleteHandler, {
+      body: { orgId: ORG_ID, taskId: 't-1' },
+    })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(store[`${TASKS}/t-1`]).toMatchObject({ status: 'done', completedByUid: WRITER })
+    expect(emitHostEvent).toHaveBeenCalledTimes(1)
+    expect(emitHostEvent.mock.calls[0][0]).toBe('site-origin')
+    expect(emitHostEvent.mock.calls[0][2]).toMatchObject({ taskId: 't-1', taskHostId: 'site-origin' })
+  })
+
+  it('completes an ORGANIZATION task with no event to emit — there is no site', async () => {
+    open('t-org', { hostId: null, visibleTo: ['org'] })
+    const { status } = await call(crmTaskCompleteHandler, {
+      body: { orgId: ORG_ID, taskId: 't-org' },
+    })
+    expect(status).toBe(200)
+    expect(store[`${TASKS}/t-org`].status).toBe('done')
+    expect(emitHostEvent).not.toHaveBeenCalled()
+  })
+
+  it('refuses a site-scoped member, writing nothing', async () => {
+    open('t-1')
+    resolveOrgPermissions.mockResolvedValue({
+      orgId: ORG_ID,
+      orgWide: false,
+      role: 'editor',
+      permissions: { 'data.manage': true },
+    })
+    const { status } = await call(crmTaskCompleteHandler, {
+      body: { orgId: ORG_ID, taskId: 't-1' },
+    })
+    expect(status).toBe(403)
+    expect(store[`${TASKS}/t-1`].status).toBe('open')
+    expect(emitHostEvent).not.toHaveBeenCalled()
+  })
+
+  it('completes a batch in one request: each answered, a done one as alreadyDone, a missing one refused', async () => {
+    open('t-1')
+    open('t-2', { status: 'done', completedAtMs: 1234 })
+    open('t-org', { hostId: null, visibleTo: ['org'] })
+    const { status, body } = await call(crmTaskCompleteHandler, {
+      body: { orgId: ORG_ID, taskIds: ['t-1', 't-2', 'gone', 't-org', 't-1'] },
+    })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+    // Deduplicated: five ids, four answers, in order.
+    expect(body.results.map((row: { taskId: string }) => row.taskId)).toEqual([
+      't-1',
+      't-2',
+      'gone',
+      't-org',
+    ])
+    expect(body.results[0]).toMatchObject({ ok: true })
+    expect(body.results[1]).toEqual({ taskId: 't-2', ok: true, completedAtMs: 1234, alreadyDone: true })
+    expect(body.results[2]).toEqual({ taskId: 'gone', ok: false, error: 'That task no longer exists.' })
+    expect(body.results[3]).toMatchObject({ ok: true })
+    expect(store[`${TASKS}/t-1`].status).toBe('done')
+    expect(store[`${TASKS}/t-org`].status).toBe('done')
+    // One event: the site task's, on its site. The org task has none.
+    expect(emitHostEvent).toHaveBeenCalledTimes(1)
+    expect(emitHostEvent.mock.calls[0][0]).toBe('site-origin')
+  })
+
+  it('refuses a batch under a site, an empty one, and one beyond the cap', async () => {
+    open('t-1')
+    expect(
+      (await call(crmTaskCompleteHandler, { body: { hostId: HOST_ID, taskIds: ['t-1'] } })).status,
+    ).toBe(400)
+    expect(
+      (await call(crmTaskCompleteHandler, { body: { orgId: ORG_ID, taskIds: [] } })).status,
+    ).toBe(400)
+    expect(
+      (
+        await call(crmTaskCompleteHandler, {
+          body: { orgId: ORG_ID, taskIds: Array.from({ length: 201 }, (_, i) => `t-${i}`) },
+        })
+      ).status,
+    ).toBe(400)
+    expect(store[`${TASKS}/t-1`].status).toBe('open')
   })
 })

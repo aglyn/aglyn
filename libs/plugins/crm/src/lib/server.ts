@@ -92,6 +92,12 @@ import {
 import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-merge'
 import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
 import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
+import {
+  CRM_RECIPE_INSTALL_ROUTE,
+  CRM_RECIPE_STATUS_ROUTE,
+  crmRecipeInstallHandler,
+  crmRecipeStatusHandler,
+} from './server/recipe-routes'
 
 /**
  * `GET /api/crm/ping` → `{ ok: true, plugin: 'crm' }`.
@@ -559,4 +565,9 @@ export function registerCrmConsoleApi(): void {
   // hub performed client-direct (AGL-2634): the feed is closed to clients,
   // so the bulk bars' lines come through here.
   registerPluginApiRoute(CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler)
+  // A recipe's action written into one site's automations from the org
+  // hub (AGL-2639), stamped and deduplicated by the server, and the stamps
+  // read back per site so the hub can say which sites carry which recipe.
+  registerPluginApiRoute(CRM_RECIPE_INSTALL_ROUTE, crmRecipeInstallHandler)
+  registerPluginApiRoute(CRM_RECIPE_STATUS_ROUTE, crmRecipeStatusHandler)
 }

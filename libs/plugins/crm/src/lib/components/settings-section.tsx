@@ -67,6 +67,7 @@ import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import AssignmentRuleDrawer from './assignment-rule-drawer'
+import RecipesCard from './recipes-card'
 
 export type CrmSettingsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
 
@@ -709,15 +710,24 @@ RoundRobinCard.displayName = 'RoundRobinCard'
  * either. The one per-site setting — the default owner — is the site's
  * slot in an org-wide map: under a site the card names the site it is for,
  * and at the organization level it lists every site's slot.
+ *
+ * The Recipes card (AGL-2639) is the one card that mounts at the
+ * ORGANIZATION level only. It installs an automation onto a site of the
+ * reader's choosing, which is the org's need; under a site the Actions
+ * page's own Recipes menu is the door, and a second one here would write
+ * the same action by a different route. Last, because the welcome recipe
+ * leans on the round-robin pool set up in the card above it.
  */
 export function CrmSettingsSection(props: CrmSettingsSectionProps) {
   const { hostId, org } = props
+  const mount = useCrmOrgMount()
   return (
     <Stack spacing={3}>
       <AutoCreateCompaniesCard hostId={hostId} org={org} />
       <DefaultOwnerCard hostId={hostId} org={org} />
       <AssignmentRulesCard hostId={hostId} org={org} />
       <RoundRobinCard hostId={hostId} org={org} />
+      {mount ? <RecipesCard org={org} /> : null}
     </Stack>
   )
 }

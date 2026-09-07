@@ -148,6 +148,14 @@ A deal moves by `stageId`, by `status`, or by both:
 Every move stamps `stageChangedAt`. A move into a `won` or `lost` stage sets
 `closedAt`; a move back to an open stage clears it.
 
+A move into the `won` stage — and a `POST` that creates a deal there — also
+sets the linked contact's lifecycle stage to `customer` for the deal's site,
+the way an order does: a contact with no stage or an earlier one becomes a
+customer, and a later stage (`evangelist`, `other`) is never lowered. Read it
+back on [the contact](contacts.md) — the deal's own representation does not
+change. There is no flag to turn this off; a won deal is a customer by
+definition.
+
 #### Line items {#line-items}
 
 `lineItems` is the list of products behind the amount. Each line is:

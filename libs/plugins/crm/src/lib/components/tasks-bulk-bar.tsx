@@ -21,13 +21,16 @@
  *
  * Complete them, hand them to somebody, move their due date, take them
  * into a spreadsheet, or delete them. Two of these have a side effect
- * outside the document and go through their ROUTE one task at a time:
- * completing fires `taskCompleted`, which only the server emits, and
- * assigning tells the assignee, which only the server may write into
- * somebody's inbox — so Complete goes through `crm/task-complete` and
- * Assign through `crm/task-save`, exactly as the checkbox and the drawer
- * do for one task. The due date and the delete have no effect beyond the
- * document, so they are batched client-direct writes under the rules,
+ * outside the document and go through their ROUTE: completing fires
+ * `taskCompleted`, which only the server emits, and assigning tells the
+ * assignee, which only the server may write into somebody's inbox — so
+ * Complete goes through `crm/task-complete` and Assign through
+ * `crm/task-save`, exactly as the checkbox and the drawer do for one task.
+ * Under a site that is one request per task, each authorized against the
+ * site; beneath the organization hub it is ONE request per action, the
+ * routes' org-level batch form (AGL-2637), authorized once by the org and
+ * answered per task. The due date and the delete have no effect beyond
+ * the document, so they are batched client-direct writes under the rules,
  * as reopening is.
  */
 
@@ -45,10 +48,16 @@ import {
   type CrmBulkPlan,
   type CrmBulkWrite,
   crmBulkWriters,
+  runCrmBulkBatch,
   runCrmBulkCalls,
   runCrmBulkWrites,
 } from '../model/crm-bulk-writes'
-import { completeCrmTask, saveCrmTask } from '../model/task-api'
+import {
+  completeCrmTask,
+  completeCrmTasks,
+  saveCrmTask,
+  saveCrmTasks,
+} from '../model/task-api'
 import { crmTaskFieldsOf } from '../model/task-routes'
 import { dueAtToLocalInput, localInputToDueAt } from '../model/task-views'
 import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
@@ -62,7 +71,8 @@ import {
 export interface TasksBulkBarProps {
   /**
    * The site the task routes run as, or `null` at the organization level
-   * (AGL-2630), where each call runs as its task's own capturing site.
+   * (AGL-2630), where the routes run as the org — their batch form, one
+   * request per action (AGL-2637).
    */
   hostId: string | null
   /** `['orgs', orgId]`, or `null` while the org is unresolved. */
@@ -132,20 +142,39 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
     [apply, writers],
   )
 
-  /** One route request per task, in order, named by title. */
+  // The org the batch form names — the scope's, which is the org's root.
+  const orgId = scope?.[1] ?? null
+
+  /**
+   * The routes over the rows: under a site one request per task, in
+   * order, named by title; beneath the org hub one request for them all,
+   * tallied off its per-task answers.
+   */
   const runCalls = useCallback(
     (
       tasks: readonly CrmTaskRow[],
-      call: (task: CrmTaskRow) => Promise<unknown>,
+      call: {
+        each: (task: CrmTaskRow) => Promise<unknown>
+        batch: (tasks: readonly CrmTaskRow[]) => Promise<ReadonlyArray<{ taskId: string; ok: boolean; error?: string }>>
+      },
       done: (count: number) => string,
     ) =>
       apply({
         attempted: tasks.length,
         skipped: [],
-        job: () => runCrmBulkCalls(tasks, labelOf, call),
+        job: () =>
+          hostId
+            ? runCrmBulkCalls(tasks, labelOf, call.each)
+            : runCrmBulkBatch(
+                tasks,
+                (task) => task.$id,
+                labelOf,
+                async (rows) =>
+                  (await call.batch(rows)).map(({ taskId, ...rest }) => ({ id: taskId, ...rest })),
+              ),
         done,
       }),
-    [apply],
+    [apply, hostId],
   )
 
   /*
@@ -154,13 +183,19 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
    * answer nothing is not worth its round trip.
    */
   const handleComplete = useCallback(async () => {
+    if (!orgId) return
     const open = selectedRows.filter((task) => task.status !== 'done')
     await runCalls(
       open,
-      (task) => completeCrmTask(user, { hostId: hostId ?? task.hostId, taskId: task.$id }),
+      {
+        each: (task) => completeCrmTask(user, { hostId: hostId as string, taskId: task.$id }),
+        batch: async (tasks) =>
+          (await completeCrmTasks(user, { orgId, taskIds: tasks.map((task) => task.$id) }))
+            .results,
+      },
       (count) => `Completed ${countNoun(count, NOUN)}`,
     )
-  }, [selectedRows, runCalls, user, hostId])
+  }, [selectedRows, runCalls, user, hostId, orgId])
 
   const handleApply = useCallback(async () => {
     if (!pending || !scope) return
@@ -169,14 +204,17 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
     if (action === 'assign') {
       const assigneeUid = value || null
       const who = assigneeUid ? directory.nameOf(assigneeUid) : 'nobody'
+      const reassigned = (task: CrmTaskRow) => ({
+        taskId: task.$id,
+        task: { ...crmTaskFieldsOf(task), assigneeUid },
+      })
       await runCalls(
         selectedRows,
-        (task) =>
-          saveCrmTask(user, {
-            hostId: hostId ?? task.hostId,
-            taskId: task.$id,
-            task: { ...crmTaskFieldsOf(task), assigneeUid },
-          }),
+        {
+          each: (task) => saveCrmTask(user, { hostId: hostId as string, ...reassigned(task) }),
+          batch: async (tasks) =>
+            (await saveCrmTasks(user, { orgId: scope[1], tasks: tasks.map(reassigned) })).results,
+        },
         (count) => `Assigned ${countNoun(count, NOUN)} to ${who}`,
       )
       return

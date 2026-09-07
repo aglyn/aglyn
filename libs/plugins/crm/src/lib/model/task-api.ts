@@ -25,6 +25,10 @@ import {
   type CrmTaskCompleteResponse,
   type CrmTaskSaveRequest,
   type CrmTaskSaveResponse,
+  type CrmTasksCompleteRequest,
+  type CrmTasksCompleteResponse,
+  type CrmTasksSaveRequest,
+  type CrmTasksSaveResponse,
   crmTaskRouteUrl,
 } from './task-routes'
 
@@ -69,4 +73,24 @@ export function completeCrmTask(
   request: CrmTaskCompleteRequest,
 ): Promise<CrmTaskCompleteResponse> {
   return post<CrmTaskCompleteResponse>(user, CRM_TASK_ROUTES.complete, request)
+}
+
+/**
+ * The organization hub's batch forms (AGL-2637): one request per bulk
+ * action, answered per task. A refused TASK is a row in `results`, not a
+ * thrown error — only a refused REQUEST (no session, no reach, a body the
+ * route would not read) throws.
+ */
+export function completeCrmTasks(
+  user: MaybeTokenSource,
+  request: CrmTasksCompleteRequest,
+): Promise<CrmTasksCompleteResponse> {
+  return post<CrmTasksCompleteResponse>(user, CRM_TASK_ROUTES.complete, request)
+}
+
+export function saveCrmTasks(
+  user: MaybeTokenSource,
+  request: CrmTasksSaveRequest,
+): Promise<CrmTasksSaveResponse> {
+  return post<CrmTasksSaveResponse>(user, CRM_TASK_ROUTES.save, request)
 }

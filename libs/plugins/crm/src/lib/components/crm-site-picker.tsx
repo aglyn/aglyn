@@ -31,7 +31,29 @@ export interface CrmSitePickerProps {
   /** What the pick decides, said under the field. */
   helperText?: string
   disabled?: boolean
+  /**
+   * A choice that is no site at all — the organization itself (AGL-2637).
+   * Offered under the sites when given, and then the field renders even
+   * for an org with one site, because there is a choice to make. `picked`
+   * says the form holds that choice; picking a site clears it. Only a task
+   * offers this: every other CRM record is a fact about a person some site
+   * met, and is captured BY that site.
+   */
+  noSite?: {
+    label: string
+    /** What the choice decides, said under the field while it is picked. */
+    helperText?: string
+    picked: boolean
+    onPick: (picked: boolean) => void
+  }
 }
+
+/**
+ * The select's value for the no-site choice. Never a site's id, which is a
+ * Firestore document id and cannot begin with an underscore-and-word the
+ * console minted itself.
+ */
+const NO_SITE_VALUE = '__organization'
 
 /**
  * THE SITE A CREATE IS CAPTURED BY, at the organization level (AGL-2630).
@@ -55,31 +77,52 @@ export interface CrmSitePickerProps {
  * Rendered as a required select rather than an autocomplete: an org has at
  * most thirty sites in a consent group and rarely more than a handful at
  * all, and a required field with a fixed list should look like one.
+ *
+ * With a {@link CrmSitePickerProps.noSite} choice the field is a question
+ * even for an org with one site — the site, or the organization — and the
+ * no-site pick is the FORM's, not the session's: the remembered site stays
+ * what the next contact or deal defaults to.
  */
 export function CrmSitePicker(props: CrmSitePickerProps) {
-  const { hostId, label = 'Site', helperText, disabled } = props
+  const { hostId, label = 'Site', helperText, disabled, noSite } = props
   const mount = useCrmOrgMount()
-  // Under a site, or with one site to choose from, there is no question.
-  if (hostId || !mount || (mount.hostsReady && mount.hosts.length === 1)) {
+  // Under a site, or with one site and nothing else to choose, there is no
+  // question.
+  if (
+    hostId ||
+    !mount ||
+    (!noSite && mount.hostsReady && mount.hosts.length === 1)
+  ) {
     return null
   }
+  const picked = noSite?.picked ? NO_SITE_VALUE : (mount.createHostId ?? '')
   return (
     <TextField
       select
       required
       size="small"
       label={label}
-      value={mount.createHostId ?? ''}
-      onChange={(event) => mount.setCreateHostId(String(event.target.value))}
+      value={picked}
+      onChange={(event) => {
+        const next = String(event.target.value)
+        if (next === NO_SITE_VALUE) {
+          noSite?.onPick(true)
+          return
+        }
+        noSite?.onPick(false)
+        mount.setCreateHostId(next)
+      }}
       disabled={disabled || !mount.hostsReady}
       helperText={
         !mount.hostsReady
           ? 'Loading your sites…'
-          : mount.hosts.length === 0
-            ? 'This organization has no sites yet, so nothing can be filed.'
-            : (helperText ??
-              'The site this record belongs to — it decides which of your ' +
-                'sites may see it.')
+          : noSite?.picked
+            ? (noSite.helperText ?? helperText)
+            : mount.hosts.length === 0 && !noSite
+              ? 'This organization has no sites yet, so nothing can be filed.'
+              : (helperText ??
+                'The site this record belongs to — it decides which of your ' +
+                  'sites may see it.')
       }
       slotProps={{ inputLabel: { shrink: true } }}
     >
@@ -88,6 +131,7 @@ export function CrmSitePicker(props: CrmSitePickerProps) {
           {host.name}
         </MenuItem>
       ))}
+      {noSite ? <MenuItem value={NO_SITE_VALUE}>{noSite.label}</MenuItem> : null}
     </TextField>
   )
 }

@@ -92,6 +92,27 @@ export interface AdvertisingTagMountsProps {
    * props for the current render are by definition the state before it.
    */
   readonly resolve: () => readonly ResolvedAdvertisingTag[]
+  /**
+   * The request's CSP nonce, stamped onto BOTH elements of every pair.
+   *
+   * A surface that enforces a nonce'd `script-src` refuses an inline script
+   * that does not carry it, and the boot half of every pair is inline. Next's
+   * `<Script>` stamps a nonce only when one reaches it: the automatic path
+   * reads `HeadManagerContext`, and the App Router's client provider carries
+   * no nonce at all — so a pair mounted after hydration, which is the only
+   * time this component ever mounts one, is unnonced unless the caller hands
+   * the value down. An explicit prop wins inside `next/script`
+   * (`restProps.nonce || nonce`), which is what makes this the one door.
+   *
+   * The failure without it is silent and lopsided: the library beside the
+   * boot has a `src` the policy allows, so the vendor's code loads and runs
+   * against an account nobody configured, and the conversions this surface
+   * sends are lost with nothing in the page but a CSP violation.
+   *
+   * Absent on a surface that sends no `script-src`: nothing is stamped, and
+   * nothing is refused.
+   */
+  readonly nonce?: string
 }
 
 /**
@@ -118,6 +139,7 @@ export default function AdvertisingTagMounts({
   active,
   tags,
   resolve,
+  nonce,
 }: AdvertisingTagMountsProps): ReactElement | null {
   /*
    * The resolver is held in a ref rather than listed as an effect dependency.
@@ -164,6 +186,7 @@ export default function AdvertisingTagMounts({
           <Script
             id={`ad-tag-${vendor.id}-init`}
             strategy="afterInteractive"
+            nonce={nonce}
             {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
           >
             {vendor.bootSnippet ? vendor.bootSnippet(accountId) : ''}
@@ -180,6 +203,7 @@ export default function AdvertisingTagMounts({
             <Script
               id={`ad-tag-${vendor.id}-src`}
               strategy="afterInteractive"
+              nonce={nonce}
               {...{ [ADVERTISING_TAG_ATTRIBUTE]: vendor.id }}
               // `scriptSrcFor` where the vendor has one: gtag reads the
               // container out of the loader's query, so the copy we bring

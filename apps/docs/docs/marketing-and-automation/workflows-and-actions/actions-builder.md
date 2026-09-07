@@ -38,6 +38,9 @@ steps — with a line saying which recipe it started from; change anything, then
 Nothing is saved until you do. **Tag by form** asks for one of this site's forms first,
 because the trigger is keyed on it. What each recipe builds, step by step, is in
 [Automations for the CRM → Recipes](../../content-and-data/contacts/automations.md#recipes).
+An organization with several sites can also install a recipe on any of them, without
+the editor, from the organization's
+[CRM → Settings → Recipes](../../content-and-data/contacts/settings.md#recipes).
 
 ## Triggers
 

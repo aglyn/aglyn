@@ -77,8 +77,25 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react'
  * exists to prevent. Here it also keeps hydration honest: the server and the
  * first client render agree on "nothing yet", and the visitor's own state
  * attaches after.
+ *
+ * ## Why the nonce is a prop and not read here
+ *
+ * Every boot below is inline, and the console enforces a nonce'd `script-src`
+ * (AGL-2640). Next stamps a nonce onto a `<Script>` only when one reaches it,
+ * and the App Router's client head manager carries none — so a pair mounted
+ * from an effect, which is the only way this component ever mounts one, is
+ * refused unless the value is handed down explicitly. The root layout is the
+ * nearest server component, so it reads the header the middleware set and the
+ * value arrives here as a prop; a client component has no request to read.
  */
-export default function PlatformAdvertisingTags(): ReactElement | null {
+export interface PlatformAdvertisingTagsProps {
+  /** The request's CSP nonce, stamped onto every element this mounts. */
+  readonly nonce?: string
+}
+
+export default function PlatformAdvertisingTags({
+  nonce,
+}: PlatformAdvertisingTagsProps = {}): ReactElement | null {
   const [ready, setReady] = useState(false)
   // A counter rather than a boolean pair: the verdict is re-read from the
   // resolvers on every render, and this only has to make a render happen. A
@@ -107,7 +124,12 @@ export default function PlatformAdvertisingTags(): ReactElement | null {
 
   return (
     <>
-      <AdvertisingTagMounts active={ready} tags={tags} resolve={resolve} />
+      <AdvertisingTagMounts
+        active={ready}
+        tags={tags}
+        resolve={resolve}
+        nonce={nonce}
+      />
       {/* GOOGLE TAG MANAGER, under the analytics gate and never a looser one.
 
           Consent Mode v2 is already declared by the time this runs: the
@@ -134,6 +156,7 @@ export default function PlatformAdvertisingTags(): ReactElement | null {
           <Script
             id="gtm-init"
             strategy="afterInteractive"
+            nonce={nonce}
             {...{ [ADVERTISING_TAG_ATTRIBUTE]: 'gtm' }}
           >
             {platformGtmBootSnippet()}
@@ -141,6 +164,7 @@ export default function PlatformAdvertisingTags(): ReactElement | null {
           <Script
             id="gtm-src"
             strategy="afterInteractive"
+            nonce={nonce}
             {...{ [ADVERTISING_TAG_ATTRIBUTE]: 'gtm' }}
             src={platformGtmScriptSrc(containerId)}
           />

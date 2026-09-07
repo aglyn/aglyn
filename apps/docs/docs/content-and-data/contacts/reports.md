@@ -218,6 +218,14 @@ and each is a single server-side count or sum — the card never downloads
 records to count them. Switch it off from the dashboard's customize dialog if
 you do not want it there.
 
+The organization's **Sites** page (**Organization → Sites**) carries the same
+card above the site grid, for an organization owner, admin or editor. There
+every figure totals **the whole organization** — the leads figure is the open
+leads on every site, added up — and each link opens the matching section of
+the [organization-level hub](./overview.md#at-the-organization-level). That
+row is not customizable: the customize dialog belongs to a site's dashboard,
+and an arrangement made there does not reach the organization's page.
+
 ## How the numbers are counted
 
 - A figure that has not arrived, or that the database refused, shows as a

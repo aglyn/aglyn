@@ -59,6 +59,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ...jest.requireActual(
       '../../../libs/tenant/data/admin/src/lib/server/crm-records',
     ),
+    // The REAL customer floor a win applies to the deal's contact (AGL-2641),
+    // over the same double, so the facet it writes is the one read back.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/contact-lifecycle-floor',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',
@@ -796,6 +801,53 @@ describe('/v1/deals', () => {
 
     const moved = await call('PATCH', `deals/${deal.id}`, { pipelineId: 'other' })
     expect((await json(moved)).error.fields.pipelineId).toMatch(/Not writable/)
+  })
+
+  /*
+   * A won deal makes its contact a customer (AGL-2641): the facet of the
+   * deal's site is floored on the transition into `won` — by PATCH, and by
+   * a POST that creates the deal won — and a later stage is never lowered.
+   */
+  it('floors the contact at customer when a deal is won, and never demotes', async () => {
+    const stageOf = () =>
+      (mockDocs.get(`${ORG}/contacts/c-1`) as any)?.facets?.['host-1']?.lifecycleStage
+    mockDocs.set(`${ORG}/contacts/c-1`, {
+      email: 'avery@example.com',
+      facets: { 'host-1': { sources: {}, interactions: [], lifecycleStage: 'opportunity' } },
+    })
+    const deal = await json(
+      await call('POST', 'deals', { title: 'Beans', contactId: 'c-1', consentSiteId: 'host-1' }),
+    )
+    // Open stages and a loss say nothing about a purchase.
+    await call('PATCH', `deals/${deal.id}`, { stageId: 'negotiation' })
+    await call('PATCH', `deals/${deal.id}`, { status: 'lost' })
+    expect(stageOf()).toBe('opportunity')
+
+    const won = await json(await call('PATCH', `deals/${deal.id}`, { status: 'won' }))
+    expect(won.status).toBe('won')
+    expect(stageOf()).toBe('customer')
+
+    // An evangelist who closes another deal stays an evangelist.
+    mockDocs.set(`${ORG}/contacts/c-1`, {
+      email: 'avery@example.com',
+      facets: { 'host-1': { sources: {}, interactions: [], lifecycleStage: 'evangelist' } },
+    })
+    await call('PATCH', `deals/${deal.id}`, { status: 'open' })
+    await call('PATCH', `deals/${deal.id}`, { stageId: 'won' })
+    expect(stageOf()).toBe('evangelist')
+
+    // A deal created won is a won deal.
+    mockDocs.set(`${ORG}/contacts/c-1`, { email: 'avery@example.com' })
+    const born = await json(
+      await call('POST', 'deals', {
+        title: 'Cake',
+        contactId: 'c-1',
+        status: 'won',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(born.status).toBe('won')
+    expect(stageOf()).toBe('customer')
   })
 
   it('validates a status filter and sends the most selective id as the clause', async () => {

@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { CrmActionRecipeId } from '@aglyn/aglyn'
+
 /**
  * The CRM plugin's console API routes, as the dispatcher keys them.
  *
@@ -34,7 +36,51 @@ export const CRM_API_ROUTES = {
    * `server/org-activity.ts`.
    */
   orgActivity: 'crm/org-activity',
+  /**
+   * `POST` — installs one recipe's action on one site (AGL-2639): the
+   * server builds it, stamps it and writes it into the site's actions;
+   * see `server/recipe-routes.ts`.
+   */
+  recipeInstall: 'crm/recipe-install',
+  /**
+   * `POST` — which recipes each of the organization's sites carries
+   * (AGL-2639), read off the stamps; see `server/recipe-routes.ts`.
+   */
+  recipeStatus: 'crm/recipe-status',
 } as const
+
+/**
+ * One site's answer to `crm/recipe-status` (AGL-2639).
+ *
+ * `installed` names the recipes a live action on the site is stamped with.
+ * `unstamped` counts the live actions that carry NO stamp — every action
+ * saved before the stamp existed — and a site with any is one the reader
+ * cannot call free of a recipe: the card names it as "may already have
+ * it" rather than offering the install as if to a blank site.
+ */
+export interface CrmRecipeSiteStatus {
+  hostId: string
+  installed: CrmActionRecipeId[]
+  unstamped: number
+}
+
+/** The body `crm/recipe-install` reads, beside the route scope. */
+export interface CrmRecipeInstallRequest {
+  hostId: string
+  orgId?: string
+  recipeId: CrmActionRecipeId
+  /** The site's form a recipe that `needs: 'form'` is keyed on. */
+  formId?: string
+}
+
+/** What a successful `crm/recipe-install` answers with. */
+export interface CrmRecipeInstallResult {
+  ok: true
+  actionId: string
+  /** The installed action's name, as the site's Actions list will show it. */
+  name: string
+  recipeId: CrmActionRecipeId
+}
 
 /**
  * What an organization-level activity line may point at: the CRM's record

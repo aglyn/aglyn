@@ -18,6 +18,7 @@
 
 import type { ConsolePluginOrgHost, ConsolePluginOrgMount } from '@aglyn/aglyn'
 import {
+  type ComponentType,
   createContext,
   type ReactNode,
   useCallback,
@@ -188,6 +189,41 @@ CrmOrgMountProvider.displayName = 'CrmOrgMountProvider'
 /** The org-level mount, or `null` under a site. */
 export function useCrmOrgMount(): CrmOrgMount | null {
   return useContext(CrmOrgMountContext)
+}
+
+/**
+ * `Card` beneath the org-level mount the SHELL hands it as a prop (AGL-2636).
+ *
+ * The hub page mounts the provider itself, because the shell hands the hub
+ * page an `orgMount` and the page owns everything under it. A widget on the
+ * org's `orgDashboard` slot is dropped into a console page the CRM does not
+ * own — the org's sites list — and the console never imports a plugin, so
+ * the page cannot mount this plugin's provider around the slot. The slot
+ * hands each widget the same `orgMount` instead, and this puts the provider
+ * where the hub page puts it: around the surface, one level down. `Card`
+ * then reads `useCrmOrgMount()` and `useCrmScope({ hostId: null })` exactly
+ * as it does under the hub, and stays one component for both mounts.
+ *
+ * Handed no mount — a slot that names a site, or a shell older than the org
+ * zone — the card renders as it is, and `useCrmOrgMount` answers `null` the
+ * way it does under a site.
+ */
+export function withCrmOrgMount<P extends object>(
+  Card: ComponentType<P>,
+): ComponentType<P & { orgMount?: ConsolePluginOrgMount }> {
+  function CrmOrgMounted(props: P & { orgMount?: ConsolePluginOrgMount }) {
+    const { orgMount, ...rest } = props
+    const card = <Card {...(rest as P)} />
+    return orgMount ? (
+      <CrmOrgMountProvider mount={orgMount}>{card}</CrmOrgMountProvider>
+    ) : (
+      card
+    )
+  }
+  CrmOrgMounted.displayName = `CrmOrgMounted(${
+    Card.displayName ?? (Card as { name?: string }).name ?? 'Card'
+  })`
+  return CrmOrgMounted
 }
 
 /**

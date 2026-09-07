@@ -29,6 +29,9 @@ import {
   crmRecipeTagForForm,
   FLOW_TIMED_OUT_FIELD,
   HOST_ACTION_STEP_LABELS,
+  type HostAction,
+  hostActionDocument,
+  hostActionRecipeId,
   hostActionStepsForClient,
   STALE_LEAD_WAIT_MINUTES,
   validateHostAction,
@@ -99,6 +102,102 @@ describe('CRM_ACTION_RECIPES', () => {
     expect(crmActionRecipe('nope')).toBeNull()
     expect(crmActionRecipe(undefined)).toBeNull()
   })
+
+  it('stamps every action it builds with its own id, so a writer saving what it was handed keeps the provenance (AGL-2639)', () => {
+    for (const { recipe, action } of built()) {
+      expect(action.recipe).toBe(recipe.id)
+      expect(hostActionRecipeId(action)).toBe(recipe.id)
+    }
+  })
+})
+
+describe('the stored recipe stamp (AGL-2639)', () => {
+  it('reads a known id, null for "no recipe", and UNKNOWN for a document from before the stamp', () => {
+    expect(hostActionRecipeId({ recipe: 'followUpWonDeal' })).toBe('followUpWonDeal')
+    expect(hostActionRecipeId({ recipe: null })).toBeNull()
+    // A retired or mistyped id says nothing usable; it reads as no recipe.
+    expect(hostActionRecipeId({ recipe: 'retiredRecipe' })).toBeNull()
+    // No field at all is the older document: unknown, not absent.
+    expect(hostActionRecipeId({})).toBeUndefined()
+    expect(hostActionRecipeId(undefined)).toBeUndefined()
+  })
+
+  it('refuses a stamp that names no recipe, and passes null and absent alike', () => {
+    const action = crmActionRecipe('followUpWonDeal')!.build()
+    expect(validateHostAction({ ...action, recipe: 'retiredRecipe' as never })).toBe(
+      'Unknown recipe',
+    )
+    expect(validateHostAction({ ...action, recipe: null })).toBeNull()
+    const { recipe: _stamp, ...unstamped } = action
+    expect(validateHostAction(unstamped)).toBeNull()
+  })
+})
+
+describe('hostActionDocument (AGL-2639)', () => {
+  const action: HostAction = {
+    name: 'Nudge',
+    trigger: {
+      event: 'scrollDepth',
+      threshold: 50,
+      oncePerVisitor: true,
+      cooldownMinutes: 30,
+      condition: { field: 'x', op: 'notEmpty' },
+      conditions: [{ field: 'path', op: 'contains', value: '/pricing' }],
+      combinator: 'or',
+    },
+    steps: [{ type: 'siteAlert', message: 'Hi', severity: 'info' }],
+  }
+
+  it('writes every cap and list out, so a merge-set clears what the editor switched off', () => {
+    const stored = hostActionDocument(action)
+    expect(stored.trigger).toEqual({
+      event: 'scrollDepth',
+      threshold: 50,
+      oncePerVisitor: true,
+      oncePerSession: false,
+      cooldownMinutes: 30,
+      everyTime: false,
+      // The legacy single condition is always nulled; the list is canonical.
+      condition: null,
+      conditions: [{ field: 'path', op: 'contains', value: '/pricing' }],
+      combinator: 'or',
+    })
+    expect(stored.enabled).toBe(true)
+    expect(stored.steps).toEqual(action.steps)
+    expect(stored.name).toBe('Nudge')
+    const bare = hostActionDocument({
+      name: 'Bare',
+      trigger: { event: 'formSubmission' },
+      steps: [],
+      enabled: false,
+    })
+    expect(bare.trigger).toEqual({
+      event: 'formSubmission',
+      oncePerVisitor: false,
+      oncePerSession: false,
+      cooldownMinutes: null,
+      everyTime: false,
+      condition: null,
+      conditions: null,
+      combinator: null,
+    })
+    expect(bare.enabled).toBe(false)
+  })
+
+  it('carries the recipe stamp only when the action says something about it', () => {
+    expect('recipe' in hostActionDocument(action)).toBe(false)
+    expect(hostActionDocument({ ...action, recipe: null }).recipe).toBeNull()
+    expect(hostActionDocument(crmActionRecipe('welcomeNewLead')!.build()).recipe).toBe(
+      'welcomeNewLead',
+    )
+  })
+
+  it('is the shape a recipe install writes: the validator accepts it as it accepts the action', () => {
+    for (const recipe of CRM_ACTION_RECIPES) {
+      const built = recipe.build(recipe.needs === 'form' ? { form: FORM } : undefined)
+      expect(validateHostAction(hostActionDocument(built))).toBeNull()
+    }
+  })
 })
 
 describe('Welcome a new lead', () => {
@@ -137,11 +236,11 @@ describe('Welcome a new lead', () => {
 })
 
 describe('Follow up a won deal', () => {
-  it('moves the contact to Customer and books a call a week out', () => {
-    const action = crmActionRecipe('followUpWonDeal')!.build()
+  it('books a call a week out, and sets no stage — the win itself makes the contact a customer (AGL-2641)', () => {
+    const recipe = crmActionRecipe('followUpWonDeal')!
+    const action = recipe.build()
     expect(action.trigger).toEqual({ event: 'dealWon' })
     expect(action.steps).toEqual([
-      { type: 'setContactStage', lifecycleStage: 'customer' },
       {
         type: 'createCrmTask',
         title: 'Check in with the new customer',
@@ -149,6 +248,10 @@ describe('Follow up a won deal', () => {
         dueInDays: 7,
       },
     ])
+    // A stage step here would be a SET after the win's floor: a repeat at
+    // best, a demotion of an evangelist at worst.
+    expect(action.steps.some((step) => step.type === 'setContactStage')).toBe(false)
+    expect(recipe.description).toMatch(/Customer on its own/)
   })
 })
 

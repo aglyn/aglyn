@@ -54,8 +54,9 @@ export function CrmSendEmailButton(props: CrmSendEmailButtonProps) {
   const { hostId, org, contactId, leadId, dealId, email, name } = props
   const [open, setOpen] = useState(false)
   const address = String(email ?? '').trim()
+  const orgMount = useCrmOrgMount()
   // A site to send from, or an org whose sites the dialog can offer.
-  const canSend = Boolean(hostId) || Boolean(useCrmOrgMount())
+  const canSend = Boolean(hostId) || Boolean(orgMount)
   // A contact can be read for its address on open; a deal names one or
   // nothing; a lead carries its own.
   const reachable = canSend && (Boolean(address) || Boolean(contactId))

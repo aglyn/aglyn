@@ -51,8 +51,36 @@ export interface CrmTaskFields {
   dealId: string | null
 }
 
-export interface CrmTaskSaveRequest {
-  hostId: string
+/**
+ * Which level a task route call runs at (AGL-2637), the way
+ * `readCrmRouteScope` reads it off the body.
+ *
+ * `hostId` alone is the SITE variant every route has always had: the org is
+ * resolved from the site, the caller's role checked on it, the task stamped
+ * with the site's scope. `orgId` is the ORGANIZATION variant, authorized by
+ * the org for an org-wide member; a `hostId` beside it names the site a NEW
+ * task is filed from, and absent, the task is the organization's own — no
+ * site, `hostId: null`, the org scope token alone.
+ */
+export type CrmTaskRouteScope =
+  | { hostId: string; orgId?: undefined }
+  | { orgId: string; hostId?: string | null }
+
+/**
+ * The scope a surface calls with, from what it holds: the mounted site, or
+ * at the organization level the org the scope hook resolved. `null` until
+ * the org is known, which is when a surface has nothing to call with.
+ */
+export function crmTaskCallScope(
+  hostId: string | null | undefined,
+  orgId: string | null | undefined,
+): CrmTaskRouteScope | null {
+  if (hostId) return { hostId }
+  if (orgId) return { orgId }
+  return null
+}
+
+export type CrmTaskSaveRequest = CrmTaskRouteScope & {
   /** Absent on create. */
   taskId?: string
   task: CrmTaskFields
@@ -65,16 +93,58 @@ export interface CrmTaskSaveResponse {
   notified: boolean
 }
 
-export interface CrmTaskCompleteRequest {
-  hostId: string
-  taskId: string
-}
+export type CrmTaskCompleteRequest = CrmTaskRouteScope & { taskId: string }
 
 export interface CrmTaskCompleteResponse {
   ok: true
   completedAtMs: number
   /** The task was already done; nothing was written and no event fired. */
   alreadyDone?: boolean
+}
+
+/**
+ * THE BATCH FORMS, organization level only (AGL-2637).
+ *
+ * The org hub's bulk bar completes or reassigns a selection in ONE request
+ * per action: the same two routes, with `taskIds` (complete) or `tasks`
+ * (save) in place of one `taskId`, authorized once by the org. Each task is
+ * answered on its own — a refusal names the task and carries the route's
+ * sentence — so a selection that reaches a task that has since been deleted
+ * still completes the rest. The site hub keeps one request per task, where
+ * each is authorized against the site.
+ *
+ * Capped at the list's own window: a selection cannot be larger than what
+ * the list showed.
+ */
+export const CRM_TASK_BATCH_MAX = 200
+
+export interface CrmTasksCompleteRequest {
+  orgId: string
+  taskIds: string[]
+}
+
+export type CrmTaskCompleteOutcome =
+  | { taskId: string; ok: true; completedAtMs: number; alreadyDone?: boolean }
+  | { taskId: string; ok: false; error: string }
+
+export interface CrmTasksCompleteResponse {
+  ok: true
+  results: CrmTaskCompleteOutcome[]
+}
+
+export interface CrmTasksSaveRequest {
+  orgId: string
+  /** Updates only — a batch never creates. */
+  tasks: Array<{ taskId: string; task: CrmTaskFields }>
+}
+
+export type CrmTaskSaveOutcome =
+  | { taskId: string; ok: true; notified: boolean }
+  | { taskId: string; ok: false; error: string }
+
+export interface CrmTasksSaveResponse {
+  ok: true
+  results: CrmTaskSaveOutcome[]
 }
 
 export const CRM_TASK_TITLE_MAX = 200

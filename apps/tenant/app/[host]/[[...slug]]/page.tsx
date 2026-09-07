@@ -1129,7 +1129,17 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
 
           `result.props.data.host` is the SAME object `CatchAllClient`
           receives below, so Flight serializes it once and this costs no
-          payload. Rendered FIRST so it hydrates before the page body. */}
+          payload. Rendered FIRST so it hydrates before the page body.
+
+          NO `nonce` is handed down, and it cannot be from here (AGL-2640).
+          `SiteAnalytics` accepts one so its inline boots are ready for a
+          nonce'd `script-src`, but this page is ISR-cached: `headers()` in
+          it would opt every tenant page out of the cache, and a per-request
+          value cannot match cached bytes anyway — the AGL-1228 finding that
+          is why the tenant sends no `script-src` at all. The day that policy
+          ships, it ships with a way to read its nonce here; until then the
+          prop stays unset and nothing on this surface refuses an unnonced
+          script. */}
       <SiteAnalytics
         host={result.props.data?.host as any}
         screenId={(result.props.data?.screen?.data as any)?.$id}

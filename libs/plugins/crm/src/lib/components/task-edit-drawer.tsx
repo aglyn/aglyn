@@ -51,7 +51,9 @@ import {
   dueAtToLocalInput,
   localInputToDueAt,
 } from '../model/task-views'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { isOrgTask } from '../model/task-scope'
 import CrmRecordPicker from './crm-record-picker'
 import { CrmSitePicker } from './crm-site-picker'
 import TaskSnoozeMenu from './task-snooze-menu'
@@ -61,8 +63,9 @@ export interface TaskEditDrawerProps {
   onClose: () => void
   /**
    * The site the drawer is opened under, or `null` at the organization
-   * level (AGL-2630), where a NEW task asks which site it is filed from and
-   * an edit keeps the task's own.
+   * level (AGL-2630), where a NEW task asks which site it is filed from —
+   * or whether it is the organization's own, with no site (AGL-2637) —
+   * and an edit keeps the task's own.
    */
   hostId: string | null
   org?: Record<string, unknown> | null
@@ -117,13 +120,33 @@ function TaskForm(props: TaskEditDrawerProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const directory = useOrgMemberDirectory(orgId)
+  const mount = useCrmOrgMount()
   // The viewing group under a site, for a linked contact's facet name; null
   // at the organization level, where the picker names each contact through
   // its own holder. The site the route files a NEW task from is the mounted
-  // one or the picked one; an edit goes back to the task's own.
+  // one or the picked one — or none, when the reader files the task with
+  // the organization itself; an edit goes back to the task's own.
   const { consentGroup, createHostId } = useCrmScope({ hostId, org })
   const groupId = consentGroup?.groupId ?? null
-  const taskHostId = task ? (task.hostId ?? null) : createHostId
+  const [noSite, setNoSite] = useState(false)
+  const filedFrom = task ? (task.hostId ?? null) : noSite ? null : createHostId
+  /*
+   * Whether the form knows where the task goes: an edit always does (the
+   * document does), and a create does once a site is picked or the
+   * organization is. `filedFrom` alone cannot say — it is null for both
+   * "not yet picked" and "the organization's own".
+   */
+  const filed = Boolean(task) || noSite || Boolean(createHostId)
+  /*
+   * Which level the route runs at: the site the drawer is mounted under, or
+   * the organization, with the site a NEW task is filed from named beside
+   * it. An edit names no site — the route reads the task's own.
+   */
+  const routeScope = hostId
+    ? { hostId }
+    : orgId
+      ? { orgId, ...(task || !filedFrom ? {} : { hostId: filedFrom }) }
+      : null
 
   const [fields, setFields] = useState<CrmTaskFields>(() => {
     const base = crmTaskFieldsOf(task ?? {})
@@ -145,8 +168,12 @@ function TaskForm(props: TaskEditDrawerProps) {
       setError('A task needs a title.')
       return
     }
-    if (!taskHostId) {
-      setError('Pick the site this task is filed from.')
+    if (!filed) {
+      setError('Pick the site this task is filed from, or file it with the organization.')
+      return
+    }
+    if (!routeScope) {
+      setError('The organization is still loading. Try again in a moment.')
       return
     }
     setBusy(true)
@@ -154,7 +181,7 @@ function TaskForm(props: TaskEditDrawerProps) {
     try {
       const write = async () => {
         const result = await saveCrmTask(user, {
-          hostId: taskHostId,
+          ...routeScope,
           ...(task ? { taskId: task.$id } : {}),
           task: { ...fields, title: fields.title.trim() },
         })
@@ -231,8 +258,30 @@ function TaskForm(props: TaskEditDrawerProps) {
       }}
     >
       <Typography variant="h6">{task ? 'Edit task' : 'New task'}</Typography>
-      {/* Only a new task at the organization level asks — see `taskHostId`. */}
-      {task ? null : <CrmSitePicker hostId={hostId} disabled={busy} />}
+      {/* Only a new task at the organization level asks — see `filedFrom`. */}
+      {task ? null : (
+        <CrmSitePicker
+          hostId={hostId}
+          disabled={busy}
+          noSite={{
+            label: 'This organization (no site)',
+            helperText:
+              'A task of the organization itself, listed from the ' +
+              'organization hub and from every site. Completing it runs no ' +
+              "site's automations.",
+            picked: noSite,
+            onPick: setNoSite,
+          }}
+        />
+      )}
+      {/* An edit at the organization level says where the task is filed. */}
+      {task && mount ? (
+        <Typography variant="caption" color="text.secondary">
+          {isOrgTask(task)
+            ? 'Filed with the organization — no site.'
+            : `Filed from ${mount.siteName(task.hostId as string)}.`}
+        </Typography>
+      ) : null}
       <TextField
         label="Title"
         value={fields.title}
@@ -394,7 +443,7 @@ function TaskForm(props: TaskEditDrawerProps) {
         <Button onClick={onClose} disabled={busy}>
           {'Cancel'}
         </Button>
-        <Button type="submit" variant="contained" disabled={busy || !taskHostId}>
+        <Button type="submit" variant="contained" disabled={busy || !filed}>
           {task ? 'Save' : 'Create task'}
         </Button>
       </Stack>

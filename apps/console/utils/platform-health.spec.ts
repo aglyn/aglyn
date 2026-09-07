@@ -284,12 +284,78 @@ describe('readCspReport', () => {
     ])
   })
 
+  it("names a blocked INLINE script on the console's own pages as first-party code", () => {
+    /*
+     * The row exactly as the collector writes it for the console's refused
+     * advertising boot (AGL-2640): the enforcing policy blocked
+     * `#ad-tag-google-ads-init` on `/signin`, the browser reported
+     * `blocked-uri: inline` under `script-src-elem`, and the aggregate keyed
+     * the row on the bare keyword. It must read as an INCIDENT, and as the
+     * specific kind it is — the page has to be able to say "inline", because
+     * a reader cannot tell that from a blocked CDN by the directive alone.
+     */
+    const blockedAt = Date.parse('2026-09-06T02:11:40Z')
+    const view = readCspReport({
+      windowDays: 7,
+      since: '2026-08-31',
+      rows: [
+        {
+          day: '2026-09-06',
+          app: 'console',
+          directive: 'script-src-elem',
+          blockedOrigin: 'inline',
+          count: 13,
+          disposition: 'enforce',
+          lastSeenMs: blockedAt,
+          lastPath: '/signin',
+        },
+        // The report-only twin of the same script: measured, never blocked,
+        // and never counted as inline-blocked — an unknown or report
+        // disposition must not be able to invent an incident.
+        {
+          day: '2026-09-06',
+          app: 'console',
+          directive: 'script-src-elem',
+          blockedOrigin: 'inline',
+          count: 13,
+          disposition: 'report',
+          lastSeenMs: blockedAt,
+          lastPath: '/signin',
+        },
+        // A blocked third-party host, enforced: an incident, but not an
+        // inline one — the count below has to separate the two.
+        {
+          day: '2026-09-05',
+          app: 'console',
+          directive: 'script-src-elem',
+          blockedOrigin: 'https://cdn.example',
+          count: 2,
+          disposition: 'enforce',
+          lastSeenMs: blockedAt - 86_400_000,
+        },
+      ],
+    })
+    expect(view.directives).toEqual([
+      {
+        directive: 'script-src-elem',
+        count: 28,
+        blocked: 15,
+        reported: 13,
+        lastBlockedMs: blockedAt,
+      },
+    ])
+    expect(view.lastBlockedMs).toBe(blockedAt)
+    // Thirteen inline, two not; the measured thirteen are neither.
+    expect(view.blockedInline).toBe(13)
+  })
+
   it('reads an empty window as zero rather than as no answer', () => {
     // Zero violations is the finding that says a directive is safe to enforce.
     const view = readCspReport({ windowDays: 14, since: '2026-08-04', rows: [] })
     expect(view).toBeTruthy()
     expect(view.totalViolations).toBe(0)
     expect(view.directives).toEqual([])
+    expect(view.blockedInline).toBe(0)
   })
 
   it('carries the truncation flag through', () => {

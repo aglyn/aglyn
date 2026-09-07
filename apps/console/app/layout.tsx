@@ -23,6 +23,7 @@ import { TITLE_TEMPLATE } from './page-title'
 import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-cache'
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import type { Metadata, Viewport } from 'next'
+import { headers } from 'next/headers'
 import type { ReactNode } from 'react'
 import Providers from './providers'
 import '../public/_static/styles/styles.css'
@@ -149,12 +150,31 @@ import WebVitalsReporter from '../components/web-vitals-reporter.component'
 
 export const dynamic = 'force-dynamic'
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: ReactNode
+}) {
+  // The request's CSP nonce, for first-party inline scripts that Next's own
+  // stamping never reaches (AGL-2640).
+  //
+  // The middleware mints one nonce per request, writes it into the enforcing
+  // `script-src`, and copies it onto the request as `x-nonce` for exactly this
+  // read. Next stamps the scripts IT renders from the response policy, but a
+  // `<Script>` a client component mounts after hydration reads its nonce from
+  // the client head manager, which carries none — so the advertising boots,
+  // which are inline and mount only once the visitor's consent record has
+  // resolved, ran into the enforcing policy with no nonce and were refused,
+  // while the vendor libraries beside them loaded. This is the only server
+  // component above the mount, so the value is read here and handed down as a
+  // prop; `force-dynamic` above already puts every render inside a request,
+  // so `headers()` costs nothing it was not already paying.
+  const nonce = (await headers()).get('x-nonce') ?? undefined
   return (
     <html lang="en">
       <body>
         <AppRouterCacheProvider options={APP_EMOTION_CACHE_OPTIONS}>
-          <Providers>
+          <Providers nonce={nonce}>
             {children}
             {/* Registers /sw.js in production only, and offers its updates
                 (AGL-1053/AGL-1055). Renders nothing.

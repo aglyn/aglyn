@@ -78,12 +78,19 @@ export interface AdvertisingTagsProps {
    * HTML free of any visitor's state — the same discipline as the GA gate.
    */
   ready?: boolean
+  /**
+   * The request's CSP nonce, for the day this surface enforces a nonce'd
+   * `script-src`. The tenant sends none today (see `page.tsx`), so nothing is
+   * stamped; the mount refuses nothing without it because nothing refuses.
+   */
+  nonce?: string
 }
 
 export default function AdvertisingTags({
   host,
   stored,
   ready,
+  nonce,
 }: AdvertisingTagsProps): ReactElement | null {
   const hostId = host?.$id
   // Our own marketing site, or nothing at all. Evaluated before the verdict as
@@ -108,6 +115,7 @@ export default function AdvertisingTags({
       active={ourSurface === true && Boolean(hostId)}
       tags={tags}
       resolve={resolve}
+      nonce={nonce}
     />
   )
 }

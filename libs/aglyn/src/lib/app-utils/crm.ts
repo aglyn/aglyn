@@ -412,7 +412,20 @@ export const DEAL_LINE_ITEM_NAME_MAX = 120
 /** Units per line; past this the number is a data-entry slip. */
 export const DEAL_LINE_ITEM_QUANTITY_MAX = 1_000_000
 
-/** `orgs/{orgId}/deals/{dealId}`. */
+/**
+ * `orgs/{orgId}/deals/{dealId}`.
+ *
+ * A WON DEAL MAKES ITS CONTACT A CUSTOMER (AGL-2641). A win is the same
+ * fact as a purchase — the business has decided this person bought — and an
+ * order already floors a contact's lifecycle stage at `customer` on
+ * capture. So every writer of `status` — the console's stage route at both
+ * levels and the REST resource — applies the same floor to the contact
+ * `contactId` names on the transition into `won`, in the facet of the site
+ * the deal was made on (`hostId`), with `advanceContactLifecycleStage`'s
+ * rule: an empty stage is filled, an earlier one advanced, and nobody is
+ * ever moved back. Behind no setting, because a won deal is a customer by
+ * definition; an automation on `dealWon` is for what happens NEXT.
+ */
 export interface CrmDeal extends CrmScoped {
   title: string
   titleLower?: string
@@ -484,8 +497,19 @@ export const CRM_TASK_MAX_DUE_DAYS = 365
 export type CrmTaskPriority = 'low' | 'normal' | 'high'
 export type CrmTaskStatus = 'open' | 'done'
 
-/** `orgs/{orgId}/crmTasks/{taskId}`. */
-export interface CrmTask extends CrmScoped {
+/**
+ * `orgs/{orgId}/crmTasks/{taskId}`.
+ *
+ * The one CRM record that may belong to NO site (AGL-2637): a task filed
+ * from the organization's own hub carries `hostId: null` and the org scope
+ * token alone, because a to-do owed by the organization — renew the
+ * insurance, chase the agency's own invoice — is not captured by any brand.
+ * Every other record is a fact about a person some site met, so
+ * `CrmScoped` keeps its site required.
+ */
+export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
+  /** The site that created it, or `null` for the organization's own task. */
+  hostId: string | null
   title: string
   notes?: string
   kind: CrmTaskKind
