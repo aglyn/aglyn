@@ -74,11 +74,52 @@ if (!snap.exists) {
   process.exit(1)
 }
 const data = snap.data() ?? {}
+
+/*
+ * THE SUBSCRIPTION LIVES IN THREE PLACES AND THIS HAS TO READ ALL OF THEM.
+ *
+ * AGL-1028 moved `subscription` to `orgs/{orgId}/billing/stripe` and left
+ * `billingStatus` on the org document as the mirror entitlement resolution
+ * reads. Reading only the inline copy — where it no longer is — resolved the
+ * status to null for every org on the platform, and the refusal below is
+ * written `if (status && DEAD.has(status))`, so a null short-circuited it and
+ * the guard could not fire at all.
+ *
+ * Measured before this: `subscriptionStatus` was null for all 11 orgs,
+ * including one holding a live `active` subscription. The check was passing
+ * because it was blind, not because the orgs were healthy.
+ *
+ * The order matches `backfill-marketing-consent`: mirror, then the legacy
+ * inline copy, then the document the subscription actually lives in.
+ */
+const stripeDoc = await ref.collection('billing').doc('stripe').get()
+const stripeSubscription = stripeDoc.exists
+  ? stripeDoc.get('subscription')
+  : undefined
+const subscriptionStatus =
+  data.billingStatus ?? data.subscription?.status ?? stripeSubscription?.status ?? null
+/*
+ * Whether a subscription EXISTS, which is a different question from what its
+ * status says. A staff plan override writes `plan` and never a subscription,
+ * so a comped org legitimately has no status and must not be refused for it —
+ * but an org that HAS one whose status cannot be read is unverifiable, and a
+ * plan change on an unverifiable billing state is what this guard is for.
+ */
+const hasSubscription = Boolean(data.subscription) || Boolean(stripeSubscription)
+
 const before = {
   plan: data.plan ?? null,
   enterprise: data.enterprise === true,
-  subscriptionStatus: data.subscription?.status ?? null,
-  customMonthlyUsd: data.subscription?.customMonthlyUsd ?? null,
+  subscriptionStatus,
+  hasSubscription,
+  // Same three places as the status, and the same reason. This one feeds
+  // `readsEnterprise` below, so reading only the inline copy refuses an org
+  // whose custom price has already moved — a safe direction to be wrong in,
+  // and still wrong.
+  customMonthlyUsd:
+    data.subscription?.customMonthlyUsd ??
+    stripeSubscription?.customMonthlyUsd ??
+    null,
   discountPercentOff: data.discount?.percentOff ?? null,
   ssoStatus: data.sso?.status ?? null,
   entitlementKeys: Object.keys(data.entitlements ?? {}),
@@ -107,6 +148,21 @@ if (before.subscriptionStatus && DEAD_STATUSES.has(before.subscriptionStatus)) {
     `\nRefusing: subscription status is "${before.subscriptionStatus}". ` +
       'resolveEffectivePlan downgrades such an org to `free`, so the stored ' +
       'plan must not be changed until billing is restored.',
+  )
+  process.exit(1)
+}
+/*
+ * A subscription whose status cannot be read is not the same as no
+ * subscription, and only the second is safe to proceed on. A comped org — a
+ * staff plan override writes `plan` and never a subscription — has no status
+ * by construction and is not what this catches.
+ */
+if (before.hasSubscription && !before.subscriptionStatus) {
+  console.error(
+    '\nRefusing: this org holds a subscription whose status could not be ' +
+      'read from `billingStatus`, the inline copy, or ' +
+      `orgs/${orgId}/billing/stripe. A plan change on a billing state ` +
+      'nothing can verify is the case this refusal exists for.',
   )
   process.exit(1)
 }
