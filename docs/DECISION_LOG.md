@@ -92,6 +92,67 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-07 — Reconciliation note: `aglyn.com/pricing` republished to the bands the code enforces (not a decision)
+
+- **Decided by:** nobody — a record; the session that republished the page, under the 2026-09-05 rule that the code is authoritative where an older figure disagrees. No charged price moves and nothing here is a new decision.
+- **Scope:** pricing
+- **Evidence:** screen `v0clP6xQl-`, version `zj-21jtrPG`, published 2026-09-07 12:54Z; `PLAN_ENTITLEMENTS` and `PLAN_PRICING` at `c224b7382` (v1.0.0-beta.77); `apps/console/specs/published-pricing-table-parity.spec.ts`, whose `PUBLISHED` literals were re-transcribed from the page the same day; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2656.
+
+**No charged price moves.** The page was carrying figures the code had stopped
+enforcing on 2026-08-30 and 2026-08-31, and the CRM launch republish brought
+it onto the code. This entry exists so the was → now of every row is on
+record in the repo, next to the spec that pins the now.
+
+### What the page shows now (7 self-serve columns; Enterprise reads "Talk to us")
+
+| Row (page label) | Was | Now (= the code) |
+|---|---|---|
+| Storage per site | 250 MB · 2 · 10 · 50 · 75 · 100 · 200 GB | 250 MB · 2 · 10 · 20 · 30 · 40 · 60 GB |
+| Bandwidth / mo | 5 GB · 50 · 250 · 1 TB · 2.5 · 5 · 20 TB | 2 GB · 50 · 225 · 400 · 700 GB · 1 TB · 3 TB |
+| Form submissions / mo → **per site** (relabeled) | 20 · 200 · 1,000 · 10,000 · 50,000 · 100,000 · Unlimited | 20 · 200 · 1,000 · 8,000 · 25,000 · 40,000 · 25,000 |
+| Contacts included → **CRM records included (contacts, companies & deals)** | 100 · 1,000 · 10,000 · 100,000 · 500,000 · 1,000,000 · Unlimited | 100 · 1,000 · 10,000 · 50,000 · 100,000 · 150,000 · 500,000 |
+| **CRM suite: leads, companies, deals & tasks** (new row) | — | — · ✓ from Starter; Enterprise ✓ |
+| **One-to-one emails / day** (new row) | — | — · 50 · 150 · 200 · 300 · 500 · 1,000 |
+| Email sends / mo → **Campaign emails / mo** | — · 500 · 5,000 · 50,000 · 100,000 · 125,000 · 250,000 | — · — · 5,000 · 25,000 · 40,000 · 65,000 · 130,000 |
+| Add-on: Contacts → **CRM records, per 1,000 over the included band** (Starter → Agency) | $1 · $0.75 · $0.50 · $0.40 · $0.25 · — | $1 · $0.75 · $0.50 · $0.40 · $0.40 · $0.40 |
+| Add-on: Extra dataset storage, per GB-month (Starter → Agency) | $0.25 ×6 | $0.36 ×6 |
+| Add-on: Extra site, per month (Starter → Agency) | $10 · $8 · $5 · $5 · $4 · $3 | **unchanged, deliberately** — the code says $8 on Scale, Advanced and Agency; open as AGL-2652 |
+| Plan cards and room-to-grow strips | Starter "500 campaign emails/mo"; Scale strip "2.5 TB · 100,000"; Advanced "125,000"; Agency "250,000"; Enterprise "unlimited campaign emails" | Starter "CRM: leads, companies, deals & tasks"; Business "25,000 campaign emails/mo"; Scale strip "700 GB bandwidth · 40,000 campaign emails/mo"; Advanced "65,000"; Agency "130,000"; Enterprise "campaign email volume by agreement" |
+
+Everything else on the page — prices, seats, datasets, records per dataset,
+workflows, products, POS, both fee ladders, API, and the metered rates $0.13 /
+$0.065 / $0.0338 — already equaled the code and is untouched.
+
+### Why the code won over the two 2026-08-30 Drive entries
+
+The Drive log's two 2026-08-30 entries, "Infrastructure bands are resized to
+what the price can carry, and Agency is repriced" and "Advanced and Agency
+email allowances come down to what the platform can deliver" (the second is
+mirrored below), were superseded the same day by commits that never got an
+entry of their own:
+
+- `82c10f0f7` took bandwidth to 400 / 700 / 1,000 / 3,000 GB and the contacts
+  bands to 50,000 / 100,000 / 150,000 / 500,000, and `72aa20742` took Pro to
+  225 GB — the first entry's own invariant, no tier negative at 100% of its
+  bands, is what forced the second cut. Storage and form bands match that
+  entry as written.
+- `b8ab5837f` took campaign emails on Business → Agency to 25,000 / 40,000 /
+  65,000 / 130,000 and gave Enterprise a finite 250,000 default; `55f728b50`
+  (2026-08-31) took Starter to 0, because a campaign band obliges a per-site
+  sending domain.
+- `a1e8aaaca` moved dataset storage $0.25 → $0.36, extra host $5 / $4 / $3 →
+  $8 and the Advanced / Agency contacts rate to $0.40 with **no entry** in
+  either log. Those three are open as AGL-2652; the page shows $0.36 because
+  `checkDataStorageQuota` already bills it, and keeps $5 / $4 / $3 because the
+  extra-site figure has not been decided.
+
+Open owner decisions this note does not make: AGL-2651 (plans negative at
+100% of their bands at the annual price — bandwidth), AGL-2652 (the three
+`a1e8aaaca` rates), AGL-2653 (assist overage), AGL-2654 (Enterprise fallbacks
+and runs cost), AGL-2655 (membership subscriptions and Stripe's fee).
+
+---
+
 ## 2026-09-05 — CRM records band, the CRM suite gate and one-to-one email caps
 
 - **Decided by:** Zach, 2026-09-05, by directive — the CRM must never run negative, must hold an 80% gross margin at full utilization, and is available only from a minimum tier. The figures below were chosen under that directive and are recorded as the decision; the Drive Pricing Decision Log entry of the same date carries the cost model and the arithmetic.
