@@ -19,6 +19,24 @@ not a replacement. Two of them are large enough to have earned their own
 page: [`COMMERCE_BACKFILLS.md`](COMMERCE_BACKFILLS.md) and
 [`CRM_LIFECYCLE_BACKFILL.md`](CRM_LIFECYCLE_BACKFILL.md).
 
+## The lifecycle, and why this list should shrink
+
+A one-shot is finished when its dry run reports a zero, and a finished one-shot
+is **deleted by the commit that confirms it**:
+
+    write  →  run  →  dry run reports zero  →  delete, same commit
+
+Kept past that point it is not documentation, it is a file the next reader has
+to re-derive the status of. Git holds it, and this index holds what it did.
+
+⚠️ A zero is only evidence when the script can still FIND input. A zero from a
+script whose source collection is retired proves nothing, which is why the
+table below says what each one scanned rather than only what it would change.
+
+⛔ Moving these into a subdirectory is not the fix. Every row here that is not
+converged is an open gap in production data, and a tidier listing would hide
+the queue rather than drain it.
+
 ## How to read a row
 
 | State | Means |
@@ -61,7 +79,6 @@ automation references is the expected state for all of them.
 | `backfill-name-lower.mjs` | Outstanding | Fills the search keys on hosts, orgs, screens, products and dataset records. `/api/admin/orgs` names this script by path as the remedy for an org missing `nameLower`, and [`PLATFORM_PROVISIONING.md`](PLATFORM_PROVISIONING.md) prescribes it once per environment. Actively extended. |
 | `backfill-org-reach.mjs` | Outstanding | `orgWide` on org memberships. Documented as the canonical fix in [`MULTI_TENANT_FIRESTORE.md`](MULTI_TENANT_FIRESTORE.md). Refuses to create a missing membership row, and reports it instead. |
 | `backfill-host-memberships.mjs` | Repeatable | The `users/{uid}/hostMemberships` projection. The runtime fan-out keeps it in step on every membership change; this is the bulk repair path beside it. |
-| `backfill-user-profiles.mjs` | Converging | First and last name on `users/{uid}`. The sign-in path seeds the same document, so this shrinks on its own as people return. Never overwrites a non-blank value. |
 | `backfill-stripe-org-identity.mjs` | Repeatable | Stamps the org onto the Stripe customer. Reads Firestore, writes only Stripe. The webhook self-heals active orgs; this covers cancelled and annual ones. A console spec executes this file and diffs its parameters against the TypeScript original, so it cannot drift. |
 | `backfill-org-billing.mjs` | ⚠️ Outstanding | The `--seed-empty` half is safe and idempotent. The **copy** half merges any inline `subscription` on the org document into `billing/stripe` — and the inline copy is no longer maintained, so where one survives it is stale and copying it can overwrite a current subscription with an older one. Establish which orgs still carry inline fields (`drop-inline-org-billing.mjs`, dry run) before applying. |
 | `migrate-enterprise-plan.mjs` | ⚠️ Outstanding | Sets `plan: 'enterprise'` and writes an audit row. Its refusal on a dead subscription reads `subscription.status` off the **org document**, where that field no longer lives, so the status resolves to null and the refusal passes vacuously on a cancelled org. Confirm the subscription by hand until that guard reads `orgs/{id}/billing/stripe`. Named by two specs as the only writer of `orgs.enterprise` in the product. |
@@ -95,12 +112,9 @@ automation references is the expected state for all of them.
 
 | Script | State | What to know |
 | --- | --- | --- |
-| `backfill-compress-nodes.mjs` | Outstanding | Re-stores plain-map node trees as msgpack. Every write path already compresses; **nothing else migrates the corpus**, so this is the only route. It also reaches `systemEmailTemplates`, which no other sweep touches. Take a backup first — its header says how. |
 | `backfill-node-interactions.mjs` | Outstanding | Moves element-scoped actions onto their nodes. `interactions-provider` states in code that a legacy action row keeps working and stays editable **until this backfill moves it**, so this is genuinely unfinished work rather than a converged migration. The only one here that soft-deletes its source, and it has no self-test. |
 | `backfill-node-plugin-ids.mjs` | Outstanding | Rewrites the `pluginId` copied onto a node at insert time after a bundle move. A stale value costs a first-paint round trip, never correctness. A forms spec parses this script's own table and diffs it against the live registries. |
-| `backfill-icon-paths.mjs` | Outstanding | Denormalizes the icon SVG path beside the id. The renderer falls back to a catalog lookup, so this is a payload fix. Covers screens, layouts, components and templates — **not** forms or email templates, which also carry nodes. |
 | `backfill-scheme-dark.mjs` | Outstanding | Generates the dark-scheme `sx` slices. Slices are recomputed from the light base every run, so it self-corrects. ⚠️ `--open-gate` is the flag to be careful with: it is host-wide and publishes dark mode across every page at once. Same coverage set as the icon backfill. |
-| `backfill-template-screen-kind.mjs` | Outstanding | Stamps `kind: 'template'` on pointer-designated screens. ⚠️ Its header says the billable count stays flat across the run; that no longer holds — billing now reads the stamp alone, so an unstamped template screen is currently billed and this run **lowers** the count. Routing is unaffected either way. Uses `--commit`. |
 | `backfill-theme-history.mjs` | **Blocked** | Moves the theme undo buffer into a subcollection. Two preconditions, both read out of the tree: the rules must deny clients the new collection (satisfied), and the revert action must read the new location (**not** satisfied — it still reads the host field, and the marker this leaves has no reader). It refuses `--apply` until both hold. Do not work around the refusal: the buffer it relocates is the theme a site was wearing before the swap. |
 
 ## Plugins and marketplace
@@ -108,7 +122,6 @@ automation references is the expected state for all of them.
 | Script | State | What to know |
 | --- | --- | --- |
 | `backfill-install-counts.mjs` | Repeatable | Reconciles listing and version install counts from the pins. Not a one-shot: the request path only heals a listing somebody opens, so unvisited listings drift indefinitely. Run `audit-install-counters.mjs` either side of it. |
-| `backfill-plugin-review-state.mjs` | Converged | Stamps `reviewState` on versions published before review moved to the version. Publishing now stamps it on every new version, so a run reports only untouched rows. |
 | `backfill-plugin-id-crm.mjs` | Converged | The `contacts` → `crm` plugin-id rename. Its header records that it ran against the live project and found zero documents, and the alias it unblocked has since been retired. Kept deliberately: it is the shape the next plugin-id rename copies, and the way to re-check that zero. |
 
 ## What was removed, and the standard for removing more
