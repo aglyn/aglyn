@@ -149,7 +149,12 @@ if (!STRIPE_KEY) {
   console.error('Missing STRIPE_SECRET_KEY env var')
   process.exit(1)
 }
-const STRIPE_MODE = STRIPE_KEY.startsWith('sk_live') ? 'LIVE' : 'test'
+// `sk_live_` is a secret key and `rk_live_` a RESTRICTED one; both read live
+// data, and the mode is the half of the prefix after the underscore. Matching
+// only `sk_live` calls a restricted live key a test key and refuses it, which
+// pushes the operator toward the full secret for a job that needs two read
+// scopes — the opposite of what the refusal below is protecting.
+const STRIPE_MODE = /^(sk|rk)_live/.test(STRIPE_KEY) ? 'LIVE' : 'test'
 
 // A TEST-mode key must never source rows written into the PRODUCTION
 // database. This repo keeps both keys in local env files and the loader above
