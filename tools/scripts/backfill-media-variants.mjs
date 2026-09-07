@@ -146,7 +146,24 @@ for (const doc of snapshot.docs) {
   if (contentType === 'image/svg+xml') { skippedSvg++; continue }
   if (!storagePath) { skippedNoPath++; continue }
 
-  const sourceWidth = d.dimensions?.width ?? null
+  /*
+   * A media document carries `width` at the TOP LEVEL — `upload-url/route.ts`
+   * writes `variants`, `width`, `height` and `uploadedBy` together. Reading
+   * `dimensions.width` found nothing on any document, so `sourceWidth` was
+   * always null, and null is the documented "unknown width" that degrades to
+   * generating EVERY width rather than skipping.
+   *
+   * So the rule this script's own header promises — an 800px logo is skipped,
+   * not upscaled — could not fire. Measured across 218 media documents:
+   * `0 smaller than every width`, and all 16 planned rows printed `src=?w`.
+   * Nothing was upscaled in fact, but it wrote more objects than it reported
+   * and labelled them with widths the source never had.
+   *
+   * `dimensions.width` stays as a fallback rather than being dropped: it costs
+   * one `??` and it is the shape any document written before the flattening
+   * would carry.
+   */
+  const sourceWidth = d.width ?? d.dimensions?.width ?? null
   const eligible = mediaVariantWidthsFor({ contentType, sourceWidth })
   if (!eligible.length) { skippedTooSmall++; continue }
 

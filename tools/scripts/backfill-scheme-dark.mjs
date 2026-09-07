@@ -390,10 +390,26 @@ const violations = []
  * the three ways earlier attempts went wrong, so a regression fails the run
  * instead of shipping quietly.
  */
-function checkSlice(base, slice, where) {
+function checkSlice(base, slice, where, pinned = false) {
   const json = JSON.stringify(slice)
   if (json.includes('NaN'))
     violations.push(`${where}: NaN in slice ${json.slice(0, 120)}`)
+  /*
+   * A PINNED slice is held to the NaN check alone, and to nothing below it.
+   *
+   * The three assertions below encode what a FLIPPED slice must look like on
+   * a dark canvas. A pin is the opposite instrument: on a gradient panel the
+   * canvas does not go dark, so the slice exists to hold the LIGHT appearance
+   * the site has always shipped. Every one of them is therefore inverted for
+   * a pin, and asserting them anyway made the run refuse itself on the
+   * feature working — overriding a token is exactly what stops it flipping,
+   * a light background is the appearance being held, and a dark foreground is
+   * correct on a panel that stayed light.
+   *
+   * Measured: 13 violations across two nodes of one component, every one of
+   * them a pin doing its job.
+   */
+  if (pinned) return
   for (const [k, v] of Object.entries(slice)) {
     // Never override a key whose light value is a theme token: it already flips.
     if (typeof base[k] === 'string' && !HEX.test(base[k]))
@@ -476,7 +492,7 @@ async function processDoc(ref) {
     const slice = sliceFor(base, onGradient.has(id))
     if (slice) {
       nodesWithHex += 1
-      checkSlice(base, slice, `${ref.path}#${id}`)
+      checkSlice(base, slice, `${ref.path}#${id}`, onGradient.has(id))
       for (const [k, v] of Object.entries(slice)) {
         if (typeof v !== 'string') continue
         const key = `${k}: ${String(base[k]).toLowerCase()} → ${v}`
