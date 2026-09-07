@@ -76,8 +76,6 @@ automation references is the expected state for all of them.
 
 | Script | State | What to know |
 | --- | --- | --- |
-| `backfill-name-lower.mjs` | Outstanding | Fills the search keys on hosts, orgs, screens, products and dataset records. `/api/admin/orgs` names this script by path as the remedy for an org missing `nameLower`, and [`PLATFORM_PROVISIONING.md`](PLATFORM_PROVISIONING.md) prescribes it once per environment. Actively extended. |
-| `backfill-org-reach.mjs` | Outstanding | `orgWide` on org memberships. Documented as the canonical fix in [`MULTI_TENANT_FIRESTORE.md`](MULTI_TENANT_FIRESTORE.md). Refuses to create a missing membership row, and reports it instead. |
 | `backfill-host-memberships.mjs` | Repeatable | The `users/{uid}/hostMemberships` projection. The runtime fan-out keeps it in step on every membership change; this is the bulk repair path beside it. |
 | `backfill-stripe-org-identity.mjs` | Repeatable | Stamps the org onto the Stripe customer. Reads Firestore, writes only Stripe. The webhook self-heals active orgs; this covers cancelled and annual ones. A console spec executes this file and diffs its parameters against the TypeScript original, so it cannot drift. |
 | `backfill-org-billing.mjs` | ⚠️ Outstanding | The `--seed-empty` half is safe and idempotent. The **copy** half merges any inline `subscription` on the org document into `billing/stripe` — and the inline copy is no longer maintained, so where one survives it is stale and copying it can overwrite a current subscription with an older one. Establish which orgs still carry inline fields (`drop-inline-org-billing.mjs`, dry run) before applying. |
