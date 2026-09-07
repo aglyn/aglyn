@@ -166,9 +166,9 @@ test('re-running the same seed does NOT double-count', async () => {
 })
 
 test('rewriting an asset with new bytes moves the counter by the DELTA', async () => {
-  // `migrate-blog-covers.mjs` overwrites the object and the doc's `sizeBytes`.
-  // The count does not move; the bytes move by the difference, in either
-  // direction.
+  // A caller that replaces an asset's bytes overwrites the stored object and
+  // the document's `sizeBytes`. The count does not move; the bytes move by
+  // the difference, in either direction.
   const db = fakeFirestore()
   await putMediaDocument({
     firestore: db,
