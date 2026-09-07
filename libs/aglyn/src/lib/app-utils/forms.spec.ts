@@ -610,32 +610,40 @@ describe('a total says which months it covers', () => {
 })
 
 /**
- * AGL-2671 — retirement is a positive timestamp and nothing else.
+ * AGL-2671 — retirement is a MARKER, and its shape is not fixed.
  *
- * Shaped to match `isPipelineArchived` deliberately: retirement means the
- * same thing for a form and a pipeline, and two predicates that disagreed
- * about what `0` means would disagree in the two places least likely to be
- * read together.
+ * ⛔ Not "a positive number". The first version of this asked for one, by
+ * analogy with `isPipelineArchived`, and that un-hid a form the funnel probe
+ * was still skipping — the catalog showed 5 where the probe counted 4, on
+ * production, because the marker on that form is a Firestore `Timestamp`.
  *
- * The asymmetry that matters: everything unusable reads as IN USE. A form
- * whose flag is absent, null, zero or the wrong type is still collecting,
- * because the alternative — treating a malformed value as retirement — would
- * silently stop a live funnel.
+ * The two readers that predate this function both test truthiness — the list
+ * filter and `funnel-probe`'s `if (data['archivedAt']) continue` — so this
+ * agrees with them by construction. What matters is that everything meaning
+ * "never retired" stays falsy, which `Boolean` already gives for `0`.
  */
 describe('isFormArchived', () => {
-  it('is true for a positive timestamp, and nothing else', () => {
+  it('is true for any marker, whatever wrote it', () => {
     expect(isFormArchived({ archivedAt: 1_757_000_000_000 })).toBe(true)
-    expect(isFormArchived({ archivedAt: 1 })).toBe(true)
+    // What the console writes, and what a server clock left behind.
+    expect(isFormArchived({ archivedAt: { seconds: 1_757_000_000, nanoseconds: 0 } })).toBe(true)
+    expect(isFormArchived({ archivedAt: '2026-09-07T10:30:44.000Z' })).toBe(true)
   })
 
-  it('reads every unusable value as still collecting', () => {
+  it('reads every "never retired" value as still collecting', () => {
     expect(isFormArchived({ archivedAt: null })).toBe(false)
     expect(isFormArchived({ archivedAt: 0 })).toBe(false)
     expect(isFormArchived({})).toBe(false)
     expect(isFormArchived(null)).toBe(false)
     expect(isFormArchived(undefined)).toBe(false)
-    // A Firestore timestamp that was never converted, or a stray string.
-    expect(isFormArchived({ archivedAt: 'yesterday' } as never)).toBe(false)
-    expect(isFormArchived({ archivedAt: Number.NaN })).toBe(false)
+  })
+
+  it('agrees with the funnel probe, which is the whole point', () => {
+    // `funnel-probe.ts` skips on `if (data['archivedAt']) continue`. A form
+    // this function and that line disagreed about is one the catalog hides
+    // and the monitor grades, or the reverse.
+    for (const archivedAt of [1, 1_757_000_000_000, 'x', { seconds: 1 }, null, 0, undefined]) {
+      expect(isFormArchived({ archivedAt })).toBe(Boolean(archivedAt))
+    }
   })
 })

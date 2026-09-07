@@ -161,8 +161,13 @@ export interface FormDocument<N = AglynNodeSchema> {
    * the key those rows are filed under. What retirement changes is that it
    * stops being a live lead surface — it leaves the forms list, it stops
    * being graded by `/api/health/funnel`, and `/api/forms/submit` refuses it.
+   *
+   * `unknown` because the stored value is not one shape: the console writes a
+   * number, and a marker already in production is a Firestore `Timestamp`.
+   * {@link isFormArchived} is the only thing that should read it, and it asks
+   * about presence rather than about what kind of clock wrote it.
    */
-  archivedAt?: number | null
+  archivedAt?: unknown
   /*
    * ── THE DESIGN ───────────────────────────────────────────────────────────
    *
@@ -193,20 +198,29 @@ export interface FormDocument<N = AglynNodeSchema> {
 /**
  * Whether a form has been retired — see {@link FormDocument.archivedAt}.
  *
- * Shaped exactly like `isPipelineArchived`, and deliberately so: retirement
- * means the same thing for both, and two predicates that disagreed about what
- * a timestamp of `0` means would disagree in the two places least likely to
- * be read together. A positive number and nothing else — absent, `null`, `0`
- * and a value of the wrong type are all "in use", because the safe reading of
- * an unusable timestamp is that a form is still collecting.
+ * PRESENCE, not a number. Absent, `null` and `0` are "in use"; any other
+ * value is a retirement marker.
+ *
+ * ⛔ Deliberately NOT shaped like `isPipelineArchived`, which asks for a
+ * positive number. A pipeline stores its own numeric stamp; a form's is
+ * written by whatever retired it, and the marker already in production on at
+ * least one form is a Firestore `Timestamp` rather than a number. The two
+ * readers that predate this function — the list filter and
+ * `/api/health/funnel`'s probe — both test truthiness, so a stricter rule
+ * here does not tighten anything: it just disagrees with them, and the
+ * disagreement surfaces as a retired form reappearing in the catalog while
+ * the funnel goes on ignoring it.
+ *
+ * Measured, not assumed: with the numeric rule this function un-hid a form
+ * the probe was still skipping, and the two counts were 5 against 4.
  *
  * ⚠️ Asked of the STORED document. A caller that has already filtered a list
- * must not re-derive this from a display flag; the timestamp is the fact.
+ * must not re-derive this from a display flag; the field is the fact.
  */
 export function isFormArchived(
   form: Pick<FormDocument, 'archivedAt'> | null | undefined,
 ): boolean {
-  return typeof form?.archivedAt === 'number' && form.archivedAt > 0
+  return Boolean(form?.archivedAt)
 }
 
 /**
