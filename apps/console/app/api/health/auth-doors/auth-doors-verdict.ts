@@ -259,6 +259,15 @@ export function emailVerificationDoorHealth(
     linkOnConsoleOrigin: boolean
     linkCarriesCode: boolean
     redemption: RedemptionAnswer
+    /**
+     * Whether the cooldown in front of the automatic send lets a first
+     * arrival through — the one step of this door that is ours rather than
+     * the provider's, and the only one whose refusal is invisible. A
+     * suppressed automatic send is answered 200 `alreadySent`, so it reaches
+     * the account holder as the same "we sent a verification link" screen a
+     * real send produces, and leaves no failure anywhere to notice.
+     */
+    sendGate: 'admits' | 'suppresses' | 'unavailable'
   },
   ms: number,
 ): AuthDoorCheck {
@@ -267,7 +276,8 @@ export function emailVerificationDoorHealth(
     ms,
     asserts:
       'the link mint path answers, the minted link is rebuilt on a console ' +
-      'handler URL carrying the code, and redemption refuses an invalid code',
+      'handler URL carrying the code, redemption refuses an invalid code, ' +
+      'and the cooldown admits the automatic send of a first arrival',
   }
   if (facts.mintVerdict === 'unreachable') {
     return { ...base, ok: false, code: 'mint-unreachable' }
@@ -288,6 +298,15 @@ export function emailVerificationDoorHealth(
   }
   const fault = redemptionFault(facts.redemption)
   if (fault) return { ...base, ok: false, code: fault }
+  // Last, so a provider fault above still reports as a provider fault: this
+  // clause is about our own gate, and it only means anything once everything
+  // it sits in front of is known to work.
+  if (facts.sendGate === 'suppresses') {
+    return { ...base, ok: false, code: 'auto-send-suppressed' }
+  }
+  if (facts.sendGate === 'unavailable') {
+    return { ...base, ok: false, code: 'auto-send-gate-unavailable' }
+  }
   return { ...base, ok: true }
 }
 
@@ -547,3 +566,15 @@ export const AUTH_DOOR_PROBE_ADDRESS =
  */
 export const AUTH_DOOR_PROBE_OOB_CODE =
   'aglyn-health-probe-not-a-real-oob-code'
+
+/**
+ * Prefix for the uid the send-gate probe asks the cooldown about.
+ *
+ * The uid is made unique per probe, because the only interesting question is
+ * the one a brand-new account asks: may the mount that follows a signup send
+ * its link? A reused uid would answer for its own second visit instead, which
+ * is the case that is SUPPOSED to be suppressed — the check would then be
+ * green exactly when the door is shut, which is the failure this whole
+ * endpoint exists to stop repeating.
+ */
+export const AUTH_DOOR_PROBE_UID_PREFIX = 'health-probe-first-arrival-'
