@@ -27,6 +27,7 @@ import { CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useMemo } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import BillingAssistOverageCardComponent from '../../../../../../components/billing/billing-assist-overage-card.component'
 import BillingMeteredEstimateComponent from '../../../../../../components/billing/billing-metered-estimate.component'
 import BillingStorageOverageCardComponent from '../../../../../../components/billing/billing-storage-overage-card.component'
 import BillingUsageBudgetCardComponent from '../../../../../../components/billing/billing-usage-budget-card.component'
@@ -40,7 +41,8 @@ import { useOrgHosts } from '../../../../../../hooks/use-org-hosts'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 
 /**
- * What this workspace is consuming, and the two controls over what that costs.
+ * What this workspace is consuming, and the three controls over what that
+ * costs.
  *
  * Its own route because these are the heaviest reads on the whole surface —
  * live meters across every host, twelve months of monthly rollups, a metered
@@ -48,9 +50,10 @@ import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
  * editing a card. On one page they ran on every visit to Billing, whatever the
  * visitor came for.
  *
- * The storage cap and the usage budget sit here rather than under Plan on
- * purpose: both are about consumption, and the cap in particular is meaningless
- * without the meter above it that shows why you would want one.
+ * The storage cap, the AI assist stop and the usage budget sit here rather
+ * than under Plan on purpose: all three are about consumption, and the two
+ * caps in particular are meaningless without the meters above them that show
+ * why you would want one.
  */
 const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
@@ -185,6 +188,37 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                         contentGutterY
                       >
                         <BillingStorageOverageCardComponent
+                          orgId={orgId}
+                          canManage={can('billing.manage')}
+                        />
+                      </CardDisplay>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'assist-overage',
+                  children: (
+                    <div id="assist-overage">
+                      <CardDisplay
+                        header={'AI assist overage'}
+                        subheader={
+                          'Extra AI assist credits past your included band ' +
+                          'are billed on your monthly invoice. Turn on the ' +
+                          'stop if you would rather the assistant paused ' +
+                          'there instead.'
+                        }
+                        help={docsHelp('billing', {
+                          anchor: '#assist-overage',
+                          excerpt:
+                            'On a paid plan the assistant keeps answering past ' +
+                            'your included credits and the extra is billed at ' +
+                            "your plan's per-1,000 rate, unless you switch on " +
+                            'the stop at the included band.',
+                        })}
+                        contentGutterX
+                        contentGutterY
+                      >
+                        <BillingAssistOverageCardComponent
                           orgId={orgId}
                           canManage={can('billing.manage')}
                         />

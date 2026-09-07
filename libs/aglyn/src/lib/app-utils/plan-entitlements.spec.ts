@@ -2511,6 +2511,52 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
     }
   })
 
+  /**
+   * The two bands that are sold past by default (AGL-2653) — assist credits
+   * and campaign emails — carry the same contradiction in both directions,
+   * and neither is in `METERED_PAIRS`: both are finite on every tier, so the
+   * "unlimited band, no rate" rule above is vacuous for them. What can go
+   * wrong instead is a POSITIVE band with no rate (usage past it is provider
+   * spend with no invoice line, the silent free overage) or a rate on a band
+   * of ZERO (a fee advertised on a quantity the plan never sold). Enterprise
+   * is contractual on both and must carry no rate.
+   */
+  const SOLD_BAND_PAIRS = [
+    { band: 'assistCreditsPerMonth', rate: 'extraAssistCreditsUsdPer1k', unit: 'assist credits' },
+    { band: 'emailSendsPerMonth', rate: 'extraEmailSendsUsdPer1k', unit: 'campaign emails' },
+  ] as const
+
+  it.each(SOLD_BAND_PAIRS)(
+    'a plan that SELLS a $unit band carries a rate, and one that sells none carries no rate (AGL-2653)',
+    ({ band, rate }) => {
+      // FORCED RED by setting `extraAssistCreditsUsdPer1k: null` on Pro
+      // (silent free overage) and by `extraEmailSendsUsdPer1k: 2` on Starter
+      // (a rate on a band of zero); each failed on the plan named.
+      const sold: string[] = []
+      const unsold: string[] = []
+      for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+        const limit = PLAN_ENTITLEMENTS[plan][band]
+        const price = PLAN_PRICING[plan][rate]
+        if (isCustomPricedPlan(plan)) {
+          expect(`${plan}: ${price}`).toBe(`${plan}: null`)
+          continue
+        }
+        if (Number.isFinite(limit) && limit > 0) {
+          sold.push(plan)
+          expect(`${plan}: ${price}`).not.toBe(`${plan}: null`)
+          expect(price).toBeGreaterThan(0)
+        } else {
+          unsold.push(plan)
+          expect(`${plan}: ${price}`).toBe(`${plan}: null`)
+        }
+      }
+      // The premise, both ways: some plan sells the band and some does not,
+      // or one of the two branches above never ran.
+      expect(sold.length).toBeGreaterThan(0)
+      expect(unsold.length).toBeGreaterThan(0)
+    },
+  )
+
   it('a band with NO rate is unlimited or HARD — never finite and silently passable (AGL-2611)', () => {
     // The rule from the third side. The two cases above pair a finite band
     // with a rate; this one says what a band with no rate must be: either

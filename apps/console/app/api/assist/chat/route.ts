@@ -21,6 +21,10 @@ import {
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import {
+  assistHardCapRefusalText,
+  assistRefusedByHardCap,
+} from '@aglyn/aglyn/app-utils/assist-credits'
+import {
   checkRateLimit,
   emailUnverifiedResponse,
   featureLockdownRefusal,
@@ -861,16 +865,26 @@ async function handler(request: Request): Promise<Response> {
       org,
     )
     if (!quota.allowed) {
-      // Three refusals, not two. The spend ceiling (AGL-2264) is armed by
+      // Four refusals, not two. The spend ceiling (AGL-2264) is armed by
       // default at $40, and it must not borrow the message cap's words:
       // "reached its limit for the month" invites the user to count their
       // messages, and they will find they have plenty left. Same
-      // `reason: 'quota'` either way, so the panel's 429 handling and its
+      // `reason: 'quota'` either way, so the panel's handling and its
       // remaining-messages line are unchanged.
+      //
+      // The fourth is the org's OWN wall (AGL-2653): credits past the band
+      // are for sale, and this workspace switched the sale off. That is not
+      // a rate limit, so it is not a 429 — it is 402, the one status that
+      // says "this would proceed if you chose to pay", and the sentence names
+      // the switch and where it lives. A band that refuses because the plan
+      // sells no overage at all keeps the credits sentence and the 429: there
+      // is no switch to point at.
+      const hardCapped = assistRefusedByHardCap(org, quota.refusedBy)
       return Response.json(
         {
-          error:
-            quota.refusedBy === 'budget'
+          error: hardCapped
+            ? assistHardCapRefusalText(org)
+            : quota.refusedBy === 'budget' || quota.refusedBy === 'band'
               ? quota.budgetUsd === null
                 ? 'This workspace reached its assistant spending limit for the month'
                 : 'This workspace used its assistant credits for the month'
@@ -883,7 +897,7 @@ async function handler(request: Request): Promise<Response> {
           // provider bill at the serving model's rates.
           quota: publicAssistQuota(quota),
         },
-        { status: 429 },
+        { status: hardCapped ? 402 : 429 },
       )
     }
 

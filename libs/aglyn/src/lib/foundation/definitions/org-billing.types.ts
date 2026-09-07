@@ -515,11 +515,13 @@ export interface OrgEntitlements {
    *
    * A credit is a dollar of provider spend at `ASSIST_CREDIT_COST_USD`, so
    * the band IS a liability figure: the plan's whole assist give is
-   * `assistCreditsPerMonth / 1000` dollars, and `reserveAssistMessage`
-   * refuses past it, so nothing can exceed it. Sizing it as a share of the
-   * subscription price says nothing about whether the tier can afford it,
-   * because the price is also carrying storage, bandwidth, form submissions,
-   * dataset storage, API requests, contacts and email.
+   * `assistCreditsPerMonth / 1000` dollars. Credits past it are not a give —
+   * since AGL-2653 they are SOLD at `extraAssistCreditsUsdPer1k`, unless the
+   * org's `assistOverage.hardCap` asks `reserveAssistMessage` to refuse at
+   * the band instead. Sizing it as a share of the subscription price says
+   * nothing about whether the tier can afford it, because the price is also
+   * carrying storage, bandwidth, form submissions, dataset storage, API
+   * requests, contacts and email.
    *
    * So each band is sized against what those SEVEN other terms leave. Every
    * paid band takes between a quarter and a third of that remainder, which
@@ -721,6 +723,47 @@ export interface OrgStorageOverage {
   acknowledgedBy?: string | null
   /** @deprecated legacy bound; read as a cap. See `capUsd`. */
   monthlyCeilingUsd?: number
+}
+
+/**
+ * The org's own answer to what happens when Aglyn Assist reaches its included
+ * band (AGL-2653).
+ *
+ * Absent by default, and absent is the normal state: assist past the band is
+ * SOLD — `reserveAssistMessage` keeps reserving and `report-usage` bills the
+ * credits past the band at `PLAN_PRICING.extraAssistCreditsUsdPer1k`. Writing
+ * `hardCap: true` is a customer opting IN to being stopped at the band
+ * instead, which is what the gate did for every org before the overage was
+ * sold. The shape mirrors `OrgStorageOverage`, the same control on storage,
+ * for the same reason: a ceiling on metered spend is the END USER's control,
+ * offered rather than imposed.
+ *
+ * An ENTITLEMENT INPUT in the security sense, in both directions at once. A
+ * client that could clear it would lift a ceiling the org chose; one that
+ * could set it on another org would switch that org's assistant off at the
+ * band. So the rules deny it to every client and only
+ * `/api/billing/assist-overage` (Admin SDK, `billing.manage`) writes it. Read
+ * through `resolveAssistHardCap` in `app-utils/assist-credits`, never
+ * directly.
+ *
+ * `report-usage` never reads this map — it bills whatever landed past the
+ * band, the way storage bills stored bytes. With the cap on that is at most
+ * the one exchange that crossed the line, because an exchange's cost is known
+ * only after it is answered; with it off, it is the overage the org chose to
+ * buy. Reading the switch at sweep time instead would let a flip on the 1st
+ * erase a month's overage, the AGL-2399 shape on a different meter.
+ *
+ * On a plan whose `extraAssistCreditsUsdPer1k` is `null` the switch changes
+ * nothing: there is no rate to sell past the band at, so the band stays the
+ * wall it always was, on or off.
+ */
+export interface OrgAssistOverage {
+  /** True stops assist at the included band; absent or false sells past it. */
+  hardCap?: boolean
+  /** When the switch was last written, for the audit trail. */
+  hardCapSetAt?: ITimestamp | null
+  /** The uid that wrote it. */
+  hardCapSetBy?: string | null
 }
 
 /**
@@ -937,6 +980,12 @@ export interface AglynOrgBilling extends AglynDocument {
    * mid-month start serving again without waiting for a cron to clear it.
    */
   bandwidthCap?: OrgBandwidthCap
+  /**
+   * The org's assist hard-cap switch (AGL-2653) — see `OrgAssistOverage`.
+   * Admin-SDK-only, denied in the rules beside `storageOverage`; read
+   * through `resolveAssistHardCap`.
+   */
+  assistOverage?: OrgAssistOverage
   stripeCustomerId?: string
   subscription?: OrgSubscription
   /**

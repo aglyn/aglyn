@@ -30,14 +30,21 @@
 import {
   ASSIST_CREDIT_COST_USD,
   ASSIST_CREDIT_MIN_MARGIN_PCT,
+  ASSIST_HARD_CAP_CONTROL_LABEL,
+  ASSIST_HARD_CAP_CONTROL_LOCATION,
+  assistBandRefuses,
   assistCreditOverage,
   assistCreditRateMarginPct,
   assistCreditsFromUsd,
+  assistHardCapRefusalText,
+  assistMonthOverage,
+  assistRefusedByHardCap,
   assistUsdFromCredits,
   priceAssistCreditOverage,
   publicAssistCredits,
   resolveAssistBudgetUsd,
   resolveAssistCreditBudget,
+  resolveAssistHardCap,
 } from './assist-credits'
 import {
   ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
@@ -335,6 +342,157 @@ describe('what a customer may be shown is credits, never our provider bill', () 
       used: 41_500,
       limit: null,
       remaining: null,
+    })
+  })
+})
+
+describe('the overage is SOLD past the band at the plan rate, unless the org asks to be stopped (AGL-2653)', () => {
+  /**
+   * Pro: 2,750 credits at $3.00 per 1,000; Agency: 58,000 at $2.00. Each
+   * fixture is the month's measured spend as `report-usage` reads it, built
+   * from the credit count so the band edge is exact.
+   */
+  const BILLED = [
+    { plan: 'pro' as const, band: 2_750, rate: 3, plus2500Usd: 7.5 },
+    { plan: 'agency' as const, band: 58_000, rate: 2, plus2500Usd: 5 },
+  ]
+
+  describe.each(BILLED)('assistMonthOverage on $plan', ({ plan, band, rate, plus2500Usd }) => {
+    it('at the band: nothing over, nothing billed', () => {
+      // FORCED RED by `Math.max(0, used - band + 1)` in `assistCreditOverage`.
+      expect(assistMonthOverage({ plan }, assistUsdFromCredits(band))).toEqual({
+        usedCredits: band,
+        bandCredits: band,
+        overageCredits: 0,
+        overageMonthlyUsd: 0,
+        overageRateUsd: rate,
+      })
+    })
+
+    it('at band + 1 credit: one credit over, which rounds to no cents', () => {
+      // One credit at $2–$3 per 1,000 is a third of a cent, and the invoice
+      // rounds to the cent as every other overage term does — so the count
+      // is 1 and the amount is $0.00. Both are on the rollup for that reason.
+      expect(assistMonthOverage({ plan }, assistUsdFromCredits(band + 1))).toEqual({
+        usedCredits: band + 1,
+        bandCredits: band,
+        overageCredits: 1,
+        overageMonthlyUsd: 0,
+        overageRateUsd: rate,
+      })
+    })
+
+    it('at band + 2,500 credits: 2.5 x the rate, to the cent', () => {
+      // LITERAL dollars, not `2.5 * rate` — a guard that recomputes the
+      // expression it tests cannot fail when the expression is wrong.
+      const month = assistMonthOverage({ plan }, assistUsdFromCredits(band + 2_500))
+      expect(month).toEqual({
+        usedCredits: band + 2_500,
+        bandCredits: band,
+        overageCredits: 2_500,
+        overageMonthlyUsd: plus2500Usd,
+        overageRateUsd: rate,
+      })
+      // And in cents, the way `billedCents` folds it in beside contacts, API
+      // and dataset storage.
+      expect(Math.round(month.overageMonthlyUsd * 100)).toBe(plus2500Usd * 100)
+    })
+  })
+
+  it('prices ZERO where there is no band or no rate, structurally', () => {
+    // Free and Starter: no band, so nothing to be over. Enterprise: a band,
+    // and no rate to sell past it at.
+    expect(assistMonthOverage({ plan: 'free' }, 40)).toMatchObject({
+      bandCredits: null,
+      overageCredits: 0,
+      overageMonthlyUsd: 0,
+      overageRateUsd: null,
+    })
+    expect(assistMonthOverage({ plan: 'enterprise' }, 100)).toMatchObject({
+      bandCredits: ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
+      overageCredits: 100_000 - ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
+      overageMonthlyUsd: 0,
+      overageRateUsd: null,
+    })
+    // Junk spend is zero credits, never NaN dollars.
+    expect(assistMonthOverage({ plan: 'pro' }, Number.NaN).overageMonthlyUsd).toBe(0)
+  })
+
+  describe('the switch', () => {
+    it('is OFF by default, and OFF is the selling state on every plan with a rate', () => {
+      // FORCED RED by returning `true` from `assistBandRefuses` — the
+      // pre-2026-09-07 behavior, where every band was a wall.
+      for (const plan of PAID_TIERS) {
+        expect(resolveAssistHardCap({ plan })).toBe(false)
+        expect(assistBandRefuses({ plan })).toBe(false)
+      }
+    })
+
+    it('ON makes the band a wall on those same plans', () => {
+      for (const plan of PAID_TIERS) {
+        const org = { plan, assistOverage: { hardCap: true } }
+        expect(resolveAssistHardCap(org)).toBe(true)
+        expect(assistBandRefuses(org)).toBe(true)
+      }
+    })
+
+    it('reads only the boolean — a string, a 1, a missing map all sell', () => {
+      for (const hardCap of ['true', 1, 'on', undefined] as unknown[]) {
+        expect(
+          resolveAssistHardCap({ plan: 'pro', assistOverage: { hardCap: hardCap as boolean } }),
+        ).toBe(false)
+      }
+      expect(resolveAssistHardCap(null)).toBe(false)
+      expect(resolveAssistHardCap({ plan: 'pro', assistOverage: {} })).toBe(false)
+    })
+
+    it('changes nothing on a plan with no rate: the band is a wall either way', () => {
+      // Enterprise sells no overage; Free and Starter have no band to wall,
+      // and answer the same harmlessly (their reservation never measures
+      // against a band).
+      for (const plan of ['enterprise', 'free', 'starter'] as const) {
+        expect(assistBandRefuses({ plan })).toBe(true)
+        expect(assistBandRefuses({ plan, assistOverage: { hardCap: false } })).toBe(true)
+        expect(assistBandRefuses({ plan, assistOverage: { hardCap: true } })).toBe(true)
+      }
+    })
+
+    it('a refusal is the switch’s own only when the switch caused it', () => {
+      const stopped = { plan: 'pro' as const, assistOverage: { hardCap: true } }
+      expect(assistRefusedByHardCap(stopped, 'band')).toBe(true)
+      // The operator's figure, the message cap, or an admission: not the switch.
+      expect(assistRefusedByHardCap(stopped, 'budget')).toBe(false)
+      expect(assistRefusedByHardCap(stopped, 'messages')).toBe(false)
+      expect(assistRefusedByHardCap(stopped, null)).toBe(false)
+      // Switch off: a band refusal is somebody else's (an operator figure at
+      // the band, say), and must not send the user to a switch that is off.
+      expect(assistRefusedByHardCap({ plan: 'pro' }, 'band')).toBe(false)
+      // A plan with no rate: the band refuses whatever the switch says, so
+      // pointing at the switch would point at a control that does nothing.
+      expect(
+        assistRefusedByHardCap({ plan: 'enterprise', assistOverage: { hardCap: true } }, 'band'),
+      ).toBe(false)
+    })
+  })
+
+  describe('the refusal sentence', () => {
+    it('names the control by its label, says where it lives, and quotes the plan rate', () => {
+      const text = assistHardCapRefusalText({ plan: 'pro' })
+      expect(text).toContain(`"${ASSIST_HARD_CAP_CONTROL_LABEL}"`)
+      expect(text).toContain(ASSIST_HARD_CAP_CONTROL_LOCATION)
+      expect(text).toContain('$3.00 per 1,000 credits')
+      expect(assistHardCapRefusalText({ plan: 'agency' })).toContain('$2.00 per 1,000 credits')
+    })
+
+    it('ships no dollar figure of OURS — only the retail rate', () => {
+      const text = assistHardCapRefusalText({ plan: 'pro' })
+      for (const leak of ['costUsd', 'estCostUsd', '0.001', 'provider']) {
+        expect(text).not.toContain(leak)
+      }
+      // The label is a customer-facing string, so it is spelled the way the
+      // console spells it: a sentence, not a key.
+      expect(ASSIST_HARD_CAP_CONTROL_LABEL).toMatch(/^[A-Z][a-z]/)
+      expect(ASSIST_HARD_CAP_CONTROL_LABEL).not.toMatch(/[_{}]/)
     })
   })
 })

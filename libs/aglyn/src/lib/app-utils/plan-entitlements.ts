@@ -1234,9 +1234,15 @@ export interface PlanPricing {
    * there is no overage to price. Null on Enterprise, where every rate is
    * the "not for sale" sentinel and the terms are contractual.
    *
-   * Unlike email, a null here strands nothing. Assist is refused at the
-   * band on every tier, so a plan with no rate simply stops — there is no
-   * unrefusable traffic to absorb.
+   * ## What the rate decides at the gate (AGL-2653)
+   *
+   * A plan WITH a rate sells past its band by default: `reserveAssistMessage`
+   * keeps reserving and `report-usage` bills the excess here, unless the org
+   * has switched on `assistOverage.hardCap` to be refused at the band
+   * instead. A plan with NO rate has nothing to sell the excess at, so its
+   * band stays the wall it always was, switch or no switch — see
+   * `assistBandRefuses`. Unlike email, a null here strands nothing: there is
+   * no unrefusable assist traffic to absorb.
    */
   extraAssistCreditsUsdPer1k: number | null
   /**
