@@ -95,6 +95,10 @@ jest.mock('./lead-surfaces-note', () => ({
   __esModule: true,
   default: () => null,
 }))
+jest.mock('./org-lead-surfaces-note', () => ({
+  __esModule: true,
+  default: () => null,
+}))
 jest.mock('./lead-history-card', () => ({
   leadSources: () => [],
   leadSourceLabel: (source: string) => source,
