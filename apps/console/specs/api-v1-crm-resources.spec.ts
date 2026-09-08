@@ -98,6 +98,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
+  // The REAL custom-field reader (AGL-2661): a company body judged against
+  // the company definitions and a deal body against the deal ones is the
+  // contract, and a stub would pass any map.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contact-custom-fields'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
@@ -1133,5 +1137,146 @@ describe('an archived pipeline (AGL-2620)', () => {
     mockDocs.set(`${DEALS}/d-old`, { title: 'Old', pipelineId: 'old', stageId: 'won', status: 'won', ...stamp })
     const reopened = await json(await call('PATCH', 'deals/d-old', { status: 'open' }))
     expect(reopened).toMatchObject({ stageId: 'qualified', status: 'open' })
+  })
+})
+
+// ── Custom fields on companies and deals (AGL-2661) ─────────────────────────
+
+describe('custom fields on companies and deals (AGL-2661)', () => {
+  const FIELDS = `${ORG}/contactFields`
+  /** Three definitions sharing one key — one per object — so a body can only pass against its own. */
+  const seedFields = () => {
+    mockDocs.set(`${FIELDS}/f-contact`, {
+      key: 'region',
+      label: 'Region',
+      type: 'text',
+      order: 0,
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    mockDocs.set(`${FIELDS}/f-company`, {
+      key: 'region',
+      label: 'Region',
+      type: 'select',
+      options: ['west', 'east'],
+      order: 0,
+      object: 'company',
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    mockDocs.set(`${FIELDS}/f-deal`, {
+      key: 'region',
+      label: 'Region',
+      type: 'number',
+      order: 0,
+      object: 'deal',
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    mockDocs.set(`${FIELDS}/f-retired`, {
+      key: 'old',
+      label: 'Old',
+      type: 'text',
+      order: 1,
+      object: 'company',
+      retiredAt: 1,
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+  }
+
+  it('stores a company map judged against the company definitions, and publishes it', async () => {
+    seedFields()
+    const created = await json(
+      await call('POST', 'companies', {
+        name: 'Acme',
+        consentSiteId: 'host-1',
+        custom: { region: 'west' },
+      }),
+    )
+    expect(created.custom).toEqual({ region: 'west' })
+    expect(mockDocs.get(`${COMPANIES}/${created.id}`)!.custom).toEqual({ region: 'west' })
+    // A company without a map publishes `{}`, never `null`, and a read-only
+    // `nextTaskAt` that is `null` until a task names it.
+    const bare = await json(await call('POST', 'companies', { name: 'Bare', consentSiteId: 'host-1' }))
+    expect(bare.custom).toEqual({})
+    expect(bare.nextTaskAt).toBeNull()
+    expect(mockDocs.get(`${COMPANIES}/${bare.id}`)).not.toHaveProperty('custom')
+  })
+
+  it('refuses a choice outside the list, an unknown key and a retired field, naming each', async () => {
+    seedFields()
+    // `north` is a fine TEXT value for the contact `region` — and refused
+    // here, because the company `region` is a choice list.
+    const refused = await call('POST', 'companies', {
+      name: 'Acme',
+      consentSiteId: 'host-1',
+      custom: { region: 'north', tier: 'gold', old: 'x' },
+    })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields).toEqual({
+      'custom.region': 'Must be one of: west, east',
+      'custom.tier': 'No such company field',
+      'custom.old': 'Retired company field — restore it to write it',
+    })
+    const shape = await call('POST', 'companies', {
+      name: 'Acme',
+      consentSiteId: 'host-1',
+      custom: ['west'],
+    })
+    expect((await json(shape)).error.fields.custom).toMatch(/object/)
+  })
+
+  it('merges a PATCH key by key and clears with null', async () => {
+    seedFields()
+    mockDocs.set(`${FIELDS}/f-company-2`, {
+      key: 'seats',
+      label: 'Seats',
+      type: 'number',
+      order: 2,
+      object: 'company',
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    const created = await json(
+      await call('POST', 'companies', {
+        name: 'Acme',
+        consentSiteId: 'host-1',
+        custom: { region: 'west', seats: 4 },
+      }),
+    )
+    const patched = await json(
+      await call('PATCH', `companies/${created.id}`, { custom: { region: null } }),
+    )
+    // `seats` survives a PATCH that did not mention it; `region` is an
+    // explicit null, not a missing key.
+    expect(patched.custom).toEqual({ region: null, seats: 4 })
+    const stored = mockDocs.get(`${COMPANIES}/${created.id}`)!
+    expect(stored.custom).toEqual({ region: null, seats: 4 })
+    const again = await json(
+      await call('PATCH', `companies/${created.id}`, { custom: { seats: '6' } }),
+    )
+    expect(again.custom).toEqual({ region: null, seats: 6 })
+  })
+
+  it('coerces a deal map by the DEAL definitions, and publishes it with nextTaskAt', async () => {
+    seedFields()
+    const created = await json(
+      await call('POST', 'deals', {
+        title: 'Roast',
+        consentSiteId: 'host-1',
+        custom: { region: '4' },
+      }),
+    )
+    expect(created.custom).toEqual({ region: 4 })
+    expect(created.nextTaskAt).toBeNull()
+    expect(mockDocs.get(`${DEALS}/${created.id}`)!.custom).toEqual({ region: 4 })
+    const refused = await call('PATCH', `deals/${created.id}`, { custom: { region: 'west' } })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields).toEqual({ 'custom.region': 'Must be a number' })
+    const patched = await json(
+      await call('PATCH', `deals/${created.id}`, { custom: { region: null } }),
+    )
+    expect(patched.custom).toEqual({ region: null })
   })
 })

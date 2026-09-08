@@ -281,6 +281,16 @@ export function contactLifecycleStageAfterPurchase(
 export type ContactCustomValue = string | number | boolean | null
 
 /**
+ * The same scalar, under the name the other objects use (AGL-2661).
+ *
+ * A company's and a deal's `custom` map hold exactly what a contact's
+ * does — one definition, one coercion rule, one stored shape — so the
+ * value type is one type with two names: the contact name it was born
+ * with, and this one for code that is not about contacts.
+ */
+export type CrmCustomValue = ContactCustomValue
+
+/**
  * The fields every CRM document carries.
  *
  * `visibleTo` is the scope both enforcement layers evaluate — see
@@ -326,6 +336,16 @@ export interface CrmCompany extends CrmScoped {
    * nobody has linked since the counter existed, which reads as zero.
    */
   contactsCount?: number
+  /**
+   * Custom field values, keyed by the key of a definition whose `object`
+   * is `company` — see {@link fieldDefinitionObject} (AGL-2661).
+   */
+  custom?: Record<string, CrmCustomValue>
+  /**
+   * When the earliest OPEN task filed against this company is due, epoch
+   * ms, or `null` when none is — see {@link CrmDeal.nextTaskAtMs}.
+   */
+  nextTaskAtMs?: number | null
 }
 
 /** One step of a pipeline. */
@@ -459,6 +479,25 @@ export interface CrmDeal extends CrmScoped {
   lostReason?: string
   notes?: string
   createdByUid?: string
+  /**
+   * Custom field values, keyed by the key of a definition whose `object`
+   * is `deal` — see {@link fieldDefinitionObject} (AGL-2661).
+   */
+  custom?: Record<string, CrmCustomValue>
+  /**
+   * When the earliest OPEN task filed against this deal is due, epoch ms,
+   * or `null` when no open task names it (AGL-2661).
+   *
+   * DENORMALIZED from `crmTasks`, because the question "which deals have
+   * nothing scheduled" is asked of a LIST — a column, a filter, a report
+   * tile — and a list cannot afford a task query per row. Every server
+   * writer of a task recomputes it for the records the task names
+   * (`recomputeCrmNextTaskAt` in the admin library), and a client-direct
+   * task write asks the console route to do the same; the Fields section
+   * offers a one-off recompute for the records written before the field
+   * existed. Absent on such a record, which every reader treats as `null`.
+   */
+  nextTaskAtMs?: number | null
 }
 
 /**
@@ -1067,7 +1106,63 @@ export interface ContactFieldDefinition extends CrmScoped {
   /** Position in the form and the export, ascending. */
   order: number
   retiredAt?: number | null
+  /**
+   * Which record the field describes (AGL-2661). ABSENT means `contact`,
+   * because every definition written before companies and deals could carry
+   * custom fields described a contact, and a backfill that stamped them
+   * would touch every org for a fact the reader can infer. Read it through
+   * {@link fieldDefinitionObject}, never directly, so that inference lives
+   * in one place. Keys are unique PER OBJECT: a company field and a contact
+   * field may both be called `region`.
+   */
+  object?: CrmFieldObject
 }
+
+/**
+ * The records a custom field may describe, in the order the Fields
+ * section tabs them (AGL-2661).
+ */
+export const CRM_FIELD_OBJECTS = ['contact', 'company', 'deal'] as const
+
+export type CrmFieldObject = (typeof CRM_FIELD_OBJECTS)[number]
+
+/** How each object reads on the Fields section's tabs and in a refusal. */
+export const CRM_FIELD_OBJECT_LABELS: Record<CrmFieldObject, string> = {
+  contact: 'Contacts',
+  company: 'Companies',
+  deal: 'Deals',
+}
+
+export function isCrmFieldObject(value: unknown): value is CrmFieldObject {
+  return (
+    typeof value === 'string' &&
+    (CRM_FIELD_OBJECTS as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * Which record a definition describes — `contact` when the document says
+ * nothing, or says something no reader understands.
+ *
+ * The one reader of {@link ContactFieldDefinition.object}. A stored value
+ * outside the list is read as `contact` rather than refused, for the
+ * reason an absent one is: the definition predates the field, or was
+ * written by something that never learned it, and either way the values
+ * under its key sit on contacts.
+ */
+export function fieldDefinitionObject(
+  definition: Pick<ContactFieldDefinition, 'object'> | null | undefined,
+): CrmFieldObject {
+  return isCrmFieldObject(definition?.object) ? definition.object : 'contact'
+}
+
+/**
+ * The definition type under the name new code uses (AGL-2661). The type,
+ * the collection (`contactFields`) and the rules match keep the contact
+ * name: renaming them would ripple through the rules, the REST resources
+ * and the docs for no change in what is stored.
+ */
+export type CrmFieldDefinition = ContactFieldDefinition
 
 /** What a stored field key must look like — a letter, then up to 39 of `[a-z0-9_]`. */
 export const CONTACT_FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]{0,39}$/
@@ -2413,6 +2508,25 @@ export function crmContactCustomKey(column: string): string | null {
   return column.startsWith(prefix) && column.length > prefix.length
     ? column.slice(prefix.length)
     : null
+}
+
+/**
+ * A stored phone number as the `href` of a click-to-call link, or `null`
+ * when the value is not one (AGL-2661).
+ *
+ * The console stores E.164 (`normalizePhone` runs before every write), and
+ * a `tel:` URL wants exactly that: digits with a leading `+`, nothing else.
+ * Spaces, dots, dashes and parentheses are dropped rather than refused
+ * because a value written before normalization existed may carry them;
+ * anything that is not a run of digits after that — a word, an extension
+ * typed as `x123` — is refused, because a dialer handed it would ring
+ * nothing and the link would be a lie.
+ */
+export function crmTelHref(phone: unknown): string | null {
+  const text = String(phone ?? '').trim()
+  if (!text) return null
+  const compact = text.replace(/[\s().-]/g, '')
+  return /^\+?\d{3,20}$/.test(compact) ? `tel:${compact}` : null
 }
 
 const CRM_VIEW_TAGS_FIELD = CRM_CONTACT_VIEW_FIELDS.tags

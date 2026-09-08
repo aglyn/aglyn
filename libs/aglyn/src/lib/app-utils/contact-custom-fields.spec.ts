@@ -32,7 +32,9 @@ import {
   coerceContactCustomValue,
   collectMappedContactCustom,
   CONTACT_FIELDS_MAX_PER_ORG,
+  fieldDefinitionsForObject,
   readContactCustomInput,
+  readCrmCustomInput,
   sortContactFieldDefinitions,
   withContactFieldMapping,
 } from './contact-custom-fields'
@@ -287,5 +289,51 @@ describe('ordering and the read bound', () => {
   it('bounds the whole-collection read at a number a profile form can carry', () => {
     expect(CONTACT_FIELDS_MAX_PER_ORG).toBeGreaterThanOrEqual(50)
     expect(CONTACT_FIELDS_MAX_PER_ORG).toBeLessThanOrEqual(500)
+  })
+})
+
+describe('custom fields on every object (AGL-2661)', () => {
+  const region = definition({ key: 'region', type: 'select', options: ['west', 'east'] })
+  const companyRegion = definition({
+    key: 'region',
+    type: 'text',
+    order: 5,
+    object: 'company',
+  })
+  const dealTier = definition({ key: 'tier', type: 'number', object: 'deal' })
+  const all = [dealTier, companyRegion, region]
+
+  it('narrows the whole list to one object, an absent object being contact', () => {
+    expect(fieldDefinitionsForObject(all, 'contact').map((entry) => entry.key)).toEqual([
+      'region',
+    ])
+    expect(fieldDefinitionsForObject(all, 'company')).toEqual([companyRegion])
+    expect(fieldDefinitionsForObject(all, 'deal')).toEqual([dealTier])
+  })
+
+  it('judges a company body against the company definitions alone', () => {
+    // The contact `region` is a choice list; the company one is free text.
+    expect(readCrmCustomInput({ region: 'north' }, all, 'company')).toEqual({
+      values: { region: 'north' },
+    })
+    expect(readCrmCustomInput({ region: 'north' }, all, 'contact')).toEqual({
+      errors: { 'custom.region': 'Must be one of: west, east' },
+    })
+    expect(readCrmCustomInput({ tier: '3' }, all, 'company')).toEqual({
+      errors: { 'custom.tier': 'No such company field' },
+    })
+    expect(readCrmCustomInput({ tier: '3' }, all, 'deal')).toEqual({
+      values: { tier: 3 },
+    })
+  })
+
+  it('names the object in a retired refusal, and keeps the contact wording by default', () => {
+    const retired = definition({ key: 'old', type: 'text', object: 'deal', retiredAt: 1 })
+    expect(readCrmCustomInput({ old: 'x' }, [retired], 'deal')).toEqual({
+      errors: { 'custom.old': 'Retired deal field — restore it to write it' },
+    })
+    expect(readContactCustomInput({ nope: 'x' }, [])).toEqual({
+      errors: { 'custom.nope': 'No such contact field' },
+    })
   })
 })

@@ -54,6 +54,7 @@ import {
 import type { GridColDef } from '@mui/x-data-grid'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import {
@@ -74,6 +75,7 @@ import {
   formatAmountByCurrency,
   formatMoney,
 } from '../model/deal-board-model'
+import { customFieldColumns } from './contact-custom-columns'
 import { DealBoard } from './deal-board'
 import { DealEditDrawer } from './deal-edit-drawer'
 import DealsBulkBar from './deals-bulk-bar'
@@ -152,6 +154,8 @@ export function DealsSection(props: ConsolePluginPageProps) {
   const roster = useOrgMemberDirectory(scope.orgId)
   const api = useDealStageApi(hostId)
   const nowMs = useMemo(() => Date.now(), [])
+  // The org's deal fields, for the table's optional columns (AGL-2661).
+  const dealFields = useContactFieldDefinitions(scope.orgId, 'deal')
 
   const [view, setView] = useState<View>('board')
   const [closedExpanded, setClosedExpanded] = useState(false)
@@ -377,8 +381,10 @@ export function DealsSection(props: ConsolePluginPageProps) {
           />
         ),
       },
+      // The org's deal fields as optional columns (AGL-2661).
+      ...customFieldColumns(dealFields.active),
     ],
-    [pipelineState, roster],
+    [pipelineState, roster, dealFields.active],
   )
   /* The table's column and sort models are the view's (AGL-2617). */
   const grid = useCrmViewGrid(views, columns)

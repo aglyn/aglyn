@@ -21,6 +21,10 @@ import {
   type ConsolePluginPageProps,
   createResourceUid,
   CRM_COLLECTIONS,
+  CRM_FIELD_OBJECT_LABELS,
+  CRM_FIELD_OBJECTS,
+  type CrmFieldObject,
+  isCrmFieldObject,
   newResourceScopeFields,
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
@@ -53,11 +57,13 @@ import {
   Chip,
   IconButton,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tabs,
   Typography,
 } from '@mui/material'
 import {
@@ -78,8 +84,31 @@ import ContactFieldDrawer, { type ContactFieldDraft } from './contact-field-draw
 
 export type ContactsFieldsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
 
+/** What each tab says the fields are for, above its list. */
+const OBJECT_INTRO: Record<CrmFieldObject, string> = {
+  contact:
+    'The custom fields on a contact — text, number, date, choice, ' +
+    'checkbox or link. They show on every contact, as columns on the ' +
+    'list, and a form field can save into one.',
+  company:
+    'The custom fields on a company. They show on every company’s page ' +
+    'and its edit form, as columns on the companies list, and a CSV ' +
+    'import can fill them.',
+  deal:
+    'The custom fields on a deal. They show on every deal’s page and ' +
+    'its edit form, and as columns on the deals table.',
+}
+
+/** The noun each tab's empty state and captions use. */
+const OBJECT_NOUN: Record<CrmFieldObject, string> = {
+  contact: 'contact',
+  company: 'company',
+  deal: 'deal',
+}
+
 /**
- * `/crm/fields` — the custom fields a holder keeps on a person (AGL-2601).
+ * `/crm/fields` — the custom fields a holder keeps on a person (AGL-2601),
+ * and since AGL-2661 on a company and a deal too, one tab each.
  *
  * Definitions live in `orgs/{orgId}/contactFields`, one document per field,
  * and the VALUES live under each contact facet's `custom` keyed by the
@@ -118,7 +147,16 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
   // none for a field defined over the whole org before any pick.
   const { scope, ready: scopeReady, createHostId } = useCrmScope({ hostId, org })
   const orgId = scope?.[1] ?? null
-  const { definitions, ready, fromCache } = useContactFieldDefinitions(orgId)
+  /*
+   * ONE TAB PER OBJECT (AGL-2661). The list, the drawer and every write
+   * below are about the tab's object: the hook narrows the org's one
+   * definition list to it, a new field is stamped with it, and the drawer
+   * refuses a key only against the keys THIS object already uses — a
+   * company and a contact may both define `region`.
+   */
+  const [object, setObject] = useState<CrmFieldObject>('contact')
+  const { definitions, ready, fromCache } = useContactFieldDefinitions(orgId, object)
+  const noun = OBJECT_NOUN[object]
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editing, setEditing] = useState<ContactFieldDefinitionDoc | null>(null)
@@ -194,6 +232,8 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             required: draft.required,
             order,
             retiredAt: null,
+            // Which record the field describes — the tab it was made on.
+            object,
             hostId: createHostId,
             ...newResourceScopeFields([ORG_SCOPE_TOKEN]),
             createdAt: now,
@@ -208,7 +248,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       setDrawerOpen(false)
       setEditing(null)
     },
-    [scope, editing, fromCache, fieldRef, enqueueSnackbar, definitions, firestore, createHostId],
+    [scope, editing, fromCache, fieldRef, enqueueSnackbar, definitions, firestore, createHostId, object],
   )
 
   /**
@@ -272,7 +312,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
         const accepted = await confirm({
           title: `Retire “${definition.label}”?`,
           description:
-            'It leaves every contact form, column and form-field mapping. ' +
+            `It leaves every ${noun} form, column and form-field mapping. ` +
             'Values already saved under it are kept and still export, and ' +
             'you can restore the field at any time.',
           confirmationText: 'Retire',
@@ -300,7 +340,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
         setBusyId('')
       }
     },
-    [scope, busyId, confirm, fieldRef, enqueueSnackbar],
+    [scope, busyId, confirm, fieldRef, enqueueSnackbar, noun],
   )
 
   /**
@@ -319,7 +359,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
         title: `Delete “${definition.label}”?`,
         description:
           'The definition is removed for good. Values saved under its key ' +
-          `(${definition.key}) stay on the contacts that carry them but ` +
+          `(${definition.key}) stay on the ${noun}s that carry them but ` +
           'nothing will show them again — and a new field created with the ' +
           'same key would read them as its own.',
         confirmationText: 'Delete field',
@@ -339,7 +379,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
         setBusyId('')
       }
     },
-    [scope, busyId, confirm, fieldRef, enqueueSnackbar],
+    [scope, busyId, confirm, fieldRef, enqueueSnackbar, noun],
   )
 
   const rowActions = (definition: ContactFieldDefinitionDoc): RowActionsMenuItem[] => [
@@ -394,21 +434,29 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       }}
     >
       <Stack spacing={2}>
+        <Tabs
+          value={object}
+          onChange={(_event, next) => {
+            if (isCrmFieldObject(next)) setObject(next)
+          }}
+          aria-label="Fields by record"
+        >
+          {CRM_FIELD_OBJECTS.map((entry) => (
+            <Tab key={entry} value={entry} label={CRM_FIELD_OBJECT_LABELS[entry]} />
+          ))}
+        </Tabs>
         <Typography variant="body2" color="text.secondary">
-          {'The custom fields on a contact — text, number, date, choice, ' +
-            'checkbox or link. They show on every contact, as columns on ' +
-            'the list, and a form field can save into one. Fields are ' +
-            'shared across every site in this organization, like the ' +
-            'contacts themselves.'}
+          {`${OBJECT_INTRO[object]} Fields are shared across every site in this ` +
+            'organization, like the records themselves.'}
         </Typography>
         {scopeReady && !scope ? (
           <Typography variant="body2" color="text.secondary">
-            {'This site has no organization, so it has no contact fields.'}
+            {`This site has no organization, so it has no ${noun} fields.`}
           </Typography>
         ) : !ready ? null : definitions.length === 0 ? (
           <EmptyStateComponent
-            label={'No custom fields yet'}
-            description={'A field you define here is kept on every contact and shows on their page.'}
+            label={`No custom ${noun} fields yet`}
+            description={`A field you define here is kept on every ${noun} and shows on its page.`}
             action={
               scope ? (
                 <Button variant="contained" onClick={openCreate}>
@@ -496,8 +544,8 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
         )}
         {definitions.length ? (
           <Typography variant="caption" color="text.secondary">
-            {'How many contacts carry a value under each field is not ' +
-              'counted — that would read every contact in the organization ' +
+            {`How many ${noun}s carry a value under each field is not ` +
+              `counted — that would read every ${noun} in the organization ` +
               'each time this page opened.'}
           </Typography>
         ) : null}
@@ -506,6 +554,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         definition={editing}
+        object={object}
         takenKeys={definitions.map((definition) => definition.key)}
         onSubmit={handleSubmit}
       />

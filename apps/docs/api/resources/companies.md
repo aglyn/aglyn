@@ -66,6 +66,8 @@ after creation; a record that belongs somewhere else is deleted and recreated th
   "industry": "Coffee roasting",
   "ownerUid": "u_9f1c",
   "notes": "Renews in March.",
+  "custom": { "tier": "gold", "seats": 12 },
+  "nextTaskAt": "2026-09-12T15:00:00.000Z",
   "siteId": "site_a1b2c3",
   "created": "2026-09-05T18:23:23.941Z",
   "updated": "2026-09-05T18:23:23.941Z"
@@ -84,6 +86,8 @@ after creation; a record that belongs somewhere else is deleted and recreated th
 | `industry` | string \| null | Free text, 120 characters. Writable. |
 | `ownerUid` | string \| null | The team member responsible for the account. Must be a member of your organization. Writable. |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
+| `custom` | object | The organization's [company custom fields](/content-and-data/crm/custom-fields#over-the-api), keyed by field key; `{}` when the company has none. Judged against the **company** definitions: a key that is not one, a retired field, or a value the type cannot hold is a `400` naming `custom.<key>`. A `PATCH` merges the keys it sends; `null` clears one. Writable. |
+| `nextTaskAt` | string \| null | When the earliest **open** [task](tasks.md) filed against the company is due, or `null` when none is. Maintained by every task write. **Read-only.** |
 | `siteId` | string | The site the company was created from — see [above](#scopes-and-sites). **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. A fresh record's `updated` equals its `created`. |
 
@@ -211,7 +215,7 @@ removed it, in which case the original receipt is replayed.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `name` or `consentSiteId` (or one naming a site the organization does not own), a `domain` or `phone` that does not normalize, a `website` that is not a web address, an `ownerUid` who is not a member, or a key that is not writable. On the list, a `?domain=` that is not a domain or a malformed `?updatedAfter=`. `fields` names each offending key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `name` or `consentSiteId` (or one naming a site the organization does not own), a `domain` or `phone` that does not normalize, a `website` that is not a web address, an `ownerUid` who is not a member, a `custom` entry that is not a company field or does not fit its type (named as `custom.<key>`), or a key that is not writable. On the list, a `?domain=` that is not a domain or a malformed `?updatedAfter=`. `fields` names each offending key. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — the CRM records band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. Checked before the method. |
 | `404` | `not_found` | `"No such company"`. |

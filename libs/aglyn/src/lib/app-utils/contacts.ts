@@ -211,6 +211,14 @@ export interface HostContact {
    * shared row. Bounded at {@link CONTACT_ALTERNATE_EMAILS_CAP}.
    */
   alternateEmails?: string[]
+  /**
+   * When the earliest OPEN task filed against this person is due, epoch
+   * ms, or `null` when none is (AGL-2661) — see `CrmDeal.nextTaskAtMs` in
+   * `crm.ts` for the rule. On the SHARED row rather than a facet, because a
+   * task lives at the organization level and names the contact, not a
+   * holder's view of them.
+   */
+  nextTaskAtMs?: number | null
 }
 
 /** Timeline cap: keeps the doc small; older interactions age out. */

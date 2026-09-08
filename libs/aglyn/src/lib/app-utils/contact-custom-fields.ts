@@ -34,7 +34,13 @@
  * else's decision.
  */
 
-import type { ContactCustomValue, ContactFieldDefinition, ContactFieldType } from './crm'
+import {
+  type ContactCustomValue,
+  type ContactFieldDefinition,
+  type ContactFieldType,
+  type CrmFieldObject,
+  fieldDefinitionObject,
+} from './crm'
 import type { FormFieldDecl } from './forms'
 
 /**
@@ -92,6 +98,22 @@ export function sortContactFieldDefinitions<
     (a, b) =>
       (Number(a.order) || 0) - (Number(b.order) || 0) ||
       a.key.localeCompare(b.key),
+  )
+}
+
+/**
+ * The definitions that describe ONE object, in `order` (AGL-2661).
+ *
+ * Every reader of the collection gets it whole — it is one bounded read —
+ * and narrows here, through the one reader of `object`, so a definition
+ * written before the key existed lands on the contacts tab and nowhere
+ * else. Keys are unique within what this returns, not across it.
+ */
+export function fieldDefinitionsForObject<
+  T extends Pick<ContactFieldDefinition, 'order' | 'key' | 'object'>,
+>(definitions: readonly T[], object: CrmFieldObject): T[] {
+  return sortContactFieldDefinitions(
+    definitions.filter((definition) => fieldDefinitionObject(definition) === object),
   )
 }
 
@@ -329,6 +351,11 @@ function customValueExpectation(
 export function readContactCustomInput(
   raw: unknown,
   definitions: readonly ContactFieldDefinition[],
+  /**
+   * The object the map is written on, for the refusals' wording — the
+   * caller has already narrowed `definitions` to it. Contacts when unsaid.
+   */
+  object: CrmFieldObject = 'contact',
 ): { values: Record<string, ContactCustomValue> } | { errors: Record<string, string> } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return { errors: { custom: 'Must be an object of field values keyed by field key' } }
@@ -344,11 +371,11 @@ export function readContactCustomInput(
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     const definition = byKey.get(key)
     if (!definition) {
-      errors[`custom.${key}`] = 'No such contact field'
+      errors[`custom.${key}`] = `No such ${object} field`
       continue
     }
     if (definition.retiredAt) {
-      errors[`custom.${key}`] = 'Retired contact field — restore it to write it'
+      errors[`custom.${key}`] = `Retired ${object} field — restore it to write it`
       continue
     }
     if (value === null) {
@@ -363,4 +390,22 @@ export function readContactCustomInput(
     values[key] = coerced
   }
   return Object.keys(errors).length ? { errors } : { values }
+}
+
+/**
+ * `readContactCustomInput` for ANY object (AGL-2661): the org's whole
+ * definition list in, the ones describing `object` judged.
+ *
+ * The narrowing happens here rather than at every caller so a company
+ * body cannot be validated against a contact field of the same key —
+ * `region` on both is two fields, and a value sent to one must never be
+ * read by the other's type. What comes back is exactly what the contact
+ * reader answers: a map to store, or refusals named `custom.<key>`.
+ */
+export function readCrmCustomInput(
+  raw: unknown,
+  definitions: readonly ContactFieldDefinition[],
+  object: CrmFieldObject,
+): { values: Record<string, ContactCustomValue> } | { errors: Record<string, string> } {
+  return readContactCustomInput(raw, fieldDefinitionsForObject(definitions, object), object)
 }

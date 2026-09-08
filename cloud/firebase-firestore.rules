@@ -1118,9 +1118,13 @@ service cloud.firestore {
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
-      // The custom fields a holder keeps on a person. The definition lives
-      // here; the values live under the contact facet's `custom`, so the
-      // definition answers to the same authority the values do.
+      // The custom fields a holder keeps on a person, a company or a deal
+      // (`object` names which; absent means a contact). The definition
+      // lives here; the values live under the contact facet's `custom`, or
+      // the company's or the deal's own `custom` map, so the definition
+      // answers to the same authority the values do. No match here checks
+      // a map's SHAPE: a value is judged against its definition by the
+      // console and the REST resources, the way a contact's has been.
       match /contactFields/{fieldId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||

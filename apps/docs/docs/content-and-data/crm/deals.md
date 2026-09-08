@@ -185,7 +185,9 @@ Opening a deal shows:
 - **Stage** — a stepper across the open stages, with **Won** and **Lost**
   buttons and, on a closed deal, the way to reopen it.
 - **Properties** — the amount and its weighted value, the expected close, the
-  owner, links to the contact and the company, and the notes.
+  owner, links to the contact and the company, the notes, and one row per
+  [custom field](./custom-fields.md) defined on the **Deals** tab of the Fields
+  section; **Edit** carries a control for each.
 - **Products** — the [line items](#line-items) behind the amount, with the
   door to add one from the catalog or by hand.
 - **Tasks** and **Activity** — what is owed on this deal and what has happened

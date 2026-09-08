@@ -79,6 +79,8 @@ import {
   createPayload,
   crmCollection,
   crmCreateStamp,
+  crmCustomUpdate,
+  crmCustomView,
   crmRecordsBandRefusal,
   crmRefErrors,
   crmTimes,
@@ -88,6 +90,7 @@ import {
   memberError,
   parseIsoInstant,
   readChoice,
+  readCrmCustomBody,
   readCrmSite,
   readEqualityFilters,
   readOptionalText,
@@ -133,6 +136,11 @@ function dealView(doc: FirebaseFirestore.DocumentSnapshot) {
     companyId: data.companyId ?? null,
     lostReason: data.lostReason ?? null,
     notes: data.notes ?? null,
+    // The org's deal custom fields, keyed by field key (AGL-2661).
+    custom: crmCustomView(data as FirebaseFirestore.DocumentData),
+    // When the earliest open task against the deal is due — see
+    // `CrmDeal.nextTaskAtMs`. Read-only: the tasks resource maintains it.
+    nextTaskAt: isoFromMs(data.nextTaskAtMs),
     siteId: data.hostId ?? null,
     ...crmTimes(data as FirebaseFirestore.DocumentData),
   }
@@ -151,6 +159,7 @@ const DEAL_WRITABLE = new Set([
   'companyId',
   'lostReason',
   'notes',
+  'custom',
 ])
 
 interface DealInput {
@@ -276,6 +285,14 @@ function readDealInput(
   const notes = readOptionalText(body, 'notes', CRM_TEXT_MAX, errors)
   if (notes !== undefined) values.notes = notes
 
+  // `custom` is shape-checked here and judged against the org's
+  // definitions by the writers, which is where the read is paid.
+  if (body.custom !== undefined) {
+    if (!body.custom || typeof body.custom !== 'object' || Array.isArray(body.custom)) {
+      errors.custom = 'Must be an object of field values keyed by field key'
+    }
+  }
+
   return Object.keys(errors).length ? { errors } : { values }
 }
 
@@ -399,6 +416,10 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
   if ('response' in site) return site.response
   const refErrors = await dealRefErrors(ctx, parsed.values)
   if (Object.keys(refErrors).length) return crmValidationFailed(ctx, 'deal', refErrors)
+  // Judged against the org's deal definitions, above the claim (AGL-2661).
+  const custom = await readCrmCustomBody(ctx, body, 'deal')
+  if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'deal', custom.errors)
+  const customValues = custom && 'values' in custom ? custom.values : {}
 
   const collection = crmCollection(ctx, CRM_COLLECTIONS.deals)
   const claimed = await claimWrite(
@@ -454,6 +475,9 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
         ...placedLines.fields,
         ...stageMove(stage, stamp.createdAt.toMillis()),
       }),
+      ...(Object.keys(customValues).length
+        ? { custom: createPayload(customValues) }
+        : {}),
       ...stamp,
     })
     // A deal created won is a won deal: its contact is a customer from birth.
@@ -475,7 +499,8 @@ async function updateDeal(
   ctx: ApiV1Context,
   ref: FirebaseFirestore.DocumentReference,
 ): Promise<Response> {
-  const parsed = readDealInput(await readJsonBody(request), { partial: true })
+  const body = await readJsonBody(request)
+  const parsed = readDealInput(body, { partial: true })
   if ('errors' in parsed) return crmValidationFailed(ctx, 'deal', parsed.errors)
   const snap = await ref.get()
   if (!snap.exists) {
@@ -483,6 +508,8 @@ async function updateDeal(
   }
   const refErrors = await dealRefErrors(ctx, parsed.values)
   if (Object.keys(refErrors).length) return crmValidationFailed(ctx, 'deal', refErrors)
+  const custom = await readCrmCustomBody(ctx, body, 'deal')
+  if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'deal', custom.errors)
 
   const { title, stageId, status, lineItems, ...rest } = parsed.values
   const stored = snap.data() as Partial<CrmDeal>
@@ -503,6 +530,7 @@ async function updateDeal(
   const update: Record<string, unknown> = {
     ...(title !== undefined ? { title, titleLower: title.toLowerCase() } : {}),
     ...updatePayload({ ...rest, ...placedLines.fields }),
+    ...(custom && 'values' in custom ? crmCustomUpdate(custom.values) : {}),
   }
   // The write's one instant: `updatedAt`, and the stage move if there is one,
   // so a deal closed at T reads updated at T.

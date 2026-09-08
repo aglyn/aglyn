@@ -50,6 +50,7 @@ import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import { COMPANY_LIST_FILTER_FIELDS } from '../constants/company-filters'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CompanyCsvOptions, companiesCsv } from '../model/companies-csv'
@@ -58,6 +59,7 @@ import { crmRoutes } from '../model/crm-routes'
 import CompaniesBulkBar from './companies-bulk-bar'
 import CompanyEditDrawer from './company-edit-drawer'
 import { CompanyImportButton } from './company-import-drawer'
+import { customFieldColumns } from './contact-custom-columns'
 
 export interface CompaniesSectionProps {
   /** The site the list is read under, or `null` at the organization level. */
@@ -122,6 +124,8 @@ export function CompaniesSection(props: CompaniesSectionProps) {
    * serves both, which is why the drawer takes it as a prop.
    */
   const members = useOrgMemberOptions(orgId)
+  // The org's company fields, for the optional columns below (AGL-2661).
+  const companyFields = useContactFieldDefinitions(orgId, 'company')
 
   /*
    * The column filter is the saved VIEW'S first clause (AGL-2617): this
@@ -337,8 +341,11 @@ export function CompaniesSection(props: CompaniesSectionProps) {
           </Typography>
         ),
       },
+      // The org's company fields as optional columns (AGL-2661), read off
+      // the row's own `custom` map the way the contacts list reads its own.
+      ...customFieldColumns(companyFields.active),
     ],
-    [members],
+    [members, companyFields.active],
   )
 
   /*
@@ -405,7 +412,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
               'people, its deals and its open tasks, or to link a contact ' +
               'to it.'}
           </Typography>
-          <CompanyImportButton hostId={hostId} />
+          <CompanyImportButton hostId={hostId} org={org} />
           <Button size="small" onClick={handleExport} disabled={!companies.length}>
             {'Export CSV'}
           </Button>

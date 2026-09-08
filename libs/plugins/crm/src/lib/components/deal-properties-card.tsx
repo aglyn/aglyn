@@ -16,10 +16,16 @@
  */
 'use client'
 
-import { dealStageById, pluginDocsHelp, weightedDealAmountCents } from '@aglyn/aglyn'
+import {
+  type ContactFieldDefinition,
+  dealStageById,
+  pluginDocsHelp,
+  weightedDealAmountCents,
+} from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Stack, Typography } from '@mui/material'
+import { Link, Stack, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
+import { formatContactCustomValue } from './contact-custom-columns'
 import {
   type DealDoc,
   formatMoney,
@@ -33,6 +39,12 @@ export interface DealPropertiesCardProps {
   pipeline: PipelineDoc | null
   ownerLabel: string
   routes: CrmRoutes
+  /**
+   * The org's ACTIVE deal field definitions (AGL-2661), one row each under
+   * the fixed properties. Handed in by the page, which resolves the org
+   * once for every card on it.
+   */
+  customFields?: readonly ContactFieldDefinition[]
 }
 
 function Row(props: { label: string; children: ReactNode }) {
@@ -62,7 +74,7 @@ function Row(props: { label: string; children: ReactNode }) {
  * the deal is a caption that may lag a rename.
  */
 export function DealPropertiesCard(props: DealPropertiesCardProps) {
-  const { deal, pipeline, ownerLabel, routes } = props
+  const { deal, pipeline, ownerLabel, routes, customFields = [] } = props
   const stage = dealStageById(pipeline, deal.stageId)
   const weighted = weightedDealAmountCents(deal, stage)
   const createdMs = timestampMs(deal.createdAt)
@@ -118,6 +130,20 @@ export function DealPropertiesCard(props: DealPropertiesCardProps) {
             </Typography>
           </Row>
         ) : null}
+        {customFields.map((definition) => {
+          const text = formatContactCustomValue(definition, deal.custom?.[definition.key])
+          return (
+            <Row key={definition.key} label={definition.label || definition.key}>
+              {text && definition.type === 'url' ? (
+                <Link href={text} target="_blank" rel="noreferrer noopener">
+                  {text}
+                </Link>
+              ) : (
+                text || 'Not set'
+              )}
+            </Row>
+          )
+        })}
       </Stack>
     </CardDisplay>
   )

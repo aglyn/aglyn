@@ -241,7 +241,7 @@ export const DOCS_HELP_TOPICS = {
   customFields: {
     path: '/content-and-data/crm/custom-fields',
     title: 'Custom fields',
-    excerpt: 'Define your own contact properties — text, number, date, choice, checkbox or link — show them on every contact, and save form answers straight into them.',
+    excerpt: 'Define your own properties on contacts, companies and deals — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact\'s.',
   },
   customRoles: {
     path: '/workspace-and-billing/teams-and-roles/custom-roles',
@@ -807,7 +807,7 @@ export const DOCS_HELP_ANCHORS = {
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#at-the-organization-level', '#who-can-open-the-crm', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
-  customFields: ['#define-a-field', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#related'],
+  customFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#related'],
   customRoles: ['#create-a-custom-role', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   datasetsAndSchema: ['#display-names-vs-field-ids', '#naming--describing-fields', '#the-typed-model', '#record-quotas-per-plan', '#import--export', '#repeatables', '#everything-that-writes-records', '#deleting-a-dataset', '#related'],
