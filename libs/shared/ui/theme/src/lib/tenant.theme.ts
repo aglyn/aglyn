@@ -222,18 +222,27 @@ export const tenantThemeDark: Theme = createResponsiveTheme({
 })
 
 /**
- * Hosts whose brand IS the platform brand, and which therefore keep
+ * Hosts whose brand IS the operator's own brand, and which therefore keep
  * `consoleOptions` rather than the tenant default.
+ *
+ * Comma-separated in `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS`, so a self-host
+ * operator points it at their own marketing domain and their customers still
+ * resolve the neutral tenant palette. The literal is the `??` default and
+ * nothing else reads it: the platform's own deployment needs no variable to
+ * keep its brand. Setting the variable to an empty string puts every host,
+ * including the operator's own, on the tenant default.
  *
  * Matched on the registrable domain the `[host]` route resolves, so a preview
  * deployment — which resolves the same host document — is covered by the same
  * entry. `aglyn.app` subdomains are CUSTOMER sites and are deliberately
  * absent: a customer on a platform subdomain is still a tenant.
  */
-export const PLATFORM_BRAND_HOSTS: ReadonlySet<string> = new Set([
-  'aglyn.com',
-  'aglyn.io',
-])
+export const PLATFORM_BRAND_HOSTS: ReadonlySet<string> = new Set(
+  (process.env['NEXT_PUBLIC_PLATFORM_BRAND_HOSTS'] ?? 'aglyn.com,aglyn.io')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean),
+)
 
 export function wearsPlatformBrand(host: string | undefined): boolean {
   return !!host && PLATFORM_BRAND_HOSTS.has(host.trim().toLowerCase())
