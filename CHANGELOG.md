@@ -21,6 +21,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **ci:** the main gate's typecheck gets a memory budget, not just a CPU one ([AGL-2684](https://linear.app/aglyn/issue/AGL-2684))
+- **pricing:** the /pricing frames catch up, and four exemptions come out ([AGL-2679](https://linear.app/aglyn/issue/AGL-2679))
 
 ### Performance
 
