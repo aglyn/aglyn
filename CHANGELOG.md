@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.87 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/c26f25316...v1.0.0-beta.87)
+
+### Added
+
+- **billing:** sell the assist overage by default, with a per-org hard-cap switch ([AGL-2653](https://linear.app/aglyn/issue/AGL-2653))
+
+### Fixed
+
+- **pricing:** finite Enterprise fallbacks, an override on every axis, a cost per run ([AGL-2654](https://linear.app/aglyn/issue/AGL-2654))
+- **pricing:** hold the margin invariant at the annual price, and cut bandwidth to it ([AGL-2651](https://linear.app/aglyn/issue/AGL-2651))
+- **functions:** the console cron retries once after an edge challenge ([AGL-2642](https://linear.app/aglyn/issue/AGL-2642))
+- **commerce:** a storefront subscription carries the card cost as a percent ([AGL-2655](https://linear.app/aglyn/issue/AGL-2655), [AGL-2152](https://linear.app/aglyn/issue/AGL-2152))
+- **billing:** the a1e8aaaca rates are ratified; setup-stripe carries them too ([AGL-2652](https://linear.app/aglyn/issue/AGL-2652))
+
+### Documentation
+
+- **billing:** the API-access comments name every tier that carries it ([AGL-2652](https://linear.app/aglyn/issue/AGL-2652))
+- **crm:** the CRM docs move from contacts/ to crm/ with a redirect per old path ([AGL-2650](https://linear.app/aglyn/issue/AGL-2650))
+
 ## v1.0.0-beta.86 — 2026-09-07
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/42d58bdf8...v1.0.0-beta.86)
