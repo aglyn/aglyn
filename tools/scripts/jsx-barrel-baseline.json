@@ -63,21 +63,16 @@
     "change-case",
     "clsx",
     "deepmerge-ts",
-    "flat",
     "hoist-non-react-statics",
     "js-cookie",
     "lodash-es",
-    "mitt",
     "mobx",
     "mobx-utils",
-    "mout",
     "nanoid",
-    "nanoid-dictionary",
     "next",
     "react",
     "react-dom",
     "react-is",
-    "react-use",
-    "use-debounce"
+    "react-use"
   ]
 }

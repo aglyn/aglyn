@@ -61,9 +61,25 @@ export * from './lib/change-case'
 // line was the live edge the whole time. Still importable as
 // `@aglyn/shared-util-vendor/fuse`.
 export * from './lib/hoist-non-react-statics'
-export * from './lib/mitt-emitter'
+// mitt is NOT re-exported (AGL-2682), same treatment as `platform-identification`
+// below and for the same reason: NOTHING in the repo reads `Mitt` — not an app,
+// not a plugin, not a tool — so the only thing this line did was put `mitt` in
+// front of every file that takes anything at all from this index. Aglyn's own
+// event bus is `EmitManager` (eventemitter2), which is what the runtime
+// actually uses. Still importable as `@aglyn/shared-util-vendor/mitt-emitter`.
 export * from './lib/object-deep-merge'
-export * from './lib/object-flatten'
+// object-deep-fill-in is NOT re-exported (AGL-2682). It was a second package
+// (`mout`) inside `object-deep-merge`, whose OTHER export the host theme calls
+// on every published page — so `mout` was emitted to every visitor of every
+// customer site for a function nothing calls. Split out rather than deleted,
+// and importable as `@aglyn/shared-util-vendor/object-deep-fill-in`.
+// object-flatten is NOT re-exported (AGL-2682). Its one consumer,
+// `element-styles-form.component.tsx`, is the besigner's styles panel —
+// console-only — and it now takes the subpath. `flat` was never emitted to a
+// published page (Turbopack shakes it), so this is graph hygiene rather than
+// bytes: it keeps the allowlist honest about what a tenant page can reach, so
+// the NEXT import of anything from this index cannot quietly ship a flattener.
+// Still importable as `@aglyn/shared-util-vendor/object-flatten`.
 // platform-identification is NOT re-exported (AGL-2486). Nothing in the repo
 // imports it — not the apps, not a plugin, not a tool — so its only effect
 // was that every file taking anything at all from this index (and there are
@@ -71,5 +87,15 @@ export * from './lib/object-flatten'
 // `hoistNonReactStatics`) also pulled in the `platform` UA-parsing package.
 // Measured at -4.7 KB gz off the eager barrel graph. Still importable as
 // `@aglyn/shared-util-vendor/platform-identification`.
+// uid-alphabets is NOT re-exported (AGL-2682), the same shape as
+// `object-deep-fill-in`: `nanoid-dictionary` was a second package inside
+// `unique-identification`, whose `createUid` the loading context and
+// `createResourceUid` do call on every published page. Split out rather than
+// deleted, and importable as `@aglyn/shared-util-vendor/uid-alphabets`.
 export * from './lib/unique-identification'
-export * from './lib/use-debounce'
+// use-debounce is NOT re-exported (AGL-2682), same shape as `object-flatten`
+// above. Its one consumer is `icon-select.component.tsx` — the icon picker,
+// console-only — which now takes the subpath. Note that a page-side debounce
+// already exists and is unrelated: `@aglyn/shared-ui-jsx`'s own `useDebounce`
+// is built on lodash-es, which the tenant page carries anyway. Still importable
+// as `@aglyn/shared-util-vendor/use-debounce`.

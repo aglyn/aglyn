@@ -10,17 +10,12 @@
     "change-case",
     "deepmerge-ts",
     "eventemitter2",
-    "flat",
     "hoist-non-react-statics",
     "lodash-es",
-    "mitt",
     "mobx",
     "mobx-state-tree",
     "mobx-utils",
-    "mout",
     "nanoid",
-    "nanoid-dictionary",
-    "react",
-    "use-debounce"
+    "react"
   ]
 }

@@ -65,7 +65,7 @@ import {
 } from '@aglyn/shared-ui-jsx-forms'
 import { Container, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useHostThemeDocument } from '@aglyn/shared-ui-theme'
-import { objectFlatten } from '@aglyn/shared-util-vendor'
+import { objectFlatten } from '@aglyn/shared-util-vendor/object-flatten'
 import {
   Alert,
   Box,
