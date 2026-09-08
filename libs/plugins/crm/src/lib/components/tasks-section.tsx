@@ -63,6 +63,7 @@ import {
   TaskRecordLink,
 } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
+import { TaskImportButton } from './task-import-drawer'
 import TaskSnoozeMenu from './task-snooze-menu'
 import TasksBulkBar from './tasks-bulk-bar'
 
@@ -400,6 +401,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
               ))}
             </ToggleButtonGroup>
             <Stack sx={{ flex: 1 }} />
+            <TaskImportButton hostId={hostId} />
             <Button size="small" onClick={handleExport} disabled={!tasks.length}>
               {'Export CSV'}
             </Button>

@@ -82,6 +82,8 @@ import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmCompaniesImportHandler } from './server/companies-import'
 import { crmContactsImportHandler } from './server/contacts-import'
+import { crmDealsImportHandler } from './server/deals-import'
+import { crmTasksImportHandler } from './server/tasks-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { crmEmailSendHandler } from './server/email-send'
 import { leadConvertHandler } from './server/lead-convert'
@@ -535,6 +537,11 @@ export function registerCrmConsoleApi(): void {
   // One chunk of a companies file (AGL-2621), matched by domain then name
   // and written with the stamp every CRM creator writes.
   registerPluginApiRoute('crm/companies-import', crmCompaniesImportHandler)
+  // One chunk of a deals file and one of a tasks file (AGL-2662): the
+  // pipeline, the stage and the assignee resolved by name, a row refused
+  // when the org has no such name.
+  registerPluginApiRoute('crm/deals-import', crmDealsImportHandler)
+  registerPluginApiRoute('crm/tasks-import', crmTasksImportHandler)
   // The one writer of a deal's stage, won and lost (AGL-2598): the browser
   // could write the field, but only a server can emit the event an
   // automation listens for.

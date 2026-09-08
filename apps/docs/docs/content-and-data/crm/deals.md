@@ -94,6 +94,44 @@ address, the expected close date, status, the contact and the company, when
 it closed, the lost reason and notes; the bar's **Export CSV** writes the same
 file over the selection.
 
+## Import from CSV
+
+**Import CSV** beside the table's status filter takes a spreadsheet of deals —
+an export from another CRM, a forecast sheet — and files each row as a new
+deal. A deal has no key the way a contact has an address, so nothing is
+merged: importing a file twice files it twice. Importing needs the same
+**Manage data** permission as creating a deal.
+
+The three steps are the ones the [contacts import](./import.md) walks: choose
+the file (up to 5,000 rows), match its columns — Aglyn proposes a match from
+the header names and shows the first row's value beside each — check the
+ten-row preview, then import in batches of 200 with a progress bar and a
+result that says how many were **added** and **skipped**, with the skipped
+rows downloadable as a CSV that says why. **Download template** hands you the
+export's own header over no rows, so a sheet filled in against it maps itself.
+
+| Field | What is read |
+| --- | --- |
+| **Title** | Required. A row without one is skipped. |
+| **Pipeline** | By **name**, as it appears in [Pipelines](#pipelines), spelled either way. Left empty, the row lands in the default pipeline. A name your workspace has no pipeline for skips the row as *No pipeline by that name*. |
+| **Stage** | By name within that pipeline. Left empty, the pipeline's first open stage. A name the pipeline has no stage for skips the row as *No stage by that name in that pipeline*. A row filed into **Won** or **Lost** is closed on arrival; no `dealWon` or `dealLost` event fires for it. |
+| **Amount** | In major units (`1250.00`, `$1,250`); the currency symbol and separators are ignored. A cell that is not a number is dropped and reported. |
+| **Currency** | A three-letter code (`USD`, `EUR`); `USD` when empty. Anything else is dropped and reported. |
+| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the deal without an owner, and the result names those addresses. |
+| **Expected close** | A calendar day (`2026-12-01`) or a timestamp. Anything else is dropped and reported. |
+| **Notes** | Free text. |
+
+The export's **Status**, **Contact**, **Company**, **Closed** and **Lost
+reason** columns are proposed as **Do not import**: the stage decides the
+status, and a deal is linked to its contact and company on its own page. A
+new deal counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
+on a plan whose band is a hard limit, rows past it are skipped as **CRM
+records limit reached**.
+
+At the [organization level](./overview.md#at-the-organization-level) the
+drawer first asks which site the deals are filed under, because a deal is
+some site's record and the site decides which of your sites may see it.
+
 ## Creating a deal
 
 **New deal** opens a drawer. A deal needs only a title; everything else is
@@ -200,6 +238,7 @@ with a **New deal** shortcut that starts a deal already linked to them.
 - [Companies](./companies.md) and [the contact record](./contact-record.md) — the two records a deal is with
 - [Tasks & follow-ups](./tasks.md) and [Activities & the timeline](./activities.md) — what is owed on a deal and what has happened on it
 - [Bulk actions](./bulk-actions.md#deals) — stage, owner, loss, export and delete over a selection
+- [Import contacts from CSV](./import.md) — the same three steps the deals import walks
 - [Reports](./reports.md) — the open pipeline, its weighted forecast, and won against lost
 - [Automations for the CRM](./automations.md) — the three deal events, and what a won deal does on its own
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)

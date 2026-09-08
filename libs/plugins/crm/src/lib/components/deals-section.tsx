@@ -76,6 +76,7 @@ import {
 } from '../model/deal-board-model'
 import { DealBoard } from './deal-board'
 import { DealEditDrawer } from './deal-edit-drawer'
+import { DealImportButton } from './deal-import-drawer'
 import DealsBulkBar from './deals-bulk-bar'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { OwnerAvatar } from './owner-avatar'
@@ -543,6 +544,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   <ToggleButton value="lost">{'Lost'}</ToggleButton>
                 </ToggleButtonGroup>
                 <Stack sx={{ flex: 1 }} />
+                <DealImportButton hostId={hostId} />
                 <Button size="small" onClick={handleExport} disabled={!paged.rows.length}>
                   {'Export CSV'}
                 </Button>

@@ -75,6 +75,11 @@ export * from './crm-import'
 // stages over the company vocabulary, on the generic helpers `crm-import`
 // also stands on. Pure, and beside it for the same reason.
 export * from './crm-company-import'
+// Reading a spreadsheet of DEALS or TASKS into the CRM (AGL-2662): the same
+// three stages over each vocabulary; the server resolves a pipeline, a
+// stage and an assignee by name and refuses the row it cannot.
+export * from './crm-deal-import'
+export * from './crm-task-import'
 // The CSV cell grammar the exports write with (AGL-2621) — named rather than
 // starred, because the two import modules above re-export the custom-target
 // helpers from the same file under their own names.
