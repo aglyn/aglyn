@@ -127,6 +127,15 @@ describe('wearsPlatformBrand', () => {
     expect(wearsPlatformBrand('  AGLYN.IO ')).toBe(true)
   })
 
+  it('matches the `cname--` form the middleware actually hands the route', () => {
+    // The `[host]` segment for a CUSTOM DOMAIN is `cname--<apex>`, never the
+    // bare apex — `apps/tenant/middleware.ts` builds it that way. Matching only
+    // the bare form is what put aglyn.com on the tenant palette in production.
+    expect(wearsPlatformBrand('cname--aglyn.com')).toBe(true)
+    expect(wearsPlatformBrand('CNAME--AGLYN.IO')).toBe(true)
+    expect(wearsPlatformBrand('cname--acme.com')).toBe(false)
+  })
+
   it('treats a customer site — including an aglyn.app subdomain — as a tenant', () => {
     expect(wearsPlatformBrand('acme.com')).toBe(false)
     expect(wearsPlatformBrand('acme.aglyn.app')).toBe(false)
