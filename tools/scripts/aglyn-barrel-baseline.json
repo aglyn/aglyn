@@ -8,7 +8,6 @@
   "packages": [
     "@msgpack/msgpack",
     "change-case",
-    "deep-equal",
     "deepmerge-ts",
     "eventemitter2",
     "flat",
@@ -21,7 +20,6 @@
     "mout",
     "nanoid",
     "nanoid-dictionary",
-    "php-serialize",
     "react",
     "use-debounce"
   ]

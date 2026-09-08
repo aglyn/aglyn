@@ -28,7 +28,7 @@ import {
   getGoogleFontsUrl,
   sanitizeHostTheme,
 } from '@aglyn/shared-ui-theme'
-import { deepEqual } from '@aglyn/shared-util-vendor'
+import { deepEqual } from '@aglyn/shared-util-vendor/deep-equal'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import {
   Button,

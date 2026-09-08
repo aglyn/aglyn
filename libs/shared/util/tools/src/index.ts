@@ -90,8 +90,12 @@ export * from './lib/operator'
 
 export * from './lib/serialize/base64-isomorphic-decode'
 export * from './lib/serialize/base64-isomorphic-encode'
-export * from './lib/serialize/php-serial-deserialize-from-byte-stream'
-export * from './lib/serialize/php-serial-is-serialized-byte-stream'
-export * from './lib/serialize/php-serial-serialize-to-byte-stream'
+// The three php-serial wrappers are NOT re-exported (AGL-2682), the same
+// removal AGL-2486 made in `shared-util-vendor` for `platform-identification`
+// and for the same reason: NOTHING in the repo imports them — not an app, not
+// a plugin, not a tool — so the only thing this line did was put
+// `php-serialize`'s parser in front of every file that takes anything at all
+// from this index, which on the tenant is every published page. Still
+// importable as `@aglyn/shared-util-tools/serialize/php-serial-<name>`.
 export * from './lib/serialize/json-deserialize'
 export * from './lib/serialize/json-serialize'
