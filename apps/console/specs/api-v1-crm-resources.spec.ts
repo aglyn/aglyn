@@ -99,6 +99,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm-task-reminders'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm-email-templates'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
@@ -145,6 +146,7 @@ const PIPELINES = `${ORG}/pipelines`
 const DEALS = `${ORG}/deals`
 const TASKS = `${ORG}/crmTasks`
 const ACTIVITIES = `${ORG}/crmActivities`
+const TEMPLATES = `${ORG}/crmEmailTemplates`
 
 const handlers = { GET, POST, PATCH, DELETE }
 
@@ -202,7 +204,7 @@ describe('the premise (AGL-899)', () => {
     const scopes = readSource('libs/tenant/data/admin/src/lib/server/api-keys.ts')
     expect(scopes).toContain("'crm:read'")
     expect(scopes).toContain("'crm:write'")
-    for (const resource of ['companies', 'pipelines', 'deals', 'tasks', 'activities']) {
+    for (const resource of ['companies', 'pipelines', 'deals', 'tasks', 'activities', 'email-templates']) {
       const source = readSource(`apps/console/utils/api-v1/crm-${resource}.ts`)
       expect(source).toContain("requireScope(ctx, 'crm:read')")
       if (resource !== 'pipelines') {
@@ -214,10 +216,10 @@ describe('the premise (AGL-899)', () => {
     ).toMatch(/scope: 'crm:write'/)
   })
 
-  it('advertises the five resources at the root', async () => {
+  it('advertises the CRM resources at the root', async () => {
     const root = await json(await call('GET', ''))
     expect(root.resources).toEqual(
-      expect.arrayContaining(['companies', 'pipelines', 'deals', 'tasks', 'activities']),
+      expect.arrayContaining(['companies', 'pipelines', 'deals', 'tasks', 'activities', 'email-templates']),
     )
   })
 
@@ -239,7 +241,7 @@ describe('the premise (AGL-899)', () => {
 
 describe('the CRM suite entitlement (AGL-2611)', () => {
   /** Every plan-gated resource, by a path that resolves on each. */
-  const SUITE_PATHS = ['companies', 'pipelines', 'deals', 'tasks', 'activities']
+  const SUITE_PATHS = ['companies', 'pipelines', 'deals', 'tasks', 'activities', 'email-templates']
 
   it('refuses every CRM resource, on any verb, for an org without the suite', async () => {
     // API access without the suite is reachable only through a staff
@@ -1072,6 +1074,142 @@ describe('/v1/activities', () => {
 })
 
 // ── Usage ───────────────────────────────────────────────────────────────────
+
+/**
+ * `/v1/email-templates` (AGL-2658): the stamp, the owner-and-visibility
+ * pair kept together on both verbs, a snippet's subject dropped, the
+ * merge fields stored as written, and the one-clause list.
+ */
+describe('/v1/email-templates', () => {
+  it('stamps a shared template for its site, stores merge fields as written, and normalizes paragraphs', async () => {
+    const template = await json(
+      await call('POST', 'email-templates', {
+        name: '  Follow-up ',
+        subject: 'Following up, {{contact.firstName}}',
+        body: 'Hi {{contact.firstName}},\r\n\r\nStill keen on {{deal.name}}?',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(template).toMatchObject({
+      object: 'email_template',
+      name: 'Follow-up',
+      kind: 'template',
+      visibility: 'shared',
+      ownerUid: null,
+      subject: 'Following up, {{contact.firstName}}',
+      body: 'Hi {{contact.firstName}},\n\nStill keen on {{deal.name}}?',
+      siteId: 'host-1',
+    })
+    const stored = mockDocs.get(`${TEMPLATES}/${template.id}`)!
+    expect(stored.visibleTo).toEqual(tokensFor('host-1'))
+    expect(stored.createdByUid).toBe('api')
+    expect(stored.createdAtMs).toBe(mockClock.nowMs)
+    expect(stored.updatedAtMs).toBe(mockClock.nowMs)
+    expect('ownerUid' in stored).toBe(false)
+  })
+
+  it('keeps the owner and the visibility together, and a snippet keeps no subject', async () => {
+    const orphan = await call('POST', 'email-templates', {
+      name: 'Mine',
+      body: 'x',
+      visibility: 'personal',
+      consentSiteId: 'host-1',
+    })
+    expect(orphan.status).toBe(400)
+    expect(Object.keys((await json(orphan)).error.fields)).toEqual(['ownerUid'])
+    const claimed = await call('POST', 'email-templates', {
+      name: 'Shared',
+      body: 'x',
+      ownerUid: 'u-owner',
+      consentSiteId: 'host-1',
+    })
+    expect(Object.keys((await json(claimed)).error.fields)).toEqual(['ownerUid'])
+    const stranger = await call('POST', 'email-templates', {
+      name: 'Mine',
+      body: 'x',
+      visibility: 'personal',
+      ownerUid: 'u-stranger',
+      consentSiteId: 'host-1',
+    })
+    expect((await json(stranger)).error.fields.ownerUid).toContain('member')
+    expect(childPaths(TEMPLATES)).toEqual([])
+
+    const snippet = await json(
+      await call('POST', 'email-templates', {
+        name: 'Signature',
+        kind: 'snippet',
+        subject: 'ignored',
+        body: '-- Rep',
+        visibility: 'personal',
+        ownerUid: 'u-owner',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(snippet).toMatchObject({ kind: 'snippet', subject: '', visibility: 'personal', ownerUid: 'u-owner' })
+
+    const bad = await call('POST', 'email-templates', {
+      name: '',
+      kind: 'letter',
+      visibility: 'secret',
+      body: '   ',
+      consentSiteId: 'host-1',
+    })
+    expect(Object.keys((await json(bad)).error.fields).sort()).toEqual(['body', 'kind', 'name', 'visibility'])
+  })
+
+  it('flips ownership on PATCH — personal names an owner, shared drops it — and never empties the body', async () => {
+    const created = await json(
+      await call('POST', 'email-templates', { name: 'T', subject: 'S', body: 'B', consentSiteId: 'host-1' }),
+    )
+    const path = `email-templates/${created.id}`
+    expect((await json(await call('PATCH', path, { visibility: 'personal' }))).error.fields.ownerUid).toBeTruthy()
+    const personal = await json(await call('PATCH', path, { visibility: 'personal', ownerUid: 'u-owner' }))
+    expect(personal).toMatchObject({ visibility: 'personal', ownerUid: 'u-owner' })
+    const shared = await json(await call('PATCH', path, { visibility: 'shared' }))
+    expect(shared).toMatchObject({ visibility: 'shared', ownerUid: null })
+    expect('ownerUid' in mockDocs.get(`${TEMPLATES}/${created.id}`)!).toBe(false)
+
+    const cleared = await json(await call('PATCH', path, { subject: null }))
+    expect(cleared.subject).toBe('')
+    const emptied = await call('PATCH', path, { body: '  ' })
+    expect((await json(emptied)).error.fields.body).toBe('Must not be empty')
+    const asSnippet = await json(await call('PATCH', path, { kind: 'snippet', subject: 'back' }))
+    expect(asSnippet).toMatchObject({ kind: 'snippet', subject: '' })
+    expect((await call('PATCH', path, { siteId: 'host-2' })).status).toBe(400)
+    expect((await call('GET', 'email-templates/missing')).status).toBe(404)
+  })
+
+  it('validates the list filters and sends the owner as the one clause', async () => {
+    await call('POST', 'email-templates', { name: 'A', body: 'x', consentSiteId: 'host-1' })
+    await call('POST', 'email-templates', {
+      name: 'B',
+      kind: 'snippet',
+      body: 'y',
+      visibility: 'personal',
+      ownerUid: 'u-owner',
+      consentSiteId: 'host-1',
+    })
+    const page = await json(await call('GET', 'email-templates?kind=template&ownerUid=u-owner'))
+    expect(page.data).toEqual([])
+    expect(lastFilters()).toEqual([{ field: 'ownerUid', op: '==', value: 'u-owner' }])
+    const snippets = await json(await call('GET', 'email-templates?kind=snippet'))
+    expect(snippets.data.map((row: any) => row.name)).toEqual(['B'])
+    expect((await call('GET', 'email-templates?kind=letter')).status).toBe(400)
+    expect((await call('GET', 'email-templates?visibility=secret')).status).toBe(400)
+  })
+
+  it('deletes the template alone and replays the receipt on the same key', async () => {
+    const created = await json(
+      await call('POST', 'email-templates', { name: 'T', body: 'B', consentSiteId: 'host-1' }),
+    )
+    const first = await call('DELETE', `email-templates/${created.id}`, undefined, 'del-1')
+    expect(await json(first)).toEqual({ id: created.id, object: 'email_template', deleted: true })
+    expect(childPaths(TEMPLATES)).toEqual([])
+    const replay = await call('DELETE', `email-templates/${created.id}`, undefined, 'del-1')
+    expect(replay.status).toBe(200)
+    expect(await json(replay)).toEqual({ id: created.id, object: 'email_template', deleted: true })
+  })
+})
 
 describe('GET /v1/usage', () => {
   it('publishes the CRM collection sizes as unlimited, unmetered bands', async () => {

@@ -52,6 +52,7 @@ const sendEmail = jest.fn()
 const isEmailConfigured = jest.fn()
 const resolveOrgPermissions = jest.fn()
 const logOrgActivity = jest.fn()
+const getHostDocAdmin = jest.fn()
 
 let store: Record<string, Record<string, any>> = {}
 /** The org's sites, as `hosts.orgId` answers the org variant's sweep. */
@@ -135,6 +136,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: (...args: unknown[]) => getOrgForHost(...args),
+  getHostDocAdmin: (...args: unknown[]) => getHostDocAdmin(...args),
   getOrgDoc: async (orgId: string) => (orgId === ORG_ID ? { $id: ORG_ID, plan: PLAN } : null),
   logOrgActivity: (...args: unknown[]) => logOrgActivity(...args),
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
@@ -186,6 +188,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   CRM_EMAIL_DECLINED_MESSAGE,
+  CRM_EMAIL_EMPTY_AFTER_MERGE_MESSAGE,
   CRM_EMAIL_NOT_INCLUDED_MESSAGE,
   CRM_EMAIL_PICK_SITE_MESSAGE,
   CRM_EMAIL_RATE_MESSAGE,
@@ -277,6 +280,9 @@ beforeEach(() => {
     hostRole: 'editor',
   })
   logOrgActivity.mockResolvedValue(undefined)
+  getHostDocAdmin.mockImplementation(async (hostId: string) =>
+    hostId === HOST_ID ? { displayName: 'Site One' } : null,
+  )
   consumeRateLimit.mockResolvedValue({ allowed: true, resetMs: Date.now() + 60_000 })
   countCrmActivitiesForRecord.mockResolvedValue(0)
   filterSendableForHost.mockImplementation(async (_host: string, emails: string[]) => emails)
@@ -434,6 +440,78 @@ describe('the recipient comes off the record', () => {
       leadId: 'lead-1',
       contactId: 'contact-1',
     })
+  })
+})
+
+/**
+ * Merge fields (AGL-2658) are filled by the ROUTE, off the documents it
+ * already read, so the letter that leaves is the letter that is logged —
+ * and the one the dialog previewed with the same resolver.
+ */
+describe('merge fields, filled at send time', () => {
+  beforeEach(() => {
+    store[CONTACT].name = 'Ada Lovelace'
+    store[CONTACT].facets[HOST_ID].jobTitle = 'Analyst'
+    store[CONTACT].facets[HOST_ID].companyName = 'Analytical Engines'
+    store[DEAL].title = 'Difference Engine'
+    store[DEAL].amountCents = 125_000
+    store[DEAL].currency = 'usd'
+  })
+
+  it('fills the subject and the body from the contact, the deal, the sender and the site, and logs the letter as sent', async () => {
+    const { status } = await call({
+      dealId: 'deal-1',
+      subject: 'About {{deal.name}}',
+      body: 'Hi {{contact.firstName}} ({{contact.title}}, {{contact.company}}),\r\n\r\n{{deal.amount}} — {{sender.firstName}} at {{site.name}}',
+    })
+    expect(status).toBe(200)
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({
+      subject: 'About Difference Engine',
+      text: 'Hi Ada (Analyst, Analytical Engines),\n\n$1,250.00 — Rep at Site One',
+    })
+    expect(writeCrmEmailActivity.mock.calls[0][1]).toMatchObject({
+      subject: 'About Difference Engine',
+      body: 'Hi Ada (Analyst, Analytical Engines),\n\n$1,250.00 — Rep at Site One',
+    })
+    expect(getHostDocAdmin).toHaveBeenCalledWith(HOST_ID)
+  })
+
+  it('reads the site document only when a field asks for it', async () => {
+    await call(MESSAGE)
+    expect(getHostDocAdmin).not.toHaveBeenCalled()
+    await call({ ...MESSAGE, body: 'From {{sender.name}}' })
+    expect(getHostDocAdmin).not.toHaveBeenCalled()
+    await call({ ...MESSAGE, body: 'From {{site.name}}' })
+    expect(getHostDocAdmin).toHaveBeenCalledTimes(1)
+    expect(sendEmail.mock.calls[2][0].text).toBe('From Site One')
+  })
+
+  it('renders a field with no value, an unknown field and a missing record as nothing', async () => {
+    delete store[CONTACT].name
+    await call({
+      ...MESSAGE,
+      body: 'Hi {{contact.firstName}}, re {{deal.name}} {{contact.shoeSize}} {{ contact.email }}',
+    })
+    expect(sendEmail.mock.calls[0][0].text).toBe('Hi , re   ada@example.com')
+  })
+
+  it('fills a lead\'s fields from the lead document', async () => {
+    store[LEAD].name = 'Charles Babbage'
+    await call({ leadId: 'lead-1', subject: 'Hello {{lead.firstName}}', body: '{{lead.name}} <{{lead.email}}>' })
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({
+      subject: 'Hello Charles',
+      text: 'Charles Babbage <lead@example.com>',
+    })
+  })
+
+  it('refuses a subject or a message that is nothing once filled, before any gate', async () => {
+    delete store[CONTACT].name
+    const { status, body } = await call({ ...MESSAGE, subject: '{{contact.firstName}}' })
+    expect(status).toBe(400)
+    expect(body).toMatchObject({ error: CRM_EMAIL_EMPTY_AFTER_MERGE_MESSAGE, reason: 'merge' })
+    expect(countCrmActivitiesForRecord).not.toHaveBeenCalled()
+    expectNothingSent()
   })
 })
 

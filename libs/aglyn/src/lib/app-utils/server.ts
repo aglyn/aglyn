@@ -49,6 +49,11 @@ export * from './person-key-web'
 // it because `ContactFacet` names its lifecycle stage and custom-value types;
 // the scope stamp every CRM creator writes lives here too.
 export * from './crm'
+// Email templates, snippets and the merge-field resolver (AGL-2658): the
+// letter a rep keeps under a name, and the one grammar the send route and
+// the dialog fill it in by. Pure like `crm`, and beside it because a
+// template is scoped the way a task is.
+export * from './crm-email-templates'
 // Two contact documents folded into one (AGL-2625): the plan the console
 // previews and the server writes, reading the facet shape from `contacts`
 // and the company mirror from `crm`.

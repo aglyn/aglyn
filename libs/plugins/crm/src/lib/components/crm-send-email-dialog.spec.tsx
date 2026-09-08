@@ -39,7 +39,11 @@ const sendingApi = jest.fn()
 const crmApi = jest.fn()
 const enqueueSnackbar = jest.fn()
 const getDoc = jest.fn()
+const setDoc = jest.fn()
+const confirm = jest.fn()
 const firestoreHandle = {}
+/** What the templates listener answers — the rows as stored, with ids (AGL-2658). */
+let templateRows: Array<Record<string, unknown>> = []
 
 jest.mock('@aglyn/plugins-email/components/use-sending-identity-api', () => ({
   useSendingApi: () => sendingApi,
@@ -63,7 +67,8 @@ jest.mock('./use-crm-api', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => firestoreHandle,
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
-  useUser: () => ({ data: { uid: 'u-1', email: 'Rep@Acme.com' } }),
+  useUser: () => ({ data: { uid: 'u-1', email: 'Rep@Acme.com', displayName: 'Rep Person' } }),
+  useFirestoreCollection: () => ({ data: templateRows, status: 'success', fromCache: false }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: (...args: unknown[]) => enqueueSnackbar(...args) }),
@@ -72,10 +77,19 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ href, children }: { href: string; children: React.ReactNode }) => (
     <a href={href}>{children}</a>
   ),
+  useConfirmationContext: () => ({ confirm: (...args: unknown[]) => confirm(...args) }),
 }))
 jest.mock('firebase/firestore', () => ({
-  doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
+  // A path from a handle, or from a collection path already built.
+  doc: (base: unknown, ...segments: string[]) =>
+    (typeof base === 'string' ? [base, ...segments] : segments).join('/'),
+  collection: (_db: unknown, ...segments: string[]) => segments.join('/'),
+  query: (path: string) => ({ path }),
+  where: () => null,
+  orderBy: () => null,
+  limit: () => null,
   getDoc: (...args: unknown[]) => getDoc(...args),
+  setDoc: (...args: unknown[]) => setDoc(...args),
 }))
 
 const READY = {
@@ -124,8 +138,11 @@ beforeEach(() => {
   jest.clearAllMocks()
   hubPathAskedFor = []
   crmApiHost = undefined
+  templateRows = []
   sendingApi.mockResolvedValue(READY)
   crmApi.mockResolvedValue({ response: { ok: true }, payload: { ok: true, activityId: 'act-1' } })
+  setDoc.mockResolvedValue(undefined)
+  confirm.mockResolvedValue(undefined)
 })
 
 describe('CrmSendEmailDialog', () => {
@@ -259,5 +276,160 @@ describe('at the organization level', () => {
     expect(screen.getByLabelText(/^Send from/)).toBeTruthy()
     draft()
     expect(sendButton()).toHaveProperty('disabled', true)
+  })
+})
+
+/**
+ * Templates, snippets and merge fields (AGL-2658): a pick fills both
+ * fields and asks first when a message is written; a snippet lands at the
+ * caret; the draft can be kept as a template stamped for this scope; and
+ * the preview runs the resolver the route runs, counting what it could
+ * not fill — while the draft itself is posted unrendered, because the
+ * route renders.
+ */
+describe('templates, snippets and merge fields', () => {
+  const stamp = { createdByUid: 'u-2', createdAtMs: 1, updatedAtMs: 1, hostId: 'site-1', visibleTo: ['host:site-1'] }
+  const ROWS = [
+    {
+      $id: 't-shared',
+      name: 'Follow-up',
+      subject: 'Following up, {{contact.firstName}}',
+      body: 'Hi {{contact.firstName}},\n\nStill keen?',
+      kind: 'template',
+      visibility: 'shared',
+      ...stamp,
+    },
+    { $id: 't-mine', name: 'Proposal', subject: 'Proposal', body: 'Attached.', kind: 'template', visibility: 'personal', ownerUid: 'u-1', ...stamp },
+    { $id: 't-theirs', name: 'Secret', subject: 'S', body: 'B', kind: 'template', visibility: 'personal', ownerUid: 'u-9', ...stamp },
+    { $id: 's-sig', name: 'Signature', subject: '', body: '-- Rep', kind: 'snippet', visibility: 'shared', ...stamp },
+  ]
+  const picker = () => screen.getByRole('combobox', { name: 'Template' })
+  const pickTemplate = async (name: string) => {
+    fireEvent.mouseDown(picker())
+    fireEvent.click(await screen.findByRole('option', { name }))
+  }
+
+  beforeEach(() => {
+    templateRows = ROWS
+    // A read that finds nothing, unless a test says otherwise: the loader
+    // runs the moment a draft names a field.
+    getDoc.mockImplementation(async () => ({ exists: () => false, data: () => undefined, get: () => undefined }))
+  })
+
+  it('offers the shared templates and my own, never a colleague\'s personal one, and a pick fills both fields', async () => {
+    open()
+    fireEvent.mouseDown(picker())
+    expect(await screen.findByRole('option', { name: 'Follow-up' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Proposal' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'Secret' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Signature' })).toBeNull()
+    fireEvent.click(screen.getByRole('option', { name: 'Follow-up' }))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Subject')).toHaveProperty('value', 'Following up, {{contact.firstName}}'),
+    )
+    expect(screen.getByLabelText('Message')).toHaveProperty('value', 'Hi {{contact.firstName}},\n\nStill keen?')
+    expect(confirm).not.toHaveBeenCalled()
+  })
+
+  it('asks before replacing a written message, and keeps it when the rep declines', async () => {
+    open()
+    draft()
+    confirm.mockRejectedValueOnce(new Error('cancelled'))
+    await pickTemplate('Proposal')
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'Replace the message?' })))
+    expect(screen.getByLabelText('Message')).toHaveProperty('value', 'A note.')
+    expect(screen.getByLabelText('Subject')).toHaveProperty('value', 'Hello')
+    await pickTemplate('Proposal')
+    await waitFor(() => expect(screen.getByLabelText('Message')).toHaveProperty('value', 'Attached.'))
+    expect(screen.getByLabelText('Subject')).toHaveProperty('value', 'Proposal')
+  })
+
+  it('inserts a snippet, or a merge field, at the caret', async () => {
+    open()
+    draft()
+    const message = screen.getByLabelText('Message') as HTMLTextAreaElement
+    message.setSelectionRange(2, 2)
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Signature' }))
+    await waitFor(() => expect(message.value).toBe('A -- Repnote.'))
+    // A letter to a contact is not offered a lead's fields, nor a deal's.
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }))
+    expect(await screen.findByRole('menuitem', { name: 'Job title' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Deal amount' })).toBeNull()
+    message.setSelectionRange(message.value.length, message.value.length)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Site name' }))
+    await waitFor(() => expect(message.value).toBe('A -- Repnote.{{site.name}}'))
+  })
+
+  it('keeps the draft as a template, stamped for this site, owned when personal', async () => {
+    open()
+    draft()
+    fireEvent.click(screen.getByRole('button', { name: 'Save as template…' }))
+    fireEvent.change(await screen.findByLabelText('Template name'), { target: { value: '  Quick note ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }))
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const [path, data] = setDoc.mock.calls[0]
+    expect(String(path)).toMatch(/^orgs\/org-1\/crmEmailTemplates\/[^/]+$/)
+    expect(data).toMatchObject({
+      name: 'Quick note',
+      subject: 'Hello',
+      body: 'A note.',
+      kind: 'template',
+      visibility: 'personal',
+      ownerUid: 'u-1',
+      createdByUid: 'u-1',
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+    })
+    expect(enqueueSnackbar).toHaveBeenCalledWith('Template "Quick note" saved', expect.objectContaining({ variant: 'success' }))
+
+    // The first save's dialog is still leaving; the outer one is reachable
+    // again once it has gone.
+    fireEvent.click(await screen.findByRole('button', { name: 'Save as template…' }))
+    fireEvent.change(await screen.findByLabelText('Template name'), { target: { value: 'Team note' } })
+    fireEvent.click(screen.getByLabelText(/^Shared/))
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }))
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(2))
+    const shared = setDoc.mock.calls[1][1]
+    expect(shared).toMatchObject({ name: 'Team note', visibility: 'shared' })
+    expect('ownerUid' in shared).toBe(false)
+  })
+
+  it('previews the fields off the record, counts the empty ones, and posts the draft unrendered', async () => {
+    const snapshot = (data: Record<string, unknown> | null) => ({
+      exists: () => data !== null,
+      data: () => data,
+      get: (field: string) => data?.[field],
+    })
+    getDoc.mockImplementation(async (path: string) =>
+      path === 'orgs/org-1/contacts/contact-1'
+        ? snapshot({ name: 'Ada Lovelace', email: 'ada@example.com' })
+        : path === 'hosts/site-1'
+          ? snapshot({ displayName: 'Site One' })
+          : snapshot(null),
+    )
+    open()
+    await waitFor(() => expect(screen.getByLabelText('From')).toHaveProperty('value', 'hello@site.mail.aglyn.app'))
+    // No field named, no read made.
+    expect(getDoc).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Hi {{contact.firstName}}' } })
+    fireEvent.change(screen.getByLabelText('Message'), {
+      target: { value: 'Re {{deal.name}} from {{sender.firstName}} at {{site.name}}' },
+    })
+    await screen.findByText('1 field has no value: {{deal.name}}')
+    const preview = screen.getByTestId('crm-email-preview')
+    expect(preview.textContent).toContain('Hi Ada')
+    expect(preview.textContent).toContain('Re  from Rep at Site One')
+    expect(getDoc).toHaveBeenCalledWith('orgs/org-1/contacts/contact-1')
+    expect(getDoc).toHaveBeenCalledWith('hosts/site-1')
+    expect(getDoc).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(sendButton())
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(crmApi).toHaveBeenCalledWith('email-send', {
+      contactId: 'contact-1',
+      subject: 'Hi {{contact.firstName}}',
+      body: 'Re {{deal.name}} from {{sender.firstName}} at {{site.name}}',
+    })
   })
 })

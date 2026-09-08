@@ -59,7 +59,7 @@ back with 60 rows — or with none — and `has_more: true`. The full list:
 | [Contacts](resources/contacts.md#combined-filter) `?email=` **with** `?tag=` | `email` narrows the query; `tag` is checked on the result. |
 | [Form submissions](resources/form-submissions.md#read-filter) `?form=` or `?formId=` **with** `?read=` | The form filter narrows the query; `read` is checked on the result. |
 | [Contacts](resources/contacts.md#crm-filters) `?lifecycleStage=` or `?ownerUid=` | Both live on a per-site profile that cannot be queried organization-wide, so they are always checked on the result. |
-| Every CRM list — [companies](resources/companies.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md) — with **two or more** filters, or **any** filter beside `?updatedAfter=` | The first filter in the resource page's order narrows the query; the rest are checked on the result. |
+| Every CRM list — [companies](resources/companies.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md), [email templates](resources/email-templates.md) — with **two or more** filters, or **any** filter beside `?updatedAfter=` | The first filter in the resource page's order narrows the query; the rest are checked on the result. |
 
 These share one cause, and it is worth knowing because it predicts the next one:
 **only one filter can narrow the query itself.** Every list here is ordered by record
@@ -121,8 +121,9 @@ This is the single most surprising thing about the API, so plan for it:
 #### The CRM lists can be walked by `updated` {#updated-after}
 
 [Companies](resources/companies.md), [pipelines](resources/pipelines.md),
-[deals](resources/deals.md), [tasks](resources/tasks.md) and
-[activities](resources/activities.md) take `?updatedAfter=`, an ISO 8601 instant with
+[deals](resources/deals.md), [tasks](resources/tasks.md),
+[activities](resources/activities.md) and [email templates](resources/email-templates.md)
+take `?updatedAfter=`, an ISO 8601 instant with
 an offset (`2026-09-01T00:00:00Z`; a bare date is a `400`, because midnight in whose
 zone is not a question we can answer). It changes two things at once:
 
@@ -211,7 +212,7 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-Eighteen operations accept an **`Idempotency-Key`** header:
+Twenty operations accept an **`Idempotency-Key`** header:
 
 | Operation | Key scoped to |
 | --- | --- |
@@ -229,8 +230,9 @@ Eighteen operations accept an **`Idempotency-Key`** header:
 | `POST /v1/deals`, `DELETE /v1/deals/{dealId}` | the organization |
 | `POST /v1/tasks`, `DELETE /v1/tasks/{taskId}` | the organization |
 | `POST /v1/activities`, `DELETE /v1/activities/{activityId}` | the organization |
+| `POST /v1/email-templates`, `DELETE /v1/email-templates/{templateId}` | the organization |
 
-Thirteen rows are organization-scoped. `POST /v1/sites` and `POST /v1/datasets` are
+Fifteen rows are organization-scoped. `POST /v1/sites` and `POST /v1/datasets` are
 because neither has an object to scope to yet — the site or dataset they create is
 the object. Both contact operations, and every CRM operation, are because
 **contacts and the CRM are organization-wide**: one list is shared by every site, so
@@ -325,10 +327,10 @@ response has to be distinguishable from a wrong id.
 `DELETE /v1/contacts/{contactId}` behaves the same way, scoped to the organization.
 Send a key on it as a matter of course: contact deletions are usually erasure requests
 running from a script, and "already erased" and "wrong id" prescribe very different
-next steps. The four CRM deletes — [companies](resources/companies.md),
+next steps. The five CRM deletes — [companies](resources/companies.md),
 [deals](resources/deals.md), [tasks](resources/tasks.md),
-[activities](resources/activities.md) — behave the same way, scoped to the
-organization.
+[activities](resources/activities.md), [email templates](resources/email-templates.md)
+— behave the same way, scoped to the organization.
 
 `PATCH` doesn't take the header and doesn't need it. It merges the supplied `values`
 over the stored ones, so the same body twice lands the same state *and* returns the

@@ -61,6 +61,13 @@ const mockApi = jest.fn(async (route: string, payload: Record<string, unknown>) 
 jest.mock('./use-crm-api', () => ({
   useCrmApi: () => mockApi,
 }))
+// The Email templates card (AGL-2658) has a spec of its own; here the section
+// is mounted for the Recipes card alone.
+jest.mock('./email-templates-card', () => ({
+  __esModule: true,
+  default: () => null,
+  EmailTemplatesCard: () => null,
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),

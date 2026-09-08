@@ -67,6 +67,7 @@ import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import AssignmentRuleDrawer from './assignment-rule-drawer'
+import EmailTemplatesCard from './email-templates-card'
 import RecipesCard from './recipes-card'
 
 export type CrmSettingsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
@@ -717,6 +718,11 @@ RoundRobinCard.displayName = 'RoundRobinCard'
  * page's own Recipes menu is the door, and a second one here would write
  * the same action by a different route. Last, because the welcome recipe
  * leans on the round-robin pool set up in the card above it.
+ *
+ * The Email templates card (AGL-2658) is the one card every CRM editor may
+ * write to — a template is working material, not policy — and mounts at
+ * both levels, listing the site's letters under a site and the whole
+ * workspace's from the organization's hub.
  */
 export function CrmSettingsSection(props: CrmSettingsSectionProps) {
   const { hostId, org } = props
@@ -727,6 +733,7 @@ export function CrmSettingsSection(props: CrmSettingsSectionProps) {
       <DefaultOwnerCard hostId={hostId} org={org} />
       <AssignmentRulesCard hostId={hostId} org={org} />
       <RoundRobinCard hostId={hostId} org={org} />
+      <EmailTemplatesCard hostId={hostId} org={org} />
       {mount ? <RecipesCard org={org} /> : null}
     </Stack>
   )

@@ -17,7 +17,9 @@ wherever a contact is captured. The section lives in the CRM hub at
 
 Only a workspace **owner or admin** can change a setting. Everyone who can
 open the CRM can read the page; a member who cannot change a switch sees it
-disabled, with a note saying why.
+disabled, with a note saying why. The one exception is the
+[Email templates](#email-templates) card, which every CRM editor may write
+to: a template is working material, not policy.
 
 ## Companies
 
@@ -131,6 +133,17 @@ reordering a member — never skips or repeats anybody: the next record goes
 to whoever follows the last recipient in the pool as it now stands. A member
 who leaves the workspace is skipped. A pool can hold up to 50 members.
 
+## Email templates
+
+The **Email templates** card lists every template and snippet you can use in
+**Send email** — the team's shared ones and your own personal ones — with its
+kind and who it is for. **New template** opens a drawer for the name, the
+kind, who it is for, the subject and the message; a row's menu edits or
+deletes it. A template written under a site is that site's; one written from
+the organization's own CRM is the whole workspace's, and every site lists it.
+Merge fields, the preview, and what shared and personal mean are on
+[Email templates & snippets](./email-templates.md).
+
 ## Recipes
 
 At the **organization level** only — `…/{organization}/crm/settings` —
@@ -164,6 +177,7 @@ delete the site's copy from its Actions page first if you want a fresh one.
 ## Related
 
 - [CRM overview](./overview.md)
+- [Email templates & snippets](./email-templates.md) — what the Email templates card keeps, and the merge fields
 - [Automations for the CRM](./automations.md#recipes) — what each recipe builds
 - [Companies](./companies.md) — the records these settings create and link
 - [The contact record](./contact-record.md) — picking a company or an owner by hand
