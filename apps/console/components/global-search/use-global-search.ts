@@ -29,9 +29,11 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { compareScored, isSearchableQuery, scoreMatch } from '@aglyn/aglyn'
-import type {
-  GlobalSearchEntity,
-  GlobalSearchEntityDef,
+import {
+  GLOBAL_SEARCH_SITES_COLLECTION,
+  globalSearchReadKind,
+  type GlobalSearchEntity,
+  type GlobalSearchEntityDef,
 } from './global-search-scope'
 
 /**
@@ -153,6 +155,22 @@ export const SEARCH_ESCALATION_WINDOW = 270
 /** The most documents one collection can cost in a single mount. */
 export const SEARCH_MAX_ITEMS = SEARCH_WINDOW + SEARCH_ESCALATION_WINDOW
 
+/**
+ * How many sites an org-level fan-out reads (AGL-2662).
+ *
+ * A host-scoped collection has no org-level shape, so the org hub reads one
+ * window per site — which multiplies that group's cost by the number of
+ * sites rather than leaving it flat. The cap is what keeps an agency running
+ * forty client sites from paying forty windows for one query, and the sites
+ * beyond it are reported as truncation rather than quietly dropped: the
+ * group says it did not look everywhere, which is the same promise the
+ * window itself makes.
+ *
+ * Ten sites at `SEARCH_WINDOW` each is 300 documents, the same ceiling one
+ * escalated collection already costs.
+ */
+export const SEARCH_ORG_HOST_FANOUT = 10
+
 /** How many rows of one kind are shown. Display only — costs no reads. */
 export const MAX_ROWS_PER_GROUP = 5
 
@@ -273,14 +291,23 @@ function windowKey(
   orgId: string | null,
   hostId: string | null,
 ): string {
-  switch (definition.scopeKind) {
+  switch (globalSearchReadKind(definition, hostId)) {
     case 'org':
       return `org:${orgId}:${definition.collection}`
     case 'orgData':
       return `orgData:${orgId}:${definition.collection}`
+    case 'orgHosts':
+      // Keyed by the ORG: the fan-out is one window over every site, and
+      // keying it by a host would make it look cached after one site.
+      return `orgHosts:${orgId}:${definition.collection}`
     default:
       return `host:${hostId}:${definition.collection}`
   }
+}
+
+/** The cache key the `sites` window is held under. */
+function sitesWindowKey(orgId: string | null): string {
+  return `org:${orgId}:${GLOBAL_SEARCH_SITES_COLLECTION}`
 }
 
 export interface UseGlobalSearchOptions {
@@ -297,6 +324,14 @@ export interface UseGlobalSearchOptions {
    * refusal rather than sent unfiltered.
    */
   orgDataTokens?: readonly string[] | null
+  /**
+   * The viewer reads the org's CRM with no scope clause (AGL-2662) — an
+   * org-wide member at the org-level hub, where a consent group's tokens
+   * cannot be resolved because there is no site to resolve them for. See
+   * `GlobalSearchContext.crmOrgWide`; the scope resolver withholds every CRM
+   * group off a site without it, and this is the second layer.
+   */
+  crmOrgWide?: boolean
   /** Raw text from the field. */
   text: string
 }
@@ -306,6 +341,7 @@ export function useGlobalSearch(
 ): UseGlobalSearchResult {
   const { firestore, entities, uid, orgId, hostId, text } = options
   const orgDataTokens = options.orgDataTokens ?? null
+  const crmOrgWide = options.crmOrgWide ?? false
   const active = isSearchableQuery(text)
 
   // The whole cost control: one entry per collection, for the life of the
@@ -324,7 +360,7 @@ export function useGlobalSearch(
   // window.
   const scopeSignature = `${uid ?? ''}|${orgId ?? ''}|${hostId ?? ''}|${(
     orgDataTokens ?? []
-  ).join(',')}`
+  ).join(',')}|${crmOrgWide ? 'orgWide' : ''}`
   const lastScopeRef = useRef(scopeSignature)
   if (lastScopeRef.current !== scopeSignature) {
     lastScopeRef.current = scopeSignature
@@ -332,6 +368,100 @@ export function useGlobalSearch(
     inFlightRef.current = new Set()
     readCountRef.current = 0
   }
+
+  /**
+   * One window over a host-scoped collection, read a site at a time
+   * (AGL-2662).
+   *
+   * The org-level answer for a collection that has none: a lead lives under
+   * `hosts/{hostId}/leads` by path, there is no `orgId` on the document to
+   * group by, and no rule admits a collection-group read — which is the same
+   * reasoning `useOrgLeads` records for the org-level Leads list. So the
+   * fan-out is one query per site, merged into a single window that matches,
+   * caches, caps and reports truncation exactly like every other one.
+   *
+   * Each row is stamped with the site it came from, because a lead's id is a
+   * PERSON KEY — the same person met by two sites has the same id on both —
+   * so the id alone can address neither the row nor its page.
+   *
+   * Never escalated: escalation is a second page of ONE ordering, and this
+   * window is many. The honest widening here is more sites, which the cap
+   * refuses on purpose, so the window reports itself truncated instead.
+   */
+  const fanOutOverSites = useCallback(
+    async (
+      definition: GlobalSearchEntityDef,
+      key: string,
+      siteRows: Array<Record<string, any>>,
+    ) => {
+      const siteIds = siteRows
+        .map((row) => String(row.$id ?? ''))
+        .filter(Boolean)
+      const read = siteIds.slice(0, SEARCH_ORG_HOST_FANOUT)
+      if (!read.length) {
+        // No site is not a failure and not a partial answer: the org holds
+        // none, so the group is complete and empty.
+        cacheRef.current.set(key, {
+          rows: [],
+          failed: false,
+          truncated: false,
+          escalated: true,
+          lastDoc: null,
+        })
+        setVersion((current) => current + 1)
+        return
+      }
+      inFlightRef.current.add(key)
+      setLoading(true)
+      try {
+        const answers = await Promise.all(
+          read.map(async (siteId) => {
+            const snapshot = await getDocs(
+              query(
+                collection(firestore, 'hosts', siteId, definition.collection),
+                orderBy(documentId()),
+                limit(SEARCH_WINDOW),
+              ),
+            )
+            return { siteId, snapshot }
+          }),
+        )
+        const rows: Array<Record<string, any>> = []
+        let filled = false
+        for (const { siteId, snapshot } of answers) {
+          readCountRef.current += Math.max(snapshot.docs.length, 1)
+          if (snapshot.docs.length >= SEARCH_WINDOW) filled = true
+          for (const document of snapshot.docs) {
+            rows.push({ ...document.data(), $id: document.id, $hostId: siteId })
+          }
+        }
+        cacheRef.current.set(key, {
+          rows,
+          failed: false,
+          truncated: filled || siteIds.length > read.length,
+          escalated: true,
+          lastDoc: null,
+        })
+      } catch {
+        // One refused site leaves the group PARTLY read, and a partly read
+        // group rendered as zero matches is the measured zero this feature
+        // is not allowed to show.
+        readCountRef.current += 1
+        cacheRef.current.set(key, {
+          rows: [],
+          failed: true,
+          truncated: false,
+          escalated: true,
+          lastDoc: null,
+        })
+      } finally {
+        inFlightRef.current.delete(key)
+        setVersion((current) => current + 1)
+        if (inFlightRef.current.size === 0) setLoading(false)
+      }
+    },
+    [firestore],
+  )
 
   const fetchWindow = useCallback(
     async (
@@ -343,14 +473,28 @@ export function useGlobalSearch(
       previous: WindowState | null,
     ) => {
       const key = windowKey(definition, orgId, hostId)
+      const readKind = globalSearchReadKind(definition, hostId)
       if (inFlightRef.current.has(key)) return
       if (!previous && cacheRef.current.has(key)) return
       // Escalating twice would spend the ceiling repeatedly for one query.
       if (previous && (previous.escalated || !previous.truncated)) return
+      if (readKind === 'orgHosts') {
+        /*
+         * The site list is the `sites` window, which the same mount reads
+         * for the Sites group — so this holds until that window lands
+         * rather than paying a membership query of its own. The effect
+         * depends on `version`, so a landed window re-runs it and the
+         * fan-out fires then.
+         */
+        const sites = cacheRef.current.get(sitesWindowKey(orgId))
+        if (!sites || sites.failed) return
+        void fanOutOverSites(definition, key, sites.rows)
+        return
+      }
       const path =
-        definition.scopeKind === 'org'
+        readKind === 'org'
           ? ['users', uid ?? '', definition.collection]
-          : definition.scopeKind === 'orgData'
+          : readKind === 'orgData'
             ? ['orgs', orgId ?? '', definition.collection]
             : ['hosts', hostId ?? '', definition.collection]
       // A momentarily empty path segment would address `hosts//screens`.
@@ -374,9 +518,9 @@ export function useGlobalSearch(
         // provable per document and an unfiltered one would be denied
         // outright rather than quietly returning the collection.
         const constraints: any[] =
-          definition.scopeKind === 'org'
+          readKind === 'org'
             ? [where('orgId', '==', orgId), orderBy(documentId())]
-            : definition.scopeKind === 'orgData'
+            : readKind === 'orgData' && hostId
               ? [
                   where('visibleTo', 'array-contains-any', orgDataTokens ?? []),
                   orderBy(documentId()),
@@ -386,14 +530,26 @@ export function useGlobalSearch(
         // only position Firestore accepts it in.
         if (previous?.lastDoc) constraints.push(startAfter(previous.lastDoc))
         constraints.push(limit(size))
-        if (definition.scopeKind === 'org' && !orgId) {
+        if (readKind === 'org' && !orgId) {
           throw new Error('refusing an unscoped site read')
         }
-        if (
-          definition.scopeKind === 'orgData' &&
-          (!orgId || !orgDataTokens?.length)
-        ) {
+        /*
+         * The org-data refusal has two halves because the read does. Under a
+         * site the tokens ARE the question, and a query without them is
+         * denied. At the org level there is no site to resolve a consent
+         * group for, and the rules admit an org-wide member without the
+         * clause — so the check is who is asking, not what they filtered by,
+         * and anyone else is refused here rather than sent an unfiltered
+         * query the rules will reject.
+         */
+        if (readKind === 'orgData' && !orgId) {
           throw new Error('refusing an unscoped org-data read')
+        }
+        if (readKind === 'orgData' && hostId && !orgDataTokens?.length) {
+          throw new Error('refusing an unscoped org-data read')
+        }
+        if (readKind === 'orgData' && !hostId && !crmOrgWide) {
+          throw new Error('refusing an org-wide org-data read')
         }
         const snapshot = await getDocs(query(reference, ...constraints))
         readCountRef.current += Math.max(snapshot.docs.length, 1)
@@ -433,7 +589,7 @@ export function useGlobalSearch(
         if (inFlightRef.current.size === 0) setLoading(false)
       }
     },
-    [firestore, orgId, hostId, uid, orgDataTokens],
+    [firestore, orgId, hostId, uid, orgDataTokens, crmOrgWide, fanOutOverSites],
   )
 
   // Reads are triggered by the query becoming worth running, not by opening

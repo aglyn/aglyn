@@ -19,6 +19,10 @@ import {
   contactInteractionHref,
   crmContactByEmailHref,
   crmHubHref,
+  crmOrgHubHref,
+  crmOrgLeadHref,
+  crmOrgRecordHref,
+  crmOrgSectionHref,
   crmRecordHref,
   crmSectionHref,
   INTERACTION_LINK_LABELS,
@@ -46,6 +50,28 @@ describe('the CRM hub, addressed from outside the plugin (AGL-2622)', () => {
     expect(crmContactByEmailHref(context, 'ada@example.test')).toBe(
       '/acme/hosts/shop/crm/contacts?email=ada%40example.test',
     )
+  })
+})
+
+describe('the same hub with no site under it (AGL-2662)', () => {
+  it('names the organization hub and its sections', () => {
+    expect(crmOrgHubHref('acme')).toBe('/acme/crm')
+    expect(crmOrgSectionHref('acme', 'tasks')).toBe('/acme/crm/tasks')
+  })
+
+  it('addresses a record by id alone, encoding it', () => {
+    expect(crmOrgRecordHref('acme', 'contact', 'c 1')).toBe('/acme/crm/contacts/c%201')
+    expect(crmOrgRecordHref('acme', 'company', 'co1')).toBe('/acme/crm/companies/co1')
+    expect(crmOrgRecordHref('acme', 'deal', 'a/b')).toBe('/acme/crm/deals/a%2Fb')
+  })
+
+  /**
+   * A lead's id is a PERSON KEY — the same on every site that met the
+   * person — so an address that spans sites has to name one. The site
+   * segment comes first, as the hub's own route reads it.
+   */
+  it('names the site before the lead', () => {
+    expect(crmOrgLeadHref('acme', 'host-1', 'l/1')).toBe('/acme/crm/leads/host-1/l%2F1')
   })
 })
 

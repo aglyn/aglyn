@@ -88,9 +88,14 @@
 
 import { Route } from '@aglyn/aglyn/app-utils/console-routes'
 import {
+  crmOrgLeadHref,
+  crmOrgRecordHref,
+  crmOrgSectionHref,
   crmRecordHref,
+  crmSectionHref,
   type CrmRecordKind,
 } from '@aglyn/aglyn/app-utils/console-record-links'
+import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 
 /** A class of thing console search can look through. */
 export type GlobalSearchEntity =
@@ -101,6 +106,8 @@ export type GlobalSearchEntity =
   | 'leads'
   | 'companies'
   | 'deals'
+  | 'tasks'
+  | 'activities'
   | 'components'
   | 'layouts'
   | 'templates'
@@ -131,8 +138,14 @@ export type GlobalSearchEntity =
  * `array-contains-any` filter, the same predicate the rules evaluate, and is
  * refused outright when they are unknown rather than issued unfiltered and
  * denied.
+ *
+ * `orgHosts` is the fourth and exists only off a site (AGL-2662): a
+ * host-scoped collection read once per site the organization has, because
+ * the org-level hub shows every site's rows at once and there is no
+ * org-level collection to listen to. The site list is the window the
+ * `sites` group has already read, so the fan-out costs no read of its own.
  */
-export type GlobalSearchScopeKind = 'host' | 'org' | 'orgData'
+export type GlobalSearchScopeKind = 'host' | 'org' | 'orgData' | 'orgHosts'
 
 export interface GlobalSearchEntityDef {
   id: GlobalSearchEntity
@@ -185,7 +198,43 @@ export interface GlobalSearchEntityDef {
    * scope kind and need no flag.
    */
   surface?: 'crm'
+  /**
+   * How this group is read when there is NO site (AGL-2662).
+   *
+   * Only a `host` group needs it, and only the one whose rows the org-level
+   * hub shows: a lead lives under its site by path, so the org hub reads
+   * every site's window and merges them. A `host` group without this is
+   * dropped off a site, as it always was — a collection that belongs to one
+   * site has no org-level answer to give.
+   */
+  orgScopeKind?: 'orgHosts'
 }
+
+/**
+ * How one group is actually read from where the caller is standing.
+ *
+ * The registry names a group's home; this names the read. They differ for
+ * exactly one group and exactly one reason — see {@link
+ * GlobalSearchEntityDef.orgScopeKind} — and the hook, the cache key and the
+ * link builder all ask this rather than each deciding for themselves, so a
+ * window fetched one way cannot be keyed or linked as the other.
+ */
+export function globalSearchReadKind(
+  definition: GlobalSearchEntityDef,
+  hostId: string | null,
+): GlobalSearchScopeKind {
+  if (definition.scopeKind !== 'host' || hostId) return definition.scopeKind
+  return definition.orgScopeKind ?? 'host'
+}
+
+/**
+ * The caller's own site memberships, narrowed to the open workspace.
+ *
+ * Named because it is read twice: as the `sites` group, and as the site list
+ * an `orgHosts` fan-out is bounded by — which is what lets the fan-out cost
+ * no read of its own. Two spellings would be two windows.
+ */
+export const GLOBAL_SEARCH_SITES_COLLECTION = 'hostMemberships'
 
 /**
  * Everything searchable, in the order groups are shown.
@@ -199,7 +248,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     group: 'Sites',
     noun: 'sites',
     scopeKind: 'org',
-    collection: 'hostMemberships',
+    collection: GLOBAL_SEARCH_SITES_COLLECTION,
     nameField: 'displayName',
     extraFields: ['subdomain'],
   },
@@ -255,6 +304,14 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     fallbackNameField: 'email',
     extraFields: ['email'],
     surface: 'crm',
+    /*
+     * And every site's leads at the org hub (AGL-2662), which is where the
+     * org-level Leads list already shows them. Read a site at a time for
+     * the reason `useOrgLeads` gives: there is no org-level collection, no
+     * `orgId` on the document to group by, and no rule admitting a
+     * collection-group read.
+     */
+    orgScopeKind: 'orgHosts',
   },
   {
     /*
@@ -279,6 +336,39 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     scopeKind: 'orgData',
     collection: 'deals',
     nameField: 'title',
+  },
+  {
+    /*
+     * The team's own work (AGL-2662): a task by its title, an activity by
+     * the subject a sent message carried or the body a person typed. Both
+     * are org data judged by `visibleTo`, so they are read and gated
+     * exactly as contacts, companies and deals are.
+     *
+     * The collections are the PREFIXED names — `crmTasks`, `crmActivities`
+     * — because `tasks` and `activities` are words the org document wants
+     * for other things; naming them from `CRM_COLLECTIONS` is how this
+     * registry and the rules cannot spell them two ways.
+     */
+    id: 'tasks',
+    group: 'Tasks',
+    noun: 'tasks',
+    scopeKind: 'orgData',
+    collection: CRM_COLLECTIONS.tasks,
+    nameField: 'title',
+    extraFields: ['notes'],
+  },
+  {
+    id: 'activities',
+    group: 'Activities',
+    noun: 'activities',
+    scopeKind: 'orgData',
+    collection: CRM_COLLECTIONS.activities,
+    // A sent email carries a subject; everything a person logs by hand
+    // carries only the body it was written into, and a row labelled by its
+    // document id is a row nobody recognizes.
+    nameField: 'subject',
+    fallbackNameField: 'body',
+    extraFields: ['body', 'outcome'],
   },
   {
     id: 'components',
@@ -413,6 +503,19 @@ export interface GlobalSearchContext {
    * as a failure the reader cannot act on.
    */
   orgDataTokens?: readonly string[] | null
+  /**
+   * The viewer may read the organization's CRM with NO scope clause
+   * (AGL-2662) — an org-wide member standing at the org-level hub.
+   *
+   * The other half of {@link orgDataTokens}, and the only one that answers
+   * off a site: the tokens are a consent group's, and a consent group names
+   * a site. The rules' `canReadScoped()` short-circuits on
+   * `isOrgWideMember()`, so for that reader the clause could only ever
+   * narrow what they are already allowed — which is the same reading the
+   * CRM's own `crmVisibleToClause` makes for its listeners. False under a
+   * site, where the tokens are the question.
+   */
+  crmOrgWide?: boolean
 }
 
 export interface GlobalSearchScope {
@@ -478,6 +581,20 @@ export function resolveGlobalSearchScope(
 ): GlobalSearchScope {
   const entities: GlobalSearchEntityDef[] = []
   const onHost = Boolean(context.orgId && context.hostReady && context.hostId)
+  /*
+   * Whether the CRM's records may be read from where the caller stands: the
+   * viewer's tokens under a site, org-wide membership at the org hub. One
+   * expression because the CRM's own gate is one — every group the hub
+   * shows is offered or withheld together, and a reader admitted to the
+   * contacts window and refused the leads one would be told, wrongly, that
+   * a site has no leads.
+   */
+  const crmReadable = Boolean(
+    context.orgId &&
+      (onHost
+        ? context.orgDataTokens?.length
+        : context.hostReady && !context.hostId && context.crmOrgWide),
+  )
 
   for (const definition of GLOBAL_SEARCH_ENTITIES) {
     // Sites are the only thing searchable off a site, and the thing people
@@ -485,23 +602,23 @@ export function resolveGlobalSearchScope(
     if (definition.scopeKind === 'org' && !context.orgId) continue
     // Host collections belong to ONE site, so they are only offered on a
     // site, and only once the id is settled — a half-resolved host would
-    // address `hosts//screens`.
-    if (definition.scopeKind === 'host' && !onHost) continue
-    // Org data is read through the viewer's scope tokens, and without them
-    // the read cannot be filtered the way the rules require — so the group
-    // is withheld rather than offered and denied.
+    // address `hosts//screens`. The exception is a group with an org-level
+    // answer of its own: it is read a site at a time instead.
     if (
-      definition.scopeKind === 'orgData' &&
-      (!context.orgId || !context.orgDataTokens?.length)
+      definition.scopeKind === 'host' &&
+      !onHost &&
+      !(definition.orgScopeKind && crmReadable)
     ) {
       continue
     }
-    // A group whose rows open in the CRM follows the CRM's gate: the same
-    // tokens that admit the org-data groups, whatever the collection's own
-    // scope. Without them the hub is not offered, so neither is the group.
-    if (definition.surface === 'crm' && !context.orgDataTokens?.length) {
-      continue
-    }
+    // Org data is read through the viewer's scope tokens, and without them
+    // the read cannot be filtered the way the rules require — so the group
+    // is withheld rather than offered and denied.
+    if (definition.scopeKind === 'orgData' && !crmReadable) continue
+    // A group whose rows open in the CRM follows the CRM's gate, whatever
+    // the collection's own scope. Without it the hub is not offered, so
+    // neither is the group.
+    if (definition.surface === 'crm' && !crmReadable) continue
     // An unresolved entitlement answers nothing: hold the gated groups until
     // it is real, rather than letting a loading default decide.
     if (
@@ -571,10 +688,13 @@ export interface GlobalSearchLinkContext {
 
 /** The record kind each CRM search group opens, for the shared builder. */
 const CRM_RECORD_KIND: Partial<Record<GlobalSearchEntity, CrmRecordKind>> & {
-  contacts: CrmRecordKind
+  // Every kind but a lead is addressable at BOTH levels by id alone, and the
+  // org-level builder refuses `'lead'` in its type for that reason — so the
+  // three are typed narrower here rather than cast at the call site.
+  contacts: Exclude<CrmRecordKind, 'lead'>
   leads: CrmRecordKind
-  companies: CrmRecordKind
-  deals: CrmRecordKind
+  companies: Exclude<CrmRecordKind, 'lead'>
+  deals: Exclude<CrmRecordKind, 'lead'>
 } = {
   contacts: 'contact',
   leads: 'lead',
@@ -653,16 +773,71 @@ export function buildResultHref(
     case 'services':
       return host ? buildRoute(Route.HOST_BOOKINGS, { orgSlug, host }) : null
     case 'contacts':
-    case 'leads':
     case 'companies':
     case 'deals':
       // The CRM is a plugin hub, which the console app may not import, so
       // its record pages are addressed through the shared builder the
-      // plugin's own `crmRoutes` is pinned against (AGL-2622).
+      // plugin's own `crmRoutes` is pinned against (AGL-2622) — the site
+      // hub's under a site, the org hub's at the org level (AGL-2662).
       return host
         ? crmRecordHref({ orgSlug, host }, CRM_RECORD_KIND[entity], id)
-        : null
+        : crmOrgRecordHref(orgSlug, CRM_RECORD_KIND[entity], id)
+    case 'leads':
+      if (host) return crmRecordHref({ orgSlug, host }, 'lead', id)
+      // At the org level a lead's address has to name its site as well: the
+      // id is a person key, the same on every site that met the person, so
+      // the id alone addresses nothing. The row carries the site it was
+      // read from.
+      return row.$hostId ? crmOrgLeadHref(orgSlug, String(row.$hostId), id) : null
+    case 'tasks':
+    case 'activities':
+      return crmWorkHref(entity, row, orgSlug, host)
     default:
       return null
   }
+}
+
+/**
+ * Where a task or an activity opens (AGL-2662): the record it was filed
+ * under.
+ *
+ * Neither has a page of its own — a task is a row in a record's Tasks card
+ * and in the Tasks list, an activity a line on a timeline — so the useful
+ * destination is the person, company or deal it belongs to. The deal is
+ * preferred, then the company, then the person: a task filed on a deal is
+ * about that deal, and landing on the contact would make the reader find it
+ * again.
+ *
+ * One that names no record at all — a standing task somebody typed into the
+ * list — lands on the Tasks section, which is where it is. An activity that
+ * names none has nowhere to go and returns null rather than a dead row; the
+ * org hub has no activities section either, so the same is true there.
+ */
+function crmWorkHref(
+  entity: 'tasks' | 'activities',
+  row: Record<string, any>,
+  orgSlug: string,
+  host: string,
+): string | null {
+  const linked: Array<[Exclude<CrmRecordKind, 'lead'>, string]> = [
+    ['deal', String(row.dealId ?? '')],
+    ['company', String(row.companyId ?? '')],
+    ['contact', String(row.contactId ?? '')],
+  ]
+  const named = linked.find(([, value]) => Boolean(value))
+  if (named) {
+    const [kind, recordId] = named
+    return host
+      ? crmRecordHref({ orgSlug, host }, kind, recordId)
+      : crmOrgRecordHref(orgSlug, kind, recordId)
+  }
+  // An activity logged against a LEAD names its site by path and not on the
+  // document, so only the site hub can address it.
+  if (entity === 'activities' && host && row.leadId) {
+    return crmRecordHref({ orgSlug, host }, 'lead', String(row.leadId))
+  }
+  if (entity !== 'tasks') return null
+  return host
+    ? crmSectionHref({ orgSlug, host }, 'tasks')
+    : crmOrgSectionHref(orgSlug, 'tasks')
 }

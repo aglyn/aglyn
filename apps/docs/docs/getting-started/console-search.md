@@ -33,12 +33,38 @@ your sites across the workspace:
 | Redirects | A redirect, matched on its source path | The Redirects page |
 | Services | A bookable service | The Bookings page |
 | Contacts | A person in the CRM, matched on their name, email, phone number or company name | The contact's own page in the CRM |
+| Leads | A lead captured on a site, matched on their name or email | The lead's own page in the CRM |
+| Companies | A company in the CRM, matched on its name or domain | The company's own page in the CRM |
+| Deals | A deal, matched on its title | The deal's own page in the CRM |
+| Tasks | A task, matched on its title or notes | The record the task was filed under, or the Tasks list when it names none |
+| Activities | A logged call, email, meeting or note, matched on the subject of a sent message or the text of a logged one | The record the activity was filed under |
 
 A group only appears if your plan includes it. On the Free plan there are no
 workflows, products, services or redirects, so those groups are neither shown
 nor searched. **Contacts** appear only while the [CRM](../content-and-data/crm/overview.md)
 is available to you and your role can manage data — the same rule that opens
 the CRM itself — so a person you could not open never shows up as a result.
+The other CRM groups — leads, companies, deals, tasks and activities — follow
+that same rule.
+
+Tasks and activities have no page of their own, so a row opens the record it
+was filed under: the deal if it names one, otherwise the company, otherwise
+the person. A task filed against nothing in particular opens the Tasks list.
+
+## Searching from the organization
+
+At the organization-level CRM — `/{workspace}/crm`, with no site in the
+address — the CRM groups search **across every site in the workspace** rather
+than one, and a lead's result opens under the site that captured it. This is
+offered to organization-wide members only, which is the same rule that opens
+that hub.
+
+The site groups — pages, emails, components, layouts, templates, content,
+authors, workflows, products, redirects and services — belong to one site and
+are not searched from there; open a site first.
+
+Leads are read one site at a time, so a workspace with a great many sites has
+the first ten searched and the group says it was only partly searched.
 
 ## How matching works
 
