@@ -61,6 +61,8 @@ jest.mock('../hooks/use-contact-field-definitions', () => ({
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  // The maintenance recompute (AGL-2661) calls the route as the signed-in user.
+  useUser: () => ({ data: null }),
   writeGuardedBySeed: async (_seed: unknown, write: () => Promise<void>) => {
     await write()
     return { ok: true }

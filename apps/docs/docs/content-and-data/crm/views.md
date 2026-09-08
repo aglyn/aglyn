@@ -71,6 +71,13 @@ companies grid's column filter, the deals table's **All / Open / Won / Lost**,
 the task view, the leads **Show** — and a view keeps it with the columns and
 the sort.
 
+The contacts, companies and deals lists also have a **No next activity** chip
+beside the view control: on, the list keeps only the records with no open task
+scheduled against them (see [next activity](./tasks.md#next-activity)). It is
+a clause on the view — a view saved with it on reopens with it on — and on the
+companies and deals lists it narrows the page on screen rather than the whole
+collection, the way a contacts filter that cannot be served does.
+
 ## Columns and sort
 
 **Manage columns** in any list's column menu chooses what shows, and **Move

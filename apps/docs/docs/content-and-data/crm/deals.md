@@ -82,8 +82,11 @@ Above the board, three figures summarize what is open: the **open count**, the
 value** (each amount multiplied by its stage's probability).
 
 Switch to the **table** for a paged list with the title, stage, amount, owner,
-expected close date and status of every deal in the pipeline, including the
-closed ones.
+expected close date, status and [**next activity**](./tasks.md#next-activity)
+of every deal in the pipeline, including the closed ones. The **No next
+activity** chip beside the status filter keeps only the deals on the page with
+no open task scheduled against them — the ones the reports page counts as
+[stuck](./reports.md#pipeline).
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one

@@ -220,6 +220,8 @@ const collectionHandle = (path: string): any => {
   }
 }
 
+const mockRecomputeNextActivity = jest.fn(async () => ({ records: 0, missing: 0 }))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -241,6 +243,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // fixture so a case can stand a record at the ceiling without seeding
   // five thousand documents.
   countCrmActivitiesForRecord: async () => mockActivityCount,
+  // The `nextTaskAtMs` writer (AGL-2661): a spy, the recompute is the admin library's suite.
+  recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecomputeNextActivity(...(args as [])),
   meterHostEmail: async () => ({ allowed: true }),
   notifyHostManagers: async () => undefined,
   orgDataCollectionForHost: async () =>
@@ -587,6 +591,10 @@ describe('records beside the contact (claim 3)', () => {
     expect(task.dueAtMs).toBeGreaterThanOrEqual(before + 2 * DAY_MS)
     expect(task.dueAtMs).toBeLessThanOrEqual(Date.now() + 2 * DAY_MS)
     expect(mockActivity.at(-1)?.summary).toBe('created task Call them back')
+    // The contact and company it names carry `nextTaskAtMs` (AGL-2661).
+    expect(mockRecomputeNextActivity).toHaveBeenCalledWith(expect.anything(), ORG_ID, [
+      { contactId: 'contact-1', companyId: 'company-1' },
+    ])
   })
 
   it('prefers the assignee the step names', async () => {

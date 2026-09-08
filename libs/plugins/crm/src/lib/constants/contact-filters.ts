@@ -102,6 +102,21 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'createdAt', kind: 'date', path: 'createdAt', presence: 'always' },
   { column: 'updatedAt', kind: 'date', path: 'updatedAt', presence: 'always' },
   /*
+   * When the earliest open task is due (AGL-2661) — window-only, because
+   * the value is on the SHARED row but a record written before the field
+   * existed has none, and Firestore cannot query for absence. `nullable`
+   * is honest: the writer stores `null` for nothing scheduled, and the
+   * matcher reads absent the same way, so "is empty" is the "No next
+   * activity" filter over the loaded window.
+   */
+  {
+    column: 'nextTaskAtMs',
+    kind: 'date',
+    path: 'nextTaskAtMs',
+    windowOnly: true,
+    presence: 'nullable',
+  },
+  /*
    * THE FACET FIELDS (AGL-2617) — window-only, every one of them.
    *
    * An owner, a stage, a company and the capture sources live on the
@@ -225,6 +240,7 @@ export const CONTACT_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   ltvCents: 'Lifetime value (cents)',
   createdAt: 'Created',
   updatedAt: 'Updated',
+  nextTaskAtMs: 'Next activity',
   [CRM_CONTACT_VIEW_FIELDS.owner]: 'Owner',
   [CRM_CONTACT_VIEW_FIELDS.stage]: 'Stage',
   [CRM_CONTACT_VIEW_FIELDS.source]: 'Source',

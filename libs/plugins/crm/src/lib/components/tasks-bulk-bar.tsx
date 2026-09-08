@@ -44,6 +44,7 @@ import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import type { CrmTaskRow } from '../hooks/use-crm-tasks'
 import type { OrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { downloadTextFile } from '../model/contacts-csv'
+import { refreshCrmNextActivity } from '../model/next-activity-api'
 import {
   type CrmBulkPlan,
   type CrmBulkWrite,
@@ -58,7 +59,7 @@ import {
   saveCrmTask,
   saveCrmTasks,
 } from '../model/task-api'
-import { crmTaskFieldsOf } from '../model/task-routes'
+import { crmTaskCallScope, crmTaskFieldsOf } from '../model/task-routes'
 import { dueAtToLocalInput, localInputToDueAt } from '../model/task-views'
 import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
 import {
@@ -131,19 +132,29 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
     setPending(action)
   }
 
+  // The org the batch form names — the scope's, which is the org's root.
+  const orgId = scope?.[1] ?? null
+
   const runPlan = useCallback(
-    (plan: CrmBulkPlan, done: (count: number) => string) =>
-      apply({
+    async (plan: CrmBulkPlan, done: (count: number) => string) => {
+      const outcome = await apply({
         attempted: plan.writes.length,
         skipped: plan.skipped,
         job: () => runCrmBulkWrites(writers, plan.writes, (write) => write.label),
         done,
-      }),
-    [apply, writers],
+      })
+      // Client-direct writes: the records the selection names are told
+      // (AGL-2661), once each however many tasks named them.
+      const written = new Set(plan.writes.map((write) => write.id))
+      await refreshCrmNextActivity(
+        user,
+        crmTaskCallScope(hostId, orgId),
+        selectedRows.filter((task) => written.has(task.$id)),
+      )
+      return outcome
+    },
+    [apply, writers, user, hostId, orgId, selectedRows],
   )
-
-  // The org the batch form names — the scope's, which is the org's root.
-  const orgId = scope?.[1] ?? null
 
   /**
    * The routes over the rows: under a site one request per task, in

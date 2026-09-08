@@ -28,6 +28,9 @@ import { TaskSnoozeMenu } from './task-snooze-menu'
 const FIRESTORE = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
+  // The snooze tells the next-activity route what moved (AGL-2661), and
+  // reaches for the caller's token to do it.
+  useUser: () => ({ data: null }),
 }))
 
 let writes: Array<{ path: string; value: Record<string, unknown> }>

@@ -75,6 +75,10 @@ export * from './crm-import'
 // stages over the company vocabulary, on the generic helpers `crm-import`
 // also stands on. Pure, and beside it for the same reason.
 export * from './crm-company-import'
+// The next activity a record carries (AGL-2661): what `nextTaskAtMs` IS given
+// a record's open tasks, the view clause a list filters on, the report figure.
+// Pure like `crm`; the admin library's `recomputeCrmNextTaskAt` is the writer.
+export * from './crm-next-activity'
 // The CSV cell grammar the exports write with (AGL-2621) — named rather than
 // starred, because the two import modules above re-export the custom-target
 // helpers from the same file under their own names.

@@ -78,7 +78,9 @@ import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { CRM_NEXT_ACTIVITY_ROUTE } from './model/next-activity'
 import { CRM_TASK_ROUTES } from './model/task-routes'
+import { crmNextActivityHandler } from './server/next-activity-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmCompaniesImportHandler } from './server/companies-import'
 import { crmContactsImportHandler } from './server/contacts-import'
@@ -529,6 +531,8 @@ export function registerCrmConsoleApi(): void {
   // — an assignee's notification, and the `taskCompleted` host event.
   registerPluginApiRoute(CRM_TASK_ROUTES.save, crmTaskSaveHandler)
   registerPluginApiRoute(CRM_TASK_ROUTES.complete, crmTaskCompleteHandler)
+  // A client-direct task write's door to `nextTaskAtMs` (AGL-2661).
+  registerPluginApiRoute(CRM_NEXT_ACTIVITY_ROUTE, crmNextActivityHandler)
   // One chunk of a contact file (AGL-2602), judged and written through the
   // same door every capture uses.
   registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)

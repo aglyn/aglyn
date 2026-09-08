@@ -20,7 +20,9 @@ import {
   type ConsolePluginPageProps,
   type CrmDealStatus,
   dealStageById,
+  filterByNextActivity,
   findOrgMember,
+  isNoNextActivityClause,
   ORG_SCOPE_TOKEN,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
@@ -36,6 +38,7 @@ import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
+import { NoNextActivityToggle, nextActivityColumn } from './crm-next-activity-column'
 import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -175,10 +178,16 @@ export function DealsSection(props: ConsolePluginPageProps) {
     const value = views.state.filters.find((clause) => clause.field === 'status')?.value
     return value === 'open' || value === 'won' || value === 'lost' ? value : 'all'
   }, [views.state.filters])
+  // The status is the query's clause; the "No next activity" clause beside
+  // it (AGL-2661) narrows the loaded page and survives a status change.
+  const viewFilters = views.state.filters
   const setStatusFilter = useCallback(
     (next: StatusFilter) =>
-      views.setFilters(next === 'all' ? [] : [{ field: 'status', op: 'equals', value: next }]),
-    [views.setFilters],
+      views.setFilters([
+        ...(next === 'all' ? [] : [{ field: 'status', op: 'equals', value: next }]),
+        ...viewFilters.filter(isNoNextActivityClause),
+      ]),
+    [views.setFilters, viewFilters],
   )
   useEffect(() => {
     if (views.currentId) setView('table')
@@ -381,10 +390,16 @@ export function DealsSection(props: ConsolePluginPageProps) {
           />
         ),
       },
+      // When the earliest open task against the deal is due (AGL-2661).
+      nextActivityColumn(nowMs),
       // The org's deal fields as optional columns (AGL-2661).
       ...customFieldColumns(dealFields.active),
     ],
-    [pipelineState, roster, dealFields.active],
+    [pipelineState, roster, dealFields.active, nowMs],
+  )
+  const tableRows = useMemo(
+    () => filterByNextActivity(paged.rows, viewFilters),
+    [paged.rows, viewFilters],
   )
   /* The table's column and sort models are the view's (AGL-2617). */
   const grid = useCrmViewGrid(views, columns)
@@ -548,6 +563,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   <ToggleButton value="won">{'Won'}</ToggleButton>
                   <ToggleButton value="lost">{'Lost'}</ToggleButton>
                 </ToggleButtonGroup>
+                <NoNextActivityToggle filters={viewFilters} onChange={views.setFilters} />
                 <Stack sx={{ flex: 1 }} />
                 <Button size="small" onClick={handleExport} disabled={!paged.rows.length}>
                   {'Export CSV'}
@@ -580,7 +596,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   <DealsBulkBar
                     hostId={hostId}
                     scope={scope.scope}
-                    rows={paged.rows}
+                    rows={tableRows}
                     selected={selectedIds}
                     onSelectedChange={setSelectedIds}
                     pipelineById={pipelineState.pipelineById}
@@ -590,7 +606,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   />
                   <CrmColumnOrderProvider value={grid.columnOrder}>
                     <ListTable
-                      rows={paged.rows}
+                      rows={tableRows}
                       columns={grid.columns}
                       slots={CRM_LIST_SLOTS}
                       selectable={{ selected: selectedIds, onChange: setSelectedIds }}

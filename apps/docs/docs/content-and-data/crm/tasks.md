@@ -140,6 +140,25 @@ first, with the same checkbox to complete one inline; the card's heading counts 
 are open and how many are done. **New task** on the card opens the drawer with the record
 already linked, and **All tasks** jumps to the section.
 
+## Next activity {#next-activity}
+
+Every contact, company and deal carries a **Next activity**: when its earliest
+open task is due. It is a column on the [contacts](./contact-record.md),
+[companies](./companies.md#the-companies-list) and [deals](./deals.md#the-board-and-the-table)
+lists — overdue in the warning color, today emphasized, a dash when nothing is
+scheduled — and a **No next activity** chip beside each list's view control
+keeps only the records with nothing planned. A view saved with the chip on
+reopens with it on. On the reports page, the pipeline card's **Stuck deals**
+counts the open deals with nothing scheduled.
+
+The figure is kept by every task write: creating, editing, snoozing, completing,
+reopening or deleting a task recomputes it for the records the task names, and
+so does a task filed by an [automation](./automations.md) or over the
+[API](/api/resources/tasks). A record that existed before the figure did shows a
+dash until a task against it is written — or until **Recompute next activity**
+in the [Fields section](./custom-fields.md#recompute-next-activity) rewrites
+every record's figure from its open tasks.
+
 ## The daily digest
 
 Because overdue and today are read off the clock, nothing on a task ever fires on its

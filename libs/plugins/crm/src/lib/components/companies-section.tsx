@@ -20,6 +20,8 @@ import {
   type AglynOrgBilling,
   CRM_COLLECTIONS,
   type CrmCompany,
+  filterByNextActivity,
+  isNoNextActivityClause,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { mdiPlus } from '@aglyn/shared-data-mdi'
@@ -34,6 +36,7 @@ import {
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
+import { NoNextActivityToggle, nextActivityColumn } from './crm-next-activity-column'
 import CrmViewsControl from './crm-views-control'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
@@ -134,14 +137,26 @@ export function CompaniesSection(props: CompaniesSectionProps) {
    * as the filter always was — the query is rebuilt from it.
    */
   const views = useCrmSavedView({ section: 'companies', hostId, org, basePath })
-  const filter: ListFilterRequest | null = views.state.filters[0] ?? null
+  /*
+   * ...beside the "No next activity" clause (AGL-2661), which is not a
+   * query the listener can run — absence has no index — and narrows the
+   * loaded page below instead. The grid's one clause is the first that is
+   * not it, and setting the grid's clause keeps it.
+   */
+  const viewFilters = views.state.filters
+  const filter: ListFilterRequest | null =
+    viewFilters.find((clause) => !isNoNextActivityClause(clause)) ?? null
   const setFilter = useCallback(
-    (request: ListFilterRequest | null) => views.setFilters(request ? [request] : []),
-    [views.setFilters],
+    (request: ListFilterRequest | null) =>
+      views.setFilters([
+        ...(request ? [request] : []),
+        ...viewFilters.filter(isNoNextActivityClause),
+      ]),
+    [views.setFilters, viewFilters],
   )
 
   const {
-    rows: companies,
+    rows: loaded,
     status,
     hasMore,
     page,
@@ -166,6 +181,11 @@ export function CompaniesSection(props: CompaniesSectionProps) {
     [firestore, scope, visibleTo, filter],
     { idField: '$id' },
   )
+  const companies = useMemo(
+    () => filterByNextActivity(loaded, viewFilters),
+    [loaded, viewFilters],
+  )
+  const nowMs = useMemo(() => Date.now(), [])
 
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -341,11 +361,13 @@ export function CompaniesSection(props: CompaniesSectionProps) {
           </Typography>
         ),
       },
+      // When the earliest open task against the company is due (AGL-2661).
+      nextActivityColumn(nowMs),
       // The org's company fields as optional columns (AGL-2661), read off
       // the row's own `custom` map the way the contacts list reads its own.
       ...customFieldColumns(companyFields.active),
     ],
-    [members, companyFields.active],
+    [members, companyFields.active, nowMs],
   )
 
   /*
@@ -396,6 +418,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
         action: (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <CrmViewsControl controller={views} allLabel="All companies" />
+            <NoNextActivityToggle filters={viewFilters} onChange={views.setFilters} />
             {newCompanyButton}
           </Stack>
         ),

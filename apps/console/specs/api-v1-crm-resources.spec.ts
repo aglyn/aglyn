@@ -64,6 +64,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ...jest.requireActual(
       '../../../libs/tenant/data/admin/src/lib/server/contact-lifecycle-floor',
     ),
+    // The REAL `nextTaskAtMs` writer (AGL-2661), over the same double, so the
+    // figure a task write leaves on its contact is the one read back.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/crm-next-activity',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',
@@ -891,12 +896,19 @@ describe('/v1/tasks', () => {
       siteId: 'host-1',
     })
     expect(mockDocs.get(`${TASKS}/${task.id}`)!.visibleTo).toEqual(tokensFor('host-1'))
+    // The contact it names carries the due time as its next activity (AGL-2661).
+    expect(mockDocs.get(`${ORG}/contacts/c-1`)!.nextTaskAtMs).toBe(Date.parse('2026-09-10T15:00:00Z'))
 
     mockClock.nowMs = 1_760_000_060_000
     const done = await json(await call('PATCH', `tasks/${task.id}`, { status: 'done' }))
     expect(done.completedAt).toBe(new Date(1_760_000_060_000).toISOString())
+    // ...and nothing once the only open task is done, the time again once reopened.
+    expect(mockDocs.get(`${ORG}/contacts/c-1`)!.nextTaskAtMs).toBeNull()
     const reopened = await json(await call('PATCH', `tasks/${task.id}`, { status: 'open' }))
     expect(reopened.completedAt).toBeNull()
+    expect(mockDocs.get(`${ORG}/contacts/c-1`)!.nextTaskAtMs).toBe(Date.parse('2026-09-10T15:00:00Z'))
+    expect((await call('DELETE', `tasks/${task.id}`, undefined, 'task-del')).status).toBe(200)
+    expect(mockDocs.get(`${ORG}/contacts/c-1`)!.nextTaskAtMs).toBeNull()
 
     const bad = await call('POST', 'tasks', {
       title: 'X',

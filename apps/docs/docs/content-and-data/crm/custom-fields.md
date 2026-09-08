@@ -134,6 +134,18 @@ saved under its key stay on the records that carry them, but nothing will show t
 again — and a new field created with the same key would read them as its own, which is
 why the key of a retired field still counts as taken when you create one on that tab.
 
+## Recompute next activity {#recompute-next-activity}
+
+**Recompute next activity** at the top of the Fields section rewrites every
+contact's, company's and deal's [next activity](./tasks.md#next-activity) from
+its open tasks — the figure every task write keeps, recomputed for the whole
+organization at once. Run it after importing records that existed before the
+figure did, or whenever a list's **Next activity** column looks stale; it is safe
+to run any time, and it reads every open task once. An organization holding
+more than twenty thousand open tasks is told only the first batch was read: the
+records those tasks name are still written, but nothing stale is cleared, since
+"nothing is scheduled against this record" cannot be said from a partial read.
+
 ## Related
 
 - [CRM overview](./overview.md)

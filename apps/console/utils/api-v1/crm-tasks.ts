@@ -33,7 +33,12 @@ import {
   type CrmTaskStatus,
   createResourceUid,
 } from '@aglyn/aglyn/server'
-import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
+import {
+  apiJson,
+  ApiErrors,
+  crmNextActivityLinksOf,
+  recomputeCrmNextTaskAt,
+} from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, requireScope } from '../api-v1'
 import {
@@ -177,6 +182,27 @@ async function taskRefErrors(
   return { ...assignee, ...refs }
 }
 
+/**
+ * The records the task names carry `nextTaskAtMs` (AGL-2661), recomputed
+ * after every write here from BOTH sides of the change. Its own catch: the
+ * task write is done, and a figure that did not move is what the Fields
+ * section's recompute is for, not a failed request.
+ */
+async function settleNextActivity(
+  ctx: ApiV1Context,
+  links: readonly (Record<string, unknown> | null | undefined)[],
+): Promise<void> {
+  try {
+    await recomputeCrmNextTaskAt(
+      ctx.firestore,
+      ctx.orgId,
+      links.map((link) => crmNextActivityLinksOf(link)),
+    )
+  } catch (error) {
+    console.error('[api-v1] next activity could not be recomputed', ctx.orgId, error)
+  }
+}
+
 /** `POST /v1/tasks`. */
 async function createTask(request: Request, ctx: ApiV1Context): Promise<Response> {
   const body = await readJsonBody(request)
@@ -212,6 +238,7 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
       ...createPayload(rest),
       ...stamp,
     })
+    await settleNextActivity(ctx, [rest as Record<string, unknown>])
     const view = taskView(await collection.doc(id).get())
     await claim.record(200, view)
     return apiJson(view, { status: 201, headers: ctx.headers })
@@ -246,6 +273,7 @@ async function updateTask(
   }
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: now })
+    await settleNextActivity(ctx, [snap.data(), rest as Record<string, unknown>])
   }
   return apiJson(taskView(await ref.get()), { headers: ctx.headers })
 }
@@ -270,7 +298,10 @@ async function deleteTask(
       await claim.release()
       return ApiErrors.notFound({ message: 'No such task', headers: ctx.headers })
     }
+    // Read before the delete: the records it named are recomputed without it.
+    const named = snap.data()
     await ref.delete()
+    await settleNextActivity(ctx, [named])
     const view = { id: ref.id, object: 'task', deleted: true }
     await claim.record(200, view)
     return apiJson(view, { headers: ctx.headers })

@@ -50,6 +50,7 @@ import RowActionsMenu, {
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
+  useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
@@ -81,6 +82,8 @@ import {
 } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import ContactFieldDrawer, { type ContactFieldDraft } from './contact-field-drawer'
+import { recomputeAllCrmNextActivity } from '../model/next-activity-api'
+import { crmTaskCallScope } from '../model/task-routes'
 
 export type ContactsFieldsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
 
@@ -157,6 +160,51 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
   const [object, setObject] = useState<CrmFieldObject>('contact')
   const { definitions, ready, fromCache } = useContactFieldDefinitions(orgId, object)
   const noun = OBJECT_NOUN[object]
+
+  /*
+   * MAINTENANCE: recompute every record's next activity (AGL-2661). The
+   * figure is kept by every task write, so this is for the records written
+   * before it existed and for whatever a write that could not reach the
+   * route left behind. A console action rather than a script, because the
+   * person who notices a stale column is the person who should be able to
+   * fix it.
+   */
+  const { data: user } = useUser()
+  const [recomputing, setRecomputing] = useState(false)
+  const recomputeNextActivity = useCallback(async () => {
+    const callScope = crmTaskCallScope(hostId, orgId)
+    if (!callScope || recomputing) return
+    const confirmed = await confirm({
+      title: 'Recompute next activity?',
+      description:
+        'Every contact, company and deal in this organization gets its ' +
+        '"Next activity" recomputed from its open tasks. Safe to run any time; ' +
+        'it only rewrites a figure the task list already implies.',
+      confirmationText: 'Recompute',
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (!confirmed) return
+    setRecomputing(true)
+    try {
+      const result = await recomputeAllCrmNextActivity(user, callScope)
+      enqueueSnackbar(
+        `Next activity recomputed: ${result.records.toLocaleString()} record${result.records === 1 ? '' : 's'} ` +
+          `from ${(result.tasks ?? 0).toLocaleString()} open task${result.tasks === 1 ? '' : 's'}` +
+          (result.truncated
+            ? ' — the first batch of open tasks only; nothing stale was cleared'
+            : ''),
+        { variant: 'success' },
+      )
+    } catch (cause) {
+      enqueueSnackbar(
+        cause instanceof Error ? cause.message : 'The next activity could not be recomputed.',
+        { variant: 'warning' },
+      )
+    } finally {
+      setRecomputing(false)
+    }
+  }, [hostId, orgId, recomputing, confirm, user, enqueueSnackbar])
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editing, setEditing] = useState<ContactFieldDefinitionDoc | null>(null)
@@ -427,9 +475,14 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       contentBordered="all"
       HeaderProps={{
         action: scope ? (
-          <Button variant="contained" onClick={openCreate}>
-            {'New field'}
-          </Button>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Button size="small" onClick={() => void recomputeNextActivity()} disabled={recomputing}>
+              {recomputing ? 'Recomputing…' : 'Recompute next activity'}
+            </Button>
+            <Button variant="contained" onClick={openCreate}>
+              {'New field'}
+            </Button>
+          </Stack>
         ) : null,
       }}
     >
