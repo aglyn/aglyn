@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.93 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.92...v1.0.0-beta.93)
+
+### Added
+
+- **media:** a stored reference can pin its asset's content hash ([AGL-2685](https://linear.app/aglyn/issue/AGL-2685))
+
+### Fixed
+
+- **media:** a stale content hash redirects to the stable URL instead of 404ing ([AGL-2685](https://linear.app/aglyn/issue/AGL-2685))
+
+### Performance
+
+- **status:** the status page probes every five minutes, and only when visible ([AGL-2687](https://linear.app/aglyn/issue/AGL-2687))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **build:** the babel presets stop asking for a core-js that is not there ([AGL-2686](https://linear.app/aglyn/issue/AGL-2686), [AGL-2682](https://linear.app/aglyn/issue/AGL-2682))
+
+</details>
+
 ## v1.0.0-beta.92 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/271e58523...v1.0.0-beta.92)
