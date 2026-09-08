@@ -113,6 +113,7 @@
     "test:authorized-domains": "node --test tools/scripts/lib/authorized-domains.test.mjs",
     "test:firebase-credential-message": "node --test tools/scripts/lib/firebase-credential-message.test.mjs",
     "test:typecheck-shard": "node --test tools/scripts/lib/typecheck-shard.test.mjs",
+    "test:typecheck-scope": "node --test tools/scripts/lib/typecheck-scope.test.mjs",
     "test:ttl-policies": "node --test tools/scripts/lib/ttl-policies.test.mjs",
     "test:dependency-egress": "node --test tools/scripts/lib/dependency-egress.test.mjs",
     "test:standalone-installs": "node --test tools/scripts/lib/standalone-installs.test.mjs",
