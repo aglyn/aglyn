@@ -474,6 +474,22 @@ export function emailReputationVerdict(
  * new" would ramp every paying tenant on the platform down to 200 a day on
  * the deploy. The direction to be wrong in is the one that does not throttle
  * a customer who has been sending for a year.
+ *
+ * ## The step is a SHARE, and that is what lets a second surface use it
+ *
+ * A step is stated two ways: `perDay`, the campaign figure, and `share`, the
+ * same restriction as a fraction of a graduated day. They are one number —
+ * `perDay / graduatedPerDay` — because a ramp is a proportion of what an
+ * established workspace may do, and only the campaign path happens to have
+ * the graduated day as its own allowance.
+ *
+ * Every other daily allowance on the platform is a plan figure sized for one
+ * workspace rather than for the whole platform's hour, so a step compared
+ * against one directly would never bind: `min(band, step)` is the band, and
+ * the ramp would be a guard that always passes.
+ * {@link rampedDailyAllowance} takes the share to the allowance instead,
+ * which is the arithmetic the campaign path already does — its allowance IS
+ * the graduated day, so share times allowance is `perDay` exactly.
  *=========================================*/
 
 /** One step of the ramp. */
@@ -516,6 +532,15 @@ export interface EmailRampVerdict {
   graduated: boolean
   /** Campaign messages this tenant may send today. */
   perDay: number
+  /**
+   * The step as a FRACTION of a graduated day, in `(0, 1]`.
+   *
+   * The same restriction {@link perDay} states, in the form a surface with a
+   * different daily allowance can apply — see the surfaces note in the header
+   * above. 1 when graduated, which is the identity every consumer wants for
+   * an established workspace.
+   */
+  share: number
   /** Which step it is on, 0-based. Equals the step count when graduated. */
   step: number
   /** Days until the next step is reachable on age alone. Null when graduated. */
@@ -552,6 +577,7 @@ export function emailRampVerdict(input: EmailRampInput): EmailRampVerdict {
   const graduate = (): EmailRampVerdict => ({
     graduated: true,
     perDay: graduatedPerDay,
+    share: 1,
     step: EMAIL_RAMP_STEPS.length,
     daysToNextStep: null,
     detail:
@@ -588,6 +614,9 @@ export function emailRampVerdict(input: EmailRampInput): EmailRampVerdict {
   return {
     graduated: false,
     perDay,
+    // `graduatedPerDay` is floored at 1 above, so this divides by a positive
+    // number, and `perDay` is the smaller of the two, so it lands in `(0, 1]`.
+    share: perDay / graduatedPerDay,
     step,
     daysToNextStep: next ? Math.max(0, next.minAgeDays - ageDays) : null,
     detail:
@@ -596,6 +625,49 @@ export function emailRampVerdict(input: EmailRampInput): EmailRampVerdict {
       'it establishes a sending history. The rest of a campaign is not lost — ' +
       'it goes out automatically on the following days.',
   }
+}
+
+/**
+ * A daily allowance, held to the share of it a young workspace has earned.
+ *
+ * The ramp applied to a surface whose day is a plan figure rather than the
+ * graduated campaign ceiling — see the share note in the header. A graduated
+ * workspace, and an absent verdict, get the allowance untouched, so a caller
+ * that cannot resolve a ramp is not silently throttling anybody.
+ *
+ * ## The two clamps, and why each is the direction it is
+ *
+ * FLOORED AT 1 while the allowance is positive, the same reasoning
+ * `orgHourlyCampaignCeiling` floors its own share at 1: the first step is a
+ * small fraction of a graduated day, and a plan band low enough to round that
+ * fraction away must throttle a workspace to a trickle rather than stop it
+ * dead. A ceiling of zero on day one is indistinguishable from a plan that
+ * carries no one-to-one email at all, and the two have to stay tellable
+ * apart.
+ *
+ * An allowance of ZERO stays zero, because that is not a small band — it is
+ * a plan with no allowance, and a ramp that raised it to 1 would sell a
+ * feature the tier does not carry. Pacing never grants.
+ *
+ * An INFINITE allowance stays infinite. It is the sentinel a contract with no
+ * ceiling is written as, a share of it is still unbounded, and the clamp
+ * below would read the infinity as a corrupt counter and answer zero — a
+ * ramp that refused the agreements that buy the most.
+ */
+export function rampedDailyAllowance(
+  allowance: number,
+  ramp: EmailRampVerdict | null | undefined,
+): number {
+  const uncapped = Number(allowance)
+  if (uncapped === Number.POSITIVE_INFINITY) return uncapped
+  const included = count(uncapped)
+  if (included <= 0 || !ramp || ramp.graduated) return included
+  // An unreadable share collapses to the floor rather than to the whole
+  // allowance: a ramp that binds and cannot say by how much owes the
+  // narrowest answer it has, not the widest.
+  const share = Number(ramp.share)
+  const earned = Number.isFinite(share) && share > 0 ? included * share : 0
+  return Math.min(included, Math.max(1, Math.floor(earned)))
 }
 
 /** Days between two instants, floored. Negative inputs read as 0. */

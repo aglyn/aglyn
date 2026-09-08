@@ -32,6 +32,7 @@
 
 import { CRM_ACTIVITIES_PER_RECORD_CEILING } from '@aglyn/aglyn/app-utils/crm'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { emailRampVerdict, rampedDailyAllowance } from '@aglyn/shared-util-email'
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -375,6 +376,108 @@ describe('the one-to-one email counter', () => {
       expect(first).toMatchObject({ ok: false, quota: { used: INCLUDED } })
       expect(aborts).toBe(1)
       expect(docs.get(TODAY)?.['count']).toBe(INCLUDED)
+    })
+
+    /**
+     * THE NEW-SENDER RAMP, applied where the ceiling is decided (AGL-2680).
+     *
+     * A young workspace's day is a share of the plan's, and the share is
+     * taken INSIDE this transaction — so the ceiling and the count it is
+     * judged against come out of one read, and the retry a losing
+     * transaction is forced into re-derives both. The race case below is the
+     * point of that: a ramp checked beside the reservation would let two
+     * reps pass one reading of the ramped ceiling, which is the defect this
+     * reservation exists to remove.
+     */
+    describe('the new-sender ramp', () => {
+      const step = (ageDays: number | null, deliveredLifetime = 0) =>
+        emailRampVerdict({ ageDays, deliveredLifetime, graduatedPerDay: 12_000 })
+      /** The plan's day at the first step: a sixtieth of a graduated day. */
+      const RAMPED = rampedDailyAllowance(INCLUDED, step(0))
+
+      it('judges the counter against the ramped day, not the plan’s', async () => {
+        expect(RAMPED).toBeGreaterThan(0)
+        expect(RAMPED).toBeLessThan(INCLUDED)
+
+        docs.set(TODAY, { count: RAMPED - 1 })
+        const last = await reserveCrmEmailSend(
+          firestore,
+          'org-1',
+          STARTER,
+          NOON,
+          step(0),
+        )
+        expect(last).toMatchObject({ ok: true, quota: { included: RAMPED } })
+        expect(docs.get(TODAY)?.['count']).toBe(RAMPED)
+
+        writes.length = 0
+        const refused = await reserveCrmEmailSend(
+          firestore,
+          'org-1',
+          STARTER,
+          NOON,
+          step(0),
+        )
+        // Refused far below the plan's own day, and writing nothing.
+        expect(refused).toMatchObject({
+          ok: false,
+          quota: { allowed: false, included: RAMPED, used: RAMPED },
+        })
+        expect(writes).toHaveLength(0)
+      })
+
+      it('leaves a graduated workspace, and a caller with no ramp, on the plan’s day', async () => {
+        docs.set(TODAY, { count: INCLUDED - 1 })
+        expect(
+          await reserveCrmEmailSend(firestore, 'org-1', STARTER, NOON, step(null)),
+        ).toMatchObject({ ok: true, quota: { included: INCLUDED } })
+
+        docs.set(TODAY, { count: INCLUDED - 1 })
+        expect(
+          await reserveCrmEmailSend(firestore, 'org-1', STARTER, NOON),
+        ).toMatchObject({ ok: true, quota: { included: INCLUDED } })
+      })
+
+      it('does not ramp a contracted allowance with no ceiling', async () => {
+        docs.set(TODAY, { count: 1_000_000 })
+        const uncapped = await reserveCrmEmailSend(
+          firestore,
+          'org-1',
+          {
+            plan: 'enterprise',
+            entitlements: { crmEmailsPerDay: Number.POSITIVE_INFINITY },
+          },
+          NOON,
+          step(0),
+        )
+        expect(uncapped.ok).toBe(true)
+        expect(docs.get(TODAY)?.['count']).toBe(1_000_001)
+      })
+
+      it('CANNOT be raced at the ramped ceiling either', async () => {
+        docs.set(TODAY, { count: RAMPED - 1 })
+        let second: Awaited<ReturnType<typeof reserveCrmEmailSend>> | null = null
+        afterRead = async () => {
+          second = await reserveCrmEmailSend(
+            firestore,
+            'org-1',
+            STARTER,
+            NOON,
+            step(0),
+          )
+        }
+        const first = await reserveCrmEmailSend(
+          firestore,
+          'org-1',
+          STARTER,
+          NOON,
+          step(0),
+        )
+        expect(second).toMatchObject({ ok: true })
+        expect(first).toMatchObject({ ok: false, quota: { used: RAMPED } })
+        expect(aborts).toBe(1)
+        expect(docs.get(TODAY)?.['count']).toBe(RAMPED)
+      })
     })
   })
 

@@ -53,6 +53,17 @@ const isEmailConfigured = jest.fn()
 const resolveOrgPermissions = jest.fn()
 const logOrgActivity = jest.fn()
 const getHostDocAdmin = jest.fn()
+const readOrgEmailRamp = jest.fn()
+
+/**
+ * The real ramp policy, built here rather than hand-written, so a spec
+ * asserting the fraction a young workspace is held to is asserting the
+ * shipped ladder and not a number copied beside it.
+ */
+const rampVerdict = (ageDays: number | null, deliveredLifetime = 0) =>
+  jest
+    .requireActual('@aglyn/shared-util-email')
+    .emailRampVerdict({ ageDays, deliveredLifetime, graduatedPerDay: 6_000 })
 
 let store: Record<string, Record<string, any>> = {}
 /** The org's sites, as `hosts.orgId` answers the org variant's sweep. */
@@ -142,6 +153,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   consumeRateLimit: (...args: unknown[]) => consumeRateLimit(...args),
+  // The ramp's two READS — the platform ceiling and the seven-day window —
+  // are Firestore's, not this route's; the step they resolve to is the
+  // input the route acts on, so the resolver is the seam and the step is
+  // what a case sets.
+  readOrgEmailRamp: (...args: unknown[]) => readOrgEmailRamp(...args),
   // The cap's reservation and its release are the real helpers over the
   // store above: the transaction is what this file has to prove.
   reserveCrmEmailSend: (...args: unknown[]) =>
@@ -178,6 +194,12 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: (...args: unknown[]) => sendEmail(...args),
   sendFailureReason: (result: { sent?: boolean; reason?: string } | null) =>
     !result || result.sent ? null : (result.reason ?? null),
+  // The REAL policy, for the same reason the reservation is real: the share
+  // a step takes off the plan's day is a rule under test.
+  rampedDailyAllowance: (...args: unknown[]) =>
+    jest
+      .requireActual('@aglyn/shared-util-email')
+      .rampedDailyAllowance(...args),
 }))
 
 import {
@@ -191,9 +213,11 @@ import {
   CRM_EMAIL_EMPTY_AFTER_MERGE_MESSAGE,
   CRM_EMAIL_NOT_INCLUDED_MESSAGE,
   CRM_EMAIL_PICK_SITE_MESSAGE,
+  CRM_EMAIL_RAMP_UNAVAILABLE_MESSAGE,
   CRM_EMAIL_RATE_MESSAGE,
   CRM_EMAIL_SUPPRESSED_MESSAGE,
   crmEmailCapReachedMessage,
+  crmEmailRampReachedMessage,
   crmEmailSendHandler,
 } from './email-send'
 
@@ -284,6 +308,9 @@ beforeEach(() => {
     hostId === HOST_ID ? { displayName: 'Site One' } : null,
   )
   consumeRateLimit.mockResolvedValue({ allowed: true, resetMs: Date.now() + 60_000 })
+  // An established workspace: the ramp does not bind, which is the state
+  // every case that is not about the ramp is written against.
+  readOrgEmailRamp.mockResolvedValue({ ramp: rampVerdict(null), degraded: false })
   countCrmActivitiesForRecord.mockResolvedValue(0)
   filterSendableForHost.mockImplementation(async (_host: string, emails: string[]) => emails)
   hostSendingIdentity.mockResolvedValue({
@@ -571,6 +598,154 @@ describe('the daily cap (AGL-2611), reserved in a transaction (AGL-2645)', () =>
     expect(countedToday()).toBe(INCLUDED)
     const refused = answers.find((answer) => answer.status === 409)
     expect(refused?.body).toMatchObject({ reason: 'quota', used: INCLUDED })
+  })
+})
+
+/**
+ * THE NEW-WORKSPACE RAMP ON THIS PATH (AGL-2680).
+ *
+ * The ramp is the campaign path's, resolved through the same
+ * `readOrgEmailRamp` and taken to the allowance this surface meters. What
+ * these cases hold are the four things that make it a control rather than a
+ * decoration: that it BINDS on a young workspace, that it does NOT bind on
+ * an established one, that what it narrows is the ceiling the RESERVATION
+ * judges — so the slot a ramped send takes is still given back when the
+ * provider refuses — and that it refuses rather than admits when the history
+ * behind it cannot be read.
+ *
+ * The ramped figure is computed from the shipped ladder rather than written
+ * down: the first step is 200 against a graduated day of 6,000, so a
+ * workspace created today keeps a thirtieth of its plan's day, and a spec
+ * that pinned "1" would go green if the ladder moved underneath it.
+ */
+describe('the new-workspace ramp, inside the same reservation', () => {
+  /** The plan's day held to the share a workspace of `ageDays` has earned. */
+  const rampedTo = (ageDays: number, delivered = 0) =>
+    jest
+      .requireActual('@aglyn/shared-util-email')
+      .rampedDailyAllowance(INCLUDED, rampVerdict(ageDays, delivered))
+
+  const onTheRamp = (ageDays: number, delivered = 0) => {
+    readOrgEmailRamp.mockResolvedValue({
+      ramp: rampVerdict(ageDays, delivered),
+      degraded: false,
+    })
+  }
+
+  it('holds a workspace created today to a share of the plan’s day', async () => {
+    const ceiling = rampedTo(0)
+    expect(ceiling).toBeGreaterThan(0)
+    expect(ceiling).toBeLessThan(INCLUDED)
+    onTheRamp(0)
+
+    sentToday(ceiling - 1)
+    expect((await call(MESSAGE)).status).toBe(200)
+    expect(countedToday()).toBe(ceiling)
+
+    jest.clearAllMocks()
+    const { status, body } = await call(MESSAGE)
+    expect(status).toBe(409)
+    expect(body).toMatchObject({
+      error: crmEmailRampReachedMessage(ceiling, ceiling),
+      reason: 'ramp',
+      included: ceiling,
+      used: ceiling,
+    })
+    // The refusal names the ramp's number and never the plan's, and it says
+    // the allowance grows rather than that a limit was hit.
+    expect(body.error).not.toContain(String(INCLUDED))
+    expect(body.error).toContain('establishes a sending history')
+    expectNothingSent(ceiling)
+  })
+
+  it('raises the ceiling for a step the workspace has earned, and binds there too', async () => {
+    // Day 1 with the first step delivered is the SECOND step: a bigger
+    // share of the same plan day, off the same ladder — and still a
+    // ceiling, which is what separates a ramp from a formality.
+    const ceiling = rampedTo(1, 100)
+    expect(ceiling).toBeGreaterThan(rampedTo(0))
+    expect(ceiling).toBeLessThan(INCLUDED)
+    onTheRamp(1, 100)
+
+    sentToday(ceiling - 1)
+    expect((await call(MESSAGE)).status).toBe(200)
+
+    jest.clearAllMocks()
+    const { status, body } = await call(MESSAGE)
+    expect(status).toBe(409)
+    expect(body).toMatchObject({ reason: 'ramp', included: ceiling })
+    expectNothingSent(ceiling)
+  })
+
+  it('does not bind an established workspace, which sends its plan’s whole day', async () => {
+    // The default: `readOrgEmailRamp` graduates an org whose record carries
+    // no creation date, and a graduated step takes nothing off the plan.
+    sentToday(INCLUDED - 1)
+    expect((await call(MESSAGE)).status).toBe(200)
+    expect(countedToday()).toBe(INCLUDED)
+
+    jest.clearAllMocks()
+    const { body } = await call(MESSAGE)
+    expect(body).toMatchObject({ reason: 'quota', included: INCLUDED })
+  })
+
+  it('gives the ramped slot back when the provider refuses, and it is spendable', async () => {
+    const ceiling = rampedTo(0)
+    onTheRamp(0)
+    // The LAST slot of the ramped day, so what comes back is the difference
+    // between a workspace that may still write to somebody and one that may
+    // not until midnight.
+    sentToday(ceiling - 1)
+    sendEmail.mockResolvedValue({ sent: false, reason: 'invalid' })
+
+    const { status } = await call(MESSAGE)
+    expect(status).toBe(502)
+    expect(countedToday()).toBe(ceiling - 1)
+    expect(writeCrmEmailActivity).not.toHaveBeenCalled()
+    expect(recordEmailSends).not.toHaveBeenCalled()
+
+    jest.clearAllMocks()
+    sendEmail.mockResolvedValue({ sent: true, id: 'msg-2' })
+    expect((await call(MESSAGE)).status).toBe(200)
+    expect(countedToday()).toBe(ceiling)
+
+    // And it was one slot back, not an amnesty: the ramp closes the day
+    // behind it.
+    jest.clearAllMocks()
+    const { status: refused, body } = await call(MESSAGE)
+    expect(refused).toBe(409)
+    expect(body).toMatchObject({ reason: 'ramp', included: ceiling })
+    expectNothingSent(ceiling)
+  })
+
+  /**
+   * A LIMITER THAT CANNOT ANSWER REFUSES. The window a step is sized from
+   * is unreadable, so the route does not know what this workspace has
+   * earned — and there is no third answer for one message the way there is
+   * for a campaign, which defers its remainder to tomorrow.
+   */
+  it('refuses, and reserves nothing, when the ramp cannot resolve the history', async () => {
+    readOrgEmailRamp.mockResolvedValue({ ramp: rampVerdict(0), degraded: true })
+    const { status, body } = await call(MESSAGE)
+    expect(status).toBe(503)
+    expect(body).toMatchObject({
+      error: CRM_EMAIL_RAMP_UNAVAILABLE_MESSAGE,
+      reason: 'ramp-unavailable',
+    })
+    // Refused BEFORE the reservation, so nothing was written and no slot is
+    // held over a day the workspace never spent.
+    expect(runTransaction).not.toHaveBeenCalled()
+    expectNothingSent()
+  })
+
+  it('does not refuse an established workspace for a history it never reads', async () => {
+    // `readOrgEmailRamp` graduates on the org record alone and never gets as
+    // far as the window, so the degraded answer cannot reach one.
+    readOrgEmailRamp.mockResolvedValue({
+      ramp: rampVerdict(null),
+      degraded: false,
+    })
+    expect((await call(MESSAGE)).status).toBe(200)
   })
 })
 
