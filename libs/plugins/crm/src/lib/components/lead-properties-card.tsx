@@ -73,8 +73,6 @@ function Fact(props: { label: string; children: React.ReactNode }) {
 
 export interface LeadPropertiesCardProps {
   hostId: string
-  /** The org document the shell passed, for the activity scope a call is logged in. */
-  org?: Partial<AglynOrgBilling> | null
   leadId: string
   lead: Record<string, unknown> & CrmLeadFields
   leadStatus: FirestoreDocStatus
@@ -100,8 +98,9 @@ export interface LeadPropertiesCardProps {
    */
   erasurePending?: boolean
   /**
-   * The org the shell passed, for the booking door (AGL-2660): whether the
-   * lead's site runs Bookings, and whether the plan is entitled to it.
+   * The org the shell passed: the booking door reads whether the lead's site
+   * runs Bookings and whether the plan is entitled to it (AGL-2660), and a
+   * logged call reads the activity scope it belongs in (AGL-2661).
    */
   org?: Partial<AglynOrgBilling> | null
 }
@@ -123,7 +122,6 @@ export interface LeadPropertiesCardProps {
 export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const {
     hostId,
-    org,
     leadId,
     lead,
     leadStatus,
