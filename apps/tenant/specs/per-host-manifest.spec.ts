@@ -258,6 +258,89 @@ describe('manifest icon media references (AGL-1407)', () => {
       await iconFor({ subdomain: 'northwind-coffee', logoUrl: 'media:junk' }),
     ).toBeUndefined()
   })
+
+  /**
+   * The site's own square icon (AGL-2689).
+   *
+   * `sizes: 'any'` fixed the LIE — a wordmark announced as a 512px square —
+   * and could not fix the artwork, because there was no field to put artwork
+   * in. `seo.appIcon` is that field, and the assertions here are the two
+   * halves of a seam: a site that fills it in installs with it, and a site
+   * that has not installs with exactly what it installed with before.
+   */
+  describe('the square app icon (AGL-2689)', () => {
+    it('is preferred over the logo when the site has one', async () => {
+      expect(
+        await iconFor({
+          $id: 'DXnRbPH4CQ',
+          subdomain: 'northwind-coffee',
+          logoUrl: 'media:org:jWmGooWE3L/wordmark',
+          seo: { appIcon: 'media:org:jWmGooWE3L/appicon' },
+        }),
+      ).toBe(
+        'https://northwind-coffee.aglyn.app' +
+          '/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/appicon',
+      )
+    })
+
+    it('falls back to the logo when the field is unset', async () => {
+      expect(
+        await iconFor({
+          subdomain: 'northwind-coffee',
+          logoUrl: 'https://cdn.test/northwind.png',
+          seo: { title: 'Northwind Coffee' },
+        }),
+      ).toBe('https://cdn.test/northwind.png')
+    })
+
+    it('falls back to the logo when the field was CLEARED', async () => {
+      // The picker writes `''` rather than deleting the key, because a merge
+      // write ignores an absent field (AGL-1191) — so "removed" has to read
+      // as "use the logo again", not as "no icon".
+      expect(
+        await iconFor({
+          subdomain: 'northwind-coffee',
+          logoUrl: 'https://cdn.test/northwind.png',
+          seo: { appIcon: '' },
+        }),
+      ).toBe('https://cdn.test/northwind.png')
+    })
+
+    it('still declares `any`, because nothing measured the file', async () => {
+      // A dedicated field is not a measurement (AGL-2204): no dimensions are
+      // stored for it, a `media:` reference carries no extension to sniff,
+      // and an SVG has no raster size at all. `any` is the honest answer for
+      // either source.
+      mockGetHost.mockResolvedValue({
+        host: {
+          displayName: 'Northwind Coffee',
+          seo: { appIcon: 'https://cdn.test/icon-512.png' },
+        },
+      })
+      const { body } = await manifestFor('northwind-coffee')
+      expect(body.icons?.[0]?.sizes).toBe('any')
+      expect(body.icons?.[0]?.purpose).toBe('any')
+    })
+
+    it('installs an app icon on a site with no logo at all', async () => {
+      // The empty case is about having NO artwork, not about `logoUrl`
+      // specifically — a site whose only mark is a square one must install.
+      expect(
+        await iconFor({
+          subdomain: 'northwind-coffee',
+          seo: { appIcon: 'https://cdn.test/icon-512.png' },
+        }),
+      ).toBe('https://cdn.test/icon-512.png')
+    })
+
+    it('omits icons when a site has neither', async () => {
+      mockGetHost.mockResolvedValue({
+        host: { displayName: 'No Marks Co', seo: { title: 'No Marks Co' } },
+      })
+      const { body } = await manifestFor('no-marks')
+      expect(body).not.toHaveProperty('icons')
+    })
+  })
 })
 
 /**

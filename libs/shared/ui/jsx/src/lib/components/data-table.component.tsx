@@ -30,6 +30,7 @@ import {
   type GridOverlayProps,
 } from '@mui/x-data-grid'
 import { forwardRef, type ReactNode } from 'react'
+import { TABLE_EMPTY_STATE_HEIGHT } from '../const/table-pagination'
 import { EmptyStateComponent } from './empty-state.component'
 import { HelpTip } from './help-tip.component'
 
@@ -152,6 +153,28 @@ const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
             width: '100%',
             display: 'flex',
             flexDirection: 'column',
+            /*
+              THE EMPTY STATE'S ROOM, RESERVED BEFORE IT IS DRAWN.
+
+              MUI X sizes the no-rows overlay from this variable and falls back
+              to two rows when nothing declares it — shorter than the empty
+              state's illustration on its own. The overlay is centered in the
+              slot and `.MuiDataGrid-main` clips what leaves it, so a slot two
+              rows tall does not crop the empty state at the bottom: it draws
+              the top half of it across the column headers and cuts the
+              description off mid-sentence.
+
+              An `autoHeight` grid grows to whatever is reserved here. A grid
+              holding a height of its own keeps it and centers the overlay in
+              what the header and the footer leave. Either way a grid WITH rows
+              is untouched: the variable is read only where there are no rows
+              to measure. A list still loading has none either, which is what
+              keeps it from changing height when the read lands empty.
+
+              On the wrapper rather than on the grid so that it inherits down
+              and a caller's `sx`, merged after this one, can still raise it.
+            */
+            '--DataGrid-overlayHeight': `${TABLE_EMPTY_STATE_HEIGHT}px`,
             '& .MuiDataGrid-root': {
               border: 'none',
               '& .MuiDataGrid-cell': {

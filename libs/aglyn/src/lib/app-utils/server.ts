@@ -112,6 +112,10 @@ export * from './crm-next-activity'
 // stage and an assignee by name and refuses the row it cannot.
 export * from './crm-deal-import'
 export * from './crm-task-import'
+// Reading a spreadsheet of LEADS into the CRM (AGL-2701): the same three
+// stages over the lead vocabulary. Half a lead — the person and the team's
+// working state — because the capture half is the capture door's to write.
+export * from './crm-lead-import'
 // The CSV cell grammar the exports write with (AGL-2621) — named rather than
 // starred, because the two import modules above re-export the custom-target
 // helpers from the same file under their own names.

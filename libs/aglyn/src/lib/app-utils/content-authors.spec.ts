@@ -104,6 +104,57 @@ describe('normalizeContentAuthor', () => {
       expect(typeof item).toBe('string')
     }
   })
+
+  /**
+   * The page's own head (AGL-2689). These are the fields that decide what a
+   * search result and a share sheet show, and this normalizer is the only
+   * thing between a stored document and both of them — a key it does not
+   * carry is a field the console can write and no page can read, which is the
+   * shape `entry.authorName` shipped in for four months.
+   */
+  it('carries the search snippet and the share card through', () => {
+    const author = normalizeContentAuthor({
+      name: 'Ada',
+      seoDescription: '  Ada Lovelace writes about compilers.  ',
+      seoImage: '  media:host-1/card  ',
+      seoImageAlt: '  Ada beside the Analytical Engine  ',
+    })
+
+    expect(author).toMatchObject({
+      seoDescription: 'Ada Lovelace writes about compilers.',
+      seoImage: 'media:host-1/card',
+      seoImageAlt: 'Ada beside the Analytical Engine',
+    })
+  })
+
+  it('caps the snippet shorter than the bio it overrides', () => {
+    // A snippet is read alone in a result and cut off past roughly 160
+    // characters; a bio is printed beside a heading and runs as long as its
+    // author wants. Storing more of the snippet only hides the cut.
+    const author = normalizeContentAuthor({
+      name: 'Ada',
+      bio: 'b'.repeat(900),
+      seoDescription: 's'.repeat(900),
+    })
+
+    expect(author?.bio).toHaveLength(600)
+    expect(author?.seoDescription).toHaveLength(300)
+  })
+
+  it('empties a non-string rather than passing it to the head', () => {
+    const author = normalizeContentAuthor({
+      name: 'Ada',
+      seoDescription: 42,
+      seoImage: { url: 'nope' },
+      seoImageAlt: ['nope'],
+    })
+
+    expect(author).toMatchObject({
+      seoDescription: '',
+      seoImage: '',
+      seoImageAlt: '',
+    })
+  })
 })
 
 describe('contentAuthorJsonLd — Person vs Organization is a real branch', () => {

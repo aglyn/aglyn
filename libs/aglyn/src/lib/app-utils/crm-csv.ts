@@ -507,6 +507,7 @@ export function tasksCsv(
 export function csvLeadSourceLabel(source: string): string {
   if (source === 'signup') return 'Sign-up'
   if (source === 'booking') return 'Booking'
+  if (source === 'import') return CONTACT_SOURCE_LABELS.import
   if (source === 'form') return CONTACT_SOURCE_LABELS.form
   if (source.startsWith('form:')) return `Form ${source.slice('form:'.length)}`
   return source

@@ -37,6 +37,7 @@ export * from './lib/theme.types'
 export * from './lib/constants'
 
 export * from './lib/console.theme'
+export * from './lib/tenant.theme'
 
 export * from './lib/components/host-theme-provider'
 export * from './lib/components/theme-css-var-provider'

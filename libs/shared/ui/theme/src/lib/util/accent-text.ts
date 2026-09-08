@@ -23,13 +23,17 @@ import { AA_TEXT_CONTRAST, contrastRatio } from './accessible-shade'
  * scheme's own surfaces" (AGL-1293 / AGL-1297).
  *
  * `dark` is deliberately overloaded rather than a new slot being invented:
- * `ensureAccessibleShades` already guarantees the DERIVED value of this slot
- * clears {@link AA_TEXT_CONTRAST} against `background.default` and
+ * `ensureAccessibleShades` already guarantees the value of this slot clears
+ * {@link AA_TEXT_CONTRAST} against `background.default` and
  * `background.paper` in whichever direction the scheme needs (darker in
- * light, LIGHTER in dark), and the marketing host already pins it explicitly
- * (`#0073ae` light / `#4fc3f7` dark). A second slot would have to be
- * whitelisted in `host-theme.ts`, authored per host, and kept in sync — three
- * new ways for a tenant palette to be missing the accessible value.
+ * light, LIGHTER in dark), so every tenant palette carries an accessible
+ * value here whether or not its author thought about one. A second slot
+ * would have to be whitelisted in `host-theme.ts`, authored per host, and
+ * kept in sync — three new ways for a palette to be missing it.
+ *
+ * `console.theme.ts` authors the shade explicitly for both schemes rather
+ * than relying on that repair, so the value a link resolves to is readable
+ * in the palette instead of recomputed at boot.
  */
 export const ACCENT_TEXT_SHADE = 'dark' as const
 
@@ -37,28 +41,21 @@ export const ACCENT_TEXT_SHADE = 'dark' as const
 export const AA_NON_TEXT_CONTRAST = 3
 
 /**
- * ⚠️ NOT WIRED TO ANYTHING, DELIBERATELY. This is a MEASUREMENT helper, not a
- * rendering path.
+ * The accent-as-text color for `color`, as a value safe to hand to a
+ * `styleOverrides` root.
  *
- * `c03a2d754` routed `MuiButton`'s `--variant-textColor` /
- * `--variant-outlinedColor`, `MuiLink`'s `color` and `MuiTab`'s selected
- * label through this function. That shipped, and it repainted the brand
- * blue: links and text/outlined button labels went `#00b0ff` → `#0077ad` in
- * light and → `rgb(76, 199, 255)` in dark. decided: **"You changed
- * my theme colors, I told you deliberately not to do that."** Every one of
- * those call sites is reverted; `#00b0ff` renders everywhere it rendered
- * before.
- *
- * What survives here is the ability to ANSWER the question — "what would
- * accent-coloured text resolve to if we ever decided to change it" — for a
- * decision that is the to make. Wiring it into a component override again
- * is a visual change to the brand and needs him to ask for it.
+ * Wired into `MuiButton`'s `--variant-textColor` / `--variant-outlinedColor`
+ * and `MuiLink`'s `color` in `console.theme.ts`. Those three are the places
+ * MUI paints an accent at normal text size, where `main` owes 4.5:1 and the
+ * brand blue delivers 2.43:1 on white. Everything that paints the accent as
+ * a FILL, a BORDER or an INDICATOR — `--variant-containedBg`,
+ * `--variant-outlinedBorder`, the Tabs indicator — keeps `main`: those owe
+ * 3:1, and the brand color is meant to be seen there.
  *
  * Returns a CSS variable reference (`var(--mui-palette-primary-dark)`) on a
- * CSS-vars theme and a literal on a single-mode theme. If this is ever wired
- * up, that matters: baking a literal is the AGL-1292 bug shape, because
- * `components` are evaluated ONCE against the root theme, so a light-scheme
- * hex would freeze into dark mode.
+ * CSS-vars theme and a literal on a single-mode theme. That distinction is
+ * load-bearing: `components` are evaluated ONCE against the root theme, so
+ * baking a light-scheme literal would freeze it into dark mode.
  *
  * @param theme the active MUI theme (CSS-vars or single-mode)
  * @param color a palette key — `'primary'`, `'error'`, … Anything without a
@@ -75,8 +72,7 @@ export function accentTextColor(
   const source = ((theme as unknown as { vars?: { palette?: unknown } }).vars ??
     theme) as { palette?: Record<string, unknown> }
   const paletteColor = source?.palette?.[color] as
-    | Record<string, string>
-    | undefined
+    Record<string, string> | undefined
   if (!paletteColor || typeof paletteColor !== 'object') return undefined
   const accent = paletteColor[ACCENT_TEXT_SHADE]
   return typeof accent === 'string' ? accent : undefined

@@ -18,6 +18,7 @@
 import { lightBlue } from '@mui/material/colors'
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
 import { buildFontFamilyList } from './constants'
+import { accentTextColor } from './util/accent-text'
 import createResponsiveTheme, {
   createResponsiveCssVarTheme,
 } from './util/create-responsive-theme'
@@ -25,9 +26,7 @@ import createResponsiveTheme, {
 export type ColorVariant = 'light' | 'dark'
 export type BackgroundRecord = PaletteOptions['background']
 export type OrdinalIdentifier<K extends string = ''> =
-  | 'primary'
-  | 'secondary'
-  | 'tertiary'
+  'primary' | 'secondary' | 'tertiary'
 export type OrdinalRecord<T extends OrdinalIdentifier = OrdinalIdentifier> =
   Pick<PaletteOptions, T>
 export type PrimaryRecord = OrdinalRecord<'primary'>['primary']
@@ -44,10 +43,21 @@ const colorScheme = {
     // objects moved, so each keeps the contrastText it shipped with.
     primary: {
       main: '#00b0ff',
+      // The accent rendered AS TEXT — `ACCENT_TEXT_SHADE` in
+      // `util/accent-text.ts`. Links and the labels of text and outlined
+      // buttons read this slot; `main` keeps painting fills, borders and
+      // indicators, which owe 3:1 rather than 4.5:1. The brand blue is
+      // 2.43:1 on white, so as normal-size text it needs the deeper shade:
+      // this one measures 4.95:1 on paper and 4.54:1 on the page.
+      dark: '#0077ad',
       contrastText: '#FFFFFF',
     },
     secondary: {
       main: '#e040fb',
+      // Same slot, same role. Authored rather than left to derivation so the
+      // value every link resolves to is readable in this file: 6.11:1 on
+      // paper, 5.61:1 on the page.
+      dark: '#9d2db0',
       contrastText: '#FFFFFF',
     },
     tertiary: {
@@ -77,11 +87,18 @@ const colorScheme = {
       paper: '#FFFFFF',
     },
     info: {
-      main: '#1e88e5',
+      // The deepest blue of this hue that still carries a WHITE label at the
+      // 4.5:1 AA text bar (4.56:1). A lighter info takes every filled
+      // variant sub-AA, and flipping its ink to dark makes an informational
+      // surface read as a warning.
+      main: '#1878cd',
       contrastText: '#FFFFFF',
     },
     error: {
-      main: '#E53935',
+      // The deepest red of this hue that keeps a white label at AA (4.51:1).
+      // An error surface is a destructive-action affordance, so the fill
+      // carries the contrast and the ink stays white.
+      main: '#e32c27',
       contrastText: '#FFFFFF',
     },
     success: {
@@ -130,10 +147,21 @@ const colorScheme = {
   dark: {
     primary: {
       main: '#00b0ff',
+      // The accent-as-text slot, LIGHTER than `main` here and deliberately
+      // so. MUI derives `dark` as `darken(main, 0.3)` in both schemes — it
+      // cannot see that the ground flipped — which lands `#007bb2` at 3.67:1
+      // on this page. Every `dark` shade in this scheme is therefore
+      // authored, and each is the value `ensureAccessibleShades` computes by
+      // walking the accent LIGHTER until it clears 4.5:1 against both
+      // `background.default` and `background.paper`. 9.02:1 / 6.62:1.
+      dark: '#4dc8ff',
       contrastText: '#FFFFFF',
     },
     secondary: {
       main: '#e040fb',
+      // 7.04:1 on the page, 5.17:1 on a raised panel. The brand magenta
+      // itself is 3.78:1 on paper, so it cannot be the text shade here.
+      dark: '#e979fc',
       contrastText: '#FFFFFF',
     },
     // Dark takes a LIFTED slate, not the brand `#404C5C`: that scores 1.38
@@ -143,9 +171,17 @@ const colorScheme = {
     // against black, 3.42 against white).
     tertiary: {
       main: '#7C8CA3',
+      // 7.73:1 / 5.68:1 — `main` itself is 2.78:1 on the page.
+      dark: '#a3afbf',
       contrastText: '#000000DE',
     },
     surface: {
+      // Held at 1.17:1 from the page even though that is flat for an
+      // elevation step. This token is also the panel the besigner draws its
+      // hierarchy depth cues on, and lifting it toward the page pushes the
+      // active guide — `secondary.main` on this fill — from 4.41:1 down to
+      // 3.89:1. Trading a legible cue for a slightly clearer edge is the
+      // wrong way round; the depth cues are what someone actually reads.
       main: `#202934`,
       contrastText: '#FFFFFF',
     },
@@ -154,9 +190,16 @@ const colorScheme = {
     // exact values here is what lets those slices be DELETED without dark mode
     // shifting: a literal needs a slice, a token flips on its own.
     tint: {
-      primary: '#143043',
-      secondary: '#3D1443',
-      tertiary: '#262B31',
+      // Tile FILLS, so the bar is separation from the page rather than a
+      // WCAG text ratio: below ~1.5:1 a tinted tile has no visible edge. The
+      // originals sat at 1.13–1.25:1 and disappeared. White ink clears 11:1
+      // on all three.
+      primary: '#193d55',
+      // Magenta cannot reach 1.5:1 without turning purple-grey, so this one
+      // stops at 1.44:1 and the tile carries an `inputOutline` border in
+      // dark instead of pushing the hue further.
+      secondary: '#571e61',
+      tertiary: '#333b44',
     },
     inputOutline: 'rgba(255, 255, 255, 0.23)',
     background: {
@@ -164,19 +207,27 @@ const colorScheme = {
       paper: '#2a3440',
     },
     info: {
-      main: '#1e88e5',
+      main: '#1878cd',
+      // 6.22:1 / 4.57:1.
+      dark: '#5da1dc',
       contrastText: '#FFFFFF',
     },
     error: {
-      main: '#E53935',
+      main: '#e32c27',
+      // 6.18:1 / 4.54:1.
+      dark: '#ed7876',
       contrastText: '#FFFFFF',
     },
     success: {
       main: '#4CAF50',
+      // 8.56:1 / 6.29:1.
+      dark: '#82c785',
       contrastText: '#000000DE',
     },
     warning: {
       main: '#FFAB40',
+      // 10.98:1 / 8.07:1.
+      dark: '#ffc479',
       contrastText: '#000000DE',
     },
     grey: {
@@ -248,12 +299,30 @@ const baseOptions: ThemeOptions = {
         color: 'primary',
       },
       styleOverrides: {
-        root: {
-          '&a[disabled], &.disabled': {
-            pointerEvents: 'none',
-            textDecoration: 'none',
-            filter: 'grayscale(1) opacity(0.65)',
-          },
+        // MUI's own variants set `--variant-textColor` and
+        // `--variant-outlinedColor` to `palette[color].main`, which paints
+        // the brand color as normal-size text — `#00b0ff` at 2.43:1 on
+        // white. Both vars move to the accent-text shade
+        // (`palette[color].dark`, scheme-aware). `--variant-outlinedBorder`
+        // and `--variant-containedBg` are left on `main`: a border and a
+        // fill owe 3:1, and the brand belongs there.
+        //
+        // Resolved per instance rather than baked, because `components` are
+        // evaluated ONCE against the root theme — a literal read here would
+        // freeze the light-scheme hex into dark mode.
+        root: ({ theme, ownerState }) => {
+          const accent = accentTextColor(theme, ownerState?.color)
+          return {
+            '&a[disabled], &.disabled': {
+              pointerEvents: 'none',
+              textDecoration: 'none',
+              filter: 'grayscale(1) opacity(0.65)',
+            },
+            ...(accent && {
+              '--variant-textColor': accent,
+              '--variant-outlinedColor': accent,
+            }),
+          }
         },
       },
     },
@@ -316,12 +385,21 @@ const baseOptions: ThemeOptions = {
         color: 'primary',
       },
       styleOverrides: {
-        root: {
-          '&[disabled], &.disabled': {
-            pointerEvents: 'none',
-            textDecoration: 'none',
-            filter: 'grayscale(1) opacity(0.65)',
-          },
+        // A Link is text by definition, so `color="primary"` resolving to
+        // `palette.primary.main` is always measured against the wrong bar.
+        // Only the PaletteColor keys are rewritten — `inherit`,
+        // `textPrimary`, `textSecondary` and `textDisabled` return undefined
+        // from `accentTextColor` and keep MUI's own resolution.
+        root: ({ theme, ownerState }) => {
+          const accent = accentTextColor(theme, ownerState?.color)
+          return {
+            '&[disabled], &.disabled': {
+              pointerEvents: 'none',
+              textDecoration: 'none',
+              filter: 'grayscale(1) opacity(0.65)',
+            },
+            ...(accent && { color: accent }),
+          }
         },
       },
     },

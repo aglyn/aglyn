@@ -62,9 +62,16 @@ Your brand still travels with every share regardless: the site title is publishe
 
 **Setup → SEO** holds the site-level fields every screen inherits: the site **Title**
 and **Description**, the **Separator** used to join a page's name to the site title
-when that page has no search title of its own (default `–`), the **Favicon**, a
-**Social image**, and an **Entity** block (Organization or Person, with a name and
-logo) that feeds the site's structured data.
+when that page has no search title of its own (default `–`), the **Favicon**, an
+**App icon**, a **Social image**, and an **Entity** block (Organization or Person,
+with a name and logo) that feeds the site's structured data.
+
+The **App icon** is the square mark someone installs to a phone or desktop home
+screen, and it is a third picture rather than a reuse of the other two on purpose: a
+favicon is a 16–32px glyph with nowhere near the resolution, and a site logo is
+usually a wordmark, which an operating system crops to a square tile. Leave it unset
+and installing your site falls back to the logo, exactly as it always has. Bring a
+square PNG at 512×512.
 
 The **Social image** card is the default card for the whole site — every page that
 sets none of its own uses it, including collection lists and blog entries with no

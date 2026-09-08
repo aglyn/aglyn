@@ -79,7 +79,11 @@ describe('hostThemeToThemeOptions', () => {
       {
         colorSchemes: {
           light: {
-            tint: { primary: '#E6F5FF', secondary: '#FBE6FE', tertiary: '#EEF0F2' },
+            tint: {
+              primary: '#E6F5FF',
+              secondary: '#FBE6FE',
+              tertiary: '#EEF0F2',
+            },
           },
         },
       },
@@ -154,7 +158,9 @@ describe('hostThemeToThemeOptions', () => {
   })
 
   it('omits mixins when the host sets none', () => {
-    expect(hostThemeToThemeOptions({ spacing: 8 }, 'light').mixins).toBeUndefined()
+    expect(
+      hostThemeToThemeOptions({ spacing: 8 }, 'light').mixins,
+    ).toBeUndefined()
   })
 })
 
@@ -270,9 +276,9 @@ describe('mergeThemeOptions (AGL-1180)', () => {
       tertiary: '#EEF0F2',
     })
     expect(tintFor(consoleOptionsDark, 'dark')).toEqual({
-      primary: '#143043',
-      secondary: '#3D1443',
-      tertiary: '#262B31',
+      primary: '#193d55',
+      secondary: '#571e61',
+      tertiary: '#333b44',
     })
   })
 
@@ -326,7 +332,9 @@ describe('mergeThemeOptions (AGL-1180)', () => {
           MuiLink: { defaultProps: { underline: 'hover' } },
         },
       } as any,
-      { components: { MuiButton: { defaultProps: { color: 'primary' } } } } as any,
+      {
+        components: { MuiButton: { defaultProps: { color: 'primary' } } },
+      } as any,
     )
     expect((merged.components as any).MuiLink.defaultProps.underline).toBe(
       'hover',

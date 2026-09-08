@@ -84,15 +84,33 @@ export interface ActivityCardProps {
  *
  * ## Two windows, two indexes, one table
  *
- * Activities are read newest-first within the period through the
- * `(visibleTo, atMs)` index the activity feed already uses — a range on
- * `atMs` ordered by `atMs` is that index's own shape, so this read adds
- * none. Completed tasks are read the same way on `completedAtMs`, under
- * `status == 'done'`, which is the one index this card adds
- * (`visibleTo, status, completedAtMs`). The two reads are independent so
- * that a missing task index degrades ONE column to a dash and a notice
- * rather than the whole card: the activities were read, and the
- * leaderboard draws them.
+ * Activities are counted within the period on `atMs`; completed tasks are
+ * counted the same way on `completedAtMs`, under `status == 'done'`. Each
+ * count is also drawn as a window, newest first, for the leaderboard.
+ *
+ * ## Why that is four indexes and not one
+ *
+ * The counts and the windows do not share an index, and neither do the two
+ * audiences.
+ *
+ * A COUNT here names no `orderBy`. Firestore then orders implicitly by the
+ * range field, ASCENDING, so a count wants `completedAtMs` ascending — while
+ * the window beside it asks for `desc` explicitly and wants the descending
+ * one. A composite index serves one direction or its exact reverse, never
+ * both, so declaring only the direction the window reads leaves the count
+ * with nothing: `FAILED_PRECONDITION`, one column of dashes, and a card that
+ * otherwise looks fine.
+ *
+ * Then the visibility clause doubles it. `visibleToClause` contributes
+ * nothing when the reader's tokens are null, which is every organization-level
+ * read, so the shape arriving at Firestore has no leading array field — a
+ * different index, not a prefix of the one with it. `(visibleTo, status,
+ * completedAtMs)` serves a site and `(status, completedAtMs)` the org above
+ * it; one without the other is a card that works for exactly one audience.
+ *
+ * The two reads are independent so that a missing task index degrades ONE
+ * column to a dash and a notice rather than the whole card: the activities
+ * were read, and the leaderboard draws them.
  *
  * A task ordered by `completedAtMs` is a task the complete route stamped;
  * a task marked done some other way, without the stamp, is not in the

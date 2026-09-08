@@ -124,6 +124,7 @@ import {
   claimOrgEmailSendDay,
   emailReputationDocId,
   orgAgeDays,
+  readOrgEmailRamp,
   readSenderReputation,
   readSenderReputationWindow,
   reconcileOrgEmailSendDay,
@@ -428,5 +429,129 @@ describe('a workspace’s age', () => {
         platformPerHour: 2_000,
       }).graduated,
     ).toBe(true)
+  })
+})
+
+/**
+ * THE STEP, RESOLVED FROM THE RECORD AND THE HISTORY.
+ *
+ * The reads `resolveOrgEmailRamp` needs, gathered — which is what lets a
+ * surface that has only an org document ask what a workspace has earned. What
+ * these hold are the reads it DOES NOT make, and the answer it gives when one
+ * of them fails.
+ */
+describe('a workspace’s ramp, read', () => {
+  /** Reads and writes the store made, so a claim about cost is measurable. */
+  const counting = () => {
+    const inner = mockFirestore()
+    const paths: string[] = []
+    return {
+      paths,
+      firestore: {
+        ...inner,
+        collection: (name: string) => ({
+          doc: (id: string) => {
+            const ref = inner.collection(name).doc(id)
+            return {
+              ...ref,
+              get: async () => {
+                paths.push(ref.path)
+                return ref.get()
+              },
+            }
+          },
+        }),
+        getAll: async (...refs: any[]) => {
+          paths.push(...refs.map((ref) => String(ref.path)))
+          return inner.getAll(...refs)
+        },
+      } as any,
+    }
+  }
+
+  it('graduates an established workspace without reading its history', async () => {
+    const { firestore, paths } = counting()
+    const read = await readOrgEmailRamp({
+      orgId: ORG,
+      createdAt: LONG_AGO,
+      now: NOW,
+      firestore,
+    })
+    expect(read).toMatchObject({ degraded: false, ramp: { graduated: true } })
+    // The platform ceiling, and nothing else: the seven-day window is a
+    // `getAll` this workspace never needed, and almost every call is this
+    // one.
+    expect(paths).toEqual(['rateLimits/sendRateConfig'])
+  })
+
+  it('resolves the step a young workspace has earned from what it delivered', async () => {
+    await recordCampaignAccepted(ORG, EMAIL_RAMP_STEPS[1].minDelivered, {
+      atMs: YESTERDAY,
+      firestore: db(),
+    })
+    const read = await readOrgEmailRamp({
+      orgId: ORG,
+      createdAt: NOW - EMAIL_RAMP_STEPS[1].minAgeDays * 86_400_000,
+      now: NOW,
+      firestore: db(),
+    })
+    expect(read.degraded).toBe(false)
+    expect(read.ramp).toMatchObject({
+      graduated: false,
+      step: 1,
+      perDay: EMAIL_RAMP_STEPS[1].perDay,
+    })
+  })
+
+  it('holds a workspace that has delivered nothing to the first step', async () => {
+    const read = await readOrgEmailRamp({
+      orgId: ORG,
+      createdAt: NOW,
+      now: NOW,
+      firestore: db(),
+    })
+    expect(read).toMatchObject({
+      degraded: false,
+      ramp: { step: 0, perDay: EMAIL_RAMP_STEPS[0].perDay },
+    })
+  })
+
+  it('SAYS SO when the history it sizes a step from cannot be read', async () => {
+    broken = true
+    const read = await readOrgEmailRamp({
+      orgId: ORG,
+      createdAt: NOW,
+      now: NOW,
+      firestore: db(),
+    })
+    // The step is the floor rather than an answer, and the flag is what
+    // separates the two. A caller that can defer may take the floor; one
+    // admitting a single message has to refuse on it.
+    expect(read.degraded).toBe(true)
+    expect(read.ramp).toMatchObject({ graduated: false, step: 0 })
+  })
+
+  it('does not flag an established workspace it never needed a window for', async () => {
+    broken = true
+    const read = await readOrgEmailRamp({
+      orgId: ORG,
+      createdAt: LONG_AGO,
+      now: NOW,
+      firestore: db(),
+    })
+    // A broken store cannot make a graduated workspace look unresolvable:
+    // the read that would have failed is one it does not make.
+    expect(read).toMatchObject({ degraded: false, ramp: { graduated: true } })
+  })
+
+  it('is parked by the platform flag, like every other send control', async () => {
+    store.set('rateLimits/sendRateConfig', { perHour: 2_000, enabled: false })
+    const read = await readOrgEmailRamp({
+      orgId: ORG,
+      createdAt: NOW,
+      now: NOW,
+      firestore: db(),
+    })
+    expect(read).toMatchObject({ degraded: false, ramp: { graduated: true } })
   })
 })

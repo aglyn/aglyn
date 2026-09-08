@@ -29,9 +29,14 @@
  *
  * At the organization level the same file gains a `Site` column, because a
  * row there is some site's lead and the file must say which; under a site
- * every row is the site's own and the column is not written. There is no
- * leads import — a lead is captured, not filed — so the header is free to
- * read well.
+ * every row is the site's own and the column is not written.
+ *
+ * The header is written to READ well rather than to round-trip, and the
+ * import (`lead-import-drawer.tsx`) is built to that header rather than the
+ * other way round: it maps the columns a file may set — the address, the
+ * name, and the team's status, owner, reason and notes — and leaves the
+ * capture door's own record (the sources, the two timestamps, the capture
+ * count) and the conversion's stamp on "Do not import".
  */
 
 /* The writer moved to `@aglyn/aglyn` under AGL-2662 — see `deals-csv.ts`. */

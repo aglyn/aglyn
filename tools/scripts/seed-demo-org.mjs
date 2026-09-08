@@ -228,7 +228,7 @@ for (const site of plan) {
   })
   total += await seedBrand({ firestore, hostRef, brand: site.brand, log })
 }
-await seedMarketplaceListing({ firestore })
+await seedMarketplaceListing({ firestore, log })
 
 console.log(
   `\nDone — ${plan.length} sites, ${total} fixture documents, one org.\n` +

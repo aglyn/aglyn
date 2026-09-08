@@ -210,7 +210,7 @@ export interface ContentScope {
   setEntryPage: (page: number) => void
   entriesPerPage: number
   setEntriesPerPage: (pageSize: number) => void
-  categories: Array<{ id: string; name: string }>
+  categories: Aglyn.CollectionCategory[]
   authors: Aglyn.ContentAuthorRecord[]
   screenOptions: any[]
   screensById: Record<string, Aglyn.CollectionTemplateScreen>
@@ -638,10 +638,12 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     { idField: '$id', pageSize: TABLE_PAGE_SIZE_DEFAULT },
   )
 
-  // Category taxonomy (AGL-582): `{ id, name }` pairs on the COLLECTION doc.
+  // Category taxonomy (AGL-582): rows on the COLLECTION doc, each a stable
+  // id, a renameable label and — since the listing needs its own meta
+  // description — an optional sentence about what the category collects.
   // Entries reference the stable id, so renaming a category here updates every
   // post at render time without touching any entry.
-  const categories = useMemo<Array<{ id: string; name: string }>>(
+  const categories = useMemo<Aglyn.CollectionCategory[]>(
     () =>
       Array.isArray(selected?.categories)
         ? selected.categories.filter(
@@ -990,9 +992,15 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
   const [categoryDrafts, setCategoryDrafts] = useState<Record<string, string>>(
     {},
   )
+  // Description drafts, keyed and committed the same way. Kept apart from the
+  // name drafts so a half-typed sentence in one box cannot be read as a
+  // rename of the other — the two commit independently, on their own blur.
+  const [categoryDescriptionDrafts, setCategoryDescriptionDrafts] = useState<
+    Record<string, string>
+  >({})
   const openCategories = useCallback(() => setCategoriesOpen(true), [])
   const persistCategories = useCallback(
-    async (next: Array<{ id: string; name: string }>) => {
+    async (next: Aglyn.CollectionCategory[]) => {
       if (!selected) return
       await updateDoc(
         doc(firestore, 'hosts', hostId, 'collections', selected.$id),
@@ -1000,7 +1008,8 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       )
       // A category's NAME is its listing address — `/blog/category/{slug}` is
       // built from it — and it is the label every pill strip and entry meta
-      // block prints. Renaming or removing one therefore changes live pages
+      // block prints; its DESCRIPTION is that listing's meta description.
+      // Renaming, describing or removing one therefore changes live pages
       // exactly as an entry does, and needs the same announcement.
       announceEntryChange()
     },
@@ -1042,8 +1051,31 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     },
     [categoryDrafts, categories, persistCategories],
   )
+  const handleDescribeCategory = useCallback(
+    (categoryId: string) => async () => {
+      const draft = (categoryDescriptionDrafts[categoryId] ?? '').trim()
+      setCategoryDescriptionDrafts((prev) => {
+        const rest = { ...prev }
+        delete rest[categoryId]
+        return rest
+      })
+      const current = categories.find((category) => category.id === categoryId)
+      if (!current || draft === (current.description ?? '')) return
+      // Emptied means UNDESCRIBED, and the key goes rather than holding `''`:
+      // the listing then inherits its template screen's description again,
+      // which is what a category with nothing written about it should say.
+      await persistCategories(
+        categories.map((category) => {
+          if (category.id !== categoryId) return category
+          const { description: _description, ...rest } = category
+          return draft ? { ...rest, description: draft } : rest
+        }),
+      )
+    },
+    [categoryDescriptionDrafts, categories, persistCategories],
+  )
   const handleDeleteCategory = useCallback(
-    (category: { id: string; name: string }) => async () => {
+    (category: Aglyn.CollectionCategory) => async () => {
       const confirmed = await confirm({
         title: `Delete "${category.name}"?`,
         description:
@@ -1163,32 +1195,59 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
             </Typography>
           ) : (
             categories.map((category) => (
-              <Stack
-                key={category.id}
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'flex-start' }}
-              >
+              <Stack key={category.id} spacing={1}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'flex-start' }}
+                >
+                  <TextField
+                    size="small"
+                    fullWidth
+                    value={categoryDrafts[category.id] ?? category.name}
+                    onChange={(event) =>
+                      setCategoryDrafts((prev) => ({
+                        ...prev,
+                        [category.id]: event.target.value,
+                      }))
+                    }
+                    onBlur={handleRenameCategory(category.id)}
+                    helperText={`id: ${category.id}`}
+                  />
+                  <Button
+                    size="small"
+                    color="error"
+                    onClick={handleDeleteCategory(category)}
+                  >
+                    {'Delete'}
+                  </Button>
+                </Stack>
+                {/* The search snippet for this category's own listing. Blank
+                    inherits the collection list's description, which is what
+                    every filtered URL on the site shares until somebody
+                    writes one. */}
                 <TextField
                   size="small"
                   fullWidth
-                  value={categoryDrafts[category.id] ?? category.name}
+                  multiline
+                  label="Description"
+                  value={
+                    categoryDescriptionDrafts[category.id] ??
+                    category.description ??
+                    ''
+                  }
                   onChange={(event) =>
-                    setCategoryDrafts((prev) => ({
+                    setCategoryDescriptionDrafts((prev) => ({
                       ...prev,
                       [category.id]: event.target.value,
                     }))
                   }
-                  onBlur={handleRenameCategory(category.id)}
-                  helperText={`id: ${category.id}`}
+                  onBlur={handleDescribeCategory(category.id)}
+                  helperText={
+                    'Shown in search results for this category’s page. ' +
+                    'Blank uses the collection page’s description.'
+                  }
                 />
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={handleDeleteCategory(category)}
-                >
-                  {'Delete'}
-                </Button>
               </Stack>
             ))
           )}

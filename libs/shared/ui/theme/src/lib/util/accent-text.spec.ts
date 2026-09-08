@@ -114,37 +114,54 @@ function cssVarValues(css: string, name: string): string[] {
   )
 }
 
-describe('the brand blue renders as itself — nothing repaints it', () => {
+/** The accent-text shade each scheme authors, per `console.theme.ts`. */
+const ACCENT_TEXT_LIGHT = '#0077ad'
+const ACCENT_TEXT_DARK = '#4dc8ff'
+
+describe('the brand blue paints every FILL; text takes the accent shade', () => {
   it('primary.main is `#00b0ff` in both schemes, untouched', () => {
     expect(consoleThemeLight.palette.primary.main).toBe(BRAND_BLUE)
     expect(consoleThemeDark.palette.primary.main).toBe(BRAND_BLUE)
   })
 
-  it('a LINK takes the brand blue, not a darkened accent shade', () => {
-    // This is the call site `c03a2d754` changed most visibly: `#0077ad` in
-    // light, `rgb(76, 199, 255)` in dark. Both must be absent.
-    for (const theme of [consoleThemeLight, consoleThemeDark]) {
+  it('a LINK takes the accent-text shade, per scheme', () => {
+    // A link is text by definition, so it is measured against the 4.5:1 bar
+    // the brand blue misses at 2.43:1. The shade differs per scheme, which
+    // is the point: darker on a light ground, LIGHTER on a dark one.
+    for (const [theme, accent] of [
+      [consoleThemeLight, ACCENT_TEXT_LIGHT],
+      [consoleThemeDark, ACCENT_TEXT_DARK],
+    ] as const) {
       const css = renderCss(theme, MuiLink, { color: 'primary', href: '#' })
-      expect(css).toContain(`color: ${BRAND_BLUE}`)
-      expect(css).not.toContain('#0077ad')
-      expect(css).not.toContain('rgb(76, 199, 255)')
+      expect(css).toContain(`color: ${accent}`)
+      expect(css).not.toContain(`color: ${BRAND_BLUE}`)
     }
   })
 
-  it('a TEXT button label takes the brand blue', () => {
-    const css = renderCss(consoleThemeLight, MuiButton, {
-      variant: 'text',
-      color: 'primary',
-    })
-    expect(cssVarValues(css, '--variant-textColor')).toEqual([BRAND_BLUE])
+  it('a TEXT button label takes the accent-text shade', () => {
+    for (const [theme, accent] of [
+      [consoleThemeLight, ACCENT_TEXT_LIGHT],
+      [consoleThemeDark, ACCENT_TEXT_DARK],
+    ] as const) {
+      const css = renderCss(theme, MuiButton, {
+        variant: 'text',
+        color: 'primary',
+      })
+      expect(cssVarValues(css, '--variant-textColor')).toEqual([accent])
+    }
   })
 
-  it('an OUTLINED button takes the brand blue for label AND border', () => {
+  it('an OUTLINED button moves its LABEL only — the border keeps the brand', () => {
+    // The split this whole mechanism exists for: a label owes 4.5:1 and a
+    // border owes 3:1, so the border stays on `main` and the brand colour is
+    // still what draws the control.
     const css = renderCss(consoleThemeLight, MuiButton, {
       variant: 'outlined',
       color: 'primary',
     })
-    expect(cssVarValues(css, '--variant-outlinedColor')).toEqual([BRAND_BLUE])
+    expect(cssVarValues(css, '--variant-outlinedColor')).toEqual([
+      ACCENT_TEXT_LIGHT,
+    ])
     expect(cssVarValues(css, '--variant-outlinedBorder')).toContain(
       'rgba(0, 176, 255, 0.5)',
     )
@@ -178,45 +195,53 @@ describe('the brand blue renders as itself — nothing repaints it', () => {
   })
 })
 
-describe('nothing is wired to accentTextColor — the overrides are static again', () => {
+describe('accentTextColor is wired to text properties ONLY', () => {
   const overrideRoot = (theme: Theme, component: string) =>
     (theme.components as any)?.[component]?.styleOverrides?.root
 
-  it('MuiButton and MuiLink roots are plain objects, not resolver functions', () => {
-    // A function root is how a colour gets computed per-render. Their being
-    // objects is the structural guarantee that no override can repaint an
-    // accent, independent of what any single rendered case shows.
+  it('MuiButton and MuiLink roots are resolver functions, not static objects', () => {
+    // The shade differs per scheme and per `color` prop, and `components` are
+    // evaluated ONCE against the root theme — so a static object could only
+    // ever carry one scheme's literal. A function root is what makes the
+    // value follow the scheme.
     for (const theme of [consoleThemeLight, consoleThemeDark]) {
       for (const component of ['MuiButton', 'MuiLink']) {
-        expect(typeof overrideRoot(theme, component)).toBe('object')
+        expect(typeof overrideRoot(theme, component)).toBe('function')
       }
     }
   })
 
-  it('MuiTab has no override at all — the entry `c03a2d754` added is gone', () => {
+  it('MuiTab has no override — a selected tab label keeps the brand blue', () => {
     for (const theme of [consoleThemeLight, consoleThemeDark]) {
       expect((theme.components as any)?.MuiTab).toBeUndefined()
     }
   })
 
-  it('NO override anywhere emits a colour — swept, not spot-checked', () => {
-    // The sweep rather than three named components: any override that set a
-    // foreground would be a repaint, whichever component grew it. Function
-    // roots are allowed and pre-date all of this — `MuiIconButton` returns
-    // padding, `MuiToolbar` returns gutters — so what is checked is the
-    // RESULT, walked deeply, for any key or value that carries a colour.
+  it('EXACTLY three properties emit a colour — swept, not spot-checked', () => {
+    // The sweep rather than two named components: an override that set any
+    // other foreground would be a repaint, whichever component grew it. What
+    // is checked is the RESULT, walked deeply, for any key or value carrying
+    // a colour — so the allowance below is the complete list of places an
+    // accent is painted as text, and anything new shows up here.
+    const allowed = new Set([
+      'MuiButton.--variant-textColor',
+      'MuiButton.--variant-outlinedColor',
+      'MuiLink.color',
+    ])
     const offenders: string[] = []
     const walk = (label: string, value: unknown, path: string) => {
       if (value === null || value === undefined) return
       if (typeof value === 'string') {
         if (/^(#|rgb|hsl|var\(--mui)/i.test(value.trim())) {
-          offenders.push(`${label}.${path} = ${value}`)
+          if (!allowed.has(path)) offenders.push(`${label}.${path} = ${value}`)
         }
         return
       }
       if (typeof value !== 'object') return
       for (const [key, child] of Object.entries(value)) {
-        if (/color/i.test(key)) offenders.push(`${label}.${path}.${key}`)
+        if (/color/i.test(key) && !allowed.has(`${path}.${key}`)) {
+          offenders.push(`${label}.${path}.${key}`)
+        }
         walk(label, child, `${path}.${key}`)
       }
     }
@@ -242,11 +267,28 @@ describe('nothing is wired to accentTextColor — the overrides are static again
       }
     }
     expect(offenders).toEqual([])
+    // And the allowance is not vacuous: those three ARE emitted, per scheme.
+    for (const [theme, accent] of [
+      [consoleThemeLight, ACCENT_TEXT_LIGHT],
+      [consoleThemeDark, ACCENT_TEXT_DARK],
+    ] as const) {
+      const button = (theme.components as any).MuiButton.styleOverrides.root({
+        theme,
+        ownerState: { color: 'primary' },
+      })
+      expect(button['--variant-textColor']).toBe(accent)
+      expect(button['--variant-outlinedColor']).toBe(accent)
+      const link = (theme.components as any).MuiLink.styleOverrides.root({
+        theme,
+        ownerState: { color: 'primary' },
+      })
+      expect(link.color).toBe(accent)
+    }
   })
 
-  it('and `contrastThreshold` is back to MUI stock 3, in every scheme', () => {
-    // The other mechanism `c03a2d754` used. At 4.5 the computed pairing for
-    // several accents flips, which is a repaint even where no override exists.
+  it('and `contrastThreshold` stays MUI stock 3, in every scheme', () => {
+    // Raising it to 4.5 flips the computed contrastText for several accents,
+    // which repaints filled surfaces — a separate decision from this one.
     expect(consoleThemeLight.palette.contrastThreshold).toBe(3)
     expect(consoleThemeDark.palette.contrastThreshold).toBe(3)
     for (const scheme of ['light', 'dark'] as const) {
@@ -258,7 +300,7 @@ describe('nothing is wired to accentTextColor — the overrides are static again
   })
 })
 
-describe('accentTextColor still ANSWERS the question, wired to nothing', () => {
+describe('accentTextColor resolution', () => {
   it('resolves a palette key to the accent-text shade', () => {
     const accent = accentTextColor(consoleThemeLight, 'primary')
     expect(accent).toBe(consoleThemeLight.palette.primary.dark)
@@ -273,7 +315,12 @@ describe('accentTextColor still ANSWERS the question, wired to nothing', () => {
   })
 
   it('leaves non-PaletteColor colors alone', () => {
-    for (const color of ['inherit', 'textPrimary', 'textSecondary', undefined]) {
+    for (const color of [
+      'inherit',
+      'textPrimary',
+      'textSecondary',
+      undefined,
+    ]) {
       expect(accentTextColor(consoleThemeLight, color)).toBeUndefined()
     }
     expect(accentTextColor(undefined, 'primary')).toBeUndefined()
@@ -338,24 +385,17 @@ describe('FINDINGS for a decision the account owner owns — measured, never app
       consoleThemeLight.palette,
       consoleThemeDark.palette,
     ]) {
-      expect(residue(palette)).toEqual([
-        'error.contrastText',
-        'info.contrastText',
-        'secondary.contrastText',
-      ])
+      expect(residue(palette)).toEqual(['secondary.contrastText'])
     }
-    // Three per scheme, six authored literals in total. The measured ratios,
-    // recorded so the decision has numbers: white on `#e040fb` is 3.34:1, on
-    // `#E53935` 4.23:1, on `#1e88e5` 3.68:1 — all under the 4.5 text bar,
-    // all above the 3:1 non-text one.
+    // One per scheme. `info` and `error` were deepened until white cleared
+    // the bar on the fill itself (4.56:1 and 4.51:1), which is available to
+    // them because neither is a brand colour. `secondary.main` is, so its
+    // only lever is the ink — and dark ink on magenta repaints every filled
+    // secondary surface. White stays, at a measured 3.34:1.
     const measured = auditPaletteContrast(consoleThemeLight.palette).map(
       (v) => `${v.color}@${v.ratio.toFixed(2)}`,
     )
-    expect(measured).toEqual([
-      'secondary@3.34',
-      'error@4.23',
-      'info@3.68',
-    ])
+    expect(measured).toEqual(['secondary@3.34'])
   })
 
   it('FINDING: getContrastTextColor is handed the TONAL OFFSET, not a threshold', () => {

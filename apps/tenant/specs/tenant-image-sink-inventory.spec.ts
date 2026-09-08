@@ -228,9 +228,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The fallback renderer: entry cover, markdown body images and the white-label brand logo, each through resolveMediaSrc. Its <style> carries ELEMENT_HIDDEN_STYLE_TEXT, a build-time constant.',
   },
   'apps/tenant/app/[host]/[[...slug]]/page.tsx': {
-    markers: 11,
+    markers: 13,
     guard: 'raw',
-    why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The author page adds two more of the same (AGL-2518): the portrait behind og:image and the one inside ProfilePage.mainEntity, both through absoluteMediaSrc, from an author record the customer wrote. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it.',
+    why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The author page adds three more of the same (AGL-2518/AGL-2689): the ProfilePage.mainEntity portrait through absoluteMediaSrc, and the head\'s own two sources — an author-supplied share card and the portrait it falls back to — through resolveSocialImage, all from an author record the customer wrote. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it.',
   },
   'apps/tenant/app/[host]/admin-bar/admin-bar.tsx': {
     markers: 2,

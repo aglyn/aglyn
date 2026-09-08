@@ -56,17 +56,27 @@ export interface CardColumnsProps {
  *
  * ## Why not `GridItems masonry`
  *
- * `GridItems` already carries a `masonry` mode, and it is the right answer
- * when a page's cards declare DIFFERENT widths — the billing page's top band
- * (`md: 4` beside `md: 8`) is exactly its case, and still uses it. But within
- * a band it groups items by their `size`: one width is one column. A run of
- * cards that all declare the same width therefore collapses into a single
- * column with the rest of the page empty — a worse layout than the one being
- * fixed, arrived at by using the fix.
+ * `GridItems` carries a `masonry` mode, and it is the only one of the two that
+ * can SPAN — a full-width item is a band of its own there, and a band whose
+ * cards declare different widths lays them out as the widths ask, which is the
+ * billing page's top row (`md: 4` beside `md: 8`). Multicol can do neither.
  *
- * That is why this exists alongside it rather than replacing it, and why the
- * two are used together on `/[orgSlug]/billing`: masonry for the band whose
- * cards differ, this for the run whose cards do not.
+ * Where the two overlap is a run of cards that all declare the SAME width, and
+ * there they fill their columns by different rules. `GridItems` fans such a
+ * band across the columns it asked for round-robin, so the nth card lands in
+ * column `n % count`: distribution by COUNT, and a row-major reading order —
+ * card 0 top-left, card 1 top-RIGHT. Multicol lets the browser place the
+ * fragmentation breaks to equalize the column heights: distribution by HEIGHT,
+ * and a column-major reading order — card 0 top-left, card 1 BELOW it.
+ *
+ * Neither is better in general. Round-robin gives an even card count and can
+ * still leave the columns ragged at the bottom when the cards weigh very
+ * different amounts; balancing evens the bottoms out and gives up the
+ * left-to-right sweep. Pick by which of the two a page's reader would notice:
+ * cards whose heights come from data — a funnel with a row per stage, a table
+ * with a row per owner — are the case for balancing, which is why the CRM
+ * report page uses this one. `/[orgSlug]/billing` uses both, masonry for the
+ * band whose cards differ in width and this for the run whose cards do not.
  *
  * ## What this does instead
  *

@@ -232,8 +232,25 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
               { key: 'source-conversion', children: <SourceConversionCard report={report} /> },
               { key: 'lead-funnel', children: <LeadFunnelCard report={report} hostId={hostId} /> },
               { key: 'pipeline', children: <PipelineCard report={report} /> },
-              { key: 'closed-deals', children: <ClosedDealsCard report={report} /> },
-              { key: 'won-lost-by-owner', children: <WonLostByOwnerCard report={report} /> },
+              {
+                key: 'closed',
+                /*
+                  One column item carrying two cards, because multicol picks
+                  its own break: two consecutive items are only USUALLY
+                  adjacent, and a card that is a footnote to the one above it
+                  cannot be left to that. Won and lost by owner asks a second
+                  question of the very rows Won and lost already read — the
+                  same window under the same `closed:won` and `closed:lost`
+                  keys — so it is read as that card's breakdown, and
+                  `break-inside: avoid` keeps the pair whole in one column.
+                */
+                children: (
+                  <Stack spacing={2}>
+                    <ClosedDealsCard report={report} />
+                    <WonLostByOwnerCard report={report} />
+                  </Stack>
+                ),
+              },
             ]}
           />
           {/*

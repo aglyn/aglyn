@@ -98,7 +98,10 @@ describe('explicit shades pass through byte-identical (AGL-1297)', () => {
     // ones.
     const theme = createResponsiveTheme({
       themeOptions: {
-        palette: { mode: 'light', primary: { main: '#00b0ff', dark: '#00a0e8' } },
+        palette: {
+          mode: 'light',
+          primary: { main: '#00b0ff', dark: '#00a0e8' },
+        },
       },
     })
     expect(theme.palette.primary.dark).toBe('#00a0e8')
@@ -157,12 +160,16 @@ describe('scheme-aware derivation of missing shades (AGL-1297)', () => {
     })
     // darken(#e040fb, 0.3) is 5.68:1 on the page — nothing to fix, so the
     // exact tonal-offset output (rgb() string and all) must survive.
-    expect(theme.palette.primary.dark).toBe(darken('#e040fb', TONAL_OFFSET_DARK))
+    expect(theme.palette.primary.dark).toBe(
+      darken('#e040fb', TONAL_OFFSET_DARK),
+    )
   })
 
   it('derived contrastText keeps the threshold choice while it clears AA against main', () => {
     const theme = createResponsiveTheme({
-      themeOptions: { palette: { mode: 'light', primary: { main: '#1976d2' } } },
+      themeOptions: {
+        palette: { mode: 'light', primary: { main: '#1976d2' } },
+      },
     })
     // MUI's contrastThreshold picks white here, and white is 4.6:1 — kept.
     expect(theme.palette.primary.contrastText).toBe('#fff')
@@ -219,7 +226,7 @@ describe('console blast radius (AGL-1297)', () => {
     ]
     const inputPalette = options.palette as unknown as Record<
       string,
-      { main: string; contrastText?: string }
+      { main: string; dark?: string; contrastText?: string }
     >
     const palette = theme.palette as unknown as Record<string, PaletteColor>
 
@@ -230,9 +237,18 @@ describe('console blast radius (AGL-1297)', () => {
         const oldDark = darken(main, TONAL_OFFSET_DARK)
         const oldLight = lighten(main, TONAL_OFFSET_LIGHT)
         const color = palette[key]
+        const authoredDark = inputPalette[key].dark
 
-        // dark slot: kept only if the old derivation already cleared AA.
-        if (color.dark === oldDark) {
+        // dark slot — three cases, in precedence order:
+        //   authored : passes through byte-identical, and clears AA because
+        //              the palette authored it to.
+        //   kept     : the old derivation already cleared AA.
+        //   repaired : it did not, and the walk moved it in the direction
+        //              this scheme needs.
+        if (authoredDark) {
+          expect(color.dark).toBe(authoredDark)
+          expect(meetsAa(color.dark, backgrounds)).toBe(true)
+        } else if (color.dark === oldDark) {
           expect(meetsAa(oldDark, backgrounds)).toBe(true)
         } else {
           expect(meetsAa(oldDark, backgrounds)).toBe(false)
@@ -276,28 +292,40 @@ describe('console blast radius (AGL-1297)', () => {
     const lightBackgrounds = ['#F5F5F5', '#FFFFFF']
     const darkBackgrounds = ['#161c21', '#2a3440']
 
-    // LIGHT scheme: two derived darks were sub-AA on the real page tint.
-    //   primary.dark  rgb(0, 123, 178)  4.30 vs #F5F5F5 -> walked
-    //   warning.dark  rgb(178, 119, 44) 3.46 vs #F5F5F5 -> walked
-    const lightChanged = ['primary', 'warning']
+    // LIGHT scheme. `primary` and `secondary` are AUTHORED — they are the
+    // slot links and text/outlined button labels read, so the palette states
+    // them rather than leaving them to a walk. `warning`'s derived dark is
+    // sub-AA on the page tint (3.46 vs #F5F5F5) and is still repaired here.
+    const lightAuthored = ['primary', 'secondary']
+    const lightWalked = ['warning']
     for (const key of accents) {
       const main = (consoleOptions.palette as any)[key].main as string
-      const kept =
-        (consoleThemeLight.palette as any)[key].dark ===
-        darken(main, TONAL_OFFSET_DARK)
-      expect(kept).toBe(!lightChanged.includes(key))
+      const shade = (consoleThemeLight.palette as any)[key].dark as string
+      const authored = (consoleOptions.palette as any)[key].dark as
+        string | undefined
+      expect(Boolean(authored)).toBe(lightAuthored.includes(key))
+      if (authored) {
+        expect(shade).toBe(authored)
+      } else {
+        const kept = shade === darken(main, TONAL_OFFSET_DARK)
+        expect(kept).toBe(!lightWalked.includes(key))
+      }
+      expect(meetsAa(shade, lightBackgrounds)).toBe(true)
     }
-    expect(
-      meetsAa(consoleThemeLight.palette.primary.dark, lightBackgrounds),
-    ).toBe(true)
 
-    // DARK scheme: every tonally-darkened dark pointed the WRONG WAY
-    // (2.0–4.6:1 on the dark page) — all seven walk lighter now, plus the
-    // two light tints that were sub-AA (error 3.80, info 4.48 vs paper).
+    // DARK scheme: every tonally-darkened dark points the WRONG WAY here
+    // (2.3–4.6:1 on the dark page), because MUI derives `dark` by darkening
+    // in both schemes. All seven are authored LIGHTER than `main` instead —
+    // stated in the palette rather than walked, so the value is reviewable.
     for (const key of accents) {
       const main = (consoleOptionsDark.palette as any)[key].main as string
       const shade = (consoleThemeDark.palette as any)[key].dark as string
+      const authored = (consoleOptionsDark.palette as any)[key].dark as
+        string | undefined
+      expect(authored).toBeDefined()
+      expect(shade).toBe(authored)
       expect(shade).not.toBe(darken(main, TONAL_OFFSET_DARK))
+      expect(wcagLuminance(shade)).toBeGreaterThan(wcagLuminance(main))
       expect(meetsAa(shade, darkBackgrounds)).toBe(true)
     }
     const darkLightChanged = ['error', 'info']
@@ -321,26 +349,27 @@ describe('tints survive theme creation untouched (AGL-1244)', () => {
   it.each([
     ['light', consoleThemeLight, consoleOptions],
     ['dark', consoleThemeDark, consoleOptionsDark],
-  ] as const)('%s scheme is byte-identical to the brand input', (
-    _scheme,
-    built,
-    options,
-  ) => {
-    expect(built.palette.tint).toEqual((options.palette as any).tint)
-    // No ramp and no contrast pairing were invented alongside it.
-    expect(Object.keys(built.palette.tint).sort()).toEqual([
-      'primary',
-      'secondary',
-      'tertiary',
-    ])
-  })
+  ] as const)(
+    '%s scheme is byte-identical to the brand input',
+    (_scheme, built, options) => {
+      expect(built.palette.tint).toEqual((options.palette as any).tint)
+      // No ramp and no contrast pairing were invented alongside it.
+      expect(Object.keys(built.palette.tint).sort()).toEqual([
+        'primary',
+        'secondary',
+        'tertiary',
+      ])
+    },
+  )
 
   it('reaches the theme through a host override too', () => {
     const theme = createResponsiveTheme({
       themeOptions: mergeThemeOptions(
         consoleOptions,
         hostThemeToThemeOptions(
-          { colorSchemes: { light: { tint: { primary: '#FFEEDD' } } } } as HostTheme,
+          {
+            colorSchemes: { light: { tint: { primary: '#FFEEDD' } } },
+          } as HostTheme,
           'light',
         ),
       ),

@@ -137,6 +137,6 @@ const written = await seedBrand({
   log,
   prune: !args.includes('--no-prune'),
 })
-await seedMarketplaceListing({ firestore })
+await seedMarketplaceListing({ firestore, log })
 
 console.log(`Done — ${written} fixture documents written to ${hostRef.id}.`)
