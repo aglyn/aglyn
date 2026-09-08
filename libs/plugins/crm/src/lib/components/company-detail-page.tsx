@@ -30,6 +30,7 @@ import CompanyContactsCard from './company-contacts-card'
 import CompanyDealsCard from './company-deals-card'
 import { CrmRecordHeader } from './crm-record-header'
 import { RecordActivityCard } from './record-activity-card'
+import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
 import CompanyPropertiesCard from './company-properties-card'
 
@@ -132,6 +133,13 @@ export function CompanyDetailPage(props: CrmDetailPageProps) {
           companyName={String(company.name ?? '')}
         />
         <RecordTasksCard hostId={hostId} org={org} basePath={basePath} companyId={id} />
+        <RecordFilesCard
+          scope={scope}
+          collection={CRM_COLLECTIONS.companies}
+          recordId={id}
+          mediaIds={company.mediaIds}
+          topic="companies"
+        />
         <RecordActivityCard hostId={hostId} org={org} companyId={id} />
       </Stack>
     </CrmCreateSiteDefault>

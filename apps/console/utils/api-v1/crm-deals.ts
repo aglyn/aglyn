@@ -59,6 +59,7 @@
  */
 import {
   CRM_COLLECTIONS,
+  CRM_MEDIA_IDS_MAX,
   type CrmDeal,
   type CrmDealLineItem,
   type CrmDealStage,
@@ -66,6 +67,7 @@ import {
   createResourceUid,
   dealStageById,
   lineItemsTotalCents,
+  normalizeCrmMediaIds,
   readDealLineItems,
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors, floorContactLifecycleStage } from '@aglyn/tenant-data-admin'
@@ -133,6 +135,7 @@ function dealView(doc: FirebaseFirestore.DocumentSnapshot) {
     companyId: data.companyId ?? null,
     lostReason: data.lostReason ?? null,
     notes: data.notes ?? null,
+    mediaIds: normalizeCrmMediaIds(data.mediaIds),
     siteId: data.hostId ?? null,
     ...crmTimes(data as FirebaseFirestore.DocumentData),
   }
@@ -151,6 +154,7 @@ const DEAL_WRITABLE = new Set([
   'companyId',
   'lostReason',
   'notes',
+  'mediaIds',
 ])
 
 interface DealInput {
@@ -172,6 +176,8 @@ interface DealInput {
   companyId?: Clearable<string>
   lostReason?: Clearable<string>
   notes?: Clearable<string>
+  /** Org-library files attached to the deal (AGL-2662), by media id. */
+  mediaIds?: string[]
 }
 
 /**
@@ -193,6 +199,19 @@ function readDealInput(
   refuseUnknownKeys(body, allowed, 'deal', errors)
   if (partial && body.pipelineId !== undefined) {
     errors.pipelineId = 'Not writable — create the deal in the other pipeline'
+  }
+
+  if (body.mediaIds !== undefined) {
+    if (!Array.isArray(body.mediaIds)) {
+      errors.mediaIds = 'Must be an array of media ids'
+    } else if (body.mediaIds.length > CRM_MEDIA_IDS_MAX) {
+      errors.mediaIds = `At most ${CRM_MEDIA_IDS_MAX} files may be attached`
+    } else {
+      // The SAME normalizer the console card writes through, so the API
+      // cannot store a list the console would refuse. An empty array is
+      // legal and clears the attachments.
+      values.mediaIds = normalizeCrmMediaIds(body.mediaIds)
+    }
   }
 
   if (body.title !== undefined || !partial) {

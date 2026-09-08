@@ -84,6 +84,7 @@ after creation; a record that belongs somewhere else is deleted and recreated th
 | `industry` | string \| null | Free text, 120 characters. Writable. |
 | `ownerUid` | string \| null | The team member responsible for the account. Must be a member of your organization. Writable. |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
+| `mediaIds` | string[] | Files from the organization's [media library](./media.md) attached to this record, by media id, at most 20. An empty array clears them. Writable. |
 | `siteId` | string | The site the company was created from — see [above](#scopes-and-sites). **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. A fresh record's `updated` equals its `created`. |
 

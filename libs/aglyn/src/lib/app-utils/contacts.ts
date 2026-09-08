@@ -465,6 +465,17 @@ export interface ContactFacet {
    * opened before then advanced the address-level rollup and nothing here.
    */
   lastEmailEngagementAtMs?: number
+  /**
+   * The org-library files THIS holder has attached to the person
+   * (AGL-2662), by media document id.
+   *
+   * Per-holder for the reason every other field here is: an agency running
+   * two client brands has one contact document between them, and a signed
+   * contract one client filed is not the other client's to see. Ids rather
+   * than URLs so a file moved between folders keeps its attachment, and so
+   * a private asset is still served through the signed CDN door.
+   */
+  mediaIds?: string[]
 }
 
 /** The map field holding the facets: `{ [groupId]: ContactFacet }`. */

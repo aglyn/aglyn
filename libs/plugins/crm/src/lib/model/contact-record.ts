@@ -82,6 +82,8 @@ export interface ContactRecord {
   address: AglynPostalAddress | null
   /** This holder's custom field values, keyed by definition key (AGL-2601). */
   custom?: Record<string, Aglyn.ContactCustomValue>
+  /** This holder's attached org-library files, by media id (AGL-2662). */
+  mediaIds?: string[]
   ownerUid: string
   /** Empty when the holder has not placed the person in the funnel. */
   lifecycleStage: ContactLifecycleStage | ''
@@ -135,6 +137,7 @@ export function contactRecordFromDoc(
     companyLink: Aglyn.readContactCompanyLink(row, group.groupId),
     address: facet.address ?? null,
     custom: facet.custom ?? {},
+    mediaIds: facet.mediaIds ?? [],
     ownerUid: facet.ownerUid ?? '',
     lifecycleStage: Aglyn.isContactLifecycleStage(facet.lifecycleStage)
       ? facet.lifecycleStage

@@ -232,6 +232,29 @@ Opening a deal shows:
 A deal also appears on the pages of the contact and the company it names, each
 with a **New deal** shortcut that starts a deal already linked to them.
 
+## Files
+
+The **Files** card attaches assets from the [media library](../media/overview.md)
+to this record: contracts, quotes, a signed proposal, a photo of the site.
+
+- **Attach…** opens the media browser. At a site you can pick from the site's
+  own library and the workspace's shared one; at the
+  [organization hub](./overview.md#at-the-organization-level) only the shared
+  library is offered, because a record there belongs to the workspace rather
+  than to one site.
+- A record holds up to **20 files**.
+- The **✕** beside a file removes the attachment. The file itself is untouched
+  and stays in the library.
+
+Files are stored **by id**, not by address. A file moved between folders keeps
+its attachment, and a private file is still served through the signed link that
+checks who is asking rather than through a public URL. A file deleted from the
+library is still listed, marked as no longer there, so an attachment never
+disappears without saying so.
+
+Attachments are readable and writable through the
+[REST API](/api/resources/deals) as `mediaIds`.
+
 ## Related
 
 - [CRM overview](./overview.md)
