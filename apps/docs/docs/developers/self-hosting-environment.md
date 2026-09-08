@@ -717,6 +717,7 @@ origin, except the last, which targets your tenant origin.
 | `0 8 * * *` | `/api/billing/usage-alerts` | Budget warnings, auto-lock sweep |
 | `0 * 1-2 * *` | `/api/billing/usage-email` | Monthly usage summaries |
 | `0 13 * * *` | `/api/crm/daily-digest` | Daily CRM digest — 08:00 in `CRM_DIGEST_TIME_ZONE`; move the hour with the zone |
+| `0 * * * *` | `/api/crm/task-reminders` | CRM task reminders — each open task's reminder, within the hour after its time; the message reads the time in `CRM_DIGEST_TIME_ZONE` |
 | `0 5 * * 1` | `/api/admin/firestore-export` | Weekly export |
 | `30 5 * * 1` | `/api/admin/reap-plugin-artifacts` | Orphaned artifact reaping |
 | `0 6 * * 1` | `/api/admin/reverify-plugin-versions` | Re-checks published plugin verdicts |
