@@ -58,9 +58,15 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'NOW', delete: () => 'DELETE' },
 }))
 
-const fileBookingOnCrm = jest.fn(async () => ({ filed: false, reason: 'no-record' }))
+const fileBookingOnCrm = jest.fn(
+  async (_firestore: unknown, _input: Record<string, unknown>) => ({
+    filed: false as const,
+    reason: 'no-record' as const,
+  }),
+)
 jest.mock('./server/booking-crm', () => ({
-  fileBookingOnCrm: (...args: unknown[]) => fileBookingOnCrm(...(args as [])),
+  fileBookingOnCrm: (firestore: unknown, input: Record<string, unknown>) =>
+    fileBookingOnCrm(firestore, input),
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {
