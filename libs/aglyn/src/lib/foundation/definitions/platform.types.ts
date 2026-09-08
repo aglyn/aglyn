@@ -187,6 +187,24 @@ export interface AglynHost extends AglynDocument {
     separator?: string
     favicon?: string
     /**
+     * The square mark a visitor installs to their home screen — the `icons`
+     * entry of `/manifest.webmanifest`.
+     *
+     * Distinct from both of its neighbours, and the distinction is what the
+     * field exists for. {@link favicon} is drawn at 16–32px in a tab, so it is
+     * a glyph rather than artwork. `logoUrl` is the site's LOCKUP — a wordmark
+     * on most sites, which is a wide rectangle, and the manifest fell back to
+     * it for want of anything else: an installer that trusted a declared size
+     * painted a stretched or letterboxed tile on somebody's home screen.
+     *
+     * A `media:` reference or a plain URL, absolutized before it is written
+     * into the manifest because nothing fetches an install icon from the page
+     * that linked it. Unset falls back to `logoUrl`, which is what every site
+     * installs with today; a site with neither gets no `icons` array at all,
+     * so the browser uses a screenshot rather than a broken tile.
+     */
+    appIcon?: string
+    /**
      * Site-wide default social card image (AGL-1337) — used by every page
      * that sets none of its own. A `media:` reference (what the picker
      * writes) or a raw URL; resolved and made absolute by
@@ -459,7 +477,7 @@ export const HOST_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'The site brand mark rendered by the tenant nav (AGL-594). Authored ' +
     'content pointing at already-public media; no gate reads it.',
   seo:
-    'Title, description, favicon, social card and the AGL-1263 ' +
+    'Title, description, favicon, app icon, social card and the AGL-1263 ' +
     '`discourageSearchEngines` switch. All of it is authoring: the values ' +
     'end up in the page the editor is already free to write.',
   // `screens` LEFT this map in AGL-2334 and is now classified as denied,

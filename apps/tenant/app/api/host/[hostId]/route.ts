@@ -38,6 +38,15 @@ export interface PublicHost {
     description?: string
     separator?: string
     favicon?: string
+    /**
+     * The installable app icon (`seo.appIcon`), published for the same reason
+     * `favicon` and `logoUrl` are: it is one of the marks a site shows the
+     * world, and a lookup asking who a site is wants the same answer a
+     * visitor gets. Key-by-key copying is what dropped `imageAlt` at
+     * AGL-2398, so a new mark is added here in the same change that adds it
+     * to the document rather than waiting to be missed.
+     */
+    appIcon?: string
     image?: string
     imageWidth?: number
     imageHeight?: number
@@ -82,6 +91,7 @@ function toPublicHost(host: AglynHost | null | undefined): PublicHost | null {
           description: seo.description,
           separator: seo.separator,
           favicon: seo.favicon,
+          appIcon: seo.appIcon,
           image: seo.image,
           imageWidth: seo.imageWidth,
           imageHeight: seo.imageHeight,

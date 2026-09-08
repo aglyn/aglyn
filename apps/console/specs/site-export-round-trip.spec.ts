@@ -631,6 +631,12 @@ const SEEDS: Array<{
         },
       ],
       bio: 'Writes about compilers.',
+      // The author PAGE's own head: a snippet short enough to survive a
+      // search result, and a card shaped like one. Both seeded because the
+      // guard below refuses a permitted key no document carries.
+      seoDescription: 'Ada Lovelace writes about compilers at Acme.',
+      seoImage: 'media:host-1/media-2',
+      seoImageAlt: 'Ada Lovelace beside the Analytical Engine',
     },
   },
   {

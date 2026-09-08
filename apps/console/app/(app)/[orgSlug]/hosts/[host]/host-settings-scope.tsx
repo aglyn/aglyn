@@ -60,6 +60,7 @@ import {
   useHostId,
   useHostSubdomain,
 } from '../../../../../components/host-id-provider'
+import AppIconCard from '../../../../../components/app-icon-card.component'
 import FaviconCard from '../../../../../components/favicon-card.component'
 import EntityLogoCard from '../../../../../components/entity-logo-card.component'
 import SocialImageCard from '../../../../../components/social-image-card.component'
@@ -597,6 +598,11 @@ function SeoFormBody(props: {
       */}
       <EntityLogoCard hostId={hostId} embedded />
       <FaviconCard hostId={hostId} embedded />
+      {/* Beside the favicon, which is the icon it is most often confused
+          with: both are the site's mark drawn small by somebody else's
+          chrome, and seeing the two together is what makes the difference in
+          size and shape legible. */}
+      <AppIconCard hostId={hostId} embedded />
       <SocialImageCard hostId={hostId} embedded />
     </>
   )

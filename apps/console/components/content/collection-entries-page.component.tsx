@@ -87,7 +87,14 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
 import CreateArtifactDrawer from '../create-artifact-drawer.component'
-import { AVATAR_HINT } from '../../constants/media-size-hints'
+import {
+  AVATAR_HINT,
+  SOCIAL_IMAGE_HINT,
+} from '../../constants/media-size-hints'
+import {
+  MEDIA_ALT_MAX_LENGTH,
+  inheritedMediaAlt,
+} from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   collectionCreateBody,
   collectionTemplateBodies,
@@ -739,9 +746,22 @@ export function CollectionEntriesPage() {
     sameAs: string
     links: Aglyn.ContentAuthorLink[]
     bio: string
+    seoDescription: string
+    seoImage: string
+    seoImageAlt: string
   } | null>(null)
   const [authorBusy, setAuthorBusy] = useState(false)
-  const [authorPickerOpen, setAuthorPickerOpen] = useState(false)
+  /**
+   * Which of the author's two pictures the media dialog is open for, or null.
+   *
+   * A target rather than a boolean because the record holds two, and they are
+   * not interchangeable: the portrait is the face beside the byline, the
+   * share card is the 1200×630 asset the author page is shared as. One flag
+   * would write whichever the last pick happened to be aimed at.
+   */
+  const [authorPickerField, setAuthorPickerField] = useState<
+    'image' | 'seoImage' | null
+  >(null)
 
   /**
    * The address this author's page will actually have (AGL-2518) — shown
@@ -783,6 +803,9 @@ export function CollectionEntriesPage() {
       // no line-per-URL form of them to edit (AGL-2516).
       links: Aglyn.normalizeContentAuthorLinks(author?.links),
       bio: author?.bio ?? '',
+      seoDescription: author?.seoDescription ?? '',
+      seoImage: author?.seoImage ?? '',
+      seoImageAlt: author?.seoImageAlt ?? '',
     })
   }, [])
 
@@ -829,6 +852,14 @@ export function CollectionEntriesPage() {
       // to store (AGL-2516).
       links: Aglyn.normalizeContentAuthorLinks(authorEditor.links),
       bio: authorEditor.bio.trim(),
+      seoDescription: authorEditor.seoDescription.trim(),
+      seoImage: authorEditor.seoImage.trim(),
+      // The alt describes the SHARE CARD, so it goes when the card does —
+      // a description left behind would be published beside the portrait the
+      // page falls back to, which is a different picture.
+      seoImageAlt: authorEditor.seoImage.trim()
+        ? authorEditor.seoImageAlt.trim()
+        : '',
     }
     setAuthorBusy(true)
     try {
@@ -2205,7 +2236,7 @@ export function CollectionEntriesPage() {
               size="small"
               variant="outlined"
               sx={{ mt: 0.5 }}
-              onClick={() => setAuthorPickerOpen(true)}
+              onClick={() => setAuthorPickerField('image')}
             >
               {'Choose…'}
             </Button>
@@ -2415,6 +2446,75 @@ export function CollectionEntriesPage() {
               'sentence is not a schema.org description of a person.'
             }
           />
+          {/*
+            The two fields that describe the author's PAGE rather than the
+            author — a search snippet and a share card. Both fall back to what
+            the record already carries, so an author who ignores them keeps
+            the page they have today: the bio as the description, the portrait
+            as the picture.
+          */}
+          <TextField
+            label="Search description"
+            size="small"
+            multiline
+            minRows={2}
+            value={authorEditor?.seoDescription ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, seoDescription: event.target.value } : prev,
+              )
+            }
+            helperText={
+              'The snippet under their page in search results. Blank uses ' +
+              'the bio, which is often longer than a result shows.'
+            }
+          />
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
+            <TextField
+              label="Share card"
+              size="small"
+              sx={{ flexGrow: 1 }}
+              value={authorEditor?.seoImage ?? ''}
+              onChange={(event) =>
+                setAuthorEditor((prev) =>
+                  prev ? { ...prev, seoImage: event.target.value } : prev,
+                )
+              }
+              helperText={
+                'The picture when their page is shared. Blank shares the ' +
+                `portrait above as a small card. ${SOCIAL_IMAGE_HINT}`
+              }
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              sx={{ mt: 0.5 }}
+              onClick={() => setAuthorPickerField('seoImage')}
+            >
+              {'Choose…'}
+            </Button>
+          </Stack>
+          {authorEditor?.seoImage?.trim() ? (
+            <TextField
+              label="Share card description"
+              size="small"
+              value={authorEditor?.seoImageAlt ?? ''}
+              onChange={(event) =>
+                setAuthorEditor((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        seoImageAlt: event.target.value.slice(
+                          0,
+                          MEDIA_ALT_MAX_LENGTH,
+                        ),
+                      }
+                    : prev,
+                )
+              }
+              helperText="Read aloud by screen readers in a social preview"
+            />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAuthorEditor(null)}>{'Cancel'}</Button>
@@ -2429,19 +2529,42 @@ export function CollectionEntriesPage() {
       </Dialog>
       <MediaPickerDialog
         hostId={hostId}
-        open={authorPickerOpen}
-        onClose={() => setAuthorPickerOpen(false)}
+        open={Boolean(authorPickerField)}
+        onClose={() => setAuthorPickerField(null)}
         onPick={(media) => {
-          // The author's portrait / logo (AGL-2486), stored as a `media:`
-          // REFERENCE rather than the object's current location — an AGL-1215
-          // folder move would 404 a raw URL permanently. The tenant resolves it
-          // to an absolute URL for the JSON-LD with the same helper `og:image`
-          // uses.
+          // The author's pictures (AGL-2486), stored as a `media:` REFERENCE
+          // rather than the object's current location — an AGL-1215 folder
+          // move would 404 a raw URL permanently. The tenant resolves it to an
+          // absolute URL for the JSON-LD with the same helper `og:image` uses.
           const src = Aglyn.mediaNodeSrc(media)
-          if (src) {
-            setAuthorEditor((prev) => (prev ? { ...prev, image: src } : prev))
+          const field = authorPickerField
+          if (src && field) {
+            setAuthorEditor((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    [field]: src,
+                    // A share card carries the chosen asset's own description
+                    // through the ONE shared rule (AGL-1896): an alt somebody
+                    // already wrote for this picture wins, and an asset with
+                    // none leaves the box empty rather than inventing a
+                    // sentence out of a file name. The portrait has no alt of
+                    // its own to seed — it is emitted as the person, not as a
+                    // card.
+                    ...(field === 'seoImage'
+                      ? {
+                          seoImageAlt:
+                            inheritedMediaAlt({
+                              placementAlt: prev.seoImageAlt,
+                              assetAlt: (media as { alt?: unknown }).alt,
+                            }) ?? prev.seoImageAlt,
+                        }
+                      : {}),
+                  }
+                : prev,
+            )
           }
-          setAuthorPickerOpen(false)
+          setAuthorPickerField(null)
         }}
       />
     </>

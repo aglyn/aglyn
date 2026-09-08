@@ -478,9 +478,10 @@ and both URL forms. See [the Media API resource](/api/resources/media), includin
 - **Image** — place and bind images from the library.
 - **Video** — embed uploaded video.
 - **Favicon picker** — choose the site favicon from your media.
+- **App icon picker** — choose the square mark your site installs with.
 
-Everywhere you pick media — the Image and Video components, the logo and favicon pickers,
-and the organization logo field — the **same media picker** opens, with **This site** and
+Everywhere you pick media — the Image and Video components, the logo, favicon and app
+icon pickers, and the organization logo field — the **same media picker** opens, with **This site** and
 **Organization (shared)** tabs so you can pull from either library without leaving the
 dialog.
 

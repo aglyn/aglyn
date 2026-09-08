@@ -128,9 +128,29 @@ only the fields that apply:
 | **Links** | the row of marks a reader clicks | same |
 | **Profile links** | `sameAs`, one URL per line | `sameAs`, one URL per line |
 | **Bio** | shown beside the byline; not structured data | same |
+| **Search description** | the snippet under their page in results | same |
+| **Share card** | the picture their page is shared as | same |
 
 The portrait is a **media-picker target** — choose from the site or organization
 library, or paste a URL if the avatar lives elsewhere.
+
+#### The author's own page, in search and in a share
+
+The last two fields describe the **page**, not the person, and both fall back to a
+field above them — so an author who ignores both keeps the page they have today.
+
+**Search description** overrides the bio in the `<meta name="description">` of their
+author page. The bio is the fallback because it is already the sentence that
+describes them to a stranger; it is often the wrong length, because it is printed
+beside a heading and runs as long as you like, while a search result cuts off at
+roughly 160 characters.
+
+**Share card** overrides the portrait as the picture the page is shared with, and
+changes the card's shape with it: a page with a share card shares as the **large**
+card, and one without keeps the small one. That is not a preference — a portrait is
+square, and a square face dropped into a wide card is cropped to a letterbox. Bring
+1200×630, and describe it in the box that appears once you have picked one, which is
+what a screen reader announces in a social preview.
 
 #### Links a reader can click
 
@@ -228,6 +248,12 @@ every post instantly without touching a single entry** — the display name is r
 render time wherever it appears (entry pages, meta lines, related posts, RSS, JSON-LD).
 Deleting a category leaves its entries uncategorized until they are reassigned. A
 collection holds up to 50 categories.
+
+Each category also takes a **Description**, which becomes the meta description of its
+own `/{collection}/category/{slug}` listing. Leave it blank and that listing inherits
+the collection page's description — which is true enough, but means every category on
+the site is described by the same sentence, and a search engine reads that as several
+pages saying the same thing. One line per category is enough to tell them apart.
 
 Posts written before category lookup existed keep rendering their old free-typed
 category; the entry editor flags them so you can migrate each post to a real category

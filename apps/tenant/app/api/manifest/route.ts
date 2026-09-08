@@ -72,17 +72,24 @@ export async function GET(request: Request): Promise<Response> {
   const backgroundColor = light?.background?.default || '#ffffff'
 
   /**
-   * Icons come from the site's own logo when it has one.
+   * Icons come from the site's own square app icon, and failing that from its
+   * logo.
+   *
+   * The order is the point. `seo.appIcon` is artwork chosen FOR this slot —
+   * square, and shown at a size the author was told about before they
+   * uploaded it. `logoUrl` is the site's lockup, which on most sites is a
+   * wordmark: usable as a last resort, and the reason the `sizes` note below
+   * is as long as it is.
    *
    * The empty case is deliberate rather than incidental (AGL-1022's rule): a
-   * site with no logo gets **no `icons` array at all**, so the browser falls
+   * site with neither gets **no `icons` array at all**, so the browser falls
    * back to a screenshot of the page. An entry pointing at a missing image
    * would install a broken tile, which is the failure this whole issue is
    * about — someone else's branding, or none, on a customer's home screen.
    *
    * ## Why ABSOLUTE here, when the page's own `<img>` tags are relative
    *
-   * `logoUrl` has three stored generations, and two of them — a `media:`
+   * Both fields have three stored generations, and two of them — a `media:`
    * reference and the AGL-175 relative CDN path — resolve to
    * `/api/media/cdn/…` (AGL-1407). A manifest icon is not fetched by the page
    * that linked it: the install prompt, the OS icon cache and every
@@ -103,7 +110,7 @@ export async function GET(request: Request): Promise<Response> {
    * An already-absolute URL — the raw storage URL, or one an author typed —
    * never depends on the origin and is unchanged.
    */
-  const iconSrc = absoluteMediaSrc(site?.logoUrl, {
+  const iconSrc = absoluteMediaSrc(site?.seo?.appIcon || site?.logoUrl, {
     hostId: site?.$id,
     origin: hostPublicOrigin(site),
   })
@@ -111,7 +118,7 @@ export async function GET(request: Request): Promise<Response> {
     ? [
         {
           src: iconSrc,
-          // `any` rather than `maskable`: a logo that has not been designed
+          // `any` rather than `maskable`: an icon that has not been designed
           // with a safe zone gets cropped into a circle on Android, and we
           // cannot know whether a customer's has one. `any` also leaves the
           // OS to supply its own plate, rather than us baking a background
@@ -134,11 +141,12 @@ export async function GET(request: Request): Promise<Response> {
            *  - A `media:` reference resolves to `/api/media/cdn/{scope}/{id}`,
            *    which carries NO file extension, so the format cannot be
            *    sniffed from the src either.
-           *  - Nothing stores the logo's dimensions. `seo.imageWidth/Height`
+           *  - Neither icon field stores dimensions. `seo.imageWidth/Height`
            *    exist because the social-image picker copies them at pick time
-           *    (AGL-1152); the logo picker writes `logoUrl` alone.
+           *    (AGL-1152); the logo and app-icon pickers write the reference
+           *    alone.
            *  - Even a Firestore read would not close it: `AglynHostMedia.width`
-           *    is best-effort and RASTER-ONLY, so an SVG logo — the common
+           *    is best-effort and RASTER-ONLY, so an SVG mark — the common
            *    case, and this site's case — never has one.
            *
            * So the honest choices are to omit `sizes` or to say `any`. `any`
@@ -147,12 +155,13 @@ export async function GET(request: Request): Promise<Response> {
            * site that installs today still installs. What it never does is
            * assert a pixel dimension we have not measured.
            *
-           * NOTE the shape problem is NOT fixed by this, and cannot be fixed
-           * here: a wordmark is the wrong artwork for an installed-app icon at
-           * any declared size. The remedy is a square mark, and the only
-           * square mark we own is OURS — putting it in a customer's manifest
-           * is exactly the AGL-1252 defect this route exists to prevent. A
-           * site-supplied square icon needs a field that does not exist yet.
+           * The SHAPE — the half a size declaration cannot repair, because a
+           * wordmark is the wrong artwork for an installed-app icon at any
+           * declared size — is what `seo.appIcon` answers instead. The remedy
+           * was always a square mark, and the only square mark we own is OURS,
+           * so putting one there would be exactly the AGL-1252 defect this
+           * route exists to prevent: it has to come from the site, which is
+           * why it is a field the site fills in rather than a default.
            */
           sizes: 'any',
         },

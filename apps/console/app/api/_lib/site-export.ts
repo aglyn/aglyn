@@ -283,6 +283,13 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     // them — a silent loss, because every other field survives.
     'links',
     'bio',
+    // The author page's own search snippet and share card. Dropping them on
+    // an import silently re-describes and re-pictures every author page on
+    // the restored site from the bio and the portrait, which is the state
+    // these fields exist to override.
+    'seoDescription',
+    'seoImage',
+    'seoImageAlt',
   ],
   services: [
     'name',

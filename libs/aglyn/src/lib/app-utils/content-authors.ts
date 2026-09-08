@@ -16,6 +16,7 @@
  */
 
 import { HostEntityType } from '../foundation/definitions/platform.types'
+import { MEDIA_ALT_MAX_LENGTH } from './media-metadata'
 import { absoluteMediaSrc } from './media-ref'
 import { urlSlugSegment } from './url-slug'
 
@@ -332,6 +333,42 @@ export interface ContentAuthorRecord {
    * is a claim about the person, and a marketing sentence is not that.
    */
   bio?: string
+  /**
+   * The `<meta name="description">` for this author's page, overriding
+   * {@link bio}.
+   *
+   * The two are different sentences written for different readers, which is
+   * why one field cannot serve both. A bio is printed BESIDE the byline, on a
+   * page whose heading already says whose it is, and it runs as long as the
+   * person wants; a meta description is read alone in a search result, has to
+   * name the person it is about, and is cut off past roughly 160 characters.
+   * Falling back to the bio is still right — a long true sentence beats no
+   * description at all — but an author who wants the snippet to read a
+   * particular way now has somewhere to say so.
+   */
+  seoDescription?: string
+  /**
+   * The share card for this author's page, overriding {@link image}.
+   *
+   * `image` is a PORTRAIT: square, cropped to a face, and correct as the
+   * `schema.org` image of a person. A share card is 1200×630 and gets
+   * letterboxed or center-cropped when a square goes out in its place, which
+   * is why the author page ships the small `summary` card while a page with
+   * one of these ships the large one.
+   *
+   * A `media:` reference or a plain URL, resolved through the same
+   * `resolveSocialImage` every other surface's card goes through.
+   */
+  seoImage?: string
+  /**
+   * `og:image:alt` for {@link seoImage} — what the card SHOWS, for the screen
+   * readers that announce a social preview.
+   *
+   * Stored beside the reference rather than derived, and read only when
+   * `seoImage` is the image that won: a description carried over to the
+   * portrait would describe a picture the card does not show.
+   */
+  seoImageAlt?: string
 }
 
 /**
@@ -395,6 +432,12 @@ export function normalizeContentAuthor(
     sameAs,
     links: normalizeContentAuthorLinks(raw['links']),
     bio: text(raw['bio'], 600),
+    // Shorter than the bio it overrides, because it is read alone in a search
+    // result rather than beside a heading — past this nothing survives the
+    // snippet, so storing more only hides the cut from whoever wrote it.
+    seoDescription: text(raw['seoDescription'], 300),
+    seoImage: text(raw['seoImage'], 1000),
+    seoImageAlt: text(raw['seoImageAlt'], MEDIA_ALT_MAX_LENGTH),
   }
 }
 

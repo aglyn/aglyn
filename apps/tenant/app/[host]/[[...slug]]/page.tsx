@@ -217,13 +217,36 @@ function buildMetadata(props: Props): Metadata {
         })
       : undefined
     const authorTitle = titleFor({ name: author.name })
-    // The bio, which is the one sentence on the record written to describe
-    // this person to a stranger — exactly what a search snippet wants.
-    const authorDescription = record?.bio?.trim() || undefined
-    const authorImage = Aglyn.absoluteMediaSrc(record?.image, {
-      hostId: host?.$id,
-      origin: authorBase,
+    /**
+     * The snippet the author wrote for a search result, then the bio.
+     *
+     * The bio is the one sentence on the record describing this person to a
+     * stranger, which is the right shape for a snippet and is why it is the
+     * fallback. It is not the right LENGTH: it is printed beside a byline,
+     * where it runs as long as the person wants, and a bio of several hundred
+     * characters reaches a result page cut off mid-clause. `seoDescription`
+     * is where the short version goes.
+     */
+    const authorDescription =
+      record?.seoDescription?.trim() || record?.bio?.trim() || undefined
+    /**
+     * The card, through the same resolver every other surface's card goes
+     * through — so an author page gains the absolute URL, the dimension pair
+     * and `og:image:alt` rather than the bare string this emitted.
+     *
+     * Resolved in two steps because the SHARE CARD and the PORTRAIT are
+     * different pictures with different consequences below: a purpose-made
+     * 1200×630 asset is what the wide Twitter card is for, and a square
+     * portrait is precisely what it crops to a letterbox. Knowing which one
+     * won is therefore part of the answer, not an implementation detail.
+     */
+    const authorCard = Aglyn.resolveSocialImage({
+      sources: [{ image: record?.seoImage, imageAlt: record?.seoImageAlt }],
+      host,
     })
+    const authorImage =
+      authorCard ??
+      Aglyn.resolveSocialImage({ sources: [{ image: record?.image }], host })
     return {
       title: authorTitle,
       ...(authorDescription ? { description: authorDescription } : {}),
@@ -245,9 +268,11 @@ function buildMetadata(props: Props): Metadata {
         ...(siteTitle ? { siteName: siteTitle } : {}),
       },
       twitter: {
-        // `summary`, never `summary_large_image`: the image here is a
-        // PORTRAIT, and the wide card crops a square face to a letterbox.
-        card: 'summary',
+        // The wide card only for a picture shaped like one. Falling back to
+        // the portrait means falling back to `summary`: a square face in a
+        // `summary_large_image` slot is cropped to a letterbox, which is a
+        // worse card than the small one that fits.
+        card: authorCard ? 'summary_large_image' : 'summary',
         title: authorTitle,
         ...(authorDescription ? { description: authorDescription } : {}),
         ...(authorImage ? { images: [authorImage] } : {}),
@@ -311,11 +336,23 @@ function buildMetadata(props: Props): Metadata {
       : category
         ? undefined
         : listScreenSeo?.title
-    // The same chain the screen branch uses, so the two cannot disagree about
-    // where a description comes from.
+    /**
+     * The same chain the screen branch uses, so the two cannot disagree about
+     * where a description comes from — with the routed CATEGORY ahead of it.
+     *
+     * A category's own description is the only sentence on this list that is
+     * about the filtered listing rather than the whole collection. Without
+     * one, every `/{collection}/category/{slug}` on a site repeats the list
+     * template's description verbatim: as many identical snippets as the
+     * taxonomy has categories, which is the duplication the composed category
+     * title (AGL-1321) exists to avoid, in the tag beneath it. An undescribed
+     * category still inherits, because the list it filters describes it
+     * better than the site-wide default does.
+     */
     const description: string | undefined = entry
       ? entry.seoDescription || entry.excerpt || undefined
-      : listScreenSeo?.description ||
+      : category?.description ||
+        listScreenSeo?.description ||
         screen?.description ||
         host?.seo?.description
     // The card image (AGL-1337). The entry's own cover wins, then the
