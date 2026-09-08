@@ -74,6 +74,7 @@ import {
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import {
   LEAD_FILTER_LABELS,
@@ -81,6 +82,7 @@ import {
   type LeadFilter,
   leadMatchesFilter,
 } from '../model/lead-filters'
+import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { leadSourceLabel, leadSources, leadTimeLabel } from './lead-history-card'
 import { LeadOwnerSelect } from './lead-owner-select'
@@ -88,6 +90,7 @@ import { CONVERT_PENDING_ERASURE_REASON } from './lead-properties-card'
 import { LeadStatusChip } from './lead-status-chip'
 import LeadSurfacesNote from './lead-surfaces-note'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
+import LeadsBulkBar from './leads-bulk-bar'
 import OrgLeadSurfacesNote from './org-lead-surfaces-note'
 
 /**
@@ -228,6 +231,27 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     () => rows.slice(page * pageSize, (page + 1) * pageSize),
     [rows, page, pageSize],
   )
+
+  /*
+   * The ticked rows, for the bulk bar (AGL-2662). Cleared when the filter
+   * changes: a selection made on the open leads is not a selection of the
+   * unqualified ones, and the bar's count would be over rows no longer
+   * listed.
+   */
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  useEffect(() => setSelectedIds([]), [filter])
+  // How the file names the owner and, at the org level, the site.
+  const csvOptions: LeadCsvOptions = useMemo(
+    () => ({
+      ownerEmail: roster.emailFor,
+      ...(hostId ? {} : { siteName: (id: string) => mount?.siteName(id) }),
+    }),
+    [roster.emailFor, hostId, mount],
+  )
+  // The listed window — every row the filter admits, not just the page.
+  const handleExport = useCallback(() => {
+    downloadTextFile('leads.csv', 'text/csv', leadsCsv(rows, csvOptions))
+  }, [rows, csvOptions])
 
   const [assigning, setAssigning] = useState<LeadRow | null>(null)
   const [unqualifying, setUnqualifying] = useState<LeadRow | null>(null)
@@ -436,6 +460,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 ))}
               </Select>
             </FormControl>
+            <Button size="small" onClick={handleExport} disabled={!rows.length}>
+              {'Export CSV'}
+            </Button>
           </Stack>
         }
         contentGutterX
@@ -456,11 +483,19 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             </Typography>
           ) : (
             <>
+              <LeadsBulkBar
+                rows={rows}
+                selected={selectedIds}
+                onSelectedChange={setSelectedIds}
+                roster={roster}
+                csv={csvOptions}
+              />
               <CrmColumnOrderProvider value={grid.columnOrder}>
                 <ListTable
                   rows={pageRows}
                   columns={grid.columns}
                   slots={CRM_LIST_SLOTS}
+                  selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                   loading={status === 'loading'}
                   onOpen={(_id, row: LeadRow) =>
                     router.push(routes.lead(row.leadId, hostId ? null : row.hostId))
