@@ -157,7 +157,7 @@ export function registerCrmConsole(): void {
         header: {
           title: 'CRM',
           icon: { path: mdiCardAccountDetailsOutline.path },
-          docsTopic: 'contacts',
+          docsTopic: 'crm',
         },
         Component: CrmConsolePage,
       },
