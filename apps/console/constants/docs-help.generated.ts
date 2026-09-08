@@ -646,7 +646,7 @@ export const DOCS_HELP_TOPICS = {
   settings: {
     path: '/content-and-data/crm/settings',
     title: 'CRM settings',
-    excerpt: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to by default, by rule, or in turn, the address that files your mailbox\'s replies on a record, and the recipes installed on each site.',
+    excerpt: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to, the address that files replies on a record, and each site\'s recipes.',
   },
   siteProtection: {
     path: '/building-sites/site-protection/overview',
@@ -691,7 +691,7 @@ export const DOCS_HELP_TOPICS = {
   tasks: {
     path: '/content-and-data/crm/tasks',
     title: 'Tasks & follow-ups',
-    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, a reminder at the task\'s own time, and a morning digest of what is owed.',
+    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the record they are for — overdue and today read off the clock, a snooze, a reminder at its own time, and a morning digest.',
   },
   team: {
     path: '/workspace-and-billing/teams-and-roles/overview',

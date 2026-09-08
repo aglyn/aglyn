@@ -911,6 +911,26 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
+    'libs/plugins/crm/src/lib/components/email-templates-card.tsx',
+    'The workspace’s email TEMPLATES (AGL-2658) — a settings table, one row ' +
+      'per letter somebody saved, read whole under `CRM_EMAIL_TEMPLATES_LIMIT` ' +
+      '(200) and ordered by name at the query. A template is written by hand ' +
+      'and picked by name in the send dialog, so the collection is bounded by ' +
+      'what a team will keep rather than by what customers generate: a footer ' +
+      'would page a list whose whole point is to be scanned at once. The cap ' +
+      'is the read, not the page — past 200 the card would need a footer.',
+  ],
+  [
+    'libs/plugins/crm/src/lib/components/book-meeting-action.tsx',
+    'The sending site’s bookable SERVICES (AGL-2660), inside the dialog that ' +
+      'drops a booking link — a chooser, not a view of the collection. It is ' +
+      'read under `limit(100)`, filtered for deleted rows and sorted by name ' +
+      'in the component, and it is dismissed the moment a service is picked. ' +
+      'A site with more than 100 services would show an arbitrary hundred; ' +
+      'that is the cap to raise, not a footer to add, since paging a picker ' +
+      'inside a dialog buries the thing being picked.',
+  ],
+  [
     'libs/plugins/mui/src/lib/components/data-table.tsx',
     'The Table ELEMENT (AGL-2543), not a view of a collection. Its rows are ' +
       'typed into the attributes panel by the author — a feature matrix or a ' +
@@ -1623,7 +1643,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 53 since the org hub's Settings offers the automation RECIPE catalog
     // (AGL-2639): one row per recipe the plugin ships, naming the sites it is
     // installed on.
-    expect(NOT_A_LIST).toHaveLength(53)
+    //
+    // 55 since the CRM learned to keep a letter and to offer a time
+    // (AGL-2658, AGL-2660): the email templates a team saves, read whole
+    // under its own limit and scanned at once, and the services picker
+    // inside the booking-link dialog, which is dismissed as soon as one is
+    // chosen. Neither is a view of a collection a customer grows.
+    expect(NOT_A_LIST).toHaveLength(55)
   })
 })
 

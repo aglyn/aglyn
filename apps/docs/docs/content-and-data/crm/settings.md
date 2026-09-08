@@ -1,7 +1,7 @@
 ---
 sidebar_position: 13
 title: CRM settings
-description: What the CRM does on its own for every site — whether a company is created from a contact's work email domain, who a new contact is assigned to by default, by rule, or in turn, the address that files your mailbox's replies on a record, and the recipes installed on each site.
+description: What the CRM does on its own for every site — whether a company is created from a contact's work email domain, who a new contact is assigned to, the address that files replies on a record, and each site's recipes.
 ---
 
 # CRM settings
