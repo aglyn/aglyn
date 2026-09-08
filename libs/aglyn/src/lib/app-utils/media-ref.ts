@@ -56,13 +56,36 @@
  *    tokens live in exactly this position and resolve at render. A media
  *    reference is the same kind of thing, and reads that way to an author.
  *
- * ## What is NOT stored
+ * ## The optional content pin (AGL-2685)
  *
- * The reference deliberately omits the content hash: it names the asset, so
- * it always resolves to the asset's current bytes, which is what makes a
- * **replace** propagate instead of breaking. It also omits the entitlement
- * decision — see {@link mediaNodeSrc}, which is why a free-tier org keeps
- * getting a raw storage URL rather than a reference.
+ * A reference may carry the asset's content hash — `media:{scope}/{id}@{hash}`
+ * — and when it does, {@link resolveMediaSrc} emits the CDN's immutable URL
+ * form, which is cached for a year instead of a minute.
+ *
+ * This was refused for a long time, and the refusal was right at the time.
+ * The reference names the asset so that a **replace** propagates; a hash is a
+ * snapshot of bytes, and the immutable URL 404s the moment it goes stale, so
+ * pinning one into a published document meant the first replace broke every
+ * screen holding it. What changed is the handler: a stale hash now REDIRECTS
+ * to the stable URL rather than 404ing, so a pin that has gone stale costs one
+ * extra hop and nothing else. The pin is an optimisation that degrades, not a
+ * commitment that breaks.
+ *
+ * Two properties follow, and both are load-bearing:
+ *
+ * 1. **The pin is optional at every layer.** Every reference written before
+ *    this carries no hash, resolves to the stable URL, and is exactly as
+ *    correct as it was. There is no migration, and the backfill that adds
+ *    pins (`tools/scripts/backfill-media-content-pins.mjs`) is an optimisation
+ *    pass, not a repair.
+ * 2. **A stale pin is never wrong, only slower.** Which is why nothing here
+ *    validates a hash against the asset — this module cannot read a media
+ *    document, and a pin it cannot check is one the CDN resolves for it.
+ *
+ * ## What is still NOT stored
+ *
+ * The entitlement decision — see {@link mediaNodeSrc}, which is why a
+ * free-tier org keeps getting a raw storage URL rather than a reference.
  */
 
 /**
@@ -114,6 +137,15 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
  */
 export const MEDIA_REF_PREFIX = 'media:'
 
+/**
+ * What separates the media id from the optional content pin (AGL-2685).
+ *
+ * `@` because it cannot occur in either half: {@link SEGMENT_SOURCE} is
+ * `[A-Za-z0-9_-]`, so the FIRST `@` after the media id is unambiguously the
+ * boundary, and a reference written before pins existed contains none.
+ */
+export const MEDIA_REF_HASH_SEPARATOR = '@'
+
 const ORG_SCOPE_PREFIX = 'org:'
 
 /**
@@ -131,6 +163,12 @@ export interface MediaRef {
   /** `{hostId}`, `org:{orgId}`, or `org:{orgId}:{hostId}`. */
   scope: string
   mediaId: string
+  /**
+   * The content pin, when the reference carries one (AGL-2685). Absent on
+   * every reference written before pins existed, which is the majority and
+   * stays correct forever.
+   */
+  contentHash?: string
 }
 
 /** Whether a scope segment is one the CDN would accept. */
@@ -141,14 +179,26 @@ export function isMediaCdnScope(scope: string): boolean {
   return parts.every((part) => SEGMENT.test(part))
 }
 
-/** Mints the stored form. Returns undefined rather than emitting junk. */
+/**
+ * Mints the stored form. Returns undefined rather than emitting junk.
+ *
+ * A `contentHash` that does not fit the segment grammar is DROPPED rather
+ * than refused: the pin is an optimisation, and returning undefined for it
+ * would turn a bad hash into no reference at all — an image that stops
+ * rendering because a cache hint was malformed.
+ */
 export function formatMediaRef(
   scope: string | undefined | null,
   mediaId: string | undefined | null,
+  contentHash?: string | undefined | null,
 ): string | undefined {
   if (!scope || !mediaId) return undefined
   if (!isMediaCdnScope(scope) || !SEGMENT.test(mediaId)) return undefined
-  return `${MEDIA_REF_PREFIX}${scope}/${mediaId}`
+  const pin =
+    contentHash && SEGMENT.test(contentHash)
+      ? `${MEDIA_REF_HASH_SEPARATOR}${contentHash}`
+      : ''
+  return `${MEDIA_REF_PREFIX}${scope}/${mediaId}${pin}`
 }
 
 /** Whether a persisted value is a media reference rather than a URL. */
@@ -165,9 +215,20 @@ export function parseMediaRef(value: unknown): MediaRef | null {
   const slash = rest.indexOf('/')
   if (slash <= 0) return null
   const scope = rest.slice(0, slash)
-  const mediaId = rest.slice(slash + 1)
+  // The media id may be followed by `@{contentHash}` (AGL-2685). Neither half
+  // can contain `@`, so the first one is the boundary.
+  const tail = rest.slice(slash + 1)
+  const at = tail.indexOf(MEDIA_REF_HASH_SEPARATOR)
+  const mediaId = at === -1 ? tail : tail.slice(0, at)
+  const contentHash = at === -1 ? undefined : tail.slice(at + 1)
   if (!isMediaCdnScope(scope) || !SEGMENT.test(mediaId)) return null
-  return { scope, mediaId }
+  // A malformed pin loses the PIN, never the reference — the asset is still
+  // named, and the stable URL still serves it.
+  if (contentHash !== undefined && !SEGMENT.test(contentHash))
+    return { scope, mediaId }
+  return contentHash === undefined
+    ? { scope, mediaId }
+    : { scope, mediaId, contentHash }
 }
 
 /**
@@ -271,7 +332,11 @@ export function resolveMediaSrc(
   const ref = parseMediaRef(value)
   if (!ref) return undefined
   const scope = hostQualifiedScope(ref.scope, options?.hostId)
-  return `${MEDIA_CDN_ROUTE}/${scope}/${ref.mediaId}`
+  const stable = `${MEDIA_CDN_ROUTE}/${scope}/${ref.mediaId}`
+  // A pinned reference resolves to the CDN's immutable URL — a year in the
+  // browser instead of a minute (AGL-2685). Safe to emit without checking the
+  // hash: a stale one redirects here, to this exact stable URL.
+  return ref.contentHash ? `${stable}/${ref.contentHash}` : stable
 }
 
 /**
@@ -551,19 +616,24 @@ export function isFirstPartyMediaSrc(value: unknown): value is string {
  * the `cdnPath` the server already wrote on the media doc, so nothing new
  * has to be plumbed through the media APIs.
  *
- * A content-hashed path (`…/{mediaId}/{hash}`) yields the plain reference:
- * the stored form names the asset, never a snapshot of its bytes, so a
- * replace keeps working instead of 404ing that exact URL by design.
+ * A content-hashed path (`…/{mediaId}/{hash}`) yields the reference for the
+ * asset it names; the hash in the path is discarded. The pin, when there is
+ * one, comes from the media document's CURRENT `contentHash` — see
+ * {@link mediaNodeSrc} — never from whatever a stored path snapshotted.
  */
 export function mediaRefFromCdnPath(
   cdnPath: string | undefined | null,
+  contentHash?: string | undefined | null,
 ): string | undefined {
   if (!cdnPath) return undefined
   const marker = `${MEDIA_CDN_ROUTE}/`
   const at = cdnPath.indexOf(marker)
   if (at === -1) return undefined
   const [scope, mediaId] = cdnPath.slice(at + marker.length).split('/')
-  return formatMediaRef(scope, mediaId)
+  // A hash in the PATH is still discarded — the caller's `contentHash` is the
+  // media document's current one, where a third path segment is whatever the
+  // stored string happened to snapshot.
+  return formatMediaRef(scope, mediaId, contentHash)
 }
 
 /**
@@ -581,6 +651,12 @@ export function mediaRefFromCdnPath(
  *
  * Deliberately not anchored to a quote: it must find a reference wherever it
  * was serialized. The trailing guard stops `med1` matching `med12`.
+ *
+ * It matches a PINNED reference too (AGL-2685) and must keep doing so: `@` is
+ * outside `[A-Za-z0-9_-]`, so `media:h/med1@abc` satisfies the trailing guard
+ * on its own. Had it not, the where-used scan would have started reporting
+ * live assets as used nowhere the day pins shipped — a scan whose every error
+ * already points at "safe to delete".
  */
 export function mediaRefPattern(mediaId: string): RegExp {
   const id = mediaId.replace(/[^A-Za-z0-9_-]/g, '')
@@ -609,10 +685,21 @@ export function mediaRefPattern(mediaId: string): RegExp {
  * the besigner canvas, which has no site context, can still fetch a
  * restricted asset; {@link resolveMediaSrc} overrides it wherever the real
  * rendering host IS known.
+ *
+ * `media.contentHash` rides along the same way the pixel dimensions do
+ * (AGL-2486): the pick is the one moment a surface holds the media DOCUMENT,
+ * and the tenant renderer never reads one. Absent — a legacy upload, or a
+ * caller that does not carry the field — simply means no pin, which is the
+ * behaviour every reference had before AGL-2685.
  */
 export function mediaNodeSrc(media: {
   url?: string | null
   cdnPath?: string | null
+  contentHash?: string | null
 }): string | undefined {
-  return mediaRefFromCdnPath(media.cdnPath) ?? media.url ?? undefined
+  return (
+    mediaRefFromCdnPath(media.cdnPath, media.contentHash) ??
+    media.url ??
+    undefined
+  )
 }

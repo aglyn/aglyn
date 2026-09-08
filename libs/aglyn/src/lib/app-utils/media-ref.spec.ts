@@ -430,4 +430,94 @@ describe('media references (AGL-1215)', () => {
       expect(isFirstPartyMediaSrc(42)).toBe(false)
     })
   })
+
+  describe('the content pin (AGL-2685)', () => {
+    const PIN = 'abc123def4567890'
+
+    it('round-trips a pinned reference', () => {
+      const ref = formatMediaRef('site-a', 'med123', PIN)
+      expect(ref).toBe(`media:site-a/med123@${PIN}`)
+      expect(parseMediaRef(ref)).toEqual({
+        scope: 'site-a',
+        mediaId: 'med123',
+        contentHash: PIN,
+      })
+    })
+
+    it('resolves to the immutable URL, and an unpinned one does not', () => {
+      expect(resolveMediaSrc(`media:site-a/med123@${PIN}`)).toBe(
+        `${MEDIA_CDN_ROUTE}/site-a/med123/${PIN}`,
+      )
+      expect(resolveMediaSrc('media:site-a/med123')).toBe(
+        `${MEDIA_CDN_ROUTE}/site-a/med123`,
+      )
+    })
+
+    it('host-qualifies a pinned org reference like any other', () => {
+      // The pin is the LAST segment; qualification rewrites the FIRST. A
+      // resolver that concatenated in the wrong order would produce a URL
+      // that 404s on a restricted asset and nowhere else, which is the
+      // hardest kind of bug to see.
+      expect(resolveMediaSrc(`media:org:o1/med123@${PIN}`, { hostId: 'h2' })).toBe(
+        `${MEDIA_CDN_ROUTE}/org:o1:h2/med123/${PIN}`,
+      )
+    })
+
+    it('drops a malformed pin and KEEPS the reference', () => {
+      // The failure that must not happen: a bad cache hint taking the image
+      // with it. Every one of these still names the asset.
+      for (const bad of ['', 'bad hash', 'a'.repeat(65), 'a@b']) {
+        const value = `media:site-a/med123@${bad}`
+        expect(parseMediaRef(value)).toEqual({
+          scope: 'site-a',
+          mediaId: 'med123',
+        })
+        expect(resolveMediaSrc(value)).toBe(`${MEDIA_CDN_ROUTE}/site-a/med123`)
+      }
+    })
+
+    it('drops a malformed pin at mint time rather than refusing to mint', () => {
+      expect(formatMediaRef('site-a', 'med123', 'bad hash')).toBe(
+        'media:site-a/med123',
+      )
+      expect(formatMediaRef('site-a', 'med123', '')).toBe('media:site-a/med123')
+      expect(formatMediaRef('site-a', 'med123', null)).toBe(
+        'media:site-a/med123',
+      )
+    })
+
+    it('is still found by the where-used scan', () => {
+      // A scan that stopped matching pinned references would report a live
+      // asset as used nowhere, immediately before someone deletes it.
+      const pattern = mediaRefPattern('med123')
+      expect(pattern.test(`{"src":"media:site-a/med123@${PIN}"}`)).toBe(true)
+      expect(pattern.test(`{"src":"media:org:o1:h2/med123@${PIN}"}`)).toBe(true)
+      // And the guard that stops a prefix match still holds beside it.
+      expect(pattern.test(`{"src":"media:site-a/med1234@${PIN}"}`)).toBe(false)
+    })
+
+    it('accepts a pinned reference as first-party media', () => {
+      expect(isFirstPartyMediaSrc(`media:site-a/med123@${PIN}`)).toBe(true)
+    })
+
+    it('pins from the media document, never from a hashed cdnPath', () => {
+      // `cdnPath` can itself be content-hashed. That hash is whatever was
+      // written when the path was minted; the document's is current.
+      expect(
+        mediaNodeSrc({
+          cdnPath: `${MEDIA_CDN_ROUTE}/site-a/med123/oldhash0000`,
+          contentHash: PIN,
+        }),
+      ).toBe(`media:site-a/med123@${PIN}`)
+      expect(
+        mediaNodeSrc({ cdnPath: `${MEDIA_CDN_ROUTE}/site-a/med123` }),
+      ).toBe('media:site-a/med123')
+    })
+
+    it('leaves a free-tier org on its raw storage URL, pin or no pin', () => {
+      // The entitlement gate is `cdnPath`, and a `contentHash` must not
+      // become a second way to reach paid delivery.
+      expect(mediaNodeSrc({ url: RAW_URL, contentHash: PIN })).toBe(RAW_URL)
+    })
+  })
 })

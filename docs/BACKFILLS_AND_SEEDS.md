@@ -1,8 +1,8 @@
 # Backfills, migrations and seeds
 
-`tools/scripts` holds 144 scripts. Most are named by `package.json`, a
+`tools/scripts` holds 146 scripts. Most are named by `package.json`, a
 workflow or `tools/gate.sh`, so what they are for is answered by what runs
-them. The 28 shaped as one-shots — `backfill-*`, `migrate-*`, `seed-*`,
+them. The 26 shaped as one-shots — `backfill-*`, `migrate-*`, `seed-*`,
 `bootstrap-*` — are not, and exactly one (`seed-e2e.mjs`, as
 `npm run seed:e2e`) is wired to anything at all.
 
@@ -99,6 +99,7 @@ automation references is the expected state for all of them.
 
 | Script | State | What to know |
 | --- | --- | --- |
+| `backfill-media-content-pins.mjs` | Repeatable | Stamps each stored media reference with its asset's current `contentHash`, so it resolves to the CDN's immutable URL (a year in the browser) instead of the stable one (a minute). **An optimisation, never a repair** — an unpinned reference renders exactly as it always has, and a stale pin redirects rather than breaking, which is what makes writing one safe. Every reference the picker has written since AGL-2685 is already pinned; this is the corpus that predates it. `--media=<id>` re-pins one asset, which is the tidy-up after a **replace**. Pure `repinString` / `repinValue`, both driven by `--self-test`. |
 | `backfill-media-variants.mjs` | ⚠️ Outstanding | Generates the WebP variants an asset advertises. It reads the source width from `dimensions.width`, which media documents do not carry — they store `width` at the top level — so the source width is always absent and the documented "an 800px logo is skipped, not upscaled" rule never fires. Nothing is upscaled in fact, but it writes more objects than it reports and labels them with widths the source never had. |
 
 ## Besigner and canvas

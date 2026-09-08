@@ -38,13 +38,15 @@
  *
  * ## What it does
  *
- * A picked image is stored as `media:{scope}/{mediaId}` and resolves to the
- * SITE-RELATIVE path `/api/media/cdn/{scope}/{mediaId}`. A browser has a page
+ * A picked image is stored as `media:{scope}/{mediaId}`, optionally with a
+ * content pin (`@{contentHash}`, AGL-2685), and resolves to the SITE-RELATIVE
+ * path `/api/media/cdn/{scope}/{mediaId}`. A browser has a page
  * to resolve that against; an inbox does not. So the reference is resolved and
  * then prefixed with the origin of whichever host is sending.
  */
 
 const MEDIA_REF_PREFIX = 'media:'
+const MEDIA_REF_HASH_SEPARATOR = '@'
 const MEDIA_CDN_ROUTE = '/api/media/cdn'
 const ORG_SCOPE_PREFIX = 'org:'
 /** Mirrors `SEGMENT` in media-ref.ts, which mirrors the CDN's own grammar. */
@@ -80,9 +82,20 @@ export function resolveEmailMediaSrc(
   const slash = rest.indexOf('/')
   if (slash <= 0) return undefined
   const scope = rest.slice(0, slash)
-  const mediaId = rest.slice(slash + 1)
+  // A reference may carry a content pin, `…/{mediaId}@{contentHash}`
+  // (AGL-2685). Neither half can contain '@', so the first one is the
+  // boundary; a malformed pin loses the pin and keeps the reference.
+  const tail = rest.slice(slash + 1)
+  const at = tail.indexOf(MEDIA_REF_HASH_SEPARATOR)
+  const mediaId = at === -1 ? tail : tail.slice(0, at)
+  const rawHash = at === -1 ? undefined : tail.slice(at + 1)
+  const contentHash = rawHash && SEGMENT.test(rawHash) ? rawHash : undefined
   if (!isCdnScope(scope) || !SEGMENT.test(mediaId)) return undefined
-  return `${MEDIA_CDN_ROUTE}/${hostQualified(scope, hostId)}/${mediaId}`
+  const stable = `${MEDIA_CDN_ROUTE}/${hostQualified(scope, hostId)}/${mediaId}`
+  // A year in the inbox's image cache instead of a minute. An inbox is the
+  // consumer that benefits most and can least be re-rendered, and a pin that
+  // has gone stale redirects rather than breaking.
+  return contentHash ? `${stable}/${contentHash}` : stable
 }
 
 /**

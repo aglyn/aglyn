@@ -70,6 +70,18 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
     'media:org:/med123',
     'media:org:o1:h2:extra/med123',
     'media:h1/med/extra',
+    // Content pins (AGL-2685). The whole point of this table is that the two
+    // copies agree on the SHAPE grammar, so every way a pin can be malformed
+    // belongs here — an empty one, an over-long one, and a second separator —
+    // not just the happy path.
+    'media:h1/med123@abc123def4567890',
+    'media:org:o1:h2/med123@abc123def4567890',
+    'media:h1/med123@',
+    'media:h1/med123@bad hash',
+    `media:h1/med123@${'h'.repeat(64)}`,
+    `media:h1/med123@${'h'.repeat(65)}`,
+    'media:h1/med123@a@b',
+    'media:h1/@abc123',
     // The segment LENGTH bound, both sides of it. Without these a mirror that
     // widened {1,64} agreed with the authority on every other input — the
     // drift this table missed on its first pass.
