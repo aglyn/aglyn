@@ -21,6 +21,8 @@ import {
   CRM_COLLECTIONS,
   type CrmTask,
   crmScopeTokens,
+  crmTaskReminderAfterEdit,
+  crmTaskReminderPending,
   isOrgWideMember,
   memberCanSee,
   type PluginApiHandler,
@@ -268,6 +270,38 @@ function storedFields(
   return out
 }
 
+/**
+ * The reminder a save leaves (AGL-2659), as a Firestore write.
+ *
+ * `crmTaskReminderAfterEdit` decides which reminder the task ends up with;
+ * this turns the decision into fields. Written as `null` when unset, like
+ * `dueAtMs`, so the document says the reminder was decided. A reminder that
+ * MOVED — to a new time, or to none — is a reminder not yet sent, so the
+ * runner's mark comes off with it; one that stayed keeps its mark, which is
+ * what stops a title correction from re-sending last week's reminder.
+ */
+function reminderFields(
+  fields: CrmTaskFields,
+  existing: FirebaseFirestore.DocumentSnapshot | null,
+): Record<string, unknown> {
+  const previous = existing
+    ? {
+        dueAtMs: (existing.get('dueAtMs') as number | null | undefined) ?? null,
+        remindAtMs: (existing.get('remindAtMs') as number | null | undefined) ?? null,
+      }
+    : null
+  const remindAtMs = crmTaskReminderAfterEdit({
+    dueAtMs: fields.dueAtMs,
+    remindAtMs: fields.remindAtMs,
+    previous,
+  })
+  const out: Record<string, unknown> = { remindAtMs }
+  if (previous && remindAtMs !== previous.remindAtMs) {
+    out['reminderSentAtMs'] = FieldValue.delete()
+  }
+  return out
+}
+
 const tasksCollection = (orgId: string) =>
   firebaseAdmin
     .app()
@@ -351,6 +385,7 @@ async function updateTask(
   const previousAssignee = String(existing.get('assigneeUid') ?? '') || null
   await tasks.doc(taskId).update({
     ...storedFields(fields, 'update'),
+    ...reminderFields(fields, existing),
     updatedAt: FieldValue.serverTimestamp(),
   })
   const linkHostId =
@@ -413,6 +448,7 @@ async function createTask(
   const ref = tasks.doc()
   await ref.set({
     ...storedFields(fields, 'create'),
+    ...reminderFields(fields, null),
     status: 'open',
     completedAtMs: null,
     visibleTo,
@@ -599,6 +635,9 @@ async function completeTask(
     status: 'done',
     completedAtMs,
     completedByUid: writer.uid,
+    // A reminder still owed on a task that is done is owed to nobody
+    // (AGL-2659); one already sent stays, as a fact about what happened.
+    ...(crmTaskReminderPending(task) ? { remindAtMs: null } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   })
 

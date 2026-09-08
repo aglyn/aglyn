@@ -586,6 +586,8 @@ describe('records beside the contact (claim 3)', () => {
     })
     expect(task.dueAtMs).toBeGreaterThanOrEqual(before + 2 * DAY_MS)
     expect(task.dueAtMs).toBeLessThanOrEqual(Date.now() + 2 * DAY_MS)
+    // The reminder a person's task gets by default (AGL-2659): its due time.
+    expect(task.remindAtMs).toBe(task.dueAtMs)
     expect(mockActivity.at(-1)?.summary).toBe('created task Call them back')
   })
 
