@@ -16,6 +16,15 @@ content on the marketing site and is written separately.
 ### Added
 
 - **console:** the sign-up and subscribe conversions carry hashed user_data ([AGL-2683](https://linear.app/aglyn/issue/AGL-2683))
+- **tools:** `analyze:chunks` reads what the chunker actually emitted ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682))
+
+### Fixed
+
+- **ci:** the main gate's typecheck gets a memory budget, not just a CPU one ([AGL-2684](https://linear.app/aglyn/issue/AGL-2684))
+
+### Performance
+
+- **tenant:** a console-only equality check drags 60 packages onto every page ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
 
 <details>
 <summary>Also in this release: 1 chore</summary>
