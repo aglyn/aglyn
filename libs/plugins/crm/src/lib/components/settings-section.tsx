@@ -373,8 +373,11 @@ function DefaultOwnerPicker(props: {
       onChange={(event) => void handleChange(event.target.value)}
       disabled={!ready || !canManage || busy || roster.loading}
       // "Nobody" is the empty value, which a select would otherwise
-      // render as a blank rather than as the choice it is.
-      slotProps={{ select: { displayEmpty: true } }}
+      // render as a blank rather than as the choice it is. The label is
+      // shrunk with it: a field that always draws a value has no empty
+      // state for the label to sit in, and left to itself it decides from
+      // the value alone and paints the label over the choice.
+      slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
       sx={{ maxWidth: 360 }}
     >
       <MenuItem value={NO_DEFAULT_OWNER}>{'Nobody — leave unassigned'}</MenuItem>

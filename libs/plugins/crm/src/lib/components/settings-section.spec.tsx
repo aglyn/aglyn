@@ -216,6 +216,24 @@ describe('the default owner (AGL-2618)', () => {
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
     expect((updateDoc as jest.Mock).mock.calls[0][2]).toEqual({ __delete: true })
   })
+
+  /*
+   * A site with nobody set still DRAWS a value, because the empty choice is
+   * a choice here. The label has to be shrunk to say so: left to decide from
+   * the value, it stays in the box and paints itself over "Nobody — leave
+   * unassigned", which is what every unassigned site looked like in
+   * production until it was fixed.
+   */
+  it('keeps the label out of the box when nobody is the owner', () => {
+    render(<CrmSettingsSection hostId="host-1" org={{}} />)
+    const combo = screen.getByRole('combobox', { name: 'Default owner for this site' })
+    expect(combo.textContent).toContain('Nobody')
+    const label = combo
+      .closest('.MuiFormControl-root')
+      ?.querySelector('.MuiInputLabel-root')
+    expect(label).toBeTruthy()
+    expect(label?.className).toContain('MuiInputLabel-shrink')
+  })
 })
 
 describe('the assignment rules (AGL-2618)', () => {
