@@ -27,7 +27,7 @@ import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 // rule in `shared-ui-jsx/src/index.ts` is enforced in CI.
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useDebounce } from '@aglyn/shared-util-vendor'
+import { useDebounce } from '@aglyn/shared-util-vendor/use-debounce'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'

@@ -29,7 +29,7 @@
  * changes.
  */
 
-import { useDebounce } from '@aglyn/shared-util-vendor'
+import { useDebounce } from '@aglyn/shared-util-vendor/use-debounce'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
