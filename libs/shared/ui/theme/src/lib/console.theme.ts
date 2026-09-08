@@ -176,10 +176,13 @@ const colorScheme = {
       contrastText: '#000000DE',
     },
     surface: {
-      // Raised half a step from the page (1.32:1). Below roughly 1.2:1 a
-      // fill and its ground read as one plane, which is what flattened
-      // elevation across every dark surface built on this token.
-      main: `#273240`,
+      // Held at 1.17:1 from the page even though that is flat for an
+      // elevation step. This token is also the panel the besigner draws its
+      // hierarchy depth cues on, and lifting it toward the page pushes the
+      // active guide — `secondary.main` on this fill — from 4.41:1 down to
+      // 3.89:1. Trading a legible cue for a slightly clearer edge is the
+      // wrong way round; the depth cues are what someone actually reads.
+      main: `#202934`,
       contrastText: '#FFFFFF',
     },
     // The hand-curated dark counterparts the 15 tinted tiles carried in their
