@@ -21,6 +21,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useEffect, useRef } from 'react'
 import { editorHintCookieDomain } from './editor-hint-cookie.component'
+import { emailGateWouldRefuse } from '../utils/email-verification-gate'
 
 /**
  * The `*.aglyn.app` half of the editor-presence hint (AGL-1842).
@@ -51,7 +52,9 @@ import { editorHintCookieDomain } from './editor-hint-cookie.component'
  *   through our bounce, and localhost has no `.aglyn.app` to reach;
  * - the throttle stamp is stale, and STORABLE: the stamp is written before
  *   navigating, so a browser that refuses storage skips the bounce rather
- *   than looping through it on every load.
+ *   than looping through it on every load;
+ * - the session passes the email-verification gate (AGL-479), which the blob
+ *   mint applies — see the note at that guard for why it precedes the stamp.
  *
  * Sign-out clears the stamp so the next sign-in re-plants promptly. It
  * cannot clear the `.aglyn.app` cookies from here — that boundary again —
@@ -119,18 +122,36 @@ export default function EditHintBounce({
     }
     if (Date.now() - lastBounceAt < EDIT_HINT_BOUNCE_INTERVAL_MS) return
     startedRef.current = true
-    try {
-      // BEFORE the navigation, deliberately: a bounce that fails after this
-      // point costs one silent miss until the next window, never a loop.
-      window.localStorage.setItem(
-        EDIT_HINT_BOUNCE_STAMP_KEY,
-        String(Date.now()),
-      )
-    } catch {
-      return
-    }
 
     void (async () => {
+      // Ahead of the stamp, and it is the only guard that is (AGL-2691).
+      //
+      // The blob mint refuses an unverified session with a 403, so on
+      // `/verify-email` — where every brand-new account lands and where this
+      // component mounts like it does everywhere else — the bounce was spent
+      // on a request that could not be answered. The stamp is written before
+      // the fetch by design (the loop guard below), so the cost was not the
+      // wasted POST: it was that the editor verified their address a minute
+      // later and then got no `.aglyn.app` hint for the REST OF THE DAY. The
+      // sign-out branch above clears the stamp precisely so the next sign-in
+      // re-plants promptly; a guaranteed refusal must not undo that.
+      //
+      // A session that COULD have minted and did not still holds the stamp —
+      // one silent miss, never a retry loop. That distinction is the whole
+      // reason this sits here rather than beside the response check.
+      if (await emailGateWouldRefuse(user)) return
+      try {
+        // BEFORE the navigation, deliberately: a bounce that fails after this
+        // point costs one silent miss until the next window, never a loop.
+        window.localStorage.setItem(
+          EDIT_HINT_BOUNCE_STAMP_KEY,
+          String(Date.now()),
+        )
+      } catch {
+        // Unwritable stamp: bounce nothing, or every console load becomes a
+        // redirect.
+        return
+      }
       try {
         const response = await authorizedFetch(user, '/api/edit-hint/blob', {
           method: 'POST',

@@ -29,6 +29,10 @@ import {
 } from '../utils/interactive-signin'
 import clearServiceWorkerCaches from '../utils/clear-service-worker-caches'
 import {
+  emailGateWouldRefuse,
+  type ClaimSource,
+} from '../utils/email-verification-gate'
+import {
   adoptRestoredPool,
   signInWithPooledCustomToken,
 } from '../utils/pooled-custom-token'
@@ -64,9 +68,28 @@ import {
  * `{ current: null }`.
  */
 export async function mintSession(
-  user: { uid: string; getIdToken: () => Promise<string> },
+  user: { uid: string; getIdToken: () => Promise<string> } & ClaimSource,
   mintedForUid: { current: string | null },
 ): Promise<boolean> {
+  // An unverified session is refused (AGL-479), and the token says so before
+  // the request is made — so on the sign-up path this warned, in the voice
+  // reserved for a real refusal, about the most ordinary event the console
+  // has (AGL-2691). The warning below has to keep meaning something.
+  //
+  // ⚑ This does forgo the tombstone clear the refusal path performs
+  // server-side (AGL-1142), and that is safe HERE and only here: everything
+  // a shared cookie unlocks sits behind the same gate that refuses the mint,
+  // so a tombstone standing through the unverified window denies access the
+  // account does not have. It heals the moment it starts to matter — the
+  // verified user hard-navigates, the restore branch below reads
+  // `401 signed-out`, `tombstoneEndsSession` finds it older than this
+  // account's sign-in, and the re-mint replaces it. Do not extend this to a
+  // refusal the token cannot predict; the AGL-1142 nine-day cookie was a
+  // VERIFIED account locked out, which this path can no longer produce.
+  if (await emailGateWouldRefuse(user)) {
+    mintedForUid.current = null
+    return false
+  }
   try {
     const response = await authorizedFetch(user, '/api/auth/session', {
       method: 'POST',
