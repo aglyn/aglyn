@@ -372,16 +372,60 @@ const IMAGE_ORIGINS = [
  * `"directive":"img-src"` and `"disposition":"report"`, which separates them
  * from the enforcing script-src stream without a second endpoint.
  *
- * ONE report is expected and must not be waved through: the console runs
- * Firebase Analytics (`components/layouts/firebase-app.layout.tsx`), and gtag
- * has historically fallen back to an `<img>` beacon, with Google Signals able
- * to add pixels to `stats.g.doubleclick.net` and `www.google.com/ads/
- * ga-audiences`. Whether ours does could not be determined from source — it is
- * inside the bundled SDK, which is exactly the blind spot this directive exists
- * to cover. If those hosts appear, the answer is a decision about whether we
- * ship ad-network pixels in a logged-in console, NOT a new allowlist entry.
- * Adding a tracking host to silence its own report is the AGL-1671 mistake
- * played backwards.
+ * ## The measurement beacons: reported, then decided (AGL-2694)
+ *
+ * This comment used to end by predicting those reports and refusing them in
+ * advance — "if those hosts appear, the answer is a decision about whether we
+ * ship ad-network pixels in a logged-in console, NOT a new allowlist entry."
+ * They appeared. Over the 60-day retention, `cspViolationDaily` named
+ * `googleads.g.doubleclick.net` on `/signup`, `www.google.com` across the
+ * besigner and `/signin`, and `www.googletagmanager.com` on the host lists.
+ * So the decision came due, and it is `MEASUREMENT_IMAGE_ORIGINS` below —
+ * the same list the tenant's ENFORCING policy already carries.
+ *
+ * ⚑ What decided it is mechanical rather than a preference: **enforcing
+ * `img-src` would not stop ad-network egress from the console.** The enforcing
+ * policy is `script-src` plus the base directives and no `default-src`, so
+ * there is no `connect-src` and gtag's fetch/beacon transport is entirely
+ * unconstrained — and the gtag script itself is allowlisted in `SCRIPT_ORIGINS`
+ * because we deliberately ship it. Refusing the pixels removes no tracking. It
+ * removes only the pixel-shaped subset, which is exactly the Google Ads
+ * conversion signal and the GA4→Ads remarketing join. The vendor would still
+ * see the console; we would simply stop being able to measure it.
+ *
+ * ⛔ This is NOT the AGL-1671 mistake played backwards — that warning stands
+ * and is about a different act. Silencing `api.qrserver.com` would have
+ * re-authorised an egress we had just REMOVED from the source. These beacons
+ * are the reverse: tags this repository mounts on purpose, whose script half is
+ * already allowlisted on exactly that reasoning. Allowlisting the script and
+ * reporting its beacon measures nothing, which is the argument the
+ * `www.googletagmanager.com` entry in `IMAGE_ORIGINS` was already added on.
+ *
+ * The reports get MORE legible, not less: with the known vendors named, a
+ * `www.google.<something>` still arriving is a country domain missing from
+ * `GOOGLE_CCTLDS` — the signal that list's own comment asks for, previously
+ * buried under the hosts we already knew about.
+ *
+ * ⚠️ This admits a BARE `https://www.google.com`, which `SCRIPT_ORIGINS`
+ * above deliberately refuses, path-scoping its own entry to `/recaptcha/`
+ * because "a bare host entry would authorize all of it — the `https:` mistake
+ * in miniature". The asymmetry is intended and rests on what each directive
+ * decides. For a script, a shared host is arbitrary CODE EXECUTION from
+ * anywhere on it, and reCAPTCHA lives at one known path. For an image, the
+ * exposure is a URL leaving the page, and the beacon's path is chosen by a
+ * bundled SDK that has already moved once — AGL-1726 predicted
+ * `/ads/ga-audiences` and production served a ccTLD instead. Path-scoping a
+ * host whose path we cannot pin is a directive that looks tighter and fails
+ * the first time the vendor reroutes.
+ *
+ * ⚑ UNGATED, unlike the tenant's copy, which is conditioned on
+ * `runsMeasurement`. That gate exists because a CUSTOMER's site should not
+ * carry our vendors; this console is ours. A gate here would have to key on
+ * `NEXT_PUBLIC_ADS_CONVERSION_ID` — the variable whose absence from the
+ * console build WAS the silent conversion failure (AGL-2558), so keying the
+ * policy on it would rebuild that failure one layer down and give it a second
+ * way to happen. The ~190 country domains cost ~4.8 KB, byte-identical on every
+ * response and therefore carried once per connection by HPACK/QPACK.
  *
  * `isProduction` follows `baseCspDirectives` above in also allowing the
  * `http://` forms off production, plus the Storage emulator on
@@ -398,8 +442,27 @@ function imgSrcDirective(isProduction) {
   const sources = ["'self'", 'data:', 'blob:']
     .concat(firstParty)
     .concat(IMAGE_ORIGINS)
+    // The measurement and ad-conversion beacons (AGL-2694). Reused from the
+    // tenant's enforcing policy rather than retyped, so a vendor cannot be
+    // named on one surface and missing on the other — the shape
+    // `MEASUREMENT_CONNECT_ORIGINS` is derived for the same reason. Every
+    // entry there was measured against a live probe (AGL-1152), including the
+    // two GA4 collection families that read as one vendor and are not, and the
+    // LinkedIn `px#.` shard wildcard whose pinned host was the one prefix that
+    // never arrived.
+    .concat(MEASUREMENT_IMAGE_ORIGINS)
     .concat(development)
-  return `img-src ${sources.join(' ')}`
+  // Deduped: `www.googletagmanager.com` is in both lists, deliberately —
+  // `IMAGE_ORIGINS` holds it as GA4's own pixel on the analytics SDK we ship,
+  // which is true whether or not the advertising vendors are ever named here.
+  // Neither entry is redundant; the repeat in the HEADER is.
+  //
+  // ⚑ A Set does NOT collapse `https://www.google.com/recaptcha/` into
+  // `https://www.google.com`, and must not be expected to: the second is
+  // broader and arrives from the country list, but the first records why App
+  // Check's badge is permitted and would be the surviving grant if the
+  // measurement origins were ever gated or removed.
+  return `img-src ${[...new Set(sources)].join(' ')}`
 }
 
 /**
@@ -533,19 +596,20 @@ const SCRIPT_ORIGINS = [
   // Firebase Analytics. `components/layouts/firebase-app.layout.tsx` imports
   // `firebase/analytics` and calls `useAnalytics()`, and the GA4 SDK loads the
   // gtag script from here. This is a script we deliberately ship, so it belongs
-  // in the candidate policy — unlike a gtag *pixel*, which would arrive as an
-  // `img-src` report and is a question about ad-network beacons in a logged-in
-  // console rather than an allowlist entry (see `imgSrcDirective`).
+  // in the candidate policy. The gtag *pixel* was left open here as a separate
+  // question about ad-network beacons in a logged-in console; the reports
+  // answered it and `imgSrcDirective` now carries the beacons too (AGL-2694).
   'https://www.googletagmanager.com',
   /*
    * The console's own advertising tags
    * (`apps/console/components/advertising-tags.component.tsx`).
    *
    * Scripts we deliberately ship, so they belong in the candidate policy for
-   * the same reason the gtag loader above does — and the distinction that
-   * comment draws still holds: a gtag *pixel* arrives as an `img-src` report
-   * and is a question about ad-network beacons in a logged-in console, not an
-   * allowlist entry here.
+   * the same reason the gtag loader above does. Their BEACONS were held open
+   * as a separate question — an `img-src` one — and are now answered there
+   * too: `imgSrcDirective` carries `MEASUREMENT_IMAGE_ORIGINS` (AGL-2694), so
+   * a vendor named here is no longer allowlisted for its script and reported
+   * for its pixel.
    *
    * Two of these are already covered by `www.googletagmanager.com`: the Google
    * Ads tag rides the same `gtag/js` library, and a Tag Manager container is
@@ -824,6 +888,12 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * measurement still pending.
  *
  * ## Condition 4 is now ANSWERED, and the answer is not an allowlist entry
+ *
+ * ⛔ SUPERSEDED by AGL-1152, and kept only as the record of how the evidence
+ * arrived. This section concludes "there is no line to add"; `GOOGLE_CCTLDS`
+ * and `MEASUREMENT_IMAGE_ORIGINS` below are those lines, and that list's own
+ * comment says why the call recorded here was the wrong one. Read the two
+ * together, in that order — not this one alone.
  *
  * Re-read 2026-08-24. The collection has moved: 18 documents, and **three of
  * them are `app: 'tenant'`** where the 08-20 reading found none. One is the
