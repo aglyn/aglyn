@@ -151,4 +151,13 @@ export interface HostTheme {
   mixins?: HostThemeMixins
   /** Keyed by MUI component slot name (e.g. `MuiButton`). Consumers validate against a whitelist. */
   components?: Record<string, HostThemeComponentOverride>
+  /**
+   * Whether visitors get a dark scheme. Absent (`'auto'`) follows the
+   * visitor's system setting or their choice in the theme mode switcher,
+   * rendering the platform's default dark palette under whatever dark colors
+   * the site authored. `'off'` keeps every visitor on light — for a site whose
+   * content carries light-only backgrounds — and hides the switcher on
+   * published pages.
+   */
+  darkScheme?: 'auto' | 'off'
 }

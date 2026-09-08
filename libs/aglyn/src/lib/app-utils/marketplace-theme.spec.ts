@@ -252,6 +252,12 @@ describe('validateThemeForPublish — fonts are the hard dependency', () => {
 })
 
 describe('themeArtifactContent', () => {
+  it('leaves the dark-scheme opt-out on the host (AGL-2676)', () => {
+    expect(themeArtifactContent({ darkScheme: 'off', spacing: 8 })).toEqual({
+      spacing: 8,
+    })
+  })
+
   it('carries the design and nothing else', () => {
     const theme = {
       ...goodTheme(),

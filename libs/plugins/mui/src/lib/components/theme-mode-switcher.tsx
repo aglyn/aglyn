@@ -27,7 +27,7 @@ import IconButton from '@mui/material/IconButton'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
-import { forwardRef } from 'react'
+import { forwardRef, useContext } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -45,11 +45,19 @@ export interface ThemeModeSwitcherProps {
  * so the choice persists across visits and pages. The icon variant
  * cycles light → dark → device default; the toggle variant shows the
  * three choices explicitly.
+ *
+ * A site whose theme has its dark scheme switched off renders light whatever
+ * this control says, so on a published page it renders nothing rather than a
+ * switch that flips only its own icon (AGL-2676). The static besigner canvas
+ * keeps it visible so the author can still place and style it.
  */
 const ThemeModeSwitcher = forwardRef<HTMLElement, ThemeModeSwitcherProps>(
   (props, ref) => {
     const { variant, ...rest } = props
-    const [, toggleThemeMode, cookieMode] = useThemeMode()
+    const [, toggleThemeMode, cookieMode, canGoDark] = useThemeMode()
+    const { editorInert } = useContext(Aglyn.ScreenLinkContext)
+
+    if (canGoDark === false && !editorInert) return null
 
     if (variant === 'toggle') {
       return (
@@ -113,7 +121,7 @@ export const schema: Aglyn.ComponentSchema<ThemeModeSwitcherProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Theme mode switcher',
   description:
-    'Lets visitors override the site theme with light, dark, or device default.',
+    'Lets visitors override the site theme with light, dark, or device default. Hidden on published pages while the theme has its dark scheme switched off.',
   category: Aglyn.ComponentCategory.INPUT,
   icon: { path: mdiThemeLightDark.path, sx: { color: '#7b1fa2' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
