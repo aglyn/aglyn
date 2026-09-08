@@ -66,6 +66,21 @@
 /** Everything `firebase deploy --only functions` packs and ships. */
 export const FUNCTIONS_SOURCE_PATH = 'cloud/functions'
 
+/**
+ * The pathspecs that decide WHICH commit the deployed functions are judged
+ * against. An installed dependency tree is never packed into the artifact —
+ * the deploy installs its own from the lockfile — so a commit that only
+ * touches `node_modules` changes nothing that could be deployed. One was
+ * tracked by accident (AGL-2695), and both the commit that added it and the
+ * commit that removed it read as source changes: the check then demanded a
+ * deploy that Firebase correctly skipped as unchanged, which left it red on
+ * a timestamp that could never move.
+ */
+export const FUNCTIONS_SOURCE_PATHSPECS = Object.freeze([
+  FUNCTIONS_SOURCE_PATH,
+  `:(exclude)${FUNCTIONS_SOURCE_PATH}/node_modules`,
+])
+
 /** The file whose `export const` names become deployed function ids. */
 export const FUNCTIONS_ENTRY_FILE = 'cloud/functions/src/index.ts'
 
