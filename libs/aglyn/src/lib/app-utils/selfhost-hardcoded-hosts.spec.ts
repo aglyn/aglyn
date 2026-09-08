@@ -95,6 +95,12 @@ function stripComments(source: string): string {
  */
 const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   {
+    file: 'libs/aglyn/src/lib/app-utils/crm-inbound.ts',
+    count: 1,
+    reason:
+      "AGL-2657. The CRM's email capture. The literal is the `??` default of `CRM_INBOUND_DOMAIN` and nothing else reads it: a self-host operator points that variable at the receiving domain their own mail provider verified, and every capture address is built from what the variable answers. Left as the default so the platform's own deployment needs no variable to work.",
+  },
+  {
     file: 'libs/tenant/data/admin/src/lib/server/upload-cors-reconcile.ts',
     count: 1,
     reason:
