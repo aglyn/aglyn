@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.88 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.87...v1.0.0-beta.88)
+
+### Fixed
+
+- **plugins-mui:** the screen's hero is a lead image beside the layout logo ([AGL-2678](https://linear.app/aglyn/issue/AGL-2678))
+
+### Documentation
+
+- **perf:** record the per-origin lead image and the unsized shared heroes ([AGL-2678](https://linear.app/aglyn/issue/AGL-2678))
+
 ## v1.0.0-beta.87 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/c26f25316...v1.0.0-beta.87)
