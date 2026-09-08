@@ -9,6 +9,16 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.96 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/a850c276b...v1.0.0-beta.96)
+
+### Fixed
+
+- **tools:** a file only git reads is not a reason to redeploy ([AGL-2695](https://linear.app/aglyn/issue/AGL-2695))
+- **release:** the bump the merge reverted ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **tools:** an installed dependency tree is not a reason to redeploy ([AGL-2695](https://linear.app/aglyn/issue/AGL-2695))
+
 ## v1.0.0-beta.95 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/3081d1104...v1.0.0-beta.95)

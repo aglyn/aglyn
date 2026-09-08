@@ -68,17 +68,29 @@ export const FUNCTIONS_SOURCE_PATH = 'cloud/functions'
 
 /**
  * The pathspecs that decide WHICH commit the deployed functions are judged
- * against. An installed dependency tree is never packed into the artifact —
- * the deploy installs its own from the lockfile — so a commit that only
- * touches `node_modules` changes nothing that could be deployed. One was
- * tracked by accident (AGL-2695), and both the commit that added it and the
- * commit that removed it read as source changes: the check then demanded a
- * deploy that Firebase correctly skipped as unchanged, which left it red on
- * a timestamp that could never move.
+ * against: everything under the package EXCEPT what cannot change what runs.
+ *
+ * The exclusions are deliberately few, and the list only ever grows by
+ * argument, because it is the direction that fails UNSAFELY — a path wrongly
+ * excluded is a missed deploy, the incident this whole check exists to catch.
+ * An include-list would fail that way by default, which is why this is not one.
+ *
+ * `node_modules` — never packed; the deploy installs its own from the
+ * lockfile. One was tracked by accident (AGL-2695) and both the commit that
+ * added it and the commit that removed it read as source changes.
+ *
+ * `.gitignore` — read by git, and by nothing the deploy runs. `firebase.json`
+ * declares no `ignore` for this package, so packing follows firebase-tools'
+ * own defaults; this file is carried along and never consulted.
+ *
+ * Each was a real red with nothing to deploy behind it: Firebase skips an
+ * unchanged function, correctly, so the timestamp the check waits for never
+ * arrives and the workflow stays red for good.
  */
 export const FUNCTIONS_SOURCE_PATHSPECS = Object.freeze([
   FUNCTIONS_SOURCE_PATH,
   `:(exclude)${FUNCTIONS_SOURCE_PATH}/node_modules`,
+  `:(exclude)${FUNCTIONS_SOURCE_PATH}/.gitignore`,
 ])
 
 /** The file whose `export const` names become deployed function ids. */
