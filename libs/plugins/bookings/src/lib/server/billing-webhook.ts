@@ -38,6 +38,7 @@ import {
 } from '../model/booking-purchase-analytics'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { storefrontTaxModeOf } from '@aglyn/plugins-commerce/server/storefront-tax'
+import { fileBookingOnCrm } from './booking-crm'
 
 /**
  * Paid-booking section of the platform Stripe webhook (AGL-170/418):
@@ -212,6 +213,22 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           },
         )
         if (!confirmedNow) return
+        // THE RECORD'S MEETING (AGL-2660). Payment is what confirms a paid
+        // booking, so this is where it reaches the CRM: the meeting on the
+        // record's timeline and, when the service asks, the follow-up task.
+        // Inside the idempotency gate for the same reason the GA4 purchase
+        // below is — a redelivery must not file a second meeting — and
+        // through `after()` for the same reason too: this invocation is
+        // frozen the moment the response is sent (AGL-2327). Never thrown:
+        // the writer swallows its own failures, and the catch is for the
+        // scheduling itself.
+        after(() =>
+          fileBookingOnCrm(firestore, {
+            hostId: String(hostId),
+            bookingId: String(bookingId),
+            booking,
+          }).catch(() => undefined),
+        )
         // AGLYN'S REVENUE ON THIS BOOKING (AGL-2481) — into OUR GA4 property.
         //
         // ## Why it is inside the idempotency gate rather than beside it

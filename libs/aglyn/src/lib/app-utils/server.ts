@@ -54,6 +54,10 @@ export * from './crm'
 // the dialog fill it in by. Pure like `crm`, and beside it because a
 // template is scoped the way a task is.
 export * from './crm-email-templates'
+// The booking door's shared vocabulary (AGL-2660): the query keys a booking
+// link carries, the record reference inside it, and the wording and due
+// date of what a booking files back on the record.
+export * from './crm-booking'
 // Two contact documents folded into one (AGL-2625): the plan the console
 // previews and the server writes, reading the facet shape from `contacts`
 // and the company mirror from `crm`.

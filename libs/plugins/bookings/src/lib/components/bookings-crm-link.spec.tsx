@@ -75,6 +75,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 let params: Record<string, string> | null = { orgSlug: 'acme', host: 'shop' }
 jest.mock('next/navigation', () => ({
   useParams: () => params,
+  // No booker filter (AGL-2660): the list is the week ahead, as it was.
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 const FUTURE = Date.now() + 7 * 24 * 60 * 60_000

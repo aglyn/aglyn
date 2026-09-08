@@ -22,6 +22,12 @@ import {
   trackEventBeforeNavigation,
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import { campaignTouchField } from '@aglyn/aglyn/app-utils/campaign-touch'
+import {
+  BOOKING_SERVICE_PARAM,
+  CRM_BOOKING_REF_PARAM,
+  formatCrmBookingRef,
+  parseCrmBookingRef,
+} from '@aglyn/aglyn/app-utils/crm-booking'
 import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -54,6 +60,20 @@ interface ServiceOption {
   durationMinutes: number
   priceUsd: number
   description?: string
+}
+
+/**
+ * One query value off the page the widget is on, or `null` — on the server
+ * and in the besigner there is no page to read.
+ *
+ * A booking link built from a CRM record carries two (AGL-2660): the
+ * service it is about, and the record it was dropped from. Read at the
+ * moment each is needed rather than held in state, so a widget mounted
+ * before the URL settles still sees the values.
+ */
+function readLinkParam(key: string): string | null {
+  if (typeof window === 'undefined') return null
+  return new URLSearchParams(window.location.search).get(key)
 }
 
 interface SlotOption {
@@ -101,7 +121,16 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     void fetch(`/api/bookings/slots?hostId=${encodeURIComponent(hostId)}`)
       .then((response) => response.json())
       .then((payload) => {
-        if (active) setServices(payload?.services ?? [])
+        if (!active) return
+        const loaded: ServiceOption[] = payload?.services ?? []
+        setServices(loaded)
+        // A booking link opens the widget on its service (AGL-2660). Only
+        // a service the site still offers: a link to one since deleted
+        // leaves the picker for the visitor rather than failing on it.
+        const wanted = readLinkParam(BOOKING_SERVICE_PARAM)
+        if (wanted && loaded.some((one) => one.$id === wanted)) {
+          setServiceId(wanted)
+        }
       })
       .catch(() => {
         if (active) setServices([])
@@ -150,6 +179,11 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
     if (!hostId || !serviceId || !slotMs || status === 'booking') return
     setStatus('booking')
     setErrorMessage(null)
+    // The CRM record a booking link was dropped from (AGL-2660), carried
+    // onto the request so the booking lands on that record even when the
+    // visitor books with a different address. Parsed here so a value that
+    // is not a reference is never sent.
+    const crmRef = parseCrmBookingRef(readLinkParam(CRM_BOOKING_REF_PARAM))
     try {
       const response = await siteFetch('/api/bookings/book', {
         method: 'POST',
@@ -160,6 +194,7 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           startsAtMs: slotMs,
           name,
           email,
+          ...(crmRef ? { crmRef: formatCrmBookingRef(crmRef) } : {}),
           ...(marketingConsent ? { marketingConsent: true } : {}),
           // The campaign this visitor came from, when they came from one.
           // A booking is an identify moment like a form submission: the

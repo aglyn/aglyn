@@ -65,6 +65,12 @@ describe('the site records a timeline points back at', () => {
     )
   })
 
+  it('narrows the bookings list to one booker (AGL-2660)', () => {
+    expect(links.bookingsByBooker('ada@example.test')).toBe(
+      '/acme/hosts/shop/bookings?email=ada%40example.test',
+    )
+  })
+
   it('lands bookings and members on their pages', () => {
     expect(links.bookings()).toBe('/acme/hosts/shop/bookings')
     expect(links.members()).toBe('/acme/hosts/shop/users')

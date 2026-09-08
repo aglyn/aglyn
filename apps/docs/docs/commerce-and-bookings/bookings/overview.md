@@ -118,6 +118,34 @@ address, moving straight on to the record when exactly one person matches. A boo
 taken without an address has no link. A contact's timeline links back to this page
 from the booking that captured them.
 
+### Booking from the CRM {#booking-from-the-crm}
+
+A contact, a lead or a deal in the [CRM](../../content-and-data/crm/overview.md)
+carries **Book a meeting** whenever this site runs Bookings and your plan includes
+it. It lists the site's services, each with the public link a visitor books it at —
+the page the booking widget sits on, with that service preselected — and a copy
+button. From **Send email** on a record, **Insert booking link** drops the chosen
+link into the message where the caret is.
+
+Every link dropped from a record carries that record with it, so the booking lands
+on the right timeline **even when the person books with a different address**. A
+booking taken without a record reference is matched to a contact by the booker's
+address instead. Links are per service, not per person: a service has one calendar,
+so there is nothing narrower to link to.
+
+Each service has two switches in its dialog:
+
+- **Log a meeting on the CRM record when this service is booked** (on by default) — a confirmed booking is filed as
+  a **meeting** on the record's timeline, titled with the service and the slot.
+- **Create a follow-up task on the CRM record when this service is booked** (off by default) — a **Follow up after &lt;service&gt;**
+  task is filed on the record, due one business day after the slot, on whoever holds
+  the relationship.
+
+Neither files anything on a site where the CRM plugin is switched off, and a
+booking is filed once however many times its payment confirmation is redelivered.
+A contact's page links back here through **Bookings on this site**, which is this
+page narrowed to every booking taken with their address, upcoming and past.
+
 ### Canceling and refunding {#canceling-and-refunding}
 
 Canceling a booking reopens the slot. For a **paid** booking, canceling also
@@ -138,5 +166,6 @@ and tells you the amount before you confirm.
 ## Related
 
 - [Commerce](../commerce/overview.md)
+- [CRM activities & the timeline](../../content-and-data/crm/activities.md)
 - [Events calendar](../../content-and-data/events/overview.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)

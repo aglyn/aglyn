@@ -49,6 +49,7 @@ import ContactMergeDialog, { useContactMergeDialog } from './contact-merge-dialo
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
+import { useBookingDoor } from './book-meeting-action'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
@@ -183,6 +184,27 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           orgSlug: String(params.orgSlug),
           host: String(params.host),
         }).ordersByCustomer(record.email)
+      : null
+  /*
+   * Where this person's BOOKINGS are read (AGL-2660): the site's Bookings
+   * page narrowed to their address, under the same match rule the booking
+   * row's own "View in CRM" uses. Offered only where the site has a booking
+   * door — a site that never enabled Bookings should not carry the row. At
+   * the organization level the capturing site's page, addressed through
+   * the subdomain the mount knows it by.
+   */
+  const bookingDoor = useBookingDoor(siteHostId, org)
+  const siteSlug = params?.host
+    ? String(params.host)
+    : siteHostId && mount
+      ? mount.siteSubdomain(siteHostId)
+      : null
+  const bookingsHref =
+    bookingDoor.open && params?.orgSlug && siteSlug && record?.email
+      ? Aglyn.siteRecordLinks({
+          orgSlug: String(params.orgSlug),
+          host: siteSlug,
+        }).bookingsByBooker(record.email)
       : null
 
   /*
@@ -355,6 +377,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           ) : null
         }
         menuItems={[...overflowItems, ...erase.menuItems]}
+        // The booking door (AGL-2660): this site's services, or at the
+        // organization level the capturing site's.
+        booking={record ? { hostId: siteHostId, org, kind: 'contact', recordId: id } : undefined}
         loading={!record}
         chips={
           record ? (
@@ -434,6 +459,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             scope={scope}
             seed={{ status, fromCache }}
             basePath={basePath}
+            bookingsHref={bookingsHref}
           />
           <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
           <ContactTimelineCard

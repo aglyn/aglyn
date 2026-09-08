@@ -53,6 +53,7 @@ import {
 import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { BookMeetingButton, insertLinkAtCaret } from './book-meeting-action'
 import { CrmSitePicker } from './crm-site-picker'
 import { useCrmApi } from './use-crm-api'
 import { useEmailsHubPath } from './use-emails-hub-path'
@@ -529,6 +530,33 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
 
   const toLabel = props.name && recipient ? `${props.name} <${recipient}>` : (recipient ?? '')
 
+  /*
+   * The booking door (AGL-2660): a link to one of the sending site's
+   * services, dropped where the caret is. The link carries the most
+   * specific record this message is about — the deal over its contact, so
+   * the booking lands on the deal's timeline as the email does.
+   */
+  const bookingRef = dealId
+    ? { kind: 'deal' as const, id: dealId }
+    : leadId
+      ? { kind: 'lead' as const, id: leadId }
+      : contactId
+        ? { kind: 'contact' as const, id: contactId }
+        : null
+  const handleInsertLink = useCallback((link: string) => {
+    const input = messageRef.current
+    const current = input?.value ?? ''
+    const start = input?.selectionStart ?? current.length
+    const end = input?.selectionEnd ?? start
+    const next = insertLinkAtCaret(current, link, start, end)
+    setBody(next.text)
+    // Once the new value has painted, typing continues after the link.
+    window.setTimeout(() => {
+      input?.focus()
+      input?.setSelectionRange(next.caret, next.caret)
+    }, 0)
+  }, [])
+
   return (
     <Dialog open={open} onClose={sending ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{'Send email'}</DialogTitle>
@@ -659,6 +687,16 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
               {preview.body.text}
             </Typography>
           </Stack>
+        ) : null}
+        {bookingRef ? (
+          <BookMeetingButton
+            variant="chip"
+            hostId={sendHostId}
+            org={org}
+            kind={bookingRef.kind}
+            recordId={bookingRef.id}
+            onInsert={handleInsertLink}
+          />
         ) : null}
         {error ? <Alert severity="error">{error}</Alert> : null}
       </DialogContent>

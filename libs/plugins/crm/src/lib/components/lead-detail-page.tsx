@@ -129,6 +129,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           extraMenuItems={erase.menuItems}
           banner={erase.banner}
           erasurePending={erase.pendingSinceMs !== null}
+          org={org}
         />
         <LeadHistoryCard hostId={hostId} leadId={id} lead={lead} />
         <RecordActivityCard hostId={hostId} org={org} leadId={id} />

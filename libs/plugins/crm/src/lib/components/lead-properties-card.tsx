@@ -17,7 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import type { CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
+import type { AglynOrgBilling, CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
 import { mdiAccountCancelOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -96,6 +96,11 @@ export interface LeadPropertiesCardProps {
    * refused there, and the lead itself goes when the request runs.
    */
   erasurePending?: boolean
+  /**
+   * The org the shell passed, for the booking door (AGL-2660): whether the
+   * lead's site runs Bookings, and whether the plan is entitled to it.
+   */
+  org?: Partial<AglynOrgBilling> | null
 }
 
 /**
@@ -126,6 +131,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     extraMenuItems = [],
     banner,
     erasurePending = false,
+    org,
   } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -195,6 +201,10 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       help={Aglyn.pluginDocsHelp('crmLeads', { anchor: '#working-a-lead-from-the-row' })}
       backHref={routes.section('leads')}
       backLabel="Back to leads"
+      // The booking door (AGL-2660), while the lead is still the record
+      // being worked: once converted, the contact is where a meeting is
+      // booked from, and the links below lead there.
+      booking={converted ? undefined : { hostId, org, kind: 'lead', recordId: leadId }}
       actions={
         <>
           {converted ? null : erasurePending ? (

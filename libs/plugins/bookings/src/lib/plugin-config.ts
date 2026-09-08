@@ -16,7 +16,7 @@
  */
 
 import type { PluginConfigSchema } from '@aglyn/aglyn'
-import { BOOKING_MAX_DAYS_AHEAD } from './model'
+import { BOOKING_MAX_DAYS_AHEAD, BOOKING_PATH_DEFAULT } from './model'
 
 /**
  * Bookings plugin config schema (AGL-428) — the first adopter of the
@@ -37,6 +37,20 @@ export const BOOKINGS_CONFIG_SCHEMA: PluginConfigSchema = {
         'How far ahead visitors can book. Slots beyond this many days ' +
         'from now are not offered.',
     },
+    {
+      // Where a booking link sends people (AGL-2660). The Booking block is
+      // placed on whichever page the site owner chose, and nothing records
+      // which; the CRM's "Book a meeting" links and the "Insert booking
+      // link" chip build on this path. Per site, through the ordinary
+      // site-level override.
+      key: 'bookingPath',
+      label: 'Booking page path',
+      type: 'string',
+      description:
+        'The page on your site that holds the Booking block, e.g. /book. ' +
+        'Booking links from the CRM open this page with the service ' +
+        'preselected.',
+    },
   ],
-  defaults: { maxDaysAhead: BOOKING_MAX_DAYS_AHEAD },
+  defaults: { maxDaysAhead: BOOKING_MAX_DAYS_AHEAD, bookingPath: BOOKING_PATH_DEFAULT },
 }

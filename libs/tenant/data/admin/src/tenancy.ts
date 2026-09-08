@@ -128,5 +128,8 @@ export * from './lib/server/crm-records'
 // Where a one-to-one email's activity row lives and how the delivery
 // webhook advances it (AGL-2615).
 export * from './lib/server/crm-email-activity'
+// What a confirmed booking files on the CRM record — the meeting and the
+// follow-up (AGL-2660).
+export * from './lib/server/crm-booking-activity'
 export * from './lib/server/user-profiles'
 export * from './lib/server/legal-acceptance'
