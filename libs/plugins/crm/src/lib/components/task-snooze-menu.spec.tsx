@@ -37,6 +37,7 @@ jest.mock('firebase/firestore', () => ({
     writes.push({ path: ref.path, value })
   },
   serverTimestamp: () => '<server-timestamp>',
+  deleteField: () => '<delete>',
 }))
 
 let notices: string[]
@@ -81,6 +82,40 @@ describe('TaskSnoozeMenu', () => {
     })
     expect(onSnoozed).toHaveBeenCalledWith(expected)
     expect(notices[0]).toMatch(/^Snoozed until /)
+  })
+
+  it('carries a reminder that sat on the due time, as a reminder not yet sent (AGL-2659)', async () => {
+    render(
+      <TaskSnoozeMenu
+        dueAtMs={DUE}
+        remindAtMs={DUE}
+        target={{ write: { scope: SCOPE, taskId: 't1' } }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Snooze' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Tomorrow' }))
+    const expected = snoozeDueAt('tomorrow', DUE, NOW)
+    await waitFor(() => expect(writes).toHaveLength(1))
+    expect(writes[0].value).toEqual({
+      dueAtMs: expected,
+      remindAtMs: expected,
+      reminderSentAtMs: '<delete>',
+      updatedAt: '<server-timestamp>',
+    })
+  })
+
+  it('leaves a reminder set to a time of its own alone', async () => {
+    render(
+      <TaskSnoozeMenu
+        dueAtMs={DUE}
+        remindAtMs={DUE - 60_000}
+        target={{ write: { scope: SCOPE, taskId: 't1' } }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Snooze' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Tomorrow' }))
+    await waitFor(() => expect(writes).toHaveLength(1))
+    expect(Object.keys(writes[0].value).sort()).toEqual(['dueAtMs', 'updatedAt'])
   })
 
   it('hands the date to a form that has no document yet, and writes nothing', async () => {

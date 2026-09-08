@@ -34,7 +34,7 @@ import {
   TextField,
   Tooltip,
 } from '@mui/material'
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useState } from 'react'
 import {
   CRM_TASK_SNOOZE_OPTIONS,
@@ -61,6 +61,12 @@ export interface TaskSnoozeMenuProps {
   /** The task's current due date; the time of day is kept across a snooze. */
   dueAtMs: number | null | undefined
   target: TaskSnoozeTarget
+  /**
+   * The task's reminder (AGL-2659), so one that sits on the due time
+   * follows the snooze the way a save would carry it. Absent, a snooze
+   * moves the due date alone.
+   */
+  remindAtMs?: number | null
   /** An icon on a row, a labeled button in the drawer. */
   variant?: 'icon' | 'button'
   disabled?: boolean
@@ -85,7 +91,7 @@ export interface TaskSnoozeMenuProps {
  * snooze is not an edit.
  */
 export function TaskSnoozeMenu(props: TaskSnoozeMenuProps) {
-  const { dueAtMs, target, variant = 'icon', disabled, onSnoozed } = props
+  const { dueAtMs, target, remindAtMs, variant = 'icon', disabled, onSnoozed } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -104,8 +110,12 @@ export function TaskSnoozeMenu(props: TaskSnoozeMenuProps) {
     setBusy(true)
     try {
       const { scope, taskId } = target.write
+      // A reminder on the old due time is a reminder on the new one, and
+      // a moved reminder is one not yet sent — the save route's own rule.
+      const follows = typeof remindAtMs === 'number' && remindAtMs === dueAtMs
       await updateDoc(doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.tasks, taskId), {
         dueAtMs: next,
+        ...(follows ? { remindAtMs: next, reminderSentAtMs: deleteField() } : {}),
         updatedAt: serverTimestamp(),
       })
       enqueueSnackbar(
