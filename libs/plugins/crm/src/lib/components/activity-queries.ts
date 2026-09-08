@@ -190,6 +190,12 @@ export const ACTIVITY_PAGE_SIZE = 100
  * arrives as `(<record>, atMs DESC)` with the array field gone — a different
  * index, not a prefix of the one above it. Adding a record kind here means
  * adding BOTH halves; one of them alone leaves the other audience unserved.
+ *
+ * These are all DESCENDING because this window asks for `desc` outright. A
+ * read over the same rows that names no order is not served by them: Firestore
+ * orders such a query by its range field ascending, and an index serves one
+ * direction or its exact reverse. That is why the report counts carry their
+ * own ascending indexes rather than borrowing these.
  */
 export function useActivityWindow(
   scope: ActivityScope,

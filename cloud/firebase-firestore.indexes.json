@@ -1765,6 +1765,38 @@
       ]
     },
     {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crmActivities",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1817,6 +1849,20 @@
         {
           "fieldPath": "atMs",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmActivities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "atMs",
+          "order": "ASCENDING"
         }
       ]
     },
