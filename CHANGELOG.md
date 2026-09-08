@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.95 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/3081d1104...v1.0.0-beta.95)
+
+### Fixed
+
+- **repo:** the functions install is not a file this repository carries ([AGL-2695](https://linear.app/aglyn/issue/AGL-2695))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the ceiling reaches the symlink issue ([AGL-2695](https://linear.app/aglyn/issue/AGL-2695))
+- **tools:** the reminder job's bypass path is declared with the rest ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659))
+
+</details>
+
 ## v1.0.0-beta.94 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.93...v1.0.0-beta.94)
