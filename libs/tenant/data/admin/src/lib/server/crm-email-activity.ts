@@ -22,6 +22,7 @@ import {
   isCrmEmailDeliveryState,
   nextCrmEmailDeliveryState,
 } from '@aglyn/aglyn/server'
+import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -162,5 +163,57 @@ export async function recordCrmEmailDelivery(
   } catch (error) {
     console.error('[crm] email delivery state write failed', orgId, activityId, error)
     return 'failed'
+  }
+}
+
+/**
+ * `orgs/{orgId}/crmActivities/{id}` for a CAPTURED message (AGL-2657), with
+ * the id derived from the message's key — its `Message-ID`, else the
+ * provider's id — so a second delivery of one message addresses the row
+ * the first delivery wrote. A hash rather than the key itself, because a
+ * `Message-ID` carries `<`, `@` and `/`, which a document id may not.
+ */
+export function crmCapturedEmailActivityRef(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  key: string,
+): FirebaseFirestore.DocumentReference {
+  const digest = createHash('sha256').update(key).digest('hex').slice(0, 28)
+  return crmActivityRef(firestore, orgId, `cap_${digest}`)
+}
+
+/** What a create answered: the row is new, or it was already there. */
+export type CrmEmailActivityCreateOutcome = 'created' | 'duplicate'
+
+const isAlreadyExists = (error: unknown): boolean => {
+  const failure = error as { code?: unknown; message?: unknown } | null
+  return (
+    failure?.code === 6 ||
+    failure?.code === 'already-exists' ||
+    /ALREADY_EXISTS/i.test(String(failure?.message ?? ''))
+  )
+}
+
+/**
+ * Writes a captured message's row ONCE: `create()`, which refuses a
+ * document that already exists, is what makes two deliveries of one
+ * message one row even when they arrive together — the second create is
+ * the one Firestore refuses, and this answers `duplicate` for it. Any
+ * other failure is the caller's.
+ */
+export async function createCrmEmailActivity(
+  ref: FirebaseFirestore.DocumentReference,
+  activity: CrmActivity,
+): Promise<CrmEmailActivityCreateOutcome> {
+  try {
+    await ref.create({
+      ...activity,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    return 'created'
+  } catch (error) {
+    if (isAlreadyExists(error)) return 'duplicate'
+    throw error
   }
 }
