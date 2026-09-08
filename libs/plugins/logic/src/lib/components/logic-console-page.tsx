@@ -32,6 +32,7 @@ export function LogicConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org } = props
   return (
     <GridItems
+      masonry
       spacing={3}
       items={[
         {

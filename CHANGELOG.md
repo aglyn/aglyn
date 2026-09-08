@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.98 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/940930cda...v1.0.0-beta.98)
+
+### Fixed
+
+- **console:** cards of unequal height stack instead of leaving the row's hole ([AGL-2698](https://linear.app/aglyn/issue/AGL-2698))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the ceiling reaches the layout sweep ([AGL-2698](https://linear.app/aglyn/issue/AGL-2698))
+
+</details>
+
 ## v1.0.0-beta.97 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/85a72b06e...v1.0.0-beta.97)

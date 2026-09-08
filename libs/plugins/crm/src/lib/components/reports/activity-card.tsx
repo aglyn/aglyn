@@ -21,7 +21,6 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Section } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import {
   Alert,
-  Box,
   Stack,
   Table,
   TableBody,
@@ -201,114 +200,112 @@ export function ActivityCard(props: ActivityCardProps) {
   const taskFigures = taskCounts.value
 
   return (
-    <Box sx={{ gridColumn: { lg: '1 / -1' } }}>
-      <CardDisplay
-        header={'Activity by teammate'}
-        help={Aglyn.pluginDocsHelp('crmReports', {
-          anchor: '#activity-by-teammate',
-          excerpt:
-            'The calls, emails, meetings and notes each teammate logged in ' +
-            'the period, and the tasks they completed, busiest first. ' +
-            'Grouped from the period’s newest thousand of each.',
-        })}
-        contentGutterX
-        contentGutterY
-      >
-        <Stack spacing={2}>
-          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
-            <ReportStatTile
-              label={'Activities logged'}
-              value={activityFigures ? activityFigures.current.toLocaleString() : null}
-              deltaPct={
-                activityFigures
-                  ? Aglyn.deltaPercent(activityFigures.current, activityFigures.previous)
-                  : null
-              }
-              note={'counted on the server'}
-              href={routes.section('contacts')}
-            />
-            <ReportStatTile
-              label={'Tasks completed'}
-              value={taskFigures ? taskFigures.current.toLocaleString() : null}
-              deltaPct={
-                taskFigures
-                  ? Aglyn.deltaPercent(taskFigures.current, taskFigures.previous)
-                  : null
-              }
-              note={'ticked off in the period'}
-              href={routes.section('tasks')}
-            />
-            <ReportStatTile
-              label={'Teammates active'}
-              value={settled ? teammates.toLocaleString() : null}
-              note={'logged or completed something'}
-            />
-          </Stack>
-          {activityCounts.status === 'error' || activityWindow.status === 'error' ? (
-            <Alert severity="warning">{'The activities could not be read.'}</Alert>
-          ) : null}
-          {taskCounts.status === 'error' || taskWindow.status === 'error' ? (
-            <Alert severity="warning">
-              {'The completed-task counts could not be read; the Tasks done column is left blank.'}
-            </Alert>
-          ) : null}
-          <Section title={'Who did what'}>
-            {rows.length ? (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    {COLUMNS.map((column, index) => (
-                      <TableCell key={column} align={index ? 'right' : 'left'}>
-                        {column}
+    <CardDisplay
+      header={'Activity by teammate'}
+      help={Aglyn.pluginDocsHelp('crmReports', {
+        anchor: '#activity-by-teammate',
+        excerpt:
+          'The calls, emails, meetings and notes each teammate logged in ' +
+          'the period, and the tasks they completed, busiest first. ' +
+          'Grouped from the period’s newest thousand of each.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
+      <Stack spacing={2}>
+        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+          <ReportStatTile
+            label={'Activities logged'}
+            value={activityFigures ? activityFigures.current.toLocaleString() : null}
+            deltaPct={
+              activityFigures
+                ? Aglyn.deltaPercent(activityFigures.current, activityFigures.previous)
+                : null
+            }
+            note={'counted on the server'}
+            href={routes.section('contacts')}
+          />
+          <ReportStatTile
+            label={'Tasks completed'}
+            value={taskFigures ? taskFigures.current.toLocaleString() : null}
+            deltaPct={
+              taskFigures
+                ? Aglyn.deltaPercent(taskFigures.current, taskFigures.previous)
+                : null
+            }
+            note={'ticked off in the period'}
+            href={routes.section('tasks')}
+          />
+          <ReportStatTile
+            label={'Teammates active'}
+            value={settled ? teammates.toLocaleString() : null}
+            note={'logged or completed something'}
+          />
+        </Stack>
+        {activityCounts.status === 'error' || activityWindow.status === 'error' ? (
+          <Alert severity="warning">{'The activities could not be read.'}</Alert>
+        ) : null}
+        {taskCounts.status === 'error' || taskWindow.status === 'error' ? (
+          <Alert severity="warning">
+            {'The completed-task counts could not be read; the Tasks done column is left blank.'}
+          </Alert>
+        ) : null}
+        <Section title={'Who did what'}>
+          {rows.length ? (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  {COLUMNS.map((column, index) => (
+                    <TableCell key={column} align={index ? 'right' : 'left'}>
+                      {column}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.uid || '$nobody'}>
+                    <TableCell>{nameOf(row)}</TableCell>
+                    {Aglyn.CRM_ACTIVITY_KINDS.map((kind) => (
+                      <TableCell key={kind} align="right">
+                        {row.kinds[kind].toLocaleString()}
                       </TableCell>
                     ))}
+                    <TableCell align="right">{row.activities.toLocaleString()}</TableCell>
+                    <TableCell align="right">
+                      {tasksRead ? row.tasksDone.toLocaleString() : '—'}
+                    </TableCell>
                   </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow key={row.uid || '$nobody'}>
-                      <TableCell>{nameOf(row)}</TableCell>
-                      {Aglyn.CRM_ACTIVITY_KINDS.map((kind) => (
-                        <TableCell key={kind} align="right">
-                          {row.kinds[kind].toLocaleString()}
-                        </TableCell>
-                      ))}
-                      <TableCell align="right">{row.activities.toLocaleString()}</TableCell>
-                      <TableCell align="right">
-                        {tasksRead ? row.tasksDone.toLocaleString() : '—'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                {settled ? 'Nothing logged or completed in this period.' : 'Reading…'}
-              </Typography>
-            )}
-            {rows.some((row) => !row.uid) ? (
-              <Typography variant="caption" color="text.secondary">
-                {'No teammate — activities an automation logged, and tasks completed with nobody assigned.'}
-              </Typography>
-            ) : null}
-            <ReportExport
-              filename={reportFilename('activity', period)}
-              columns={COLUMNS}
-              rows={() =>
-                rows.map((row) => [
-                  nameOf(row),
-                  ...Aglyn.CRM_ACTIVITY_KINDS.map((kind) => row.kinds[kind]),
-                  row.activities,
-                  tasksRead ? row.tasksDone : '',
-                ])
-              }
-              disabled={!activitiesRead || !rows.length}
-              caption={caption ? `${caption}; the tiles are counted on the server.` : undefined}
-            />
-          </Section>
-        </Stack>
-      </CardDisplay>
-    </Box>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {settled ? 'Nothing logged or completed in this period.' : 'Reading…'}
+            </Typography>
+          )}
+          {rows.some((row) => !row.uid) ? (
+            <Typography variant="caption" color="text.secondary">
+              {'No teammate — activities an automation logged, and tasks completed with nobody assigned.'}
+            </Typography>
+          ) : null}
+          <ReportExport
+            filename={reportFilename('activity', period)}
+            columns={COLUMNS}
+            rows={() =>
+              rows.map((row) => [
+                nameOf(row),
+                ...Aglyn.CRM_ACTIVITY_KINDS.map((kind) => row.kinds[kind]),
+                row.activities,
+                tasksRead ? row.tasksDone : '',
+              ])
+            }
+            disabled={!activitiesRead || !rows.length}
+            caption={caption ? `${caption}; the tiles are counted on the server.` : undefined}
+          />
+        </Section>
+      </Stack>
+    </CardDisplay>
   )
 }
 ActivityCard.displayName = 'ActivityCard'
