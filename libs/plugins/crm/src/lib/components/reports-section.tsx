@@ -19,9 +19,8 @@
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { mdiRefresh } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { GridItems, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
-  Box,
   Button,
   Stack,
   ToggleButton,
@@ -205,34 +204,70 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
         </Stack>
       </Stack>
       {report ? (
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 2,
-            gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
-            alignItems: 'start',
-          }}
-        >
-          <ContactsTrendCard report={report} totalContacts={totalContacts} />
-          <ContactsMixCard report={report} totalContacts={totalContacts} />
-          <SourceConversionCard report={report} />
-          <LeadFunnelCard report={report} hostId={hostId} />
-          <PipelineCard report={report} />
-          <ClosedDealsCard report={report} />
-          {/*
-            Directly beneath the card whose two windows it re-reads from
-            memory, so the totals and the by-owner rows are read together
-            and cannot be compared across a refresh.
-          */}
-          <WonLostByOwnerCard report={report} />
-          <ActivityCard report={report} />
-          <Box sx={{ gridColumn: { lg: '1 / -1' } }}>
-            <ForecastCard report={report} />
-          </Box>
-          <Box sx={{ gridColumn: { lg: '1 / -1' } }}>
-            <TasksCard report={report} />
-          </Box>
-        </Box>
+        <GridItems
+          /*
+            MASONRY, not rows. These cards are as tall as the data behind
+            them — a funnel of stages against a fixed bar chart — and a row
+            is as tall as its tallest card, so the shorter one leaves a hole
+            the length of the difference. Measured on a live page before this
+            changed: 271, 272 and 111 pixels of dead space down one report,
+            and an odd card stranded with an empty column beside it.
+          */
+          masonry
+          spacing={2}
+          items={[
+            {
+              key: 'trend',
+              size: { xs: 12, lg: 6 },
+              children: (
+                <ContactsTrendCard report={report} totalContacts={totalContacts} />
+              ),
+            },
+            {
+              key: 'mix',
+              size: { xs: 12, lg: 6 },
+              children: (
+                <ContactsMixCard report={report} totalContacts={totalContacts} />
+              ),
+            },
+            {
+              key: 'source-conversion',
+              size: { xs: 12, lg: 6 },
+              children: <SourceConversionCard report={report} />,
+            },
+            {
+              key: 'lead-funnel',
+              size: { xs: 12, lg: 6 },
+              children: <LeadFunnelCard report={report} hostId={hostId} />,
+            },
+            {
+              key: 'pipeline',
+              size: { xs: 12, lg: 6 },
+              children: <PipelineCard report={report} />,
+            },
+            {
+              key: 'closed-deals',
+              size: { xs: 12, lg: 6 },
+              children: <ClosedDealsCard report={report} />,
+            },
+            {
+              key: 'won-lost-by-owner',
+              size: { xs: 12, lg: 6 },
+              children: <WonLostByOwnerCard report={report} />,
+            },
+            {
+              key: 'activity',
+              size: 12,
+              children: <ActivityCard report={report} />,
+            },
+            {
+              key: 'forecast',
+              size: 12,
+              children: <ForecastCard report={report} />,
+            },
+            { key: 'tasks', size: 12, children: <TasksCard report={report} /> },
+          ]}
+        />
       ) : (
         <Typography variant="body2" color="text.secondary">
           {'Loading…'}

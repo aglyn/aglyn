@@ -339,6 +339,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
       ) : (
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <GridItems
+          masonry
           spacing={3}
           items={[
             {

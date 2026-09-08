@@ -98,6 +98,7 @@ function sectionBody(
     case 'overlays':
       return (
         <GridItems
+          masonry
           spacing={3}
           items={[
             {
