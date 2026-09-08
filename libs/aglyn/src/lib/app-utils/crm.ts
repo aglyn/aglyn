@@ -714,6 +714,14 @@ export function crmEmailDeliveryTags(input: {
 }
 
 /**
+ * Which way an `email` activity's message traveled. `outbound` is every
+ * message the workspace wrote — sent by the platform, or copied to the
+ * capture address from a mailbox; `inbound` is one a correspondent wrote,
+ * which only the capture route files (AGL-2657).
+ */
+export type CrmEmailDirection = 'outbound' | 'inbound'
+
+/**
  * `orgs/{orgId}/crmActivities/{activityId}` — one thing that happened.
  *
  * Distinct from a contact's `interactions`: those are what the PLATFORM
@@ -757,12 +765,27 @@ export interface CrmActivity extends CrmScoped {
   subject?: string
   /** The address the message left for. */
   to?: string
-  /** `outbound` for a message the platform sent. Nothing is inbound yet. */
-  direction?: 'outbound'
+  /**
+   * `outbound` for a message the platform sent or a teammate copied to the
+   * capture address; `inbound` for one a correspondent wrote (AGL-2657).
+   */
+  direction?: CrmEmailDirection
   /** See {@link CrmEmailDeliveryState}; advanced by the delivery webhook. */
   deliveryState?: CrmEmailDeliveryState
   /** When the delivery state last moved, epoch ms. */
   deliveryAtMs?: number
+  /**
+   * An email CAPTURED from a mailbox (AGL-2657) — forwarded or copied to
+   * the workspace's capture address — as against one the platform sent:
+   * who wrote it, the provider's `Message-ID` the row is deduplicated by,
+   * the message it answered, and the subject with its reply and forward
+   * prefixes removed, which is what groups a thread. Absent on every other
+   * email row.
+   */
+  from?: string
+  messageId?: string
+  inReplyTo?: string
+  threadSubject?: string
 }
 
 /** An activity as a listener hands it back: the document plus its id. */

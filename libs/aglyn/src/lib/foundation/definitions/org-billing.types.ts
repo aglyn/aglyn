@@ -1029,6 +1029,12 @@ export interface AglynOrgBilling extends AglynDocument {
   crm?: OrgCrmSettings
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
+  /**
+   * The workspace's email capture address (AGL-2657) — see `OrgCrmInbound`.
+   * Server-owned and member-readable: the token IS the address, so a client
+   * that could write it could point another workspace's mail here.
+   */
+  crmInbound?: OrgCrmInbound
 }
 
 /**
@@ -1072,6 +1078,25 @@ export interface OrgCrmHostSettings {
    * is what the product did before the setting existed.
    */
   defaultOwnerUid?: string
+}
+
+/**
+ * The workspace's email capture address, as the org document carries it
+ * (AGL-2657): `crm+<token>@<capture domain>`.
+ *
+ * One token per organization, minted lazily by `crm/inbound-address` the
+ * first time a member asks for the address, and replaced by the same route
+ * on a rotation. Every site of the organization shares it: a captured
+ * message is filed on the record that matches its correspondent, and the
+ * record says which site it belongs to, so the address need not.
+ */
+export interface OrgCrmInbound {
+  /** The url-safe secret in the local part; `crm+<token>@…`. */
+  token: string
+  /** When the first token was minted, epoch ms. */
+  createdAtMs: number
+  /** When the token was last replaced, epoch ms; absent until it has been. */
+  rotatedAtMs?: number
 }
 
 /**
