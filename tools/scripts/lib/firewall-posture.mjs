@@ -516,6 +516,22 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
       }),
       Object.freeze({
+        name: 'Cron bypass',
+        why: 'the two reaper jobs were answered with a 403 checkpoint on 2026-09-07 because the path list above named neither — a job route the list does not name is a job that goes silent',
+        // ADDED 2026-09-07 (AGL-2642). BOTH conditions are load-bearing, as
+        // for the tenant's job runner: the path prefix alone would lift the
+        // challenge from every admin and billing route, and the header alone
+        // would lift it site-wide for anyone who guessed the header's name.
+        // Each route still compares the header's VALUE against CRON_SECRET,
+        // so the bypass removes the bot challenge and nothing else — verified
+        // on the day it went in: a wrong-secret POST reached the app and was
+        // refused 401 JSON, a header-less POST was answered 429 HTML.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 're', value: '^/api/(admin|billing)/' }),
+          Object.freeze({ type: 'header', op: 'ex', key: 'x-cron-secret' }),
+        ]),
+      }),
+      Object.freeze({
         name: 'Plugin loader control plane bypass',
         why: 'plugins.aglyn.com/load fetches both of these SERVER-SIDE and can carry no bypass header; challenged, a site on a verified custom domain cannot frame a plugin at all',
         // ADDED 2026-08-23 (AGL-2483), repairing a live break that the console
