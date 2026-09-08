@@ -585,9 +585,18 @@ function headlineLimits(
      * page. The only place the console showed it was the current-plan chip,
      * which tells you what you already have and nothing about what a tier
      * you are considering would give you.
+     *
+     * A band of zero prints as the absence it is, like the one-to-one row
+     * above: a tier that cannot send a campaign at all is not a tier that
+     * rations campaigns at zero, and "0 campaign emails/mo" reads as the
+     * second. The overage suffix cannot survive the branch either — a rate
+     * beside a zero band prices volume `emailSendsOverage` always returns 0
+     * for.
      */
-    `${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo` +
-      perThousand(pricing.extraEmailSendsUsdPer1k),
+    entitlements.emailSendsPerMonth > 0
+      ? `${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo` +
+        perThousand(pricing.extraEmailSendsUsdPer1k)
+      : 'No campaign email',
   ]
 }
 
@@ -1415,7 +1424,9 @@ function PlanCardBody({
           is. Absent from every customer-facing pricing surface
           until now. */}
       <Typography variant="body2">
-        {`${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`}
+        {entitlements.emailSendsPerMonth > 0
+          ? `${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo`
+          : 'No campaign email'}
         {/* `toFixed(2)`, unlike the rates above it: these are 2.5 and 1.25,
             and a bare interpolation prints "$2.5" — a price missing its cents
             column on the one line that is about money. */}

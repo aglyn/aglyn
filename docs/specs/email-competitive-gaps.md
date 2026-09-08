@@ -916,8 +916,10 @@ with `limit(500)` and **no `orderBy`** — the exact defect D1 closed everywhere
 
 **Calibration.** This is not a free-tier hole: free has `commerce: false`, so member posts
 and restock alerts are unreachable there. The finding is an **asymmetry**, and it starts
-at Starter: a $25/month customer is sold **500 campaign emails a month** through the
-capped, suppressed, unsubscribable path — and gets an **uncapped** one next to it.
+at Starter: a $25/month customer may send **no campaign email at all** through the capped,
+suppressed, unsubscribable path — the band went to 0 when campaign email moved to Pro —
+and gets an **uncapped** one next to it. The band moving to 0 sharpened this row rather
+than closing it: the capped path is now the one a Starter site cannot use.
 
 **Why first.** One fix at the `sendEmail` chokepoint — add the headers, consult
 `filterSendableForHost` — closes a Google/Yahoo compliance failure, a suppression-honoring
@@ -1682,8 +1684,8 @@ Neither is recommended here, and neither changes a charged price or a plan allow
 
 ### 6.5 The Starter asymmetry in [P1](#p1) may be a packaging decision as well as a bug
 
-A $25/month customer is sold 500 campaign emails through the capped path and has an
-uncapped one beside it. Closing the compliance half (unsubscribe headers, suppression
+A $25/month customer may send no campaign email through the capped path — the Starter band
+is 0 — and has an uncapped one beside it. Closing the compliance half (unsubscribe headers, suppression
 filtering) is unambiguously a bug fix and should not wait. **Whether member posts and
 restock alerts should then count against an allowance is a packaging decision**, because
 it changes what a plan delivers. Recorded, not recommended.

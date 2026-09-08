@@ -394,8 +394,12 @@ describe('the page opens on the decision, not the catalogue', () => {
    */
   it('every card states its campaign email allowance', () => {
     renderCards({ plan: 'starter' })
-    // Starter's own, and the two rungs above it.
-    expect(screen.queryAllByText(/campaign emails\/mo/).length).toBe(3)
+    // Starter's own, and the two rungs above it. Starter's is an ABSENCE —
+    // its band is 0, and a card reading "0 campaign emails/mo" would describe
+    // a tier that rations campaigns rather than one that cannot send them.
+    // Three cards, three statements; only the shape of Starter's differs.
+    expect(screen.queryAllByText(/campaign emails\/mo/).length).toBe(2)
+    expect(screen.queryAllByText('No campaign email').length).toBe(1)
   })
 
   it('and says CAMPAIGN, because transactional mail is not rationed', () => {

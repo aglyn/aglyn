@@ -1340,8 +1340,11 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       `${fmtLimit(resolved.managersPerOrg)} team seats`,
                       // Campaign sends, and only those (AGL-1438) — the cap
                       // does not apply to transactional mail, so the chip must
-                      // not read as though it does.
-                      `${fmtLimit(resolved.emailSendsPerMonth)} campaign emails/mo`,
+                      // not read as though it does. A zero band is an absence
+                      // rather than a ration of zero, and reads as one.
+                      resolved.emailSendsPerMonth > 0
+                        ? `${fmtLimit(resolved.emailSendsPerMonth)} campaign emails/mo`
+                        : 'No campaign email',
                     ].map((label) => (
                       <Chip
                         key={label}
