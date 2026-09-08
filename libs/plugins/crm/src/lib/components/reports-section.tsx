@@ -41,6 +41,7 @@ import { ForecastCard } from './reports/forecast-card'
 import { LeadFunnelCard } from './reports/lead-funnel-card'
 import { PipelineCard } from './reports/pipeline-card'
 import { SourceConversionCard } from './reports/source-conversion-card'
+import { WonLostByOwnerCard } from './reports/won-lost-by-owner-card'
 import {
   type CrmReportScope,
   reportCacheKey,
@@ -218,6 +219,12 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
           <LeadFunnelCard report={report} hostId={hostId} />
           <PipelineCard report={report} />
           <ClosedDealsCard report={report} />
+          {/*
+            Directly beneath the card whose two windows it re-reads from
+            memory, so the totals and the by-owner rows are read together
+            and cannot be compared across a refresh.
+          */}
+          <WonLostByOwnerCard report={report} />
           <ActivityCard report={report} />
           <Box sx={{ gridColumn: { lg: '1 / -1' } }}>
             <ForecastCard report={report} />

@@ -161,6 +161,24 @@ the window was full.
 - **Won vs lost per week** — two bars per week, placed by the moment each deal
   was closed.
 
+## Won and lost by owner
+
+The same closed deals, grouped by the person who **owned** each one at the
+close — not by whoever created it, so a deal reassigned mid-cycle counts for
+whoever carried it over the line.
+
+- One row per owner: **won**, **lost**, the **win rate** over what closed for
+  them, and the value of what they won.
+- Rows rank by how much closed, not by win rate. An owner who closed one deal
+  and won it is not the best closer on the team, and ranking by rate would
+  say they were.
+- Deals nobody owns are kept as a row called **Unassigned** rather than
+  dropped, so the rows add up to what the card above them reports.
+- An owner with nothing closed in the period has **no rate** rather than 0%.
+
+This card reads the same **500 most recently closed of each outcome** the
+*Won and lost* card does, and says so when the period held more.
+
 ## Activity by teammate
 
 Who did what in the period, busiest first.

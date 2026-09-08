@@ -43,6 +43,24 @@ line of notes under it), the kind, the priority, the due date colored by where i
 the record it is for, as a link into that record's page. A view shows at most 200 rows
 and says so when it is full; narrow the view to see the rest.
 
+### The calendar view
+
+**List** and **Calendar** sit beside the view control. The calendar draws one month,
+placing each task on the day it is **due**, and clicking one opens the same drawer a
+row does. The arrows page a month at a time and **Today** comes back.
+
+The calendar draws the **same tasks the list is showing** — the same view, the same
+window, and no extra reading — so a month that looks empty may simply be a month the
+view's tasks are not in. It says so underneath: how many of them are due outside the
+month on screen, how many have no due date at all (a calendar cannot place those), and
+whether the view is showing only its first page.
+
+A day that has more than three tasks lists three and counts the rest. Overdue titles are
+red, completed ones are struck through, and today's square is outlined.
+
+Selection is a list gesture: there is no bulk bar over the calendar. Switch back to
+**List** to select and act on many.
+
 ### Snoozing a task
 
 The alarm icon beside an open task's due date offers **Tomorrow**, **Next week** and
