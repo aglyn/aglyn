@@ -96,6 +96,7 @@ import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
 import { handleActivities } from './api-v1/crm-activities'
 import { handleCompanies } from './api-v1/crm-companies'
 import { handleDeals } from './api-v1/crm-deals'
+import { handleEmailTemplates } from './api-v1/crm-email-templates'
 import { handleLeads } from './api-v1/crm-leads'
 import { handlePipelines } from './api-v1/crm-pipelines'
 import { handleTasks } from './api-v1/crm-tasks'
@@ -3723,6 +3724,9 @@ const CRM_SUITE_RESOURCES: ReadonlySet<string> = new Set([
   // status, an owner, the conversion — is the suite's, and so is the API
   // onto them (AGL-2627).
   'leads',
+  // The letters a team sends from a record (AGL-2658) — the CRM's, like the
+  // one-to-one send they are written for.
+  'email-templates',
 ])
 
 /** Route a `/v1/<resource>/...` request to its handler. */
@@ -3741,8 +3745,8 @@ export async function dispatchResource(
   if (CRM_SUITE_RESOURCES.has(segments[0]) && !checkEntitlement(ctx.org, 'crm')) {
     return ApiErrors.planRequired({
       message:
-        'The CRM suite — companies, pipelines, deals, tasks, activities and ' +
-        'leads — is not included in this organization’s plan',
+        'The CRM suite — companies, pipelines, deals, tasks, activities, ' +
+        'leads and email templates — is not included in this organization’s plan',
       code: 'crm',
       headers: ctx.headers,
     })
@@ -3769,6 +3773,8 @@ export async function dispatchResource(
       return handleActivities(request, ctx, segments, url)
     case 'leads':
       return handleLeads(request, ctx, segments, url)
+    case 'email-templates':
+      return handleEmailTemplates(request, ctx, segments, url)
     case 'media':
       // The ORGANIZATION library. A site's own files are the same resource
       // under `/v1/sites/{siteId}/media`.

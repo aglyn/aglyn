@@ -75,6 +75,7 @@ async function dispatch(
         // (AGL-2606) are org-level like contacts, and so are top-level here.
         // Leads (AGL-2627) are a site's rows, but the path is `/v1/leads`
         // with the site as a parameter, so the path is what is advertised.
+        // Email templates (AGL-2658) are org-level like the other CRM rows.
         resources: [
           'datasets',
           'contacts',
@@ -84,6 +85,7 @@ async function dispatch(
           'tasks',
           'activities',
           'leads',
+          'email-templates',
           'sites',
           'media',
         ],
