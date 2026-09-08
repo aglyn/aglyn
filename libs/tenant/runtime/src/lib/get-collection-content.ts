@@ -208,6 +208,12 @@ function mapEntryFields(
 /**
  * The collection doc's category taxonomy (AGL-582), sanitized: only
  * `{ id, name }` pairs with non-empty strings survive, order preserved.
+ *
+ * `description` rides along when the author wrote one and is dropped when it
+ * is blank or not a string, so the head can tell "described" from "not
+ * described" by truthiness alone — an empty string reaching the metadata
+ * would suppress the template screen's description and leave the listing with
+ * none at all.
  */
 function mapCollectionCategories(value: unknown): CollectionCategory[] {
   if (!Array.isArray(value)) return []
@@ -219,7 +225,15 @@ function mapCollectionCategories(value: unknown): CollectionCategory[] {
         typeof item?.name === 'string' &&
         item.name.trim() !== '',
     )
-    .map((item) => ({ id: item.id, name: item.name }))
+    .map((item) => {
+      const description =
+        typeof item.description === 'string' ? item.description.trim() : ''
+      return {
+        id: item.id,
+        name: item.name,
+        ...(description ? { description } : {}),
+      }
+    })
 }
 
 /**
@@ -501,6 +515,13 @@ export interface CollectionRouteCategory {
   id?: string
   /** Display label; falls back to the raw segment for an unknown category. */
   name: string
+  /**
+   * The taxonomy's {@link CollectionCategory.description}, carried onto the
+   * route so the head can describe the FILTERED listing rather than inherit
+   * the whole collection's description. Absent for an unknown segment, which
+   * names no category and therefore has nothing to describe.
+   */
+  description?: string
   /**
    * Whether the segment resolved against the collection's taxonomy. An
    * unknown category still renders — an empty listing, not a crash — but the
@@ -789,6 +810,7 @@ function applyCategoryAndPagination(
       slug: collectionCategorySlug(routedCategory),
       ...(match ? { id: match.id } : {}),
       name: match?.name ?? routedCategory,
+      ...(match?.description ? { description: match.description } : {}),
       known: Boolean(match),
     }
     data.entries = data.entries.filter((entry) =>

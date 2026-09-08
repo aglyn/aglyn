@@ -54,6 +54,12 @@ const FAVICON_CARD = join(
   'components',
   'favicon-card.component.tsx',
 )
+const APP_ICON_CARD = join(
+  __dirname,
+  '..',
+  'components',
+  'app-icon-card.component.tsx',
+)
 const LISTING_EDITOR = join(
   __dirname,
   '..',
@@ -106,6 +112,10 @@ const faviconCode = code(
   readFileSync(FAVICON_CARD, 'utf8'),
   'favicon-card.component.tsx',
 )
+const appIconCode = code(
+  readFileSync(APP_ICON_CARD, 'utf8'),
+  'app-icon-card.component.tsx',
+)
 const contentCode = code(CONTENT_SOURCES, 'components/content/*')
 
 describe('site logo card (AGL-1407)', () => {
@@ -149,6 +159,36 @@ describe('favicon card (AGL-1407)', () => {
     // both test truthiness, and a deleted field would leave the projection
     // row's `favicon` behind (AGL-1071).
     expect(faviconCode).toMatch(/favicon:\s*''/)
+  })
+})
+
+/**
+ * The installable app icon (AGL-2689), which is a fourth picker on the same
+ * host document and therefore the fourth chance to write the wrong thing.
+ *
+ * This one is fetched further out of band than any of them — the install
+ * prompt and the OS icon cache, neither of which has a page to resolve a
+ * relative path against — so a raw storage URL here survives right up until
+ * somebody moves the asset into a folder (AGL-1215) and every home screen
+ * that installed the site shows a blank tile.
+ */
+describe('app icon card (AGL-2689)', () => {
+  it('writes the picked asset through mediaNodeSrc, not media.url', () => {
+    expect(appIconCode).toMatch(/mediaNodeSrc\(media\)/)
+    expect(appIconCode).not.toMatch(/appIcon:\s*media\.url/)
+  })
+
+  it('resolves the stored value before showing it back', () => {
+    expect(appIconCode).toMatch(/resolveMediaSrc\(appIcon/)
+    // `src={appIcon}` renders `media:…` as a broken tile.
+    expect(appIconCode).not.toMatch(/src=\{appIcon\}/)
+  })
+
+  it('clears the field with an empty string, not a deleted key', () => {
+    // A merge write ignores an absent field, so "Remove" has to SEND `''` —
+    // and `''` is what makes the manifest fall back to the site logo again
+    // rather than to no icon at all (AGL-1191).
+    expect(appIconCode).toMatch(/save\(''/)
   })
 })
 

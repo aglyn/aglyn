@@ -257,6 +257,89 @@ describe('the cases that must NOT inherit the template screen', () => {
   })
 })
 
+/**
+ * A category's own description (AGL-2689).
+ *
+ * The title of a filtered listing has been its own since AGL-1321; its
+ * DESCRIPTION was still the template screen's, so `/changelog/category/*`
+ * emitted one sentence across every category the taxonomy holds — as many
+ * identical snippets as there are pills, which is the duplication the
+ * composed title exists to prevent, in the tag underneath it.
+ */
+describe('a category that describes itself', () => {
+  const CATEGORY_DESCRIPTION =
+    'Everything we shipped, newest first — one note per release.'
+
+  it('describes the FILTERED listing rather than the collection', async () => {
+    givenListTemplate({
+      screenSeo: { title: SCREEN_TITLE, description: SCREEN_DESCRIPTION },
+      category: {
+        slug: 'shipped',
+        name: 'Shipped',
+        known: true,
+        description: CATEGORY_DESCRIPTION,
+      },
+    })
+
+    const metadata = await metadataFor(['changelog', 'category', 'shipped'])
+
+    expect(metadata.description).toBe(CATEGORY_DESCRIPTION)
+    expect(metadata.openGraph.description).toBe(CATEGORY_DESCRIPTION)
+    // The title is untouched — it was already this listing's own.
+    expect(metadata.title).toBe('Shipped · Changelog | Acme')
+  })
+
+  it('leaves the UNFILTERED listing on the screen’s description', async () => {
+    // `/changelog` is not a category and must not borrow one's description.
+    givenListTemplate({
+      screenSeo: { title: SCREEN_TITLE, description: SCREEN_DESCRIPTION },
+    })
+
+    expect((await metadataFor(['changelog'])).description).toBe(
+      SCREEN_DESCRIPTION,
+    )
+  })
+
+  it('leaves an undescribed category exactly where it was', async () => {
+    // The fallback IS the behavior to preserve: the list a category filters
+    // describes it better than the site-wide default does.
+    givenListTemplate({
+      screenSeo: { title: SCREEN_TITLE, description: SCREEN_DESCRIPTION },
+      hostSeo: { description: HOST_DESCRIPTION },
+      category: { slug: 'shipped', name: 'Shipped', known: true },
+    })
+
+    const metadata = await metadataFor(['changelog', 'category', 'shipped'])
+
+    expect(metadata.description).toBe(SCREEN_DESCRIPTION)
+    expect(metadata.description).not.toBe(HOST_DESCRIPTION)
+  })
+
+  it('never lets a category describe an ENTRY page', async () => {
+    // An entry is one post, not a listing, and its own excerpt is what
+    // describes it — a category's sentence would describe every post in it.
+    givenListTemplate({
+      screenSeo: { title: SCREEN_TITLE, description: SCREEN_DESCRIPTION },
+      category: {
+        slug: 'shipped',
+        name: 'Shipped',
+        known: true,
+        description: CATEGORY_DESCRIPTION,
+      },
+      entry: {
+        $id: 'e1',
+        title: 'Search visibility',
+        slug: 'search-visibility',
+        excerpt: 'Per-screen SEO fields.',
+      },
+    })
+
+    const metadata = await metadataFor(['changelog', 'search-visibility'])
+
+    expect(metadata.description).toBe('Per-screen SEO fields.')
+  })
+})
+
 describe('the indexing policy is untouched (AGL-1263/AGL-1300)', () => {
   it('still emits noindex on a discouraged site whose list SEO now renders', async () => {
     givenListTemplate({

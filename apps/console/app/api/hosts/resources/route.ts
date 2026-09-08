@@ -568,6 +568,13 @@ const RESOURCES: Record<string, {
       // the kind of half-working that reads as a flaky save.
       'links',
       'bio',
+      // How the author's own PAGE describes and pictures itself: the search
+      // snippet that overrides the bio, and the share card that overrides the
+      // portrait. Same reasoning as `links` above — an author created with
+      // both filled in must not arrive with neither.
+      'seoDescription',
+      'seoImage',
+      'seoImageAlt',
     ],
   },
 }

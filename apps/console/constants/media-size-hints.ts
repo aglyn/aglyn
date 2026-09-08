@@ -57,6 +57,18 @@ export const FAVICON_HINT =
   'every tab, bookmark and home-screen size.'
 
 /**
+ * The icon an installed site shows on a home screen.
+ *
+ * 512 is the largest size any installer asks for and every smaller tile is
+ * derived from it, so a single 512×512 file covers the whole set. Square
+ * because the OS crops to a square (or a circle inside one) regardless, and a
+ * wordmark handed to that crop loses its own name.
+ */
+export const APP_ICON_HINT =
+  'Recommended: a square PNG, 512×512 — a mark rather than a wordmark, ' +
+  'because the operating system crops it to a square tile.'
+
+/**
  * Google's structured-data guidance sets a floor for a publisher logo, and a
  * logo under it is dropped from rich results rather than scaled up — which is
  * the failure worth warning about, because nothing in the console can see it

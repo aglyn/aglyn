@@ -190,6 +190,18 @@ export const COLLECTION_CATEGORIES_MAX = 50
 export interface CollectionCategory {
   id: string
   name: string
+  /**
+   * What this category's listing is about, for the `<meta name="description">`
+   * of `/{collection}/category/{slug}`.
+   *
+   * Without one every filtered listing on a site inherits the list template
+   * screen's description — six `/blog/category/*` URLs all described as "the
+   * blog", which is the same duplicate-result problem the composed category
+   * TITLE was introduced to solve (AGL-1321), one tag over. Optional, and the
+   * template's description remains the fallback: a category nobody has
+   * described is better summarized by the list it filters than by nothing.
+   */
+  description?: string
 }
 
 /**
