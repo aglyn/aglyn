@@ -15,10 +15,13 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **crm:** a leads file imports through the capture door ([AGL-2701](https://linear.app/aglyn/issue/AGL-2701))
 - **seo:** four fields the tenant had nowhere to read from ([AGL-2689](https://linear.app/aglyn/issue/AGL-2689), [AGL-2664](https://linear.app/aglyn/issue/AGL-2664), [AGL-1321](https://linear.app/aglyn/issue/AGL-1321), [AGL-2204](https://linear.app/aglyn/issue/AGL-2204))
 
 ### Fixed
 
+- **theme:** the brand-host list is an operator setting, not a constant ([AGL-2703](https://linear.app/aglyn/issue/AGL-2703))
+- **ui:** an empty list reserves the room its empty state needs ([AGL-2702](https://linear.app/aglyn/issue/AGL-2702))
 - **theme:** an accent painted as text answers to the text bar ([AGL-2703](https://linear.app/aglyn/issue/AGL-2703))
 - **marketplace:** a listing the grid shows has to open ([AGL-2700](https://linear.app/aglyn/issue/AGL-2700))
 - **crm:** one-to-one sends honor the new-workspace ramp ([AGL-2680](https://linear.app/aglyn/issue/AGL-2680))
