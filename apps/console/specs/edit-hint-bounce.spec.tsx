@@ -35,6 +35,10 @@
  *   failure cannot loop either);
  * - signed out → clears the stamp so the next sign-in re-plants promptly;
  * - auth still resolving → does nothing, clears nothing.
+ *
+ * And the email gate (AGL-2691): a session the blob mint would refuse never
+ * spends the day's window, which is the difference between "one wasted POST"
+ * and "a brand-new editor gets no hint until tomorrow".
  */
 
 import { render, waitFor } from '@testing-library/react'
@@ -50,7 +54,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: mockUser }),
 }))
 
-const signedInUser = { getIdToken: async () => 'id-token-123' }
+const signedInUser = {
+  getIdToken: async () => 'id-token-123',
+  getIdTokenResult: async () => ({ claims: { email_verified: true } }),
+}
 
 describe('EditHintBounce (AGL-1842)', () => {
   let navigate: jest.Mock
@@ -131,6 +138,46 @@ describe('EditHintBounce (AGL-1842)', () => {
     expect(
       Number(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)),
     ).toBeGreaterThan(0)
+  })
+
+  it('spends nothing on an unverified session — no fetch, and the window is still there', async () => {
+    // Waiting on the CLAIMS READ, not on a timer: it is the last thing that
+    // happens before the guard, so its call is the proof the effect ran and
+    // reached the decision rather than the proof that time passed.
+    const getIdTokenResult = jest.fn(async () => ({
+      claims: { email_verified: false },
+    }))
+    mockUser = { getIdToken: async () => 'id-token-123', getIdTokenResult }
+    render(<EditHintBounce navigate={navigate} />)
+    await waitFor(() => expect(getIdTokenResult).toHaveBeenCalled())
+    await Promise.resolve()
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+    // The load-bearing assertion. A stamp here is the whole bug: the editor
+    // verifies their address a minute later and gets no hint until tomorrow.
+    expect(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)).toBeNull()
+  })
+
+  it('still bounces a staff impersonation session of an unverified owner (AGL-480)', async () => {
+    mockUser = {
+      getIdToken: async () => 'id-token-123',
+      getIdTokenResult: async () => ({
+        claims: { email_verified: false, impersonatedBy: 'staff-uid' },
+      }),
+    }
+    render(<EditHintBounce navigate={navigate} />)
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1))
+  })
+
+  it('CONTROL — an unreadable token bounces anyway, and lets the route decide', async () => {
+    mockUser = {
+      getIdToken: async () => 'id-token-123',
+      getIdTokenResult: async () => {
+        throw new Error('token refresh failed')
+      },
+    }
+    render(<EditHintBounce navigate={navigate} />)
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1))
   })
 
   it('clears the throttle on sign-out so the next sign-in re-plants', () => {
