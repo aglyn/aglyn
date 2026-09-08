@@ -74,7 +74,7 @@ work needed:
 ![The built-in sign-in page on a published site with email and password fields](/img/guides/members-signin.png)
 
 New members automatically flow into your
-[CRM](../content-and-data/contacts/overview.md) and appear as leads;
+[CRM](../content-and-data/crm/overview.md) and appear as leads;
 `memberSignUp` and `memberSignIn`
 [automation events](../marketing-and-automation/workflows-and-actions/overview.md)
 fire so you can trigger welcome actions.
@@ -148,7 +148,7 @@ The site's **Users** page has two cards: **Site users** (your members — this
 guide) and **Users** (console collaborators). The Site users card is
 searchable and paged, newest first, with **Email**, **Name**, **Joined**, and
 **Status** columns. For members who may open the
-[CRM](../content-and-data/contacts/overview.md), each row's **⋮** menu holds
+[CRM](../content-and-data/crm/overview.md), each row's **⋮** menu holds
 **Open in CRM** — the member's contact, found by the address they signed up
 with.
 
@@ -205,5 +205,5 @@ both are recorded in the site's activity log — never the password itself.
 
 - [Members-only areas](../workspace-and-billing/teams-and-roles/members-only.md)
 - [Commerce end to end](commerce-end-to-end.md)
-- [CRM](../content-and-data/contacts/overview.md)
+- [CRM](../content-and-data/crm/overview.md)
 - [Site protection & error screens](../building-sites/site-protection/overview.md)

@@ -598,11 +598,12 @@ describe('CONCURRENTLY: datasetsPerOrg cannot be laundered', () => {
     expect(mockState.attempts).toBe(attempts)
   })
 
-  it('an UNLIMITED plan lands all of them', async () => {
+  it('a plan whose band dwarfs the attempts lands all of them', async () => {
+    // Enterprise's fallback is 4,000 datasets (twice Agency's, since
+    // 2026-09-07) — two hundred times the attempts here, so the cap never
+    // enters the race and every write must land.
     mockState.org = { plan: 'enterprise' }
-    expect(PLAN_ENTITLEMENTS.enterprise.datasetsPerOrg).toBe(
-      Number.POSITIVE_INFINITY,
-    )
+    expect(PLAN_ENTITLEMENTS.enterprise.datasetsPerOrg).toBe(4_000)
     const attempts = 20
     seedDatasets(0)
     const responses = await Promise.all(

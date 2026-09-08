@@ -42,7 +42,7 @@
  * | dimension | braces (runtime) | belt (structural) |
  * | -- | -- | -- |
  * | media storage | `mediaStorageGate` refuses past the band | `meteredInfraPassThrough: false` ⇒ `billableCostUsd: 0` |
- * | bandwidth / page views | `bandwidthCapEngaged` refuses a free org past its band; `checkBandwidthAbuseCeiling` contains any plan past 10x | same flag, same zero |
+ * | bandwidth / page views | `bandwidthCapEngaged` refuses a free org past its band; `checkBandwidthAbuseCeiling` contains any plan past 3x | same flag, same zero |
  * | form submissions | `checkFormSubmissionQuota` walls at the band | same flag, same zero |
  * | dataset storage | `checkDataStorageQuota().allowed`, enforced at the record write (AGL-2163) | `extraDataGbMonthlyUsd: null` ⇒ `overageMonthlyUsd: 0` |
  * | API requests | `apiAccess` gate + `checkApiRequestQuota().allowed` at the /v1 chokepoint (AGL-2163) | `extraApiRequestsUsdPer1k: null` ⇒ 0 |
@@ -60,7 +60,7 @@
  *    refuses the pages of a free org past its band, in the middleware ahead of
  *    the ISR cache and again in the loader. Proven end to end, with its paid
  *    positive control, in `apps/tenant/specs/bandwidth-cap-refusal.spec.ts`.
- *  - `checkBandwidthAbuseCeiling` — the ABUSE backstop at 10x the band. It has
+ *  - `checkBandwidthAbuseCeiling` — the ABUSE backstop at 3x the band. It has
  *    to exist separately because the cap deliberately never touches a metered
  *    plan, and because it is evaluated where the counter is WRITTEN
  *    (`/api/analytics/collect`, after the render) and so reacts in minutes

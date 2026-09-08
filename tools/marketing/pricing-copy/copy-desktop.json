@@ -281,7 +281,7 @@
               "name": "Frame",
               "cells": [
                 "For high-growth stores and multi-site teams that have outgrown Business.",
-                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 700 GB bandwidth"
+                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 290 GB bandwidth"
               ]
             },
             {
@@ -498,11 +498,11 @@
                 "Bandwidth / mo",
                 "2 GB",
                 "50 GB",
-                "225 GB",
-                "400 GB",
-                "700 GB",
-                "1 TB",
-                "3 TB",
+                "125 GB",
+                "185 GB",
+                "290 GB",
+                "345 GB",
+                "1.54 TB",
                 "Talk to us"
               ]
             },

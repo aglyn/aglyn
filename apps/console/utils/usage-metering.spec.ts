@@ -28,6 +28,7 @@ import {
   METERED_MARKUP,
   METERED_UNIT_RATES_USD,
   meteredIncludedAllowance,
+  pageViewsFromBandwidthGb,
 } from './usage-metering'
 
 const GB = 1024 * 1024 * 1024
@@ -82,11 +83,22 @@ describe('meteredIncludedAllowance', () => {
     expect(meteredIncludedAllowance(undefined).metered).toBe(false)
   })
 
-  it('leaves enterprise bands unlimited', () => {
+  it('sizes enterprise bands at the finite fallback, unmetered', () => {
+    // Twice Agency's bands since 2026-09-07 — 200 sites × 120 GB, 3,080 GB of
+    // views, 200 × 50,000 submissions — and `metered` false, so nothing past
+    // them bills: an agreement sets the terms, and a per-org override the
+    // figures.
     const included = meteredIncludedAllowance({ plan: 'enterprise' } as any)
-    expect(included.storageGb).toBe(Number.POSITIVE_INFINITY)
-    expect(included.pageViews).toBe(Number.POSITIVE_INFINITY)
-    expect(included.formSubmissions).toBe(Number.POSITIVE_INFINITY)
+    expect(included.storageGb).toBe(24_000)
+    expect(included.pageViews).toBe(pageViewsFromBandwidthGb(3_080))
+    expect(included.formSubmissions).toBe(10_000_000)
+    expect(included.metered).toBe(false)
+    // A contracted UNLIMITED still subtracts to zero billable usage.
+    const contracted = meteredIncludedAllowance({
+      plan: 'enterprise',
+      entitlements: { storagePerHostMb: Number.POSITIVE_INFINITY },
+    } as any)
+    expect(contracted.storageGb).toBe(Number.POSITIVE_INFINITY)
   })
 })
 

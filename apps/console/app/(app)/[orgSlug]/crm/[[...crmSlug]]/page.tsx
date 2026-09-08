@@ -390,7 +390,7 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
       // The docs section about THIS mount (AGL-2630). The route serves the
       // CRM hub alone, so the topic is fixed rather than read off the nav
       // item, and the anchor is the heading a reader standing here needs.
-      help={{ topic: 'contacts', anchor: '#at-the-organization-level' }}
+      help={{ topic: 'crm', anchor: '#at-the-organization-level' }}
       header={{
         children: title,
         secondary: activeSection?.label,

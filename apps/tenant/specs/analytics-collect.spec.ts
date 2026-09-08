@@ -597,8 +597,8 @@ describe('dwell time (AGL-2182)', () => {
  * the mechanism are proved separately, so neither can pass on the other's
  * behalf.
  *
- * ⚠️ Free's ceiling is the FLOOR (100,000), not 10× its 5 GB band (~87,381).
- * Starter's is 10× its 50 GB band (873,813). 150,000 views therefore sits
+ * ⚠️ Free's ceiling is the FLOOR (100,000), not 3× its 2 GB band (~10,486).
+ * Starter's is 3× its 50 GB band (262,144). 150,000 views therefore sits
  * between them, which is what makes the plan pair below a real forced branch
  * rather than two runs of the same arithmetic.
  */
@@ -668,7 +668,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
 
   it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
     // Same traffic, same route, same month — only the plan differs. Starter's
-    // ceiling is 873,813, so 150,000 is ordinary growth and nothing happens.
+    // ceiling is 262,144, so 150,000 is ordinary growth and nothing happens.
     mockOrgForHost = { $id: 'org-1', plan: 'starter' }
     plantMonthViews(150_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
@@ -684,7 +684,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     mockOrgForHost = { $id: 'org-1', plan: 'starter' }
     plantMonthViews(1_000_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
-    expect(flag()).toMatchObject({ ceiling: 873_813, degraded: false })
+    expect(flag()).toMatchObject({ ceiling: 262_144, degraded: false })
     expect(mockStaffNotices).toHaveLength(1) // still an incident
   })
 

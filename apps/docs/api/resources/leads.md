@@ -227,5 +227,5 @@ See [Conventions → Errors](../conventions.md#errors) for the shared envelope.
   can open.
 - [Webhooks](../integrations/webhooks.md) — the `lead` event fires the moment a site
   captures one, and carries the `leadId` to read it back with.
-- [Leads in the console](/content-and-data/contacts/leads) — the same queue and the
+- [Leads in the console](/content-and-data/crm/leads) — the same queue and the
   same conversion, by hand.

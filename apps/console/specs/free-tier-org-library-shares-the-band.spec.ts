@@ -258,9 +258,14 @@ describe('the enforced band IS the invoiced band (AGL-2075)', () => {
   })
 
   it('an UNLIMITED band reads nothing at all', async () => {
-    // Enterprise has the most sites to fan out over and the least reason to:
-    // no sum could change the verdict.
-    const pool = await band({ plan: 'enterprise' })
+    // An org with the most sites to fan out over and the least reason to: no
+    // sum could change the verdict. Since 2026-09-07 the Enterprise plan row
+    // is a finite fallback (twice Agency's), so the unbounded band is what a
+    // contracted per-org override writes.
+    const pool = await band({
+      plan: 'enterprise',
+      entitlements: { storagePerHostMb: Number.POSITIVE_INFINITY },
+    })
     expect(pool.allowanceMb).toBe(Number.POSITIVE_INFINITY)
     expect(getAllCalls).toBe(0)
     expect(queryCalls).toBe(0)

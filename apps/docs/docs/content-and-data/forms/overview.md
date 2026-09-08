@@ -8,7 +8,7 @@ description: Add forms to your site, collect submissions in an inbox, and write 
 
 **Forms** let visitors send you information — contact requests, sign-ups, lead capture.
 Submissions land in your **inbox** and can flow straight into a [dataset](../datasets/overview.md)
-and your [CRM](../contacts/overview.md).
+and your [CRM](../crm/overview.md).
 
 ![The Inbox page in the Aglyn console, with its Submissions, Members & leads, and Campaigns sections](/img/forms/inbox-page.png)
 
@@ -52,10 +52,11 @@ Each tier includes a monthly form-submission allowance, counted per site:
 | Free | 20 |
 | Starter | 200 |
 | Pro | 1,000 |
-| Business | 10,000 |
-| Scale | 50,000 |
-| Advanced | 100,000 |
-| Agency & Enterprise | Unlimited |
+| Business | 8,000 |
+| Scale | 25,000 |
+| Advanced | 40,000 |
+| Agency | 25,000 |
+| Enterprise | 50,000 by default; more by agreement |
 
 On **Free**, that allowance is a hard wall: at the cap, further submissions are
 **declined** — the visitor sees the form's error message rather than a fake success.
@@ -67,9 +68,10 @@ Either way the count resets with the calendar month (UTC), and the
 [billing page's usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
 warn you at 80% before you get there.
 
-**Unlimited** on Agency and Enterprise means exactly that about the *plan*: nothing
-meters your submission volume and nothing cuts you off for buying too small a tier.
-It is not a promise that the endpoint will take any number of requests from anyone —
+The allowance is **per site**. On Enterprise the figure is a default your agreement
+raises; Enterprise is not metered, so at that line further submissions are declined
+until the month turns or the agreement is updated. None of this is a promise that the
+endpoint will take any number of requests from anyone —
 every site, on every plan, sits under the
 [anti-abuse ceiling](#the-per-site-monthly-ceiling) below.
 
@@ -215,13 +217,13 @@ either of two topic boxes is ticked.
   [chips saying where it went](#where-this-one-went) — including saying nothing about a
   dataset when the record wasn't created.
 - **Contacts** — every submission that carries an email address updates the person in
-  the [CRM](../contacts/overview.md) at stage **Lead**: a new contact when the address
+  the [CRM](../crm/overview.md) at stage **Lead**: a new contact when the address
   is new, an interaction on their timeline when it is not, and a customer stays a
   customer. A field can also save its answer into one of your
-  [custom contact fields](../contacts/custom-fields.md#save-a-form-field) — pick the
+  [custom contact fields](../crm/custom-fields.md#save-a-form-field) — pick the
   field under **Saves to contact fields** on the form's own page.
 - **Leads** — only when the form's **CRM routing** card has the lead switch on. See
-  [What makes a lead](../contacts/leads.md#what-makes-a-lead).
+  [What makes a lead](../crm/leads.md#what-makes-a-lead).
 
 ### The inbox
 
@@ -241,7 +243,7 @@ row actions.
   updated, found by the address they gave — beside **Mark read** and **Delete**. A
   submission that carried no email address updated no contact, and the item says so.
 - The CRM links back the other way: **Open submission** on a captured entry of a
-  contact's [timeline](../contacts/activities.md) lands on this tab with the reader
+  contact's [timeline](../crm/activities.md) lands on this tab with the reader
   already open on that submission (the address carries `?submission={id}`) and marks
   it read, as a click would. A submission that has since been deleted says so.
 - The dashboard's **Inbox** card previews the newest submissions and counts the site's
@@ -375,7 +377,7 @@ messages is a query over everything the site has ever collected, and most visits
 page are about the form's settings.
 
 **Saves to contact fields** lists every field the published design declares, with a
-choice beside each of your [custom contact fields](../contacts/custom-fields.md#save-a-form-field).
+choice beside each of your [custom contact fields](../crm/custom-fields.md#save-a-form-field).
 Pick one and every submission's answer is stored under it on the contact the submission
 creates or updates, converted by that field's type. The mapping is kept by field name, so
 publishing a new design does not lose it; a field renamed on the canvas starts unmapped.
@@ -388,5 +390,5 @@ were sent with rather than this form's id, so they stay in the Inbox under **All
 ## Related
 
 - [Datasets & dynamic content](../datasets/overview.md)
-- [CRM](../contacts/overview.md)
+- [CRM](../crm/overview.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)

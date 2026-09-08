@@ -44,7 +44,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'Map a single event to a single action without building a full workflow.',
   },
   activities: {
-    path: '/content-and-data/contacts/activities',
+    path: '/content-and-data/crm/activities',
     title: 'Activities & the timeline',
     excerpt: 'Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, email one person from their record, and read it all in one timeline beside everything captured and every campaign sent.',
   },
@@ -94,7 +94,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'The docs-gap and cost board behind Assist — how the ranking is ordered, why ungrounded questions are counted separately, and what the cache-read rate says about margin.',
   },
   automations: {
-    path: '/content-and-data/contacts/automations',
+    path: '/content-and-data/crm/automations',
     title: 'Automations for the CRM',
     excerpt: 'The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — the steps that tag, stage, assign, create a task or log an activity, and one-click recipes.',
   },
@@ -144,7 +144,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'The console-extension + frontend-UI plugin pair pattern for shipping features as plugins.',
   },
   bulkActions: {
-    path: '/content-and-data/contacts/bulk-actions',
+    path: '/content-and-data/crm/bulk-actions',
     title: 'Bulk actions',
     excerpt: 'Select rows in any CRM table — contacts, companies, deals or tasks — and act on all of them at once, or export them as a CSV that re-imports.',
   },
@@ -169,7 +169,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'Create products with billing modes, design the storefront with Commerce blocks, take Stripe checkout for one-time and subscription sales, and run orders from the console.',
   },
   companies: {
-    path: '/content-and-data/contacts/companies',
+    path: '/content-and-data/crm/companies',
     title: 'Companies',
     excerpt: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, address and the people who work there.',
   },
@@ -199,14 +199,9 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'Where things live in the Aglyn console app bar and navigation.',
   },
   contactRecord: {
-    path: '/content-and-data/contacts/contact-record',
+    path: '/content-and-data/crm/contact-record',
     title: 'The contact record',
     excerpt: 'Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — open their own page in the CRM, and merge two records that turn out to be one person.',
-  },
-  contacts: {
-    path: '/content-and-data/contacts/overview',
-    title: 'CRM',
-    excerpt: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
   },
   content: {
     path: '/building-sites/site-templates/overview',
@@ -233,13 +228,18 @@ export const DOCS_HELP_TOPICS = {
     title: 'Create a redirect',
     excerpt: 'Add a redirect rule and read its hit metrics.',
   },
+  crm: {
+    path: '/content-and-data/crm/overview',
+    title: 'CRM',
+    excerpt: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
+  },
   customDomains: {
     path: '/building-sites/custom-domains/overview',
     title: 'Custom Domains',
     excerpt: 'Connect your own domain — subdomain or bare apex — with one-click DNS verification.',
   },
   customFields: {
-    path: '/content-and-data/contacts/custom-fields',
+    path: '/content-and-data/crm/custom-fields',
     title: 'Custom fields',
     excerpt: 'Define your own contact properties — text, number, date, choice, checkbox or link — show them on every contact, and save form answers straight into them.',
   },
@@ -259,7 +259,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'Field ids vs display names, the typed model, per-plan record quotas, import/export, repeatables with item bindings, and every writer that can append records.',
   },
   deals: {
-    path: '/content-and-data/contacts/deals',
+    path: '/content-and-data/crm/deals',
     title: 'Deals pipeline',
     excerpt: 'Every open deal by stage — with an amount, an owner and an expected close — as a board you drag across or a table you page through, and the won and lost history behind it.',
   },
@@ -364,7 +364,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',
   },
   import: {
-    path: '/content-and-data/contacts/import',
+    path: '/content-and-data/crm/import',
     title: 'Import contacts from CSV',
     excerpt: 'Bring a spreadsheet of people into the CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.',
   },
@@ -404,7 +404,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'A layout is the shared frame your screens render inside — header, nav and footer in one place, nested up to five deep.',
   },
   leads: {
-    path: '/content-and-data/contacts/leads',
+    path: '/content-and-data/crm/leads',
     title: 'Leads',
     excerpt: 'Work the people your site has captured — a status, an owner and notes on every lead — and convert one into a contact, a company and a deal.',
   },
@@ -569,7 +569,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'File a bug, an idea, or a question from any page in the console — on every plan, including Free.',
   },
   reports: {
-    path: '/content-and-data/contacts/reports',
+    path: '/content-and-data/crm/reports',
     title: 'Reports',
     excerpt: 'New contacts, where they came from and which sources convert, the lead funnel, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.',
   },
@@ -639,7 +639,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'Plugin API routes behind the dispatchers, Stripe/Svix signature verification, billing hooks, and scheduled jobs.',
   },
   settings: {
-    path: '/content-and-data/contacts/settings',
+    path: '/content-and-data/crm/settings',
     title: 'CRM settings',
     excerpt: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to by default, by rule, or in turn, and the recipes installed on each site.',
   },
@@ -684,7 +684,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'How Aglyn staff triage an incoming support ticket — priority, the billing answers, and every escalation route out of the queue.',
   },
   tasks: {
-    path: '/content-and-data/contacts/tasks',
+    path: '/content-and-data/crm/tasks',
     title: 'Tasks & follow-ups',
     excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, and a morning digest of what is owed.',
   },
@@ -734,7 +734,7 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'Every screen, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
   },
   views: {
-    path: '/content-and-data/contacts/views',
+    path: '/content-and-data/crm/views',
     title: 'Saved views',
     excerpt: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
   },
@@ -781,7 +781,7 @@ export const DOCS_HELP_ANCHORS = {
   automations: ['#the-events', '#the-steps', '#assigning-an-owner-or-rotating-one', '#an-automated-email-on-the-timeline', '#recipes', '#installing-from-the-organization', '#example-tag-every-new-contact-from-a-form', '#example-spread-qualified-leads-across-the-team', '#example-follow-up-on-a-won-deal', '#related'],
   bandwidth: ['#what-each-plan-includes', '#where-to-see-it', '#paused', '#timing', '#reducing-bandwidth', '#reference', '#how-usage-is-counted', '#which-views-are-counted', '#the-two-mechanisms', '#what-a-visitors-browser-gets', '#fail-open-on-purpose', '#self-hosting', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#the-inspector', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
-  billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#billing-email', '#payment-methods', '#billing-address', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
+  billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#billing-email', '#payment-methods', '#billing-address', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#canceling-and-refunding', '#related'],
   buildABlog: ['#1-create-a-collection', '#delete-a-collection', '#2-write-entries', '#scheduling', '#authors', '#links-a-reader-can-click', '#the-authors-page', '#designing-the-author-page', '#categories', '#visual-editor', '#3-design-the-pages-with-template-screens', '#blog-blocks', '#category-filtering', '#entry-tokens', '#no-template-still-designed', '#paginated-page-sets', '#build-your-own-pager', '#4-publish--syndicate', '#tips', '#related'],
@@ -800,12 +800,12 @@ export const DOCS_HELP_ANCHORS = {
   consoleSearch: ['#what-it-searches', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#daily-digests', '#alerts-on-this-device'],
   contactRecord: ['#adding-a-contact-by-hand', '#the-record-page', '#deleting-and-erasing', '#what-each-site-keeps-to-itself', '#merging-two-records', '#likely-duplicates', '#owner', '#last-engaged', '#lifecycle-stages', '#where-the-persons-lead-is', '#finding-a-contact', '#related'],
-  contacts: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#at-the-organization-level', '#who-can-open-the-crm', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],
   cookieConsent: ['#how-it-works', '#what-needs-consent', '#privacy-choices--the-persistent-control', '#where-the-choice-is-kept', '#global-privacy-control', '#previewing-what-visitors-see', '#turn-the-banner-off'],
   copyAssist: ['#use-it', '#tips', '#related'],
   copyPaste: ['#copy', '#paste', '#between-documents', '#copy--paste-vs-duplicate-vs-reusable-components', '#shortcuts', '#related'],
   createARedirect: ['#add-a-rule', '#read-hit-metrics', '#related'],
+  crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#at-the-organization-level', '#who-can-open-the-crm', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
   customFields: ['#define-a-field', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#related'],
   customRoles: ['#create-a-custom-role', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],

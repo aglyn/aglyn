@@ -135,7 +135,7 @@ export const FLAG_DOC_PAGES: Partial<
   // every disclosure below says the page is unavailable, not the feature.
   release_contacts: [
     {
-      path: 'docs/content-and-data/contacts/overview.md',
+      path: 'docs/content-and-data/crm/overview.md',
       disclosure: 'admonition',
       checkNoPriceClaim: true,
     },

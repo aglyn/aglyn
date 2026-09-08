@@ -53,12 +53,14 @@ the gap made visible. **When you republish the page, update those literals in
 the same commit** — otherwise the spec goes on describing a gap that no longer
 exists, and the next reader believes it.
 
-The page was last republished on 2026-09-07, to version `zj-21jtrPG` of
-screen `v0clP6xQl-`, and now matches `PLAN_ENTITLEMENTS` on every row except
-the extra-site add-on, which stays at the published $5 · $4 · $3 against the
-code's $8 pending AGL-2652. The parity spec's literals were updated the same
-day, and the 2026-09-07 entry in `docs/DECISION_LOG.md` records the was → now
-of every row that moved.
+The page was republished on 2026-09-07 — first to version `zj-21jtrPG` of
+screen `v0clP6xQl-`, which brought every row but one onto the code, then
+again to close that row: the extra-site add-on, $5 · $4 · $3 → $8 · $8 · $8
+on Scale, Advanced and Agency, the rate AGL-2652 ratified (with the $0.36
+dataset-storage and $0.40 CRM-records rates, which the page already carried).
+The parity spec's literals were updated the same day, and the 2026-09-07
+entries in `docs/DECISION_LOG.md` record the was → now of every row that
+moved.
 
 **#9 quotes the price in prose and nothing reads it.** `/pricing`'s
 description is a plain-text field on the screen's detail page, separate from
@@ -67,6 +69,28 @@ the body, and it propagates into `<meta name="description">`,
 can see it, so the body of the page can be entirely correct while search
 results and every shared link still advertise the old price. Fix it in the
 same pass as the body; it is a different field and it will not follow.
+
+## Enterprise has no price here, but it has bands
+
+`PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice
+Agency's band on every axis Agency bounds, and `UNLIMITED` only where Agency
+already is (2026-09-07 decision). Enterprise meters nothing and every rate on
+it is the "not for sale" sentinel, so the fallbacks are **caps**: past one the
+quota gates refuse, exactly as Free's do. They are what an agreement gets
+before its numbers are written down.
+
+The numbers are written as a **per-org `entitlements.*` override** on the org
+document — `resolveOrgEntitlements` honors a numeric override on every axis,
+and `plan-entitlements.spec.ts` proves the precedence key by key. Provisioning
+an Enterprise deal therefore has two halves: the plan, and the overrides its
+agreement names. A deal provisioned with the plan alone runs at the fallbacks,
+and the console's Enterprise card reads "does not currently enable everything
+Enterprise can include" for anything an override set below them.
+
+Workflow and action runs carry a cost since the same day —
+`ORG_COGS_UNIT_RATES_USD.perRun`, derived in its docblock — and reach
+`orgMonthlyCogsUsd` and the margin guard through it. No plan bills runs; the
+rate is COGS, not a price, and appears on no surface a customer reads.
 
 ## Saving the LIVE version revalidates; saving a draft does not
 

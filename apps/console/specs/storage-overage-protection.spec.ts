@@ -333,14 +333,32 @@ describe('WHAT STILL HARD-BANDS: free/hobby, so it always actually stays free', 
     expect(gate.code).toBe('plan_limit_reached')
   })
 
-  it('enterprise is UNLIMITED and never reaches any of the three outcomes', () => {
-    const gate = mediaStorageGate({
+  it('enterprise WALLS at its finite fallback, and never bills', () => {
+    // Since 2026-09-07 the plan row is twice Agency's band — 120 GB a site —
+    // rather than UNLIMITED, and Enterprise meters nothing, so past that line
+    // the gate is the Free-shaped refusal: a cap an agreement raises with a
+    // per-org override, never an invoice. Under the line, everything.
+    const under = mediaStorageGate({
+      org: { plan: 'enterprise' } as any,
+      usedMb: 122_879,
+    })
+    expect(under.allowed).toBe(true)
+    expect(under.billed).toBe(false)
+    const past = mediaStorageGate({
       org: { plan: 'enterprise' } as any,
       usedMb: 50_000_000,
     })
-    expect(gate.allowed).toBe(true)
-    expect(gate.billed).toBe(false)
-    expect(gate.projectedOverageUsd).toBe(0)
+    expect(past.allowed).toBe(false)
+    expect(past.billed).toBe(false)
+    expect(past.code).toBe('plan_limit_reached')
+    expect(past.projectedOverageUsd).toBe(0)
+    // …and a contracted UNLIMITED never reaches any of the three outcomes.
+    const contracted = mediaStorageGate({
+      org: { plan: 'enterprise', entitlements: { storagePerHostMb: Number.POSITIVE_INFINITY } } as any,
+      usedMb: 50_000_000,
+    })
+    expect(contracted.allowed).toBe(true)
+    expect(contracted.billed).toBe(false)
   })
 })
 

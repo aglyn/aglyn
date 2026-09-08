@@ -16,6 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
@@ -1092,11 +1093,12 @@ async function handler(request: Request): Promise<Response> {
       /*==========================================
        * AGLYN ASSIST PROVIDER SPEND, RECORDED AND PRICED (AGL-2280).
        *
-       * Deliberately absent from `billedCents` below — Assist is entitled by
-       * plan, not metered on the invoice, and putting it there would start
-       * charging for it. It IS priced by `orgMonthlyCogsUsd`, because it is a
-       * real dollar cost we pay a provider, and the discount guardrail's
-       * entire job is to compare revenue against what an org costs us.
+       * The SPEND is deliberately absent from `billedCents` below — Assist is
+       * entitled by plan up to its band, and putting our provider bill on the
+       * invoice would charge for what the subscription already bought. It IS
+       * priced by `orgMonthlyCogsUsd`, because it is a real dollar cost we
+       * pay a provider, and the discount guardrail's entire job is to compare
+       * revenue against what an org costs us.
        *
        * Already dollars: `estCostUsd` is computed at the provider's list
        * rates where the tokens were counted. Re-deriving it from tokens here
@@ -1105,6 +1107,27 @@ async function handler(request: Request): Promise<Response> {
       const assistCostRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
       const assistCostUsd =
         Number.isFinite(assistCostRaw) && assistCostRaw > 0 ? assistCostRaw : 0
+      /*==========================================
+       * AGLYN ASSIST OVERAGE, PRICED ONTO THE INVOICE (AGL-2653).
+       *
+       * The credits PAST the plan's band are a different thing from the spend
+       * above: they were sold, at `extraAssistCreditsUsdPer1k`, and they enter
+       * `billedCents` beside contacts, API requests and dataset storage with
+       * the same cent rounding. One derivation — `assistMonthOverage` turns
+       * the measured spend into credits, subtracts the band the org resolves
+       * to, and prices the rest — so the console meter and this line cannot
+       * disagree about what was over.
+       *
+       * The org's hard-cap switch is NOT read here, on purpose. The switch
+       * lives at the gate: on, `reserveAssistMessage` refuses at the band and
+       * at most the one exchange that crossed the line can land past it; off,
+       * the org bought the excess. Either way what landed is what bills,
+       * exactly as storage bills stored bytes whatever `storageOverage.capUsd`
+       * says — reading the switch at sweep time would let a flip on the 1st
+       * erase a month's overage, which is AGL-2399 on a different meter. A
+       * plan with no band or no rate prices zero structurally.
+       *=========================================*/
+      const assistOverage = assistMonthOverage(orgData, assistCostUsd)
       /*==========================================
        * THE POS FEE THAT STRIPE CANNOT COLLECT (AGL-2111).
        *
@@ -1132,6 +1155,7 @@ async function handler(request: Request): Promise<Response> {
         Math.round(apiQuota.overageMonthlyUsd * 100) +
         Math.round(contactsOverageUsd * 100) +
         Math.round(emailOverageUsd * 100) +
+        Math.round(assistOverage.overageMonthlyUsd * 100) +
         offlinePosFeeCents
       // `usageRef` / `existing` come from the batch above (AGL-2399) — the
       // stock basis needs the same document this guard does, and reading it
@@ -1232,7 +1256,7 @@ async function handler(request: Request): Promise<Response> {
           formSubmissionsOverageWithheldUsd: formSubmissionsWithheldUsd,
           costUsd: estimate.costUsd,
           // The excess only, at cost (AGL-1280) — `billedCents` is this
-          // number marked up, plus the four plan-priced overages. Read off
+          // number marked up, plus the five plan-priced overages. Read off
           // `billedEstimate` so it stays the pre-markup twin of what was
           // actually charged; `storageGb` and `costUsd` above are the truth.
           billableCostUsd: billedEstimate.billableCostUsd,
@@ -1355,8 +1379,19 @@ async function handler(request: Request): Promise<Response> {
             ? 0
             : contactQuota.overageMonthlyUsd,
           // AGL-2280 — see where it is computed. Priced into COGS, never into
-          // `billedCents`.
+          // `billedCents`: the subscription bought the band.
           assistCostUsd,
+          // The credit view of the same month (AGL-2653): what was drawn, the
+          // band it was drawn against, and the part past it that DID enter
+          // `billedCents`, with the rate it was priced at. Recorded always,
+          // zeros included, so a month inside its band is legible as one and
+          // the count sits beside the amount on the row a customer asks
+          // about. `assistCreditsBand` is `null` where the plan sells none.
+          assistCredits: assistOverage.usedCredits,
+          assistCreditsBand: assistOverage.bandCredits,
+          assistCreditsOverage: assistOverage.overageCredits,
+          assistOverageUsd: assistOverage.overageMonthlyUsd,
+          assistOverageRateUsd: assistOverage.overageRateUsd,
           // The cash/folio POS platform fee this month (AGL-2111), and the
           // number of sales it came from. Recorded ALWAYS, including at zero,
           // so "this store took no cash" is legible as a fact rather than as
@@ -1376,10 +1411,10 @@ async function handler(request: Request): Promise<Response> {
           // `ORG_COGS_UNIT_RATES_USD.perEmailSend` — every message the
           // provider charged for, campaigns and transactional alike — and its
           // OVERAGE is priced onto the invoice at the plan's retail
-          // per-1,000 rate. `workflowRuns` and `actionRuns` remain recorded
-          // and unpriced: no per-run rate exists, and inventing one here
-          // would put a made-up number into both the invoice and the discount
-          // guardrail on the same day.
+          // per-1,000 rate. `workflowRuns` and `actionRuns` are PRICED INTO
+          // COGS at `ORG_COGS_UNIT_RATES_USD.perRun` (2026-09-07) and never
+          // reach the invoice: no plan sells runs past its band, so there is
+          // no overage line for them to become.
           emailSends: counterTotals.emailSends,
           // Volume above the plan's included band, in emails (AGL-1438).
           // Mostly transactional, because that is the mail no cap may refuse

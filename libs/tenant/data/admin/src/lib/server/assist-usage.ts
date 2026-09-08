@@ -26,6 +26,7 @@
  */
 import { FieldValue } from 'firebase-admin/firestore'
 import {
+  assistBandRefuses,
   publicAssistCredits,
   resolveAssistBudgetUsd,
   type PublicAssistCredits,
@@ -285,12 +286,25 @@ function assistOperatorCeilingUsd(): number | null | undefined {
  * An org with no band (`budgetUsd === null` — Free, Starter, and any org
  * whose plan sells no assist) is unchanged in every case: it gets exactly the
  * ceiling it got before, default and all.
+ *
+ * ## When the band is a line rather than a wall (AGL-2653)
+ *
+ * `bandRefuses` is `assistBandRefuses(org)`: false on a plan that sells
+ * credits past its band unless the org's `assistOverage.hardCap` is on. A
+ * band that does not refuse is not a ceiling, so it drops out of the
+ * composition and the operator's explicit figure is the only thing left that
+ * can bind — the repo default stays off, for the reason above, and `off`
+ * leaves nothing. The message cap is still there either way, so a workspace
+ * buying overage is bounded by messages a month rather than by nothing; the
+ * overage it buys is priced by `report-usage` at the plan's rate.
  */
 export function assistMonthlyCeilingUsd(
   budgetUsd: number | null,
+  bandRefuses = true,
 ): number | null {
   if (budgetUsd === null) return assistOrgMonthlyCostLimitUsd()
   const operator = assistOperatorCeilingUsd()
+  if (!bandRefuses) return typeof operator === 'number' ? operator : null
   return typeof operator === 'number'
     ? Math.min(budgetUsd, operator)
     : budgetUsd
@@ -410,15 +424,19 @@ export interface AssistReservation extends AssistQuotaVerdict {
   /** Month the `assistUsage` doc was incremented for (`YYYY-MM`). */
   monthKey: string
   /**
-   * Which ceiling refused, or `null` when the message was reserved. The two
+   * Which ceiling refused, or `null` when the message was reserved. The
    * refusals need different words at the surface: a message cap resets on a
-   * clock the user can be told about, and a spend ceiling does not.
+   * clock the user can be told about, a spend ceiling does not, and the
+   * plan's own band (`'band'`, AGL-2653) is a line the org could have chosen
+   * to buy past — so its refusal has to name the switch that made it a wall.
+   * `'band'` is answered only when the figure that refused IS the band; an
+   * operator's lower figure refuses as `'budget'` even on a plan with one.
    *
    * Only on the reservation, not on `AssistQuotaVerdict` — `checkAssistQuota`
    * is a reporting read that never consults the spend ceiling, and widening
    * the shared type would let a caller believe it had.
    */
-  refusedBy: 'messages' | 'budget' | null
+  refusedBy: 'messages' | 'budget' | 'band' | null
   /**
    * Measured provider spend for `monthKey` in USD as read inside the
    * transaction, or `null` when the transaction did not consult it.
@@ -510,6 +528,16 @@ export interface AssistReservation extends AssistQuotaVerdict {
  * before this function is reached — so a workspace at its band keeps getting
  * every answer the docs index can give it. That is not a carve-out inside
  * this gate; it is the reason those paths are ahead of it.
+ *
+ * ## The band is sold past by default (AGL-2653)
+ *
+ * Refusing at the band is legitimate; it is no longer the default. A plan
+ * with an `extraAssistCreditsUsdPer1k` keeps reserving past its band and
+ * `report-usage` bills the excess at that rate, unless the org's own
+ * `assistOverage.hardCap` asks for the wall — `assistBandRefuses` is the one
+ * place that rule lives. The ceiling below is composed from that answer, and
+ * `refusedBy: 'band'` is how a refusal the switch caused is told apart from
+ * one the operator's figure caused.
  */
 export async function reserveAssistMessage(
   firestore: FirebaseFirestore.Firestore,
@@ -530,12 +558,20 @@ export async function reserveAssistMessage(
   const gateRef = entitled ? monthlyRef : dailyRef
   const gateField = entitled ? 'messages' : day
 
-  // The plan's band first, then whatever the operator did about it. Resolved
-  // OUTSIDE the transaction: it is pure arithmetic over a document the caller
-  // already holds, and a transaction that retries must not re-derive a
-  // ceiling that could have moved between attempts.
+  // The plan's band first, then whether it refuses at all, then whatever the
+  // operator did about it. Resolved OUTSIDE the transaction: it is pure
+  // arithmetic over a document the caller already holds, and a transaction
+  // that retries must not re-derive a ceiling that could have moved between
+  // attempts.
   const budgetUsd = resolveAssistBudgetUsd(org)
-  const costLimitUsd = assistMonthlyCeilingUsd(budgetUsd)
+  const bandRefuses = assistBandRefuses(org)
+  const costLimitUsd = assistMonthlyCeilingUsd(budgetUsd, bandRefuses)
+  // The ceiling IS the band when the band refuses and nothing lower undercut
+  // it. That is the refusal the surface has to attribute to the org's own
+  // switch (or to a plan that sells no overage); a lower operator figure is
+  // the operator's decision and keeps the operator's word.
+  const ceilingIsBand =
+    bandRefuses && budgetUsd !== null && costLimitUsd === budgetUsd
 
   return firestore.runTransaction(async (tx) => {
     // Every read before any write — Firestore requires that ordering, and it
@@ -575,7 +611,7 @@ export async function reserveAssistMessage(
     if (costLimitUsd !== null && costUsd !== null && !(costUsd < costLimitUsd)) {
       return {
         allowed: false,
-        refusedBy: 'budget' as const,
+        refusedBy: ceilingIsBand ? ('band' as const) : ('budget' as const),
         period,
         dayKey: day,
         monthKey: month,
@@ -619,7 +655,7 @@ export interface PublicAssistQuota {
   used: number
   limit: number
   remaining: number
-  refusedBy: 'messages' | 'budget' | null
+  refusedBy: 'messages' | 'budget' | 'band' | null
   /**
    * The credit standing, or `null` when the org's plan sells no assist band.
    *
@@ -645,13 +681,25 @@ export interface PublicAssistQuota {
  * renders, and folding it into credits would make "10 messages a day"
  * unsayable.
  *
- * The credit view reads against the EFFECTIVE ceiling, not the plan band, so
- * an org whose band was undercut by an operator's figure is not told it has
- * credits left while being refused.
+ * The credit view reads against the LOWER of the plan band and the effective
+ * ceiling. The band, because it is the quantity the org was sold and the line
+ * `report-usage` bills past — an org buying overage (AGL-2653) has no ceiling
+ * at all, and reading against `null` would blank its standing at "used 900 of
+ * nothing". The ceiling, because an org whose band was undercut by an
+ * operator's figure must not be told it has credits left while being refused.
+ * `remaining` clamps at zero, so a workspace past its band reads as spent
+ * rather than as owed.
  */
 export function publicAssistQuota(
   reservation: AssistReservation,
 ): PublicAssistQuota {
+  const { budgetUsd, costLimitUsd, costUsd } = reservation
+  const ceilingUsd =
+    budgetUsd === null
+      ? null
+      : costLimitUsd === null
+        ? budgetUsd
+        : Math.min(budgetUsd, costLimitUsd)
   return {
     allowed: reservation.allowed,
     period: reservation.period,
@@ -659,10 +707,7 @@ export function publicAssistQuota(
     limit: reservation.limit,
     remaining: reservation.remaining,
     refusedBy: reservation.refusedBy,
-    credits:
-      reservation.budgetUsd === null
-        ? null
-        : publicAssistCredits(reservation.costUsd, reservation.costLimitUsd),
+    credits: ceilingUsd === null ? null : publicAssistCredits(costUsd, ceilingUsd),
   }
 }
 

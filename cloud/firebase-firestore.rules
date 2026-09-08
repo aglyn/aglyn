@@ -472,12 +472,19 @@ service cloud.firestore {
       // (billing.manage) and by `eraseHost`, both Admin SDK. A client that
       // could write it would hand itself the whole purchased pool on every
       // site — the exact over-entitlement AGL-2439 closes.
+      //
+      // `assistOverage` joins all three lists beside `storageOverage`
+      // (AGL-2653), and cuts both ways: it is the org's own switch between
+      // buying assist credits past the plan band and being refused at it. A
+      // client that could clear it would lift a ceiling the org chose; one
+      // that could set it would switch an assistant off at the band. Written
+      // only by /api/billing/assist-overage (billing.manage), Admin SDK.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'registerAllocations', 'collaboratorAllocations',
-             'storageOverage',
+             'storageOverage', 'assistOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -489,7 +496,7 @@ service cloud.firestore {
              'sso',
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'registerAllocations', 'collaboratorAllocations',
-             'storageOverage',
+             'storageOverage', 'assistOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -504,8 +511,8 @@ service cloud.firestore {
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
              'entitlements', 'releaseFlags',
              'enabledPlugins', 'seatAddons', 'registerAllocations',
-             'collaboratorAllocations', 'storageOverage', 'bandwidthCap',
-             'stripeCustomerId', 'subscription',
+             'collaboratorAllocations', 'storageOverage', 'assistOverage',
+             'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',
              // AGL-1881. Server-owned, and they were client-writable because

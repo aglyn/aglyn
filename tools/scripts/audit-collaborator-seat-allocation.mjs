@@ -90,10 +90,9 @@ export const AUDIT_PLAN_COLLABORATOR_CAPS = {
   scale: { membersPerHost: 75, maxMembersPerHost: 150 },
   advanced: { membersPerHost: 100, maxMembersPerHost: 250 },
   agency: { membersPerHost: 250, maxMembersPerHost: 1000 },
-  enterprise: {
-    membersPerHost: Number.POSITIVE_INFINITY,
-    maxMembersPerHost: Number.POSITIVE_INFINITY,
-  },
+  // Twice Agency's bands — the finite Enterprise fallback since 2026-09-07; a
+  // contracted per-org override on the org document still wins.
+  enterprise: { membersPerHost: 500, maxMembersPerHost: 2000 },
 }
 
 /**

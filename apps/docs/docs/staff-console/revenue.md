@@ -135,9 +135,13 @@ rather than overstated — the safe direction.
   that owes it. The consequence is that Stripe's processing fee comes out of Aglyn's
   balance with nothing recovering it, so marketplace commission is **gross** of that cost.
   An estimate is shown as a warning chip.
-- **Storefront subscription renewals.** Stripe subscriptions accept only a fee
-  *percentage*, which cannot carry a fixed 30¢, so that path never got the processing
-  recovery. Aglyn absorbs the card cost on those renewals; the count is shown.
+- **Storefront subscription cycles billed before their re-price.** A storefront
+  subscription carries the same pass-through folded into its fee *percentage* (Stripe
+  subscriptions accept no cents amount, so the fixed 30¢ becomes a share of the recurring
+  price, rounded up to two decimals), and the page nets it out of every cycle exactly as
+  it does a one-time sale. A subscription sold before that carried only the bare take
+  until its next paid invoice re-priced it, so that one cycle's take reports as zero. The
+  count of subscription cycles is shown so the size of that residue is visible.
 - **Internal traffic.** Aglyn's own tagged purchases are real charges that really settled,
   so they are **included** in the totals — dropping them would make this page disagree
   with Stripe's own balance. They are surfaced separately because analytics excludes them.

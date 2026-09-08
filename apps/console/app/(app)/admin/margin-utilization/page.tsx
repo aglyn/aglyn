@@ -49,7 +49,6 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import {
-  BANDS_WITHOUT_A_UNIT_COST,
   MARGIN_SCOPE_NOTE,
   UTILIZATION_BAND_LABELS,
   byWorstMargin,
@@ -389,21 +388,6 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                             <TableRow key={band.band}>
                               <TableCell>
                                 {UTILIZATION_BAND_LABELS[band.band]}
-                                {/*
-                                  A band with no unit cost is still a band a
-                                  customer consumes. Marked rather than hidden,
-                                  so its utilization is readable without being
-                                  mistaken for a cost driver.
-                                */}
-                                {BANDS_WITHOUT_A_UNIT_COST.includes(band.band) ? (
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                    sx={{ display: 'block' }}
-                                  >
-                                    no unit cost
-                                  </Typography>
-                                ) : null}
                               </TableCell>
                               <TableCell align="right">{band.counted}</TableCell>
                               <TableCell align="right">

@@ -36,24 +36,24 @@ copy that goes stale.
 | Scale | Higher product and site limits, lower fee again |
 | Advanced | Unlimited products, no transaction fee, high-volume commerce & API |
 | Agency | Many sites under one organization, white-label |
-| Enterprise | Unlimited everything, SSO, white-label, no transaction fee |
+| Enterprise | Twice Agency's capacity by default and more by agreement, SSO, white-label, no transaction fee |
 
 Transaction fees are Aglyn platform fees on the sales you take through your site —
 storefront orders, paid memberships and paid bookings alike — separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
 
-Every plan also includes an amount of monthly **traffic** — 5 GB on Free, rising to
-unlimited on Enterprise. Passing it is metered and billed on a paid plan, and pauses the
-site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
+Every plan also includes an amount of monthly **traffic** — 2 GB on Free, rising to
+3,080 GB on Enterprise by default (an agreement can set more). Passing it is metered and
+billed on a paid plan, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
 for what a paused site shows a visitor.
 
 ### Enterprise
 
 **Enterprise** is the one tier you cannot buy from the Billing page. It has no list
 price — the plan, term, and invoicing are agreed with us, and we provision the
-organization directly. On top of everything in Agency it lifts every quota to
-unlimited and adds **SAML / OIDC single sign-on**, so your team signs in through your
-own identity provider.
+organization directly. On top of everything in Agency it doubles every quota Agency
+bounds — and your agreement can set any of them higher — and adds **SAML / OIDC single
+sign-on**, so your team signs in through your own identity provider.
 
 To start a conversation, use the **Contact sales** button on the Enterprise card at the
 bottom of your Billing page. Once your organization is on Enterprise, plan changes go
@@ -99,7 +99,8 @@ Nothing here guarantees that a price or feature set will remain the same.
 
 - The **billing page** shows meters for every quota — storage, bandwidth, datasets, seats,
   sends, CRM records (with the contacts, companies and deals beneath the total),
-  one-to-one emails sent today, and more — with redesigned plan cards.
+  one-to-one emails sent today, [AI assist credits](#assist-overage), and more — with
+  redesigned plan cards.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
 - Org admins also get an in-app **notification** when email sends, dataset count, data
   storage, or [bandwidth](bandwidth.md) crosses 80% or 100% — once per threshold per month,
@@ -139,14 +140,43 @@ takes effect immediately.
 :::info Free plans are never billed for storage
 On the Free plan there is no storage overage at all. Your included storage is a fixed
 cap: uploads stop there, nothing is metered, and no amount of usage produces a charge —
-so there is nothing to cap and nothing to configure. Enterprise storage is unlimited, so
-it has no overage either.
+so there is nothing to cap and nothing to configure. Enterprise storage is a fixed
+default of 120 GB per site that an agreement raises, with no overage either: uploads stop
+there.
 :::
 
 :::tip No surprise bills
 Two things prevent one, and they work in different ways. The **alerts** at 80% and 100%
 of your allowance mean nobody first learns about overage from an invoice. The optional
 **cap** means anyone who wants a hard ceiling can have one, at a number they choose.
+:::
+
+## AI assist overage {#assist-overage}
+
+Paid plans include a monthly band of **AI assist credits** — the **Aglyn Assist credits**
+meter on the billing page shows how much of it this month's assistant use has drawn. On a
+plan that sells credits past the band, reaching it is not a wall:
+
+- **The assistant keeps answering.** Nothing stops because you reached your included
+  credits.
+- **The extra credits are billed** on your monthly invoice, per 1,000 credits over the
+  band, at your plan's rate — the exact figure is on
+  [the pricing page](https://aglyn.com/pricing) and in **Billing → Usage → AI assist
+  overage**.
+
+### If you would rather the assistant stopped {#stop-ai-assist-at-the-included-band}
+
+Turn on **Stop AI assist at the included band** in **Billing → Usage → AI assist
+overage**. This is optional and off unless you choose it. Once it is on, the assistant
+refuses once the included credits are used — the refusal names this switch and where it
+lives — and you are never billed for AI assist. Turn it off at any time to keep going at
+your plan's rate; either change takes effect on the next message. Changing it needs the
+**Manage billing** permission.
+
+:::info Plans that sell no overage
+Free and Starter include no AI assist credits, so there is nothing to stop at. Enterprise
+credits are set by agreement and are never billed past the band, so the assistant stops
+there on its own and the switch is not offered.
 :::
 
 ## Usage budget
@@ -157,8 +187,9 @@ hear about — the same shape as a Google Cloud billing budget. Set it in
 
 - **It warns, it never limits.** Passing a budget sends a notification and an email.
   Nothing stops, no upload is refused, and your bill is unaffected. If you want usage to
-  actually stop, that is the [storage cap](#storage-overage) above — a different control,
-  deliberately kept separate.
+  actually stop, that is the [storage cap](#storage-overage) or the
+  [AI assist stop](#assist-overage) above — different controls, deliberately kept
+  separate.
 - **You choose the alert points.** The default is **50%, 90% and 100%**; you can set your
   own, including percentages above 100 so a runaway month keeps speaking. Up to six.
 - **One alert per percentage per month.** Crossing 50% tells you once, not once an hour.
@@ -186,7 +217,7 @@ warning you against the new number straight away.
 ## CRM records {#crm-records}
 
 :::caution Rolling out
-The **[CRM](../../content-and-data/contacts/overview.md)** in the console isn't
+The **[CRM](../../content-and-data/crm/overview.md)** in the console isn't
 available yet. Contacts are still captured from your sites and readable over the
 [REST API](/api/resources/contacts), and the Free band below still applies — but while
 the page is unavailable, **paid records overage is not billed**. The rates below are
@@ -199,7 +230,8 @@ records band**, not a hard cap. A record is a **contact, a company or a deal**; 
 logged activities, pipelines and custom fields are not counted.
 
 - Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 50,000,
-  Scale 100,000, Advanced 150,000, Agency 500,000 records. Enterprise is unlimited.
+  Scale 100,000, Advanced 150,000, Agency 500,000 records; Enterprise 1,000,000 by
+  default, and more by agreement.
 - On **paid tiers**, growing past the band never blocks or drops anything — extra
   records are **metered overage** on your monthly invoice, at a per-1,000 rate that
   falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
@@ -235,11 +267,12 @@ whatever the plan.
 
 A **one-to-one email** is a message a teammate writes to one person from a CRM record
 — **Send email** on a contact's, a lead's or a deal's page, described under
-[Activities & the timeline](../../content-and-data/contacts/activities.md#sending-an-email)
+[Activities & the timeline](../../content-and-data/crm/activities.md#sending-an-email)
 — as against a [campaign](../../marketing-and-automation/email-campaigns/overview.md),
 which is one send over an audience, or the transactional mail your site sends on its
 own. It is capped **per organization per day (UTC)**: Free 0, Starter 50, Pro 150,
-Business 200, Scale 300, Advanced 500, Agency 1,000; Enterprise is unlimited. The cap
+Business 200, Scale 300, Advanced 500, Agency 1,000; Enterprise 2,000 by default, and
+more by agreement. The cap
 is a pace rather than a meter: at the cap the send is refused — the dialog says so and
 names the count — until the day turns over, and nothing is ever billed for it. An
 email an automation sends is metered as usage and does not count against the cap.
@@ -273,7 +306,7 @@ organization**:
 | Scale | 300,000 | Metered, at a lower rate than Business |
 | Advanced | 1,000,000 | Metered, lower again |
 | Agency | 5,000,000 | Metered, the lowest per-unit rate |
-| Enterprise | Unlimited | — |
+| Enterprise | 10,000,000 by default; more by agreement | — |
 
 - Requests past the included quota **keep working** and bill as metered overage on your
   monthly invoice — never a hard wall mid-integration.
@@ -441,6 +474,14 @@ recurring member subscriptions alike. A paid booking is a service sale and sits 
 that same digital line rather than carrying a rate of its own; see
 [Bookings](../../commerce-and-bookings/bookings/overview.md#payments-and-fees).
 Selling requires a paid plan with commerce.
+
+**Stripe's processing cost is passed through at cost**, on every tier, alongside the
+platform fee above. On a one-time sale it is a cents amount inside the application fee.
+On a recurring membership it is folded into the fee percentage, because a Stripe
+subscription accepts only a percentage: the fixed per-transaction part becomes a share
+of the recurring price, rounded up to two decimals, so a $10-a-month membership carries
+a higher percentage than a $100-a-month one. The platform take itself does not move,
+and a 0% tier still takes 0%.
 
 **In-person sales carry the same rate.** The fee is charged on the sale, not on the
 tender, so a cash sale or a charge-to-room sale at the register is priced exactly like

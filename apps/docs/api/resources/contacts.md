@@ -6,7 +6,7 @@ description: Read, add, edit, and delete your organization's contacts — and th
 
 # Contacts
 
-Your organization's [contacts](/content-and-data/contacts/overview) — the unified list
+Your organization's [contacts](/content-and-data/crm/overview) — the unified list
 built from form submissions, member sign-ups, orders, and bookings, plus anyone your
 own systems add through this API.
 
@@ -17,7 +17,7 @@ row.
 
 :::note The API is ahead of the console
 These endpoints are live. The console's **CRM** is still
-[rolling out](/content-and-data/contacts/overview), so until it opens this API is the
+[rolling out](/content-and-data/crm/overview), so until it opens this API is the
 way to work with the contacts your sites have already captured.
 :::
 
@@ -420,7 +420,7 @@ See [Conventions → Errors](../conventions.md#errors) for the shared envelope.
 
 ## Related
 
-- [CRM](/content-and-data/contacts/overview) — how contacts are captured, and
+- [CRM](/content-and-data/crm/overview) — how contacts are captured, and
   what the audience band means for your plan.
 - [Companies](companies.md), [deals](deals.md), [tasks](tasks.md) and
   [activities](activities.md) — the records that sit beside a contact, each pointing

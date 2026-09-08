@@ -425,10 +425,12 @@ describe('the page opens on the decision, not the catalogue', () => {
 
   it('and Enterprise, which has no meter, prints no rate', () => {
     renderCards({ plan: 'agency' })
-    // Every band UNLIMITED and the price negotiated, so there is no
-    // pass-through to quote — the row is the word, with nothing after it.
-    expect(screen.queryAllByText('Unlimited CRM records').length).toBeGreaterThan(0)
-    expect(screen.queryAllByText(/Unlimited CRM records \(\+/)).toHaveLength(0)
+    // A finite fallback — twice Agency's band, since 2026-09-07 — and the
+    // price negotiated, so there is no pass-through to quote: the row is the
+    // number, with nothing after it.
+    expect(screen.queryAllByText('1,000,000 CRM records').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/1,000,000 CRM records \(\+/)).toHaveLength(0)
+    expect(screen.queryAllByText(/Unlimited CRM records/)).toHaveLength(0)
   })
 
   it('the Enterprise card states its limits like every other card', () => {
@@ -436,7 +438,7 @@ describe('the page opens on the decision, not the catalogue', () => {
     // Agency's own figures — with its per-unit rate, since Agency meters —
     // and Enterprise's answer beside them, which carries no rate.
     expect(screen.queryAllByText(/^100 hosts/)).toHaveLength(1)
-    expect(screen.queryAllByText('Unlimited hosts')).toHaveLength(1)
+    expect(screen.queryAllByText('200 hosts')).toHaveLength(1)
     // Never the raw sentinel (AGL-2482).
     expect(screen.queryAllByText(/∞|Infinity/)).toHaveLength(0)
   })
@@ -566,7 +568,7 @@ describe('the Enterprise card in the comparison grid', () => {
     // hidden the one Enterprise band that is no longer unlimited.
     renderGrid({ plan: 'agency' })
     const enterprise = within(enterpriseCard())
-    expect(enterprise.getByText('250,000 campaign emails/mo')).toBeTruthy()
+    expect(enterprise.getByText('260,000 campaign emails/mo')).toBeTruthy()
     // …and no overage rate beside it: Enterprise publishes none, and quoting
     // one on a contract-priced tier would advertise a fee nobody agreed to.
     expect(enterprise.queryByText(/campaign emails\/mo \(\+/)).toBeNull()
@@ -608,7 +610,7 @@ describe('the Enterprise card in the comparison grid', () => {
     expect(contact.getAttribute('href')).toBeTruthy()
     // The whole offer, ticked — in the tier rows and the checklist, which
     // state it in more detail and in the same shape as every card beside it.
-    expect(enterprise.getByText('Unlimited hosts')).toBeTruthy()
+    expect(enterprise.getByText('200 hosts')).toBeTruthy()
     expect(enterprise.getByText('SAML / OIDC single sign-on')).toBeTruthy()
     expect(enterprise.getByText('Full white-label')).toBeTruthy()
     // And the one promise no entitlement row can carry, which is why it is
@@ -642,7 +644,7 @@ describe('the Enterprise card in the comparison grid', () => {
     expect(enterprise.queryByText('WHAT AN AGREEMENT INCLUDES')).toBeNull()
     expect(enterprise.queryByText('YOUR AGREEMENT')).toBeNull()
     for (const restated of [
-      'Unlimited sites, screens, seats, and storage',
+      'Twice Agency’s sites, seats and storage, unlimited screens, and more by agreement',
       'SAML / OIDC single sign-on for your whole team',
       'Full white-label — your brand, not ours',
     ]) {
@@ -650,7 +652,7 @@ describe('the Enterprise card in the comparison grid', () => {
     }
     // The rows those lines duplicated are each still on the card, exactly
     // once — this must read as de-duplication, never as a card losing rows.
-    expect(enterprise.getAllByText(/^Unlimited (hosts|team seats)$/)).toHaveLength(2)
+    expect(enterprise.getAllByText(/^200 (hosts|team seats)$/)).toHaveLength(2)
     expect(enterprise.getAllByText('Full white-label')).toHaveLength(1)
   })
 
@@ -1273,10 +1275,17 @@ describe('an uncapped quota never leaks its sentinel (AGL-2482)', () => {
    * only the formatting was wrong. Same defect one surface over, which is why
    * it survived that sweep.
    */
-  it('the Agency card says Unlimited CRM records, not the ∞ glyph', () => {
+  it('the records rows read as grouped numbers on every card, never the ∞ glyph', () => {
+    // The row this case was written on — Enterprise's uncapped records band
+    // — is a finite fallback of twice Agency's since 2026-09-07, so no plan
+    // row reaches `quotaCount` with the sentinel any more; the class guard
+    // below is what holds the glyph rule for whichever quota next turns
+    // uncapped. What this case holds is the shape the two top cards print.
     renderGrid({ plan: 'agency' })
     expect(screen.queryAllByText(/∞/).length).toBe(0)
-    expect(screen.queryAllByText(/Unlimited CRM records/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/500,000 CRM records/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/1,000,000 CRM records/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByText(/Unlimited CRM records/).length).toBe(0)
   })
 
   it('no card anywhere prints ∞ or Infinity, on any plan', () => {

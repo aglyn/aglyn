@@ -90,17 +90,20 @@ const mb = (v: number): string => {
 /**
  * Bandwidth in gigabytes. DECIMAL promotion (1 TB = 1000 GB) — note this
  * differs from `mb` above, and the difference is real, not an oversight. The
- * code's bandwidth values are 1000 / 2500 / 5000 / 20000, which are round
- * only in decimal; dividing by 1024 renders them "1000 GB", "2.4 TB", "4.9
- * TB", "19.5 TB". The reconciliation against the frame is what caught this —
- * all four rows disagreed, and the frame was right.
+ * code's bandwidth values are chosen in decimal — 1,540 GB is "1.54 TB" —
+ * and dividing by 1024 would render them as "1.5 TB" of a different size.
+ * The reconciliation against the frame is what first caught this: every
+ * terabyte row disagreed, and the frame was right.
+ *
+ * Two decimals, trailing zeros dropped: the page shows the band to the
+ * gigabyte where the number has one, so 1,540 GB reads "1.54 TB" and 2,500
+ * GB reads "2.5 TB", never "1.5 TB" for a band that is not 1,500 GB.
  */
 const gb = (v: number): string => {
   if (v === UNLIMITED) return 'Unlimited'
   if (v === 0) return NO
   if (v < 1000) return `${v} GB`
-  const tb = v / 1000
-  return `${Number.isInteger(tb) ? tb : tb.toFixed(1)} TB`
+  return `${Number((v / 1000).toFixed(2))} TB`
 }
 
 const pct = (v: number): string => `${v}%`

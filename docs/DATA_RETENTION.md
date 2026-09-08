@@ -101,6 +101,12 @@ live project; that read-back is the `ttls list` command below.
 | Workspaces from a signup nobody ever confirmed | **7 days**, then erased | `/api/admin/reap-unverified-orgs`, daily 06:00 UTC. Selects only a workspace whose sole owner is a password account that never verified its address, which has no second member, no site, no content, no activity beyond its own creation and no billing relationship — then erases it through the same `eraseOrg` cascade, releasing the workspace address it took. Reports rather than acts unless the caller passes `dryRun=0`. | `reap-unverified-orgs.ts` (AGL-2585) |
 | Workspace address held by an unconfirmed signup | **21 days**, then claimable | `orgSlugs/{slug}.reservedUntil`. The address a signup takes is a reservation rather than a grant until the owner verifies; the sweep above promotes it to a grant once they do, and the expiry is what still ends a squat when that sweep has stopped. | `organizations.ts` — `SLUG_RESERVATION_MS` (AGL-2585) |
 
+Each row above is fired by its own Cloud Scheduler function in `cloud/functions`
+(`consoleDailyCron`). When the console's edge answers the POST with a Security
+Checkpoint page instead of the route — a 403 or 429 whose body is HTML — the function
+waits seven seconds and POSTs once more before reporting the refusal (AGL-2642); a
+second challenge is reported exactly as a first one used to be.
+
 The archived half is readable **inside the product** (AGL-2324): the staff
 audit page's *Archive (90–365 days)* card lists the objects for a month and
 reads one back, via `/api/admin/audit-archive/browse`. Before that reader

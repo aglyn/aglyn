@@ -92,6 +92,259 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-07 — The three `a1e8aaaca` rates are ratified: extra site $8 above Starter, dataset storage $0.36, CRM records $0.40 on Advanced and Agency
+
+- **Decided by:** the account owner, 2026-09-07, asked whether to keep the three rates `a1e8aaaca` shipped on 2026-08-30 without an entry or to revert them to the 2026-08-18 lock's figures. Keep them; the Drive Pricing Decision Log entry of the same date carries the line-margin arithmetic behind each.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING[*].extraHostMonthlyUsd` (10 · 8 · 5 · 8 · 8 · 8, Starter → Agency), `extraDataGbMonthlyUsd` (0.36 on every paid plan) and `extraContactsUsdPer1k` (1 · 0.75 · 0.5 · 0.4 · 0.4 · 0.4) in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`, set by `a1e8aaaca` and `82c10f0f7`; `npm run check:pricing-drift` 92/92 in sync at 15:30Z, Stripe live `aglyn_{scale,advanced,agency}_extra_host` at $8; `tools/scripts/setup-stripe.mjs` and `apps/console/specs/published-pricing-table-parity.spec.ts` brought onto the same figures; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2652.
+
+**Three charged rates are confirmed where the code and Stripe already have
+them.** Nothing moves in code or in Stripe; what moves is the record, and the
+one surface that still said otherwise — the extra-site row of
+`aglyn.com/pricing`, which the reconciliation note below had left at $5 · $4
+· $3 as the single row where the page and the code disagreed.
+
+| Rate | Lock (2026-08-18) | Ratified |
+|---|---|---|
+| Extra site, per month (Starter → Agency) | $10 · $8 · $5 · $5 · $4 · $3 | $10 · $8 · $5 · **$8 · $8 · $8** |
+| Extra dataset storage, per GB-month | $0.25 | **$0.36** |
+| CRM records, per 1,000 over the band (Starter → Agency) | $1 · $0.75 · $0.50 · $0.40 · $0.25 · — | $1 · $0.75 · $0.50 · $0.40 · **$0.40 · $0.40** |
+
+### Why each rate is where it is
+
+- **The extra-site ladder stops descending because it was inverted against
+  its own cost.** Storage and form submissions are per-host bands, so buying
+  a host adds that tier's bands to the org's included allowance; under a
+  ladder that descends with the tier, the tiers granting the most per host
+  charged the least for one. Business stays $5 because it grants the
+  smallest bands of the four.
+- **$0.36 is the 50% line margin on dataset storage** against the $0.18 per
+  GB-month Firestore stored-data cost; $0.25 carried 28%, close enough to the
+  infrastructure pass-through's 23% that a retail add-on and a cost
+  pass-through read as the same kind of number. This is the dataset line;
+  the $0.0338 metered storage rate is untouched.
+- **$0.40 is the floor of the records ladder, not another step down.**
+  Against `perContactMonth` of $0.20 per 1,000, $0.25 was a 20% line margin
+  on a retail price. Agency carries a rate because its band became finite
+  in `82c10f0f7`, and a finite band with no rate is usage past a bound that
+  is silently free — the 2026-08-21 rule run in reverse.
+
+### What this changes, and what it does not
+
+- **Stripe: nothing.** The live price objects have charged $8 since
+  2026-08-31 and the drift check has said so on every run. `setup-stripe.mjs`
+  still carried $5 / $4 / $3 and Agency $799 / $649, and is corrected in the
+  same commit so a re-run cannot re-mint retired prices.
+- **`aglyn.com/pricing`:** the extra-site cells go $5 · $4 · $3 → $8 · $8 ·
+  $8 on Scale, Advanced and Agency. The parity spec's was/now assertion for
+  that row collapses into one `toEqual`; `docs/PRICING_SURFACES.md` records
+  the republish.
+- **Existing customers:** no stored price changes hands. Live Stripe holds
+  no Scale, Advanced or Agency subscription carrying an extra-host item; the
+  dataset-storage overage has billed at $0.36 since the rollup first read
+  the constant, and the records overage is still withheld from invoices
+  while `release_contacts` is off.
+
+---
+
+## 2026-09-07 — Storefront membership subscriptions carry the processing pass-through
+
+- **Decided by:** the account owner (AGL-2655) — the pass-through at cost that `/pricing` promises for one-time sales applies to recurring sales too
+- **Scope:** pricing
+- **Evidence:** `resolveSubscriptionFeePercent` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `libs/aglyn/src/lib/app-utils/subscription-processing-pass-through.spec.ts` and `libs/plugins/commerce/src/lib/server/checkout-subscription-fee-pass-through.spec.ts`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log
+
+**No advertised platform rate moves** — a 0% tier is still a 0% platform take. What
+changes is that a storefront **subscription** now recovers Stripe's processing cost
+the way a one-time sale has since 2026-08-19 (AGL-2152). Until now a membership sold
+on a 0% tier went out with no fee parameter at all, and Aglyn paid Stripe's cost on
+every cycle out of its own balance.
+
+A Stripe Subscription accepts only `application_fee_percent` (two decimals, no cents
+amount), so the fixed 30¢ is folded into the rate: `(rate × amount + fixed) ÷ amount`,
+rounded **up** to the next hundredth of a percent, on top of the plan's own percent,
+and sized on the recurring goods (tax and shipping excluded, the AGL-2317 basis). The
+constants are the one-time path's own (`STOREFRONT_PROCESSING_PERCENT`, 6% + 30¢), so
+repointing them moves both surfaces together. At those rates a $10 membership carries
+9%, $25 carries 7.2% and $100 carries 6.3%; Business digital (2%) at $100 carries 8.3%.
+Every tier carries it, mirroring the one-time rule exactly.
+
+A subscription sold before this is carried onto the new figure by the renewal
+re-price (AGL-2289) at its next paid invoice — no backfill. The staff revenue page
+nets the pass-through out of subscription cycles as it does one-time sales.
+
+## 2026-09-07 — AI assist credits past the included band are sold at the plan rate; an org may refuse at the band instead
+
+- **Decided by:** the account owner, 2026-09-07, by directive, answering AGL-2653 — sell the overage by default and give the org a control to refuse at the band.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING.extraAssistCreditsUsdPer1k` ($3.00 Pro → $2.00 Agency, unchanged; `null` on Free, Starter and Enterprise); `libs/aglyn/src/lib/app-utils/assist-credits.ts` (`assistBandRefuses`, `assistMonthOverage`); `libs/tenant/data/admin/src/lib/server/assist-usage.ts` (`reserveAssistMessage`); `apps/console/app/api/billing/report-usage/route.ts`; `apps/console/app/api/billing/assist-overage/route.ts`; `cloud/firebase-firestore.rules`; `libs/aglyn/src/lib/app-utils/plan-entitlements.spec.ts` (the band-with-rate guard); the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2653.
+
+**No charged rate moves.** The per-1,000 assist overage rates have been on
+`PLAN_PRICING` and on `aglyn.com/pricing` ("AI assist, per 1,000 credits over
+the included band") since the assist bands were sized; what changes is that
+the platform now collects them. Until this entry `reserveAssistMessage`
+refused every plan at its band, so the advertised rate was never billed.
+
+### What was decided
+
+- **Sold by default.** On every plan with a rate — Pro, Business, Scale,
+  Advanced, Agency — an exchange past the included band is reserved, answered,
+  and its credits are billed on the monthly invoice at
+  `extraAssistCreditsUsdPer1k`, rounded to the cent beside the contacts, API
+  and dataset-storage overages. The provider spend itself stays out of
+  `billedCents`, priced into COGS exactly as before.
+- **The org may refuse at the band.** `orgs/{orgId}.assistOverage.hardCap`
+  (absent by default, read strictly as `=== true`) is the org's own switch.
+  On, the assistant refuses at the band with a **402** that names the switch
+  — "Stop AI assist at the included band", under Billing → Usage — and quotes
+  the plan's rate. Written only through `/api/billing/assist-overage`
+  (`billing.manage`, Admin SDK, audited to `adminAudit`), and denied to every
+  client in the rules beside `storageOverage`.
+- **Plans with no rate are unchanged.** Enterprise's band is contractual and
+  stays a wall whatever the switch says; Free and Starter have no band. The
+  switch cannot be turned on there (409), so a control that does nothing is
+  never offered. Turning it off is always available.
+- **The switch is read at the gate, never at the sweep.** `report-usage`
+  bills what landed past the band; with the switch on that is at most the one
+  exchange that crossed the line. A flip on the 1st cannot erase a month.
+- **The operator ceiling.** `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` still binds
+  when set explicitly, on both sides of the switch, and refuses in its own
+  words. The $40 repo default remains a backstop for orgs with no band only;
+  an org buying overage is bounded by the entitled monthly message cap.
+
+### The guard, widened
+
+`plan-entitlements.spec.ts` now pairs `assistCreditsPerMonth` with
+`extraAssistCreditsUsdPer1k` and `emailSendsPerMonth` with
+`extraEmailSendsUsdPer1k`: a positive band on a self-serve plan requires a
+rate, a band of zero forbids one, and Enterprise carries none. Email had the
+same shape and the same rate table, so it was covered in the same pass.
+
+## 2026-09-07 — Enterprise's bands become finite fallbacks at twice Agency's; every numeric entitlement takes a per-org override; workflow and action runs carry a cost
+
+- **Decided by:** Zach, 2026-09-07, by directive, on the pricing soundness audit of the same day — an Enterprise org provisioned without per-org figures was the one org on the platform whose worst-case cost had no bound on any axis; the fallback is now finite, an agreement raises it, and runs stop reading as free. The Drive Pricing Decision Log entry of the same date carries the arithmetic.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS.enterprise`, `ENTERPRISE_EMAIL_SENDS_PER_MONTH`, `ENTERPRISE_ASSIST_CREDITS_PER_MONTH`, `ORG_COGS_UNIT_RATES_USD.perRun`, `orgMonthlyCogsUsd`'s `runs` line, `bandwidthCeilingDegradesRender` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; the key-by-key relation and the override-precedence proof in `libs/aglyn/src/lib/app-utils/plan-entitlements.spec.ts`; the ninth cost axis in `apps/console/specs/tier-margin-floor.spec.ts`; `docs/PRICING_SURFACES.md` → *Enterprise has no price here, but it has bands*; AGL-2654.
+
+**No charged price moves.** Enterprise has no list price and gains no rate;
+no self-serve figure moves. What moves is **packaging** on the one custom-priced
+tier, and the **cost model** every tier is judged by.
+
+### What was decided
+
+1. **Enterprise's bands are finite fallbacks: Agency's band × 2 on every
+   axis Agency bounds**, and `UNLIMITED` only where Agency is already
+   unlimited. Sites 200, storage 120 GB a site, bandwidth 3,080 GB, form
+   submissions 50,000 a site, CRM records 1,000,000, one-to-one email 2,000 a
+   day, campaign email 260,000 (from the 250,000 default), workflow runs
+   4,000,000, action runs 2,000,000, API calls 10,000,000, seats 200 (max
+   1,000), collaborators 500 a site (max 2,000), datasets 4,000 (max 10,000),
+   dataset storage 1,000 GB, assist 116,000 credits, POS registers 40,
+   inventory locations 100. `formsPerHost` stays the flat ceiling every plan
+   carries (2026-08-30). `meteredInfraPassThrough` stays `false` and every
+   rate stays the sentinel, so the fallbacks are **caps**: past one the gate
+   refuses, exactly as Free's does. A contracted per-org value still wins.
+2. **A per-org `entitlements.*` override is honored on every numeric axis**
+   — the mechanism that existed for campaign email, saved forms and assist is
+   the mechanism for all of them, proved key by key. It is how an agreement's
+   numbers are written, and why a finite fallback is safe to hold.
+3. **Workflow and action runs carry a unit cost of $0.000012** — about 12
+   Firestore reads, 2 writes and a moment of compute per run at nam5 and
+   Fluid-compute list prices, derived from the run paths because nothing
+   measurable exists (runs execute inside the request that fired the event,
+   Cloud Logging carries no per-run entry, and the project logged no run in
+   the 14 days to this date). It is COGS, not a price: no plan bills runs. It
+   enters `orgMonthlyCogsUsd`, the staff margin surfaces and the whole-plan
+   guard, where it takes the last of the room the bandwidth resize left —
+   Agency's 3,000,000 runs are $36 a month that read as nothing before.
+4. **The bandwidth abuse ceiling no longer degrades an Enterprise site.** It
+   keyed on "does not meter", which Enterprise shares with Free; with a
+   finite band that would have taken a contracted customer's site off the
+   air three times past a default nobody chose. It still trips, flags the
+   host and pages staff.
+
+### The guardrail
+
+With the runs term, every band at 100%, at the annual price net of Stripe:
+Starter 30.0%, Pro 0.4%, Business 0.3%, Scale 0.8%, Advanced 1.3%, Agency
+1.5% (monthly 53.1 / 29.3 / 27.9 / 27.8 / 25.3 / 19.9). Business's headroom
+is $0.27 a month; a run rate above $0.0000147 would take it under.
+
+### What does not change
+
+Every price. Every self-serve band. `meteredInfraPassThrough` on every plan.
+The Enterprise feature set (SSO and white-label on the plan). The form abuse
+ceiling.
+
+---
+
+## 2026-09-07 — The margin invariant is held at the annual price, net of Stripe, with the CRM terms; five bandwidth bands come down to what that price carries; the bandwidth abuse ceiling is 3× the band
+
+- **Decided by:** Zach, 2026-09-07, by directive, on the pricing soundness audit of the same day — the platform's invariant, that a customer cannot cost more than they pay by using exactly what they were sold, is held at the **annual** price (the yearly price ÷ 12), net of Stripe's 2.9% + 30¢ (the fixed part amortized over the one annual charge), with the CRM seat term ($0.06 a collaborator-month) and the one-to-one email term (the daily cap × 30 × $0.0009) counted, at the modeled page-view rate — the 627 KB `perPageView` calibration stays as it is. The Drive Pricing Decision Log entry of the same date carries the cost model and the arithmetic.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS[*].bandwidthGb` and `BANDWIDTH_ABUSE_CEILING_MULTIPLE` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; the whole-plan guard in `apps/console/specs/tier-margin-floor.spec.ts`, which now prices the annual price net of Stripe with the two CRM terms, pins every tier at both prices, and carries the mutation at the 2026-09-05 bands; `apps/console/specs/published-pricing-table-parity.spec.ts` → *Bandwidth / mo*; `tools/marketing/pricing-copy/tables.json` (regenerated); `apps/docs/docs/workspace-and-billing/billing-and-plans/bandwidth.md`; AGL-2651.
+
+**No charged price moves.** Plan prices, add-on prices, both fee ladders, the
+three metered pass-through rates and every retail overage ladder are what the
+2026-08-18 lock and the 2026-08-31 Agency entry left them. What moves is
+**packaging**: five included bandwidth bands, and a containment multiple that
+was never a price.
+
+### What was decided
+
+1. **The invariant is stated at the annual price, net of Stripe, over every
+   cost the platform can name.** The guard that stood until today judged the
+   monthly price, gross of the processing fee, and summed the metered axes
+   alone; it read +10.0 / +10.9 / +8.3 / +6.7 / +9.1% on Pro through Agency.
+   At the annual price, net of the fee, with the seat and one-to-one email
+   terms of the 2026-09-05 decision added, the same bands read −44.1 / −36.5 /
+   −37.5 / −33.9 / −19.4%, and at the monthly price Pro and Advanced were
+   already negative (−1.7%, −1.2%).
+2. **Bandwidth comes down to what the annual price carries.** Pro 225 → 125
+   GB, Business 400 → 185 GB, Scale 700 → 290 GB, Advanced 1,000 → 345 GB,
+   Agency 3,000 → 1,540 GB (the page reads "1.54 TB"). Free (2 GB) and Starter
+   (50 GB) do not move — Starter was never under water. Bandwidth is 58–70% of
+   every paid tier's cost and the only lever that moves the number; every
+   other band stays where the 2026-08-30 and 2026-09-05 entries put it.
+   Metered plans keep serving past the band and bill at the unchanged $0.13
+   per 1,000 views.
+3. **The bandwidth abuse ceiling is 3× the band, from 10×.** A cap, not a
+   price: it flags a site and pages staff, and on a metered plan it changes
+   nothing a visitor sees. Lower because the meter under it is priced for a
+   627 KB page while the platform serves 1,054 KB — past the band every 1,000
+   views bills $0.13 and costs about $0.17 — so the tail a plan can run up
+   before anyone looks is a loss that grows with the traffic; at 10× that tail
+   was open-ended on Agency. The 100,000-view floor and the form ceiling's 10×
+   are unchanged.
+
+### The guardrail
+
+`apps/console/specs/tier-margin-floor.spec.ts` asserts, over
+`PLAN_ENTITLEMENTS`, `PLAN_PRICING`, `ORG_COGS_UNIT_RATES_USD` and
+`netOfProcessorFee`, that no paid tier is negative at 100% of every band at
+the annual price, and pins the figures at both prices. With every band at
+100%: Starter 30.0% annual / 53.1% monthly, Pro 0.7 / 29.5, Business 1.5 /
+28.8, Scale 2.5 / 29.0, Advanced 4.4 / 27.5, Agency 4.9 / 22.6. Thin on
+purpose — the bands were cut to what the price carries and no further,
+because every gigabyte cut is capacity the customer no longer has.
+
+The same guard pins what the OTHER page-view rate says: at the 1,054 KB page
+the platform actually serves ($0.000168 a view at the calibration's own
+per-KB basis) every paid tier is negative at the annual price again — Starter
+−7.2%, Pro −37.5%, Business −20.8%, Scale −16.8%, Advanced −9.4%, Agency
+−12.6% — and positive at the monthly one. Recorded as a fact beside the
+decision, not as a decision: the bands were sized at the modeled rate, and
+closing that gap is a page-weight or a rate decision that this entry does not
+make.
+
+### What does not change
+
+Every price. `perPageView` and the two other pass-through rates, and the
++30% markup on them. The Free and Starter bands. The storage, form, records,
+campaign email, one-to-one email, seat, dataset, API and assist bands on every
+tier. `meteredInfraPassThrough` on every plan. The form abuse ceiling.
+
+---
+
 ## 2026-09-07 — Reconciliation note: `aglyn.com/pricing` republished to the bands the code enforces (not a decision)
 
 - **Decided by:** nobody — a record; the session that republished the page, under the 2026-09-05 rule that the code is authoritative where an older figure disagrees. No charged price moves and nothing here is a new decision.

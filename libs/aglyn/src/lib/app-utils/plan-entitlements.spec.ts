@@ -159,15 +159,15 @@ describe('plan entitlements', () => {
       scale: [15, UNLIMITED, UNLIMITED],
       advanced: [25, UNLIMITED, UNLIMITED],
       agency: [100, UNLIMITED, UNLIMITED],
-      // Enterprise (AGL-1118): uncapped at the top of the ladder.
-      enterprise: [UNLIMITED, UNLIMITED, UNLIMITED],
+      // Enterprise: twice Agency's hosts, and UNLIMITED where Agency has it.
+      enterprise: [200, UNLIMITED, UNLIMITED],
     })
     // Media storage was pinned against the published-site cap (AGL-67) until
     // `totalSiteSizeMb` was retired (AGL-2133) — there is no second figure to
     // compare it to any more, so what is pinned now is that no plan declares
     // the retired key at all. A default reintroduced by hand would put the
     // staff override field back on the dialog with nothing behind it.
-    expect(PLAN_ENTITLEMENTS.enterprise.storagePerHostMb).toBe(UNLIMITED)
+    expect(PLAN_ENTITLEMENTS.enterprise.storagePerHostMb).toBe(122_880)
     for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
       expect(plan).not.toHaveProperty('totalSiteSizeMb')
     }
@@ -396,48 +396,66 @@ describe('plan entitlements', () => {
     expect(ENTERPRISE_PLAN_LABEL).toBe(PLAN_LABELS.enterprise)
   })
 
-  it('gives the enterprise plan uncapped entitlements + SSO (AGL-1118)', () => {
+  it('gives the enterprise plan finite fallbacks at twice Agency\'s bands, and SSO (AGL-1118)', () => {
     const org = { plan: 'enterprise' } as any
     const resolved = resolveOrgEntitlements(org)
-    // Every numeric quota is unbounded — nothing hard-walls an enterprise deal.
+    const agency = PLAN_ENTITLEMENTS.agency as unknown as Record<string, number>
+    // The 2026-09-07 rule, key by key: every numeric quota is Agency's × 2,
+    // and UNLIMITED only where Agency is already UNLIMITED. A row that read
+    // UNLIMITED on every axis was the one org on the platform whose cost had
+    // no bound — `meteredInfraPassThrough` is false here and every rate is
+    // the "not for sale" sentinel, so nothing priced the usage a contract had
+    // not named. A contracted per-org override still wins on every axis; the
+    // case below proves it.
+    const doubled: string[] = []
     for (const [key, value] of Object.entries(resolved)) {
       if (key === 'features') continue
+      // A fee RATE is not a capacity — doubled would mean twice the cut.
       if (key === 'transactionFeePhysicalPct') continue
       if (key === 'transactionFeeDigitalPct') continue
-      // A fee RATE is not a capacity — unbounded would mean an infinite cut.
       if (key === 'marketplaceFeePct') continue
       // Nor is an abuse ceiling. `formsPerHost` is the same finite number on
-      // every plan that has forms, deliberately including this one: an
-      // unbounded catalog is a storage vector no price tier makes safe. A
-      // deal that needs a larger one takes a per-org override, which is the
-      // instrument for exactly this and leaves the ceiling alone.
+      // every plan that has forms, deliberately including this one: it bounds
+      // a collection rather than a tier, and the 2026-08-30 decision withdrew
+      // the ladder. A deal that needs a larger one takes a per-org override.
       if (key === 'formsPerHost') continue
-      // Nor is the email allowance, and for a related reason one axis over.
-      // Every other band here is infrastructure we already meter and price
-      // into the deal; email is a third party's per-message charge, so an
-      // unbounded band is an unbounded liability the negotiation never named.
-      // It is a DEFAULT — a contract raises it through the same per-org
-      // override `formsPerHost` uses — and it is FINITE, because
-      // `JSON.stringify(Infinity)` is `null` and reads back as a cap of zero
-      // on the most expensive plan on the price list.
-      if (key === 'emailSendsPerMonth') continue
-      // Nor is an assist band. Every other quota here is infrastructure the
-      // deal already meters and prices; assist is a per-token charge from a
-      // third party, and `UNLIMITED` is unrepresentable off-process —
-      // `JSON.stringify(Infinity)` is `null`, which reads back as a band of
-      // ZERO. An unbounded assist band would hand the only customers with a
-      // signed contract the one budget that refuses everything. A deal that
-      // needs more takes the per-org override, like `formsPerHost`.
-      if (key === 'assistCreditsPerMonth') continue
-      expect([key, value]).toEqual([key, UNLIMITED])
+      if (agency[key] === UNLIMITED) {
+        expect([key, value]).toEqual([key, UNLIMITED])
+        continue
+      }
+      expect([key, value]).toEqual([key, agency[key] * 2])
+      expect(Number.isFinite(value as number)).toBe(true)
+      doubled.push(key)
     }
-    expect(resolved.assistCreditsPerMonth).toBe(
-      ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
+    // …over a real set of axes, so the loop cannot pass by skipping.
+    expect(doubled.length).toBeGreaterThanOrEqual(18)
+    expect(doubled).toEqual(
+      expect.arrayContaining([
+        'hostLimit',
+        'storagePerHostMb',
+        'bandwidthGb',
+        'formSubmissionsPerMonth',
+        'contactsPerHost',
+        'crmEmailsPerDay',
+        'emailSendsPerMonth',
+        'workflowRunsPerMonth',
+        'actionRunsPerMonth',
+        'apiRequestsPerMonth',
+        'assistCreditsPerMonth',
+        'managersPerOrg',
+        'membersPerHost',
+        'datasetsPerOrg',
+        'dataStorageMbPerOrg',
+      ]),
     )
-    expect(Number.isFinite(resolved.assistCreditsPerMonth)).toBe(true)
-    expect(resolved.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
+    // The two named constants ARE the doubled figures, finite, and survive
+    // the wire — `JSON.stringify(Infinity)` is `null`, which reads back as a
+    // cap of zero on the most expensive plan on the price list.
+    expect(resolved.assistCreditsPerMonth).toBe(ENTERPRISE_ASSIST_CREDITS_PER_MONTH)
     expect(resolved.emailSendsPerMonth).toBe(ENTERPRISE_EMAIL_SENDS_PER_MONTH)
-    expect(Number.isFinite(resolved.emailSendsPerMonth)).toBe(true)
+    expect(ENTERPRISE_EMAIL_SENDS_PER_MONTH).toBe(agency.emailSendsPerMonth * 2)
+    expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBe(agency.assistCreditsPerMonth * 2)
+    expect(resolved.formsPerHost).toBe(FORMS_PER_HOST_CEILING)
     expect(resolved.transactionFeePhysicalPct).toBe(0)
     expect(resolved.transactionFeeDigitalPct).toBe(0)
     expect(resolved.marketplaceFeePct).toBe(20)
@@ -445,18 +463,65 @@ describe('plan entitlements', () => {
     // per-org entitlement override needed.
     expect(checkEntitlement(org, 'ssoEnabled')).toBe(true)
     expect(checkEntitlement(org, 'whiteLabel')).toBe(true)
-    // Quota gates never trip.
-    expect(checkQuota(org, 'hostLimit', 10_000).allowed).toBe(true)
-    expect(checkSeatQuota(org, 'managers', 10_000).allowed).toBe(true)
-    expect(checkSeatQuota(org, 'members', 10_000).allowed).toBe(true)
-    expect(checkDatasetQuota(org, 10_000).allowed).toBe(true)
-    expect(checkDataStorageQuota(org, 10_000_000).allowed).toBe(true)
-    expect(checkApiRequestQuota(org, 10_000_000).allowed).toBe(true)
-    expect(checkCrmRecordsQuota(org, 10_000_000).allowed).toBe(true)
-    expect(checkCrmEmailQuota(org, 10_000_000).allowed).toBe(true)
+    // The gates are CAPS at the fallback — no rate and no pass-through, so
+    // they refuse at the line exactly as Free's do — and admit everything
+    // under it. Both sides of every line, so a gate stuck on one answer
+    // cannot pass.
+    expect(checkQuota(org, 'hostLimit', 199).allowed).toBe(true)
+    expect(checkQuota(org, 'hostLimit', 200).allowed).toBe(false)
+    expect(checkSeatQuota(org, 'managers', 199).allowed).toBe(true)
+    expect(checkSeatQuota(org, 'managers', 1_000).allowed).toBe(false)
+    expect(checkSeatQuota(org, 'members', 499).allowed).toBe(true)
+    expect(checkDatasetQuota(org, 3_999).allowed).toBe(true)
+    expect(checkDatasetQuota(org, 10_000).allowed).toBe(false)
+    expect(checkDataStorageQuota(org, 1_023_999).allowed).toBe(true)
+    expect(checkDataStorageQuota(org, 1_024_000).allowed).toBe(false)
+    expect(checkApiRequestQuota(org, 9_999_999).allowed).toBe(true)
+    expect(checkApiRequestQuota(org, 10_000_000).allowed).toBe(false)
+    expect(checkCrmRecordsQuota(org, 999_999).allowed).toBe(true)
+    expect(checkCrmRecordsQuota(org, 1_000_000).allowed).toBe(false)
+    expect(checkCrmEmailQuota(org, 1_999).allowed).toBe(true)
+    expect(checkCrmEmailQuota(org, 2_000).allowed).toBe(false)
     // And it reads as Enterprise everywhere the plan is shown, with no
     // custom price and no comped marker needed.
     expect(isEnterpriseOrg(org)).toBe(true)
+  })
+
+  it('honors a contracted per-org override on EVERY numeric axis, ahead of the plan default', () => {
+    // The instrument a deal is written with, and what makes a finite fallback
+    // safe to hold. Every finite axis of the Enterprise row is overridden
+    // here one key at a time, and the resolved value must be the override —
+    // not the fallback and not a clamp of it. Proved on every axis rather
+    // than on the three the docblocks used to name, so a resolver that
+    // started honoring a chosen list fails by the name of the axis it dropped.
+    const fallback = resolveOrgEntitlements({ plan: 'enterprise' } as any)
+    const missed: string[] = []
+    let axes = 0
+    for (const [key, value] of Object.entries(fallback)) {
+      if (key === 'features' || typeof value !== 'number' || !Number.isFinite(value)) continue
+      const contracted = value * 3 + 7
+      const resolved = resolveOrgEntitlements({
+        plan: 'enterprise',
+        entitlements: { [key]: contracted },
+      } as any) as unknown as Record<string, number>
+      if (resolved[key] !== contracted) missed.push(key)
+      axes += 1
+    }
+    expect(missed).toEqual([])
+    expect(axes).toBeGreaterThanOrEqual(22)
+    // The same precedence on a self-serve tier, where an override is a
+    // staff grant rather than a contract.
+    expect(
+      resolveOrgEntitlements({ plan: 'pro', entitlements: { bandwidthGb: 900 } } as any).bandwidthGb,
+    ).toBe(900)
+    // …and an UNLIMITED override is honored in-process — the sentinel a deal
+    // with no ceiling on an axis is written with.
+    expect(
+      resolveOrgEntitlements({ plan: 'enterprise', entitlements: { bandwidthGb: UNLIMITED } } as any)
+        .bandwidthGb,
+    ).toBe(UNLIMITED)
+    // CONTROL: without the override the fallback stands.
+    expect(resolveOrgEntitlements({ plan: 'enterprise' } as any).bandwidthGb).toBe(3_080)
   })
 
   it('reports no list-price revenue for an enterprise org without a deal price', () => {
@@ -505,7 +570,7 @@ describe('plan entitlements', () => {
       business: [15, 100, 50, 100],
       scale: [25, 150, 75, 150],
       agency: [100, 500, 250, 1000],
-      enterprise: [UNLIMITED, UNLIMITED, UNLIMITED, UNLIMITED],
+      enterprise: [200, 1000, 500, 2000],
     })
   })
 
@@ -637,11 +702,19 @@ describe('plan entitlements', () => {
       expect(entitlements).not.toHaveProperty('maxPosRegistersPerHost')
       expect(entitlements).not.toHaveProperty('maxHostsPerOrg')
     }
-    // Enterprise resolves UNLIMITED (Infinity), so the add is a no-op there
-    // and every `limit === UNLIMITED` console renderer keeps saying so.
+    // Enterprise resolves the plan's own cap — 40 since 2026-09-07, twice
+    // Agency's — and a contracted UNLIMITED override keeps the register add a
+    // no-op, so every `limit === UNLIMITED` console renderer keeps saying so.
     expect(
       resolveOrgEntitlements({
         plan: 'enterprise',
+        seatAddons: { posRegisters: 5, hosts: 5 },
+      } as any).posRegisters,
+    ).toBe(40)
+    expect(
+      resolveOrgEntitlements({
+        plan: 'enterprise',
+        entitlements: { posRegisters: UNLIMITED },
         seatAddons: { posRegisters: 5, hosts: 5 },
       } as any).posRegisters,
     ).toBe(UNLIMITED)
@@ -924,7 +997,7 @@ describe('plan entitlements', () => {
       scale: 300,
       advanced: 500,
       agency: 1_000,
-      enterprise: UNLIMITED,
+      enterprise: 2_000,
     }
     for (const [plan, cap] of Object.entries(table)) {
       expect([plan, PLAN_ENTITLEMENTS[plan as OrgPlan].crmEmailsPerDay]).toEqual([
@@ -952,8 +1025,17 @@ describe('plan entitlements', () => {
     const free = checkCrmEmailQuota({ plan: 'free' } as any, 0, noon)
     expect(free.allowed).toBe(false)
     expect(free.included).toBe(0)
-    // Enterprise is unbounded, and a per-org override raises any other tier.
-    expect(checkCrmEmailQuota({ plan: 'enterprise' } as any, 1_000_000, noon).allowed).toBe(true)
+    // Enterprise's fallback is twice Agency's cap (2026-09-07), refused at
+    // the line like every other tier's; a per-org override raises any tier.
+    expect(checkCrmEmailQuota({ plan: 'enterprise' } as any, 1_999, noon).allowed).toBe(true)
+    expect(checkCrmEmailQuota({ plan: 'enterprise' } as any, 2_000, noon).allowed).toBe(false)
+    expect(
+      checkCrmEmailQuota(
+        { plan: 'enterprise', entitlements: { crmEmailsPerDay: 5_000 } } as any,
+        2_000,
+        noon,
+      ).allowed,
+    ).toBe(true)
     expect(
       checkCrmEmailQuota(
         { plan: 'starter', entitlements: { crmEmailsPerDay: 60 } } as any,
@@ -1004,9 +1086,16 @@ describe('plan entitlements', () => {
     )
     expect(dead.allowed).toBe(false)
     expect(dead.included).toBe(20)
-    // Enterprise is unlimited, so the wall never comes up regardless.
+    // Enterprise does not meter either, so its wall is real — at the finite
+    // per-site fallback of twice Agency's band (2026-09-07), and a contracted
+    // override moves it.
+    expect(checkFormSubmissionQuota({ plan: 'enterprise' } as any, 49_999).allowed).toBe(true)
+    expect(checkFormSubmissionQuota({ plan: 'enterprise' } as any, 50_000).allowed).toBe(false)
     expect(
-      checkFormSubmissionQuota({ plan: 'enterprise' } as any, 1e9).allowed,
+      checkFormSubmissionQuota(
+        { plan: 'enterprise', entitlements: { formSubmissionsPerMonth: 1e6 } } as any,
+        50_000,
+      ).allowed,
     ).toBe(true)
   })
 
@@ -1017,7 +1106,7 @@ describe('plan entitlements', () => {
     expect(checkFormSubmissionQuota({ plan: 'starter' } as any, 5_000).allowed).toBe(
       true,
     )
-    expect(checkFormSubmissionQuota({ plan: 'enterprise' } as any, 1e9).allowed).toBe(
+    expect(checkFormSubmissionQuota({ plan: 'agency' } as any, 1e9).allowed).toBe(
       true,
     )
 
@@ -1044,13 +1133,21 @@ describe('plan entitlements', () => {
       PLAN_ENTITLEMENTS.pro.formSubmissionsPerMonth,
     )
 
-    // UNLIMITED bands have nothing to multiply and must still be finite —
-    // an unlimited PLAN is not an unlimited tolerance for a bot flood.
+    // Enterprise's band is finite since 2026-09-07, so its ceiling is the
+    // multiple like every other plan's; an UNLIMITED band — now only ever a
+    // contracted override — has nothing to multiply and must still be finite,
+    // because an unlimited PLAN is not an unlimited tolerance for a bot flood.
     const enterprise = checkFormSubmissionAbuseCeiling(
       { plan: 'enterprise' } as any,
       0,
     )
-    expect(enterprise.ceiling).toBe(FORM_ABUSE_CEILING_UNLIMITED)
+    expect(enterprise.ceiling).toBe(50_000 * FORM_ABUSE_CEILING_MULTIPLE)
+    expect(
+      checkFormSubmissionAbuseCeiling(
+        { plan: 'enterprise', entitlements: { formSubmissionsPerMonth: UNLIMITED } } as any,
+        0,
+      ).ceiling,
+    ).toBe(FORM_ABUSE_CEILING_UNLIMITED)
     expect(Number.isFinite(enterprise.ceiling)).toBe(true)
     expect(
       checkFormSubmissionAbuseCeiling({ plan: 'enterprise' } as any, 1e9).exceeded,
@@ -2395,8 +2492,10 @@ describe('quota caps over a JSON boundary', () => {
   it('restores an Enterprise per-site cap end to end', () => {
     // The real path, with real entitlements rather than a hand-written
     // Infinity: resolve → serialise → restore, and the comparison the
-    // console makes on the far side.
-    const org = { plan: 'enterprise' } as never
+    // console makes on the far side. Since 2026-09-07 no plan row is
+    // UNLIMITED here, so the uncapped band is what a contract writes: a
+    // per-org override.
+    const org = { plan: 'enterprise', entitlements: { membersPerHost: UNLIMITED } } as never
     const cap = resolveHostCollaboratorCap(org, 'host-1')
     expect(cap).toBe(UNLIMITED)
     const sent = {
@@ -2464,15 +2563,21 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
     },
   )
 
-  it('the premise holds — some plan really is uncapped for each meter', () => {
-    // Without this the three cases above would pass on a table where every
-    // band happened to be finite, which is the shape of a guard that has
-    // quietly stopped testing anything.
+  it('the premise moved on 2026-09-07 — NO plan row is uncapped on any meter', () => {
+    // The three cases above used to be exercised by Enterprise's UNLIMITED
+    // rows; those are finite fallbacks now, so the cases pass vacuously on
+    // the shipped table. Pinned as the positive claim rather than left
+    // silent: every metered band on every plan is finite, and the rule above
+    // binds again the day a row is re-uncapped — which is the only way it can
+    // start advertising a rate on a band nothing can exceed.
     for (const { band, unit } of METERED_PAIRS) {
       const uncapped = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter(
         (plan) => PLAN_ENTITLEMENTS[plan][band] === UNLIMITED,
       )
-      expect(uncapped.length).toBeGreaterThan(0)
+      expect(`${band}: ${uncapped.join(',')}`).toBe(`${band}: `)
+      for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+        expect(Number.isFinite(PLAN_ENTITLEMENTS[plan][band])).toBe(true)
+      }
       expect(unit).toBeTruthy()
     }
   })
@@ -2511,6 +2616,52 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
     }
   })
 
+  /**
+   * The two bands that are sold past by default (AGL-2653) — assist credits
+   * and campaign emails — carry the same contradiction in both directions,
+   * and neither is in `METERED_PAIRS`: both are finite on every tier, so the
+   * "unlimited band, no rate" rule above is vacuous for them. What can go
+   * wrong instead is a POSITIVE band with no rate (usage past it is provider
+   * spend with no invoice line, the silent free overage) or a rate on a band
+   * of ZERO (a fee advertised on a quantity the plan never sold). Enterprise
+   * is contractual on both and must carry no rate.
+   */
+  const SOLD_BAND_PAIRS = [
+    { band: 'assistCreditsPerMonth', rate: 'extraAssistCreditsUsdPer1k', unit: 'assist credits' },
+    { band: 'emailSendsPerMonth', rate: 'extraEmailSendsUsdPer1k', unit: 'campaign emails' },
+  ] as const
+
+  it.each(SOLD_BAND_PAIRS)(
+    'a plan that SELLS a $unit band carries a rate, and one that sells none carries no rate (AGL-2653)',
+    ({ band, rate }) => {
+      // FORCED RED by setting `extraAssistCreditsUsdPer1k: null` on Pro
+      // (silent free overage) and by `extraEmailSendsUsdPer1k: 2` on Starter
+      // (a rate on a band of zero); each failed on the plan named.
+      const sold: string[] = []
+      const unsold: string[] = []
+      for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
+        const limit = PLAN_ENTITLEMENTS[plan][band]
+        const price = PLAN_PRICING[plan][rate]
+        if (isCustomPricedPlan(plan)) {
+          expect(`${plan}: ${price}`).toBe(`${plan}: null`)
+          continue
+        }
+        if (Number.isFinite(limit) && limit > 0) {
+          sold.push(plan)
+          expect(`${plan}: ${price}`).not.toBe(`${plan}: null`)
+          expect(price).toBeGreaterThan(0)
+        } else {
+          unsold.push(plan)
+          expect(`${plan}: ${price}`).toBe(`${plan}: null`)
+        }
+      }
+      // The premise, both ways: some plan sells the band and some does not,
+      // or one of the two branches above never ran.
+      expect(sold.length).toBeGreaterThan(0)
+      expect(unsold.length).toBeGreaterThan(0)
+    },
+  )
+
   it('a band with NO rate is unlimited or HARD — never finite and silently passable (AGL-2611)', () => {
     // The rule from the third side. The two cases above pair a finite band
     // with a rate; this one says what a band with no rate must be: either
@@ -2538,13 +2689,13 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
             : 'hard'
       expect(`${plan}: ${verdict}`).toMatch(new RegExp(`^${plan}: (unlimited|hard)$`))
     }
-    // The one-to-one email cap carries no rate on ANY tier, so every finite
-    // cap must be hard, and the only unbounded one is the negotiated plan.
+    // The one-to-one email cap carries no rate on ANY tier, so every cap must
+    // be hard — and since 2026-09-07 no plan row is unbounded, Enterprise's
+    // being a finite fallback a contract raises.
     for (const plan of plans) {
       const cap = PLAN_ENTITLEMENTS[plan].crmEmailsPerDay
       if (cap === UNLIMITED) {
-        expect(plan).toBe('enterprise')
-        continue
+        throw new Error(`${plan}: no plan row carries an UNLIMITED one-to-one cap`)
       }
       expect(
         `${plan}: ${checkCrmEmailQuota({ plan } as any, cap).allowed ? 'passable' : 'hard'}`,

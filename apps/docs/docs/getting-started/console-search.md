@@ -36,7 +36,7 @@ your sites across the workspace:
 
 A group only appears if your plan includes it. On the Free plan there are no
 workflows, products, services or redirects, so those groups are neither shown
-nor searched. **Contacts** appear only while the [CRM](../content-and-data/contacts/overview.md)
+nor searched. **Contacts** appear only while the [CRM](../content-and-data/crm/overview.md)
 is available to you and your role can manage data — the same rule that opens
 the CRM itself — so a person you could not open never shows up as a result.
 
