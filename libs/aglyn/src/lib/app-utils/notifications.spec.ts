@@ -102,3 +102,16 @@ describe('an assigned record is work arriving (AGL-2618)', () => {
     expect(notificationMuted({ team: false }, 'content.leadAssigned')).toBe(false)
   })
 })
+
+describe('a task falling due is work arriving (AGL-2659)', () => {
+  it('files the reminder beside the assignment, under the one mute that stops both', () => {
+    expect(notificationCategory('content.taskReminder')).toBe(
+      notificationCategory('content.taskAssigned'),
+    )
+    expect(NOTIFICATION_TYPE_LABELS['content.taskReminder']).toBe('Task reminder')
+    expect(notificationMuted({ content: false }, 'content.taskReminder')).toBe(true)
+    expect(notificationMuted({ billing: false }, 'content.taskReminder')).toBe(false)
+    // Default on: no preference at all is a reminder that arrives.
+    expect(notificationMuted(undefined, 'content.taskReminder')).toBe(false)
+  })
+})

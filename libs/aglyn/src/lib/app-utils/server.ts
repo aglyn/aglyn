@@ -66,6 +66,11 @@ export * from './crm-reports'
 // the task and lead bucketing, and the words the notification and the mail
 // say (AGL-2619). Pure like `crm-reports`, read by the scheduled route.
 export * from './crm-digest'
+// A task's reminder at its own time (AGL-2659): which reminder a save
+// leaves, whether one is owed, and the words the notification and the mail
+// say. Pure like `crm-digest`, read by the hourly route and by every
+// writer of the field.
+export * from './crm-task-reminders'
 // Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
 // mapping, the per-row normalizer and the chunk-result arithmetic the
 // console drawer and the `crm/contacts-import` route both read. Pure, and
