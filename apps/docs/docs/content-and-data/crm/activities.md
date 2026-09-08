@@ -110,6 +110,19 @@ their own entries; an org-wide member can edit or delete anyone's. A colleague
 with access to only some of your sites can read an entry they did not write, and
 cannot change it.
 
+### A meeting from a booking {#meeting-from-a-booking}
+
+A confirmed [booking](../../commerce-and-bookings/bookings/overview.md#booking-from-the-crm)
+files a **meeting** on its record's timeline without anyone logging it — titled
+with the service and the slot, and linked to the booking. The record is the one
+the booking link was dropped from (a contact's, a lead's or a deal's **Book a
+meeting**, or **Insert booking link** in **Send email**), which wins even when the
+person books with another address; a booking taken from the widget with no record
+attached is matched to a contact by the booker's address. When the service asks
+for it, a **Follow up after &lt;service&gt;** [task](tasks.md) is filed beside the
+meeting, due one business day after the slot. Nothing is filed on a site where the
+CRM is switched off.
+
 ## Sending an email
 
 A contact's, a lead's and a deal's page each carry **Send email**: one message,
