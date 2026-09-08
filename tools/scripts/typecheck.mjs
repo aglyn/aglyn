@@ -83,7 +83,7 @@
  */
 
 import { execFile, execFileSync } from 'node:child_process'
-import { readdirSync, existsSync } from 'node:fs'
+import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { availableParallelism, loadavg } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -92,6 +92,7 @@ import { promisify } from 'node:util'
 const run = promisify(execFile)
 
 import { parseShard, shardConfigs } from './lib/typecheck-shard.mjs'
+import { barrelEntryPoints, barrelsAmong } from './lib/typecheck-scope.mjs'
 const root = join(fileURLToPath(import.meta.url), '..', '..', '..')
 
 const TSC = join(root, 'node_modules', '@typescript', 'native', 'bin', 'tsc')
@@ -197,6 +198,19 @@ function changedFiles(base) {
   return [...merged].filter((f) => /\.(ts|tsx|mts|cts)$/.test(f))
 }
 
+/**
+ * `tsconfig.base.json`, or an empty object. A parse failure must not take the
+ * gate down — `barrelEntryPoints` degrades to "no barrels", which is exactly
+ * the behaviour this check had before it learned about them.
+ */
+function readBaseTsconfig() {
+  try {
+    return JSON.parse(readFileSync(join(root, 'tsconfig.base.json'), 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
 const allConfigs = findConfigs(root, [])
 let configs
 let scopeLabel
@@ -205,11 +219,20 @@ const changedIdx = argv.indexOf('--changed')
 if (changedIdx >= 0) {
   const base = argv[changedIdx + 1]?.startsWith('--') || !argv[changedIdx + 1] ? 'origin/main' : argv[changedIdx + 1]
   const files = changedFiles(base)
-  configs = configsForFiles(files, allConfigs)
+  // A changed BARREL widens to everything (AGL-2682). Its readers are every
+  // project that imports the package by name, and not one of their files is in
+  // the diff — so the scoped answer is clean and the promotion is not. See
+  // `lib/typecheck-scope.mjs` for why the list comes from `tsconfig.base.json`
+  // rather than a `**/src/index.ts` glob.
+  const barrels = barrelsAmong(files, barrelEntryPoints(readBaseTsconfig()))
+  configs = barrels.length ? allConfigs : configsForFiles(files, allConfigs)
   const specs = configs.filter((c) => c.endsWith('tsconfig.spec.json')).length
-  scopeLabel =
-    `--changed vs ${base}: ${files.length} changed .ts/.tsx file(s) -> ` +
-    `${configs.length} tsconfig(s), ${specs} of them spec configs`
+  scopeLabel = barrels.length
+    ? `--changed vs ${base}: ${files.length} changed .ts/.tsx file(s), ` +
+      `${barrels.length} of them a BARREL (${barrels.join(', ')}) -> ` +
+      `widened to the whole workspace, ${configs.length} tsconfig(s)`
+    : `--changed vs ${base}: ${files.length} changed .ts/.tsx file(s) -> ` +
+      `${configs.length} tsconfig(s), ${specs} of them spec configs`
   if (files.length && configs.length === 0) {
     console.error(
       `typecheck --changed: ${files.length} changed file(s) resolved to NO tsconfig.\n` +

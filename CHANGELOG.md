@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.92 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/271e58523...v1.0.0-beta.92)
+
+### Fixed
+
+- **tools:** a changed barrel widens `typecheck:changed` to the whole workspace ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682))
+
 ## v1.0.0-beta.91 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.90...v1.0.0-beta.91)
