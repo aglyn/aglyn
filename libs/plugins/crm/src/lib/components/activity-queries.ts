@@ -181,9 +181,15 @@ export const ACTIVITY_PAGE_SIZE = 100
  * predicate the rules evaluate with `hasAny`: a filtered query is provable
  * per document, and an unfiltered one is refused outright rather than
  * quietly returning everything. The record filter is one equality on top of
- * it — the three indexes `(visibleTo, contactId|companyId|dealId, atMs DESC)`
- * exist for exactly these queries, and `(visibleTo, atMs DESC)` for the feed
- * that names no record.
+ * it — the four indexes `(visibleTo, contactId|companyId|dealId|leadId, atMs
+ * DESC)` exist for exactly these queries, and `(visibleTo, atMs DESC)` for the
+ * feed that names no record.
+ *
+ * Each record filter is indexed twice. An organization-level reader has no
+ * tokens, so `crmVisibleToClause` contributes no constraint and the query
+ * arrives as `(<record>, atMs DESC)` with the array field gone — a different
+ * index, not a prefix of the one above it. Adding a record kind here means
+ * adding BOTH halves; one of them alone leaves the other audience unserved.
  */
 export function useActivityWindow(
   scope: ActivityScope,

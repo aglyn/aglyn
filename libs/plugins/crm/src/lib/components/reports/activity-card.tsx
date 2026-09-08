@@ -88,11 +88,18 @@ export interface ActivityCardProps {
  * `(visibleTo, atMs)` index the activity feed already uses — a range on
  * `atMs` ordered by `atMs` is that index's own shape, so this read adds
  * none. Completed tasks are read the same way on `completedAtMs`, under
- * `status == 'done'`, which is the one index this card adds
- * (`visibleTo, status, completedAtMs`). The two reads are independent so
- * that a missing task index degrades ONE column to a dash and a notice
- * rather than the whole card: the activities were read, and the
- * leaderboard draws them.
+ * `status == 'done'`, which is the index this card adds — TWICE, because
+ * the visibility clause is not always there to index. At the organization
+ * level the reader's tokens are null and `visibleToClause` contributes
+ * nothing, so the shape reaching Firestore is `(status, completedAtMs)`
+ * with no leading array field, and an equality beside a range on another
+ * field is a composite either way. `(visibleTo, status, completedAtMs)`
+ * serves a site; `(status, completedAtMs)` serves the org above it. One
+ * without the other is a card that works for exactly one audience.
+ *
+ * The two reads are independent so that a missing task index degrades ONE
+ * column to a dash and a notice rather than the whole card: the activities
+ * were read, and the leaderboard draws them.
  *
  * A task ordered by `completedAtMs` is a task the complete route stamped;
  * a task marked done some other way, without the stamp, is not in the

@@ -1751,6 +1751,20 @@
       ]
     },
     {
+      "collectionGroup": "crmTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "completedAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crmActivities",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1784,6 +1798,20 @@
       "fields": [
         {
           "fieldPath": "dealId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "atMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crmActivities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "leadId",
           "order": "ASCENDING"
         },
         {
