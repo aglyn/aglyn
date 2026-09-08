@@ -477,6 +477,27 @@ export interface OrgEntitlements {
    * Every send still counts on the org's `emailSends` cost meter, like any
    * other message the provider charged for. 0 on Free, which has no CRM
    * suite; `UNLIMITED` on Enterprise, whose contract prices its own volume.
+   *
+   * ## This ladder and `emailSendsPerMonth` are NOT the same ladder
+   *
+   * They answer to different principles, deliberately, and a tier's two
+   * numbers are not expected to look like each other. `emailSendsPerMonth`
+   * is sized against SHARED-DOMAIN REPUTATION: campaign mail is bulk on a
+   * pool every tier without its own verified sending domain rides under
+   * `p=reject`, so what one workspace sends is a cost every other workspace
+   * pays. This one is sized against COGS SHARE: one-to-one mail is a per-tier
+   * margin question, which is why it is a daily pace rather than a monthly
+   * band.
+   *
+   * The two are far apart at the entry tier — a band of 0 beside a real daily
+   * allowance — and that reads as an inconsistency until the principles are
+   * named. It is not one. One-to-one mail is addressed to a single person,
+   * usually inside a relationship the recipient started, and it reaches the
+   * provider through a per-user pace limit, both suppression lists, a
+   * `declined` consent basis as a hard stop, and an atomic daily reservation.
+   * Complaint rates on it are structurally unlike bulk. Reconciling the two
+   * ladders would price a reply to one customer as though it carried a
+   * campaign's reputation risk.
    */
   crmEmailsPerDay?: number
   /**
@@ -493,6 +514,10 @@ export interface OrgEntitlements {
    * The name is the narrow thing on purpose. A cap that means something
    * narrower than it says is how AGL-1438 came to exist, so every surface
    * that shows this number says "campaign".
+   *
+   * Sized against shared-domain reputation, which is a different principle
+   * from the one behind `crmEmailsPerDay` — see there for why the two ladders
+   * are not meant to track each other.
    */
   emailSendsPerMonth?: number
   /**
