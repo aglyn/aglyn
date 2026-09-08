@@ -23,10 +23,12 @@ export default {
   globals: {},
   transform: {
     '^.+\\.[tj]sx?$': [
-      'ts-jest',
-      {
-        tsconfig: '<rootDir>/tsconfig.spec.json',
-      },
+      '@swc/jest',
+      // swcrc: false keeps the build-oriented .swcrc (which excludes spec
+      // files) from being applied to the jest transform; the automatic JSX
+      // runtime is what lets a component spec render (ts-jest under the
+      // workspace's `jsx: preserve` emitted the tags untouched).
+      { swcrc: false, jsc: { transform: { react: { runtime: 'automatic' } } } },
     ],
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],

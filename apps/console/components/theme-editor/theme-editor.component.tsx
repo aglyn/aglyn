@@ -225,6 +225,17 @@ export function ThemeEditor(props: ThemeEditorProps) {
     setScheme(value)
   }, [])
 
+  // Absent means "follows the visitor"; only the opt-out is written, so the
+  // saved document stays empty for the common case.
+  const setDarkScheme = useCallback((value: string) => {
+    setDraft((prev) => {
+      const next: HostTheme = { ...prev }
+      if (value === 'off') next.darkScheme = 'off'
+      else delete next.darkScheme
+      return next
+    })
+  }, [])
+
   const setMainColor = useCallback(
     (key: (typeof PALETTE_COLOR_FIELDS)[number]['key']) =>
       (hex: string | undefined) => {
@@ -443,6 +454,22 @@ export function ThemeEditor(props: ThemeEditorProps) {
                 'Pick the palette for light and dark schemes — primary, secondary, surfaces, and text; the preview updates live.',
             })}
           >
+            <TextField
+              select
+              size="small"
+              label="Dark scheme"
+              value={draft.darkScheme === 'off' ? 'off' : 'auto'}
+              onChange={(event) => setDarkScheme(event.target.value)}
+              helperText={
+                draft.darkScheme === 'off'
+                  ? 'Every visitor sees light, and the theme mode switcher is hidden on published pages.'
+                  : 'Follows each visitor; anything unset under Dark comes from the default dark palette.'
+              }
+              sx={{ mb: 2 }}
+            >
+              <MenuItem value="auto">{'Follows the visitor'}</MenuItem>
+              <MenuItem value="off">{'Off — always light'}</MenuItem>
+            </TextField>
             <TabContext value={scheme}>
               <TabList onChange={handleSchemeTab}>
                 <Tab label="Light" value="light" />
