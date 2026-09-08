@@ -23,6 +23,7 @@ import {
   mdiDeleteOutline,
   mdiDotsHorizontalCircleOutline,
   mdiEmailOutline,
+  mdiEmailReceiveOutline,
   mdiNoteTextOutline,
   mdiPencilOutline,
   mdiPhoneOutline,
@@ -187,6 +188,17 @@ export function ActivityRow(props: ActivityRowProps) {
    * left — though whoever may delete a row may still delete this one.
    */
   const sent = activity.direction === 'outbound'
+  /*
+   * A message CAPTURED from a mailbox (AGL-2657) carries the provider's
+   * Message-ID and, when a correspondent wrote it, the `inbound` direction.
+   * It is drawn as its own thing — "Received" beside the kind, the sender
+   * where a sent row shows the recipient, no author because nobody on the
+   * team logged it — and a member's copied send reads "Sent" without a
+   * delivery chip, since the platform did not carry it. Neither takes the
+   * caller's "Logged" chip: nobody logged them.
+   */
+  const received = activity.direction === 'inbound'
+  const captured = typeof activity.messageId === 'string' && activity.messageId !== ''
   const deliveryState = Aglyn.isCrmEmailDeliveryState(activity.deliveryState)
     ? activity.deliveryState
     : null
@@ -207,7 +219,11 @@ export function ActivityRow(props: ActivityRowProps) {
           fontSize: (theme) => theme.typography.h6.fontSize,
         }}
       >
-        <ActivityKindIcon kind={activity.kind} />
+        {received ? (
+          <MdiIcon path={mdiEmailReceiveOutline.path} />
+        ) : (
+          <ActivityKindIcon kind={activity.kind} />
+        )}
       </Stack>
       <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
         <Stack
@@ -216,6 +232,22 @@ export function ActivityRow(props: ActivityRowProps) {
           sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
         >
           <Chip label={label} size="small" />
+          {received ? (
+            <Chip
+              label="Received"
+              size="small"
+              variant="outlined"
+              color="info"
+              data-testid="activity-direction"
+            />
+          ) : captured ? (
+            <Chip
+              label="Sent"
+              size="small"
+              variant="outlined"
+              data-testid="activity-direction"
+            />
+          ) : null}
           {deliveryState ? (
             <Tooltip
               title={
@@ -233,7 +265,7 @@ export function ActivityRow(props: ActivityRowProps) {
               />
             </Tooltip>
           ) : null}
-          {subject}
+          {captured ? null : subject}
           {detail.length ? (
             <Typography variant="caption" color="text.secondary">
               {detail.join(' · ')}
@@ -253,7 +285,8 @@ export function ActivityRow(props: ActivityRowProps) {
             sx={{ alignSelf: 'flex-start' }}
           >
             {[
-              authorName(activity),
+              received ? null : authorName(activity),
+              received && activity.from ? `from ${activity.from}` : null,
               sent && activity.to ? `to ${activity.to}` : null,
               Aglyn.activityTimeLabel(activity.atMs, nowMs ?? Date.now()),
             ]
@@ -264,7 +297,7 @@ export function ActivityRow(props: ActivityRowProps) {
       </Stack>
       {editable ? (
         <Stack direction="row" spacing={0.5}>
-          {onEdit && !sent ? (
+          {onEdit && !sent && !received ? (
             <IconButton
               size="small"
               aria-label="Edit activity"
