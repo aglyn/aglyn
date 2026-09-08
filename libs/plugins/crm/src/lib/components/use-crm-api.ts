@@ -34,6 +34,7 @@ export type CrmApiRoute =
   | 'org-activity'
   | 'recipe-install'
   | 'recipe-status'
+  | 'inbound-address'
 
 /** What one call to the CRM API answered with. */
 export interface CrmApiResult {
