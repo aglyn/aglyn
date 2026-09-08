@@ -157,7 +157,13 @@ export * from './lib/hocs/with-hoc'
 
 export * from './lib/utils/make-link-elements'
 export * from './lib/utils/make-meta-elements'
-export * from './lib/utils/vendor'
+// `./lib/utils/vendor` is NOT re-exported (AGL-2682). It wraps eleven `react-is`
+// predicates and NOTHING reads any of them from this index — the two real
+// consumers, `aglyn-node-renderer`'s `leaf.tsx` and the besigner's
+// `component-icon.component.tsx`, import `react-is` directly. So the line's
+// only effect was to hold `react-is` inside the reachable set of a barrel that
+// ships eagerly on every published page. Still importable as
+// `@aglyn/shared-ui-jsx/utils/vendor`.
 
 export * from './lib/types'
 

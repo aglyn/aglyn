@@ -395,31 +395,35 @@ export {
 
 export { type Shape } from '@mui/system'
 
-export {
-  type BaseCreateCSSProperties,
-  type BaseCSSProperties,
-  type CSSProperties,
-  type ServerStyleSheets,
-  type StyledProps,
-  type StyleRules,
-  type StyleRulesCallback,
-  type Styles,
-  type StylesOptions,
-  type StylesProviderProps,
-  type ThemedComponentProps,
-  type ThemeOfStyles,
-  type ThemeProviderProps,
-  type WithStyles,
-  type WithStylesOptions,
-  type WithTheme,
-  type WithThemeCreatorOption,
-  getThemeProps,
-  jssPreset,
-  StylesContext,
-  StylesProvider,
-  useThemeVariants,
-  withThemeCreator,
-  makeStyles,
-  withStyles,
-  createStyles,
+// The VALUE half of this block is NOT re-exported (AGL-2682). `getThemeProps`,
+// `jssPreset`, `StylesContext`, `StylesProvider`, `useThemeVariants`,
+// `withThemeCreator`, `makeStyles`, `withStyles` and `createStyles` had no
+// reader anywhere in the repo, and a value re-export is a RUNTIME edge: it put
+// `@mui/styles` — MUI v4's deprecated JSS engine, and the `jss` tree under it —
+// inside the reachable set of every file that takes anything at all from this
+// barrel, which on the tenant is every published customer page. The one real
+// consumer of any of them, `shared-ui-jsx`'s `sandbox-frame.tsx`, imports
+// `jssPreset` and `StylesProvider` from `@mui/styles` directly; that is the
+// pattern to copy if a value is needed again.
+//
+// The types stay exactly as they were. `export type` is erased at compile time
+// and carries no edge, so nothing a consumer writes has to change.
+export type {
+  BaseCreateCSSProperties,
+  BaseCSSProperties,
+  CSSProperties,
+  ServerStyleSheets,
+  StyledProps,
+  StyleRules,
+  StyleRulesCallback,
+  Styles,
+  StylesOptions,
+  StylesProviderProps,
+  ThemedComponentProps,
+  ThemeOfStyles,
+  ThemeProviderProps,
+  WithStyles,
+  WithStylesOptions,
+  WithTheme,
+  WithThemeCreatorOption,
 } from '@mui/styles'
