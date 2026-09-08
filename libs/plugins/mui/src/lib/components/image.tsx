@@ -28,7 +28,9 @@ import { generatePresetId } from '../utils/generate-preset-id'
 export const ID: Aglyn.ComponentId = 'image'
 
 /**
- * The node id of the first image on the page, in document order (AGL-2486).
+ * The node ids of the images that load eagerly: the first image the LAYOUT
+ * chain renders and the first image the SCREEN renders, each in document
+ * order (AGL-2486).
  *
  * Every image used to render `loading="lazy"` — the hero included. That is
  * the worst possible default for the one image that is almost always the LCP
@@ -39,48 +41,71 @@ export const ID: Aglyn.ComponentId = 'image'
  * is looking at: with everything lazy and everything low, nothing outranked
  * anything, so the order was whatever the network felt like.
  *
- * So the first image gets `loading="eager"` and the rest get
+ * So the lead images get `loading="eager"` and the rest get
  * `fetchpriority="low"`, which is the browser-level knob that stops
- * below-the-fold images competing with the one above it.
+ * below-the-fold images competing with the ones above them.
  *
- * The first image does NOT get `fetchpriority="high"` any more, and the
- * reasoning is at the `fetchPriority` prop below. Short version: this
- * function answers "which image is first", which was being read as "which
- * element is the LCP", and on any site with a logo in its header those are
- * different elements — measured on aglyn.com, where the logo took the hint
- * and the `<h1>` was the LCP at six times its area.
+ * ONE lead image was not enough. On any site whose header carries a logo, the
+ * first image in document order is that logo, so the screen's own hero — the
+ * element Lighthouse names as the LCP on aglyn.com's solution pages at
+ * 375x812 — stayed `lazy` + `low`: undiscovered until layout, then fetched
+ * behind every script on the page (measured 2026-09-08: 1.5 s of load delay
+ * and 1.5 s of load time for a 13 KB image). Composition namespaces layout
+ * nodes by origin ({@link Aglyn.isLayoutComposedNodeId}), so the walk keeps
+ * one lead PER ORIGIN: the layout's first image (the logo) and the screen's
+ * first image (the hero). A layout image further down — a mega-menu
+ * illustration, the footer mark — is still deferred, as is every later
+ * screen image. In the besigner canvas nothing is layout-composed, so the
+ * screen's first image is the only lead, exactly as before.
+ *
+ * Neither lead gets `fetchpriority="high"`, and the reasoning is at the
+ * `fetchPriority` prop below. Short version: "first image of its origin" is
+ * still not "the LCP element", and a ranking claim needs evidence this
+ * function does not have.
  *
  * Resolved from the tree rather than a render-order counter on purpose: the
  * renderer walks the tree in document order on the server AND on hydrate, but
  * a mutable counter would double-count under React's concurrent re-renders
  * and hand the priority to a different image on the client than the one the
- * HTML gave it. A pure function of the tree cannot disagree with itself.
+ * HTML gave it. A pure function of the tree cannot disagree with itself — and
+ * it is deliberately NOT memoized on the root object, because the canvas
+ * mutates that tree in place while an author works.
  *
- * The walk STOPS at the first image, so it is O(nodes above the hero) — a
- * dozen nodes on a normal page — rather than a full traversal per image.
+ * The walk STOPS once both leads are known — on a page with a header logo
+ * and a hero that is O(nodes above the hero), a dozen or two on a normal
+ * page — and at the first image on a screen with no layout.
  *
  * An image with no `src` renders a placeholder box and no `<img>` at all, so
  * it cannot be the LCP element and is skipped.
  */
-export function firstImageNodeId(
+export function leadImageNodeIds(
   root: Aglyn.NodeSchema | undefined,
-): string | undefined {
-  const walk = (node: Aglyn.NodeSchema | undefined): string | undefined => {
-    if (!node) return undefined
+): readonly string[] {
+  let layoutLead: string | undefined
+  let screenLead: string | undefined
+  const walk = (node: Aglyn.NodeSchema | undefined): boolean => {
+    if (!node) return false
     if (node.componentId === ID) {
       const props = (node.resolvedProps ?? node.props ?? {}) as Record<
         string,
         unknown
       >
-      if (String(props['src'] ?? '').trim()) return node.$id
+      if (String(props['src'] ?? '').trim()) {
+        if (Aglyn.isLayoutComposedNodeId(node.$id)) {
+          if (!layoutLead) layoutLead = node.$id
+        } else if (!screenLead) {
+          screenLead = node.$id
+        }
+        if (layoutLead && screenLead) return true
+      }
     }
     for (const child of node.children ?? []) {
-      const found = walk(child)
-      if (found) return found
+      if (walk(child)) return true
     }
-    return undefined
+    return false
   }
-  return walk(root)
+  walk(root)
+  return [layoutLead, screenLead].filter((id): id is string => Boolean(id))
 }
 
 export interface ImageProps {
@@ -203,18 +228,18 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
    * Eagerness (AGL-2486). An explicit author choice always wins — including
    * an explicit `lazy`, so someone who deliberately deferred the top image
    * keeps that. Only an UNSET `loading` is decided here, and only for the
-   * first image on the page.
+   * lead images: the layout's first and the screen's first.
    *
    * `leafIdsMatch` rather than `===`: a reusable component instance suffixes
    * its leaf ids, so the id in the tree and the id in the context are the
    * same leaf spelled two ways (the markdown block resolves the same way).
    */
   const nodeId = Aglyn.useNodeId()
-  const leadImageId = firstImageNodeId(Aglyn.canvas.rootNode)
   const isLeadImage =
     Boolean(nodeId) &&
-    Boolean(leadImageId) &&
-    Aglyn.leafIdsMatch(leadImageId as string, nodeId)
+    leadImageNodeIds(Aglyn.canvas.rootNode).some((leadId) =>
+      Aglyn.leafIdsMatch(leadId, nodeId),
+    )
   const eager = loading === 'eager' || (loading == null && isLeadImage)
   /**
    * Resolve the stored value to a URL (AGL-1215). A media reference becomes

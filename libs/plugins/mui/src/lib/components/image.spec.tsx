@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { render } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
-import Image, { firstImageNodeId, schema } from './image'
+import Image, { leadImageNodeIds, schema } from './image'
 
 describe('Image element (AGL-579 SSR hardening)', () => {
   it('is flagged self-closing so renderers never pass it children', () => {
@@ -236,7 +236,7 @@ describe('Image loading priority (AGL-2486)', () => {
       { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
       { $id: 'footer', props: { src: 'https://example.com/footer.png' } },
     ])
-    expect(firstImageNodeId(Aglyn.canvas.rootNode as any)).toBe('hero')
+    expect(leadImageNodeIds(Aglyn.canvas.rootNode as any)).toEqual(['hero'])
   })
 
   it('skips an image with no src — it renders no <img> to prioritise', () => {
@@ -244,12 +244,48 @@ describe('Image loading priority (AGL-2486)', () => {
       { $id: 'placeholder', props: {} },
       { $id: 'real', props: { src: 'https://example.com/real.png' } },
     ])
-    expect(firstImageNodeId(Aglyn.canvas.rootNode as any)).toBe('real')
+    expect(leadImageNodeIds(Aglyn.canvas.rootNode as any)).toEqual(['real'])
   })
 
-  it('returns undefined for a page with no images at all', () => {
+  it('returns nothing for a page with no images at all', () => {
     fillCanvas([{ $id: 'text1', componentId: 'muiTypography' }])
-    expect(firstImageNodeId(Aglyn.canvas.rootNode as any)).toBeUndefined()
+    expect(leadImageNodeIds(Aglyn.canvas.rootNode as any)).toEqual([])
+  })
+
+  it('keeps one lead PER ORIGIN: the layout logo and the screen hero', () => {
+    // Composition namespaces layout nodes (`layout__…`), and on a site with a
+    // header logo that is always the first image in document order. One lead
+    // for the whole tree therefore meant the screen's hero never got one.
+    fillCanvas([
+      { $id: 'layout__logo', props: { src: 'https://example.com/logo.svg' } },
+      { $id: 'layout__menuArt', props: { src: 'https://example.com/menu.png' } },
+      { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
+      { $id: 'below', props: { src: 'https://example.com/below.png' } },
+    ])
+    expect(leadImageNodeIds(Aglyn.canvas.rootNode as any)).toEqual([
+      'layout__logo',
+      'hero',
+    ])
+  })
+
+  it('reads the origin through a reusable-component graft', () => {
+    // The marketing nav ships as `cmp__layout__<nav>__<leaf>` and the solution
+    // heroes as `cmp__<instance>__<leaf>`: the graft prefix is peeled before
+    // the origin is read, on both sides.
+    fillCanvas([
+      {
+        $id: 'cmp__layout__nav__logo',
+        props: { src: 'https://example.com/logo.svg' },
+      },
+      {
+        $id: 'cmp__heroInstance__mockup',
+        props: { src: 'https://example.com/hero.png' },
+      },
+    ])
+    expect(leadImageNodeIds(Aglyn.canvas.rootNode as any)).toEqual([
+      'cmp__layout__nav__logo',
+      'cmp__heroInstance__mockup',
+    ])
   })
 
   it('loads the first image eagerly, and claims NO priority ranking for it', () => {
@@ -319,8 +355,8 @@ describe('Image loading priority (AGL-2486)', () => {
 
   it('THE HEADER LOGO CASE: a small first image takes no priority hint', () => {
     // The regression this change exists for, in the shape it actually shipped
-    // in. `firstImageNodeId` answers "which image is first in document
-    // order", and on any site with a logo in its header that is the logo —
+    // in. `leadImageNodeIds` answers "which image is first in document
+    // order" per origin, and on any site with a logo in its header that is the logo —
     // not a hero, and never the LCP. Measured on aglyn.com at 375x812: the
     // image holding `fetchpriority="high"` was the logo at 145x44 =
     // 6,380 px², against an `<h1>` at 343x113 = 38,893 px².
@@ -342,6 +378,44 @@ describe('Image loading priority (AGL-2486)', () => {
     // The discovery half is deliberately retained: an above-the-fold logo
     // should not be lazy either.
     expect(img.getAttribute('loading')).toBe('eager')
+  })
+
+  it('THE SCREEN HERO CASE: the hero behind a layout logo is eager too', () => {
+    // Measured on aglyn.com/solutions/small-business at 375x812 on
+    // 2026-09-08: the header logo (layout-composed) was the only eager image,
+    // so the screen's hero — the element Lighthouse named as the LCP — shipped
+    // `lazy` + `low`, was not requested until 1.5 s after the HTML arrived and
+    // then queued behind every script for another 1.5 s. One lead per origin
+    // is the fix; the logo keeps its discovery hint and the hero gains one.
+    fillCanvas([
+      { $id: 'layout__logo', props: { src: 'https://example.com/logo.svg' } },
+      { $id: 'layout__menuArt', props: { src: 'https://example.com/menu.png' } },
+      { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
+    ])
+    const logo = renderAsNode(
+      'layout__logo',
+      <Image src="https://example.com/logo.svg" alt="Aglyn" />,
+    )
+    expect(logo.container.querySelector('img')!.getAttribute('loading')).toBe(
+      'eager',
+    )
+    const hero = renderAsNode(
+      'hero',
+      <Image src="https://example.com/hero.png" alt="hero" />,
+    )
+    const heroImg = hero.container.querySelector('img')!
+    expect(heroImg.getAttribute('loading')).toBe('eager')
+    // Still no ranking claim — see the fetchPriority reasoning.
+    expect(heroImg.getAttribute('fetchpriority')).toBeNull()
+    // A layout image that is not the layout's FIRST stays deferred: the
+    // mega-menu illustration is not on screen until the menu opens.
+    const menu = renderAsNode(
+      'layout__menuArt',
+      <Image src="https://example.com/menu.png" alt="" />,
+    )
+    const menuImg = menu.container.querySelector('img')!
+    expect(menuImg.getAttribute('loading')).toBe('lazy')
+    expect(menuImg.getAttribute('fetchpriority')).toBe('low')
   })
 
   it('stays lazy outside the renderer, where there is no node identity', () => {
