@@ -118,6 +118,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
       <Stack spacing={3}>
         <LeadPropertiesCard
           hostId={hostId}
+          org={org}
           leadId={id}
           lead={lead}
           leadStatus={status}

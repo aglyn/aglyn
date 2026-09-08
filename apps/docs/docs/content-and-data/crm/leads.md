@@ -118,10 +118,13 @@ Click a row to open the lead. The page has two cards.
 
 **Lead** holds what the team decides: the status, the owner, and free-text
 **notes** with a **Save notes** button. It also shows the identity the capture
-recorded — email and name — and the person's **marketing consent**: whether
-they opted in (and when), declined, or never recorded a choice. A lead with no
-recorded consent cannot be sent marketing email, which is worth knowing
-before you promise them a newsletter.
+recorded — email and name, and a phone number when the form that captured
+them took one — and the person's **marketing consent**: whether they opted in
+(and when), declined, or never recorded a choice. A lead with no recorded
+consent cannot be sent marketing email, which is worth knowing before you
+promise them a newsletter. The card's header carries **Call** and **Log a
+call** beside **Send email** — see
+[click to call](./activities.md#click-to-call).
 
 **Captured history** is read-only: when the person was first and last seen,
 how many times your site captured them, every source that did, and — under

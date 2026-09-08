@@ -51,6 +51,7 @@ import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
+import { CrmCallButton } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { useErasePersonAction } from './erase-person-action'
 import { RecordTasksCard } from './record-tasks-card'
@@ -344,6 +345,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           record ? (
             <>
               <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
+              {/* Dial the number, and log the call it was (AGL-2661). */}
+              <CrmCallButton
+                hostId={siteHostId}
+                org={org}
+                link={{ contactId: id }}
+                phone={record.phone}
+              />
               <CrmSendEmailButton
                 hostId={siteHostId}
                 org={org}

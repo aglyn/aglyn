@@ -44,9 +44,13 @@ record links to. The page opens with the person's name, their lifecycle stage,
 their owner, when they [last engaged](#last-engaged) with one of your
 campaigns, and — for a buyer — how many orders they have placed and what they
 have spent; the order count is a link to the site's orders list narrowed to the
-person's address. Under it, one card per aspect of the record:
+person's address. Beside **Send email** it carries **Call**, which dials the
+person's number, and **Log a call** — see
+[click to call](./activities.md#click-to-call). Under it, one card per aspect
+of the record:
 
-- **Properties** — the editable profile: name, phone, job title, company,
+- **Properties** — the editable profile: name, phone (with a dial button
+  beside it, see [click to call](./activities.md#click-to-call)), job title, company,
   lifecycle stage, owner, tags, address and an **About** box for your
   team's notes. One **Save** writes everything at once. The email is shown
   but cannot be edited here, because it is the shared identity. The

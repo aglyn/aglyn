@@ -39,6 +39,7 @@ import {
 import type { CrmRoutes } from '../model/crm-routes'
 import CompanyEditDrawer from './company-edit-drawer'
 import { formatContactCustomValue } from './contact-custom-columns'
+import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 
 export interface CompanyPropertiesCardProps {
@@ -176,7 +177,8 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
         </Link>
       ) : null,
     },
-    { label: 'Phone', value: company.phone },
+    // Callable in one tap (AGL-2661); plain text for a value no dialer takes.
+    { label: 'Phone', value: <CrmPhoneLink phone={company.phone} /> },
     { label: 'Address', value: address },
     { label: 'Tags', value: (company.tags ?? []).join(', ') },
     { label: 'Notes', value: company.notes },
@@ -205,15 +207,23 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
       backHref={routes.section('companies')}
       backLabel="Back to companies"
       actions={
-        <Button
-          size="small"
-          color="primary"
-          variant="outlined"
-          startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
-          onClick={() => setEditing(true)}
-        >
-          {'Edit'}
-        </Button>
+        <>
+          <CrmCallButton
+            hostId={hostId}
+            org={org}
+            link={{ companyId: company.$id }}
+            phone={company.phone}
+          />
+          <Button
+            size="small"
+            color="primary"
+            variant="outlined"
+            startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
+            onClick={() => setEditing(true)}
+          >
+            {'Edit'}
+          </Button>
+        </>
       }
       menuItems={[
         {

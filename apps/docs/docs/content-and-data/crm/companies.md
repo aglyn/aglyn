@@ -59,8 +59,10 @@ The page names the company in the heading and the trail, and holds its
 properties, its contacts, its [deals](./deals.md), its open [tasks](./tasks.md)
 and the [activity](./activities.md) logged against it. The header of the
 first card carries the domain under the company's kind, the industry and the
-owner as chips, **Back to companies**, and **Edit**, which opens the same form
-the company was created with; **Delete company** is in the header's menu (⋮).
+owner as chips, **Back to companies**, **Call** and **Log a call** (see
+[click to call](./activities.md#click-to-call)), and **Edit**, which opens the
+same form the company was created with; **Delete company** is in the header's
+menu (⋮). The company's phone number is a link on the properties card too.
 Every CRM record page — contact, company, deal and lead — is headed the same
 way.
 
