@@ -1143,6 +1143,14 @@ describe('a shared library is fetched once, not once per product', () => {
     document.head.append(existing)
     return existing
   }
+  // A placed loader outlives its test — it is appended to the real `<head>`,
+  // which React's cleanup never touches — and the cases below assert on an
+  // EMPTY document. Each case starts from one.
+  afterEach(() => {
+    document
+      .querySelectorAll(`script[src*="${GOOGLE_ADS_VENDOR.scriptMatch}"]`)
+      .forEach((element) => element.remove())
+  })
 
   it('THE CONTROL: with no GA loader present, Ads brings its own', () => {
     // Without this the skip below is indistinguishable from Google Ads never

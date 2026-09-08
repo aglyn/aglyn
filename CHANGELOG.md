@@ -18,6 +18,7 @@ content on the marketing site and is written separately.
 - **billing:** a zero campaign band reads as an absence, not a ration ([AGL-2679](https://linear.app/aglyn/issue/AGL-2679))
 - **billing:** the campaign meter is hidden where no band is sold ([AGL-2679](https://linear.app/aglyn/issue/AGL-2679))
 - **plugins-mui:** the screen's hero is a lead image beside the layout logo ([AGL-2678](https://linear.app/aglyn/issue/AGL-2678))
+- **tenant:** the advertising tags ride the GA loader the page renders instead of fetching gtag.js twice ([AGL-2681](https://linear.app/aglyn/issue/AGL-2681))
 
 ### Documentation
 
