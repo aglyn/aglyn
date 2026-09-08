@@ -198,7 +198,7 @@ from another domain will render without those parts.
 :::
 
 Storage is metered per site against your plan (Free 250 MB, Starter 2 GB, Pro 10 GB,
-Business 50 GB, Scale 75 GB, Advanced 100 GB, Agency 200 GB, Enterprise unlimited) —
+Business 20 GB, Scale 30 GB, Advanced 40 GB, Agency 60 GB, Enterprise 120 GB by default) —
 the library's toolbar shows the running total, and the
 [billing page](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
 meters it alongside everything else.

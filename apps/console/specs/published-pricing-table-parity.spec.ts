@@ -916,9 +916,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
        */
       expect(Number.isFinite(PLAN_ENTITLEMENTS.agency.contactsPerHost)).toBe(true)
       expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBe(0.4)
-      // The uncapped-band-carries-no-rate rule still holds where a band
-      // really is uncapped, which is Enterprise alone.
-      expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(UNLIMITED)
+      // Enterprise publishes no rate and, since 2026-09-07, no unbounded band
+      // either: its row is a finite fallback of twice Agency's that a
+      // contract raises, and the page still reads "Talk to us" for it.
+      expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(1_000_000)
       expect(PLAN_PRICING.enterprise.extraContactsUsdPer1k).toBeNull()
     })
   })

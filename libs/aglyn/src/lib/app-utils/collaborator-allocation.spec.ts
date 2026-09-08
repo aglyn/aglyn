@@ -141,9 +141,13 @@ describe('collaborator seat allocation (AGL-2439)', () => {
       )
     })
 
-    it('leaves UNLIMITED unlimited rather than clamping it to a number', () => {
+    it('leaves a contracted UNLIMITED unlimited rather than clamping it to a number', () => {
+      // The plan row is a finite fallback of 500 a site (twice Agency's, since
+      // 2026-09-07); the sentinel is what an agreement with no collaborator
+      // ceiling writes as a per-org override.
       const enterprise = {
         plan: 'enterprise',
+        entitlements: { membersPerHost: UNLIMITED, maxMembersPerHost: UNLIMITED },
         seatAddons: { members: 4 },
         collaboratorAllocations: { 'host-a': 4 },
       } as any
@@ -151,6 +155,7 @@ describe('collaborator seat allocation (AGL-2439)', () => {
       expect(resolveHostCollaboratorCap(enterprise, 'host-unallocated')).toBe(
         UNLIMITED,
       )
+      expect(resolveHostCollaboratorCap({ plan: 'enterprise' } as any, 'host-a')).toBe(500)
     })
   })
 

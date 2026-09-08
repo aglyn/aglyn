@@ -333,14 +333,29 @@ describe('the one-to-one email counter', () => {
       expect(docs.get(TODAY)?.['count']).toBe(INCLUDED)
     })
 
-    it('refuses a tier with no suite at zero, and admits everything on Enterprise', async () => {
+    it('refuses a tier with no suite at zero, and admits everything a contracted Enterprise cap allows', async () => {
       const free = await reserveCrmEmailSend(firestore, 'org-1', { plan: 'free' }, NOON)
       expect(free).toMatchObject({ ok: false, quota: { included: 0, used: 0 } })
       expect(writes).toHaveLength(0)
 
+      // The plan row is a finite fallback of 2,000 a day since 2026-09-07
+      // (twice Agency's), refused at the line like every other tier's…
+      docs.set(TODAY, { count: 1_999 })
+      const fallback = await reserveCrmEmailSend(firestore, 'org-1', { plan: 'enterprise' }, NOON)
+      expect(fallback.ok).toBe(true)
+      expect(docs.get(TODAY)?.['count']).toBe(2_000)
+      const atTheLine = await reserveCrmEmailSend(firestore, 'org-1', { plan: 'enterprise' }, NOON)
+      expect(atTheLine.ok).toBe(false)
+      // …and a contracted per-org override is what an agreement with no
+      // ceiling writes.
       docs.set(TODAY, { count: 1_000_000 })
-      const enterprise = await reserveCrmEmailSend(firestore, 'org-1', { plan: 'enterprise' }, NOON)
-      expect(enterprise.ok).toBe(true)
+      const contracted = await reserveCrmEmailSend(
+        firestore,
+        'org-1',
+        { plan: 'enterprise', entitlements: { crmEmailsPerDay: Number.POSITIVE_INFINITY } },
+        NOON,
+      )
+      expect(contracted.ok).toBe(true)
       expect(docs.get(TODAY)?.['count']).toBe(1_000_001)
     })
 

@@ -55,6 +55,8 @@ let mockStore: Record<string, Record<string, any>> = {}
 let mockAddedSubmissions: Record<string, any>[] = []
 let mockNotifications: Record<string, any>[] = []
 let mockOrgPlan: string | null = 'starter'
+/** A per-org entitlement override on the mocked org, for the contracted shapes. */
+let mockOrgEntitlements: Record<string, number> | undefined
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -114,7 +116,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // The per-IP limiter is a different control with its own coverage; it must
   // never be what makes this test pass.
   consumeRateLimit: async () => ({ allowed: true, resetMs: Date.now() + 1000 }),
-  getOrgForHost: async () => (mockOrgPlan ? { org: { plan: mockOrgPlan } } : null),
+  getOrgForHost: async () =>
+    mockOrgPlan
+      ? { org: { plan: mockOrgPlan, entitlements: mockOrgEntitlements } }
+      : null,
   notifyHostManagers: async (hostId: string, payload: Record<string, any>) => {
     mockNotifications.push({ hostId, ...payload })
   },
@@ -177,6 +182,7 @@ beforeEach(() => {
   mockAddedSubmissions = []
   mockNotifications = []
   mockOrgPlan = 'starter'
+  mockOrgEntitlements = undefined
 })
 
 describe('form submission abuse ceiling (AGL-1655)', () => {
@@ -249,13 +255,20 @@ describe('form submission abuse ceiling (AGL-1655)', () => {
     expect(billedThisMonth()).toBe(FORM_ABUSE_CEILING_FLOOR)
   })
 
-  it('caps an unlimited plan too, and never before the free wall on free', async () => {
-    // Enterprise has no included band to exceed, so the plan gate can never
-    // refuse it — an unlimited PLAN is not an unlimited tolerance for a bot.
+  it('caps a contracted unlimited band too, and never before the free wall on free', async () => {
+    // An Enterprise agreement with no submission ceiling has no included band
+    // to exceed, so the plan gate can never refuse it — and an unlimited BAND
+    // is not an unlimited tolerance for a bot. Since 2026-09-07 the plan row
+    // is a finite fallback (twice Agency's), so the uncapped shape is the
+    // per-org override an agreement writes.
     mockOrgPlan = 'enterprise'
+    mockOrgEntitlements = { formSubmissionsPerMonth: Number.POSITIVE_INFINITY }
     mockStore[counterPath] = { [MONTH]: 1_000_000 }
     expect(
-      checkFormSubmissionQuota({ plan: 'enterprise' } as any, 1_000_000).allowed,
+      checkFormSubmissionQuota(
+        { plan: 'enterprise', entitlements: mockOrgEntitlements } as any,
+        1_000_000,
+      ).allowed,
     ).toBe(true)
     expect((await submit()).status).toBe(429)
     expect(billedThisMonth()).toBe(1_000_000)
@@ -265,6 +278,7 @@ describe('form submission abuse ceiling (AGL-1655)', () => {
     mockStore = { [`hosts/${HOST_ID}`]: { name: 'Site' } }
     mockNotifications = []
     mockOrgPlan = 'free'
+    mockOrgEntitlements = undefined
     mockStore[counterPath] = { [MONTH]: 20 }
     const walled = await submit()
     expect(walled.status).toBe(429)

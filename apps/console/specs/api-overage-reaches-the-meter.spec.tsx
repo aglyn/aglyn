@@ -102,8 +102,16 @@ import BillingUsageComponent from '../components/billing/billing-usage.component
 const BUSINESS = { $id: 'org-1', plan: 'business' } as any
 /** Pro: no API requests included at all, so there is no meter to caption. */
 const PRO = { $id: 'org-1', plan: 'pro' } as any
-/** Enterprise: `UNLIMITED` requests, and no published overage rate. */
-const ENTERPRISE = { $id: 'org-1', plan: 'enterprise' } as any
+/**
+ * Enterprise with a contracted `UNLIMITED` request band, and no published
+ * overage rate. The plan row itself is a finite fallback of 10,000,000 since
+ * 2026-09-07; the sentinel is what an agreement writes as an override.
+ */
+const ENTERPRISE = {
+  $id: 'org-1',
+  plan: 'enterprise',
+  entitlements: { apiRequestsPerMonth: Number.POSITIVE_INFINITY },
+} as any
 const HOSTS = [{ $id: 'host-a', displayName: 'Site A' }]
 
 const METER = 'API requests (this month)'

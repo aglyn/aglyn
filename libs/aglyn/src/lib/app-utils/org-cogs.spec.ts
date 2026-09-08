@@ -210,14 +210,13 @@ describe('orgMonthlyCogsUsd', () => {
   })
 
   /**
-   * Email SENDS are priced. The three figures beside them are not.
+   * Email SENDS are priced. The two figures beside them are not.
    *
-   * The rollup document carries five email-ish and run-ish fields and only
-   * one of them is a cost: `emailSends` is every message a provider charged
-   * for, so it enters the model at `perEmailSend`. `emailSendsOverage` is a
-   * SUBSET of that same volume — pricing it too would bill the excess twice
-   * — and `campaignEmailSends` is a subset again. `workflowRuns` and
-   * `actionRuns` have no rate at all.
+   * The rollup document carries three email-ish fields and only one of them
+   * is a cost: `emailSends` is every message a provider charged for, so it
+   * enters the model at `perEmailSend`. `emailSendsOverage` is a SUBSET of
+   * that same volume — pricing it too would bill the excess twice — and
+   * `campaignEmailSends` is a subset again.
    *
    * The distinction is the whole test. A model that priced "anything that
    * looks like email" would double-count by however much an org exceeded its
@@ -239,12 +238,10 @@ describe('orgMonthlyCogsUsd', () => {
         emailSends: 100_000,
         emailSendsOverage: 95_000,
         campaignEmailSends: 5_000,
-        workflowRuns: 900_000,
-        actionRuns: 900_000,
       } as never,
       2,
     )
-    // 100,000 x $0.0009 = $90.00, and not a cent more from the four fields
+    // 100,000 x $0.0009 = $90.00, and not a cent more from the two fields
     // beside it.
     expect(withEmail.measuredUsd - withoutEmail.measuredUsd).toBeCloseTo(90, 6)
     expect(withEmail.breakdown.emailSends).toBeCloseTo(90, 6)
@@ -261,9 +258,49 @@ describe('orgMonthlyCogsUsd', () => {
     // per-campaign rate appearing here is the double-count.
     expect(
       Object.keys(ORG_COGS_UNIT_RATES_USD).filter((rate) =>
-        /email|campaign|workflow|action/i.test(rate),
+        /email|campaign/i.test(rate),
       ),
     ).toEqual(['perEmailSend'])
+  })
+
+  /**
+   * Workflow and action RUNS are priced, together, at one rate (2026-09-07).
+   *
+   * Both counters were recorded on every rollup and read as nothing: there
+   * was no `perRun`, so Agency's 3,000,000 runs a month were $36 the model
+   * could not see. One rate for the two because a run is the same handful
+   * of reads, two writes and a moment of compute whichever builder produced
+   * it; the bands differ only in which tier sells them.
+   */
+  it('prices workflow and action runs together, at perRun', () => {
+    const priced = { storageGb: 3, pageViews: 12_000 }
+    const without = orgMonthlyCogsUsd(priced, 2)
+    const withRuns = orgMonthlyCogsUsd(
+      { ...priced, workflowRuns: 900_000, actionRuns: 600_000 },
+      2,
+    )
+    // 1,500,000 × $0.000012 = $18.00, on one line.
+    expect(ORG_COGS_UNIT_RATES_USD.perRun).toBe(0.000012)
+    expect(withRuns.breakdown.runs).toBeCloseTo(18, 6)
+    expect(withRuns.measuredUsd - without.measuredUsd).toBeCloseTo(18, 6)
+    // Every OTHER breakdown line is untouched.
+    for (const key of Object.keys(without.breakdown)) {
+      if (key === 'runs') continue
+      expect(`${key}=${withRuns.breakdown[key]}`).toBe(`${key}=${without.breakdown[key]}`)
+    }
+    // Either counter alone reaches the line — a model that read only one of
+    // the two would price half the automations an org runs.
+    expect(orgMonthlyCogsUsd({ workflowRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(12, 6)
+    expect(orgMonthlyCogsUsd({ actionRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(12, 6)
+    // …and the rate is really read: the same rollup moves with it.
+    const rates = ORG_COGS_UNIT_RATES_USD as unknown as Record<string, number>
+    const original = rates.perRun
+    try {
+      rates.perRun = original * 2
+      expect(orgMonthlyCogsUsd({ workflowRuns: 1_000_000 }, 0).breakdown.runs).toBeCloseTo(24, 6)
+    } finally {
+      rates.perRun = original
+    }
   })
 
   /**

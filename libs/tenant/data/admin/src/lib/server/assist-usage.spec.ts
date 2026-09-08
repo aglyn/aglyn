@@ -1140,15 +1140,16 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
   })
 
   it('takes a CONTRACTED Enterprise band over the plan fallback', async () => {
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 100 })
-    // The fallback is 87,000 credits — $87 — so this org is over it.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 120 })
+    // The fallback is 116,000 credits — $116, twice Agency's band since
+    // 2026-09-07 — so this org is over it.
     const onFallback = await reserveAssistMessage(firestore(), ORG, true, NOW, {
       plan: 'enterprise',
     })
     expect(onFallback).toMatchObject({
       allowed: false,
       refusedBy: 'budget',
-      costLimitUsd: 87,
+      costLimitUsd: 116,
     })
     // The same spend against a contract that bought more.
     const contracted = await reserveAssistMessage(firestore(), ORG, true, NOW, {

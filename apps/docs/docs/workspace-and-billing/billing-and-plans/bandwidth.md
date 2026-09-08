@@ -27,7 +27,7 @@ until the start of the next month.
 | Scale | 290 GB | Keeps serving; the extra is billed |
 | Advanced | 345 GB | Keeps serving; the extra is billed |
 | Agency | 1,540 GB | Keeps serving; the extra is billed |
-| Enterprise | Unlimited | Nothing to pass |
+| Enterprise | 3,080 GB by default; more by agreement | Keeps serving; not billed — your agreement sets the terms |
 
 The allowance is per **organization**, across every site in it — not per site. If you run
 four sites on one Business plan, they share the 185 GB.

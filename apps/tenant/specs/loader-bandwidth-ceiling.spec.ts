@@ -212,7 +212,10 @@ describe('the ceiling arithmetic the loader is driven by', () => {
   it('the ladder never inverts — a bigger plan never gets a smaller ceiling', () => {
     // The failure `FORM_ABUSE_CEILING_UNLIMITED` exists to prevent, restated:
     // a floor plus a multiple plus an infinite band is three rules that can
-    // disagree, and enterprise's UNLIMITED bandwidth has nothing to multiply.
+    // disagree. Since 2026-09-07 no plan row is infinite — enterprise's band
+    // is a finite fallback of twice Agency's — so the top of the ladder is a
+    // multiple like every rung below it, and the sentinel's ceiling is what a
+    // contracted UNLIMITED override resolves to.
     const ladder = [
       'free',
       'starter',
@@ -225,9 +228,27 @@ describe('the ceiling arithmetic the loader is driven by', () => {
     for (let i = 1; i < ladder.length; i++) {
       expect(ladder[i]).toBeGreaterThanOrEqual(ladder[i - 1])
     }
-    expect(ladder[ladder.length - 1]).toBe(
-      Aglyn.BANDWIDTH_ABUSE_CEILING_UNLIMITED,
+    expect(ladder[ladder.length - 1]).toBe(16_148_070)
+    expect(Number.isFinite(ladder[ladder.length - 1])).toBe(true)
+    const contracted = Aglyn.checkBandwidthAbuseCeiling(
+      { plan: 'enterprise', entitlements: { bandwidthGb: Aglyn.UNLIMITED } } as never,
+      0,
     )
+    expect(contracted.ceiling).toBe(Aglyn.BANDWIDTH_ABUSE_CEILING_UNLIMITED)
+    expect(contracted.ceiling).toBeGreaterThanOrEqual(ladder[ladder.length - 1])
+  })
+
+  it('an ENTERPRISE site past its ceiling is flagged but never degraded', () => {
+    // Enterprise meters nothing, which is the predicate the degrade used to
+    // read — so a finite fallback band would have taken a contracted
+    // customer's site off the air three times past a default nobody chose
+    // for them. Its traffic is paid for by agreement: the ceiling trips,
+    // pages staff, and changes nothing a visitor sees.
+    const past = tripFor('enterprise', 20_000_000)
+    expect(past.exceeded).toBe(true)
+    expect(past.degraded).toBe(false)
+    // …while Free at the same count is the one plan that degrades.
+    expect(tripFor('free', 20_000_000).degraded).toBe(true)
   })
 })
 

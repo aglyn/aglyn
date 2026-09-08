@@ -92,6 +92,64 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-07 — Enterprise's bands become finite fallbacks at twice Agency's; every numeric entitlement takes a per-org override; workflow and action runs carry a cost
+
+- **Decided by:** Zach, 2026-09-07, by directive, on the pricing soundness audit of the same day — an Enterprise org provisioned without per-org figures was the one org on the platform whose worst-case cost had no bound on any axis; the fallback is now finite, an agreement raises it, and runs stop reading as free. The Drive Pricing Decision Log entry of the same date carries the arithmetic.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS.enterprise`, `ENTERPRISE_EMAIL_SENDS_PER_MONTH`, `ENTERPRISE_ASSIST_CREDITS_PER_MONTH`, `ORG_COGS_UNIT_RATES_USD.perRun`, `orgMonthlyCogsUsd`'s `runs` line, `bandwidthCeilingDegradesRender` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; the key-by-key relation and the override-precedence proof in `libs/aglyn/src/lib/app-utils/plan-entitlements.spec.ts`; the ninth cost axis in `apps/console/specs/tier-margin-floor.spec.ts`; `docs/PRICING_SURFACES.md` → *Enterprise has no price here, but it has bands*; AGL-2654.
+
+**No charged price moves.** Enterprise has no list price and gains no rate;
+no self-serve figure moves. What moves is **packaging** on the one custom-priced
+tier, and the **cost model** every tier is judged by.
+
+### What was decided
+
+1. **Enterprise's bands are finite fallbacks: Agency's band × 2 on every
+   axis Agency bounds**, and `UNLIMITED` only where Agency is already
+   unlimited. Sites 200, storage 120 GB a site, bandwidth 3,080 GB, form
+   submissions 50,000 a site, CRM records 1,000,000, one-to-one email 2,000 a
+   day, campaign email 260,000 (from the 250,000 default), workflow runs
+   4,000,000, action runs 2,000,000, API calls 10,000,000, seats 200 (max
+   1,000), collaborators 500 a site (max 2,000), datasets 4,000 (max 10,000),
+   dataset storage 1,000 GB, assist 116,000 credits, POS registers 40,
+   inventory locations 100. `formsPerHost` stays the flat ceiling every plan
+   carries (2026-08-30). `meteredInfraPassThrough` stays `false` and every
+   rate stays the sentinel, so the fallbacks are **caps**: past one the gate
+   refuses, exactly as Free's does. A contracted per-org value still wins.
+2. **A per-org `entitlements.*` override is honored on every numeric axis**
+   — the mechanism that existed for campaign email, saved forms and assist is
+   the mechanism for all of them, proved key by key. It is how an agreement's
+   numbers are written, and why a finite fallback is safe to hold.
+3. **Workflow and action runs carry a unit cost of $0.000012** — about 12
+   Firestore reads, 2 writes and a moment of compute per run at nam5 and
+   Fluid-compute list prices, derived from the run paths because nothing
+   measurable exists (runs execute inside the request that fired the event,
+   Cloud Logging carries no per-run entry, and the project logged no run in
+   the 14 days to this date). It is COGS, not a price: no plan bills runs. It
+   enters `orgMonthlyCogsUsd`, the staff margin surfaces and the whole-plan
+   guard, where it takes the last of the room the bandwidth resize left —
+   Agency's 3,000,000 runs are $36 a month that read as nothing before.
+4. **The bandwidth abuse ceiling no longer degrades an Enterprise site.** It
+   keyed on "does not meter", which Enterprise shares with Free; with a
+   finite band that would have taken a contracted customer's site off the
+   air three times past a default nobody chose. It still trips, flags the
+   host and pages staff.
+
+### The guardrail
+
+With the runs term, every band at 100%, at the annual price net of Stripe:
+Starter 30.0%, Pro 0.4%, Business 0.3%, Scale 0.8%, Advanced 1.3%, Agency
+1.5% (monthly 53.1 / 29.3 / 27.9 / 27.8 / 25.3 / 19.9). Business's headroom
+is $0.27 a month; a run rate above $0.0000147 would take it under.
+
+### What does not change
+
+Every price. Every self-serve band. `meteredInfraPassThrough` on every plan.
+The Enterprise feature set (SSO and white-label on the plan). The form abuse
+ceiling.
+
+---
+
 ## 2026-09-07 — The margin invariant is held at the annual price, net of Stripe, with the CRM terms; five bandwidth bands come down to what that price carries; the bandwidth abuse ceiling is 3× the band
 
 - **Decided by:** Zach, 2026-09-07, by directive, on the pricing soundness audit of the same day — the platform's invariant, that a customer cannot cost more than they pay by using exactly what they were sold, is held at the **annual** price (the yearly price ÷ 12), net of Stripe's 2.9% + 30¢ (the fixed part amortized over the one annual charge), with the CRM seat term ($0.06 a collaborator-month) and the one-to-one email term (the daily cap × 30 × $0.0009) counted, at the modeled page-view rate — the 627 KB `perPageView` calibration stays as it is. The Drive Pricing Decision Log entry of the same date carries the cost model and the arithmetic.
