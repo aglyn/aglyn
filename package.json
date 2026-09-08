@@ -102,6 +102,7 @@
     "test:ci-test-digest": "node --test tools/scripts/lib/ci-test-digest.test.mjs",
     "test:deploy-guard": "node --test tools/scripts/lib/clean-deploy-source.test.mjs",
     "test:gate-script": "bash tools/gate.sh --self-test",
+    "test:vercel-ignore-build": "node --test tools/scripts/lib/vercel-ignore-build.test.mjs",
     "test:sso-attestation": "node --test tools/scripts/lib/sso-domain-attestation.test.mjs",
     "test:rules-drift": "node --test tools/scripts/lib/rules-drift.test.mjs",
     "test:index-drift": "node --test tools/scripts/lib/index-drift.test.mjs",

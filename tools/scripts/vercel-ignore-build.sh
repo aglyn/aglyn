@@ -22,6 +22,13 @@
 # reads vercel.json from a project's ROOT DIRECTORY and that project's root is
 # `tools/plugin-loader/origin`, not the repo root.
 #
+# `aglyn-docs` has the same shape and the same trap: its root directory is
+# `apps/docs`, so it invokes this script as
+# `bash ../../tools/scripts/vercel-ignore-build.sh docs` from a
+# `commandForIgnoringBuildStep` held in VERCEL PROJECT SETTINGS, not in any
+# file here. Changing the argument list or this path means editing dashboard
+# state in the same change, or the docs site silently stops updating.
+#
 # That project also taught the distinction this whole file turns on
 # (2026-08-04): an **ignoreCommand cancels a build, it does not prevent a
 # DEPLOYMENT**. Vercel creates the deployment record first, then runs the
@@ -129,7 +136,7 @@ if [ "${VERCEL_ENV:-production}" != "production" ]; then
 fi
 
 case "$APP" in
-  console|tenant|plugins) ;;
+  console|tenant|plugins|docs) ;;
   *)
     echo "ignore-build: unknown app '$APP' -> BUILD (fail safe)" >&2
     exit 1
@@ -176,13 +183,36 @@ fi
 #   tools/          `with-aglyn.nextjs.config.js` and the next.config files
 #                   reach into tools/, so a change there can reach a build.
 #   libs/           see the header.
+# The two apps that OWN a directory and read nothing outside it. For these the
+# rule inverts: everything is ignorable EXCEPT their own tree.
+#
+# The inversion is safe only because each was verified, not assumed:
+#
+#   plugins  `tools/plugin-loader/origin` is 9 files with a single LOCAL
+#            import and no dependency on libs/ or any app.
+#   docs     Docusaurus with its OWN `package.json` and its own `npm install`
+#            (`apps/docs/project.json` runs every target with `cwd: apps/docs`).
+#            No `@aglyn/*` import, no path escaping `apps/docs`, and its
+#            content roots — `sidebars.ts`, `api`, `learn`, `help` — are all
+#            relative to it. The root lockfile cannot reach it either, because
+#            it installs its own.
+#
+# ⚠️ Inverting is the DANGEROUS direction, and it is chosen here rather than
+# inherited: everything this file does not know about becomes ignorable, so a
+# new out-of-tree input to one of these apps would be skipped silently. If
+# either ever imports from `libs/` or is built by a root-level command, delete
+# its entry here and let it fall through to the deny-by-default rule below.
+inverted_root() {
+  case "$1" in
+    plugins) printf 'tools/plugin-loader/origin/' ;;
+    docs) printf 'apps/docs/' ;;
+    *) return 1 ;;
+  esac
+}
+
 is_ignorable() {
-  # `plugins` inverts the rule, and it is the one app where that is safe.
-  # `tools/plugin-loader/origin` is 9 files with a single LOCAL import and no
-  # dependency on libs/ or any app — verified, not assumed — so nothing outside
-  # that directory can change what it serves. Everything else is ignorable.
-  if [ "$APP" = "plugins" ]; then
-    case "$1" in tools/plugin-loader/origin/*) return 1 ;; esac
+  if root=$(inverted_root "$APP"); then
+    case "$1" in "$root"*) return 1 ;; esac
     return 0
   fi
   case "$1" in
