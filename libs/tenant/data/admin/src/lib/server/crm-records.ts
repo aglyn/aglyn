@@ -27,6 +27,10 @@ import {
   crmEmailUsageDayKey,
   type CrmRecordsQuotaResult,
 } from '@aglyn/aglyn/server'
+import {
+  type EmailRampVerdict,
+  rampedDailyAllowance,
+} from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -185,6 +189,32 @@ export type ReserveCrmEmailSendResult =
   | { ok: false; quota: CrmEmailQuotaResult }
 
 /**
+ * The plan's day, narrowed to the share of it a young workspace has earned.
+ *
+ * The new-sender ramp reaches the one-to-one path here and only here, so the
+ * ceiling the transaction below judges against is one value with one origin.
+ * The alternative — a full-allowance reservation with a ramp consulted beside
+ * it — is two ceilings for one decision, and under two concurrent senders it
+ * admits against whichever of them was read first.
+ *
+ * `included` is the only field the ramp moves; `resetsAt` is the day's, which
+ * a share does not change, and `used` is what the transaction read.
+ */
+function rampedCrmEmailQuota(
+  plan: CrmEmailQuotaResult,
+  ramp: EmailRampVerdict | null | undefined,
+): CrmEmailQuotaResult {
+  const included = rampedDailyAllowance(plan.included, ramp)
+  if (included >= plan.included) return plan
+  return {
+    ...plan,
+    included,
+    allowed: plan.used < included,
+    remaining: Math.max(0, included - plan.used),
+  }
+}
+
+/**
  * Claims ONE one-to-one send against today's cap, ATOMICALLY (AGL-2645).
  *
  * The counter used to be read before the send and incremented after
@@ -211,17 +241,36 @@ export type ReserveCrmEmailSendResult =
  * leaves the org one send short for the rest of the UTC day — conservative
  * in the direction a cap cares about, and healed at midnight, because each
  * day is its own document.
+ *
+ * ## The new-sender ramp rides the same read
+ *
+ * `ramp` narrows the plan's day to the share of it a young workspace has
+ * earned, INSIDE the transaction and before the counter is judged — see
+ * {@link rampedCrmEmailQuota}. Applying it here rather than in the caller is
+ * the whole of what makes it safe: the ceiling and the count it is compared
+ * against come out of one read, so the retry Firestore forces on a losing
+ * transaction re-derives both. A ramp checked outside would be a second
+ * ceiling, decided from a snapshot the write never proves it still held —
+ * the defect this reservation was built to remove, one field over.
+ *
+ * The ramp is optional and an absent one is not a throttle: a caller that
+ * did not resolve one gets the plan's day, which is what every surface but
+ * the send path wants.
  */
 export async function reserveCrmEmailSend(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
   org: Partial<AglynOrgBilling> | null | undefined,
   now: Date = new Date(),
+  ramp?: EmailRampVerdict | null,
 ): Promise<ReserveCrmEmailSendResult> {
   const day = crmEmailUsageDayKey(now)
   const ref = crmEmailUsageRefForDay(firestore, orgId, day)
   return firestore.runTransaction(async (tx) => {
-    const quota = checkCrmEmailQuota(org, crmEmailCount(await tx.get(ref)), now)
+    const quota = rampedCrmEmailQuota(
+      checkCrmEmailQuota(org, crmEmailCount(await tx.get(ref)), now),
+      ramp,
+    )
     if (!quota.allowed) return { ok: false, quota }
     tx.set(
       ref,

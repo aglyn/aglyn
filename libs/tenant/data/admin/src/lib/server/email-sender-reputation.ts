@@ -84,6 +84,7 @@ import {
   type EmailReputationPolicy,
   type EmailReputationVerdict,
 } from '@aglyn/shared-util-email'
+import { readEmailSendRateConfig } from './email-send-rate'
 import { firebaseAdmin } from './firebase-admin'
 import { RATE_LIMIT_COLLECTION } from './rate-limit-store'
 
@@ -341,6 +342,106 @@ export function resolveOrgEmailRamp(options: {
     deliveredLifetime: options.deliveredLifetime,
     graduatedPerDay: orgDailyCampaignCeiling(options.platformPerHour),
   })
+}
+
+/** A workspace's ramp step, and whether the history behind it was readable. */
+export interface OrgEmailRampRead {
+  /** The step, from the age and the delivery history that resolved. */
+  ramp: EmailRampVerdict
+  /**
+   * True when the ramp BINDS and the window it is sized from was unreadable,
+   * so {@link ramp} is a floor rather than an answer.
+   *
+   * A caller that pages a batch — the campaign path — may treat this as the
+   * step and carry on, because the floor is the lowest step and erring low
+   * defers mail rather than sending it. A caller that admits or refuses ONE
+   * message has no such third answer and must refuse: see
+   * {@link readOrgEmailRamp}.
+   */
+  degraded: boolean
+}
+
+/**
+ * A workspace's ramp step, resolved from its record and its history.
+ *
+ * The reads {@link resolveOrgEmailRamp} needs, in the order that pays for
+ * the fewest of them. The platform ceiling comes first because it is process-
+ * cached for fifteen seconds and therefore free; the seven-day window is a
+ * `getAll` and is only paid when the ramp can still bind.
+ *
+ * ## A graduated workspace pays nothing
+ *
+ * Age alone decides graduation — delivery volume can only RAISE a step, never
+ * reach past the last one — so a workspace past its first week is answered
+ * from the org record with no window read at all. That is every existing
+ * customer and every org whose record predates the creation timestamp, which
+ * is to say almost every call.
+ *
+ * ## An unreadable window is `degraded`, and it is the caller's to answer
+ *
+ * The window read grades itself rather than throwing, and an unreadable one
+ * reads as zero delivered — the LOWEST step, which is the conservative
+ * direction for a ceiling. What it is not is a fact, so it is flagged: a
+ * surface admitting one message at a time cannot defer the remainder to
+ * tomorrow the way a campaign can, and a limiter with no answer must refuse
+ * rather than admit.
+ *
+ * ## The platform flag parks this control
+ *
+ * `enabled: false` on the send-rate config graduates every workspace here,
+ * exactly as it parks the hourly share and {@link claimOrgEmailSendDay} — one
+ * switch, and it turns the ramp off everywhere it is consulted.
+ */
+export async function readOrgEmailRamp(options: {
+  orgId: string
+  /** The org record's `createdAt`, in whatever shape it was stored. */
+  createdAt: unknown
+  now?: number
+  firestore?: any
+}): Promise<OrgEmailRampRead> {
+  const now = Number(options.now ?? Date.now())
+  const at = Number.isFinite(now) && now > 0 ? now : Date.now()
+  const config = await readEmailSendRateConfig(
+    options.firestore ? { firestore: options.firestore, now: at } : { now: at },
+  )
+  const platformPerHour = config.perHour
+  if (!config.enabled) {
+    // A parked control answers with the verdict an established workspace
+    // gets, so a surface reading the step does not blank while it is off.
+    const parked = resolveOrgEmailRamp({
+      ageDays: null,
+      deliveredLifetime: 0,
+      platformPerHour,
+    })
+    return { ramp: parked, degraded: false }
+  }
+  const ageDays = orgAgeDays(options.createdAt, at)
+  /*
+   * The step this workspace would be on having delivered nothing. It is the
+   * graduation test and the floor in one value: delivered volume only ever
+   * raises a step, so a verdict that graduates here graduates at any volume,
+   * and one that does not is the lowest step the workspace can be on.
+   */
+  const floor = resolveOrgEmailRamp({
+    ageDays,
+    deliveredLifetime: 0,
+    platformPerHour,
+  })
+  if (floor.graduated) return { ramp: floor, degraded: false }
+  const window = await readSenderReputationWindow({
+    orgId: options.orgId,
+    now: at,
+    firestore: options.firestore,
+  })
+  if (window.degraded) return { ramp: floor, degraded: true }
+  return {
+    ramp: resolveOrgEmailRamp({
+      ageDays,
+      deliveredLifetime: window.accepted,
+      platformPerHour,
+    }),
+    degraded: false,
+  }
 }
 
 /** The answer to a per-day ramp claim. Every field is a stated number. */

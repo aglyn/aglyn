@@ -39,6 +39,7 @@ import {
   readContactFacet,
   readMarketingBasis,
   renderCrmMergeFields,
+  resolveOrgEntitlements,
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import {
@@ -60,6 +61,7 @@ import {
   memberHasOrgPermission,
   newCrmActivityRef,
   orgDataCollectionForHost,
+  readOrgEmailRamp,
   recordEmailSends,
   releaseCrmEmailSend,
   reserveCrmEmailSend,
@@ -134,6 +136,19 @@ import {
  * message the provider refuses gives the slot back. After the provider has
  * accepted, two more things are written, neither able to fail the send:
  * the activity row and the org's cost meter.
+ *
+ * ## The new-workspace ramp is part of that cap, not a gate beside it
+ *
+ * A message from a workspace created this morning lands on the sending
+ * domain every other tenant's receipts leave on, so the plan's day is held
+ * to the share of it the workspace has earned — the same ramp the campaign
+ * path is paced by, `readOrgEmailRamp`, taken to the allowance this surface
+ * meters instead of the campaign ceiling. It is handed to the reservation
+ * rather than checked before it, so the ceiling and the count it is judged
+ * against come out of the one transactional read; a ramp consulted
+ * separately would be a second ceiling and two reps could pass it at once.
+ * A workspace past its first week is not ramped and pays nothing to find
+ * that out.
  */
 
 /** How many one-to-one emails one person may send in one minute. */
@@ -152,6 +167,35 @@ export function crmEmailCapReachedMessage(included: number): string {
     'reached. It resets at midnight UTC — see Billing for the count.'
   )
 }
+
+/**
+ * What the route says when the NEW-WORKSPACE RAMP is the ceiling that was
+ * reached, rather than the plan's own.
+ *
+ * The campaign path's wording, pointed at this surface: the number, what was
+ * spent against it, that nothing was sent or counted, and when it lifts. A
+ * workspace told only "limit reached" against a figure far below the one its
+ * plan page advertises would read it as a billing fault.
+ */
+export function crmEmailRampReachedMessage(
+  ceiling: number,
+  used: number,
+): string {
+  return (
+    `This workspace may send ${ceiling.toLocaleString('en-US')} one-to-one ` +
+    `email${ceiling === 1 ? '' : 's'} a day while it establishes a sending ` +
+    `history, and has sent ${used.toLocaleString('en-US')} today. Nothing ` +
+    'has been sent and nothing has been counted — the allowance grows as ' +
+    "the workspace sends, and is the plan's in full after its first week. " +
+    'It resets at midnight UTC.'
+  )
+}
+
+/** What the route says when the ramp's own history could not be read. */
+export const CRM_EMAIL_RAMP_UNAVAILABLE_MESSAGE =
+  "This workspace's sending history could not be read just now, so how much " +
+  'of its first-week email allowance it has earned is not known. Nothing has ' +
+  'been sent and nothing has been counted — try again in a moment.'
 
 export const CRM_EMAIL_SUPPRESSED_MESSAGE =
   'This address has bounced or reported a message as spam, so it cannot be ' +
@@ -622,22 +666,62 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
       )
     }
 
+    const now = new Date()
+    /*
+     * THE NEW-WORKSPACE RAMP, resolved for the ceiling below.
+     *
+     * A workspace past its first week graduates off the org record alone and
+     * pays no read for this. One that is still on the ramp needs its
+     * delivery history to know which step it has earned, and when that
+     * history is unreadable the step is a floor rather than an answer.
+     *
+     * A floor is enough for a campaign, which defers what it cannot send
+     * today and delivers it tomorrow. It is not enough here: this route
+     * admits or refuses ONE message and has no third answer, so a ramp that
+     * cannot say what a workspace has earned refuses and says so. The
+     * refusal is transient by construction — it lasts as long as the window
+     * read is failing — and it reaches only workspaces inside their first
+     * week, since every other one graduated before the window was consulted.
+     */
+    const { ramp, degraded } = await readOrgEmailRamp({
+      orgId,
+      createdAt: (org as Record<string, unknown>)['createdAt'],
+      now: now.getTime(),
+    })
+    if (degraded) {
+      return answer(
+        res,
+        refuse(503, CRM_EMAIL_RAMP_UNAVAILABLE_MESSAGE, {
+          reason: 'ramp-unavailable',
+        }),
+      )
+    }
+
     // THE DAILY CAP (AGL-2611), taken as a slot rather than read as a
     // figure (AGL-2645): the transaction reads today's counter, judges it
-    // with `checkCrmEmailQuota` and raises it in one step, so the count the
-    // cap enforces is the count this send was admitted on.
-    const claim = await reserveCrmEmailSend(firestore, orgId, org)
+    // with `checkCrmEmailQuota` against the ramp's share of the plan's day
+    // and raises it in one step, so the count the cap enforces is the count
+    // this send was admitted on.
+    const claim = await reserveCrmEmailSend(firestore, orgId, org, now, ramp)
     if (!claim.ok) {
       const { quota } = claim
+      // WHICH ceiling was reached, in the org's own terms. The reservation
+      // answers with the number it judged, which is the plan's day unless
+      // the ramp held this workspace below it — and a workspace shown a
+      // figure under the one its plan page advertises is owed the reason.
+      const rampBound =
+        quota.included < resolveOrgEntitlements(org).crmEmailsPerDay
       return answer(
         res,
         refuse(
           409,
-          quota.included > 0
-            ? crmEmailCapReachedMessage(quota.included)
-            : CRM_EMAIL_NOT_INCLUDED_MESSAGE,
+          quota.included <= 0
+            ? CRM_EMAIL_NOT_INCLUDED_MESSAGE
+            : rampBound
+              ? crmEmailRampReachedMessage(quota.included, quota.used)
+              : crmEmailCapReachedMessage(quota.included),
           {
-            reason: 'quota',
+            reason: rampBound ? 'ramp' : 'quota',
             included: quota.included,
             used: quota.used,
             resetsAtMs: quota.resetsAt.getTime(),

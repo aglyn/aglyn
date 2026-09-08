@@ -42,6 +42,7 @@ import {
   formatReputationRate,
   effectiveReputationPolicy,
   normalizeEmailReputationPolicy,
+  rampedDailyAllowance,
   reputationDayKey,
   reputationWindowDayKeys,
 } from './sender-reputation'
@@ -436,6 +437,82 @@ describe('the new-sender ramp', () => {
       emailRampVerdict({ ageDays: 2, deliveredLifetime: -1, graduatedPerDay: 0 })
         .perDay,
     ).toBeGreaterThan(0)
+  })
+
+  it('states each step as a share of a graduated day as well as a figure', () => {
+    // The two are one number, which is what lets a surface whose day is a
+    // plan figure rather than the campaign ceiling apply the same step.
+    for (const ageDays of [0, 1, 3, 6]) {
+      const verdict = emailRampVerdict({
+        ageDays,
+        deliveredLifetime: 1_000,
+        graduatedPerDay,
+      })
+      expect(verdict.share).toBeCloseTo(verdict.perDay / graduatedPerDay, 10)
+      expect(verdict.share).toBeGreaterThan(0)
+      expect(verdict.share).toBeLessThan(1)
+    }
+    expect(
+      emailRampVerdict({ ageDays: null, deliveredLifetime: 0, graduatedPerDay })
+        .share,
+    ).toBe(1)
+  })
+})
+
+describe('a daily allowance held to the ramp', () => {
+  const graduatedPerDay = 12_000
+  const step = (ageDays: number | null, deliveredLifetime = 0) =>
+    emailRampVerdict({ ageDays, deliveredLifetime, graduatedPerDay })
+
+  it('holds a young workspace to the share of its day it has earned', () => {
+    // The first step is a sixtieth of this graduated day, so a 300-a-day
+    // band is a 5-a-day band on a workspace created this morning.
+    expect(rampedDailyAllowance(300, step(0))).toBe(5)
+    // And the earned step raises it, off the same ladder.
+    expect(
+      rampedDailyAllowance(300, step(1, EMAIL_RAMP_STEPS[1].minDelivered)),
+    ).toBe(25)
+  })
+
+  it('leaves a graduated workspace, and a caller with no verdict, untouched', () => {
+    expect(rampedDailyAllowance(300, step(null))).toBe(300)
+    expect(rampedDailyAllowance(300, null)).toBe(300)
+    expect(rampedDailyAllowance(300, undefined)).toBe(300)
+  })
+
+  it('floors a positive allowance at one rather than at nothing', () => {
+    // A band small enough for the share to round away is throttled to a
+    // trickle, not stopped dead: a ceiling of zero is what a plan carrying
+    // no allowance at all looks like, and the two have to stay tellable
+    // apart.
+    expect(rampedDailyAllowance(10, step(0))).toBe(1)
+    expect(rampedDailyAllowance(1, step(0))).toBe(1)
+  })
+
+  it('never grants what a plan does not carry', () => {
+    // Zero is not a small band; it is no band, and pacing does not sell one.
+    expect(rampedDailyAllowance(0, step(0))).toBe(0)
+    expect(rampedDailyAllowance(-5, step(0))).toBe(0)
+  })
+
+  it('leaves an uncapped allowance uncapped', () => {
+    // The sentinel a contract with no ceiling is written as. A share of it
+    // is still unbounded, and clamping it as a corrupt counter would refuse
+    // the agreements that buy the most.
+    expect(rampedDailyAllowance(Number.POSITIVE_INFINITY, step(0))).toBe(
+      Number.POSITIVE_INFINITY,
+    )
+  })
+
+  it('takes the narrowest answer it has when a share cannot be read', () => {
+    // A ramp that BINDS and cannot say by how much must not resolve to the
+    // whole allowance: a limiter with no answer refuses.
+    const unreadable = { ...step(0), share: Number.NaN }
+    expect(rampedDailyAllowance(300, unreadable)).toBe(1)
+  })
+
+  it('never returns more than the allowance it was given', () => {
+    expect(rampedDailyAllowance(300, { ...step(0), share: 4 })).toBe(300)
   })
 })
 
