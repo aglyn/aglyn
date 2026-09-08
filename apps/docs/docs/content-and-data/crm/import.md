@@ -52,7 +52,7 @@ from the first run are reported as updated.
 | **Owner** | The email address of a member of your organization. An address that matches nobody on the team leaves the contact without an owner, and the result names those addresses. |
 | **Lifecycle stage** | One of `subscriber`, `lead`, `marketing-qualified`, `sales-qualified`, `opportunity`, `customer`, `evangelist`, `other` — by id or by label. |
 | **Marketing consent** | `yes`, `true` or `1` records a marketing opt-in for this site, dated today. Anything else records nothing. This is your statement that the person agreed; it is not a substitute for their own opt-in. |
-| **Custom fields** | Every custom field you have defined under **Fields** is offered as a target. A value that does not fit the field's type — a word in a number field, a choice a dropdown does not offer — is dropped and reported. |
+| **Custom fields** | Every **contact** field you have defined under [Fields](./custom-fields.md) is offered as a target. A value that does not fit the field's type — a word in a number field, a choice a dropdown does not offer — is dropped and reported. The [companies import](./companies.md#import-from-csv) offers the company fields the same way. |
 
 A value that cannot be read never stops the row: the person is imported without
 it, and the result names the values it could not keep, by field.
@@ -85,4 +85,5 @@ it), not to every site in the account.
 - [The contact record](./contact-record.md) — the fields an imported row lands in
 - [Bulk actions](./bulk-actions.md) — tag, assign or stage the people you just imported, all at once
 - [Import companies from CSV](./companies.md#import-from-csv) — the same three steps for the organizations behind them
+- [Import deals from CSV](./deals.md#import-from-csv) and [import tasks from CSV](./tasks.md#import-from-csv) — the same three steps, the pipeline, the stage and the assignee resolved by name
 - [Import a list into an email audience](../../marketing-and-automation/email-campaigns/overview.md#import-a-list) — for adding people to a mailing list rather than to the CRM

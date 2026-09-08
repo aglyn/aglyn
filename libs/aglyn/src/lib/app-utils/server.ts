@@ -49,6 +49,15 @@ export * from './person-key-web'
 // it because `ContactFacet` names its lifecycle stage and custom-value types;
 // the scope stamp every CRM creator writes lives here too.
 export * from './crm'
+// Email templates, snippets and the merge-field resolver (AGL-2658): the
+// letter a rep keeps under a name, and the one grammar the send route and
+// the dialog fill it in by. Pure like `crm`, and beside it because a
+// template is scoped the way a task is.
+export * from './crm-email-templates'
+// The booking door's shared vocabulary (AGL-2660): the query keys a booking
+// link carries, the record reference inside it, and the wording and due
+// date of what a booking files back on the record.
+export * from './crm-booking'
 // Two contact documents folded into one (AGL-2625): the plan the console
 // previews and the server writes, reading the facet shape from `contacts`
 // and the company mirror from `crm`.
@@ -62,10 +71,29 @@ export * from './person-erasure'
 // and beside it because it reads the stage list and the deal weighting from
 // there rather than restating either.
 export * from './crm-reports'
+// Every CRM CSV, written once (AGL-2662): the column lists and the cells
+// each section's Export button writes, and the server's whole-collection
+// export streams — one implementation, because the console app may not
+// import the plugin whose sections used to hold it.
+export * from './crm-csv'
+// Which holder a cross-site reader sees one contact through (AGL-2630),
+// beside the files that write it: the org-level list and the server's
+// export both flatten a contact this way.
+export * from './contact-holder'
 // What one member is owed this morning — the day's window in a named zone,
 // the task and lead bucketing, and the words the notification and the mail
 // say (AGL-2619). Pure like `crm-reports`, read by the scheduled route.
 export * from './crm-digest'
+// A task's reminder at its own time (AGL-2659): which reminder a save
+// leaves, whether one is owed, and the words the notification and the mail
+// say. Pure like `crm-digest`, read by the hourly route and by every
+// writer of the field.
+export * from './crm-task-reminders'
+// Email capture (AGL-2657): the address's shape and token, which of a
+// message's addresses is the correspondent, the excerpt, and the row a
+// captured message becomes. Pure like `crm-digest`; the webhook route and
+// the address route are the readers with Firestore.
+export * from './crm-inbound'
 // Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
 // mapping, the per-row normalizer and the chunk-result arithmetic the
 // console drawer and the `crm/contacts-import` route both read. Pure, and
@@ -75,6 +103,15 @@ export * from './crm-import'
 // stages over the company vocabulary, on the generic helpers `crm-import`
 // also stands on. Pure, and beside it for the same reason.
 export * from './crm-company-import'
+// The next activity a record carries (AGL-2661): what `nextTaskAtMs` IS given
+// a record's open tasks, the view clause a list filters on, the report figure.
+// Pure like `crm`; the admin library's `recomputeCrmNextTaskAt` is the writer.
+export * from './crm-next-activity'
+// Reading a spreadsheet of DEALS or TASKS into the CRM (AGL-2662): the same
+// three stages over each vocabulary; the server resolves a pipeline, a
+// stage and an assignee by name and refuses the row it cannot.
+export * from './crm-deal-import'
+export * from './crm-task-import'
 // The CSV cell grammar the exports write with (AGL-2621) — named rather than
 // starred, because the two import modules above re-export the custom-target
 // helpers from the same file under their own names.

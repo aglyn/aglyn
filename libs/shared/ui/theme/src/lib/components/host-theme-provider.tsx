@@ -24,11 +24,11 @@ import type { Theme, ThemeOptions } from '../../vendor/mui'
 import { ThemeProvider } from '../../vendor/mui'
 import {
   ThemeContextDispatch,
+  type UseThemeMode,
   useThemeModeState,
 } from '../hocs/create-with-theme-provider'
 import { createResponsiveTheme } from '../util/create-responsive-theme'
 import {
-  hasDarkScheme,
   hasHostTheme,
   hostThemeToThemeOptions,
   mergeThemeOptions,
@@ -84,29 +84,32 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
   const contextTheme = useHostThemeDocument()
   const hostTheme = theme ?? contextTheme
   const themeModeState = useThemeModeState()
-  const [[, themeMode]] = themeModeState
+  const [[, themeMode], toggleThemeMode, cookieMode] = themeModeState
   const requested = themeMode === 'dark' ? 'dark' : 'light'
 
   /**
-   * A site only goes dark if it HAS a dark design (AGL-1292).
+   * Dark follows the visitor unless the site switched it off.
    *
-   * Sites are authored against a light canvas and their content carries
-   * hard-coded hex backgrounds. Honouring `prefers-color-scheme` flipped the
-   * theme's TEXT tokens to white while those backgrounds stayed light — for a
-   * host with no theme by handing it the console's dark theme wholesale, and
-   * for a host with a theme but no dark scheme by leaving `consoleOptionsDark`
-   * showing through the merge below.
-   *
-   * Measured on aglyn.com/pricing in dark mode: 903 of 1,910 text elements
-   * below AA, 539 of them under 1.5:1 and 44 at exactly 1.00:1 — white on
-   * white. It was never a `/pricing` bug; it is every site that has not
-   * authored dark colours.
-   *
-   * So dark is opt-in, and the opt-in is authoring `colorSchemes.dark`. A host
-   * that has done so is unaffected and still follows the visitor's preference.
+   * A site needs no dark design of its own to go dark: the platform's default
+   * dark palette (`consoleOptionsDark`, handed in as `baseOptions`) renders
+   * under whatever dark colors the site authored, by the same layering that
+   * gives it the brand palette in light (AGL-1180), and a host with no theme
+   * at all gets the dark fallback. Content that carries light-only hex
+   * backgrounds still reads badly under dark text tokens — that is a content
+   * choice, and the site owner makes it with `darkScheme: 'off'` in the theme
+   * editor, which keeps every visitor on light. The theme mode switcher reads
+   * the same answer and hides on such a site (AGL-2676).
    */
-  const scheme =
-    requested === 'dark' && !hasDarkScheme(hostTheme) ? 'light' : requested
+  const canGoDark = hostTheme?.darkScheme !== 'off'
+  const scheme = requested === 'dark' && !canGoDark ? 'light' : requested
+
+  // The mode state plus whether this site can honor a dark request, so a
+  // visitor-facing control (the theme mode switcher) can tell a site that
+  // will never go dark from one that merely is not dark right now.
+  const modeContext = useMemo<UseThemeMode>(
+    () => [themeModeState[0], toggleThemeMode, cookieMode, canGoDark],
+    [themeModeState, toggleThemeMode, cookieMode, canGoDark],
+  )
 
   const activeTheme = useMemo<Theme>(() => {
     if (!hasHostTheme(hostTheme)) {
@@ -135,7 +138,7 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
   }, [hostTheme, fallback, baseOptions, themeOptions, scheme])
 
   return (
-    <ThemeContextDispatch.Provider value={themeModeState}>
+    <ThemeContextDispatch.Provider value={modeContext}>
       <ThemeProvider theme={activeTheme}>
         {disableCssBaseline ? (
           children

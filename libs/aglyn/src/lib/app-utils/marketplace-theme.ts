@@ -383,10 +383,13 @@ export function validateThemeForPublish(
  * wrong. `mixins` arrived exactly that way (AGL-1242, toolbar heights) while
  * this was being written, which is why the check is a type and not a comment.
  *
- * A `false` here would mean "host-local, never published". Nothing is today —
- * `HostTheme` is pure design data — but the shape leaves room to say so.
+ * A `false` means "host-local, never published". `darkScheme` is the one such
+ * field: whether visitors get a dark scheme is a decision about a SITE's
+ * content (does it read in dark?), not about the design being published, so a
+ * publisher's opt-out must not travel with the theme and an installer's must
+ * not read as a divergence from it.
  */
-const THEME_ARTIFACT_FIELDS: Record<keyof Required<HostTheme>, true> = {
+const THEME_ARTIFACT_FIELDS: Record<keyof Required<HostTheme>, boolean> = {
   colorSchemes: true,
   typography: true,
   fonts: true,
@@ -394,6 +397,7 @@ const THEME_ARTIFACT_FIELDS: Record<keyof Required<HostTheme>, true> = {
   spacing: true,
   mixins: true,
   components: true,
+  darkScheme: false,
 }
 
 /**
@@ -413,7 +417,8 @@ export function themeArtifactContent(
 ): HostTheme {
   const content: Record<string, unknown> = {}
   if (!theme) return content
-  for (const key of Object.keys(THEME_ARTIFACT_FIELDS)) {
+  for (const [key, ships] of Object.entries(THEME_ARTIFACT_FIELDS)) {
+    if (!ships) continue
     const value = (theme as Record<string, unknown>)[key]
     if (value == null) continue
     if (Array.isArray(value) ? !value.length : typeof value === 'object'
@@ -556,6 +561,7 @@ export interface ThemeOverrideEntry {
 }
 
 const SEGMENT_LABELS: Record<string, string> = {
+  darkScheme: 'Dark scheme',
   colorSchemes: 'Color',
   typography: 'Typography',
   components: 'Component',

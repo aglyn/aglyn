@@ -59,6 +59,15 @@ jest.mock('./crm-record-header', () => ({
   CrmRecordChip: () => null,
 }))
 jest.mock('./crm-send-email-button', () => ({ CrmSendEmailButton: () => null }))
+/*
+ * The call button resolves the activity scope this spec's instance double
+ * does not carry, and has a spec of its own; the phone link beside it is
+ * pure and stays real.
+ */
+jest.mock('./crm-call-actions', () => ({
+  ...jest.requireActual('./crm-call-actions'),
+  CrmCallButton: () => null,
+}))
 jest.mock('./lead-owner-select', () => ({ LeadOwnerSelect: () => null }))
 
 const PENDING_REASON = 'An erasure is pending for this person'

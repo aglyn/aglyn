@@ -61,14 +61,16 @@ export function formatContactCustomValue(
 }
 
 /**
- * The contact list's columns for the org's custom fields (AGL-2601), one
- * per ACTIVE definition in `order`.
+ * A CRM list's columns for the org's custom fields (AGL-2601), one per
+ * ACTIVE definition in `order` — the contacts list's, and since AGL-2661
+ * the companies list's and the deals table's, each handed the definitions
+ * of its own object.
  *
- * The value is read off `row.custom`, which the list projects from THIS
- * holder's facet — the same projection that puts `tags` and `notes` on the
- * row — so a column can never show another holder's value. Sorting and
- * filtering are off: the value lives under `facets.{group}.custom.{key}`,
- * a path the list's query does not order on and no index covers, and a
+ * The value is read off `row.custom`: on a contact the list projects it
+ * from THIS holder's facet — the same projection that puts `tags` and
+ * `notes` on the row — so a column can never show another holder's value;
+ * on a company or a deal it is the document's own map. Sorting and
+ * filtering are off: the value lives under a map no index covers, and a
  * column that sorted the loaded window would look like it sorted the
  * collection.
  *

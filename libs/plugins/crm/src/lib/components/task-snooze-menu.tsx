@@ -20,7 +20,7 @@ import { CRM_COLLECTIONS } from '@aglyn/aglyn'
 import { mdiAlarmSnooze } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Box,
   Button,
@@ -34,8 +34,10 @@ import {
   TextField,
   Tooltip,
 } from '@mui/material'
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useState } from 'react'
+import { refreshCrmNextActivity } from '../model/next-activity-api'
+import type { CrmTaskRouteScope } from '../model/task-routes'
 import {
   CRM_TASK_SNOOZE_OPTIONS,
   type CrmTaskSnoozeOption,
@@ -54,13 +56,31 @@ import {
  * for its due date and the save is the write.
  */
 export type TaskSnoozeTarget =
-  | { write: { scope: readonly [string, string]; taskId: string } }
+  | {
+      write: {
+        scope: readonly [string, string]
+        taskId: string
+        /**
+         * The route scope and the records the task names (AGL-2661): a
+         * snooze moves the due date the records' next activity is read
+         * from, and a client-direct write has to say so itself.
+         */
+        call?: CrmTaskRouteScope | null
+        links?: { contactId?: string | null; companyId?: string | null; dealId?: string | null }
+      }
+    }
   | { pick: (dueAtMs: number) => void }
 
 export interface TaskSnoozeMenuProps {
   /** The task's current due date; the time of day is kept across a snooze. */
   dueAtMs: number | null | undefined
   target: TaskSnoozeTarget
+  /**
+   * The task's reminder (AGL-2659), so one that sits on the due time
+   * follows the snooze the way a save would carry it. Absent, a snooze
+   * moves the due date alone.
+   */
+  remindAtMs?: number | null
   /** An icon on a row, a labeled button in the drawer. */
   variant?: 'icon' | 'button'
   disabled?: boolean
@@ -85,7 +105,8 @@ export interface TaskSnoozeMenuProps {
  * snooze is not an edit.
  */
 export function TaskSnoozeMenu(props: TaskSnoozeMenuProps) {
-  const { dueAtMs, target, variant = 'icon', disabled, onSnoozed } = props
+  const { dueAtMs, target, remindAtMs, variant = 'icon', disabled, onSnoozed } = props
+  const { data: user } = useUser()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -104,8 +125,12 @@ export function TaskSnoozeMenu(props: TaskSnoozeMenuProps) {
     setBusy(true)
     try {
       const { scope, taskId } = target.write
+      // A reminder on the old due time is a reminder on the new one, and
+      // a moved reminder is one not yet sent — the save route's own rule.
+      const follows = typeof remindAtMs === 'number' && remindAtMs === dueAtMs
       await updateDoc(doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.tasks, taskId), {
         dueAtMs: next,
+        ...(follows ? { remindAtMs: next, reminderSentAtMs: deleteField() } : {}),
         updatedAt: serverTimestamp(),
       })
       enqueueSnackbar(
@@ -113,6 +138,7 @@ export function TaskSnoozeMenu(props: TaskSnoozeMenuProps) {
         { variant: 'success' },
       )
       onSnoozed?.(next)
+      await refreshCrmNextActivity(user, target.write.call ?? null, [target.write.links ?? {}])
     } catch (cause) {
       enqueueSnackbar(
         cause instanceof Error ? cause.message : 'The task could not be snoozed.',

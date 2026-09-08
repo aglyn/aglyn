@@ -22,8 +22,10 @@ deals against your plan's records band — see
 ## The companies list
 
 The list shows every company your site may see, newest activity first, with
-its domain, how many **contacts** are linked to it, its owner and when it was
-last changed. Open the column filter on **Company** to find one by name — the
+its domain, how many **contacts** are linked to it, its owner, when it was
+last changed and its [**next activity**](./tasks.md#next-activity) — when the
+earliest open task against it is due, with a **No next activity** chip beside
+the view control to keep only the companies with nothing scheduled. Open the column filter on **Company** to find one by name — the
 search reaches every company, not only the page on screen — and filter
 **Owner** to see one teammate's accounts. Clicking a row opens the company's
 page.
@@ -57,10 +59,17 @@ The page names the company in the heading and the trail, and holds its
 properties, its contacts, its [deals](./deals.md), its open [tasks](./tasks.md)
 and the [activity](./activities.md) logged against it. The header of the
 first card carries the domain under the company's kind, the industry and the
-owner as chips, **Back to companies**, and **Edit**, which opens the same form
-the company was created with; **Delete company** is in the header's menu (⋮).
+owner as chips, **Back to companies**, **Call** and **Log a call** (see
+[click to call](./activities.md#click-to-call)), and **Edit**, which opens the
+same form the company was created with; **Delete company** is in the header's
+menu (⋮). The company's phone number is a link on the properties card too.
 Every CRM record page — contact, company, deal and lead — is headed the same
 way.
+
+Under the fixed properties the card lists every [custom field](./custom-fields.md)
+defined on the **Companies** tab of the Fields section, and **Edit** carries a control
+for each, so a company's own properties are saved in the same form as its name and
+domain.
 
 ## Contacts at a company
 
@@ -142,6 +151,7 @@ it maps itself.
 | **Owner** | The email address of a member of your organization. An address that matches nobody leaves the company without an owner, and the result names those addresses. |
 | **Address line 1, line 2, city, state, postal code, country** | The postal address. Country must be a two-letter code. |
 | **Tags** | Separated by `,` or `\|`, lowercased. Added to any tags the company already has. |
+| **Custom fields** | Every field defined on the **Companies** tab of [Fields](./custom-fields.md) is offered as a target, and a header that matches a field's label or key is proposed for it — ahead of a standard alias, so a company field called *Region* wins over the address's region. A value that does not fit the field's type is dropped and reported. On an update, only the fields the file carries are written. |
 
 A new company counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
 on a plan whose band is a hard limit, rows past it are skipped as
@@ -172,6 +182,29 @@ created in the scope a contact captured on the same site would land in — the
 whole workspace when the workspace shares its data, and otherwise the sites
 that present as one sender — so a section of the CRM can never show a company
 to a reader who could not open the contacts at it.
+
+## Files
+
+The **Files** card attaches assets from the [media library](../media/overview.md)
+to this record: contracts, quotes, a signed proposal, a photo of the site.
+
+- **Attach…** opens the media browser. At a site you can pick from the site's
+  own library and the workspace's shared one; at the
+  [organization hub](./overview.md#at-the-organization-level) only the shared
+  library is offered, because a record there belongs to the workspace rather
+  than to one site.
+- A record holds up to **20 files**.
+- The **✕** beside a file removes the attachment. The file itself is untouched
+  and stays in the library.
+
+Files are stored **by id**, not by address. A file moved between folders keeps
+its attachment, and a private file is still served through the signed link that
+checks who is asking rather than through a public URL. A file deleted from the
+library is still listed, marked as no longer there, so an attachment never
+disappears without saying so.
+
+Attachments are readable and writable through the
+[REST API](/api/resources/companies) as `mediaIds`.
 
 ## Related
 

@@ -22,9 +22,9 @@
  *
  * The server half is `server/companies-import.ts`. What is particular to
  * companies: the name is the one cell every row needs (a domain is a key,
- * a name is the caption the list cannot do without), there are no custom
- * fields, and a row is matched to a company already filed by its domain
- * first and its name second.
+ * a name is the caption the list cannot do without), the custom fields
+ * are the org's COMPANY definitions (AGL-2661), and a row is matched to a
+ * company already filed by its domain first and its name second.
  */
 
 import {
@@ -38,12 +38,17 @@ import {
   type CompanyImportRawRow,
   type CompanyImportSkippedRow,
   companyImportSkippedCsv,
+  type ConsolePluginPageProps,
+  type ContactFieldDefinition,
   emptyCompanyImportResult,
   guessCompanyImportMapping,
   mapCompanyImportRow,
   mergeCompanyImportResults,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
+import { useMemo } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { companyImportTemplateCsv } from '../model/companies-csv'
 import {
   CsvImportButton,
@@ -54,76 +59,93 @@ import {
 /** The browser-side address of the route one chunk is posted to. */
 export const COMPANIES_IMPORT_URL = '/api/crm/companies-import'
 
-/** Built once: nothing in it depends on a render. */
-export const COMPANY_IMPORT_VOCABULARY: CsvImportVocabulary<
+/** The company vocabulary, over the org's company custom fields (AGL-2661). */
+export function companyImportVocabulary(
+  fields: readonly ContactFieldDefinition[],
+): CsvImportVocabulary<
   CompanyImportField,
   CompanyImportRawRow & Record<string, unknown>,
   CompanyImportSkippedRow
-> = {
-  title: 'Import companies from CSV',
-  help: pluginDocsHelp('companies', { anchor: '#import-from-csv' }),
-  sitePickerHelperText:
-    'The site these companies are filed under — it decides which of your ' +
-    'sites may see them.',
-  intro:
-    'A CSV with a header row. Match its columns to company fields below, ' +
-    'check the preview, then import. A company already in your list — by ' +
-    'domain, or failing that by name — is updated rather than added twice. ' +
-    `Up to ${COMPANY_IMPORT_MAX_ROWS.toLocaleString()} rows per file — split ` +
-    'a larger one.',
-  fields: COMPANY_IMPORT_FIELDS,
-  fieldLabels: COMPANY_IMPORT_FIELD_LABELS,
-  requiredField: 'name',
-  requiredWarning:
-    'Choose which column holds the company name. It is the one field every ' +
-    'row needs.',
-  unusableNotice: (count, total) =>
-    `${count.toLocaleString()} of ${total.toLocaleString()} rows have no ` +
-    'company name and will be skipped. You can download them after the ' +
-    'import.',
-  guessMapping: guessCompanyImportMapping,
-  mapRow: (cells, mapping) =>
-    mapCompanyImportRow(cells, mapping) as CompanyImportRawRow & Record<string, unknown>,
-  route: COMPANIES_IMPORT_URL,
-  maxRows: COMPANY_IMPORT_MAX_ROWS,
-  chunkSize: COMPANY_IMPORT_CHUNK_SIZE,
-  previewRows: COMPANY_IMPORT_PREVIEW_ROWS,
-  emptyResult: emptyCompanyImportResult,
-  mergeResults: mergeCompanyImportResults,
-  skipLabels: COMPANY_IMPORT_SKIP_LABELS,
-  skippedCsv: companyImportSkippedCsv,
-  skippedFileName: 'skipped-companies.csv',
-  templateCsv: companyImportTemplateCsv,
-  templateFileName: 'companies-template.csv',
+> {
+  return {
+    title: 'Import companies from CSV',
+    help: pluginDocsHelp('companies', { anchor: '#import-from-csv' }),
+    sitePickerHelperText:
+      'The site these companies are filed under — it decides which of your ' +
+      'sites may see them.',
+    intro:
+      'A CSV with a header row. Match its columns to company fields below, ' +
+      'check the preview, then import. A company already in your list — by ' +
+      'domain, or failing that by name — is updated rather than added twice. ' +
+      `Up to ${COMPANY_IMPORT_MAX_ROWS.toLocaleString()} rows per file — split ` +
+      'a larger one.',
+    fields: COMPANY_IMPORT_FIELDS,
+    fieldLabels: COMPANY_IMPORT_FIELD_LABELS,
+    customFields: fields,
+    requiredField: 'name',
+    requiredWarning:
+      'Choose which column holds the company name. It is the one field every ' +
+      'row needs.',
+    unusableNotice: (count, total) =>
+      `${count.toLocaleString()} of ${total.toLocaleString()} rows have no ` +
+      'company name and will be skipped. You can download them after the ' +
+      'import.',
+    guessMapping: (columns) => guessCompanyImportMapping(columns, fields),
+    mapRow: (cells, mapping) =>
+      mapCompanyImportRow(cells, mapping) as CompanyImportRawRow & Record<string, unknown>,
+    route: COMPANIES_IMPORT_URL,
+    maxRows: COMPANY_IMPORT_MAX_ROWS,
+    chunkSize: COMPANY_IMPORT_CHUNK_SIZE,
+    previewRows: COMPANY_IMPORT_PREVIEW_ROWS,
+    emptyResult: emptyCompanyImportResult,
+    mergeResults: mergeCompanyImportResults,
+    skipLabels: COMPANY_IMPORT_SKIP_LABELS,
+    skippedCsv: companyImportSkippedCsv,
+    skippedFileName: 'skipped-companies.csv',
+    templateCsv: companyImportTemplateCsv,
+    templateFileName: 'companies-template.csv',
+  }
 }
+
+/** The vocabulary with no custom fields — what a surface without an org resolves to. */
+export const COMPANY_IMPORT_VOCABULARY = companyImportVocabulary([])
 
 export interface CompanyImportDrawerProps {
   open: boolean
   onClose: () => void
   /** The site the file is filed under, or `null` at the organization level (AGL-2630). */
   hostId: string | null
+  /** The org, for the company field definitions the mapping offers (AGL-2661). */
+  org?: ConsolePluginPageProps['org']
 }
 
 export function CompanyImportDrawer(props: CompanyImportDrawerProps) {
-  const { open, onClose, hostId } = props
+  const { open, onClose, hostId, org } = props
+  // The org's company fields, read only while the drawer is open.
+  const { orgId } = useCrmScope({ hostId, org })
+  const { active } = useContactFieldDefinitions(open ? orgId : null, 'company')
+  const vocabulary = useMemo(() => companyImportVocabulary(active), [active])
   return (
     <CsvImportDrawer
       open={open}
       onClose={onClose}
       hostId={hostId}
-      vocabulary={COMPANY_IMPORT_VOCABULARY}
+      vocabulary={vocabulary}
     />
   )
 }
 CompanyImportDrawer.displayName = 'CompanyImportDrawer'
 
 /** The "Import CSV" action on the companies list, with the drawer it opens. */
-export function CompanyImportButton(props: { hostId: string | null }) {
-  const { hostId } = props
+export function CompanyImportButton(props: {
+  hostId: string | null
+  org?: ConsolePluginPageProps['org']
+}) {
+  const { hostId, org } = props
   return (
     <CsvImportButton>
       {(open, onClose) => (
-        <CompanyImportDrawer open={open} onClose={onClose} hostId={hostId} />
+        <CompanyImportDrawer open={open} onClose={onClose} hostId={hostId} org={org} />
       )}
     </CsvImportButton>
   )

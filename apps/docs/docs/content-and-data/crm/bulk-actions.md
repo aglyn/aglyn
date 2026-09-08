@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: Bulk actions
-description: Select rows in any CRM table — contacts, companies, deals or tasks — and act on all of them at once, or export them as a CSV that re-imports.
+description: Select rows in any CRM table — contacts, companies, deals, tasks or leads — and act on all of them at once, or export them as a CSV.
 ---
 
 # Bulk actions
@@ -11,8 +11,36 @@ checkbox in the header for the whole page — and a bar appears above the table
 saying how many are selected, with one action for all of them. The rows on
 offer are the ones the open [view](./views.md) shows, so narrowing to "my leads
 in Texas" first and ticking the header checkbox acts on exactly those. Each
-section's bar offers what that record can do; every bar has **Export CSV** and
-**Clear**.
+section's bar offers what that record can do; every bar has **Export CSV**,
+**Export all…** and **Clear**.
+
+## Two exports, and the difference matters
+
+- **Export CSV** writes the rows on screen — the selection, or the page the
+  table has loaded. Instant, and exactly what you are looking at.
+- **Export all…** writes the **whole collection**, whatever the view is
+  narrowed to and however many rows there are. The server streams it, so a
+  workspace with forty thousand contacts gets forty thousand rows.
+
+Both files have the same columns in the same order, so the two open the same
+way in a spreadsheet.
+
+**Export all…** checks itself. The server counts the collection before it
+starts sending and states that number in the response; if fewer rows arrive
+than were promised — a connection dropped mid-download — **nothing is saved**
+and you are told how many of how many arrived. A half-written export that
+looks complete is worse than no export, because nothing about a shorter file
+says it is short.
+
+A complete export writes what the SERVER can resolve: owners and assignees by
+email address, a deal's pipeline and stage by name, and a task's contact,
+company and deal by name. Past the first two thousand linked records a task
+file writes the record's id instead.
+
+Who can take one: the same people who can open the CRM — the surface has to be
+available to you and your role must be able to manage data. A collaborator
+scoped to some of the workspace's sites gets **their** rows and not the
+workspace's, enforced on the server rather than in the browser.
 
 ## Contacts
 
@@ -80,6 +108,20 @@ Board / Table control).
 | **Export CSV** | Download the selected tasks as `tasks-selected.csv` — the same file the list's **Export CSV** writes for the view on screen: title, kind, priority, status, the due date and the completion as timestamps, the assignee by email address, the contact, company and deal by name, and notes. |
 | **Delete** | After a confirmation, the selected tasks are deleted for everyone who can see them. A finished task is better ticked done, which keeps it in the Done view. |
 
+## Leads
+
+| Action | What happens |
+| --- | --- |
+| **Set owner** | Pick a team member, or **Nobody** to clear the owner. The lead alone is assigned; its contact, when there is one, is assigned from its own record. |
+| **Set status** | Pick **New** or **Working**. A lead already at that status is skipped and named, and a converted lead is left alone — its status is its conversion. Setting a closed lead back to Working reopens it and clears its reason, as the row does. |
+| **Unqualify** | Asks for one reason, then closes every open selected lead with it; the reason is kept on each so the [lead funnel](./reports.md#lead-funnel) can count it. Leads already closed or converted are skipped and named. |
+| **Export CSV** | Download the selected leads as `leads-selected.csv` — the same file the list's **Export CSV** writes: email, name, status, the owner by email address, the sources by name joined with `\|`, first and last seen, how many times the person was captured, the unqualified reason, when the lead converted, and notes. There is no leads import — a lead is captured, not filed — so this file is for reading, not for re-importing. |
+| **Clear** | Deselect everything. |
+
+A lead's owner and status are the team's own notes on a capture — no event
+and no notification fire — so the bar writes them directly, the way the
+row's inline controls do.
+
 ## At the organization level
 
 The same bars, over every site's rows at once, on the
@@ -87,7 +129,15 @@ The same bars, over every site's rows at once, on the
 writes one line into the organization's activity feed (**Team → Activity**) —
 "Owner set on 3 deals" — where a site's hub writes into the site's own feed. A
 stage move or a loss over deals is recorded per deal instead, by the move
-itself.
+itself. The leads bar writes each lead under the site that captured it, and
+its export gains a **Site** column after **Owner**, naming which — and
+**Export all…** there covers every site's leads in one file, up to two hundred
+sites.
+
+**Export all…** for contacts writes each person through their **primary
+holder** at the organization level — the first site that captured them — which
+is the profile the organization's own table shows. Under a site it writes that
+site's, as the table does.
 
 The tasks bar's **Complete** and **Assign** run there as **one request for the
 whole selection**, authorized by the organization rather than task by task
@@ -135,5 +185,5 @@ you see are for the whole selection. A person's own page in the CRM has the same
 - [CRM overview](./overview.md)
 - [The contact record](./contact-record.md) — the same tags, owner and stage, one person at a time
 - [Import contacts from CSV](./import.md) and [import companies](./companies.md#import-from-csv) — the files an export re-imports as
-- [Companies](./companies.md), [Deals pipeline](./deals.md), [Tasks & follow-ups](./tasks.md) — each section's records
+- [Companies](./companies.md), [Deals pipeline](./deals.md), [Tasks & follow-ups](./tasks.md), [Leads](./leads.md) — each section's records
 - [Email audiences](../../marketing-and-automation/email-campaigns/overview.md#email-lists) — including audiences built from a rule, which can target a contact's owner, lifecycle stage, company and custom fields.

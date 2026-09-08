@@ -48,6 +48,21 @@ export interface PickedMedia {
    * per-placement override keeps winning.
    */
   alt?: string
+  /**
+   * The chosen asset's media DOCUMENT id (AGL-2662).
+   *
+   * For the callers that store a reference rather than a placement: a CRM
+   * record's attachments are ids, so a file moved between folders keeps its
+   * attachment and a private asset is still served through the signed CDN
+   * door. Absent for a source that has no document behind it.
+   */
+  mediaId?: string
+  /**
+   * The CDN scope the id resolves under — `org:{orgId}` for the shared
+   * library, a host id for a site's own. Carried beside {@link mediaId}
+   * because an id alone cannot be turned back into a URL.
+   */
+  mediaScope?: string
 }
 
 /**

@@ -33,6 +33,7 @@ import {
 } from '../hooks/use-crm-tasks'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { crmRoutes } from '../model/crm-routes'
+import { refreshCrmNextActivity } from '../model/next-activity-api'
 import { completeCrmTask } from '../model/task-api'
 import { crmTaskCallScope } from '../model/task-routes'
 import { TaskDueText, TaskKindCell, TaskPriorityChip } from './task-cells'
@@ -109,6 +110,8 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
               updatedAt: serverTimestamp(),
             },
           )
+          // A client-direct write: the records it names are told (AGL-2661).
+          await refreshCrmNextActivity(user, crmTaskCallScope(hostId, orgId), [task])
         } else {
           // The mounted site, or at the organization level the org — whose
           // variant emits on the task's own site, or nowhere for an org task.
@@ -237,7 +240,15 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
                     {scope ? (
                       <TaskSnoozeMenu
                         dueAtMs={task.dueAtMs}
-                        target={{ write: { scope, taskId: task.$id } }}
+                        remindAtMs={task.remindAtMs}
+                        target={{
+                          write: {
+                            scope,
+                            taskId: task.$id,
+                            call: crmTaskCallScope(hostId, orgId),
+                            links: task,
+                          },
+                        }}
                         disabled={busyId === task.$id}
                       />
                     ) : null}

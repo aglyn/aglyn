@@ -82,8 +82,11 @@ Above the board, three figures summarize what is open: the **open count**, the
 value** (each amount multiplied by its stage's probability).
 
 Switch to the **table** for a paged list with the title, stage, amount, owner,
-expected close date and status of every deal in the pipeline, including the
-closed ones.
+expected close date, status and [**next activity**](./tasks.md#next-activity)
+of every deal in the pipeline, including the closed ones. The **No next
+activity** chip beside the status filter keeps only the deals on the page with
+no open task scheduled against them — the ones the reports page counts as
+[stuck](./reports.md#pipeline).
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one
@@ -93,6 +96,44 @@ name, the amount in major units beside its currency, the owner by email
 address, the expected close date, status, the contact and the company, when
 it closed, the lost reason and notes; the bar's **Export CSV** writes the same
 file over the selection.
+
+## Import from CSV
+
+**Import CSV** beside the table's status filter takes a spreadsheet of deals —
+an export from another CRM, a forecast sheet — and files each row as a new
+deal. A deal has no key the way a contact has an address, so nothing is
+merged: importing a file twice files it twice. Importing needs the same
+**Manage data** permission as creating a deal.
+
+The three steps are the ones the [contacts import](./import.md) walks: choose
+the file (up to 5,000 rows), match its columns — Aglyn proposes a match from
+the header names and shows the first row's value beside each — check the
+ten-row preview, then import in batches of 200 with a progress bar and a
+result that says how many were **added** and **skipped**, with the skipped
+rows downloadable as a CSV that says why. **Download template** hands you the
+export's own header over no rows, so a sheet filled in against it maps itself.
+
+| Field | What is read |
+| --- | --- |
+| **Title** | Required. A row without one is skipped. |
+| **Pipeline** | By **name**, as it appears in [Pipelines](#pipelines), spelled either way. Left empty, the row lands in the default pipeline. A name your workspace has no pipeline for skips the row as *No pipeline by that name*. |
+| **Stage** | By name within that pipeline. Left empty, the pipeline's first open stage. A name the pipeline has no stage for skips the row as *No stage by that name in that pipeline*. A row filed into **Won** or **Lost** is closed on arrival; no `dealWon` or `dealLost` event fires for it. |
+| **Amount** | In major units (`1250.00`, `$1,250`); the currency symbol and separators are ignored. A cell that is not a number is dropped and reported. |
+| **Currency** | A three-letter code (`USD`, `EUR`); `USD` when empty. Anything else is dropped and reported. |
+| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the deal without an owner, and the result names those addresses. |
+| **Expected close** | A calendar day (`2026-12-01`) or a timestamp. Anything else is dropped and reported. |
+| **Notes** | Free text. |
+
+The export's **Status**, **Contact**, **Company**, **Closed** and **Lost
+reason** columns are proposed as **Do not import**: the stage decides the
+status, and a deal is linked to its contact and company on its own page. A
+new deal counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
+on a plan whose band is a hard limit, rows past it are skipped as **CRM
+records limit reached**.
+
+At the [organization level](./overview.md#at-the-organization-level) the
+drawer first asks which site the deals are filed under, because a deal is
+some site's record and the site decides which of your sites may see it.
 
 ## Creating a deal
 
@@ -185,7 +226,9 @@ Opening a deal shows:
 - **Stage** — a stepper across the open stages, with **Won** and **Lost**
   buttons and, on a closed deal, the way to reopen it.
 - **Properties** — the amount and its weighted value, the expected close, the
-  owner, links to the contact and the company, and the notes.
+  owner, links to the contact and the company, the notes, and one row per
+  [custom field](./custom-fields.md) defined on the **Deals** tab of the Fields
+  section; **Edit** carries a control for each.
 - **Products** — the [line items](#line-items) behind the amount, with the
   door to add one from the catalog or by hand.
 - **Tasks** and **Activity** — what is owed on this deal and what has happened
@@ -194,12 +237,36 @@ Opening a deal shows:
 A deal also appears on the pages of the contact and the company it names, each
 with a **New deal** shortcut that starts a deal already linked to them.
 
+## Files
+
+The **Files** card attaches assets from the [media library](../media/overview.md)
+to this record: contracts, quotes, a signed proposal, a photo of the site.
+
+- **Attach…** opens the media browser. At a site you can pick from the site's
+  own library and the workspace's shared one; at the
+  [organization hub](./overview.md#at-the-organization-level) only the shared
+  library is offered, because a record there belongs to the workspace rather
+  than to one site.
+- A record holds up to **20 files**.
+- The **✕** beside a file removes the attachment. The file itself is untouched
+  and stays in the library.
+
+Files are stored **by id**, not by address. A file moved between folders keeps
+its attachment, and a private file is still served through the signed link that
+checks who is asking rather than through a public URL. A file deleted from the
+library is still listed, marked as no longer there, so an attachment never
+disappears without saying so.
+
+Attachments are readable and writable through the
+[REST API](/api/resources/deals) as `mediaIds`.
+
 ## Related
 
 - [CRM overview](./overview.md)
 - [Companies](./companies.md) and [the contact record](./contact-record.md) — the two records a deal is with
 - [Tasks & follow-ups](./tasks.md) and [Activities & the timeline](./activities.md) — what is owed on a deal and what has happened on it
 - [Bulk actions](./bulk-actions.md#deals) — stage, owner, loss, export and delete over a selection
+- [Import contacts from CSV](./import.md) — the same three steps the deals import walks
 - [Reports](./reports.md) — the open pipeline, its weighted forecast, and won against lost
 - [Automations for the CRM](./automations.md) — the three deal events, and what a won deal does on its own
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)

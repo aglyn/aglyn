@@ -24,8 +24,12 @@ immediately.
 
 - Choose your **palette** and **typography**.
 - Fonts load through a Google Fonts URL builder.
-- Configure both **light and dark** schemes — published sites apply the visitor's system
-  scheme automatically.
+- Configure both **light and dark** schemes. Published sites follow the visitor's system
+  scheme (or their choice in the theme mode switcher); anything you leave unset under
+  **Dark** comes from the platform's default dark palette, so a site goes dark without a
+  dark design of its own.
+- **Dark scheme** — set it to **Off** when your content only reads well in light: every
+  visitor stays on light and the theme mode switcher is hidden on published pages.
 
 ## It follows you into the Besigner
 
@@ -41,7 +45,7 @@ automatically when you adjust the theme — or when the visitor's scheme flips. 
 ## Tips
 
 - Set both schemes — a site that only looks right in light mode breaks for dark-mode
-  visitors.
+  visitors. Until it does, switch **Dark scheme** off rather than shipping unreadable pages.
 - Prefer theme color *references* over fixed hex values when styling elements; references
   adapt per scheme, fixed colors don't (though the Besigner can scope custom colors per
   scheme too).

@@ -106,6 +106,7 @@ import { customFieldColumns } from './contact-custom-columns'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
+import { NoNextActivityToggle } from './crm-next-activity-column'
 import { useCompanyOptions } from './company-picker'
 import CrmFilterBar, { type CrmFilterOption } from './crm-filter-bar'
 import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
@@ -896,6 +897,10 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               servedField={plan.served?.field ?? null}
               onOpen={() => setFilterOpened(true)}
             />
+            {/* The one clause a rep reaches for most (AGL-2661), as a chip. */}
+            <Stack direction="row">
+              <NoNextActivityToggle filters={views.state.filters} onChange={views.setFilters} />
+            </Stack>
           </Stack>
           {!quota.allowed ? (
             <Alert severity="warning">

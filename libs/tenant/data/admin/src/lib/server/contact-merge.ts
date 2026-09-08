@@ -60,6 +60,7 @@ import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { FieldValue } from 'firebase-admin/firestore'
 import { settleCompanyContactsCounts } from './contact-company-link'
+import { recomputeCrmNextTaskAt } from './crm-next-activity'
 import { logHostActivity } from './organizations'
 
 /** How many pointing rows one repoint pass reads — and one batch writes. */
@@ -277,6 +278,17 @@ export async function mergeContacts(
     mirror: null,
     counts: plan.companyCounts,
   })
+  /*
+   * The survivor now owns the merged record's open tasks too, so its next
+   * activity is the earliest of both (AGL-2661). Settled the same way: a
+   * figure that could not move is logged, and the Fields section's
+   * recompute corrects it.
+   */
+  await recomputeCrmNextTaskAt(firestore, orgRef.id, [{ contactId: survivorId }]).catch(
+    (error: unknown) => {
+      console.error('contact merge next activity could not be recomputed', survivorId, error)
+    },
+  )
 
   const mergedEmail = contactEmails(mergedData)[0] ?? ''
   const survivorEmail = plan.emails[0] ?? ''

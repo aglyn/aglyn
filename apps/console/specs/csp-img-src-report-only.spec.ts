@@ -47,7 +47,11 @@ import { NextRequest } from 'next/server'
 // The middleware reads this same module; the spec reads it to prove the
 // production/development split rather than to restate the list.
 // eslint-disable-next-line @nx/enforce-module-boundaries
-import { imgSrcDirective } from '../../../security-origins'
+import {
+  GOOGLE_CCTLD_ORIGINS,
+  imgSrcDirective,
+  MEASUREMENT_IMAGE_ORIGINS,
+} from '../../../security-origins'
 
 /**
  * `app.aglyn.com` — an APEX_LABELS host, chosen so the middleware short-circuits
@@ -146,6 +150,88 @@ describe('console img-src, report-only (AGL-1685)', () => {
     const policy = await reportOnly()
     expect(policy).not.toContain('qrserver')
     expect(policy).not.toContain('gravatar')
+  })
+})
+
+describe('console img-src carries the measurement beacons (AGL-2694)', () => {
+  /**
+   * The candidate policy is what the enforcing one will be. Leaving the ad and
+   * measurement beacons out of it does not withhold anything today — the
+   * header is report-only — it just arranges for the flip (AGL-1702) to take
+   * Google Ads conversion tracking and the GA4→Ads remarketing join with it,
+   * silently: no console error, no report, the pixel simply never fires.
+   *
+   * Each host below was named by production, not by inference: the first two
+   * by the console's own `cspViolationDaily` rows, the rest by the live probes
+   * AGL-1152 ran against the tenant's enforcing policy.
+   */
+  it('names the Google Ads conversion pixel the reports actually caught', async () => {
+    // `cspViolationDaily`: console | img-src | report |
+    // googleads.g.doubleclick.net | /signup. This is the sign-up conversion.
+    expect(await reportOnly()).toContain('https://googleads.g.doubleclick.net')
+  })
+
+  it('names the remarketing beacon host, unscoped — the recaptcha path does not reach it', async () => {
+    // `IMAGE_ORIGINS` already held `https://www.google.com/recaptcha/`, and a
+    // source expression matches by path PREFIX, so it never matched
+    // `/ads/ga-audiences`. That is why `www.google.com` kept reporting while
+    // the list looked like it covered it.
+    const policy = await reportOnly()
+    expect(policy).toContain('https://www.google.com ')
+    // …and the path-scoped App Check entry survives alongside it. A Set over
+    // the sources cannot collapse these two, and must not be made to.
+    expect(policy).toContain('https://www.google.com/recaptcha/')
+  })
+
+  it('carries every measurement origin the tenant enforces', async () => {
+    // Derived from the shared list rather than a retyped roll-call: a vendor
+    // added for the tenant and forgotten here is exactly the drift this
+    // asserts against, and a hand-written copy would go stale silently.
+    const policy = await reportOnly()
+    for (const origin of MEASUREMENT_IMAGE_ORIGINS) {
+      expect(policy).toContain(origin)
+    }
+  })
+
+  it('reaches non-US visitors — the country domains are the pixel, not padding', async () => {
+    // The tenant measured this the hard way: production served
+    // `www.google.com.vn`, not the `/ads/ga-audiences` form the plan guessed.
+    // A US-only list is a silently narrowed audience, which reports nothing
+    // anywhere.
+    const policy = await reportOnly()
+    expect(GOOGLE_CCTLD_ORIGINS.length).toBeGreaterThan(150)
+    expect(policy).toContain('https://www.google.com.vn')
+    expect(policy).toContain('https://www.google.co.uk')
+  })
+
+  it('names the non-Google vendors whose scripts are already allowlisted', async () => {
+    // The asymmetry this issue is about: `SCRIPT_ORIGINS` admits both loaders,
+    // so allowlisting the script and refusing its beacon measures nothing.
+    const policy = await reportOnly()
+    // Meta pixel beacon.
+    expect(policy).toContain('https://www.facebook.com')
+    // LinkedIn, wildcarded because the beacon host is a per-view SHARD —
+    // pinning `px.` reached none of the `px1`–`px4` the tag actually served.
+    expect(policy).toContain('https://*.ads.linkedin.com')
+  })
+
+  it('CONTROL — repeats are collapsed, so the header states each source once', async () => {
+    // `www.googletagmanager.com` is in BOTH lists on purpose (GA4's own pixel
+    // in `IMAGE_ORIGINS`, the tag delivery host in the measurement list). The
+    // duplication belongs in the source, not on the wire.
+    const sources = imgSrcDirective(true).replace('img-src ', '').split(' ')
+    expect(sources).toContain('https://www.googletagmanager.com')
+    expect(new Set(sources).size).toBe(sources.length)
+  })
+
+  it('CONTROL — widening img-src did not widen the enforcing policy', async () => {
+    // The beacons are in the CANDIDATE header. If this change had leaked them
+    // into the enforcing one it would have shipped an `img-src` that enforces
+    // an admittedly incomplete allowlist (AGL-1701), breaking avatars — the
+    // failure the report-only posture exists to avoid.
+    const policy = await enforcing()
+    expect(policy).not.toContain('img-src')
+    expect(policy).not.toContain('doubleclick')
   })
 })
 

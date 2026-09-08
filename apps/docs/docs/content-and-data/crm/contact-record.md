@@ -44,9 +44,13 @@ record links to. The page opens with the person's name, their lifecycle stage,
 their owner, when they [last engaged](#last-engaged) with one of your
 campaigns, and — for a buyer — how many orders they have placed and what they
 have spent; the order count is a link to the site's orders list narrowed to the
-person's address. Under it, one card per aspect of the record:
+person's address. Beside **Send email** it carries **Call**, which dials the
+person's number, and **Log a call** — see
+[click to call](./activities.md#click-to-call). Under it, one card per aspect
+of the record:
 
-- **Properties** — the editable profile: name, phone, job title, company,
+- **Properties** — the editable profile: name, phone (with a dial button
+  beside it, see [click to call](./activities.md#click-to-call)), job title, company,
   lifecycle stage, owner, tags, address and an **About** box for your
   team's notes. One **Save** writes everything at once. The email is shown
   but cannot be edited here, because it is the shared identity. The
@@ -270,6 +274,34 @@ manage data on the site, and only while the CRM is available to them.
 The phone number and company name are kept on the record itself for that
 lookup, as this site last saved them; the values you see on a person's page
 are always your own site's.
+
+## Files
+
+The **Files** card attaches assets from the [media library](../media/overview.md)
+to this record: contracts, quotes, a signed proposal, a photo of the site.
+
+- **Attach…** opens the media browser. At a site you can pick from the site's
+  own library and the workspace's shared one; at the
+  [organization hub](./overview.md#at-the-organization-level) only the shared
+  library is offered, because a record there belongs to the workspace rather
+  than to one site.
+- A record holds up to **20 files**.
+- The **✕** beside a file removes the attachment. The file itself is untouched
+  and stays in the library.
+
+Files are stored **by id**, not by address. A file moved between folders keeps
+its attachment, and a private file is still served through the signed link that
+checks who is asking rather than through a public URL. A file deleted from the
+library is still listed, marked as no longer there, so an attachment never
+disappears without saying so.
+
+Files are **per site**, like everything else on a person's record: an agency
+running two client brands has one contact document between them, and a contract
+one client filed is not the other client's to see. See
+[what each site keeps to itself](#what-each-site-keeps-to-itself).
+
+Attachments are readable and writable through the
+[REST API](/api/resources/contacts) as `mediaIds`.
 
 ## Related
 

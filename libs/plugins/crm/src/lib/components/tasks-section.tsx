@@ -48,6 +48,7 @@ import { type CrmTaskRow, useCrmTaskList, useNowMs } from '../hooks/use-crm-task
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
+import { refreshCrmNextActivity } from '../model/next-activity-api'
 import { completeCrmTask } from '../model/task-api'
 import { crmTaskCallScope } from '../model/task-routes'
 import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
@@ -63,6 +64,8 @@ import {
   TaskRecordLink,
 } from './task-cells'
 import TaskEditDrawer from './task-edit-drawer'
+import TasksCalendar from './tasks-calendar'
+import { TaskImportButton } from './task-import-drawer'
 import TaskSnoozeMenu from './task-snooze-menu'
 import TasksBulkBar from './tasks-bulk-bar'
 
@@ -182,6 +185,12 @@ export function TasksSection(props: ConsolePluginPageProps) {
     downloadTextFile('tasks.csv', 'text/csv', tasksCsv(tasks, csvOptions))
   }, [tasks, csvOptions])
 
+  /*
+   * List or month (AGL-2662). A layout choice over the SAME rows and the
+   * same view — switching does not narrow anything and costs no read, so
+   * it is a toggle rather than another saved view.
+   */
+  const [layout, setLayout] = useState<'list' | 'calendar'>('list')
   const [drawer, setDrawer] = useState<{ open: boolean; task: CrmTaskRow | null }>({
     open: false,
     task: null,
@@ -210,6 +219,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
             },
           )
           enqueueSnackbar('Task reopened', { variant: 'success' })
+          // A client-direct write: the records it names are told (AGL-2661).
+          await refreshCrmNextActivity(user, crmTaskCallScope(hostId, orgId), [task])
         } else {
           // The route runs as the mounted site, which hears the event, or
           // at the organization level as the org — the org variant, which
@@ -312,7 +323,15 @@ export function TasksSection(props: ConsolePluginPageProps) {
             {row.status === 'done' || !scope ? null : (
               <TaskSnoozeMenu
                 dueAtMs={row.dueAtMs}
-                target={{ write: { scope, taskId: row.$id } }}
+                remindAtMs={row.remindAtMs}
+                target={{
+                  write: {
+                    scope,
+                    taskId: row.$id,
+                    call: crmTaskCallScope(hostId, orgId),
+                    links: row,
+                  },
+                }}
                 disabled={busyId === row.$id}
               />
             )}
@@ -399,7 +418,21 @@ export function TasksSection(props: ConsolePluginPageProps) {
                 </ToggleButton>
               ))}
             </ToggleButtonGroup>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              color="primary"
+              value={layout}
+              onChange={(_event, next) => {
+                if (next) setLayout(next as 'list' | 'calendar')
+              }}
+              aria-label="Task layout"
+            >
+              <ToggleButton value="list">{'List'}</ToggleButton>
+              <ToggleButton value="calendar">{'Calendar'}</ToggleButton>
+            </ToggleButtonGroup>
             <Stack sx={{ flex: 1 }} />
+            <TaskImportButton hostId={hostId} />
             <Button size="small" onClick={handleExport} disabled={!tasks.length}>
               {'Export CSV'}
             </Button>
@@ -430,6 +463,19 @@ export function TasksSection(props: ConsolePluginPageProps) {
                   {`Showing the first ${CRM_TASK_VIEW_LIMIT} — narrow the view to see the rest.`}
                 </Typography>
               ) : null}
+              {/*
+                The calendar draws the same rows, so there is no bulk bar
+                over it: a selection is a list gesture, and a month grid
+                offers nowhere to make one.
+              */}
+              {layout === 'calendar' ? (
+                <TasksCalendar
+                  tasks={tasks}
+                  truncated={truncated}
+                  onOpen={(task) => setDrawer({ open: true, task })}
+                />
+              ) : (
+                <>
               <TasksBulkBar
                 hostId={hostId}
                 scope={scope}
@@ -458,6 +504,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
                   onSortModelChange={grid.onSortModelChange}
                 />
               </CrmColumnOrderProvider>
+                </>
+              )}
             </>
           )}
         </Stack>

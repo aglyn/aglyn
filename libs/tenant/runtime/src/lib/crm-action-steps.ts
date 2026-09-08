@@ -29,6 +29,7 @@ import {
   type CrmTask,
   crmEmailDeliveryTags,
   crmScopeTokens,
+  crmTaskReminderAfterEdit,
   normalizeContactEmail,
   parseCrmMemberRef,
   readContactFacet,
@@ -40,6 +41,7 @@ import {
   firebaseAdmin,
   newCrmActivityRef,
   orgDataQueryForHost,
+  recomputeCrmNextTaskAt,
   writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
 // The leaf, not the barrel: this library's specs substitute the barrel
@@ -352,12 +354,15 @@ export async function runCrmActionStep(
       if ('error' in named) return { error: named.error }
       assignee = named.uid
     }
+    const dueAtMs = nowMs + dueInDays * DAY_MS
     const task: CrmTask = {
       title,
       kind: step.kind,
       priority: 'normal',
       status: 'open',
-      dueAtMs: nowMs + dueInDays * DAY_MS,
+      dueAtMs,
+      // The reminder a person's task gets (AGL-2659): the due time.
+      remindAtMs: crmTaskReminderAfterEdit({ dueAtMs, previous: null }),
       ...(assignee ? { assigneeUid: assignee } : {}),
       createdByUid: '',
       sourceActionId: actionId,
@@ -368,6 +373,11 @@ export async function runCrmActionStep(
       updatedAt: FieldValue.serverTimestamp(),
     }
     await orgRef.collection(CRM_COLLECTIONS.tasks).add(task)
+    // The contact and company the task names carry `nextTaskAtMs` (AGL-2661);
+    // a figure that could not move is the Fields section's recompute's.
+    await recomputeCrmNextTaskAt(firebaseAdmin.app().firestore(), env.orgId, [links]).catch((error: unknown) => {
+      console.error('[workflow] next activity could not be recomputed', env.orgId, error)
+    })
     return { detail: title.slice(0, 60) }
   }
 

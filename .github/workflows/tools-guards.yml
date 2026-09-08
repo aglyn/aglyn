@@ -410,6 +410,15 @@ jobs:
       # no install, well under a second.
       - run: npm run test:gate-script
 
+      # AGL-2688. `vercel-ignore-build.sh` decides whether each of the four
+      # projects builds, and both of its failure directions are invisible from
+      # reading it: a wrong IGNORE ships stale code while every signal says
+      # shipped, and a wrong diff RANGE hides an edit that is not the tip
+      # commit of a push. The test drives the real script against a throwaway
+      # git repo — it reddens on 7 of 12 cases against the pre-AGL-2688 script,
+      # which is what makes it worth running. Pure git + bash, ~6s, no install.
+      - run: npm run test:vercel-ignore-build
+
       # AGL-2486. The guards phase is no longer a serial loop inside gate.sh —
       # it is tools/scripts/run-guards.mjs, which DERIVES the guard list from
       # this file and nx-ci.yml and runs it concurrently (1m09s -> ~15s). That

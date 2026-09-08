@@ -49,10 +49,13 @@ import ContactMergeDialog, { useContactMergeDialog } from './contact-merge-dialo
 import ContactPropertiesCard from './contact-properties-card'
 import ContactTimelineCard from './contact-timeline-card'
 import { AddToListButton } from './add-to-list-button'
+import { useBookingDoor } from './book-meeting-action'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
+import { CrmCallButton } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { useErasePersonAction } from './erase-person-action'
+import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
 import { useEmailsHubPath } from './use-emails-hub-path'
 import { useOrgMembers } from './use-org-members'
@@ -183,6 +186,27 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           orgSlug: String(params.orgSlug),
           host: String(params.host),
         }).ordersByCustomer(record.email)
+      : null
+  /*
+   * Where this person's BOOKINGS are read (AGL-2660): the site's Bookings
+   * page narrowed to their address, under the same match rule the booking
+   * row's own "View in CRM" uses. Offered only where the site has a booking
+   * door — a site that never enabled Bookings should not carry the row. At
+   * the organization level the capturing site's page, addressed through
+   * the subdomain the mount knows it by.
+   */
+  const bookingDoor = useBookingDoor(siteHostId, org)
+  const siteSlug = params?.host
+    ? String(params.host)
+    : siteHostId && mount
+      ? mount.siteSubdomain(siteHostId)
+      : null
+  const bookingsHref =
+    bookingDoor.open && params?.orgSlug && siteSlug && record?.email
+      ? Aglyn.siteRecordLinks({
+          orgSlug: String(params.orgSlug),
+          host: siteSlug,
+        }).bookingsByBooker(record.email)
       : null
 
   /*
@@ -344,6 +368,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           record ? (
             <>
               <AddToListButton hostId={hostId} org={org} contactId={id} email={record.email} />
+              {/* Dial the number, and log the call it was (AGL-2661). */}
+              <CrmCallButton
+                hostId={siteHostId}
+                org={org}
+                link={{ contactId: id }}
+                phone={record.phone}
+              />
               <CrmSendEmailButton
                 hostId={siteHostId}
                 org={org}
@@ -355,6 +386,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           ) : null
         }
         menuItems={[...overflowItems, ...erase.menuItems]}
+        // The booking door (AGL-2660): this site's services, or at the
+        // organization level the capturing site's.
+        booking={record ? { hostId: siteHostId, org, kind: 'contact', recordId: id } : undefined}
         loading={!record}
         chips={
           record ? (
@@ -434,6 +468,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             scope={scope}
             seed={{ status, fromCache }}
             basePath={basePath}
+            bookingsHref={bookingsHref}
           />
           <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
           <ContactTimelineCard
@@ -451,6 +486,19 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             contactName={record.name || record.email}
           />
           <RecordTasksCard hostId={hostId} org={org} basePath={basePath} contactId={id} />
+          {/*
+            The files are the VIEWING holder's, like everything else on this
+            page: the write is a facet path, so a contract one brand filed
+            never appears on a sibling brand's copy of the person.
+          */}
+          <RecordFilesCard
+            scope={scope}
+            collection="contacts"
+            recordId={id}
+            facetGroupId={consentGroup.groupId}
+            mediaIds={record.mediaIds}
+            topic="contactRecord"
+          />
           <ContactDuplicatesCard
             current={{ id, doc: row }}
             scope={scope}

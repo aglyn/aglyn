@@ -64,6 +64,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ...jest.requireActual(
       '../../../libs/tenant/data/admin/src/lib/server/contact-lifecycle-floor',
     ),
+    // The REAL `nextTaskAtMs` writer (AGL-2661), over the same double, so the
+    // figure a task write leaves on its contact is the one read back.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/crm-next-activity',
+    ),
     verifyApiKey: async () => ({
       orgId: 'org-1',
       keyId: 'key-1',
@@ -98,6 +103,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm-task-reminders'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm-email-templates'),
+  // The REAL custom-field reader (AGL-2661): a company body judged against
+  // the company definitions and a deal body against the deal ones is the
+  // contract, and a stub would pass any map.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contact-custom-fields'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
@@ -144,6 +155,7 @@ const PIPELINES = `${ORG}/pipelines`
 const DEALS = `${ORG}/deals`
 const TASKS = `${ORG}/crmTasks`
 const ACTIVITIES = `${ORG}/crmActivities`
+const TEMPLATES = `${ORG}/crmEmailTemplates`
 
 const handlers = { GET, POST, PATCH, DELETE }
 
@@ -201,7 +213,7 @@ describe('the premise (AGL-899)', () => {
     const scopes = readSource('libs/tenant/data/admin/src/lib/server/api-keys.ts')
     expect(scopes).toContain("'crm:read'")
     expect(scopes).toContain("'crm:write'")
-    for (const resource of ['companies', 'pipelines', 'deals', 'tasks', 'activities']) {
+    for (const resource of ['companies', 'pipelines', 'deals', 'tasks', 'activities', 'email-templates']) {
       const source = readSource(`apps/console/utils/api-v1/crm-${resource}.ts`)
       expect(source).toContain("requireScope(ctx, 'crm:read')")
       if (resource !== 'pipelines') {
@@ -213,10 +225,10 @@ describe('the premise (AGL-899)', () => {
     ).toMatch(/scope: 'crm:write'/)
   })
 
-  it('advertises the five resources at the root', async () => {
+  it('advertises the CRM resources at the root', async () => {
     const root = await json(await call('GET', ''))
     expect(root.resources).toEqual(
-      expect.arrayContaining(['companies', 'pipelines', 'deals', 'tasks', 'activities']),
+      expect.arrayContaining(['companies', 'pipelines', 'deals', 'tasks', 'activities', 'email-templates']),
     )
   })
 
@@ -238,7 +250,7 @@ describe('the premise (AGL-899)', () => {
 
 describe('the CRM suite entitlement (AGL-2611)', () => {
   /** Every plan-gated resource, by a path that resolves on each. */
-  const SUITE_PATHS = ['companies', 'pipelines', 'deals', 'tasks', 'activities']
+  const SUITE_PATHS = ['companies', 'pipelines', 'deals', 'tasks', 'activities', 'email-templates']
 
   it('refuses every CRM resource, on any verb, for an org without the suite', async () => {
     // API access without the suite is reachable only through a staff
@@ -887,12 +899,19 @@ describe('/v1/tasks', () => {
       siteId: 'host-1',
     })
     expect(mockDocs.get(`${TASKS}/${task.id}`)!.visibleTo).toEqual(tokensFor('host-1'))
+    // The contact it names carries the due time as its next activity (AGL-2661).
+    expect(mockDocs.get(`${ORG}/contacts/c-1`)!.nextTaskAtMs).toBe(Date.parse('2026-09-10T15:00:00Z'))
 
     mockClock.nowMs = 1_760_000_060_000
     const done = await json(await call('PATCH', `tasks/${task.id}`, { status: 'done' }))
     expect(done.completedAt).toBe(new Date(1_760_000_060_000).toISOString())
+    // ...and nothing once the only open task is done, the time again once reopened.
+    expect(mockDocs.get(`${ORG}/contacts/c-1`)!.nextTaskAtMs).toBeNull()
     const reopened = await json(await call('PATCH', `tasks/${task.id}`, { status: 'open' }))
     expect(reopened.completedAt).toBeNull()
+    expect(mockDocs.get(`${ORG}/contacts/c-1`)!.nextTaskAtMs).toBe(Date.parse('2026-09-10T15:00:00Z'))
+    expect((await call('DELETE', `tasks/${task.id}`, undefined, 'task-del')).status).toBe(200)
+    expect(mockDocs.get(`${ORG}/contacts/c-1`)!.nextTaskAtMs).toBeNull()
 
     const bad = await call('POST', 'tasks', {
       title: 'X',
@@ -903,6 +922,62 @@ describe('/v1/tasks', () => {
       consentSiteId: 'host-1',
     })
     expect(Object.keys((await json(bad)).error.fields).sort()).toEqual(['dueAt', 'kind'])
+  })
+
+  it('gives a task a reminder at its due time unless told otherwise, and carries it as the task changes (AGL-2659)', async () => {
+    const task = await json(
+      await call('POST', 'tasks', {
+        title: 'Call back',
+        dueAt: '2026-09-10T15:00:00Z',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(task).toMatchObject({ remindAt: '2026-09-10T15:00:00.000Z', reminderSentAt: null })
+    // An explicit none, and an explicit time of its own.
+    const none = await json(
+      await call('POST', 'tasks', {
+        title: 'No alarm',
+        dueAt: '2026-09-10T15:00:00Z',
+        remindAt: null,
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(none.remindAt).toBeNull()
+    const early = await json(
+      await call('POST', 'tasks', {
+        title: 'Early',
+        dueAt: '2026-09-10T15:00:00Z',
+        remindAt: '2026-09-10T14:00:00Z',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(early.remindAt).toBe('2026-09-10T14:00:00.000Z')
+
+    // A moved due date carries a reminder that sat on it, and takes the
+    // runner's mark off — it is a reminder not yet sent.
+    mockDocs.get(`${TASKS}/${task.id}`)!.reminderSentAtMs = 1_760_000_000_000
+    const moved = await json(
+      await call('PATCH', `tasks/${task.id}`, { dueAt: '2026-09-12T09:30:00Z' }),
+    )
+    expect(moved).toMatchObject({
+      dueAt: '2026-09-12T09:30:00.000Z',
+      remindAt: '2026-09-12T09:30:00.000Z',
+      reminderSentAt: null,
+    })
+    // …but leaves one set to a time of its own where it was.
+    const still = await json(
+      await call('PATCH', `tasks/${early.id}`, { dueAt: '2026-09-12T09:30:00Z' }),
+    )
+    expect(still.remindAt).toBe('2026-09-10T14:00:00.000Z')
+    // A PATCH that says nothing about it changes nothing about it.
+    const retitled = await json(await call('PATCH', `tasks/${early.id}`, { title: 'Earlier' }))
+    expect(retitled.remindAt).toBe('2026-09-10T14:00:00.000Z')
+    // Completing clears a reminder still owed.
+    const done = await json(await call('PATCH', `tasks/${task.id}`, { status: 'done' }))
+    expect(done).toMatchObject({ status: 'done', remindAt: null })
+
+    const bad = await call('POST', 'tasks', { title: 'X', remindAt: 'soon', consentSiteId: 'host-1' })
+    expect(Object.keys((await json(bad)).error.fields)).toEqual(['remindAt'])
   })
 
   it('filters on one clause, the assignee before the status', async () => {
@@ -1015,6 +1090,142 @@ describe('/v1/activities', () => {
 })
 
 // ── Usage ───────────────────────────────────────────────────────────────────
+
+/**
+ * `/v1/email-templates` (AGL-2658): the stamp, the owner-and-visibility
+ * pair kept together on both verbs, a snippet's subject dropped, the
+ * merge fields stored as written, and the one-clause list.
+ */
+describe('/v1/email-templates', () => {
+  it('stamps a shared template for its site, stores merge fields as written, and normalizes paragraphs', async () => {
+    const template = await json(
+      await call('POST', 'email-templates', {
+        name: '  Follow-up ',
+        subject: 'Following up, {{contact.firstName}}',
+        body: 'Hi {{contact.firstName}},\r\n\r\nStill keen on {{deal.name}}?',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(template).toMatchObject({
+      object: 'email_template',
+      name: 'Follow-up',
+      kind: 'template',
+      visibility: 'shared',
+      ownerUid: null,
+      subject: 'Following up, {{contact.firstName}}',
+      body: 'Hi {{contact.firstName}},\n\nStill keen on {{deal.name}}?',
+      siteId: 'host-1',
+    })
+    const stored = mockDocs.get(`${TEMPLATES}/${template.id}`)!
+    expect(stored.visibleTo).toEqual(tokensFor('host-1'))
+    expect(stored.createdByUid).toBe('api')
+    expect(stored.createdAtMs).toBe(mockClock.nowMs)
+    expect(stored.updatedAtMs).toBe(mockClock.nowMs)
+    expect('ownerUid' in stored).toBe(false)
+  })
+
+  it('keeps the owner and the visibility together, and a snippet keeps no subject', async () => {
+    const orphan = await call('POST', 'email-templates', {
+      name: 'Mine',
+      body: 'x',
+      visibility: 'personal',
+      consentSiteId: 'host-1',
+    })
+    expect(orphan.status).toBe(400)
+    expect(Object.keys((await json(orphan)).error.fields)).toEqual(['ownerUid'])
+    const claimed = await call('POST', 'email-templates', {
+      name: 'Shared',
+      body: 'x',
+      ownerUid: 'u-owner',
+      consentSiteId: 'host-1',
+    })
+    expect(Object.keys((await json(claimed)).error.fields)).toEqual(['ownerUid'])
+    const stranger = await call('POST', 'email-templates', {
+      name: 'Mine',
+      body: 'x',
+      visibility: 'personal',
+      ownerUid: 'u-stranger',
+      consentSiteId: 'host-1',
+    })
+    expect((await json(stranger)).error.fields.ownerUid).toContain('member')
+    expect(childPaths(TEMPLATES)).toEqual([])
+
+    const snippet = await json(
+      await call('POST', 'email-templates', {
+        name: 'Signature',
+        kind: 'snippet',
+        subject: 'ignored',
+        body: '-- Rep',
+        visibility: 'personal',
+        ownerUid: 'u-owner',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(snippet).toMatchObject({ kind: 'snippet', subject: '', visibility: 'personal', ownerUid: 'u-owner' })
+
+    const bad = await call('POST', 'email-templates', {
+      name: '',
+      kind: 'letter',
+      visibility: 'secret',
+      body: '   ',
+      consentSiteId: 'host-1',
+    })
+    expect(Object.keys((await json(bad)).error.fields).sort()).toEqual(['body', 'kind', 'name', 'visibility'])
+  })
+
+  it('flips ownership on PATCH — personal names an owner, shared drops it — and never empties the body', async () => {
+    const created = await json(
+      await call('POST', 'email-templates', { name: 'T', subject: 'S', body: 'B', consentSiteId: 'host-1' }),
+    )
+    const path = `email-templates/${created.id}`
+    expect((await json(await call('PATCH', path, { visibility: 'personal' }))).error.fields.ownerUid).toBeTruthy()
+    const personal = await json(await call('PATCH', path, { visibility: 'personal', ownerUid: 'u-owner' }))
+    expect(personal).toMatchObject({ visibility: 'personal', ownerUid: 'u-owner' })
+    const shared = await json(await call('PATCH', path, { visibility: 'shared' }))
+    expect(shared).toMatchObject({ visibility: 'shared', ownerUid: null })
+    expect('ownerUid' in mockDocs.get(`${TEMPLATES}/${created.id}`)!).toBe(false)
+
+    const cleared = await json(await call('PATCH', path, { subject: null }))
+    expect(cleared.subject).toBe('')
+    const emptied = await call('PATCH', path, { body: '  ' })
+    expect((await json(emptied)).error.fields.body).toBe('Must not be empty')
+    const asSnippet = await json(await call('PATCH', path, { kind: 'snippet', subject: 'back' }))
+    expect(asSnippet).toMatchObject({ kind: 'snippet', subject: '' })
+    expect((await call('PATCH', path, { siteId: 'host-2' })).status).toBe(400)
+    expect((await call('GET', 'email-templates/missing')).status).toBe(404)
+  })
+
+  it('validates the list filters and sends the owner as the one clause', async () => {
+    await call('POST', 'email-templates', { name: 'A', body: 'x', consentSiteId: 'host-1' })
+    await call('POST', 'email-templates', {
+      name: 'B',
+      kind: 'snippet',
+      body: 'y',
+      visibility: 'personal',
+      ownerUid: 'u-owner',
+      consentSiteId: 'host-1',
+    })
+    const page = await json(await call('GET', 'email-templates?kind=template&ownerUid=u-owner'))
+    expect(page.data).toEqual([])
+    expect(lastFilters()).toEqual([{ field: 'ownerUid', op: '==', value: 'u-owner' }])
+    const snippets = await json(await call('GET', 'email-templates?kind=snippet'))
+    expect(snippets.data.map((row: any) => row.name)).toEqual(['B'])
+    expect((await call('GET', 'email-templates?kind=letter')).status).toBe(400)
+    expect((await call('GET', 'email-templates?visibility=secret')).status).toBe(400)
+  })
+
+  it('deletes the template alone and replays the receipt on the same key', async () => {
+    const created = await json(
+      await call('POST', 'email-templates', { name: 'T', body: 'B', consentSiteId: 'host-1' }),
+    )
+    const first = await call('DELETE', `email-templates/${created.id}`, undefined, 'del-1')
+    expect(await json(first)).toEqual({ id: created.id, object: 'email_template', deleted: true })
+    expect(childPaths(TEMPLATES)).toEqual([])
+    const replay = await call('DELETE', `email-templates/${created.id}`, undefined, 'del-1')
+    expect(replay.status).toBe(200)
+    expect(await json(replay)).toEqual({ id: created.id, object: 'email_template', deleted: true })
+  })
+})
 
 describe('GET /v1/usage', () => {
   it('publishes the CRM collection sizes as unlimited, unmetered bands', async () => {
@@ -1133,5 +1344,146 @@ describe('an archived pipeline (AGL-2620)', () => {
     mockDocs.set(`${DEALS}/d-old`, { title: 'Old', pipelineId: 'old', stageId: 'won', status: 'won', ...stamp })
     const reopened = await json(await call('PATCH', 'deals/d-old', { status: 'open' }))
     expect(reopened).toMatchObject({ stageId: 'qualified', status: 'open' })
+  })
+})
+
+// ── Custom fields on companies and deals (AGL-2661) ─────────────────────────
+
+describe('custom fields on companies and deals (AGL-2661)', () => {
+  const FIELDS = `${ORG}/contactFields`
+  /** Three definitions sharing one key — one per object — so a body can only pass against its own. */
+  const seedFields = () => {
+    mockDocs.set(`${FIELDS}/f-contact`, {
+      key: 'region',
+      label: 'Region',
+      type: 'text',
+      order: 0,
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    mockDocs.set(`${FIELDS}/f-company`, {
+      key: 'region',
+      label: 'Region',
+      type: 'select',
+      options: ['west', 'east'],
+      order: 0,
+      object: 'company',
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    mockDocs.set(`${FIELDS}/f-deal`, {
+      key: 'region',
+      label: 'Region',
+      type: 'number',
+      order: 0,
+      object: 'deal',
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    mockDocs.set(`${FIELDS}/f-retired`, {
+      key: 'old',
+      label: 'Old',
+      type: 'text',
+      order: 1,
+      object: 'company',
+      retiredAt: 1,
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+  }
+
+  it('stores a company map judged against the company definitions, and publishes it', async () => {
+    seedFields()
+    const created = await json(
+      await call('POST', 'companies', {
+        name: 'Acme',
+        consentSiteId: 'host-1',
+        custom: { region: 'west' },
+      }),
+    )
+    expect(created.custom).toEqual({ region: 'west' })
+    expect(mockDocs.get(`${COMPANIES}/${created.id}`)!.custom).toEqual({ region: 'west' })
+    // A company without a map publishes `{}`, never `null`, and a read-only
+    // `nextTaskAt` that is `null` until a task names it.
+    const bare = await json(await call('POST', 'companies', { name: 'Bare', consentSiteId: 'host-1' }))
+    expect(bare.custom).toEqual({})
+    expect(bare.nextTaskAt).toBeNull()
+    expect(mockDocs.get(`${COMPANIES}/${bare.id}`)).not.toHaveProperty('custom')
+  })
+
+  it('refuses a choice outside the list, an unknown key and a retired field, naming each', async () => {
+    seedFields()
+    // `north` is a fine TEXT value for the contact `region` — and refused
+    // here, because the company `region` is a choice list.
+    const refused = await call('POST', 'companies', {
+      name: 'Acme',
+      consentSiteId: 'host-1',
+      custom: { region: 'north', tier: 'gold', old: 'x' },
+    })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields).toEqual({
+      'custom.region': 'Must be one of: west, east',
+      'custom.tier': 'No such company field',
+      'custom.old': 'Retired company field — restore it to write it',
+    })
+    const shape = await call('POST', 'companies', {
+      name: 'Acme',
+      consentSiteId: 'host-1',
+      custom: ['west'],
+    })
+    expect((await json(shape)).error.fields.custom).toMatch(/object/)
+  })
+
+  it('merges a PATCH key by key and clears with null', async () => {
+    seedFields()
+    mockDocs.set(`${FIELDS}/f-company-2`, {
+      key: 'seats',
+      label: 'Seats',
+      type: 'number',
+      order: 2,
+      object: 'company',
+      visibleTo: ['org'],
+      hostId: 'host-1',
+    })
+    const created = await json(
+      await call('POST', 'companies', {
+        name: 'Acme',
+        consentSiteId: 'host-1',
+        custom: { region: 'west', seats: 4 },
+      }),
+    )
+    const patched = await json(
+      await call('PATCH', `companies/${created.id}`, { custom: { region: null } }),
+    )
+    // `seats` survives a PATCH that did not mention it; `region` is an
+    // explicit null, not a missing key.
+    expect(patched.custom).toEqual({ region: null, seats: 4 })
+    const stored = mockDocs.get(`${COMPANIES}/${created.id}`)!
+    expect(stored.custom).toEqual({ region: null, seats: 4 })
+    const again = await json(
+      await call('PATCH', `companies/${created.id}`, { custom: { seats: '6' } }),
+    )
+    expect(again.custom).toEqual({ region: null, seats: 6 })
+  })
+
+  it('coerces a deal map by the DEAL definitions, and publishes it with nextTaskAt', async () => {
+    seedFields()
+    const created = await json(
+      await call('POST', 'deals', {
+        title: 'Roast',
+        consentSiteId: 'host-1',
+        custom: { region: '4' },
+      }),
+    )
+    expect(created.custom).toEqual({ region: 4 })
+    expect(created.nextTaskAt).toBeNull()
+    expect(mockDocs.get(`${DEALS}/${created.id}`)!.custom).toEqual({ region: 4 })
+    const refused = await call('PATCH', `deals/${created.id}`, { custom: { region: 'west' } })
+    expect(refused.status).toBe(400)
+    expect((await json(refused)).error.fields).toEqual({ 'custom.region': 'Must be a number' })
+    const patched = await json(
+      await call('PATCH', `deals/${created.id}`, { custom: { region: null } }),
+    )
+    expect(patched.custom).toEqual({ region: null })
   })
 })

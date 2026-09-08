@@ -237,6 +237,11 @@ const RESOURCES: Record<string, {
       'priceUsd',
       'timezone',
       'windows',
+      // The two CRM switches a service carries (AGL-2660): whether a
+      // booking files a meeting on the record, and whether it owes a
+      // follow-up task.
+      'crmFollowUpTask',
+      'crmMeetingActivity',
     ],
   },
   // A redirect is a ROUTING statement over the whole live site, not a draft

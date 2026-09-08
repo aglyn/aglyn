@@ -213,7 +213,7 @@ The **FAQ** preset drops three complete panels at once.
 | **Tabs** / **Tab Panel** | A tab strip and its panels. See [Tabs](#tabs) below. |
 | **Breadcrumbs** | The trail showing where a page sits. Fill it with Screen Links so it survives renames, and leave the **current** page as plain Typography — linking a page to itself is the classic breadcrumb mistake. Set **Collapse above** to fold a long trail into an ellipsis. |
 | **Pagination** | A page picker. See [Pagination](#pagination) below. |
-| **Language switcher** / **Theme mode switcher** | Locale and light/dark controls. |
+| **Language switcher** / **Theme mode switcher** | Locale and light/dark controls. The theme mode switcher is hidden on published pages while the theme's Dark scheme is off. |
 | **Table of Contents** | An "On this page" list built from the headings of a [Markdown](long-form-markdown.md) element on the same screen. |
 
 ### Where a link opens

@@ -110,19 +110,54 @@ their own entries; an org-wide member can edit or delete anyone's. A colleague
 with access to only some of your sites can read an entry they did not write, and
 cannot change it.
 
+### A meeting from a booking {#meeting-from-a-booking}
+
+A confirmed [booking](../../commerce-and-bookings/bookings/overview.md#booking-from-the-crm)
+files a **meeting** on its record's timeline without anyone logging it — titled
+with the service and the slot, and linked to the booking. The record is the one
+the booking link was dropped from (a contact's, a lead's or a deal's **Book a
+meeting**, or **Insert booking link** in **Send email**), which wins even when the
+person books with another address; a booking taken from the widget with no record
+attached is matched to a contact by the booker's address. When the service asks
+for it, a **Follow up after &lt;service&gt;** [task](tasks.md) is filed beside the
+meeting, due one business day after the slot. Nothing is filed on a site where the
+CRM is switched off.
+
+## Click to call {#click-to-call}
+
+A contact's, a lead's and a company's page carries **Call** beside **Send
+email**: one tap dials the number the record holds, through whatever your
+device uses for a phone. The number itself is a link everywhere it is
+printed — on the record page and on the properties card — so it can be
+dialed from where you are reading it rather than copied out.
+
+Only a number a dialer can take is a link. Write phone numbers with the
+country code, like `+1 512 555 0107`; spaces, dots, dashes and parentheses
+are fine and are ignored. A value that is not a number — "ask reception",
+an extension typed as `x44` — is shown as plain text and **Call** says why
+it is unavailable, rather than offering a link that would ring nothing.
+
+**Log a call** sits beside it and opens the dialog above with the kind
+already set to **Call** and the record already bound, so logging what was
+said is one button and one sentence. It is there whether or not the record
+has a number: a call placed from your own mobile is still a call to log.
+The kind is a starting point, not a lock — change it in the dialog if the
+conversation turned out to be something else.
+
 ## Sending an email
 
 A contact's, a lead's and a deal's page each carry **Send email**: one message,
 from you, to the person the record is about. It is a letter, not a campaign —
-there is no audience, no template and no unsubscribe footer — and it is logged on
-the timeline the moment it leaves, with its delivery state following.
+there is no audience, no designed layout and no unsubscribe footer — and it is
+logged on the timeline the moment it leaves, with its delivery state following.
 
 | Field | What it is |
 | --- | --- |
 | **To** | The record's own address. It cannot be changed here: a deal writes to its contact, a lead to the address it was captured with. |
 | **From** | The site's sending address — the same identity campaigns and transactional mail leave on — with your name in front of it. |
 | **Reply-to** | Your own address, so a reply lands in your inbox rather than the site's mailbox. |
-| **Subject** and **Message** | What you write. The message is plain text; a blank line starts a new paragraph. |
+| **Template** | A saved letter to start from — fills in the subject and the message. Shown once the workspace has one; see [Email templates & snippets](./email-templates.md). |
+| **Subject** and **Message** | What you write. The message is plain text; a blank line starts a new paragraph. **Insert** drops a snippet or a merge field — `{{contact.firstName}}`, `{{deal.amount}}` — at the cursor, filled in from the record when the email is sent, and **Save as template…** keeps the draft for next time. |
 
 The send is refused, and the dialog says why, when:
 
@@ -160,6 +195,40 @@ The chip only ever moves forward — a late "delivered" never replaces an "opene
 and a bounce or a complaint stands over anything that came before it. Hover the
 chip for when the state was reached.
 
+## Captured email {#captured-email}
+
+A reply to a sent email reaches *your* mailbox, because that is where
+**Reply-to** points — and the console cannot see your mailbox. To put the reply
+on the record, hand it the message: **forward** it to the workspace's capture
+address, or put that address in **BCC** when you write to a contact from your
+own mail client. The address is printed under **Reply-to** in the **Send
+email** dialog and on the [Email capture](./settings.md#email-capture) card
+under **CRM → Settings**, each with a copy button.
+
+A message that arrives is filed as **one** email entry on the timeline:
+
+- **Whose record.** The first address among **From**, **To** and **Cc** that
+  is not a workspace member's and belongs to a contact or a lead in the CRM.
+  A lead's message files on the lead. The record's own site is the site the
+  entry lands under, so at the organization level a capture works for every
+  site at once.
+- **Which way.** A message a correspondent wrote reads **Received**, with
+  the sender beside the time; a message a member wrote and copied in reads
+  **Sent**, without a delivery chip, because the platform did not carry it.
+  Neither carries the **Logged** chip — nobody logged them — and neither can
+  be edited, though whoever may delete an entry may delete these.
+- **What is kept.** The subject and a bounded plain-text excerpt of the
+  message, cut above the quoted history (`On … wrote:`), plus the message's
+  own identifier so a second delivery of the same message is filed once.
+  Attachments are not kept.
+- **What is dropped.** A message matching nobody in the CRM is not filed; the
+  organization's **Setup → Activity** feed notes *Inbound email matched no
+  record* with the sender's domain, never the message. A message to a
+  [rotated](./settings.md#email-capture) address is dropped silently.
+
+The console's own **Send email** already logs what it sends; there is no
+need to BCC the capture address from the dialog, and it does not.
+
 ## Where an activity is visible
 
 An activity is visible exactly where a contact captured on the same site would
@@ -182,6 +251,7 @@ whole log lives.
 - [CRM overview](./overview.md)
 - [The contact record](./contact-record.md) — the page a contact's timeline lives on
 - [Tasks & follow-ups](./tasks.md) — what is owed, as opposed to what happened
+- [Email templates & snippets](./email-templates.md) — the letters **Send email** starts from, and the merge fields it fills in
 - [Automations for the CRM](./automations.md) — the **Log a CRM activity** step, and how a **Send an email** step lands on the timeline
 - [Sending domains](../../marketing-and-automation/email-campaigns/overview.md#sending-domains) — the identity a one-to-one email leaves on
 - [REST API — activities](/api/resources/activities)

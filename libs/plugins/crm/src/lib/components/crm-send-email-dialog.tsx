@@ -21,9 +21,18 @@ import {
   CRM_EMAIL_BODY_MAX,
   CRM_EMAIL_SUBJECT_MAX,
   normalizeContactEmail,
+  consentGroupForHost,
+  CRM_COLLECTIONS,
+  createResourceUid,
+  type CrmEmailTemplateRow,
+  type CrmMergeContext,
+  type CrmMergeFieldGroup,
+  crmMergeUnresolvedMessage,
+  hasCrmMergeFields,
+  resolveCrmMergeFields,
 } from '@aglyn/aglyn'
 import { useSendingApi } from '@aglyn/plugins-email/components/use-sending-identity-api'
-import { AppLink } from '@aglyn/shared-ui-jsx'
+import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -37,16 +46,55 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  InputAdornment,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, getDoc } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
+import { BookMeetingButton, insertLinkAtCaret } from './book-meeting-action'
+import {
+  CAPTURE_ADDRESS_HELPER,
+  CopyCaptureAddressButton,
+} from './copy-capture-address-button'
 import { CrmSitePicker } from './crm-site-picker'
 import { useCrmApi } from './use-crm-api'
+import { useCrmInboundAddress } from './use-crm-inbound-address'
 import { useEmailsHubPath } from './use-emails-hub-path'
+import {
+  useCrmEmailTemplates,
+  useCrmEmailTemplateScope,
+} from '../hooks/use-crm-email-templates'
+import {
+  CrmInsertMenu,
+  CrmSaveAsTemplateDialog,
+  CrmTemplatePicker,
+} from './crm-email-template-tools'
+
+/**
+ * The documents a merge-field preview reads (AGL-2658), fetched once per
+ * open and only once the draft names a field: a letter with no fields
+ * costs no reads. `site` is the sending site's name; `loaded` says the
+ * fetch has answered, so the helper text can tell "no value" from "not
+ * yet read".
+ */
+interface MergeRecords {
+  contact: Record<string, unknown> | null
+  deal: Record<string, unknown> | null
+  lead: Record<string, unknown> | null
+  site: string | null
+  loaded: boolean
+}
+
+const NO_MERGE_RECORDS: MergeRecords = {
+  contact: null,
+  deal: null,
+  lead: null,
+  site: null,
+  loaded: false,
+}
 
 /**
  * What the sending-identity route said about this site, as the dialog
@@ -135,6 +183,10 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
   const sendHostId = hostId ?? mount?.createHostId ?? null
   const crmApi = useCrmApi(sendHostId)
   const emailsHub = useEmailsHubPath(sendHostId)
+  // The capture address (AGL-2657), for the reply this send will get: the
+  // console logs what IT sends, so the address is shown to be forwarded
+  // to or copied from a mailbox, never put on this message.
+  const capture = useCrmInboundAddress(sendHostId, { enabled: open })
   // The Sending section of the Emails console — the page that fixes a
   // missing identity. `null` on a surface that cannot name the site's hub,
   // so the refusal prints the section's name instead of a link to nowhere.
@@ -148,6 +200,39 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /*
+   * TEMPLATES, SNIPPETS AND MERGE FIELDS (AGL-2658). The listener is the
+   * dialog's own scope — the mounted site's tokens, or none at the org
+   * level — and what a saved template is stamped with follows the same
+   * rule. The message field's element is held so a snippet lands at the
+   * caret rather than at the end.
+   */
+  const { confirm } = useConfirmationContext()
+  const templateScope = useCrmEmailTemplateScope({ hostId, org })
+  const { templates } = useCrmEmailTemplates({
+    scope: templateScope.scope,
+    visibleTo: templateScope.visibleTo,
+    uid: user?.uid,
+  })
+  const pickable = useMemo(() => templates.filter((row) => row.kind === 'template'), [templates])
+  const snippets = useMemo(() => templates.filter((row) => row.kind === 'snippet'), [templates])
+  const [appliedTemplate, setAppliedTemplate] = useState<CrmEmailTemplateRow | null>(null)
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [records, setRecords] = useState<MergeRecords>(NO_MERGE_RECORDS)
+  const messageRef = useRef<HTMLTextAreaElement | null>(null)
+  const draftHasFields = hasCrmMergeFields(`${subject}\n${body}`)
+  // The groups the Insert menu offers: what the record can answer.
+  const fieldGroups = useMemo<CrmMergeFieldGroup[]>(
+    () => [
+      ...(contactId || dealId ? (['Contact'] as const) : []),
+      ...(leadId && !contactId ? (['Lead'] as const) : []),
+      ...(dealId ? (['Deal'] as const) : []),
+      'You',
+      'Site',
+    ],
+    [contactId, dealId, leadId],
+  )
 
   /*
    * The identity, asked for on open. The route is the send path's own
@@ -213,7 +298,181 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
     if (!open) return
     setSubject('')
     setBody('')
+    setAppliedTemplate(null)
+    setSaveOpen(false)
+    setRecords(NO_MERGE_RECORDS)
   }, [open])
+
+  /*
+   * The documents a preview reads, fetched the first time the draft names
+   * a merge field and kept for the rest of the open: the contact, the
+   * deal, the lead, and the sending site's name — off the org mount when
+   * it knows the site, off the host document otherwise. The route reads
+   * the same documents again for the send; these are what the rep sees.
+   */
+  useEffect(() => {
+    if (!open || !draftHasFields || records.loaded) return
+    let cancelled = false
+    const read = async (path: string[] | null): Promise<Record<string, unknown> | null> => {
+      if (!path) return null
+      const snapshot = await getDoc(doc(firestore, path[0], ...path.slice(1)))
+      return snapshot.exists() ? ((snapshot.data() ?? null) as Record<string, unknown> | null) : null
+    }
+    const mountedSite = sendHostId
+      ? (mount?.hosts ?? []).find((host) => host.id === sendHostId)
+      : undefined
+    void Promise.all([
+      read(contactId && orgId ? ['orgs', orgId, 'contacts', contactId] : null),
+      read(dealId && orgId ? ['orgs', orgId, CRM_COLLECTIONS.deals, dealId] : null),
+      read(leadId && sendHostId ? ['hosts', sendHostId, 'leads', leadId] : null),
+      mountedSite || !sendHostId ? null : read(['hosts', sendHostId]),
+    ])
+      .then(([contact, deal, lead, host]) => {
+        if (cancelled) return
+        // A deal's contact, when the page named only the deal.
+        const dealContactId = String(deal?.['contactId'] ?? '').trim()
+        const withContact =
+          !contact && dealContactId && orgId
+            ? read(['orgs', orgId, 'contacts', dealContactId])
+            : Promise.resolve(contact)
+        return withContact.then((resolvedContact) => {
+          if (cancelled) return
+          setRecords({
+            contact: resolvedContact,
+            deal,
+            lead,
+            site: mountedSite?.name ?? (host ? String(host['displayName'] ?? '') : null),
+            loaded: true,
+          })
+        })
+      })
+      .catch((cause) => {
+        console.error(cause)
+        if (!cancelled) setRecords({ ...NO_MERGE_RECORDS, loaded: true })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    open,
+    draftHasFields,
+    records.loaded,
+    firestore,
+    orgId,
+    contactId,
+    dealId,
+    leadId,
+    sendHostId,
+    mount?.hosts,
+  ])
+
+  const mergeContext = useMemo<CrmMergeContext>(
+    () => ({
+      contact: records.contact,
+      contactGroupId: sendHostId ? consentGroupForHost(org ?? null, sendHostId).groupId : null,
+      deal: records.deal,
+      lead: records.lead,
+      sender: { name: user?.displayName ?? '', email: user?.email ?? '' },
+      site: { name: records.site ?? '' },
+    }),
+    [records, sendHostId, org, user?.displayName, user?.email],
+  )
+  const preview = useMemo(
+    () =>
+      draftHasFields && records.loaded
+        ? {
+            subject: resolveCrmMergeFields(subject, mergeContext),
+            body: resolveCrmMergeFields(body, mergeContext),
+          }
+        : null,
+    [draftHasFields, records.loaded, subject, body, mergeContext],
+  )
+  const unresolved = useMemo(
+    () =>
+      preview
+        ? [...new Set([...preview.subject.unresolved, ...preview.body.unresolved])]
+        : [],
+    [preview],
+  )
+
+  /** A template into both fields — asking first when a message is already written. */
+  const applyTemplate = useCallback(
+    async (template: CrmEmailTemplateRow | null) => {
+      if (!template) {
+        setAppliedTemplate(null)
+        return
+      }
+      const written = body.trim().length > 0 && body !== appliedTemplate?.body
+      if (written) {
+        const accepted = await confirm({
+          title: 'Replace the message?',
+          description: `"${template.name}" replaces what you have written in the subject and the message.`,
+          confirmationText: 'Replace',
+        })
+          .then(() => true)
+          .catch(() => false)
+        if (!accepted) return
+      }
+      if (template.subject) setSubject(template.subject)
+      setBody(template.body)
+      setAppliedTemplate(template)
+    },
+    [body, appliedTemplate, confirm],
+  )
+
+  /** A snippet or a field where the caret is, the caret moved past it. */
+  const insertAtCaret = useCallback(
+    (text: string) => {
+      const element = messageRef.current
+      const start = element?.selectionStart ?? body.length
+      const end = element?.selectionEnd ?? body.length
+      const next = `${body.slice(0, start)}${text}${body.slice(end)}`.slice(0, CRM_EMAIL_BODY_MAX)
+      setBody(next)
+      const caret = Math.min(start + text.length, next.length)
+      window.setTimeout(() => {
+        element?.focus()
+        element?.setSelectionRange(caret, caret)
+      }, 0)
+    },
+    [body],
+  )
+
+  /**
+   * The draft kept as a template, stamped as this surface's scope stamps
+   * every CRM record — the site's tokens under a site, the org token from
+   * the organization's hub — and, when personal, owned by the writer.
+   */
+  const saveAsTemplate = useCallback(
+    async (draft: { name: string; visibility: 'shared' | 'personal' }) => {
+      const scope = templateScope.scope
+      const uid = user?.uid
+      if (!scope || !uid || templateScope.createTokens.length === 0) {
+        throw new Error('a template needs an organization and a signed-in writer')
+      }
+      const now = Date.now()
+      await setDoc(
+        doc(collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.emailTemplates), createResourceUid()),
+        {
+          name: draft.name,
+          subject: subject.trim(),
+          body: body.trim(),
+          kind: 'template',
+          visibility: draft.visibility,
+          ...(draft.visibility === 'personal' ? { ownerUid: uid } : {}),
+          createdByUid: uid,
+          createdAtMs: now,
+          updatedAtMs: now,
+          hostId: templateScope.createHostId,
+          visibleTo: [...templateScope.createTokens],
+          createdAt: new Date(now),
+          updatedAt: new Date(now),
+        },
+      )
+      enqueueSnackbar(`Template "${draft.name}" saved`, { variant: 'success', persist: false })
+      setSaveOpen(false)
+    },
+    [templateScope, user?.uid, firestore, subject, body, enqueueSnackbar],
+  )
 
   /*
    * The address, when the caller had none: one read of the contact, on
@@ -280,6 +539,33 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
   }, [canSend, crmApi, contactId, leadId, dealId, subject, body, enqueueSnackbar, onSent, onClose])
 
   const toLabel = props.name && recipient ? `${props.name} <${recipient}>` : (recipient ?? '')
+
+  /*
+   * The booking door (AGL-2660): a link to one of the sending site's
+   * services, dropped where the caret is. The link carries the most
+   * specific record this message is about — the deal over its contact, so
+   * the booking lands on the deal's timeline as the email does.
+   */
+  const bookingRef = dealId
+    ? { kind: 'deal' as const, id: dealId }
+    : leadId
+      ? { kind: 'lead' as const, id: leadId }
+      : contactId
+        ? { kind: 'contact' as const, id: contactId }
+        : null
+  const handleInsertLink = useCallback((link: string) => {
+    const input = messageRef.current
+    const current = input?.value ?? ''
+    const start = input?.selectionStart ?? current.length
+    const end = input?.selectionEnd ?? start
+    const next = insertLinkAtCaret(current, link, start, end)
+    setBody(next.text)
+    // Once the new value has painted, typing continues after the link.
+    window.setTimeout(() => {
+      input?.focus()
+      input?.setSelectionRange(next.caret, next.caret)
+    }, 0)
+  }, [])
 
   return (
     <Dialog open={open} onClose={sending ? undefined : onClose} maxWidth="sm" fullWidth>
@@ -350,6 +636,33 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
           helperText="Replies come to you, not to the site's mailbox."
           slotProps={{ input: { readOnly: true }, inputLabel: { shrink: true } }}
         />
+        {capture.status === 'ready' ? (
+          <TextField
+            size="small"
+            label="Log replies"
+            value={capture.address}
+            helperText={CAPTURE_ADDRESS_HELPER}
+            slotProps={{
+              input: {
+                readOnly: true,
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <CopyCaptureAddressButton address={capture.address} />
+                  </InputAdornment>
+                ),
+              },
+              inputLabel: { shrink: true },
+            }}
+          />
+        ) : null}
+        {pickable.length ? (
+          <CrmTemplatePicker
+            templates={pickable}
+            value={appliedTemplate}
+            onChange={(template) => void applyTemplate(template)}
+            disabled={sending}
+          />
+        ) : null}
         <TextField
           size="small"
           label="Subject"
@@ -358,6 +671,21 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
           autoFocus
           slotProps={{ htmlInput: { maxLength: CRM_EMAIL_SUBJECT_MAX } }}
         />
+        <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+          <CrmInsertMenu
+            snippets={snippets}
+            groups={fieldGroups}
+            disabled={sending}
+            onInsert={insertAtCaret}
+          />
+          <Button
+            size="small"
+            disabled={sending || !templateScope.scope || (!subject.trim() && !body.trim())}
+            onClick={() => setSaveOpen(true)}
+          >
+            {'Save as template…'}
+          </Button>
+        </Stack>
         <TextField
           size="small"
           label="Message"
@@ -365,11 +693,47 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
           onChange={(event) => setBody(event.target.value)}
           multiline
           minRows={6}
-          helperText="Plain text. A blank line starts a new paragraph."
-          slotProps={{ htmlInput: { maxLength: CRM_EMAIL_BODY_MAX } }}
+          inputRef={messageRef}
+          helperText={
+            unresolved.length
+              ? crmMergeUnresolvedMessage(unresolved)
+              : draftHasFields
+                ? 'Plain text. Merge fields are filled in from this record when the email is sent.'
+                : 'Plain text. A blank line starts a new paragraph.'
+          }
+          slotProps={{
+            htmlInput: { maxLength: CRM_EMAIL_BODY_MAX },
+            formHelperText: { sx: unresolved.length ? { color: 'warning.main' } : undefined },
+          }}
         />
+        {preview ? (
+          <Stack spacing={0.5} data-testid="crm-email-preview">
+            <Typography variant="caption" color="text.secondary">
+              {'Preview — as it will be sent'}
+            </Typography>
+            <Typography variant="subtitle2">{preview.subject.text}</Typography>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+              {preview.body.text}
+            </Typography>
+          </Stack>
+        ) : null}
+        {bookingRef ? (
+          <BookMeetingButton
+            variant="chip"
+            hostId={sendHostId}
+            org={org}
+            kind={bookingRef.kind}
+            recordId={bookingRef.id}
+            onInsert={handleInsertLink}
+          />
+        ) : null}
         {error ? <Alert severity="error">{error}</Alert> : null}
       </DialogContent>
+      <CrmSaveAsTemplateDialog
+        open={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        onSave={saveAsTemplate}
+      />
       <DialogActions>
         <Button onClick={onClose} disabled={sending}>
           {'Cancel'}

@@ -78,10 +78,14 @@ import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { CRM_NEXT_ACTIVITY_ROUTE } from './model/next-activity'
 import { CRM_TASK_ROUTES } from './model/task-routes'
+import { crmNextActivityHandler } from './server/next-activity-routes'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmCompaniesImportHandler } from './server/companies-import'
 import { crmContactsImportHandler } from './server/contacts-import'
+import { crmDealsImportHandler } from './server/deals-import'
+import { crmTasksImportHandler } from './server/tasks-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { crmEmailSendHandler } from './server/email-send'
 import { leadConvertHandler } from './server/lead-convert'
@@ -92,6 +96,7 @@ import {
 import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-merge'
 import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
 import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
+import { CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler } from './server/inbound-address'
 import {
   CRM_RECIPE_INSTALL_ROUTE,
   CRM_RECIPE_STATUS_ROUTE,
@@ -529,12 +534,19 @@ export function registerCrmConsoleApi(): void {
   // — an assignee's notification, and the `taskCompleted` host event.
   registerPluginApiRoute(CRM_TASK_ROUTES.save, crmTaskSaveHandler)
   registerPluginApiRoute(CRM_TASK_ROUTES.complete, crmTaskCompleteHandler)
+  // A client-direct task write's door to `nextTaskAtMs` (AGL-2661).
+  registerPluginApiRoute(CRM_NEXT_ACTIVITY_ROUTE, crmNextActivityHandler)
   // One chunk of a contact file (AGL-2602), judged and written through the
   // same door every capture uses.
   registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)
   // One chunk of a companies file (AGL-2621), matched by domain then name
   // and written with the stamp every CRM creator writes.
   registerPluginApiRoute('crm/companies-import', crmCompaniesImportHandler)
+  // One chunk of a deals file and one of a tasks file (AGL-2662): the
+  // pipeline, the stage and the assignee resolved by name, a row refused
+  // when the org has no such name.
+  registerPluginApiRoute('crm/deals-import', crmDealsImportHandler)
+  registerPluginApiRoute('crm/tasks-import', crmTasksImportHandler)
   // The one writer of a deal's stage, won and lost (AGL-2598): the browser
   // could write the field, but only a server can emit the event an
   // automation listens for.
@@ -570,4 +582,8 @@ export function registerCrmConsoleApi(): void {
   // read back per site so the hub can say which sites carry which recipe.
   registerPluginApiRoute(CRM_RECIPE_INSTALL_ROUTE, crmRecipeInstallHandler)
   registerPluginApiRoute(CRM_RECIPE_STATUS_ROUTE, crmRecipeStatusHandler)
+  // The workspace's email capture address (AGL-2657): the token is minted
+  // and rotated here, behind the CRM's own gate, and the org document that
+  // carries it is closed to every client.
+  registerPluginApiRoute(CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler)
 }

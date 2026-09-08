@@ -33,8 +33,10 @@ import {
   localDayBounds,
   openLeadsFromCounts,
   pipelineTotals,
+  OWNER_UNASSIGNED_KEY,
   tally,
   weekBuckets,
+  wonLostByOwner,
 } from './crm-reports'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -555,5 +557,71 @@ describe('conversionBySource', () => {
       customers: 0,
       total: 0,
     })
+  })
+})
+
+describe('won and lost, by owner (AGL-2662)', () => {
+  const deal = (ownerUid: string | undefined, amountCents?: number) => ({
+    ownerUid,
+    amountCents,
+  })
+
+  it('credits each closed deal to whoever owned it at the close', () => {
+    const rows = wonLostByOwner(
+      [deal('ada', 1000), deal('ada', 500), deal('grace', 2000)],
+      [deal('grace'), deal('grace', 300)],
+    )
+    expect(rows.map((row) => row.uid)).toEqual(['grace', 'ada'])
+    expect(rows[0]).toEqual({
+      uid: 'grace',
+      won: 1,
+      lost: 2,
+      wonAmountCents: 2000,
+      lostAmountCents: 300,
+      closed: 3,
+      winRate: 1 / 3,
+    })
+    expect(rows[1].winRate).toBe(1)
+    expect(rows[1].wonAmountCents).toBe(1500)
+  })
+
+  /**
+   * A pipeline where a third of what closed had no owner is a fact about
+   * the team. Dropping those deals would make the rows add to less than the
+   * period's totals with nothing on screen to say why.
+   */
+  it('keeps the unowned deals as a row of their own', () => {
+    const rows = wonLostByOwner([deal(undefined, 900)], [deal('')])
+    expect(rows).toHaveLength(1)
+    expect(rows[0].uid).toBe(OWNER_UNASSIGNED_KEY)
+    expect(rows[0].closed).toBe(2)
+    expect(rows[0].wonAmountCents).toBe(900)
+  })
+
+  /**
+   * Ranked by what CLOSED, not by rate: an owner who closed one deal and
+   * won it is not the best closer on the team.
+   */
+  it('ranks by what closed rather than by win rate', () => {
+    const rows = wonLostByOwner(
+      [deal('lucky'), deal('busy'), deal('busy')],
+      [deal('busy'), deal('busy')],
+    )
+    expect(rows.map((row) => row.uid)).toEqual(['busy', 'lucky'])
+    expect(rows[0].winRate).toBe(0.5)
+    expect(rows[1].winRate).toBe(1)
+  })
+
+  it('reads a missing or negative amount as nothing, never as a debit', () => {
+    const rows = wonLostByOwner(
+      [deal('ada'), deal('ada', -500), deal('ada', Number.NaN)],
+      [],
+    )
+    expect(rows[0].wonAmountCents).toBe(0)
+    expect(rows[0].won).toBe(3)
+  })
+
+  it('has no rate for an owner nothing closed for, and no rows for a quiet period', () => {
+    expect(wonLostByOwner([], [])).toEqual([])
   })
 })

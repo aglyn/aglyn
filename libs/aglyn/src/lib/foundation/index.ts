@@ -68,6 +68,7 @@ export type {
   OrgBrandingProfile,
   OrgCrmAssignmentRule,
   OrgCrmHostSettings,
+  OrgCrmInbound,
   OrgCrmRoundRobin,
   OrgCrmSettings,
   OrgDiscount,

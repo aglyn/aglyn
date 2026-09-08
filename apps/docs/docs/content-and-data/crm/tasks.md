@@ -1,7 +1,7 @@
 ---
 sidebar_position: 10
 title: Tasks & follow-ups
-description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, and a morning digest of what is owed.
+description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the record they are for — overdue and today read off the clock, a snooze, a reminder at its own time, and a morning digest.
 ---
 
 # Tasks & follow-ups
@@ -43,6 +43,24 @@ line of notes under it), the kind, the priority, the due date colored by where i
 the record it is for, as a link into that record's page. A view shows at most 200 rows
 and says so when it is full; narrow the view to see the rest.
 
+### The calendar view
+
+**List** and **Calendar** sit beside the view control. The calendar draws one month,
+placing each task on the day it is **due**, and clicking one opens the same drawer a
+row does. The arrows page a month at a time and **Today** comes back.
+
+The calendar draws the **same tasks the list is showing** — the same view, the same
+window, and no extra reading — so a month that looks empty may simply be a month the
+view's tasks are not in. It says so underneath: how many of them are due outside the
+month on screen, how many have no due date at all (a calendar cannot place those), and
+whether the view is showing only its first page.
+
+A day that has more than three tasks lists three and counts the rest. Overdue titles are
+red, completed ones are struck through, and today's square is outlined.
+
+Selection is a list gesture: there is no bulk bar over the calendar. Switch back to
+**List** to select and act on many.
+
 ### Snoozing a task
 
 The alarm icon beside an open task's due date offers **Tomorrow**, **Next week** and
@@ -68,12 +86,45 @@ title, kind, priority, status, the due date and the completion as timestamps, th
 assignee by email address, the contact, company and deal by name, and notes. The bar's
 **Export CSV** writes the same file over the selection.
 
+### Import from CSV
+
+**Import CSV** beside the view control takes a spreadsheet of tasks — a
+hand-off list, another tool's export — and files each row as a new task. A
+task has no key, so nothing is merged: importing a file twice files it twice.
+Importing needs the same **Manage data** permission as creating a task, and
+nobody is notified of an imported task, however many name them.
+
+The three steps are the ones the [contacts import](./import.md) walks: choose
+the file (up to 5,000 rows), match its columns, check the ten-row preview,
+then import in batches of 200 with a result that says how many were
+**added** and **skipped**, the skipped rows downloadable as a CSV that says
+why. **Download template** hands you the export's own header over no rows.
+
+| Field | What is read |
+| --- | --- |
+| **Title** | Required. A row without one is skipped. |
+| **Kind** | `call`, `email`, `meeting` or `to-do`, by id or by label; **To-do** when empty or unreadable (and an unreadable one is reported). |
+| **Priority** | `low`, `normal` or `high` — `medium` reads as normal, `urgent` as high; **Normal** when empty or unreadable. |
+| **Status** | `open` or `done` (`yes`, `true`, `completed` also read as done). A done row is filed completed, by you, at the time of the import. Open when empty. |
+| **Due** | A calendar day (`2026-09-30`, read as noon UTC) or a timestamp. Anything else is dropped and reported; the task has no due date. |
+| **Assignee** | The email address of a member of your organization. An address that matches **nobody on the team skips the row** — a task nobody holds is a task nobody does — as *No team member has that assignee address*. Empty files the task unassigned. |
+| **Notes** | Free text. |
+
+The export's **Contact**, **Company**, **Deal** and **Completed** columns are
+proposed as **Do not import**: a task is linked to its record from the record's
+own page. Every imported task is the chosen site's task; the organization's
+own tasks — the ones with no site — are filed one at a time from the
+[organization hub](#organization-tasks), which is also where the drawer asks
+which site a file is filed from.
+
 ### Creating a task
 
 **New task** opens a drawer over the list. Give the task a title, pick a kind and a
 priority, set a due date and time (or leave it empty for a task with no deadline), choose
 an assignee from your team, link it to a contact, a company or a deal by name, and add
-notes. A new task is assigned to you unless you pick somebody else.
+notes. A new task is assigned to you unless you pick somebody else. **Remind me**, under
+the due date, is the task's [reminder](#reminders): the due time unless you move it, or
+**No reminder**.
 
 Opening a row opens the same drawer to edit it. **Delete** at the bottom of the drawer
 removes the task for everyone who can see it; a task that was finished is better ticked
@@ -91,10 +142,10 @@ category in their account settings.
 The assignee must be a member of your organization; the picker offers the current
 roster.
 
-That notification is also the reminder for work due soon: assigning a task due within the
-next day tells the assignee once, with the due time in the message. There is no separate
-per-task alarm — the [daily digest](#the-daily-digest) below is what says, each morning,
-what is due today and what is already late.
+That notification says when the task is due, but it fires once, at assignment. The task's
+own alarm is its [reminder](#reminders), sent at the task's own time; the
+[daily digest](#the-daily-digest) is what says, each morning, what is due today and what
+is already late.
 
 ### Completing and reopening
 
@@ -140,10 +191,70 @@ first, with the same checkbox to complete one inline; the card's heading counts 
 are open and how many are done. **New task** on the card opens the drawer with the record
 already linked, and **All tasks** jumps to the section.
 
+## Reminders
+
+Every task with a due date and time has a **reminder** at that time. Within the hour
+after it, the assignee gets a console notification — **Task reminder**, opening the
+task's contact, deal or company page, or the tasks list when it is linked to nothing —
+and one email listing every task of theirs that fell due in that hour. The drawer's
+**Remind me** field, under **Due**, shows it.
+
+- **It follows the due date.** Move the due date — in the drawer, with a snooze, or over
+  the API — and a reminder that sat on the old due time moves with it. Set **Remind me**
+  to a time of your own (an hour before, the evening before) and it stays there when the
+  due date moves. The bulk bar's **Set due** moves due dates only; a reminder on a task
+  it touches stays where it was.
+- **No reminder** clears it. A task with no due date has no reminder unless you set one,
+  and a task made before reminders existed has none until you set one.
+- **It fires once.** A reminder that has been sent is not sent again; changing its time
+  makes a new one. Completing a task cancels a reminder that has not fired yet, and
+  reopening the task does not bring it back.
+- **It goes to the assignee**, and only to a member who can open the CRM (the same
+  **manage data** permission as everything else here). A task assigned to nobody reminds
+  nobody; the digest is where unassigned work shows up.
+
+Reminders are checked once an hour, at the top of the hour, so "remind me at 3:00"
+arrives between 3:00 and 4:00. The time in the message is written in the same time zone
+the [daily digest](#the-daily-digest) uses. Reminders are sent only in organizations
+whose plan includes the daily digest — a plan that gets no digest gets no reminders
+either.
+
+Tasks created by an [automation](./automations.md) or over the
+[REST API](/api/resources/tasks) get the same default: a reminder at the due time,
+unless the API call says otherwise (`remindAt`).
+
+### Turning reminders off
+
+A reminder is a **Forms & bookings** notification, like **Task assigned to you**. Muting
+that category under Account settings → **Notifications** stops both the console
+notification and the email, on every workspace you belong to. There is no separate
+switch, because a reminder is one message about one task rather than a schedule you keep;
+to silence one task, clear its **Remind me** field.
+
+## Next activity {#next-activity}
+
+Every contact, company and deal carries a **Next activity**: when its earliest
+open task is due. It is a column on the [contacts](./contact-record.md),
+[companies](./companies.md#the-companies-list) and [deals](./deals.md#the-board-and-the-table)
+lists — overdue in the warning color, today emphasized, a dash when nothing is
+scheduled — and a **No next activity** chip beside each list's view control
+keeps only the records with nothing planned. A view saved with the chip on
+reopens with it on. On the reports page, the pipeline card's **Stuck deals**
+counts the open deals with nothing scheduled.
+
+The figure is kept by every task write: creating, editing, snoozing, completing,
+reopening or deleting a task recomputes it for the records the task names, and
+so does a task filed by an [automation](./automations.md) or over the
+[API](/api/resources/tasks). A record that existed before the figure did shows a
+dash until a task against it is written — or until **Recompute next activity**
+in the [Fields section](./custom-fields.md#recompute-next-activity) rewrites
+every record's figure from its open tasks.
+
 ## The daily digest
 
-Because overdue and today are read off the clock, nothing on a task ever fires on its
-own. What does is the **daily CRM digest**: once a morning, at 8:00 (America/Chicago),
+Because overdue and today are read off the clock, nothing on a task fires on its own
+except its [reminder](#reminders). What says what is owed is the **daily CRM digest**:
+once a morning, at 8:00 (America/Chicago),
 every member with open work gets **one** console notification and **one** email saying
 what they owe — for example, "3 tasks due today, 2 overdue, 1 unworked lead".
 
@@ -169,7 +280,9 @@ permission as everything else here), and only in organizations whose plan includ
 **Daily CRM digest** is a switch under Account settings → **Notifications**, on by
 default. Off, it stops both the notification and the email, on every workspace you
 belong to. Muting the **Forms & bookings** category on that same page silences the
-console notification only — the email still arrives while the digest is on. See
+console notification only — the email still arrives while the digest is on. (A
+[reminder](#turning-reminders-off) is the other way round: the category mute is its only
+switch, and stops its email too.) See
 [Workspace settings & notifications](../../getting-started/console-tour.md#workspace-settings--notifications).
 
 ## The dashboard card
@@ -201,6 +314,7 @@ takes: a member of the whole organization holding *manage data*.
 - [CRM overview](./overview.md)
 - [Activities & the timeline](./activities.md) — what happened, as opposed to what is owed
 - [Bulk actions](./bulk-actions.md#tasks) — complete, assign, reschedule, export and delete over a selection
+- [Import contacts from CSV](./import.md) — the same three steps the tasks import walks
 - [Reports](./reports.md) — open, overdue and due-today tasks by assignee
 - [Automations for the CRM](./automations.md) — the **Create a CRM task** step and the **CRM task completed** event
 - [Workflows & actions](../../marketing-and-automation/workflows-and-actions/overview.md)

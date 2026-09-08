@@ -28,6 +28,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
 import { Button, Link, Stack, Typography } from '@mui/material'
 import { type ReactNode, useCallback, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import type { CrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { COMPANY_DETACH_LIMIT } from '../model/companies'
@@ -37,6 +38,8 @@ import {
 } from '../model/company-delete'
 import type { CrmRoutes } from '../model/crm-routes'
 import CompanyEditDrawer from './company-edit-drawer'
+import { formatContactCustomValue } from './contact-custom-columns'
+import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 
 export interface CompanyPropertiesCardProps {
@@ -107,6 +110,9 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   const logActivity = useHostActivityLogger(hostId ?? company.hostId ?? undefined)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // The org's company fields (AGL-2661): one row each under the fixed
+  // ones, read by type the way the list's columns read them.
+  const fields = useContactFieldDefinitions(crmScope.orgId, 'company')
 
   const handleDelete = useCallback(async () => {
     if (!scope || deleting) return
@@ -171,10 +177,25 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
         </Link>
       ) : null,
     },
-    { label: 'Phone', value: company.phone },
+    // Callable in one tap (AGL-2661); plain text for a value no dialer takes.
+    { label: 'Phone', value: <CrmPhoneLink phone={company.phone} /> },
     { label: 'Address', value: address },
     { label: 'Tags', value: (company.tags ?? []).join(', ') },
     { label: 'Notes', value: company.notes },
+    ...fields.active.map((definition) => {
+      const text = formatContactCustomValue(definition, company.custom?.[definition.key])
+      return {
+        label: definition.label || definition.key,
+        value:
+          text && definition.type === 'url' ? (
+            <Link href={text} target="_blank" rel="noreferrer noopener">
+              {text}
+            </Link>
+          ) : (
+            text
+          ),
+      }
+    }),
   ]
 
   return (
@@ -186,15 +207,23 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
       backHref={routes.section('companies')}
       backLabel="Back to companies"
       actions={
-        <Button
-          size="small"
-          color="primary"
-          variant="outlined"
-          startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
-          onClick={() => setEditing(true)}
-        >
-          {'Edit'}
-        </Button>
+        <>
+          <CrmCallButton
+            hostId={hostId}
+            org={org}
+            link={{ companyId: company.$id }}
+            phone={company.phone}
+          />
+          <Button
+            size="small"
+            color="primary"
+            variant="outlined"
+            startIcon={<MdiIcon path={mdiPencilOutline.path} size={0.8} />}
+            onClick={() => setEditing(true)}
+          >
+            {'Edit'}
+          </Button>
+        </>
       }
       menuItems={[
         {

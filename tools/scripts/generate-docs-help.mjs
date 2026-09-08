@@ -130,6 +130,7 @@ const PLUGIN_TOPICS = {
   contactRecord: '/content-and-data/crm/contact-record',
   crmTasks: '/content-and-data/crm/tasks',
   crmReports: '/content-and-data/crm/reports',
+  crmEmailTemplates: '/content-and-data/crm/email-templates',
   contactFields: '/content-and-data/crm/custom-fields',
   crmLeads: '/content-and-data/crm/leads',
   crmSettings: '/content-and-data/crm/settings',

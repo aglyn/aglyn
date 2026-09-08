@@ -49,6 +49,14 @@ export interface CrmTaskFields {
   contactId: string | null
   companyId: string | null
   dealId: string | null
+  /**
+   * When the assignee is reminded (AGL-2659): a time, `null` for none, or
+   * ABSENT for "nothing said" — which the route answers with the rule in
+   * `crmTaskReminderAfterEdit`: a new task's reminder is its due time, and
+   * an edit that moves the due date moves a reminder that still sat on it.
+   * The drawer leaves it absent until the person touches the field.
+   */
+  remindAtMs?: number | null
 }
 
 /**
@@ -205,6 +213,19 @@ export function readCrmTaskFields(
     }
     dueAtMs = Math.round(ms)
   }
+  // Three answers, not two: a reminder the body leaves out is the route's
+  // to decide, and only an explicit null or empty string means "none".
+  const remindRaw = raw['remindAtMs']
+  let remindAtMs: number | null | undefined
+  if (remindRaw === null || remindRaw === '') {
+    remindAtMs = null
+  } else if (remindRaw !== undefined) {
+    const ms = Number(remindRaw)
+    if (!Number.isFinite(ms) || ms <= 0) {
+      return { ok: false, error: 'The reminder time could not be read.' }
+    }
+    remindAtMs = Math.round(ms)
+  }
   const assigneeRaw = String(raw['assigneeUid'] ?? '').trim()
   const notes = String(raw['notes'] ?? '').slice(0, CRM_TASK_NOTES_MAX)
   const ids = {
@@ -233,6 +254,7 @@ export function readCrmTaskFields(
       assigneeUid: assigneeRaw || null,
       notes,
       ...ids,
+      ...(remindAtMs !== undefined ? { remindAtMs } : {}),
     },
   }
 }
@@ -254,5 +276,8 @@ export function crmTaskFieldsOf(task: Partial<CrmTask>): CrmTaskFields {
     contactId: task.contactId || null,
     companyId: task.companyId || null,
     dealId: task.dealId || null,
+    // A stored task from before reminders existed carries no field, and
+    // reads as having no reminder — the same answer the route's rule gives.
+    remindAtMs: typeof task.remindAtMs === 'number' ? task.remindAtMs : null,
   }
 }

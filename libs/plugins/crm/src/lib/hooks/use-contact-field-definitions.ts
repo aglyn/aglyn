@@ -21,7 +21,8 @@ import {
   CONTACT_FIELDS_MAX_PER_ORG,
   type ContactFieldDefinition,
   CRM_COLLECTIONS,
-  sortContactFieldDefinitions,
+  type CrmFieldObject,
+  fieldDefinitionsForObject,
 } from '@aglyn/aglyn'
 import {
   useFirestore,
@@ -42,7 +43,7 @@ export interface ContactFieldDefinitionDoc extends ContactFieldDefinition {
 }
 
 export interface ContactFieldDefinitionsResult {
-  /** Every definition, retired ones included, in `order`. */
+  /** Every definition describing the asked-for object, retired ones included, in `order`. */
   definitions: ContactFieldDefinitionDoc[]
   /** The definitions a value may still be written under, in `order`. */
   active: ContactFieldDefinitionDoc[]
@@ -80,6 +81,13 @@ const EMPTY: ContactFieldDefinitionDoc[] = []
  */
 export function useContactFieldDefinitions(
   orgId: string | null | undefined,
+  /**
+   * Which record's definitions to answer with (AGL-2661). Contacts when
+   * unsaid, so every reader written before companies and deals carried
+   * fields — the form mapping, the contact columns, the audience filter —
+   * keeps seeing exactly the definitions it always did.
+   */
+  object: CrmFieldObject = 'contact',
 ): ContactFieldDefinitionsResult {
   const firestore = useFirestore()
   const { data, status, fromCache } =
@@ -100,9 +108,11 @@ export function useContactFieldDefinitions(
       [firestore, orgId],
       { idField: '$id' },
     )
+  // One listen per org, narrowed per reader: the collection is small and
+  // shared, and a query per object would be three targets for one list.
   const definitions = useMemo(
-    () => (data?.length ? sortContactFieldDefinitions(data) : EMPTY),
-    [data],
+    () => (data?.length ? fieldDefinitionsForObject(data, object) : EMPTY),
+    [data, object],
   )
   const active = useMemo(
     () => (definitions.length ? activeContactFieldDefinitions(definitions) : EMPTY),

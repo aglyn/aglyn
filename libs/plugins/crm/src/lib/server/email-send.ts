@@ -28,6 +28,8 @@ import {
   type CrmActivityLink,
   crmActivityLogHasRoom,
   crmEmailDeliveryTags,
+  type CrmMergeContext,
+  crmMergeFieldsIn,
   crmScopeTokens,
   isOrgWideMember,
   normalizeContactEmail,
@@ -36,6 +38,7 @@ import {
   type PluginApiResponse,
   readContactFacet,
   readMarketingBasis,
+  renderCrmMergeFields,
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import {
@@ -50,6 +53,7 @@ import {
   countCrmActivitiesForRecord,
   filterSendableForHost,
   firebaseAdmin,
+  getHostDocAdmin,
   getOrgForHost,
   hostSendingIdentity,
   logOrgActivity,
@@ -76,7 +80,10 @@ import {
  * Body: `{ hostId, contactId? | leadId? | dealId?, subject, body }`. Answers
  * `{ ok: true, activityId, to, from, logged }` once the provider accepted
  * the message, and a refusal with a `reason` the dialog can act on
- * otherwise.
+ * otherwise. The subject and the body may carry merge fields —
+ * `{{contact.firstName}}`, `{{deal.amount}}` (AGL-2658) — which this route
+ * fills from the record before the send, so the timeline row is the letter
+ * as it left; see `crm-email-templates.ts` for the grammar.
  *
  * ## What it is, and what it is not
  *
@@ -290,6 +297,10 @@ interface Recipient {
    * when the body named none.
    */
   siteHint: string
+  /** The deal document, when one was named — what `{{deal.*}}` reads (AGL-2658). */
+  deal: Record<string, unknown> | null
+  /** The lead document, when the recipient is a lead — what `{{lead.*}}` reads. */
+  lead: Record<string, unknown> | null
 }
 
 /**
@@ -319,6 +330,7 @@ async function resolveRecipient(
     !scoped || visibleToHost(tokens as readonly string[], hostId)
   let contactId = ids.contactId
   let siteHint = ''
+  let dealRecord: Record<string, unknown> | null = null
 
   if (ids.dealId) {
     const deal = await firestore
@@ -331,6 +343,7 @@ async function resolveRecipient(
       return refuse(404, 'Unknown deal')
     }
     link.dealId = deal.id
+    dealRecord = (deal.data() ?? {}) as Record<string, unknown>
     siteHint = typed(deal.get('hostId'), 128)
     contactId = contactId || String(deal.get('contactId') ?? '').trim()
     if (!contactId) {
@@ -353,7 +366,7 @@ async function resolveRecipient(
     if (ids.leadId) link.leadId = ids.leadId
     siteHint =
       siteHint || typed(record['hostId'], 128) || contactCaptureHostIds(record)[0] || ''
-    return { ok: true, email, record, contact: record, link, siteHint }
+    return { ok: true, email, record, contact: record, link, siteHint, deal: dealRecord, lead: null }
   }
 
   if (ids.leadId) {
@@ -372,7 +385,7 @@ async function resolveRecipient(
     // A converted lead's email belongs on the contact it became as well.
     const converted = String(lead.get('convertedContactId') ?? '').trim()
     if (converted) link.contactId = converted
-    return { ok: true, email, record, contact: null, link, siteHint: hostId }
+    return { ok: true, email, record, contact: null, link, siteHint: hostId, deal: null, lead: record }
   }
 
   return refuse(400, 'Name a contact, lead or deal to email.')
@@ -429,6 +442,38 @@ function sendRefusal(result: SendEmailResult): Refusal {
   return refuse(502, 'The email could not be sent.', { reason: 'send-failed' })
 }
 
+/** What the route says when a subject or a message is nothing once its fields are filled. */
+export const CRM_EMAIL_EMPTY_AFTER_MERGE_MESSAGE =
+  'The subject and the message are empty once their merge fields are filled ' +
+  'in. Check the fields against this record.'
+
+/**
+ * What `{{…}}` reads from, for this send (AGL-2658): the documents already
+ * in hand — the contact, the deal, the lead — the sender off their token,
+ * and the site's name, read only when a field asks for it. The contact's
+ * facet is the SENDING site's group's, because a name, a job title and a
+ * company are one holder's knowledge of a person.
+ */
+async function mergeContextFor(options: {
+  recipient: Recipient
+  sender: Sender
+  hostId: string
+  groupId: string
+  fields: readonly string[]
+}): Promise<CrmMergeContext> {
+  const { recipient, sender, hostId, groupId, fields } = options
+  const wantsSite = fields.some((field) => field.startsWith('site.'))
+  const host = wantsSite ? await getHostDocAdmin(hostId).catch(() => null) : null
+  return {
+    contact: recipient.contact,
+    contactGroupId: groupId,
+    lead: recipient.lead,
+    deal: recipient.deal,
+    sender: { name: sender.name, email: sender.email },
+    site: { name: typed(host?.['displayName'], 200) },
+  }
+}
+
 function answer(res: PluginApiResponse, refusal: Refusal): void {
   const retry = refusal.body['retryAfterSeconds']
   if (typeof retry === 'number') res.setHeader('Retry-After', String(retry))
@@ -456,19 +501,19 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
     res.status(400).json({ error: 'Name a contact, lead or deal to email.' })
     return
   }
-  const subject = typed(body['subject'], CRM_EMAIL_SUBJECT_MAX)
-  if (!subject) {
+  const draftSubject = typed(body['subject'], CRM_EMAIL_SUBJECT_MAX)
+  if (!draftSubject) {
     res.status(400).json({ error: 'Enter a subject.' })
     return
   }
   // Paragraphs are what the dialog offers, and a plain-text part is what a
   // paragraph is; line endings are normalized so the stored body and the
   // sent body are one string.
-  const text = String(body['body'] ?? '')
+  const draftText = String(body['body'] ?? '')
     .replace(/\r\n?/g, '\n')
     .trim()
     .slice(0, CRM_EMAIL_BODY_MAX)
-  if (!text) {
+  if (!draftText) {
     res.status(400).json({ error: 'Write the message.' })
     return
   }
@@ -520,6 +565,28 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
     if (recipient.contact) {
       const facet = readContactFacet(recipient.contact, group.groupId)
       if (facet.companyId) recipient.link.companyId = facet.companyId
+    }
+
+    /*
+     * MERGE FIELDS (AGL-2658), filled here rather than in the dialog: the
+     * dialog previews with the same resolver, but what leaves and what is
+     * logged is rendered by the route, off the documents it read to find
+     * the recipient, so a preview the rep did not look at cannot differ
+     * from the letter. A subject or a message that is nothing once its
+     * fields are filled is refused before any gate is spent on it.
+     */
+    const fields = crmMergeFieldsIn(`${draftSubject}\n${draftText}`)
+    const merge = fields.length
+      ? await mergeContextFor({ recipient, sender, hostId, groupId: group.groupId, fields })
+      : null
+    const subject = merge
+      ? renderCrmMergeFields(draftSubject, merge).trim().slice(0, CRM_EMAIL_SUBJECT_MAX)
+      : draftSubject
+    const text = merge
+      ? renderCrmMergeFields(draftText, merge).trim().slice(0, CRM_EMAIL_BODY_MAX)
+      : draftText
+    if (!subject || !text) {
+      return answer(res, refuse(400, CRM_EMAIL_EMPTY_AFTER_MERGE_MESSAGE, { reason: 'merge' }))
     }
 
     // The per-record ceiling, before the send: an email that could not be

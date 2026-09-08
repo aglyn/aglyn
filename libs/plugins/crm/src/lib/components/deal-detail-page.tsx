@@ -25,6 +25,7 @@ import { Button, Stack, Typography } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { CrmCreateSiteDefault } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
@@ -40,6 +41,7 @@ import { DealEditDrawer } from './deal-edit-drawer'
 import { DealProductsCard } from './deal-products-card'
 import { DealPropertiesCard } from './deal-properties-card'
 import { DealStageCard } from './deal-stage-card'
+import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
 
 /**
@@ -76,6 +78,8 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const nowMs = useMemo(() => Date.now(), [])
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // The org's deal fields (AGL-2661), for the properties card's rows.
+  const dealFields = useContactFieldDefinitions(scope.orgId, 'deal')
 
   const notFound = scope.ready && (!scope.orgId || (status !== 'loading' && !deal))
 
@@ -126,6 +130,12 @@ export function DealDetailPage(props: CrmDetailPageProps) {
           backHref={routes.section('deals')}
           backLabel="Back to deals"
           loading={!deal && !notFound}
+          // The booking door (AGL-2660): the deal's own site's services.
+          booking={
+            deal
+              ? { hostId: hostId ?? deal.hostId ?? null, org, kind: 'deal', recordId: deal.$id }
+              : undefined
+          }
           actions={
             deal ? (
               <>
@@ -199,6 +209,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                   pipeline={pipeline}
                   ownerLabel={roster.nameOf(deal.ownerUid)}
                   routes={routes}
+                  customFields={dealFields.active}
                 />
               </Stack>
               <Stack sx={{ flex: 1, minWidth: 0 }}>
@@ -215,6 +226,13 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                 unreadable={status === 'error'}
               />
             ) : null}
+            <RecordFilesCard
+              scope={scope.scope}
+              collection={CRM_COLLECTIONS.deals}
+              recordId={deal.$id}
+              mediaIds={deal.mediaIds}
+              topic="deals"
+            />
             <RecordActivityCard hostId={hostId} org={org} dealId={deal.$id} />
           </>
         ) : null}

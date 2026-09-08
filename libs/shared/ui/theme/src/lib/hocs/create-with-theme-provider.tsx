@@ -40,6 +40,12 @@ export type UseThemeMode = [
   mode: ThemeModeResult,
   toggleThemeMode: (event: SyntheticEvent<any>, to?: ThemeMode) => void,
   cookieMode: ThemeMode,
+  /**
+   * False when the surface renders light whatever the visitor asks for — a
+   * site whose theme has no authored dark scheme (AGL-1292). Absent means
+   * the surface can go dark; the console's own provider never sets it.
+   */
+  canGoDark?: boolean,
 ]
 
 export const THEME_DISPLAY_NAME: Record<ThemeMode, string> = {

@@ -109,6 +109,22 @@ export interface RevalidateLivePagesOptions {
    * the form `screenRoutePathToUrl` yields.
    */
   paths?: string[]
+  /**
+   * Drop EVERY page of the site, for a change no address can name (AGL-2690).
+   *
+   * The maintenance toggle is the caller this exists for. It does not change
+   * a screen, a layout or a route — it changes what every path on the site
+   * answers, including addresses the routing map has never held (the sitemap,
+   * a feed, a collection entry's URL). A screen fan-out leaves all of those
+   * serving the site while the console has just told the owner that visitors
+   * see the 503 screen.
+   *
+   * Use it only for a site-wide state change. Everything that CAN name what
+   * it changed should keep naming it: this drops up to the whole routing map
+   * in one call, and a publish that used it would make every save pay for
+   * every page.
+   */
+  entireHost?: boolean
 }
 
 /**
@@ -206,10 +222,12 @@ export async function revalidateLivePages(
     collectionId,
     entrySlugs,
     paths,
+    entireHost,
   } = options
   if (
     !hostId ||
-    (!screenId &&
+    (!entireHost &&
+      !screenId &&
       !layoutId &&
       !componentId &&
       !formId &&
@@ -224,6 +242,7 @@ export async function revalidateLivePages(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         hostId,
+        ...(entireHost ? { entireHost: true } : {}),
         ...(screenId ? { screenId } : {}),
         ...(layoutId ? { layoutId } : {}),
         ...(componentId ? { componentId } : {}),

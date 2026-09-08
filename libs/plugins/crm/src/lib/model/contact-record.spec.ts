@@ -137,6 +137,22 @@ describe('contactRecordFromDoc', () => {
     ).toBeNull()
   })
 
+  /*
+   * The next activity is the DOCUMENT's, not a facet's (AGL-2661): a task is
+   * filed against the contact, so every holder reading the row sees the same
+   * next step. Read off the top, and read as none when it is not a usable
+   * instant — which is what a row written before the field existed carries.
+   */
+  it('carries the shared next activity off the top of the document', () => {
+    const contact = sharedContact() as Record<string, unknown>
+    contact['nextTaskAtMs'] = 1_760_000_000_000
+    ;(contact['facets'] as Record<string, Record<string, unknown>>)['host-1']['nextTaskAtMs'] = 1
+    expect(contactRecordFromDoc(contact, soloConsentGroup('host-1')).nextTaskAtMs).toBe(
+      1_760_000_000_000,
+    )
+    expect(contactRecordFromDoc(sharedContact(), soloConsentGroup('host-1')).nextTaskAtMs).toBeNull()
+  })
+
   it('reads a stage it does not know as absent rather than rendering it', () => {
     const contact = sharedContact()
     contact.facets['host-1'].lifecycleStage = 'vip'

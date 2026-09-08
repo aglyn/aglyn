@@ -227,6 +227,12 @@ both. It is account-wide, like the category mutes; muting **Forms & bookings** s
 the digest's console notification but not its email. What it counts, and when, is in
 [Tasks & follow-ups](../content-and-data/crm/tasks.md#the-daily-digest).
 
+**Task reminders** — the notification and email a CRM task sends at its own due time —
+have no switch of their own. They are **Forms & bookings** notifications, beside **Task
+assigned to you**, and muting that category stops both the notification and the email;
+a single task is silenced by clearing its **Remind me** field. See
+[Reminders](../content-and-data/crm/tasks.md#reminders).
+
 ### Alerts on this device
 
 Below the category mutes, three switches control how a new notification

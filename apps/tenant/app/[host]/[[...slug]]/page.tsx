@@ -52,28 +52,49 @@ import type { Props } from './types'
  * was never the propagation mechanism — it was a backstop set to the request
  * rate, the same mistake the render-cache TTLs carried until AGL-1302.
  *
- * ## Why 600 and not the 3600 the doc-cache backstop uses
+ * ## 3600, and what had to be true first (AGL-2690)
  *
- * Because three states still have no bust and would inherit the full window:
+ * This was 600 while three states had no bust and would have inherited the
+ * full window. Two of them now do, which is what the previous note here made
+ * the condition for raising it:
  *
- *   - MAINTENANCE MODE — flipping the toggle off must recover the site, and
- *     nothing revalidates on that write.
- *   - THE BANDWIDTH CEILING notice — clears when the month rolls over, which is
- *     arithmetic on a counter, not an action anything hooks. (An UPGRADE now
- *     does bust it, via the plan-change fan-out added with this change.)
- *   - SOFT 404s — a path that starts resolving should not stay a 404.
+ *   - MAINTENANCE MODE — the console toggle now drops the whole host's cached
+ *     HTML as part of flipping it (`entireHost` on `/api/screens/revalidate`),
+ *     so the site goes down and — the direction that matters — comes back
+ *     when its owner says so, rather than at the end of a window.
+ *   - THE BANDWIDTH CEILING notice — this one has no write to hook at all: it
+ *     clears when `bandwidthCeilingMonthKey()` stops matching the stamp, which
+ *     is the calendar, not an action. So it moved to `/api/lockdown-verdict`
+ *     instead, beside the cap, where the middleware re-reads it every thirty
+ *     seconds AHEAD of this cache. The month roll now clears within the memo
+ *     rather than within the window, and no scheduled job has to watch
+ *     midnight for it.
+ *   - SOFT 404s — a path that starts resolving should not stay a 404. This is
+ *     the remaining exposure, accepted deliberately: the previous note named
+ *     it as the one thing that would still inherit the full window here.
  *
- * Everything else that changes without a publish is now busted on demand:
- * publish, scheduled publish, lockdown/takedown, plan change, and plugin
- * revocation. 600 keeps ~90% of the regeneration saving — the checks that
- * dominate our traffic run well inside it — while bounding those three at ten
- * minutes instead of an hour.
+ * ## Why the window was the wrong length rather than merely generous
  *
- * ⛔ Do not raise this to 3600 until the maintenance toggle and the bandwidth
- * counter reset call `revalidateEntireHost`. At that point the remaining
- * exposure is soft 404s and the value can go to the doc-cache backstop.
+ * Measured 2026-09-08 on the live estate: 90 unique paths served ~1.2K reads
+ * in twelve hours — one request per path every ~54 minutes — against a window
+ * of ten. A path went stale five times over before anybody asked for it, so
+ * nearly every request paid a full regeneration, and Vercel's own
+ * `Write Utilization` for the route read **0.8x**: each cache write was read
+ * back less than once before it expired. ISR writes cost 10x reads, which made
+ * that inversion the expensive half of the bill.
+ *
+ * A window shorter than the request rate is not a fresher site — it is the
+ * same site, rebuilt for each visitor. That was already the argument against
+ * the 60s this route started with; 600 was the same mistake one order of
+ * magnitude in.
+ *
+ * ⚠️ The number is a claim about traffic, so it expires when traffic changes.
+ * Long-tail pages are still requested less often than an hour and will keep
+ * regenerating per visit; that is the floor, not a defect. Re-read
+ * Write Utilization before moving this again — above 1.0x means the window is
+ * paying for itself, and the raw write count on its own says nothing.
  */
-export const revalidate = 600
+export const revalidate = 3600
 export const dynamicParams = true
 
 /**

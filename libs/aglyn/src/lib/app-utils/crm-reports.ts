@@ -879,3 +879,102 @@ export function conversionBySource(
     total: facets.length,
   }
 }
+
+/*==========================================
+ * WON AND LOST, BY OWNER (AGL-2662)
+ *=========================================*/
+
+/** A closed deal as the by-owner tally reads it. */
+type OwnerOutcomeDeal = Pick<CrmDeal, 'ownerUid' | 'amountCents'>
+
+/** The key an unowned deal is tallied under — see {@link OwnerOutcomeRow.uid}. */
+export const OWNER_UNASSIGNED_KEY = ''
+
+export interface OwnerOutcomeRow {
+  /**
+   * The owner's account uid, or `''` for a deal nobody owns.
+   *
+   * One row for the unowned rather than none: a pipeline where a third of
+   * what closed had no owner is a fact about the team, and dropping those
+   * deals would make the rows add to less than the period's totals without
+   * saying why.
+   */
+  uid: string
+  won: number
+  lost: number
+  /** Value of what this owner won, in the deals' own minor units. */
+  wonAmountCents: number
+  /** Value of what they lost — the size of the miss, not a negative. */
+  lostAmountCents: number
+  /** Everything that closed for this owner, won or lost. */
+  closed: number
+  /**
+   * Won over closed, 0–1, or `null` when nothing of theirs closed.
+   *
+   * Null rather than zero because the two read differently: an owner who
+   * closed nothing has no rate, and rendering that as 0% would rank a
+   * person who was not in the period below one who lost every deal.
+   */
+  winRate: number | null
+}
+
+/**
+ * Who closed what, in the period's window.
+ *
+ * The by-owner reading of the same two sets the Won and lost card already
+ * holds — everything that closed won, and everything that closed lost — so
+ * this adds no read. Credited to `ownerUid`, the field the board and the
+ * bulk bar both write, and never to the creator: a deal reassigned mid-cycle
+ * belongs to whoever carried it at the close, which is what "by owner"
+ * is asked to mean when a manager reads it.
+ *
+ * Ranked by how much CLOSED rather than by win rate, for the reason
+ * `conversionBySource` ranks by captured: an owner who closed one deal and
+ * won it is not the best closer on the team. Ties break on wins, then on
+ * the uid, so two renders of one window draw one order.
+ */
+export function wonLostByOwner(
+  won: readonly OwnerOutcomeDeal[],
+  lost: readonly OwnerOutcomeDeal[],
+): OwnerOutcomeRow[] {
+  const rows = new Map<string, OwnerOutcomeRow>()
+  const rowFor = (uid: string) => {
+    let row = rows.get(uid)
+    if (!row) {
+      row = {
+        uid,
+        won: 0,
+        lost: 0,
+        wonAmountCents: 0,
+        lostAmountCents: 0,
+        closed: 0,
+        winRate: null,
+      }
+      rows.set(uid, row)
+    }
+    return row
+  }
+  /** A missing or negative amount counts as nothing, never as a debit. */
+  const cents = (deal: OwnerOutcomeDeal) =>
+    Math.max(0, Number(deal.amountCents ?? 0) || 0)
+  for (const deal of won) {
+    const row = rowFor(String(deal.ownerUid ?? OWNER_UNASSIGNED_KEY))
+    row.won += 1
+    row.closed += 1
+    row.wonAmountCents += cents(deal)
+  }
+  for (const deal of lost) {
+    const row = rowFor(String(deal.ownerUid ?? OWNER_UNASSIGNED_KEY))
+    row.lost += 1
+    row.closed += 1
+    row.lostAmountCents += cents(deal)
+  }
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      winRate: row.closed ? row.won / row.closed : null,
+    }))
+    .sort(
+      (a, b) => b.closed - a.closed || b.won - a.won || a.uid.localeCompare(b.uid),
+    )
+}

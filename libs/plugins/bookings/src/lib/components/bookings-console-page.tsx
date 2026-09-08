@@ -17,6 +17,7 @@
 'use client'
 
 import { checkQuota, crmContactByEmailHref, pluginDocsHelp } from '@aglyn/aglyn'
+import { BOOKINGS_BOOKER_PARAM, normalizeContactEmail } from '@aglyn/aglyn'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
@@ -30,7 +31,9 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
@@ -43,7 +46,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import {
   useFirestore,
@@ -90,6 +93,9 @@ interface ServiceDraft {
   description: string
   /** Per-weekday window text, e.g. "09:00-17:00". */
   windowText: string[]
+  /** The service's two CRM switches (AGL-2660) — see `HostBookingService`. */
+  crmMeetingActivity: boolean
+  crmFollowUpTask: boolean
 }
 
 /**
@@ -122,6 +128,17 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
     params?.orgSlug && params?.host
       ? { orgSlug: String(params.orgSlug), host: String(params.host) }
       : null
+  /*
+   * The list narrowed to one booker (AGL-2660): a contact's record links
+   * here with `?email=`, and the page answers with every booking that
+   * address holds — past ones too, because that link asks about a
+   * person's history rather than the week ahead. The same match rule as
+   * the row's own "View in CRM": the address, normalized, equal. `null`
+   * outside a router, where there is no query to read.
+   */
+  const searchParams = useSearchParams()
+  const bookerFilter = normalizeContactEmail(searchParams?.get(BOOKINGS_BOOKER_PARAM))
+  const { basePath } = props
 
   const {
     data: serviceDocs,
@@ -160,6 +177,13 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const upcoming = [...(bookingDocs ?? [])]
     .filter((booking: any) => booking.endsAtMs >= Date.now())
     .sort((a: any, b: any) => a.startsAtMs - b.startsAtMs)
+  // Newest first when narrowed to a booker — the listener already orders
+  // by start, descending — so the history reads down from the latest.
+  const shown = bookerFilter
+    ? (bookingDocs ?? []).filter(
+        (booking: any) => normalizeContactEmail(booking.email) === bookerFilter,
+      )
+    : upcoming
 
   /**
    * The 24-hour reminder queue (AGL-2431).
@@ -214,6 +238,9 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       windowText: WEEKDAYS.map((_, index) =>
         index >= 1 && index <= 5 ? '09:00-17:00' : '',
       ),
+      // A booking is a meeting the record has; the follow-up is opt-in.
+      crmMeetingActivity: true,
+      crmFollowUpTask: false,
     })
   }, [entitled, org, services.length, enqueueSnackbar])
 
@@ -236,6 +263,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         description: draft.description.trim().slice(0, 500),
       }),
       windows,
+      // Written explicitly rather than only when on: an edit that switches
+      // the meeting off has to land a `false`, and `merge: true` would keep
+      // an absent key exactly as it was.
+      crmMeetingActivity: draft.crmMeetingActivity,
+      crmFollowUpTask: draft.crmFollowUpTask,
     }
     try {
       if (draft.id) {
@@ -462,6 +494,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                       windowText: WEEKDAYS.map((_, index) =>
                         formatWindows(service.windows?.[index]),
                       ),
+                      // Absent reads as ON for the meeting and OFF for the
+                      // follow-up — the model's defaults, seeded so the
+                      // switches show what the service actually does.
+                      crmMeetingActivity: service.crmMeetingActivity !== false,
+                      crmFollowUpTask: service.crmFollowUpTask === true,
                     })
                   }
                 >
@@ -498,7 +535,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       </CardDisplay>
 
       <CardDisplay
-        header={'Upcoming bookings'}
+        header={bookerFilter ? `Bookings for ${bookerFilter}` : 'Upcoming bookings'}
         help={pluginDocsHelp('bookings', {
         anchor: '#manage',
         excerpt:
@@ -508,6 +545,17 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         contentGutterX
         contentGutterY
       >
+        {bookerFilter ? (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            component="div"
+            sx={{ mb: 1 }}
+          >
+            {'Every booking this address holds, newest first. '}
+            {basePath ? <AppLink href={basePath}>{'Show upcoming bookings'}</AppLink> : null}
+          </Typography>
+        ) : null}
         {/* What the reminder beat will do next, and what it has done. Named
             "24-hour reminders" rather than "emails" because that is the only
             mail this queue governs — confirmations go out on booking. */}
@@ -528,13 +576,13 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
             sx={{ ml: 0.5, fontSize: '0.9em' }}
           />
         </Typography>
-        {upcoming.length === 0 ? (
+        {shown.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'No upcoming bookings.'}
+            {bookerFilter ? 'No bookings for this address.' : 'No upcoming bookings.'}
           </Typography>
         ) : (
           <Stack spacing={1}>
-            {upcoming.map((booking: any) => (
+            {shown.map((booking: any) => (
               <Stack
                 key={booking.$id}
                 direction="row"
@@ -703,6 +751,51 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               size="small"
             />
           ))}
+          <Typography variant="overline" color="text.secondary">
+            {'CRM'}
+          </Typography>
+          {/*
+            What a booking of this service does to the booker's CRM record
+            (AGL-2660). The meeting is on by default — a booking IS a
+            meeting the record has — and the follow-up is the service's
+            choice, because not every service earns a call afterwards.
+          */}
+          <FormControlLabel
+            control={
+              <Switch
+                checked={draft?.crmMeetingActivity ?? true}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev
+                      ? { ...prev, crmMeetingActivity: event.target.checked }
+                      : prev,
+                  )
+                }
+                size="small"
+              />
+            }
+            label="Log a meeting on the CRM record when this service is booked"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={draft?.crmFollowUpTask ?? false}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev
+                      ? { ...prev, crmFollowUpTask: event.target.checked }
+                      : prev,
+                  )
+                }
+                size="small"
+              />
+            }
+            label="Create a follow-up task on the CRM record when this service is booked"
+          />
+          <Typography variant="caption" color="text.secondary">
+            {'The follow-up is due one business day after the slot, on whoever ' +
+              'owns the record. Nothing is filed on a site whose CRM is off.'}
+          </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>

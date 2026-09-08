@@ -151,24 +151,31 @@ const PROJECTS = [
     // 2026-08-20 and produced a permanent false `BUILD MISSING` on every
     // promotion that did not touch the docs.
     //
-    // Unlike console/tenant/plugins, the scoping is NOT in
-    // `tools/scripts/vercel-ignore-build.sh` — that script rejects any app but
-    // `console|tenant|plugins`, and `apps/docs/vercel.json` declares no
-    // `ignoreCommand`. It comes from Vercel itself: the project's **Root
-    // Directory is `apps/docs`**, and Vercel skips a deployment when a push
-    // changes nothing inside a project's root directory.
+    // The scoping now comes from `tools/scripts/vercel-ignore-build.sh docs`,
+    // whose `docs` case inverts the rule: everything is ignorable EXCEPT
+    // `apps/docs/`. So this list is exactly that case, and the two must move
+    // together (AGL-2688).
     //
-    // That is dashboard state rather than repo state, so it was confirmed
-    // behaviourally from two promotions on the same day:
+    // Until AGL-2688 the scoping came from an inline `commandForIgnoringBuildStep`
+    // that diffed `HEAD^ HEAD`, which judged a whole push by its tip commit and
+    // skipped a docs build whenever the docs edit was not the last commit in the
+    // push. `buildsOnPaths` was right about WHICH paths build; what was wrong was
+    // the range the project measured them over.
+    //
+    // Vercel's own root-directory skip is a second, independent mechanism here
+    // (this project's Root Directory is `apps/docs`), and it was what these two
+    // promotions actually demonstrated:
     //   v1.0.0-beta.5 — range TOUCHED apps/docs (fontsource + docusaurus
     //                   bumps) -> docs BUILT, reported `=HEAD`.
     //   v1.0.0-beta.6 — range touched ZERO files under apps/docs -> build
     //                   CANCELED after 6s, alias legitimately trailing.
     //
     // ⚠️ If anyone turns on "Include source files outside of the Root
-    // Directory in the Build Step", docs starts building on every push and
-    // this entry must go back to `alwaysBuilds: true` — otherwise a genuinely
-    // dropped build reads as "path-current" and this check stops working.
+    // Directory in the Build Step", that second mechanism goes away — but the
+    // ignore step survives it, so this entry stays `buildsOnPaths` rather than
+    // going back to `alwaysBuilds: true`. The setting to actually fear is the
+    // ignore command being cleared on the project, which would leave nothing
+    // scoping docs at all.
     buildsOnPaths: ['apps/docs'],
   },
   {

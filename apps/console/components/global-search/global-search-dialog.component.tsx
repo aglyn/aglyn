@@ -39,6 +39,7 @@ import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgPermissions } from '../../hooks/use-org-permissions'
+import { useOrgReach } from '../../hooks/use-org-reach'
 import { useReleaseFlag } from '../../hooks/use-release-flags'
 import DocsHelpTip from '../docs-help-tip.component'
 import {
@@ -155,6 +156,27 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
     )
   }, [org, orgReady, hostId, hostReady, contactsVisible, canManageData])
 
+  /*
+   * The org-level half of the same gate (AGL-2662). Off a site there is no
+   * consent group to resolve tokens from, and the CRM's org hub is offered
+   * to an ORG-WIDE member only — the reach requirement `resolveOrgCrmAccess`
+   * puts in front of that hub, for the same reason: a scoped collaborator's
+   * unfiltered reads are refused by the rules, and a group that renders as
+   * "could not be searched" is worse than one that is not offered.
+   *
+   * The two gates are exclusive by construction: `hostId` decides which,
+   * so a site's viewer is never admitted org-wide and vice versa.
+   */
+  const { orgWide, ready: reachReady } = useOrgReach()
+  const crmOrgWide =
+    !hostId &&
+    hostReady &&
+    orgReady &&
+    reachReady &&
+    orgWide &&
+    contactsVisible &&
+    canManageData
+
   const scope = useMemo(
     () =>
       resolveGlobalSearchScope({
@@ -164,8 +186,9 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
         entitlements,
         entitlementsReady: orgReady,
         orgDataTokens,
+        crmOrgWide,
       }),
-    [orgId, hostId, hostReady, entitlements, orgReady, orgDataTokens],
+    [orgId, hostId, hostReady, entitlements, orgReady, orgDataTokens, crmOrgWide],
   )
 
   // Reset between openings so a stale query never renders against a scope it
@@ -181,6 +204,7 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
     orgId,
     hostId,
     orgDataTokens,
+    crmOrgWide,
     text,
   })
 

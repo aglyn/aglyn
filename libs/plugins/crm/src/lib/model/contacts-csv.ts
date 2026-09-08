@@ -39,121 +39,16 @@
  * "Do not import" on the way back.
  */
 
-import {
-  CONTACT_LIFECYCLE_STAGE_LABELS,
-  type AglynPostalAddress,
-  type ContactCustomValue,
-  type ContactFieldDefinition,
-  type ContactLifecycleStage,
-  csvDocument,
+/* The writer moved to `@aglyn/aglyn` under AGL-2662 — see `deals-csv.ts`. */
+export {
+  CONTACT_CSV_COLUMNS,
+  contactCsvHeader,
+  contactsCsv,
+  type ContactCsvOptions,
+  type ContactCsvRow,
 } from '@aglyn/aglyn'
 
-/** As much of a projected table row as the file reads. */
-export interface ContactCsvRow {
-  email?: string
-  name?: string
-  phone?: string
-  jobTitle?: string
-  companyName?: string
-  ownerUid?: string
-  lifecycleStage?: ContactLifecycleStage | ''
-  address?: AglynPostalAddress | null
-  tags?: string[]
-  sources?: Record<string, unknown>
-  interactions?: Array<{ atMs: number }>
-  /** The last open or click on one of the site's campaigns (AGL-2616). */
-  lastEmailEngagementAtMs?: number
-  notes?: string
-  /** This holder's custom values, keyed by definition key. */
-  custom?: Record<string, ContactCustomValue>
-}
-
-export interface ContactCsvOptions {
-  /**
-   * The owner's address for a stored uid — what the import resolves an
-   * owner by. Absent, the uid is written as it is.
-   */
-  ownerEmail?: (uid: string) => string
-  /** The org's custom fields, one column each, headed by the field's label. */
-  customFields?: readonly Pick<ContactFieldDefinition, 'key' | 'label'>[]
-}
-
-/**
- * The standard columns, in order, headed as the import reads them. A
- * custom field's column follows these, headed by its label.
- */
-export const CONTACT_CSV_COLUMNS = [
-  'Email',
-  'Name',
-  'Phone',
-  'Job title',
-  'Company',
-  'Owner',
-  'Lifecycle stage',
-  'Address line 1',
-  'Address line 2',
-  'City',
-  'State',
-  'Postal code',
-  'Country',
-  'Tags',
-  'Sources',
-  'Last interaction',
-  'Last engaged',
-  'Notes',
-] as const
-
-/** The header row, with one column per custom field after the standard ones. */
-export function contactCsvHeader(
-  customFields: ContactCsvOptions['customFields'] = [],
-): string[] {
-  return [...CONTACT_CSV_COLUMNS, ...customFields.map((field) => field.label)]
-}
-
-/** A custom value as a cell: a date field's epoch as an ISO date, the rest as text. */
-const customCell = (value: ContactCustomValue | undefined): string => {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'boolean') return value ? 'yes' : 'no'
-  return String(value)
-}
-
-/** The whole file, header first. */
-export function contactsCsv(
-  rows: readonly ContactCsvRow[],
-  options: ContactCsvOptions = {},
-): string {
-  const { ownerEmail, customFields = [] } = options
-  return csvDocument(
-    contactCsvHeader(customFields),
-    rows.map((contact) => [
-      contact.email ?? '',
-      contact.name ?? '',
-      contact.phone ?? '',
-      contact.jobTitle ?? '',
-      contact.companyName ?? '',
-      contact.ownerUid ? (ownerEmail?.(contact.ownerUid) ?? contact.ownerUid) : '',
-      contact.lifecycleStage
-        ? CONTACT_LIFECYCLE_STAGE_LABELS[contact.lifecycleStage]
-        : '',
-      contact.address?.line1 ?? '',
-      contact.address?.line2 ?? '',
-      contact.address?.city ?? '',
-      contact.address?.state ?? '',
-      contact.address?.postalCode ?? '',
-      contact.address?.country ?? '',
-      (contact.tags ?? []).join('|'),
-      Object.keys(contact.sources ?? {}).join('|'),
-      contact.interactions?.[0]
-        ? new Date(contact.interactions[0].atMs).toISOString()
-        : '',
-      contact.lastEmailEngagementAtMs
-        ? new Date(contact.lastEmailEngagementAtMs).toISOString()
-        : '',
-      contact.notes ?? '',
-      ...customFields.map((field) => customCell(contact.custom?.[field.key])),
-    ]),
-  )
-}
+import { contactsCsv, type ContactCsvOptions } from '@aglyn/aglyn'
 
 /**
  * The file the Import drawer hands out to start from: the export's header
@@ -165,7 +60,13 @@ export function contactImportTemplateCsv(
   return contactsCsv([], { customFields })
 }
 
-/** Hand the browser a file to save. */
+/**
+ * Hand the browser a file to save.
+ *
+ * The one writer that stayed: it touches `URL.createObjectURL` and
+ * `document`, so it belongs to the browser and not to the library a server
+ * route imports.
+ */
 export function downloadTextFile(name: string, mime: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: mime }))
   const anchor = document.createElement('a')

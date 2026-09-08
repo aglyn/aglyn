@@ -36,6 +36,13 @@ const mockReads: Array<{ path: string; constraints: any[] }> = []
 const mockFailing = new Set<string>()
 /** Rows returned per collection name. */
 let mockRowsByCollection: Record<string, Array<Record<string, any>>> = {}
+/**
+ * Rows returned for one exact path, which the fan-out needs: an org-level
+ * leads read asks the SAME collection name of several sites, and a fixture
+ * keyed only by that name would hand every site the same people — hiding
+ * both the merge and the stamp that says which site a row came from.
+ */
+let mockRowsByPath: Record<string, Array<Record<string, any>>> = {}
 
 jest.mock('firebase/firestore', () => ({
   collection: (_firestore: unknown, ...segments: string[]) => ({
@@ -67,7 +74,8 @@ jest.mock('firebase/firestore', () => ({
     if (mockFailing.has(name)) throw Object.assign(new Error('denied'), {
       code: 'permission-denied',
     })
-    const rows = mockRowsByCollection[name] ?? []
+    const rows =
+      mockRowsByPath[String(builtQuery.__path)] ?? mockRowsByCollection[name] ?? []
     const cursor = builtQuery.constraints.find((c: any) => c.type === 'startAfter')
     const cap = builtQuery.constraints.find((c: any) => c.type === 'limit')
     const from = cursor
@@ -86,6 +94,7 @@ import useGlobalSearch, {
   matchesIn,
   rowBelongsTo,
   SEARCH_ESCALATION_WINDOW,
+  SEARCH_ORG_HOST_FANOUT,
   SEARCH_WINDOW,
 } from './use-global-search'
 import {
@@ -110,6 +119,7 @@ const readsFor = (collectionName: string) =>
 beforeEach(() => {
   mockReads.length = 0
   mockFailing.clear()
+  mockRowsByPath = {}
   mockRowsByCollection = {
     screens: [
       { $id: 's1', displayName: 'Home' },
@@ -435,6 +445,242 @@ describe('how the reads are scoped', () => {
     rerender({ hostId: 'host-2' })
     await waitFor(() => expect(readsFor('screens')).toHaveLength(2))
     expect(readsFor('screens')[1].path).toBe('hosts/host-2/screens')
+  })
+})
+
+describe('the CRM at the organization hub (AGL-2662)', () => {
+  /** No site: the org-level mount, where a consent group cannot be resolved. */
+  const atOrg = { ...base, hostId: null as string | null }
+
+  /**
+   * The rules' `canReadScoped()` short-circuits on `isOrgWideMember()`, so
+   * for that reader a `visibleTo` clause could only ever narrow what they
+   * are already allowed — and a clause built off a site would need the org's
+   * whole site list on it and still miss a site the list did not carry. The
+   * CRM's own listeners drop it for the same reason.
+   */
+  it('reads org data with no scope clause for an org-wide member', async () => {
+    mockRowsByCollection.crmTasks = [{ $id: 't1', title: 'Call Ada back' }]
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...atOrg,
+        entities: [entity('tasks')],
+        crmOrgWide: true,
+        text: 'call',
+      }),
+    )
+    await waitFor(() => expect(readsFor('crmTasks')).toHaveLength(1))
+    expect(readsFor('crmTasks')[0].path).toBe('orgs/org-1/crmTasks')
+    expect(
+      readsFor('crmTasks')[0].constraints.some((c: any) => c.type === 'where'),
+    ).toBe(false)
+    await waitFor(() => expect(result.current.groups[0]?.rows).toHaveLength(1))
+    expect(result.current.groups[0].rows[0].$label).toBe('Call Ada back')
+  })
+
+  /**
+   * The second layer, the way the tokens check is under a site: the scope
+   * resolver already withholds these groups, and a read attempted anyway is
+   * recorded as a refusal rather than sent for the rules to reject.
+   */
+  it('refuses the org-level read outright without org-wide reach', async () => {
+    mockRowsByCollection.crmTasks = [{ $id: 't1', title: 'Call Ada back' }]
+    const { result } = renderHook(() =>
+      useGlobalSearch({ ...atOrg, entities: [entity('tasks')], text: 'call' }),
+    )
+    await waitFor(() => expect(result.current.groups.length).toBe(1))
+    expect(result.current.groups[0].failed).toBe(true)
+    expect(readsFor('crmTasks')).toHaveLength(0)
+  })
+
+  it('still demands a site\'s tokens under a site', async () => {
+    mockRowsByCollection.crmActivities = [{ $id: 'a1', subject: 'Trial agreed' }]
+    renderHook(() =>
+      useGlobalSearch({
+        ...base,
+        entities: [entity('activities')],
+        orgDataTokens: ['org', 'host:host-1'],
+        text: 'trial',
+      }),
+    )
+    await waitFor(() => expect(readsFor('crmActivities')).toHaveLength(1))
+    expect(readsFor('crmActivities')[0].constraints).toContainEqual({
+      type: 'where',
+      field: 'visibleTo',
+      op: 'array-contains-any',
+      value: ['org', 'host:host-1'],
+    })
+  })
+
+  it('labels a hand-logged activity by its body when it carries no subject', async () => {
+    mockRowsByCollection.crmActivities = [
+      { $id: 'a1', body: 'Left a voicemail about renewal' },
+    ]
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...base,
+        entities: [entity('activities')],
+        orgDataTokens: ['org'],
+        text: 'voicemail',
+      }),
+    )
+    await waitFor(() => expect(result.current.groups[0]?.rows).toHaveLength(1))
+    expect(result.current.groups[0].rows[0].$label).toBe(
+      'Left a voicemail about renewal',
+    )
+  })
+})
+
+describe('the org-level leads window, read a site at a time (AGL-2662)', () => {
+  const atOrg = { ...base, hostId: null as string | null, crmOrgWide: true }
+
+  const withSites = (ids: string[]) => {
+    mockRowsByCollection.hostMemberships = ids.map((id) => ({
+      $id: id,
+      displayName: id,
+      subdomain: id,
+    }))
+  }
+
+  /**
+   * The fan-out is bounded by the site list the `sites` group has already
+   * read, which is what makes it cost no membership query of its own. It
+   * holds until that window lands rather than opening one.
+   */
+  it('reads one window per site, over the sites window it already holds', async () => {
+    withSites(['host-a', 'host-b'])
+    mockRowsByPath['hosts/host-a/leads'] = [
+      { $id: 'l1', name: 'Grace Hopper' },
+    ]
+    mockRowsByPath['hosts/host-b/leads'] = [
+      { $id: 'l1', name: 'Grace Murray' },
+    ]
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...atOrg,
+        entities: [entity('sites'), entity('leads')],
+        text: 'grace',
+      }),
+    )
+    await waitFor(() => expect(readsFor('leads')).toHaveLength(2))
+    expect(readsFor('leads').map((read) => read.path).sort()).toEqual([
+      'hosts/host-a/leads',
+      'hosts/host-b/leads',
+    ])
+    // One membership read, spent on the Sites group and reused here.
+    expect(readsFor('hostMemberships')).toHaveLength(1)
+    const group = result.current.groups.find(
+      (entry) => entry.definition.id === 'leads',
+    )
+    await waitFor(() => expect(group ?? result.current.groups).toBeTruthy())
+    const leads = result.current.groups.find(
+      (entry) => entry.definition.id === 'leads',
+    )
+    expect(leads?.rows).toHaveLength(2)
+    // The same person key on two sites is two rows, each naming its site —
+    // without the stamp neither could be addressed.
+    expect(leads?.rows.map((row) => row.$hostId).sort()).toEqual([
+      'host-a',
+      'host-b',
+    ])
+  })
+
+  it('reads nothing at all until the sites window has landed', async () => {
+    withSites(['host-a'])
+    mockRowsByPath['hosts/host-a/leads'] = [{ $id: 'l1', name: 'Grace Hopper' }]
+    renderHook(() =>
+      useGlobalSearch({ ...atOrg, entities: [entity('leads')], text: 'grace' }),
+    )
+    await act(async () => undefined)
+    // The Sites group was not offered, so no window ever lands and the
+    // fan-out stays where it is rather than paying for a site list.
+    expect(readsFor('leads')).toHaveLength(0)
+  })
+
+  it('does not fan out again as the query grows', async () => {
+    withSites(['host-a', 'host-b'])
+    const { rerender } = renderHook(
+      (props: { text: string }) =>
+        useGlobalSearch({
+          ...atOrg,
+          entities: [entity('sites'), entity('leads')],
+          ...props,
+        }),
+      { initialProps: { text: 'gr' } },
+    )
+    await waitFor(() => expect(readsFor('leads')).toHaveLength(2))
+    for (const text of ['gra', 'grac', 'grace']) {
+      rerender({ text })
+      await act(async () => undefined)
+    }
+    expect(readsFor('leads')).toHaveLength(2)
+  })
+
+  /**
+   * The cap is the cost control: a group read per site multiplies by the
+   * org's site count rather than staying flat. The sites beyond it are
+   * reported as truncation, never silently dropped.
+   */
+  it('caps the fan-out and says the group was only partly searched', async () => {
+    withSites(
+      Array.from({ length: SEARCH_ORG_HOST_FANOUT + 3 }, (_, index) => `host-${index}`),
+    )
+    for (let index = 0; index < SEARCH_ORG_HOST_FANOUT + 3; index += 1) {
+      mockRowsByPath[`hosts/host-${index}/leads`] = [
+        { $id: `l${index}`, name: 'Grace Hopper' },
+      ]
+    }
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...atOrg,
+        entities: [entity('sites'), entity('leads')],
+        text: 'grace',
+      }),
+    )
+    await waitFor(() =>
+      expect(readsFor('leads')).toHaveLength(SEARCH_ORG_HOST_FANOUT),
+    )
+    const leads = result.current.groups.find(
+      (entry) => entry.definition.id === 'leads',
+    )
+    expect(leads?.truncated).toBe(true)
+  })
+
+  it('says a refused site FAILED rather than reporting no leads', async () => {
+    withSites(['host-a'])
+    mockFailing.add('leads')
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...atOrg,
+        entities: [entity('sites'), entity('leads')],
+        text: 'grace',
+      }),
+    )
+    await waitFor(() =>
+      expect(
+        result.current.groups.find((entry) => entry.definition.id === 'leads')
+          ?.failed,
+      ).toBe(true),
+    )
+  })
+
+  it('reports a complete, empty group for an org with no sites', async () => {
+    withSites([])
+    const { result } = renderHook(() =>
+      useGlobalSearch({
+        ...atOrg,
+        entities: [entity('sites'), entity('leads')],
+        text: 'grace',
+      }),
+    )
+    await waitFor(() => expect(readsFor('hostMemberships')).toHaveLength(1))
+    await act(async () => undefined)
+    expect(readsFor('leads')).toHaveLength(0)
+    // Nothing to say: no rows, no failure, no caveat, so the group is
+    // dropped rather than rendered as a partial answer.
+    expect(
+      result.current.groups.some((entry) => entry.definition.id === 'leads'),
+    ).toBe(false)
   })
 })
 

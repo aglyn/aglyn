@@ -17,7 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import type { CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
+import type { AglynOrgBilling, CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
 import { mdiAccountCancelOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -42,6 +42,7 @@ import {
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useId, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
+import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -96,6 +97,12 @@ export interface LeadPropertiesCardProps {
    * refused there, and the lead itself goes when the request runs.
    */
   erasurePending?: boolean
+  /**
+   * The org the shell passed: the booking door reads whether the lead's site
+   * runs Bookings and whether the plan is entitled to it (AGL-2660), and a
+   * logged call reads the activity scope it belongs in (AGL-2661).
+   */
+  org?: Partial<AglynOrgBilling> | null
 }
 
 /**
@@ -126,6 +133,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     extraMenuItems = [],
     banner,
     erasurePending = false,
+    org,
   } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -134,6 +142,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const status = Aglyn.crmLeadStatus(lead)
   const converted = Boolean(lead.convertedContactId)
   const open = Aglyn.isCrmLeadOpen(lead) && !converted
+  /** What a capture that took a number left on the document (AGL-2661). */
+  const leadPhone = String(lead['phone'] ?? '').trim()
 
   const [notes, setNotes] = useState(String(lead.notes ?? ''))
   // The label's id, so the status combobox is named "Status" rather than
@@ -195,6 +205,10 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       help={Aglyn.pluginDocsHelp('crmLeads', { anchor: '#working-a-lead-from-the-row' })}
       backHref={routes.section('leads')}
       backLabel="Back to leads"
+      // The booking door (AGL-2660), while the lead is still the record
+      // being worked: once converted, the contact is where a meeting is
+      // booked from, and the links below lead there.
+      booking={converted ? undefined : { hostId, org, kind: 'lead', recordId: leadId }}
       actions={
         <>
           {converted ? null : erasurePending ? (
@@ -212,6 +226,13 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
               {'Convert'}
             </Button>
           )}
+          {/* Dial the number the capture carried, and log the call (AGL-2661). */}
+          <CrmCallButton
+            hostId={hostId}
+            org={org}
+            link={{ leadId }}
+            phone={leadPhone}
+          />
           <CrmSendEmailButton
             hostId={hostId}
             leadId={leadId}
@@ -246,6 +267,16 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     >
       <Stack spacing={3}>
         {banner}
+        {/*
+          Only when the capture carried one (AGL-2661): the sign-up and
+          booking doors write no phone, so a row for every lead would be a
+          permanent blank. A form that captures one fills this.
+        */}
+        {leadPhone ? (
+          <Fact label="Phone">
+            <CrmPhoneLink phone={leadPhone} />
+          </Fact>
+        ) : null}
         <Fact label="Marketing consent">{consentLine}</Fact>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           {converted ? (

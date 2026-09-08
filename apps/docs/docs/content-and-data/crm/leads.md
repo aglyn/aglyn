@@ -98,6 +98,24 @@ campaign audiences.
 
 Every change here is saved immediately; there is no separate save step.
 
+### Several leads at once
+
+Every row has a checkbox. Tick one or more — or the header's checkbox for
+the page — and a bar appears over the list with **Set owner**, **Set
+status**, **Unqualify** (one reason for all of them) and **Export CSV** for
+the selection. What each does, and which leads it skips by name, is in
+[Bulk actions → Leads](./bulk-actions.md#leads). The selection clears when
+the **Show** view changes.
+
+### Export CSV
+
+**Export CSV** at the top of the card downloads the listed leads — every row
+the **Show** view admits, not only the page on screen — as `leads.csv`:
+email, name, status, the owner by email address, the sources by name, first
+and last seen, the number of captures, the unqualified reason, when the lead
+converted, and notes. At the organization level the file also names each
+lead's **Site**. There is no leads import; the file is for reading elsewhere.
+
 ### Who owns a lead
 
 A lead starts unassigned unless the workspace decided otherwise. When the
@@ -118,10 +136,13 @@ Click a row to open the lead. The page has two cards.
 
 **Lead** holds what the team decides: the status, the owner, and free-text
 **notes** with a **Save notes** button. It also shows the identity the capture
-recorded — email and name — and the person's **marketing consent**: whether
-they opted in (and when), declined, or never recorded a choice. A lead with no
-recorded consent cannot be sent marketing email, which is worth knowing
-before you promise them a newsletter.
+recorded — email and name, and a phone number when the form that captured
+them took one — and the person's **marketing consent**: whether they opted in
+(and when), declined, or never recorded a choice. A lead with no recorded
+consent cannot be sent marketing email, which is worth knowing before you
+promise them a newsletter. The card's header carries **Call** and **Log a
+call** beside **Send email** — see
+[click to call](./activities.md#click-to-call).
 
 **Captured history** is read-only: when the person was first and last seen,
 how many times your site captured them, every source that did, and — under

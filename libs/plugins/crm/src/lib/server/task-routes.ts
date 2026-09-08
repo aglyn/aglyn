@@ -21,6 +21,8 @@ import {
   CRM_COLLECTIONS,
   type CrmTask,
   crmScopeTokens,
+  crmTaskReminderAfterEdit,
+  crmTaskReminderPending,
   isOrgWideMember,
   memberCanSee,
   type PluginApiHandler,
@@ -28,10 +30,12 @@ import {
   type PluginApiResponse,
 } from '@aglyn/aglyn/server'
 import {
+  crmNextActivityLinksOf,
   firebaseAdmin,
   getOrgForHost,
   memberHasOrgPermission,
   notifyUsers,
+  recomputeCrmNextTaskAt,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
@@ -97,9 +101,9 @@ import {
  * request as a whole is refused only for what refuses every task alike.
  */
 
-type Refusal = { ok: false; status: number; body: { error: string } }
+export type Refusal = { ok: false; status: number; body: { error: string } }
 
-interface Writer {
+export interface Writer {
   ok: true
   uid: string
   staff: boolean
@@ -110,7 +114,7 @@ interface Writer {
   level: CrmRouteScope['level']
 }
 
-const refuse = (status: number, error: string): Refusal => ({
+export const refuse = (status: number, error: string): Refusal => ({
   ok: false,
   status,
   body: { error },
@@ -130,7 +134,7 @@ const ORG_REFUSAL =
  * a create the document does not exist yet and its scope is what the route
  * is about to stamp.
  */
-async function authorizeCrmWriter(
+export async function authorizeCrmWriter(
   req: PluginApiRequest,
   scope: CrmRouteScope,
 ): Promise<Writer | Refusal> {
@@ -205,11 +209,32 @@ async function authorizeCrmWriter(
  * org-level writer was admitted as org-wide, and an org-wide member reads
  * every row.
  */
-const canReach = (writer: Writer, visibleTo: unknown): boolean =>
+export const canReach = (writer: Writer, visibleTo: unknown): boolean =>
   writer.staff ||
   writer.level === 'org' ||
   isOrgWideMember(writer.member) ||
   memberCanSee(writer.member, visibleTo as string[] | undefined)
+
+/**
+ * The records the task names carry `nextTaskAtMs` (AGL-2661), recomputed
+ * after every write here. Its own catch: the task IS saved by now, and a
+ * denormalized figure that could not move is logged and left for the
+ * Fields section's recompute, not reported as a task that failed to save.
+ */
+async function settleNextActivity(
+  orgId: string,
+  links: readonly (Partial<CrmTaskFields> | Record<string, unknown> | null | undefined)[],
+): Promise<void> {
+  try {
+    await recomputeCrmNextTaskAt(
+      firebaseAdmin.app().firestore(),
+      orgId,
+      links.map((link) => crmNextActivityLinksOf(link as Record<string, unknown>)),
+    )
+  } catch (error) {
+    console.error('[crm] next activity could not be recomputed', orgId, error)
+  }
+}
 
 /**
  * The console path the assignee's notification opens: the record the task
@@ -264,6 +289,38 @@ function storedFields(
   ] as const) {
     const slot = optional(value)
     if (slot.present) out[key] = slot.value
+  }
+  return out
+}
+
+/**
+ * The reminder a save leaves (AGL-2659), as a Firestore write.
+ *
+ * `crmTaskReminderAfterEdit` decides which reminder the task ends up with;
+ * this turns the decision into fields. Written as `null` when unset, like
+ * `dueAtMs`, so the document says the reminder was decided. A reminder that
+ * MOVED — to a new time, or to none — is a reminder not yet sent, so the
+ * runner's mark comes off with it; one that stayed keeps its mark, which is
+ * what stops a title correction from re-sending last week's reminder.
+ */
+function reminderFields(
+  fields: CrmTaskFields,
+  existing: FirebaseFirestore.DocumentSnapshot | null,
+): Record<string, unknown> {
+  const previous = existing
+    ? {
+        dueAtMs: (existing.get('dueAtMs') as number | null | undefined) ?? null,
+        remindAtMs: (existing.get('remindAtMs') as number | null | undefined) ?? null,
+      }
+    : null
+  const remindAtMs = crmTaskReminderAfterEdit({
+    dueAtMs: fields.dueAtMs,
+    remindAtMs: fields.remindAtMs,
+    previous,
+  })
+  const out: Record<string, unknown> = { remindAtMs }
+  if (previous && remindAtMs !== previous.remindAtMs) {
+    out['reminderSentAtMs'] = FieldValue.delete()
   }
   return out
 }
@@ -349,10 +406,14 @@ async function updateTask(
     return refuse(403, 'That task is not visible to you.')
   }
   const previousAssignee = String(existing.get('assigneeUid') ?? '') || null
+  const previousLinks = crmNextActivityLinksOf(existing.data() as Record<string, unknown>)
   await tasks.doc(taskId).update({
     ...storedFields(fields, 'update'),
+    ...reminderFields(fields, existing),
     updatedAt: FieldValue.serverTimestamp(),
   })
+  // Both sides: a task moved off one deal onto another leaves neither stale.
+  await settleNextActivity(writer.orgId, [previousLinks, fields])
   const linkHostId =
     scope.level === 'site'
       ? scope.hostId
@@ -413,6 +474,7 @@ async function createTask(
   const ref = tasks.doc()
   await ref.set({
     ...storedFields(fields, 'create'),
+    ...reminderFields(fields, null),
     status: 'open',
     completedAtMs: null,
     visibleTo,
@@ -421,6 +483,7 @@ async function createTask(
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   })
+  await settleNextActivity(writer.orgId, [fields])
   const notified = await notifyAssignee(writer, fields, null, hostId)
   return { ok: true, taskId: ref.id, notified }
 }
@@ -599,8 +662,12 @@ async function completeTask(
     status: 'done',
     completedAtMs,
     completedByUid: writer.uid,
+    // A reminder still owed on a task that is done is owed to nobody
+    // (AGL-2659); one already sent stays, as a fact about what happened.
+    ...(crmTaskReminderPending(task) ? { remindAtMs: null } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   })
+  await settleNextActivity(writer.orgId, [task as Record<string, unknown>])
 
   const eventHostId =
     scope.level === 'site' ? scope.hostId : String(task.hostId ?? '').trim()

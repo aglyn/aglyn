@@ -189,6 +189,14 @@ describe('sanitizeHostTheme', () => {
     ).toBeUndefined()
     expect(sanitizeHostTheme({ mixins: {} }).mixins).toBeUndefined()
   })
+
+  it('keeps only the dark-scheme opt-out (AGL-2676)', () => {
+    expect(sanitizeHostTheme({ darkScheme: 'off' }).darkScheme).toBe('off')
+    expect(sanitizeHostTheme({ darkScheme: 'auto' }).darkScheme).toBeUndefined()
+    expect(
+      sanitizeHostTheme({ darkScheme: 'junk' as never }).darkScheme,
+    ).toBeUndefined()
+  })
 })
 
 describe('mergeThemeOptions (AGL-1180)', () => {

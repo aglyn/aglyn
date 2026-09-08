@@ -58,7 +58,9 @@ import {
   type CompanyImportRow,
   type CompanyImportSkippedRow,
   companyImportMatchKey,
+  type ContactFieldDefinition,
   CRM_COLLECTIONS,
+  fieldDefinitionsForObject,
   nameSearchFields,
   normalizeCompanyImportRow,
   type PluginApiHandler,
@@ -119,6 +121,44 @@ function storedFields(
 }
 
 /**
+ * The row's custom values as a MERGE writes them: one dotted path per key,
+ * so a company already filed keeps every value the file did not carry
+ * (AGL-2661). A create spreads the map itself — see the loop below.
+ */
+function customUpdate(row: CompanyImportRow): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(row.custom).map(([key, value]) => [`custom.${key}`, value]),
+  )
+}
+
+/**
+ * The org's live COMPANY field definitions (AGL-2661) — the contact
+ * import's read, narrowed to the object this import writes. Read in full
+ * and filtered in memory: a holder has a handful of fields, and a `where`
+ * on `object` would need an index for a collection that fits in one page.
+ */
+async function loadCompanyFieldDefinitions(
+  orgId: string,
+  readTokens: readonly string[],
+): Promise<ContactFieldDefinition[]> {
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection(CRM_COLLECTIONS.contactFields)
+    .limit(200)
+    .get()
+  return fieldDefinitionsForObject(
+    snapshot.docs.map((doc) => doc.data() as ContactFieldDefinition),
+    'company',
+  ).filter(
+    (field) =>
+      !!field.key && !field.retiredAt && visibleToTokens(field.visibleTo, readTokens),
+  )
+}
+
+/**
  * `POST crm/companies-import` — `{ hostId, rows }` → a {@link CompanyImportChunkResult}.
  *
  * Rows are written one after another rather than in parallel: two rows
@@ -141,6 +181,7 @@ export const crmCompaniesImportHandler: PluginApiHandler = async (req, res) => {
     const skipped: CompanyImportSkippedRow[] = []
     const dropped: Record<string, number> = {}
     const normalized: { index: number; row: CompanyImportRow }[] = []
+    const fields = await loadCompanyFieldDefinitions(context.orgId, context.readTokens)
     /*
      * A duplicate WITHIN the request is skipped rather than merged: the
      * second row would update the first's record and the count would read
@@ -149,7 +190,7 @@ export const crmCompaniesImportHandler: PluginApiHandler = async (req, res) => {
      */
     const seen = new Set<string>()
     read.rows.forEach((raw, index) => {
-      const verdict = normalizeCompanyImportRow(raw)
+      const verdict = normalizeCompanyImportRow(raw, fields)
       if (verdict.ok === false) {
         skipped.push({ index, name: verdict.input, reason: verdict.reason })
         return
@@ -186,11 +227,12 @@ export const crmCompaniesImportHandler: PluginApiHandler = async (req, res) => {
         if (!ownerUid) ownersUnresolved.add(row.ownerEmail)
       }
       const existing = await findCompany(companies, context.readTokens, row)
-      const fields = storedFields(row, ownerUid)
+      const stored = storedFields(row, ownerUid)
       if (existing) {
         await existing.ref.update({
-          ...fields,
+          ...stored,
           ...(row.tags.length ? { tags: FieldValue.arrayUnion(...row.tags) } : {}),
+          ...customUpdate(row),
           updatedAt: FieldValue.serverTimestamp(),
         })
         merged += 1
@@ -206,8 +248,9 @@ export const crmCompaniesImportHandler: PluginApiHandler = async (req, res) => {
         continue
       }
       await companies.add({
-        ...fields,
+        ...stored,
         tags: row.tags,
+        ...(Object.keys(row.custom).length ? { custom: row.custom } : {}),
         ...stamp,
       })
       createdHere += 1

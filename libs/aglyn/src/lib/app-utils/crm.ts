@@ -75,6 +75,7 @@ export const CRM_COLLECTIONS = {
   activities: 'crmActivities',
   contactFields: 'contactFields',
   views: 'crmViews',
+  emailTemplates: 'crmEmailTemplates',
 } as const
 
 export type CrmCollection = (typeof CRM_COLLECTIONS)[keyof typeof CRM_COLLECTIONS]
@@ -281,6 +282,16 @@ export function contactLifecycleStageAfterPurchase(
 export type ContactCustomValue = string | number | boolean | null
 
 /**
+ * The same scalar, under the name the other objects use (AGL-2661).
+ *
+ * A company's and a deal's `custom` map hold exactly what a contact's
+ * does — one definition, one coercion rule, one stored shape — so the
+ * value type is one type with two names: the contact name it was born
+ * with, and this one for code that is not about contacts.
+ */
+export type CrmCustomValue = ContactCustomValue
+
+/**
  * The fields every CRM document carries.
  *
  * `visibleTo` is the scope both enforcement layers evaluate — see
@@ -326,6 +337,18 @@ export interface CrmCompany extends CrmScoped {
    * nobody has linked since the counter existed, which reads as zero.
    */
   contactsCount?: number
+  /**
+   * Custom field values, keyed by the key of a definition whose `object`
+   * is `company` — see {@link fieldDefinitionObject} (AGL-2661).
+   */
+  custom?: Record<string, CrmCustomValue>
+  /**
+   * When the earliest OPEN task filed against this company is due, epoch
+   * ms, or `null` when none is — see {@link CrmDeal.nextTaskAtMs}.
+   */
+  nextTaskAtMs?: number | null
+  /** Org-library files attached to the company (AGL-2662) — see {@link CRM_MEDIA_IDS_MAX}. */
+  mediaIds?: string[]
 }
 
 /** One step of a pipeline. */
@@ -459,6 +482,27 @@ export interface CrmDeal extends CrmScoped {
   lostReason?: string
   notes?: string
   createdByUid?: string
+  /**
+   * Custom field values, keyed by the key of a definition whose `object`
+   * is `deal` — see {@link fieldDefinitionObject} (AGL-2661).
+   */
+  custom?: Record<string, CrmCustomValue>
+  /**
+   * When the earliest OPEN task filed against this deal is due, epoch ms,
+   * or `null` when no open task names it (AGL-2661).
+   *
+   * DENORMALIZED from `crmTasks`, because the question "which deals have
+   * nothing scheduled" is asked of a LIST — a column, a filter, a report
+   * tile — and a list cannot afford a task query per row. Every server
+   * writer of a task recomputes it for the records the task names
+   * (`recomputeCrmNextTaskAt` in the admin library), and a client-direct
+   * task write asks the console route to do the same; the Fields section
+   * offers a one-off recompute for the records written before the field
+   * existed. Absent on such a record, which every reader treats as `null`.
+   */
+  nextTaskAtMs?: number | null
+  /** Org-library files attached to the deal (AGL-2662) — see {@link CRM_MEDIA_IDS_MAX}. */
+  mediaIds?: string[]
 }
 
 /**
@@ -538,6 +582,22 @@ export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
   contactId?: string
   companyId?: string
   dealId?: string
+  /**
+   * When the assignee is reminded (AGL-2659): the due time unless a person
+   * moved it, `null` for no reminder. The hourly `/api/crm/task-reminders`
+   * runner reads every open task whose reminder has come due, so a task
+   * that should never remind carries `null` rather than no field — a
+   * missing key and a null both fall outside the range, but the null says
+   * it was decided.
+   */
+  remindAtMs?: number | null
+  /**
+   * When the runner handled the reminder — sent it, or found nobody to
+   * send it to. Absent while the reminder is still owed, which is how a
+   * rerun over the same hour sends nothing twice; cleared again when the
+   * reminder moves, because a moved reminder is a new one.
+   */
+  reminderSentAtMs?: number
 }
 
 /**
@@ -714,6 +774,14 @@ export function crmEmailDeliveryTags(input: {
 }
 
 /**
+ * Which way an `email` activity's message traveled. `outbound` is every
+ * message the workspace wrote — sent by the platform, or copied to the
+ * capture address from a mailbox; `inbound` is one a correspondent wrote,
+ * which only the capture route files (AGL-2657).
+ */
+export type CrmEmailDirection = 'outbound' | 'inbound'
+
+/**
  * `orgs/{orgId}/crmActivities/{activityId}` — one thing that happened.
  *
  * Distinct from a contact's `interactions`: those are what the PLATFORM
@@ -757,12 +825,33 @@ export interface CrmActivity extends CrmScoped {
   subject?: string
   /** The address the message left for. */
   to?: string
-  /** `outbound` for a message the platform sent. Nothing is inbound yet. */
-  direction?: 'outbound'
+  /**
+   * `outbound` for a message the platform sent or a teammate copied to the
+   * capture address; `inbound` for one a correspondent wrote (AGL-2657).
+   */
+  direction?: CrmEmailDirection
   /** See {@link CrmEmailDeliveryState}; advanced by the delivery webhook. */
   deliveryState?: CrmEmailDeliveryState
   /** When the delivery state last moved, epoch ms. */
   deliveryAtMs?: number
+  /**
+   * `hosts/{hostId}/bookings/{bookingId}` — the booking a `meeting` was
+   * filed from (AGL-2660), so a row the Bookings plugin wrote can be told
+   * from one a person logged, and a booking is never filed twice.
+   */
+  bookingId?: string
+  /**
+   * An email CAPTURED from a mailbox (AGL-2657) — forwarded or copied to
+   * the workspace's capture address — as against one the platform sent:
+   * who wrote it, the provider's `Message-ID` the row is deduplicated by,
+   * the message it answered, and the subject with its reply and forward
+   * prefixes removed, which is what groups a thread. Absent on every other
+   * email row.
+   */
+  from?: string
+  messageId?: string
+  inReplyTo?: string
+  threadSubject?: string
 }
 
 /** An activity as a listener hands it back: the document plus its id. */
@@ -1067,7 +1156,63 @@ export interface ContactFieldDefinition extends CrmScoped {
   /** Position in the form and the export, ascending. */
   order: number
   retiredAt?: number | null
+  /**
+   * Which record the field describes (AGL-2661). ABSENT means `contact`,
+   * because every definition written before companies and deals could carry
+   * custom fields described a contact, and a backfill that stamped them
+   * would touch every org for a fact the reader can infer. Read it through
+   * {@link fieldDefinitionObject}, never directly, so that inference lives
+   * in one place. Keys are unique PER OBJECT: a company field and a contact
+   * field may both be called `region`.
+   */
+  object?: CrmFieldObject
 }
+
+/**
+ * The records a custom field may describe, in the order the Fields
+ * section tabs them (AGL-2661).
+ */
+export const CRM_FIELD_OBJECTS = ['contact', 'company', 'deal'] as const
+
+export type CrmFieldObject = (typeof CRM_FIELD_OBJECTS)[number]
+
+/** How each object reads on the Fields section's tabs and in a refusal. */
+export const CRM_FIELD_OBJECT_LABELS: Record<CrmFieldObject, string> = {
+  contact: 'Contacts',
+  company: 'Companies',
+  deal: 'Deals',
+}
+
+export function isCrmFieldObject(value: unknown): value is CrmFieldObject {
+  return (
+    typeof value === 'string' &&
+    (CRM_FIELD_OBJECTS as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * Which record a definition describes — `contact` when the document says
+ * nothing, or says something no reader understands.
+ *
+ * The one reader of {@link ContactFieldDefinition.object}. A stored value
+ * outside the list is read as `contact` rather than refused, for the
+ * reason an absent one is: the definition predates the field, or was
+ * written by something that never learned it, and either way the values
+ * under its key sit on contacts.
+ */
+export function fieldDefinitionObject(
+  definition: Pick<ContactFieldDefinition, 'object'> | null | undefined,
+): CrmFieldObject {
+  return isCrmFieldObject(definition?.object) ? definition.object : 'contact'
+}
+
+/**
+ * The definition type under the name new code uses (AGL-2661). The type,
+ * the collection (`contactFields`) and the rules match keep the contact
+ * name: renaming them would ripple through the rules, the REST resources
+ * and the docs for no change in what is stored.
+ */
+export type CrmFieldDefinition = ContactFieldDefinition
 
 /** What a stored field key must look like — a letter, then up to 39 of `[a-z0-9_]`. */
 export const CONTACT_FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]{0,39}$/
@@ -2415,6 +2560,25 @@ export function crmContactCustomKey(column: string): string | null {
     : null
 }
 
+/**
+ * A stored phone number as the `href` of a click-to-call link, or `null`
+ * when the value is not one (AGL-2661).
+ *
+ * The console stores E.164 (`normalizePhone` runs before every write), and
+ * a `tel:` URL wants exactly that: digits with a leading `+`, nothing else.
+ * Spaces, dots, dashes and parentheses are dropped rather than refused
+ * because a value written before normalization existed may carry them;
+ * anything that is not a run of digits after that — a word, an extension
+ * typed as `x123` — is refused, because a dialer handed it would ring
+ * nothing and the link would be a lie.
+ */
+export function crmTelHref(phone: unknown): string | null {
+  const text = String(phone ?? '').trim()
+  if (!text) return null
+  const compact = text.replace(/[\s().-]/g, '')
+  return /^\+?\d{3,20}$/.test(compact) ? `tel:${compact}` : null
+}
+
 const CRM_VIEW_TAGS_FIELD = CRM_CONTACT_VIEW_FIELDS.tags
 const CRM_VIEW_SOURCE_FIELD = CRM_CONTACT_VIEW_FIELDS.source
 
@@ -2539,4 +2703,46 @@ export function crmDefaultViewPatch(
   viewId: string | null,
 ): Record<string, unknown> {
   return { [CRM_DEFAULT_VIEWS_FIELD]: { [orgId]: { [section]: viewId } } }
+}
+
+/*==========================================
+ * FILES ON A RECORD (AGL-2662)
+ *=========================================*/
+
+/** The field a record's attached files are stored under, on all three. */
+export const CRM_MEDIA_IDS_FIELD = 'mediaIds'
+
+/**
+ * The most files one record may carry.
+ *
+ * A platform ceiling in the family of {@link CRM_ACTIVITIES_PER_RECORD_CEILING}
+ * rather than a plan dimension: attachments are bounded by human effort, and
+ * this is the bound. It is also what the Firestore rules can actually check
+ * — a rule can assert a list and its size, and cannot walk one — so the
+ * number is enforced rather than merely documented.
+ */
+export const CRM_MEDIA_IDS_MAX = 20
+
+/**
+ * A stored or submitted attachment list, cleaned.
+ *
+ * Ids rather than URLs, deduplicated, trimmed, non-empty and capped. Written
+ * through by every path that sets the field — the console card, the REST
+ * write — so a record cannot hold a list one of them would refuse.
+ *
+ * An id is a media DOCUMENT id, resolved against the organization's library
+ * (`orgs/{orgId}/media/{mediaId}`) at read time. Storing the id and not the
+ * URL is what lets a file move between folders, and what keeps a private
+ * asset behind the signed CDN door rather than pinned to a raw storage URL
+ * that names its current location.
+ */
+export function normalizeCrmMediaIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [
+    ...new Set(
+      value
+        .map((id) => String(id ?? '').trim())
+        .filter((id) => id.length > 0 && id.length <= 200),
+    ),
+  ].slice(0, CRM_MEDIA_IDS_MAX)
 }

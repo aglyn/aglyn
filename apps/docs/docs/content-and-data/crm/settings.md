@@ -1,7 +1,7 @@
 ---
 sidebar_position: 13
 title: CRM settings
-description: What the CRM does on its own for every site — whether a company is created from a contact's work email domain, who a new contact is assigned to by default, by rule, or in turn, and the recipes installed on each site.
+description: What the CRM does on its own for every site — whether a company is created from a contact's work email domain, who a new contact is assigned to, the address that files replies on a record, and each site's recipes.
 ---
 
 # CRM settings
@@ -17,7 +17,9 @@ wherever a contact is captured. The section lives in the CRM hub at
 
 Only a workspace **owner or admin** can change a setting. Everyone who can
 open the CRM can read the page; a member who cannot change a switch sees it
-disabled, with a note saying why.
+disabled, with a note saying why. The one exception is the
+[Email templates](#email-templates) card, which every CRM editor may write
+to: a template is working material, not policy.
 
 ## Companies
 
@@ -131,6 +133,40 @@ reordering a member — never skips or repeats anybody: the next record goes
 to whoever follows the last recipient in the pool as it now stands. A member
 who leaves the workspace is skipped. A pool can hold up to 50 members.
 
+## Email templates
+
+The **Email templates** card lists every template and snippet you can use in
+**Send email** — the team's shared ones and your own personal ones — with its
+kind and who it is for. **New template** opens a drawer for the name, the
+kind, who it is for, the subject and the message; a row's menu edits or
+deletes it. A template written under a site is that site's; one written from
+the organization's own CRM is the whole workspace's, and every site lists it.
+Merge fields, the preview, and what shared and personal mean are on
+[Email templates & snippets](./email-templates.md).
+
+## Email capture
+
+The **Email capture** card holds the workspace's one **capture address** —
+`crm+…@in.aglyn.com` — with **Copy** and **Rotate address**. A message
+forwarded to it, or sent with it in **BCC**, is filed on the timeline of the
+contact or lead it was with, so a reply that reached your own mailbox lands on
+the record too. How a message is matched, what is kept and what is dropped is
+described under [Captured email](./activities.md#captured-email).
+
+The address is the workspace's, not a site's: the card reads the same under
+every site and at the organization level, and the record's own site decides
+which timeline the message lands on. It is minted the first time somebody
+opens the card or the **Send email** dialog, and everybody who can open the
+CRM can copy it.
+
+**Rotate address** replaces it, behind a confirmation, and only a workspace
+owner or admin may. The moment the new address is written the old one goes
+quiet: mail sent to it afterwards is dropped without a trace, so a mailbox
+rule or a saved shortcut that carried the old address has to be updated.
+Rotate when the address has leaked outside the team — anybody who holds it
+can file mail on your records, though only mail from or to somebody already
+in the CRM is ever filed.
+
 ## Recipes
 
 At the **organization level** only — `…/{organization}/crm/settings` —
@@ -164,6 +200,7 @@ delete the site's copy from its Actions page first if you want a fresh one.
 ## Related
 
 - [CRM overview](./overview.md)
+- [Email templates & snippets](./email-templates.md) — what the Email templates card keeps, and the merge fields
 - [Automations for the CRM](./automations.md#recipes) — what each recipe builds
 - [Companies](./companies.md) — the records these settings create and link
 - [The contact record](./contact-record.md) — picking a company or an owner by hand

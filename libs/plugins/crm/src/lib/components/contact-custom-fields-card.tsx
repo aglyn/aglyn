@@ -26,24 +26,20 @@ import {
   useFirestoreDoc,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import {
-  Button,
-  Checkbox,
-  FormControlLabel,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { Button, Stack, Typography } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import {
-  type ContactFieldDefinitionDoc,
-  useContactFieldDefinitions,
-} from '../hooks/use-contact-field-definitions'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactPrimaryGroup } from '../model/contact-record'
+import {
+  type CrmCustomDraft,
+  crmCustomDraftChanges,
+  crmCustomDraftMissingRequired,
+  crmCustomDraftValue,
+} from '../model/crm-custom-draft'
 import { crmRoutes } from '../model/crm-routes'
+import { CrmCustomFieldControl } from './crm-custom-field-control'
 
 export interface ContactCustomFieldsCardProps
   extends Pick<ConsolePluginPageProps, 'hostId' | 'org'> {
@@ -59,13 +55,6 @@ export interface ContactCustomFieldsCardProps
    * the read the card made.
    */
   contact?: Record<string, unknown> | null
-}
-
-/** An ISO stamp as the `<input type="date">` value it corresponds to. */
-const isoToDateInput = (value: ContactCustomValue | undefined): string => {
-  if (typeof value !== 'string' || !value) return ''
-  const ms = Date.parse(value)
-  return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : ''
 }
 
 /**
@@ -111,31 +100,17 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
     [record, consentGroup.groupId],
   )
 
-  /** Only the keys the reader touched; everything else reads from `stored`. */
-  const [draft, setDraft] = useState<Record<string, ContactCustomValue>>({})
+  /** Only the keys the reader touched; everything else reads from `stored` — see `crm-custom-draft`. */
+  const [draft, setDraft] = useState<CrmCustomDraft>({})
   const [saving, setSaving] = useState(false)
-  const valueOf = useCallback(
-    (key: string): ContactCustomValue | undefined =>
-      key in draft ? draft[key] : stored[key],
-    [draft, stored],
-  )
   const setValue = useCallback((key: string, value: ContactCustomValue) => {
     setDraft((current) => ({ ...current, [key]: value }))
   }, [])
 
   /** The keys whose draft differs from what is stored — what Save writes. */
-  const changed = useMemo(
-    () =>
-      Object.entries(draft).filter(([key, value]) => {
-        const before = stored[key] ?? null
-        return (value ?? null) !== before
-      }),
-    [draft, stored],
-  )
-  const clearingRequired = active.some(
-    (definition) =>
-      definition.required && definition.key in draft && draft[definition.key] == null,
-  )
+  const changed = useMemo(() => crmCustomDraftChanges(stored, draft), [draft, stored])
+  const clearingRequired =
+    crmCustomDraftMissingRequired(active, stored, draft, 'edit').length > 0
 
   const handleSave = useCallback(async () => {
     if (!scope || !changed.length || clearingRequired) return
@@ -152,7 +127,7 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
             ...Object.fromEntries(
               changed.map(([key, value]) => [
                 Aglyn.contactFacetPath(consentGroup.groupId, `custom.${key}`),
-                value ?? null,
+                value,
               ]),
             ),
             updatedAt: new Date(),
@@ -182,97 +157,6 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
     consentGroup.groupId,
     enqueueSnackbar,
   ])
-
-  const control = (definition: ContactFieldDefinitionDoc) => {
-    const value = valueOf(definition.key)
-    const label = definition.label
-    switch (definition.type) {
-      case 'checkbox':
-        return (
-          <FormControlLabel
-            key={definition.$id}
-            control={
-              <Checkbox
-                checked={value === true}
-                onChange={(event) => setValue(definition.key, event.target.checked)}
-                slotProps={{ input: { 'aria-label': label } }}
-              />
-            }
-            label={definition.required ? `${label} *` : label}
-          />
-        )
-      case 'select':
-        return (
-          <TextField
-            key={definition.$id}
-            select
-            size="small"
-            label={label}
-            required={definition.required === true}
-            value={typeof value === 'string' && (definition.options ?? []).includes(value) ? value : ''}
-            onChange={(event) => setValue(definition.key, event.target.value || null)}
-            fullWidth
-          >
-            <MenuItem value="">{'—'}</MenuItem>
-            {(definition.options ?? []).map((option) => (
-              <MenuItem key={option} value={option}>
-                {option}
-              </MenuItem>
-            ))}
-          </TextField>
-        )
-      case 'number':
-        return (
-          <TextField
-            key={definition.$id}
-            size="small"
-            type="number"
-            label={label}
-            required={definition.required === true}
-            value={typeof value === 'number' ? value : ''}
-            onChange={(event) => {
-              const text = event.target.value
-              if (text === '') return setValue(definition.key, null)
-              const parsed = Number(text)
-              if (Number.isFinite(parsed)) setValue(definition.key, parsed)
-            }}
-            fullWidth
-          />
-        )
-      case 'date':
-        return (
-          <TextField
-            key={definition.$id}
-            size="small"
-            type="date"
-            label={label}
-            required={definition.required === true}
-            value={isoToDateInput(value)}
-            onChange={(event) => {
-              const text = event.target.value
-              const ms = text ? Date.parse(text) : Number.NaN
-              setValue(definition.key, Number.isFinite(ms) ? new Date(ms).toISOString() : null)
-            }}
-            slotProps={{ inputLabel: { shrink: true } }}
-            fullWidth
-          />
-        )
-      default:
-        return (
-          <TextField
-            key={definition.$id}
-            size="small"
-            type={definition.type === 'url' ? 'url' : 'text'}
-            label={label}
-            required={definition.required === true}
-            value={typeof value === 'string' ? value : value == null ? '' : String(value)}
-            onChange={(event) => setValue(definition.key, event.target.value || null)}
-            slotProps={{ htmlInput: { maxLength: 2000 } }}
-            fullWidth
-          />
-        )
-    }
-  }
 
   return (
     <CardDisplay
@@ -304,7 +188,14 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
           />
         ) : (
           <>
-            {active.map(control)}
+            {active.map((definition) => (
+              <CrmCustomFieldControl
+                key={definition.$id}
+                definition={definition}
+                value={crmCustomDraftValue(stored, draft, definition.key)}
+                onChange={(value) => setValue(definition.key, value)}
+              />
+            ))}
             {clearingRequired ? (
               <Typography variant="caption" color="error">
                 {'A required field cannot be left empty.'}

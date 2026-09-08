@@ -207,6 +207,7 @@ function healthyConsoleConfig() {
     '/api/email/events',
     '/api/campaigns/process-scheduled',
     '/api/lists/materialize',
+    '/api/crm/inbound',
   ]
   return {
     firewallEnabled: true,
@@ -233,6 +234,21 @@ function healthyConsoleConfig() {
         conditionGroup: [
           { conditions: [{ op: 'pre', type: 'path', value: '/api/health' }] },
           ...paths.map((value) => ({ conditions: [{ op: 'eq', type: 'path', value }] })),
+        ],
+      },
+      {
+        name: 'Cron bypass',
+        id: 'rule_cron_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'path', op: 're', value: '^/api/(admin|billing)/' },
+              { type: 'header', op: 'ex', key: 'x-cron-secret' },
+            ],
+          },
         ],
       },
       {
@@ -320,6 +336,17 @@ test('firewallEnabled false fails even with every rule intact', () => {
 })
 
 // ── Bypass-rule scope decay: the quiet one ─────────────────────────────────
+
+test('the console cron bypass decayed to PATH-ONLY fails', () => {
+  const config = healthyConsoleConfig()
+  const rule = ruleNamed(config, 'Cron bypass')
+  // Still named, still active, still a bypass — and now every admin and
+  // billing route is reachable without the secret header.
+  rule.conditionGroup[0].conditions = [{ type: 'path', op: 're', value: '^/api/(admin|billing)/' }]
+  const findings = evalConsole(config).findings.join('\n')
+  assert.match(findings, /NO LONGER REQUIRES header x-cron-secret exists/)
+  assert.equal(evalConsole(config).ok, false)
+})
 
 test('the plugin runner rule decayed to PATH-ONLY fails', () => {
   const config = healthyTenantConfig()
@@ -571,7 +598,7 @@ test('a THIRTEENTH group for an undeclared path fails', () => {
   })
   const result = evalConsole(config)
   assert.equal(result.ok, false)
-  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq one of 14 declared paths/)
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq one of 15 declared paths/)
 })
 
 test('the finding NAMES what the offending group bypasses', () => {

@@ -59,6 +59,7 @@ const row = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
   ownerUid: '',
   lifecycleStage: '',
   lastEmailEngagementAtMs: null,
+  nextTaskAtMs: null,
   ...overrides,
 })
 
@@ -77,13 +78,14 @@ const value = (field: string, record: ContactRecord) =>
 describe('contactListColumns', () => {
   it('keeps the v1 grammar and adds Owner and Stage between Contact and Sources', () => {
     // The shown columns lead; the hidden filter-only columns follow them.
-    expect(columns.slice(0, 7).map((definition) => definition.field)).toEqual([
+    expect(columns.slice(0, 8).map((definition) => definition.field)).toEqual([
       'name',
       'ownerUid',
       'lifecycleStage',
       'sources',
       'tags',
       'updatedAt',
+      'nextTaskAtMs',
       'lastEmailEngagementAtMs',
     ])
     for (const field of CONTACT_FILTER_COLUMNS) {

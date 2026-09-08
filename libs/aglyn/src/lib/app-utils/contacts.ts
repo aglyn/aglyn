@@ -211,6 +211,14 @@ export interface HostContact {
    * shared row. Bounded at {@link CONTACT_ALTERNATE_EMAILS_CAP}.
    */
   alternateEmails?: string[]
+  /**
+   * When the earliest OPEN task filed against this person is due, epoch
+   * ms, or `null` when none is (AGL-2661) — see `CrmDeal.nextTaskAtMs` in
+   * `crm.ts` for the rule. On the SHARED row rather than a facet, because a
+   * task lives at the organization level and names the contact, not a
+   * holder's view of them.
+   */
+  nextTaskAtMs?: number | null
 }
 
 /** Timeline cap: keeps the doc small; older interactions age out. */
@@ -465,6 +473,17 @@ export interface ContactFacet {
    * opened before then advanced the address-level rollup and nothing here.
    */
   lastEmailEngagementAtMs?: number
+  /**
+   * The org-library files THIS holder has attached to the person
+   * (AGL-2662), by media document id.
+   *
+   * Per-holder for the reason every other field here is: an agency running
+   * two client brands has one contact document between them, and a signed
+   * contract one client filed is not the other client's to see. Ids rather
+   * than URLs so a file moved between folders keeps its attachment, and so
+   * a private asset is still served through the signed CDN door.
+   */
+  mediaIds?: string[]
 }
 
 /** The map field holding the facets: `{ [groupId]: ContactFacet }`. */

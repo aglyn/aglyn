@@ -528,9 +528,10 @@ see bands flip.
 ## Scheme-scoped colors
 
 Published sites follow each visitor's **light/dark scheme** (system
-setting, or their own choice via the theme mode switcher component), so
-a hardcoded light-mode hex can be unreadable in dark mode. Two tools
-keep colors correct in both schemes:
+setting, or their own choice via the theme mode switcher component)
+unless the [theme](../theme-builder/edit-your-theme.md) has its **Dark
+scheme** switched off, so a hardcoded light-mode hex can be unreadable
+in dark mode. Two tools keep colors correct in both schemes:
 
 **Theme color references (preferred).** Every color picker — text,
 background, and border color, plus color attributes on components —
@@ -585,7 +586,8 @@ modes:
   — keeping your page outline meaningful for SEO and assistive
   tech.
 - The **Theme mode switcher** component gives visitors a light/dark/
-  device-default override that persists across visits.
+  device-default override that persists across visits. It is hidden on
+  published pages while the theme's **Dark scheme** is off.
 
 ## Edit JSON for one element
 

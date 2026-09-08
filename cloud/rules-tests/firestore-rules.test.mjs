@@ -9195,6 +9195,134 @@ describe('a saved CRM view is changed by its creator or an org-wide member (AGL-
   })
 })
 
+describe('an email template is every editor\'s when shared and its owner\'s when personal (AGL-2658)', () => {
+  const TEMPLATES = 'crmEmailTemplates'
+  const MINE = `host:${HOST}`
+  /** A second scoped editor on the SAME site — can read the rows, owns none. */
+  const EDITOR_B = 'uid-editor-b'
+  const template = (uid, id) => doc(authed(uid), 'orgs', ORG, TEMPLATES, id)
+  const stamped = (createdByUid, visibleTo, extra = {}) => ({
+    name: 'Follow-up',
+    subject: 'Hi {{contact.firstName}}',
+    body: 'Still keen?',
+    kind: 'template',
+    visibility: 'shared',
+    createdByUid,
+    hostId: HOST,
+    visibleTo,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+    ...extra,
+  })
+  const personal = (uid, visibleTo) =>
+    stamped(uid, visibleTo, { visibility: 'personal', ownerUid: uid })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'members', EDITOR_B), {
+        role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' },
+        scopeTokens: ['org', MINE],
+      })
+      await setDoc(doc(db, 'orgs', ORG, TEMPLATES, 'shared'), stamped(EDITOR, [MINE]))
+      await setDoc(doc(db, 'orgs', ORG, TEMPLATES, 'personal'), personal(EDITOR, [MINE]))
+      await setDoc(doc(db, 'orgs', ORG, TEMPLATES, 'personal-2'), personal(EDITOR, [MINE]))
+      await setDoc(doc(db, 'orgs', ORG, TEMPLATES, 'org-shared'), stamped(OWNER, ['org']))
+    })
+  })
+
+  it('reads under the contacts predicate', async () => {
+    await mustAllow(
+      'a scoped editor reading an org-wide shared template',
+      getDoc(template(EDITOR, 'org-shared')),
+    )
+    await mustAllow(
+      "another scoped editor reading a colleague's personal template — hidden by the listing, not the rules",
+      getDoc(template(EDITOR_B, 'personal')),
+    )
+    await mustDeny(
+      'an org-wide viewer reading a template',
+      getDoc(template(VIEWER, 'org-shared')),
+    )
+  })
+
+  it('creates only in the caller\'s own name, own personal menu and own scope', async () => {
+    await mustAllow(
+      'a scoped editor creating a shared template stamped with their own uid in their scope',
+      setDoc(template(EDITOR, 'new-shared'), stamped(EDITOR, [MINE])),
+    )
+    await mustAllow(
+      'a scoped editor creating a personal template they own',
+      setDoc(template(EDITOR, 'new-personal'), personal(EDITOR, [MINE])),
+    )
+    await mustDeny(
+      "a scoped editor creating a template stamped with somebody else's uid",
+      setDoc(template(EDITOR, 'new-forged'), stamped(OWNER, [MINE])),
+    )
+    await mustDeny(
+      "a scoped editor dropping a personal template into a colleague's menu",
+      setDoc(
+        template(EDITOR, 'new-planted'),
+        stamped(EDITOR, [MINE], { visibility: 'personal', ownerUid: EDITOR_B }),
+      ),
+    )
+    await mustDeny(
+      'a scoped editor creating a template outside their scope',
+      setDoc(template(EDITOR, 'new-theirs'), stamped(EDITOR, ['host:host-b'])),
+    )
+    await mustDeny(
+      'an org-wide viewer creating a template',
+      setDoc(template(VIEWER, 'new-viewer'), stamped(VIEWER, ['org'])),
+    )
+  })
+
+  it('lets any editor change a shared one, only the owner a personal one, and an org-wide member either', async () => {
+    await mustAllow(
+      "another scoped editor rewording a colleague's shared template",
+      updateDoc(template(EDITOR_B, 'shared'), { body: 'Still interested?' }),
+    )
+    await mustDeny(
+      "another scoped editor rewording a colleague's personal template",
+      updateDoc(template(EDITOR_B, 'personal'), { body: 'Mine now' }),
+    )
+    await mustAllow(
+      'the owner rewording their personal template',
+      updateDoc(template(EDITOR, 'personal'), { body: 'Still interested?' }),
+    )
+    await mustAllow(
+      "the workspace owner tidying a scoped editor's personal template",
+      updateDoc(template(OWNER, 'personal'), { name: 'Tidied' }),
+    )
+    await mustDeny(
+      'a scoped editor widening a template to the org',
+      updateDoc(template(EDITOR, 'shared'), { visibleTo: ['org'] }),
+    )
+    await mustDeny(
+      'a scoped editor rewriting the creator stamp onto themselves',
+      updateDoc(template(EDITOR_B, 'shared'), { createdByUid: EDITOR_B }),
+    )
+  })
+
+  it('deletes on the same terms', async () => {
+    await mustDeny(
+      "another scoped editor deleting a colleague's personal template",
+      deleteDoc(template(EDITOR_B, 'personal')),
+    )
+    await mustAllow(
+      "another scoped editor deleting a colleague's shared template",
+      deleteDoc(template(EDITOR_B, 'shared')),
+    )
+    await mustAllow(
+      'the owner deleting their personal template',
+      deleteDoc(template(EDITOR, 'personal')),
+    )
+    await mustAllow(
+      "the workspace owner deleting a personal template a scoped editor left",
+      deleteDoc(template(OWNER, 'personal-2')),
+    )
+  })
+})
+
 /**
  * THE PUBLISH OUTBOX (AGL-2575).
  *

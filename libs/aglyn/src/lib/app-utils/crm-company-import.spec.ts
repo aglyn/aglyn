@@ -224,3 +224,50 @@ describe('the tally', () => {
     ).toEqual(['Company,Domain,Skipped because', ',acme.com,No company name'])
   })
 })
+
+describe('custom fields on the company import (AGL-2661)', () => {
+  const fields = [
+    { key: 'region', label: 'Region', type: 'select' as const, options: ['West', 'East'] },
+    { key: 'seats', label: 'Seats', type: 'number' as const },
+  ]
+
+  it('maps a header onto a company field by its label or key, ahead of a standard alias', () => {
+    expect(guessCompanyImportMapping(['Company', 'Region', 'seats', 'Notes'], fields)).toEqual({
+      0: 'name',
+      1: 'custom:region',
+      2: 'custom:seats',
+      3: 'notes',
+    })
+    // Without the definition, `Region` falls back to the standard alias it
+    // has always been — a state or region of the address — and `seats` maps
+    // nothing: the custom field WON over the alias above, not replaced it.
+    expect(guessCompanyImportMapping(['Region', 'seats'])).toEqual({ 0: 'addressState' })
+  })
+
+  it('keeps the custom cells on the raw row and coerces them by type', () => {
+    const raw = mapCompanyImportRow(['Acme', 'west', '12'], {
+      0: 'name',
+      1: 'custom:region',
+      2: 'custom:seats',
+    })
+    expect(raw).toEqual({ name: 'Acme', custom: { region: 'west', seats: '12' } })
+    const verdict = normalizeCompanyImportRow(raw, fields)
+    expect(verdict.ok && verdict.row.custom).toEqual({ region: 'West', seats: 12 })
+  })
+
+  it('drops and names a value with no definition or outside its type', () => {
+    const verdict = normalizeCompanyImportRow(
+      { name: 'Acme', custom: { region: 'north', tier: 'gold', seats: 'many' } },
+      fields,
+    )
+    expect(verdict.ok && verdict.row.custom).toEqual({})
+    expect(verdict.ok && verdict.row.dropped).toEqual([
+      { field: 'custom:region', value: 'north' },
+      { field: 'custom:tier', value: 'gold' },
+      { field: 'custom:seats', value: 'many' },
+    ])
+    // No definitions at all: every custom cell is a stranger.
+    const bare = normalizeCompanyImportRow({ name: 'Acme', custom: { region: 'West' } })
+    expect(bare.ok && bare.row.custom).toEqual({})
+  })
+})

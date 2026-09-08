@@ -87,8 +87,30 @@ function pageRevalidateSeconds(): number {
 }
 
 describe('the publish pointer TTL tracks the page window (AGL-2573)', () => {
-  it('matches the catch-all page ISR window exactly', () => {
-    expect(pointerTtlSeconds()).toBe(pageRevalidateSeconds())
+  /**
+   * ⚑ This asserted EQUALITY until AGL-2690, and the loosening is deliberate.
+   *
+   * The principle `render-cache.ts` states is *"the pointer should never be
+   * staler than the HTML that reads it"* — which is `<=`, not `==`. The two
+   * coincided while the page window was 600s, so equality was a faithful
+   * encoding and the tighter one. At 3600s they come apart, and equality is
+   * now the WORSE half:
+   *
+   *   - the loader runs only when the page regenerates, so a pointer TTL below
+   *     the window costs nothing extra — the same one read per regeneration,
+   *     which is a cache miss instead of a hit;
+   *   - at that regeneration it is the difference between rebuilding from a
+   *     pointer up to ten minutes old and one up to an hour old. With the
+   *     publish announce down — the AGL-2573 failure, which ran for eleven
+   *     days — worst-case staleness is ~1.2h at 600 and ~2h at 3600.
+   *
+   * So `<=` is what the principle actually says, and what the numbers want.
+   * The direction that must never happen is still refused below: a pointer
+   * staler than the window means a page regenerates and faithfully rebuilds
+   * itself from data the publish already replaced.
+   */
+  it('is never staler than the catch-all page ISR window', () => {
+    expect(pointerTtlSeconds()).toBeLessThanOrEqual(pageRevalidateSeconds())
   })
 
   it('reads real numbers from both files, not defaults', () => {

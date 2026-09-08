@@ -43,6 +43,8 @@ let org: Record<string, unknown> = {}
 let crmRecordsCount = 0
 let companies: Record<string, Record<string, unknown>> = {}
 let companySeq = 0
+/** `orgs/org-1/contactFields`, the org's definitions of every object (AGL-2661). */
+let fieldDefinitions: Record<string, unknown>[] = []
 const updates: Array<{ id: string; data: Record<string, unknown> }> = []
 const listMembers = jest.fn(async () => members)
 
@@ -62,6 +64,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   registerPluginApiRoute: jest.fn(),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm-company-import'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
+  ...jest.requireActual('@aglyn/aglyn/app-utils/contact-custom-fields'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/name-search'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/consent-groups'),
@@ -110,6 +113,15 @@ const firestoreHandle = {
       },
       collection: (sub: string) => {
         if (name === 'orgs' && sub === 'companies') return companiesHandle
+        if (name === 'orgs' && sub === 'contactFields') {
+          return {
+            limit: () => ({
+              get: async () => ({
+                docs: fieldDefinitions.map((data) => ({ data: () => data })),
+              }),
+            }),
+          }
+        }
         throw new Error(`unexpected collection ${name}/${id}/${sub}`)
       },
     }),
@@ -203,6 +215,7 @@ beforeEach(() => {
   crmRecordsCount = 0
   companies = {}
   companySeq = 0
+  fieldDefinitions = []
   updates.length = 0
   listMembers.mockClear()
   ;(crmRecordsQuotaForOrg as jest.Mock).mockClear()
@@ -342,6 +355,45 @@ describe('what a row becomes', () => {
   it('does not read the roster for a file with no owner column', async () => {
     await importRows([{ name: 'Acme' }])
     expect(listMembers).not.toHaveBeenCalled()
+  })
+})
+
+describe('custom fields (AGL-2661)', () => {
+  /** A company `region` choice list, a deal `region` number, and a contact `region` text. */
+  const definitions = () => [
+    { key: 'region', type: 'select', options: ['West', 'East'], object: 'company', order: 0, visibleTo: ['org'] },
+    { key: 'seats', type: 'number', object: 'company', order: 1, visibleTo: ['org'] },
+    { key: 'region', type: 'number', object: 'deal', order: 0, visibleTo: ['org'] },
+    { key: 'region', type: 'text', order: 0, visibleTo: ['org'] },
+  ]
+
+  it('stores a mapped value under the COMPANY definition, and drops one it cannot hold', async () => {
+    fieldDefinitions = definitions()
+    const out = await importRows([
+      { name: 'Acme', custom: { region: 'west', seats: '12', tier: 'gold' } },
+      { name: 'Bolt', custom: { region: 'north' } },
+    ])
+    expect(out.code).toBe(200)
+    // `west` reads as the company choice `West`; `north` is no choice and
+    // `tier` is nobody's field — each dropped and tallied, never stored.
+    expect(stored()[0]).toMatchObject({ name: 'Acme', custom: { region: 'West', seats: 12 } })
+    expect(stored()[1]).not.toHaveProperty('custom')
+    expect(out.body.dropped).toEqual({ 'custom:tier': 1, 'custom:region': 1 })
+  })
+
+  it('merges a value into a company already filed, one dotted path per key', async () => {
+    fieldDefinitions = definitions()
+    companies['c-acme'] = {
+      name: 'Acme',
+      nameLower: 'acme',
+      domain: 'acme.com',
+      visibleTo: ['host:site-1'],
+      custom: { seats: 4 },
+    }
+    const out = await importRows([{ name: 'Acme', domain: 'acme.com', custom: { region: 'East' } }])
+    expect(out.body).toMatchObject({ created: 0, merged: 1 })
+    expect(updates[0].data).toMatchObject({ 'custom.region': 'East' })
+    expect(updates[0].data).not.toHaveProperty('custom')
   })
 })
 

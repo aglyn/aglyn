@@ -28,6 +28,7 @@ import type { OrgCrmAssignmentRule } from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
+import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { CrmSettingsSection } from './settings-section'
 
 /** The caller's org role, as their own membership document answers. */
@@ -43,6 +44,19 @@ jest.mock('firebase/firestore', () => ({
       this.segments = segments
     }
   },
+  // The Email templates card's listener and writers (AGL-2658); the card's
+  // own spec exercises them, this one only mounts it.
+  collection: (_db: unknown, ...segments: string[]) => segments.join('/'),
+  query: (path: string) => ({ path }),
+  where: () => null,
+  orderBy: () => null,
+  limit: () => null,
+  setDoc: jest.fn(async () => undefined),
+  deleteDoc: jest.fn(async () => undefined),
+}))
+jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => ({
+  __esModule: true,
+  default: ({ label }: { label: string }) => <p>{label}</p>,
 }))
 jest.mock('../hooks/use-org-member-directory', () => ({
   useOrgMemberDirectory: () => ({
@@ -77,6 +91,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
+  useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
 }))
 
 const enqueueSnackbar = jest.fn()
@@ -100,6 +115,18 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
   MdiIcon: () => null,
   SrOnly: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  useConfirmationContext: () => ({ confirm: jest.fn().mockResolvedValue(undefined) }),
+}))
+// The Email capture card's route (AGL-2657) has a spec of its own; here it
+// only has to answer, so the section renders whole. One function for every
+// render, as the real hook memoizes: a fresh identity each time would run
+// the card's effect forever.
+const mockInboundApi = jest.fn(async () => ({
+  response: { ok: true },
+  payload: { address: 'crm+abcdefghijklmnopqrstuvwxyz012345@in.aglyn.com' },
+}))
+jest.mock('./use-crm-api', () => ({
+  useCrmApi: () => mockInboundApi,
 }))
 
 const LABEL = 'Create companies from work email domains'
@@ -309,5 +336,22 @@ describe('the round-robin pool (AGL-2618)', () => {
     expect((screen.getByRole('button', { name: 'Add rule' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('Move rule 1 down').closest('button') as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getAllByText('Only a workspace owner or admin can change this.').length).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe('the email templates card (AGL-2658)', () => {
+  it('mounts under a site, open to every CRM editor, and at the organization level', () => {
+    memberRole = 'editor'
+    const { rerender } = render(<CrmSettingsSection hostId="host-1" org={{}} />)
+    const region = screen.getByRole('region', { name: 'Email templates' })
+    expect((within(region).getByRole('button', { name: 'New template' }) as HTMLButtonElement).disabled).toBe(false)
+    rerender(
+      <CrmOrgMountProvider
+        mount={{ orgId: 'org-1', hosts: [], hostsReady: true, hostsPath: '/acme/hosts' }}
+      >
+        <CrmSettingsSection hostId={null} org={{}} />
+      </CrmOrgMountProvider>,
+    )
+    expect(screen.getByRole('region', { name: 'Email templates' })).toBeTruthy()
   })
 })

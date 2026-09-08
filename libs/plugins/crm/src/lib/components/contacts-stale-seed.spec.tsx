@@ -84,8 +84,12 @@ jest.mock('./recent-activity-feed', () => ({
   default: () => null,
   RecentActivityFeed: () => null,
 }))
+// ONE instance for every render, as the real hook hands back: a fresh
+// object each time re-runs every effect keyed on it, and the files card
+// (AGL-2662) sets state from such an effect, so the page never settles.
+const mockFirestore = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
+  useFirestore: () => mockFirestore,
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
   // The company picker's listen (AGL-2613); no company is what this file
   // needs, so the picker offers none and the save carries no link change.

@@ -46,6 +46,8 @@ const notifyUsers = jest.fn()
 const emitHostEvent = jest.fn()
 const resolveOrgPermissions = jest.fn()
 const getOrgDoc = jest.fn()
+/** The `nextTaskAtMs` writer (AGL-2661): a spy, because the recompute is the admin library's suite. */
+const recomputeCrmNextTaskAt = jest.fn(async () => ({ records: 0, missing: 0 }))
 
 let store: Record<string, Record<string, any>> = {}
 let autoId = 0
@@ -122,6 +124,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   notifyUsers: (...args: unknown[]) => notifyUsers(...args),
+  recomputeCrmNextTaskAt: (...args: unknown[]) => recomputeCrmNextTaskAt(...(args as [])),
+  crmNextActivityLinksOf: jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/crm-next-activity',
+  ).crmNextActivityLinksOf,
 }))
 
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './task-routes'
@@ -287,6 +293,8 @@ describe('crm/task-save', () => {
       notes: '',
       assigneeUid: WRITER,
       contactId: 'c-1',
+      // Nothing said about a reminder: the due time is one (AGL-2659).
+      remindAtMs: 1757062800000,
       status: 'open',
       completedAtMs: null,
       // An undeclared site is a group of one: this site's token alone.
@@ -301,6 +309,33 @@ describe('crm/task-save', () => {
     expect('companyId' in row).toBe(false)
     expect('dealId' in row).toBe(false)
     expect(notifyUsers).not.toHaveBeenCalled()
+    // The contact the task names has its next activity recomputed (AGL-2661).
+    expect(recomputeCrmNextTaskAt).toHaveBeenCalledWith(firestoreHandle, ORG_ID, [
+      { contactId: 'c-1' },
+    ])
+  })
+
+  it('recomputes next activity for both the record a task leaves and the one it lands on (AGL-2661)', async () => {
+    store[`${TASKS}/t-1`] = {
+      title: 'Send the deck',
+      kind: 'email',
+      priority: 'high',
+      dueAtMs: 1757062800000,
+      notes: '',
+      dealId: 'd-old',
+      status: 'open',
+      visibleTo: ['host:site-1'],
+      hostId: HOST_ID,
+      createdByUid: WRITER,
+    }
+    const { status } = await call(crmTaskSaveHandler, {
+      body: { hostId: HOST_ID, taskId: 't-1', task: task({ dealId: 'd-new', assigneeUid: null }) },
+    })
+    expect(status).toBe(200)
+    expect(recomputeCrmNextTaskAt).toHaveBeenCalledWith(firestoreHandle, ORG_ID, [
+      { dealId: 'd-old' },
+      { dealId: 'd-new' },
+    ])
   })
 
   it('stamps the whole org when the org has widened its default scope', async () => {
@@ -425,6 +460,106 @@ describe('crm/task-save', () => {
       })
       expect(status).toBe(403)
       expect(store[`${TASKS}/t-1`].title).toBe('Old title')
+    })
+  })
+})
+
+/**
+ * THE REMINDER A SAVE LEAVES (AGL-2659), through the routes rather than
+ * the rule alone: the rule is pinned in `crm-task-reminders.spec.ts`; what
+ * is proved here is that each route reads the stored task, applies it, and
+ * takes the runner's mark off exactly when the reminder moved.
+ */
+describe('a task’s reminder (AGL-2659)', () => {
+  const DUE = 1757062800000
+  const LATER = DUE + 2 * 24 * 60 * 60 * 1000
+  const reminded = (over: Record<string, unknown> = {}) => {
+    store[`${TASKS}/t-1`] = {
+      title: 'Call back',
+      kind: 'call',
+      priority: 'normal',
+      dueAtMs: DUE,
+      remindAtMs: DUE,
+      reminderSentAtMs: DUE + 60_000,
+      notes: '',
+      assigneeUid: WRITER,
+      status: 'open',
+      completedAtMs: null,
+      visibleTo: ['host:site-1'],
+      hostId: HOST_ID,
+      createdByUid: WRITER,
+      ...over,
+    }
+  }
+  const save = (over: Record<string, unknown>) =>
+    call(crmTaskSaveHandler, {
+      body: { hostId: HOST_ID, taskId: 't-1', task: task({ dueAtMs: DUE, ...over }) },
+    })
+
+  it('gives a new task the reminder the body names, or none, or its due time', async () => {
+    await call(crmTaskSaveHandler, {
+      body: { hostId: HOST_ID, task: task({ dueAtMs: DUE, remindAtMs: DUE - 3_600_000 }) },
+    })
+    expect(stored()[0].remindAtMs).toBe(DUE - 3_600_000)
+    await call(crmTaskSaveHandler, {
+      body: { hostId: HOST_ID, task: task({ dueAtMs: DUE, remindAtMs: null }) },
+    })
+    expect(stored()[1].remindAtMs).toBeNull()
+    // No due time, nothing said: decided as none, and written so.
+    await call(crmTaskSaveHandler, { body: { hostId: HOST_ID, task: task() } })
+    expect(stored()[2].remindAtMs).toBeNull()
+    expect('remindAtMs' in stored()[2]).toBe(true)
+    for (const row of stored()) expect('reminderSentAtMs' in row).toBe(false)
+  })
+
+  it('moves a reminder that sat on the old due time, and takes the sent mark off with it', async () => {
+    reminded()
+    expect((await save({ dueAtMs: LATER })).status).toBe(200)
+    const row = store[`${TASKS}/t-1`]
+    expect(row.remindAtMs).toBe(LATER)
+    expect('reminderSentAtMs' in row).toBe(false)
+  })
+
+  it('leaves a reminder somebody set to a time of their own, mark and all', async () => {
+    reminded({ remindAtMs: DUE - 3_600_000 })
+    await save({ dueAtMs: LATER })
+    const row = store[`${TASKS}/t-1`]
+    expect(row.remindAtMs).toBe(DUE - 3_600_000)
+    expect(row.reminderSentAtMs).toBe(DUE + 60_000)
+  })
+
+  it('keeps the mark on a save that changed nothing about the reminder', async () => {
+    reminded()
+    await save({ title: 'Call back, again' })
+    const row = store[`${TASKS}/t-1`]
+    expect(row.title).toBe('Call back, again')
+    expect(row.remindAtMs).toBe(DUE)
+    expect(row.reminderSentAtMs).toBe(DUE + 60_000)
+  })
+
+  it('takes a reminder the body names, or clears it, as a new reminder', async () => {
+    reminded()
+    await save({ remindAtMs: LATER })
+    expect(store[`${TASKS}/t-1`].remindAtMs).toBe(LATER)
+    expect('reminderSentAtMs' in store[`${TASKS}/t-1`]).toBe(false)
+    reminded()
+    await save({ remindAtMs: null })
+    expect(store[`${TASKS}/t-1`].remindAtMs).toBeNull()
+    expect('reminderSentAtMs' in store[`${TASKS}/t-1`]).toBe(false)
+  })
+
+  it('completing clears a reminder still owed, and keeps one already sent', async () => {
+    reminded({ reminderSentAtMs: undefined })
+    delete store[`${TASKS}/t-1`].reminderSentAtMs
+    await call(crmTaskCompleteHandler, { body: { hostId: HOST_ID, taskId: 't-1' } })
+    expect(store[`${TASKS}/t-1`]).toMatchObject({ status: 'done', remindAtMs: null })
+
+    reminded()
+    await call(crmTaskCompleteHandler, { body: { hostId: HOST_ID, taskId: 't-1' } })
+    expect(store[`${TASKS}/t-1`]).toMatchObject({
+      status: 'done',
+      remindAtMs: DUE,
+      reminderSentAtMs: DUE + 60_000,
     })
   })
 })

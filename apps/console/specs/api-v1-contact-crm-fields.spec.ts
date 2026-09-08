@@ -361,6 +361,51 @@ describe('PATCH /v1/contacts/{id} with a CRM profile', () => {
   })
 })
 
+/**
+ * AGL-2662 — a record's files are a facet field like every other. An agency
+ * running two client brands has one contact document between them, and a
+ * contract one client filed is not the other client's to read; a `mediaIds`
+ * at the top of the document would be exactly that leak.
+ */
+describe('files on a contact', () => {
+  it('files the attachments on the named site’s facet, and nowhere else', async () => {
+    mockDocs.set(`${CONTACTS}/c-2`, {
+      email: 'files@example.com',
+      facets: {
+        'host-2': { sources: {}, interactions: [], mediaIds: ['other-brand'] },
+      },
+    })
+    const response = await call('PATCH', 'contacts/c-2', {
+      consentSiteId: 'host-1',
+      mediaIds: ['  m1 ', 'm1', 'm2', ''],
+    })
+    expect(response.status).toBe(200)
+    const facets = mockDocs.get(`${CONTACTS}/c-2`)!.facets as Record<
+      string,
+      Record<string, unknown>
+    >
+    // Trimmed and deduplicated by the SAME normalizer the console writes
+    // through, so the API cannot store a list the card would refuse.
+    expect(facets['grp-a']?.['mediaIds']).toEqual(['m1', 'm2'])
+    expect(facets['host-2']?.['mediaIds']).toEqual(['other-brand'])
+  })
+
+  it('refuses attachments with no site named, and a list past the ceiling', async () => {
+    mockDocs.set(`${CONTACTS}/c-3`, { email: 'nofiles@example.com', facets: {} })
+    expect(
+      (await call('PATCH', 'contacts/c-3', { mediaIds: ['m1'] })).status,
+    ).toBe(400)
+    expect(
+      (
+        await call('PATCH', 'contacts/c-3', {
+          consentSiteId: 'host-1',
+          mediaIds: Array.from({ length: 21 }, (_, i) => `m${i}`),
+        })
+      ).status,
+    ).toBe(400)
+  })
+})
+
 describe('reading the profile', () => {
   beforeEach(() => {
     mockDocs.set(`${CONTACTS}/c-1`, {

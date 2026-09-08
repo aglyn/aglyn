@@ -186,6 +186,8 @@ export function PipelineCard(props: PipelineCardProps) {
       currency: Aglyn.currencyOfDeals(dealWindow.rows),
     }
   }, [dealWindow, pipelineWindow])
+  // Open deals with nothing scheduled (AGL-2661), off the same window.
+  const stuck = useMemo(() => Aglyn.stuckDeals(dealWindow.rows), [dealWindow.rows])
 
   const currency = summary.currency.currency
   const dealsRead = dealsStatus === 'success'
@@ -225,6 +227,21 @@ export function PipelineCard(props: PipelineCardProps) {
                 ? `from the ${OPEN_DEAL_CEILING.toLocaleString()} most recently updated`
                 : 'each deal at its stage odds'
             }
+          />
+          {/*
+            Open deals with no open task against them (AGL-2661): the ones
+            nobody has a next step for. Painted as a warning above zero,
+            because a deal with nothing planned is a deal going nowhere; the
+            tile opens the deals list, whose "No next activity" chip lists
+            them.
+          */}
+          <ReportStatTile
+            label={'Stuck deals'}
+            value={dealsRead ? stuck.count.toLocaleString() : null}
+            note={'open, with no next activity'}
+            riseIsGood={false}
+            color={stuck.count > 0 ? 'warning.main' : undefined}
+            href={routes.section('deals')}
           />
         </Stack>
         {open.status === 'error' ? (

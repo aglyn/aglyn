@@ -125,8 +125,17 @@ export * from './lib/server/upsert-contact'
 // The stage floor a won deal applies to its contact (AGL-2641).
 export * from './lib/server/contact-lifecycle-floor'
 export * from './lib/server/crm-records'
+// The `nextTaskAtMs` a contact, a company and a deal carry, recomputed from
+// their open tasks by every server-side task writer (AGL-2661).
+export * from './lib/server/crm-next-activity'
 // Where a one-to-one email's activity row lives and how the delivery
 // webhook advances it (AGL-2615).
 export * from './lib/server/crm-email-activity'
+// What a confirmed booking files on the CRM record — the meeting and the
+// follow-up (AGL-2660).
+export * from './lib/server/crm-booking-activity'
+// The org's email capture token and the filing of one received message
+// on the record it was with (AGL-2657).
+export * from './lib/server/crm-inbound-email'
 export * from './lib/server/user-profiles'
 export * from './lib/server/legal-acceptance'

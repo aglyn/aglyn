@@ -43,10 +43,15 @@
  * the org has two.
  */
 import {
+  CONTACT_FIELDS_MAX_PER_ORG,
+  type ContactFieldDefinition,
   CRM_COLLECTIONS,
   type CrmCollection,
+  type CrmCustomValue,
+  type CrmFieldObject,
   consentGroupForHost,
   crmScopeTokens,
+  readCrmCustomInput,
 } from '@aglyn/aglyn/server'
 import {
   ApiErrors,
@@ -546,4 +551,75 @@ export function readEqualityFilters(
     if (value) filters.push({ field, value })
   }
   return filters
+}
+
+/**
+ * The org's custom field definitions, retired ones included and every
+ * object's, for a resource's `custom` validation (AGL-2661).
+ *
+ * One bounded read of a small collection, paid only when a body carries
+ * `custom` — the contacts resource's own reader, shared so the three
+ * resources judge a map the same way. Retired definitions come back too
+ * because the reader refuses a write under one BY NAME, which is a better
+ * answer than "no such field" for a key the integration wrote last month.
+ */
+export async function readOrgFieldDefinitions(
+  ctx: ApiV1Context,
+): Promise<ContactFieldDefinition[]> {
+  const snapshot = await ctx.firestore
+    .collection('orgs')
+    .doc(ctx.orgId)
+    .collection(CRM_COLLECTIONS.contactFields)
+    .orderBy(FieldPath.documentId())
+    .limit(CONTACT_FIELDS_MAX_PER_ORG)
+    .get()
+  return snapshot.docs.map((doc) => doc.data() as ContactFieldDefinition)
+}
+
+/**
+ * A body's `custom` map, judged against the org's definitions for ONE
+ * object, or the refusals to answer with (AGL-2661).
+ *
+ * `undefined` when the body carried no map — nothing to validate and
+ * nothing to write. The read happens only then, so a body without
+ * `custom` pays for no definitions.
+ */
+export async function readCrmCustomBody(
+  ctx: ApiV1Context,
+  body: Record<string, unknown>,
+  object: CrmFieldObject,
+): Promise<
+  | { values: Record<string, CrmCustomValue> }
+  | { errors: Record<string, string> }
+  | undefined
+> {
+  if (body.custom === undefined) return undefined
+  return readCrmCustomInput(body.custom, await readOrgFieldDefinitions(ctx), object)
+}
+
+/**
+ * A stored `custom` map as published: the map itself, or `{}` on a record
+ * that has none, so a client can index it without a guard (AGL-2661).
+ */
+export function crmCustomView(
+  data: FirebaseFirestore.DocumentData,
+): Record<string, CrmCustomValue> {
+  return data.custom && typeof data.custom === 'object' && !Array.isArray(data.custom)
+    ? (data.custom as Record<string, CrmCustomValue>)
+    : {}
+}
+
+/**
+ * The `custom` values as a PATCH writes them: one dotted path per key, so
+ * the stored map is merged rather than replaced — `custom` on a PATCH
+ * means "these keys", and an integration correcting one value must not
+ * have to resend the other nine to keep them. A `null` stays a `null`:
+ * the key remains, explicitly cleared, the shape a `where` can find.
+ */
+export function crmCustomUpdate(
+  values: Record<string, CrmCustomValue>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [`custom.${key}`, value]),
+  )
 }

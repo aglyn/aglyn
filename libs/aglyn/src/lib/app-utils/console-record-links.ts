@@ -118,6 +118,51 @@ export function crmContactByEmailHref(
 }
 
 /**
+ * `/{orgSlug}/crm` — the ORGANIZATION-level CRM hub (AGL-2630), the same
+ * sections mounted with no site.
+ *
+ * The org-level twin of {@link crmHubHref}, and separate from it because the
+ * two take different arguments: a site address needs the subdomain, and a
+ * surface standing at the org hub has none to give. A caller that faked one
+ * would put a site's name on a page about all of them.
+ */
+export function crmOrgHubHref(orgSlug: string): string {
+  return buildRoute(Route.ORG_CRM, { orgSlug })
+}
+
+/** One section of the org-level hub — the cross-site Deals board. */
+export function crmOrgSectionHref(orgSlug: string, section: string): string {
+  return `${crmOrgHubHref(orgSlug)}/${section}`
+}
+
+/**
+ * One record's page at the org level.
+ *
+ * A lead is excluded by the type rather than by a runtime check: a lead's id
+ * is a PERSON KEY, the same on every site that met the person, and
+ * `hosts/{hostId}/leads` is host-scoped by path — so an org-level address
+ * has to name the site as well, which is {@link crmOrgLeadHref}.
+ */
+export function crmOrgRecordHref(
+  orgSlug: string,
+  kind: Exclude<CrmRecordKind, 'lead'>,
+  id: string,
+): string {
+  return `${crmOrgSectionHref(orgSlug, CRM_RECORD_SECTIONS[kind])}/${encodeURIComponent(id)}`
+}
+
+/** One site's lead, addressed from the org hub: the site, then the lead. */
+export function crmOrgLeadHref(
+  orgSlug: string,
+  hostId: string,
+  leadId: string,
+): string {
+  return `${crmOrgSectionHref(orgSlug, CRM_RECORD_SECTIONS.lead)}/${encodeURIComponent(
+    hostId,
+  )}/${encodeURIComponent(leadId)}`
+}
+
+/**
  * The query keys a site record page reads on arrival, so a CRM timeline can
  * open the submission or the order it names rather than the list it sits
  * in. Each page parses its own key from `useSearchParams`; the CRM writes
@@ -132,6 +177,11 @@ export const ORDERS_ORDER_PARAM = 'order'
  * not surprised.
  */
 export const ORDERS_CUSTOMER_PARAM = 'email'
+/**
+ * The Bookings page narrowed to one booker (AGL-2660) — the same key as the
+ * orders list and the CRM, for the same reason: one address, one word.
+ */
+export const BOOKINGS_BOOKER_PARAM = 'email'
 
 /**
  * Where the site records a contact's captured history names are read
@@ -159,6 +209,13 @@ export function siteRecordLinks(context: SiteConsoleContext) {
       withQuery(orders, ORDERS_CUSTOMER_PARAM, email),
     /** The Bookings page; a booking has no page of its own. */
     bookings: () => buildRoute(Route.HOST_BOOKINGS, { orgSlug, host }),
+    /** The Bookings page narrowed to one booker's address (AGL-2660). */
+    bookingsByBooker: (email: string) =>
+      withQuery(
+        buildRoute(Route.HOST_BOOKINGS, { orgSlug, host }),
+        BOOKINGS_BOOKER_PARAM,
+        email,
+      ),
     /** The Users page, where a site account's row and drawer are. */
     members: () => buildRoute(Route.HOST_USERS, { orgSlug, host }),
   }

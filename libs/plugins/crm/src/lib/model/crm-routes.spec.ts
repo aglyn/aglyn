@@ -18,6 +18,10 @@
 import {
   crmContactByEmailHref,
   crmHubHref,
+  crmOrgHubHref,
+  crmOrgLeadHref,
+  crmOrgRecordHref,
+  crmOrgSectionHref,
   crmRecordHref,
   crmSectionHref,
 } from '@aglyn/aglyn'
@@ -49,6 +53,33 @@ describe('crmRoutes agrees with the console-side builders', () => {
   it('asks the Contacts list to open one address with the same key', () => {
     expect(routes.contactByEmail('ada@example.test')).toBe(
       crmContactByEmailHref(context, 'ada@example.test'),
+    )
+  })
+})
+
+/**
+ * And the same pinning one level up (AGL-2662). The console's search offers
+ * the CRM's records at the ORGANIZATION hub too, where a lead's address
+ * carries its site — so the plugin's builder and the shared one have to
+ * agree about the extra segment as well as about the sections.
+ */
+describe('crmRoutes agrees with the console-side builders at the org hub', () => {
+  const orgRoutes = crmRoutes(crmOrgHubHref('acme'))
+
+  it('names the same hub and sections', () => {
+    expect(orgRoutes.section('tasks')).toBe(crmOrgSectionHref('acme', 'tasks'))
+    expect(orgRoutes.section('deals')).toBe(crmOrgSectionHref('acme', 'deals'))
+  })
+
+  it('names the same record pages', () => {
+    expect(orgRoutes.contact('c 1')).toBe(crmOrgRecordHref('acme', 'contact', 'c 1'))
+    expect(orgRoutes.company('co1')).toBe(crmOrgRecordHref('acme', 'company', 'co1'))
+    expect(orgRoutes.deal('d/1')).toBe(crmOrgRecordHref('acme', 'deal', 'd/1'))
+  })
+
+  it('names the site before the lead, on both sides', () => {
+    expect(orgRoutes.lead('l/1', 'host-1')).toBe(
+      crmOrgLeadHref('acme', 'host-1', 'l/1'),
     )
   })
 })

@@ -116,6 +116,8 @@ export type ClaimKind =
   | 'activities'
   | 'activity-deletes'
   | 'lead-conversions'
+  | 'email-templates'
+  | 'email-template-deletes'
 
 /**
  * Take an exclusive claim on one write attempt (AGL-1709), and translate the
