@@ -316,10 +316,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const row = passThrough(data).records.find(
       (r) => r.cells[0] === 'Form submissions',
     )
+    row.cells[1] = '$0.50 / 1k'
     row.cells[2] = '$1.20 / 1k'
     writeFrame(data)
 
-    const run = check()
+    const run = check([
+      '--declare-stale-metered=Form submissions|$0.50 / 1k|$0.65 / 1k',
+    ])
     assert.equal(run.status, 1)
     assert.match(run.stderr, /PASS-THROUGH disagreements not declared/)
     assert.match(run.stderr, /declared stale value was/)
@@ -339,7 +342,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     row.cells[2] = '$0.0338 / GB-mo'
     writeFrame(data)
 
-    const run = check()
+    const run = check([
+      '--declare-stale-metered=Media & file storage|$0.03 / GB-mo|$0.039 / GB-mo',
+    ])
     assert.equal(run.status, 1)
     assert.match(
       run.stderr,
@@ -520,15 +525,16 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
 
   it('fails when a declared divergence is fixed on EVERY breakpoint', () => {
     // The property that makes a declaration honest rather than a blanket
-    // exemption, extended to the new tables: Agency's $799 is declared stale
-    // because $1,299 is not chargeable until new Stripe price objects exist,
-    // and the moment the frame catches up the declaration has to come out.
+    // exemption, extended to the new tables: a price declared stale has to
+    // stop being declared the moment every breakpoint draws the code's figure.
+    // The declaration is injected because the shipped set is empty whenever
+    // the frames are current — see `injected` in the generator.
     resetFixtures()
     editWide('Compare features', 'Feature table', (table) => {
       table.records.filter((r) => r.cells[0] === 'Text')[1].cells[7] = '$1299'
     })
 
-    const run = check()
+    const run = check(['--declare-stale-column=price · Agency|$799'])
     assert.equal(run.status, 1)
     assert.match(
       run.stderr,
@@ -577,9 +583,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   it('fails when a declaration is keyed at a cell nothing carries', () => {
     // An exemption keyed at a row the frame no longer has excuses nothing
     // while reading as a considered decision — the same defect as one that
-    // has outlived its divergence, arriving from the other direction. The
-    // compare grid had no guard for this at all; dropping the one row
-    // `FRAME_STALE_CELLS` speaks about proves it now does.
+    // has outlived its divergence, arriving from the other direction.
+    //
+    // The declaration is INJECTED rather than borrowed from the shipped set,
+    // which is empty whenever the frames are current. Borrowing one couples
+    // this guard's coverage to a divergence still being unresolved, so the
+    // guard would go untested at exactly the moment someone writes the next
+    // declaration.
     resetFixtures()
     const data = readFrame('desktop')
     const table = groupOf(data, 'Compare features', 'Feature table')
@@ -588,7 +598,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     )
     writeFrame(data, 'desktop')
 
-    const run = check()
+    const run = check(['--declare-stale-cell=CDN & responsive images · Free|—'])
     assert.equal(run.status, 1)
     assert.match(
       run.stderr,

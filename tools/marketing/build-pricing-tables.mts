@@ -954,6 +954,35 @@ const framePlanOrder: Plan[] = [
 const FRAME_ROW_CELLS = framePlanOrder.length + 1
 
 const problems: string[] = []
+
+const INJECTED_WHY = 'injected on the command line; not a decision anyone made'
+
+/**
+ * Declarations supplied by `--declare-stale-*=<key>|<value>[|<value>]`.
+ *
+ * Every declaration set here refuses an entry that no longer diverges, and
+ * that refusal deserves a test — but it can only be exercised while some
+ * declaration exists, and the honest steady state is that none does. Coupling
+ * a guard's coverage to a live exemption means it goes untested at exactly the
+ * moment someone writes the next one, so the suite supplies its own.
+ *
+ * Absent the flags this yields nothing and the shipped declaration sets stand
+ * exactly as written.
+ */
+function injected(flag: string, parts: number): [string, string[]][] {
+  const out: [string, string[]][] = []
+  for (const arg of process.argv.slice(2)) {
+    if (!arg.startsWith(`${flag}=`)) continue
+    const raw = arg.slice(flag.length + 1).replace(/^['"]|['"]$/g, '')
+    const bits = raw.split('|')
+    if (bits.length !== parts) {
+      problems.push(`${flag} needs ${parts} '|'-separated parts, got ${raw}`)
+      continue
+    }
+    out.push([bits[0], bits.slice(1)])
+  }
+  return out
+}
 const fail = (headline: string, lines: string[]) => {
   if (lines.length) problems.push(`${headline}\n${lines.map((l) => `  ${l}`).join('\n')}`)
 }
@@ -1048,15 +1077,23 @@ const EXPECTED_EXTRA: Record<string, string> = {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
-  'CDN & responsive images · Free': {
-    frame: '—',
-    why: 'AGL-1152 moved the CDN to every plan, Free included; the frame still shows the pre-AGL-1152 split',
-  },
-  'Email sends / mo · Starter': {
-    frame: '500',
-    why: 'campaign email begins at Pro — a site that may send needs its own verified provider sending domain, so the allowance attaches to the tiers that carry that cost. Starter is banded at 0 like Free; the frame still draws the allowance. Resolves when the four responsive /pricing frames are hand-edited',
-  },
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
+
+/*
+ * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
+ *
+ * The reconciler refuses a declaration keyed at a cell no breakpoint carries,
+ * and that refusal is worth a test of its own — but it can only be exercised
+ * while some declaration exists, and the honest steady state for this table is
+ * that none does. A guard whose only coverage is a live exemption stops being
+ * covered the moment the exemption is resolved, which is exactly when the next
+ * one gets written.
+ *
+ * So the suite injects its own. Absent the flag this loop adds nothing and the
+ * declaration set is the empty object above.
+ */
+for (const [key, [frame]] of injected('--declare-stale-cell', 2)) {
+  FRAME_STALE_CELLS[key] = { frame, why: INJECTED_WHY }
 }
 
 const diffs: string[] = []
@@ -1149,17 +1186,10 @@ const frameMetered = frame.sections
 const FRAME_STALE_METERED: Record<
   string,
   { ourCost: string; youPay: string; why: string }
-> = {
-  'Media & file storage': {
-    ourCost: '$0.03 / GB-mo',
-    youPay: '$0.039 / GB-mo',
-    why: 'pre-AGL-1280 rate; storage was corrected 0.03 → 0.026 (GCS Standard US multi-region list, the SKU on our invoice), so the page overstates the customer\'s rate by ~15%',
-  },
-  'Form submissions': {
-    ourCost: '$0.50 / 1k',
-    youPay: '$0.65 / 1k',
-    why: 'pre-AGL-1280 rate; submissions were corrected 0.0005 → 0.00005 against a measured ~12 reads / ~9 writes / one ~0.4s invocation, so the page overstates the customer\'s rate 10x',
-  },
+> = {}
+
+for (const [label, [ourCost, youPay]] of injected('--declare-stale-metered', 3)) {
+  FRAME_STALE_METERED[label] = { ourCost, youPay, why: INJECTED_WHY }
 }
 
 const meteredDiffs: string[] = []
@@ -1428,11 +1458,10 @@ const mobileSelectedPlan = (v: FrameView): Plan | null => {
  * strip carries `priceLabel`s, neither of which is a feature spec, so they
  * cannot be compared by the row loop above and have to be compared here.
  *=========================================*/
-const COLUMNS_STALE: Record<string, Divergence> = {
-  'price · Agency': {
-    frame: '$799',
-    why: 'the repricing is decided in the code and NOT chargeable yet: Stripe prices are immutable, the live SKUs are `aglyn_agency_v2` at $799 and `_yearly` at $7,788, and $1,299 needs new price objects plus new `STRIPE_PRICE_AGENCY` / `STRIPE_PRICE_AGENCY_YEARLY` values (`apps/console/specs/published-pricing-table-parity.spec.ts`). Publishing it first would quote a price the checkout cannot take — which is the one direction of drift the frame must NOT be dragged in',
-  },
+const COLUMNS_STALE: Record<string, Divergence> = {}
+
+for (const [key, [frame]] of injected('--declare-stale-column', 2)) {
+  COLUMNS_STALE[key] = { frame, why: INJECTED_WHY }
 }
 
 const columns = reconciler('plan columns', COLUMNS_STALE)
@@ -1502,10 +1531,6 @@ columns.finish()
  * disagree as well as the contents.
  *=========================================*/
 const TIERS_STALE: Record<string, Divergence> = {
-  'Agency · price': {
-    frame: '$799 /mo',
-    why: 'the same unshipped repricing as `price · Agency` in the plan columns above, and stale for the same reason: the strip and the compare grid state one price twice, so they resolve together or the page contradicts itself',
-  },
   'Agency · spec 6': {
     frame: '20 POS registers',
     why: 'AGL-1775 made `posRegisters` the PER-SITE cap, so an org running five locations needs five; the rename is ours and the frame still carries the org-wide phrasing, exactly as the compare table\'s `frameLabel` records for the same row',
