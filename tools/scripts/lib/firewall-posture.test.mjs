@@ -236,6 +236,21 @@ function healthyConsoleConfig() {
         ],
       },
       {
+        name: 'Cron bypass',
+        id: 'rule_cron_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'path', op: 're', value: '^/api/(admin|billing)/' },
+              { type: 'header', op: 'ex', key: 'x-cron-secret' },
+            ],
+          },
+        ],
+      },
+      {
         name: 'Plugin loader control plane bypass',
         id: 'rule_loader_console',
         active: true,
@@ -320,6 +335,17 @@ test('firewallEnabled false fails even with every rule intact', () => {
 })
 
 // ── Bypass-rule scope decay: the quiet one ─────────────────────────────────
+
+test('the console cron bypass decayed to PATH-ONLY fails', () => {
+  const config = healthyConsoleConfig()
+  const rule = ruleNamed(config, 'Cron bypass')
+  // Still named, still active, still a bypass — and now every admin and
+  // billing route is reachable without the secret header.
+  rule.conditionGroup[0].conditions = [{ type: 'path', op: 're', value: '^/api/(admin|billing)/' }]
+  const findings = evalConsole(config).findings.join('\n')
+  assert.match(findings, /NO LONGER REQUIRES header x-cron-secret exists/)
+  assert.equal(evalConsole(config).ok, false)
+})
 
 test('the plugin runner rule decayed to PATH-ONLY fails', () => {
   const config = healthyTenantConfig()

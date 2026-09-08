@@ -205,6 +205,21 @@ refused **401** (the challenge was bypassed, authentication was not), and an
 ordinary console route answered the same client **429**. A single request that
 merely succeeds proves only half of that.
 
+### The cron bypass is a prefix plus a header, not a path list
+
+Added 2026-09-07. The `Machine traffic bypass` names each job route one by
+one, and on 2026-09-07 the two reaper jobs were answered with a 403
+checkpoint because nobody had added theirs — a job route the list does not
+name is a job that goes silent. `Cron bypass` closes that class: any path
+matching `^/api/(admin|billing)/` **and** carrying an `x-cron-secret` header
+skips the challenge. Both conditions are load-bearing — the prefix alone
+would lift the challenge from every admin and billing route, the header alone
+would lift it site-wide for anyone who guessed its name — and every route
+still compares the header's value against `CRON_SECRET`, so the bypass removes
+the bot challenge and nothing else. Verified the day it went in: a wrong-secret
+POST reached the app and was refused `401` JSON; a header-less POST got the
+`429` checkpoint.
+
 ### Protecting the console broke the plugin loader
 
 Two days after the console was closed, sandbox-tier plugin rendering was found
