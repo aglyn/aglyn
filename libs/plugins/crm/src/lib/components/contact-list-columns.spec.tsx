@@ -59,6 +59,7 @@ const row = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
   ownerUid: '',
   lifecycleStage: '',
   lastEmailEngagementAtMs: null,
+  nextTaskAtMs: null,
   ...overrides,
 })
 

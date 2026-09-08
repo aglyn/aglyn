@@ -90,6 +90,13 @@ export interface ContactRecord {
    * (AGL-2616), or `null` when they never have since the stamp shipped.
    */
   lastEmailEngagementAtMs: number | null
+  /**
+   * When the earliest open task against this person is due (AGL-2661), or
+   * `null` when nothing is scheduled. SHARED, not the holder's: a task is
+   * filed against the contact document, and every holder reading the row
+   * sees the same next step.
+   */
+  nextTaskAtMs: number | null
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -213,6 +220,7 @@ export function contactRecordFromDoc(
       facet.lastEmailEngagementAtMs > 0
         ? facet.lastEmailEngagementAtMs
         : null,
+    nextTaskAtMs: Aglyn.readNextTaskAtMs(row as { nextTaskAtMs?: unknown }),
     createdAt: row['createdAt'],
     updatedAt: row['updatedAt'],
   }
