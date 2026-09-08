@@ -1,11 +1,6 @@
 {
   "presets": [
-    [
-      "@nx/js/babel",
-      {
-        "useBuiltIns": "usage"
-      }
-    ],
+    "@nx/js/babel",
     "@babel/preset-typescript"
   ]
 }
