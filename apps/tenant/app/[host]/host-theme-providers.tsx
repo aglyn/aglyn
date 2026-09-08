@@ -26,6 +26,11 @@ import {
   consoleThemeDark,
   consoleThemeLight,
   HostThemeProvider,
+  tenantOptions,
+  tenantOptionsDark,
+  tenantThemeDark,
+  tenantThemeLight,
+  wearsPlatformBrand,
 } from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
 // Type-only — see the note on the same import in `host-brand.context.tsx`.
@@ -70,13 +75,39 @@ export function HostThemeProviders({
   titleSeparator?: string
   children: ReactNode
 }) {
+  // A site that authored no palette of its own resolves the tenant default —
+  // MUI's stock accents plus this platform's extra slots, accessible in both
+  // schemes. The platform's own marketing hosts keep the Aglyn brand, which
+  // is why the choice is made here rather than by writing a palette into
+  // every host document: the marketing site tracks `console.theme.ts` the
+  // same way the console does.
+  const platformBrand = wearsPlatformBrand(hostKey)
+  const fallback = platformBrand
+    ? ([consoleThemeLight, consoleThemeDark] as [
+        typeof consoleThemeLight,
+        typeof consoleThemeDark,
+      ])
+    : ([tenantThemeLight, tenantThemeDark] as [
+        typeof tenantThemeLight,
+        typeof tenantThemeDark,
+      ])
+  // The same theme as `fallback`, in options form, so a host that customizes
+  // one value keeps the rest of the base rather than MUI's stock (AGL-1180).
+  const baseOptions = platformBrand
+    ? ([consoleOptions, consoleOptionsDark] as [
+        typeof consoleOptions,
+        typeof consoleOptionsDark,
+      ])
+    : ([tenantOptions, tenantOptionsDark] as [
+        typeof tenantOptions,
+        typeof tenantOptionsDark,
+      ])
+
   return (
     <HostThemeProvider
       theme={hostTheme}
-      fallback={[consoleThemeLight, consoleThemeDark]}
-      // The same brand theme as `fallback`, in options form, so a host that
-      // customizes one value keeps the brand for the rest (AGL-1180).
-      baseOptions={[consoleOptions, consoleOptionsDark]}
+      fallback={fallback}
+      baseOptions={baseOptions}
     >
       <HostBrandProvider
         brandLogoUrl={brandLogoUrl}
