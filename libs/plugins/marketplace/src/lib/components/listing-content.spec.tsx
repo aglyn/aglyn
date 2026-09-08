@@ -16,7 +16,7 @@
  */
 
 import { render } from '@testing-library/react'
-import { ListingReadme } from './listing-content.component'
+import { ListingReadme, listingIsMissing } from './listing-content.component'
 
 /**
  * Renderer parity for the markdown-lite block set (AGL-1315): every block
@@ -74,5 +74,36 @@ describe('ListingReadme images (AGL-1686)', () => {
     )
     const bad = render(<ListingReadme readme={'![a](media:junk)'} />)
     expect(bad.container.querySelector('img')).toBeNull()
+  })
+})
+
+/**
+ * The detail page's zero state answers "does this document exist", and the
+ * grid that links to it answers "is this listing browsable" — neither asks
+ * about a publisher, so a listing carrying no `profileId` has to survive both
+ * (AGL-2700).
+ */
+describe('listingIsMissing (AGL-2700)', () => {
+  it('shows a listing that exists but names no publisher', () => {
+    expect(
+      listingIsMissing({ $id: 'seed-listing-hero', deletedAt: null }, 'success'),
+    ).toBe(false)
+  })
+
+  it('is missing when the document does not exist', () => {
+    expect(listingIsMissing(undefined, 'success')).toBe(true)
+    // A refused read reaches 'error' and carries no data — the zero state,
+    // not a page rendered over `undefined`.
+    expect(listingIsMissing(undefined, 'error')).toBe(true)
+  })
+
+  it('is missing once the publisher withdraws it', () => {
+    expect(
+      listingIsMissing({ $id: 'abc', deletedAt: '2026-09-01' }, 'success'),
+    ).toBe(true)
+  })
+
+  it('holds off while the read is still loading', () => {
+    expect(listingIsMissing(undefined, 'loading')).toBe(false)
   })
 })

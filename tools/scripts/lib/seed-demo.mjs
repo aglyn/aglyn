@@ -576,8 +576,20 @@ function scopedId(id, hostId, orgRef) {
  * Written once rather than per host, and never pruned — it lives outside any
  * host, so deleting it while re-seeding one site would blank the marketplace
  * for every other one.
+ *
+ * EMULATOR ONLY, and it is the unpruned part that makes the guard necessary.
+ * `marketplaceListings` is the one collection here with no host or org
+ * namespace: every customer of a real project browses the same shelf, so a
+ * fixture written there is a fixture on their storefront, permanently, with
+ * no `--reset` that reclaims it. The seeded shape cannot survive that
+ * exposure either — it carries no `profileId` and no `artifactType`, so it is
+ * a listing no publish path could produce and nothing can install.
  */
-export async function seedMarketplaceListing({ firestore }) {
+export async function seedMarketplaceListing({ firestore, log }) {
+  if (!process.env.FIRESTORE_EMULATOR_HOST) {
+    log?.('Not the emulator — skipped the platform-global marketplace listing.')
+    return
+  }
   await firestore
     .collection('marketplaceListings')
     .doc('seed-listing-hero')

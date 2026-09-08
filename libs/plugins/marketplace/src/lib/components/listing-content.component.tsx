@@ -26,6 +26,7 @@ import {
   hasOrgLicenceOf,
   licensedOrgIdsFor,
   installTargetsFor,
+  isListingDeleted,
   isPrivateListing,
   resolveInstallPlan,
   resolveOrgInstallSummary,
@@ -470,6 +471,29 @@ export function ListingReadme({ readme }: { readme: string }) {
       })}
     </Stack>
   )
+}
+
+/**
+ * Whether the detail page has nothing to show, so the zero state stands in
+ * for the listing (AGL-998).
+ *
+ * Existence is `$id`, which `useFirestoreDoc`'s `idField` stamps on every
+ * snapshot that exists and on none that does not. A listing FIELD cannot
+ * answer this question: browse asks nothing about a publisher, so gating on
+ * `profileId` takes a listing the grid is happily showing and 404s it the
+ * moment someone opens it (AGL-2700). Deletion is the shared predicate, for
+ * the reason its own docblock gives.
+ *
+ * `!== 'loading'` and not `=== 'success'` (AGL-1066): a refused read reaches
+ * 'error', and a listing page rendered over `undefined` is worse than the
+ * zero state this exists to show.
+ */
+export function listingIsMissing(
+  listing: { $id?: string; deletedAt?: unknown } | undefined,
+  status: 'loading' | 'success' | 'error',
+): boolean {
+  if (status === 'loading') return false
+  return !listing?.$id || isListingDeleted(listing)
 }
 
 export interface MarketplaceListingContentProps {
@@ -989,11 +1013,7 @@ export function MarketplaceListingContent({
     [purchased, purchaseDocs, listingId, orgId],
   )
 
-  // `!== 'loading'` and not `=== 'success'` (AGL-1066): a refused read now
-  // reaches 'error', and a listing page rendered over `undefined` is worse
-  // than the zero state this flag exists to show.
-  const missing =
-    status !== 'loading' && (!listing?.profileId || listing?.deletedAt)
+  const missing = listingIsMissing(listing, status)
   // Somewhere to go from the zero state (AGL-998). Same surface split as
   // every other link here: org route at org scope, host route otherwise,
   // and undefined rather than a link to nowhere when the slug is unresolved.
@@ -1230,12 +1250,12 @@ export function MarketplaceListingContent({
     <>
       <NextPageTitle screen={listing?.displayName ?? 'Marketplace listing'} />
         <Container gutterY maxWidth="xl">
-          {/* A designed zero-state, not a loose sentence (AGL-998). This is
+          {/* A designed zero-state, not a loose sentence (AGL-998). It is
               reached by ordinary means — a bookmark to something since
-              unpublished, a link from another environment — and the bare
-              line it used to print read as a half-rendered page with no way
-              out. `missing` is already gated on `status === 'success'`, so
-              this never stands in for loading. */}
+              unpublished, a link from another environment — so it has to
+              offer a way out rather than read as a half-rendered page.
+              `listingIsMissing` holds off while the read is loading, so this
+              never stands in for a page that is merely still arriving. */}
           {missing ? (
             <CardDisplay contentGutterX contentGutterY>
               <Stack
