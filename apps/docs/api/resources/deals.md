@@ -75,6 +75,7 @@ contacts and companies against the plan's records band, and on a plan that hard-
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
 | `custom` | object | The organization's [deal custom fields](/content-and-data/crm/custom-fields#over-the-api), keyed by field key; `{}` when the deal has none. Judged against the **deal** definitions: a key that is not one, a retired field, or a value the type cannot hold is a `400` naming `custom.<key>`. A `PATCH` merges the keys it sends; `null` clears one. Writable. |
 | `nextTaskAt` | string \| null | When the earliest **open** [task](tasks.md) filed against the deal is due, or `null` when none is — its [next activity](/content-and-data/crm/tasks#next-activity), and what the console's "stuck deals" figure counts. Maintained by every task write, this resource included. **Read-only.** |
+| `mediaIds` | string[] | Files from the organization's [media library](./media.md) attached to this record, by media id, at most 20. An empty array clears them. Writable. |
 | `siteId` | string | The site the deal was created from. **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. |
 

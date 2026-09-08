@@ -85,4 +85,5 @@ it), not to every site in the account.
 - [The contact record](./contact-record.md) — the fields an imported row lands in
 - [Bulk actions](./bulk-actions.md) — tag, assign or stage the people you just imported, all at once
 - [Import companies from CSV](./companies.md#import-from-csv) — the same three steps for the organizations behind them
+- [Import deals from CSV](./deals.md#import-from-csv) and [import tasks from CSV](./tasks.md#import-from-csv) — the same three steps, the pipeline, the stage and the assignee resolved by name
 - [Import a list into an email audience](../../marketing-and-automation/email-campaigns/overview.md#import-a-list) — for adding people to a mailing list rather than to the CRM

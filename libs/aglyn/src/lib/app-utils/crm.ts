@@ -347,6 +347,8 @@ export interface CrmCompany extends CrmScoped {
    * ms, or `null` when none is — see {@link CrmDeal.nextTaskAtMs}.
    */
   nextTaskAtMs?: number | null
+  /** Org-library files attached to the company (AGL-2662) — see {@link CRM_MEDIA_IDS_MAX}. */
+  mediaIds?: string[]
 }
 
 /** One step of a pipeline. */
@@ -499,6 +501,8 @@ export interface CrmDeal extends CrmScoped {
    * existed. Absent on such a record, which every reader treats as `null`.
    */
   nextTaskAtMs?: number | null
+  /** Org-library files attached to the deal (AGL-2662) — see {@link CRM_MEDIA_IDS_MAX}. */
+  mediaIds?: string[]
 }
 
 /**
@@ -2699,4 +2703,46 @@ export function crmDefaultViewPatch(
   viewId: string | null,
 ): Record<string, unknown> {
   return { [CRM_DEFAULT_VIEWS_FIELD]: { [orgId]: { [section]: viewId } } }
+}
+
+/*==========================================
+ * FILES ON A RECORD (AGL-2662)
+ *=========================================*/
+
+/** The field a record's attached files are stored under, on all three. */
+export const CRM_MEDIA_IDS_FIELD = 'mediaIds'
+
+/**
+ * The most files one record may carry.
+ *
+ * A platform ceiling in the family of {@link CRM_ACTIVITIES_PER_RECORD_CEILING}
+ * rather than a plan dimension: attachments are bounded by human effort, and
+ * this is the bound. It is also what the Firestore rules can actually check
+ * — a rule can assert a list and its size, and cannot walk one — so the
+ * number is enforced rather than merely documented.
+ */
+export const CRM_MEDIA_IDS_MAX = 20
+
+/**
+ * A stored or submitted attachment list, cleaned.
+ *
+ * Ids rather than URLs, deduplicated, trimmed, non-empty and capped. Written
+ * through by every path that sets the field — the console card, the REST
+ * write — so a record cannot hold a list one of them would refuse.
+ *
+ * An id is a media DOCUMENT id, resolved against the organization's library
+ * (`orgs/{orgId}/media/{mediaId}`) at read time. Storing the id and not the
+ * URL is what lets a file move between folders, and what keeps a private
+ * asset behind the signed CDN door rather than pinned to a raw storage URL
+ * that names its current location.
+ */
+export function normalizeCrmMediaIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [
+    ...new Set(
+      value
+        .map((id) => String(id ?? '').trim())
+        .filter((id) => id.length > 0 && id.length <= 200),
+    ),
+  ].slice(0, CRM_MEDIA_IDS_MAX)
 }

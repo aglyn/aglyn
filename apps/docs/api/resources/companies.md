@@ -88,6 +88,7 @@ after creation; a record that belongs somewhere else is deleted and recreated th
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
 | `custom` | object | The organization's [company custom fields](/content-and-data/crm/custom-fields#over-the-api), keyed by field key; `{}` when the company has none. Judged against the **company** definitions: a key that is not one, a retired field, or a value the type cannot hold is a `400` naming `custom.<key>`. A `PATCH` merges the keys it sends; `null` clears one. Writable. |
 | `nextTaskAt` | string \| null | When the earliest **open** [task](tasks.md) filed against the company is due, or `null` when none is — its [next activity](/content-and-data/crm/tasks#next-activity). Maintained by every task write, this resource included. **Read-only.** |
+| `mediaIds` | string[] | Files from the organization's [media library](./media.md) attached to this record, by media id, at most 20. An empty array clears them. Writable. |
 | `siteId` | string | The site the company was created from — see [above](#scopes-and-sites). **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. A fresh record's `updated` equals its `created`. |
 

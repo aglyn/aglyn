@@ -71,6 +71,15 @@ export * from './person-erasure'
 // and beside it because it reads the stage list and the deal weighting from
 // there rather than restating either.
 export * from './crm-reports'
+// Every CRM CSV, written once (AGL-2662): the column lists and the cells
+// each section's Export button writes, and the server's whole-collection
+// export streams — one implementation, because the console app may not
+// import the plugin whose sections used to hold it.
+export * from './crm-csv'
+// Which holder a cross-site reader sees one contact through (AGL-2630),
+// beside the files that write it: the org-level list and the server's
+// export both flatten a contact this way.
+export * from './contact-holder'
 // What one member is owed this morning — the day's window in a named zone,
 // the task and lead bucketing, and the words the notification and the mail
 // say (AGL-2619). Pure like `crm-reports`, read by the scheduled route.
@@ -98,6 +107,11 @@ export * from './crm-company-import'
 // a record's open tasks, the view clause a list filters on, the report figure.
 // Pure like `crm`; the admin library's `recomputeCrmNextTaskAt` is the writer.
 export * from './crm-next-activity'
+// Reading a spreadsheet of DEALS or TASKS into the CRM (AGL-2662): the same
+// three stages over each vocabulary; the server resolves a pipeline, a
+// stage and an assignee by name and refuses the row it cannot.
+export * from './crm-deal-import'
+export * from './crm-task-import'
 // The CSV cell grammar the exports write with (AGL-2621) — named rather than
 // starred, because the two import modules above re-export the custom-target
 // helpers from the same file under their own names.

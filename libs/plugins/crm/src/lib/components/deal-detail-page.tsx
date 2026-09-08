@@ -41,6 +41,7 @@ import { DealEditDrawer } from './deal-edit-drawer'
 import { DealProductsCard } from './deal-products-card'
 import { DealPropertiesCard } from './deal-properties-card'
 import { DealStageCard } from './deal-stage-card'
+import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
 
 /**
@@ -225,6 +226,13 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                 unreadable={status === 'error'}
               />
             ) : null}
+            <RecordFilesCard
+              scope={scope.scope}
+              collection={CRM_COLLECTIONS.deals}
+              recordId={deal.$id}
+              mediaIds={deal.mediaIds}
+              topic="deals"
+            />
             <RecordActivityCard hostId={hostId} org={org} dealId={deal.$id} />
           </>
         ) : null}

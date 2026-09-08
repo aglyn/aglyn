@@ -55,6 +55,7 @@ import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { useErasePersonAction } from './erase-person-action'
+import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
 import { useEmailsHubPath } from './use-emails-hub-path'
 import { useOrgMembers } from './use-org-members'
@@ -485,6 +486,19 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             contactName={record.name || record.email}
           />
           <RecordTasksCard hostId={hostId} org={org} basePath={basePath} contactId={id} />
+          {/*
+            The files are the VIEWING holder's, like everything else on this
+            page: the write is a facet path, so a contract one brand filed
+            never appears on a sibling brand's copy of the person.
+          */}
+          <RecordFilesCard
+            scope={scope}
+            collection="contacts"
+            recordId={id}
+            facetGroupId={consentGroup.groupId}
+            mediaIds={record.mediaIds}
+            topic="contactRecord"
+          />
           <ContactDuplicatesCard
             current={{ id, doc: row }}
             scope={scope}

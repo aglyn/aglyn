@@ -81,6 +81,7 @@ import {
 import { customFieldColumns } from './contact-custom-columns'
 import { DealBoard } from './deal-board'
 import { DealEditDrawer } from './deal-edit-drawer'
+import { DealImportButton } from './deal-import-drawer'
 import DealsBulkBar from './deals-bulk-bar'
 import { LostReasonDialog } from './lost-reason-dialog'
 import { OwnerAvatar } from './owner-avatar'
@@ -565,6 +566,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                 </ToggleButtonGroup>
                 <NoNextActivityToggle filters={viewFilters} onChange={views.setFilters} />
                 <Stack sx={{ flex: 1 }} />
+                <DealImportButton hostId={hostId} />
                 <Button size="small" onClick={handleExport} disabled={!paged.rows.length}>
                   {'Export CSV'}
                 </Button>

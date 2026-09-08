@@ -41,6 +41,8 @@ import {
   contactFacetPath,
   type ContactLifecycleStage,
   CRM_COLLECTIONS,
+  CRM_MEDIA_IDS_MAX,
+  normalizeCrmMediaIds,
   effectiveDatasetModel,
   getOrderFulfilmentService,
   inspectUploadBytes,
@@ -2368,6 +2370,10 @@ const CONTACT_CRM_FIELDS = [
   'address',
   'ownerUid',
   'lifecycleStage',
+  // Files are a facet field like the rest (AGL-2662): an agency running two
+  // client brands has one contact document between them, and a contract one
+  // client filed is not the other client's to read.
+  'mediaIds',
 ] as const
 
 type ContactCrmField = (typeof CONTACT_CRM_FIELDS)[number]
@@ -2391,11 +2397,22 @@ function contactCrmProfile(
     address: null,
     ownerUid: null,
     lifecycleStage: null,
+    // An empty ARRAY rather than null, so a client can index it without a
+    // guard — the same shape `custom` publishes for the same reason.
+    mediaIds: [],
   }
   for (const holder of groupId ? [groupId] : contactFacetHolders(data)) {
     const facet = readContactFacet(data, holder)
     for (const field of CONTACT_CRM_FIELDS) {
       const value = facet[field]
+      if (field === 'mediaIds') {
+        // The union of every holder's attachments when no site was named,
+        // and one holder's when one was — the same rule the scalar fields
+        // follow, spelled apart because a list merges rather than wins.
+        const held = profile[field] as string[]
+        if (!held.length) profile[field] = normalizeCrmMediaIds(value)
+        continue
+      }
       if (profile[field] === null && value !== undefined && value !== null) {
         profile[field] = value
       }
@@ -2521,6 +2538,8 @@ type ContactCrmInput = {
   address?: AglynPostalAddress | null
   ownerUid?: string | null
   lifecycleStage?: ContactLifecycleStage | null
+  /** Org-library files attached by this holder (AGL-2662), by media id. */
+  mediaIds?: string[]
 }
 
 function readContactInput(
@@ -2664,6 +2683,17 @@ function readContactInput(
   }
   const ownerUid = readOptionalText(body, 'ownerUid', CONTACT_NAME_MAX, errors)
   if (ownerUid !== undefined) crm.ownerUid = ownerUid
+  if (body.mediaIds !== undefined) {
+    if (!Array.isArray(body.mediaIds)) {
+      errors.mediaIds = 'Must be an array of media ids'
+    } else if (body.mediaIds.length > CRM_MEDIA_IDS_MAX) {
+      errors.mediaIds = `At most ${CRM_MEDIA_IDS_MAX} files may be attached`
+    } else {
+      // The SAME normalizer the console card writes through. An empty array
+      // is legal and clears this holder's attachments.
+      crm.mediaIds = normalizeCrmMediaIds(body.mediaIds)
+    }
+  }
   if (body.lifecycleStage === null) {
     crm.lifecycleStage = null
   } else {

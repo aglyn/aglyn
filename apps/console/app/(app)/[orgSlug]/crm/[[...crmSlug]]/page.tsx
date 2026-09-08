@@ -28,6 +28,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Box, CircularProgress } from '@mui/material'
 import { notFound, useParams, useRouter } from 'next/navigation'
 import { Suspense, useEffect, useMemo } from 'react'
+import ConsoleMediaPickerProvider from '../../../../../components/console-media-picker-provider.component'
 import { useEnabledPluginIds } from '../../../../../components/console-plugins-gate.component'
 import FeatureGate from '../../../../../components/feature-gate.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
@@ -350,6 +351,12 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
         </Box>
       }
     >
+      {/*
+        The shared library, with no site's private one beside it (AGL-2662):
+        this hub is about every site, so a record's file picker offers the
+        assets every site can already see and none that belong to one.
+      */}
+      <ConsoleMediaPickerProvider orgId={orgId}>
       <PluginComponent
         hostId={null}
         orgMount={orgMount}
@@ -362,6 +369,7 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
         section={resolved?.section?.id}
         segments={resolved?.segments}
       />
+      </ConsoleMediaPickerProvider>
     </Suspense>
   )
 

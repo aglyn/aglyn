@@ -64,6 +64,7 @@ way to work with the contacts your sites have already captured.
 | `address` | object \| null | `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter ISO code). Blank parts dropped; an empty address is stored as `null`. Writable. |
 | `ownerUid` | string \| null | The team member responsible for the relationship. Must be a member of your organization. Writable. |
 | `lifecycleStage` | string \| null | `subscriber`, `lead`, `marketing-qualified`, `sales-qualified`, `opportunity`, `customer`, `evangelist` or `other`. Writable. |
+| `mediaIds` | string[] | Files from the organization's [media library](./media.md) attached to this person **by the named site**, by media id, at most 20. Part of [the CRM profile](#crm-profile), so a write needs `consentSiteId`; a read with no site named returns the first holder's list. An empty array clears them. Writable. |
 | `companyIds` | string[] | Every company any of your sites has filed this person under — the set of the per-site `companyId`s. What `?companyId=` queries. **Read-only.** |
 | `alternateEmails` | string[] | The other addresses this person answers to — each one the address of a record [merged](#merge) into this one. A capture on any of them lands here. **Read-only** — written by a merge. |
 | `created` / `updated` | string \| null | ISO 8601. |

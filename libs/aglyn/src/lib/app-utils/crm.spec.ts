@@ -101,6 +101,8 @@ import {
   dealHasLineItems,
   isPipelineArchived,
   lineItemsTotalCents,
+  CRM_MEDIA_IDS_MAX,
+  normalizeCrmMediaIds,
   readDealLineItems,
 } from './crm'
 
@@ -1443,5 +1445,37 @@ describe('an archived pipeline (AGL-2620)', () => {
     expect(isPipelineArchived({ archivedAt: 0 })).toBe(false)
     expect(isPipelineArchived({})).toBe(false)
     expect(isPipelineArchived(null)).toBe(false)
+  })
+})
+
+/**
+ * AGL-2662 — the attachment list every writer goes through.
+ *
+ * The rules can assert the SHAPE and the CEILING and cannot walk a list, so
+ * the normalizer is the layer that decides what an id is. A path that
+ * skipped it would store a list the console card and the REST reader would
+ * both refuse to have written.
+ */
+describe('a record\'s attached files', () => {
+  it('keeps trimmed, non-empty ids and drops everything else', () => {
+    expect(
+      normalizeCrmMediaIds(['  m1 ', '', '   ', null, undefined, 'm2', 7]),
+    ).toEqual(['m1', 'm2', '7'])
+  })
+
+  it('deduplicates, so attaching the same file twice is one attachment', () => {
+    expect(normalizeCrmMediaIds(['m1', 'm1', 'm2', 'm1'])).toEqual(['m1', 'm2'])
+  })
+
+  it('caps the list at the ceiling the rules enforce', () => {
+    const many = Array.from({ length: CRM_MEDIA_IDS_MAX + 5 }, (_, i) => `m${i}`)
+    expect(normalizeCrmMediaIds(many)).toHaveLength(CRM_MEDIA_IDS_MAX)
+    expect(normalizeCrmMediaIds(many)[0]).toBe('m0')
+  })
+
+  it('reads anything that is not a list as no files at all', () => {
+    for (const value of [undefined, null, 'm1', 7, {}]) {
+      expect(normalizeCrmMediaIds(value)).toEqual([])
+    }
   })
 })

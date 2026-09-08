@@ -29,9 +29,11 @@
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   CRM_COLLECTIONS,
+  CRM_MEDIA_IDS_MAX,
   createResourceUid,
   normalizeAddress,
   normalizeCompanyDomain,
+  normalizeCrmMediaIds,
   normalizePhone,
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
@@ -81,6 +83,7 @@ function companyView(doc: FirebaseFirestore.DocumentSnapshot) {
     // When the earliest open task against the company is due — see
     // `CrmDeal.nextTaskAtMs`. Read-only: the tasks resource maintains it.
     nextTaskAt: isoFromMs(data.nextTaskAtMs),
+    mediaIds: normalizeCrmMediaIds(data.mediaIds),
     siteId: data.hostId ?? null,
     ...crmTimes(data),
   }
@@ -96,6 +99,7 @@ const COMPANY_WRITABLE = new Set([
   'ownerUid',
   'notes',
   'custom',
+  'mediaIds',
 ])
 
 interface CompanyInput {
@@ -107,6 +111,8 @@ interface CompanyInput {
   industry?: Clearable<string>
   ownerUid?: Clearable<string>
   notes?: Clearable<string>
+  /** Org-library files attached to the company (AGL-2662), by media id. */
+  mediaIds?: string[]
 }
 
 /**
@@ -136,6 +142,20 @@ function readCompanyInput(
       .slice(0, CRM_TITLE_MAX)
     if (name) values.name = name
     else errors.name = partial ? 'Must not be empty' : 'A name is required'
+  }
+
+
+  if (body.mediaIds !== undefined) {
+    if (!Array.isArray(body.mediaIds)) {
+      errors.mediaIds = 'Must be an array of media ids'
+    } else if (body.mediaIds.length > CRM_MEDIA_IDS_MAX) {
+      errors.mediaIds = `At most ${CRM_MEDIA_IDS_MAX} files may be attached`
+    } else {
+      // The SAME normalizer the console card writes through, so the API
+      // cannot store a list the console would refuse. An empty array is
+      // legal and clears the attachments.
+      values.mediaIds = normalizeCrmMediaIds(body.mediaIds)
+    }
   }
 
   const domain = readOptionalText(body, 'domain', CRM_TITLE_MAX, errors)

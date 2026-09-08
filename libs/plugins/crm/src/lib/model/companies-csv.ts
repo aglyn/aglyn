@@ -30,78 +30,15 @@
  * import" on the way back.
  */
 
-import { type AglynPostalAddress, type CrmCompany, csvDocument } from '@aglyn/aglyn'
+/* The writer moved to `@aglyn/aglyn` under AGL-2662 — see `deals-csv.ts`. */
+export {
+  COMPANY_CSV_COLUMNS,
+  companiesCsv,
+  type CompanyCsvOptions,
+  type CompanyCsvRow,
+} from '@aglyn/aglyn'
 
-/** As much of a company row as the file reads. */
-export type CompanyCsvRow = Partial<
-  Pick<
-    CrmCompany,
-    | 'name'
-    | 'domain'
-    | 'website'
-    | 'phone'
-    | 'industry'
-    | 'ownerUid'
-    | 'tags'
-    | 'notes'
-    | 'contactsCount'
-  >
-> & { address?: AglynPostalAddress | null }
-
-export interface CompanyCsvOptions {
-  /**
-   * The owner's address for a stored uid — what the import resolves an
-   * owner by. Absent, the uid is written as it is.
-   */
-  ownerEmail?: (uid: string) => string
-}
-
-/** The columns, in order, headed as the import reads them. */
-export const COMPANY_CSV_COLUMNS = [
-  'Company',
-  'Domain',
-  'Website',
-  'Phone',
-  'Industry',
-  'Owner',
-  'Address line 1',
-  'Address line 2',
-  'City',
-  'State',
-  'Postal code',
-  'Country',
-  'Tags',
-  'Notes',
-  'Contacts',
-] as const
-
-/** The whole file, header first. */
-export function companiesCsv(
-  rows: readonly CompanyCsvRow[],
-  options: CompanyCsvOptions = {},
-): string {
-  const { ownerEmail } = options
-  return csvDocument(
-    COMPANY_CSV_COLUMNS,
-    rows.map((company) => [
-      company.name ?? '',
-      company.domain ?? '',
-      company.website ?? '',
-      company.phone ?? '',
-      company.industry ?? '',
-      company.ownerUid ? (ownerEmail?.(company.ownerUid) ?? company.ownerUid) : '',
-      company.address?.line1 ?? '',
-      company.address?.line2 ?? '',
-      company.address?.city ?? '',
-      company.address?.state ?? '',
-      company.address?.postalCode ?? '',
-      company.address?.country ?? '',
-      (company.tags ?? []).join('|'),
-      company.notes ?? '',
-      Number(company.contactsCount ?? 0),
-    ]),
-  )
-}
+import { companiesCsv } from '@aglyn/aglyn'
 
 /**
  * The file the Import drawer hands out to start from: the export's header

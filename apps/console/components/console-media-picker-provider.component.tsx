@@ -16,12 +16,26 @@
  */
 'use client'
 
-import { MediaPickerContext, type PickedMedia } from '@aglyn/aglyn'
+import {
+  MediaPickerContext,
+  mediaRefFromCdnPath,
+  parseMediaRef,
+  type PickedMedia,
+} from '@aglyn/aglyn'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface ConsoleMediaPickerProviderProps {
-  hostId: string
+  /**
+   * The site whose private library is offered, when there is one.
+   *
+   * Optional since AGL-2662: the organization-level CRM mounts this with no
+   * site, where only the shared library exists — a surface about every site
+   * must not offer one site's private assets.
+   */
+  hostId?: string
+  /** The organization whose shared library is offered. */
+  orgId?: string
   children?: JSX.Children
 }
 
@@ -35,7 +49,7 @@ export interface ConsoleMediaPickerProviderProps {
 export function ConsoleMediaPickerProvider(
   props: ConsoleMediaPickerProviderProps,
 ) {
-  const { hostId, children } = props
+  const { hostId, orgId, children } = props
   const [open, setOpen] = useState(false)
   const resolver = useRef<((media: PickedMedia | null) => void) | null>(null)
 
@@ -63,10 +77,12 @@ export function ConsoleMediaPickerProvider(
       {children}
       <MediaPickerDialog
         hostId={hostId}
+        orgId={orgId}
         open={open}
         onClose={() => settle(null)}
         onPick={(media) => {
           const picked = media as {
+            $id?: string
             url?: string
             cdnPath?: string
             fileName?: string
@@ -89,6 +105,11 @@ export function ConsoleMediaPickerProvider(
                   // through raw; `inheritedMediaAlt` at the call site is
                   // what decides whether it may win.
                   alt: picked.alt,
+                  // The document id and the scope it resolves under, for a
+                  // caller that stores a REFERENCE rather than a placement
+                  // (AGL-2662) — the CRM's record attachments.
+                  mediaId: picked.$id,
+                  mediaScope: parseMediaRef(mediaRefFromCdnPath(picked.cdnPath))?.scope,
                 }
               : null,
           )

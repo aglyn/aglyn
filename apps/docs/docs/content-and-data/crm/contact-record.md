@@ -275,6 +275,34 @@ The phone number and company name are kept on the record itself for that
 lookup, as this site last saved them; the values you see on a person's page
 are always your own site's.
 
+## Files
+
+The **Files** card attaches assets from the [media library](../media/overview.md)
+to this record: contracts, quotes, a signed proposal, a photo of the site.
+
+- **Attach…** opens the media browser. At a site you can pick from the site's
+  own library and the workspace's shared one; at the
+  [organization hub](./overview.md#at-the-organization-level) only the shared
+  library is offered, because a record there belongs to the workspace rather
+  than to one site.
+- A record holds up to **20 files**.
+- The **✕** beside a file removes the attachment. The file itself is untouched
+  and stays in the library.
+
+Files are stored **by id**, not by address. A file moved between folders keeps
+its attachment, and a private file is still served through the signed link that
+checks who is asking rather than through a public URL. A file deleted from the
+library is still listed, marked as no longer there, so an attachment never
+disappears without saying so.
+
+Files are **per site**, like everything else on a person's record: an agency
+running two client brands has one contact document between them, and a contract
+one client filed is not the other client's to see. See
+[what each site keeps to itself](#what-each-site-keeps-to-itself).
+
+Attachments are readable and writable through the
+[REST API](/api/resources/contacts) as `mediaIds`.
+
 ## Related
 
 - [CRM overview](./overview.md)

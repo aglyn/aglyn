@@ -70,6 +70,7 @@ import {
   CrmBulkValueDialog,
   countNoun,
 } from './crm-bulk-bar-frame'
+import CrmExportAllButton from './crm-export-all-button'
 
 export interface CompaniesBulkBarProps {
   /**
@@ -297,6 +298,16 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
       <Button size="small" disabled={busy} onClick={handleExport}>
         {'Export CSV'}
       </Button>
+      {/*
+        The selection's file is the rows on screen; this one is the whole
+        collection, streamed by the server (AGL-2662).
+      */}
+      <CrmExportAllButton
+        resource="companies"
+        orgId={scope?.[1] ?? null}
+        hostId={hostId}
+        disabled={busy}
+      />
       <Button
         size="small"
         color="error"
