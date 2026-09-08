@@ -1163,6 +1163,46 @@ service cloud.firestore {
             resource.data.createdByUid == request.auth.uid));
       }
 
+      /**
+       * Email templates and snippets (AGL-2658): a subject and a body, or
+       * a paragraph, kept under a name, with merge fields the send route
+       * fills in from the record. READ under the contacts predicate like
+       * every companion collection — the letter is phrasing, but the
+       * surfaces that use it are the CRM's — and a PERSONAL template is
+       * hidden by the console's listing rather than by these rules, as a
+       * private saved view is, because a rule per reader would need a
+       * query per reader.
+       *
+       * WRITES: a SHARED template is every CRM editor's to change or
+       * remove; a PERSONAL one is its owner's; an org-wide member may tidy
+       * either, whoever left it. The create requires the creator stamp to
+       * be the caller and a personal template to be OWNED by the caller —
+       * nobody mints a template in a colleague's name or drops one into a
+       * colleague's personal menu — and the scoped-member update keeps
+       * `scopeUnchanged()` and the creator stamp for the reason every
+       * scoped collection above does.
+       */
+      match /crmEmailTemplates/{templateId} {
+        allow read: if isStaff() || canReadScopedPeople();
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped() &&
+           request.resource.data.createdByUid == request.auth.uid &&
+           (request.resource.data.get('visibility', 'shared') != 'personal' ||
+            request.resource.data.get('ownerUid', null) == request.auth.uid));
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           (isOrgWideMember() ||
+            (scopeUnchanged() &&
+             request.resource.data.createdByUid == resource.data.createdByUid &&
+             (resource.data.get('visibility', 'shared') != 'personal' ||
+              resource.data.get('ownerUid', null) == request.auth.uid))));
+        allow delete: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           (isOrgWideMember() ||
+            resource.data.get('visibility', 'shared') != 'personal' ||
+            resource.data.get('ownerUid', null) == request.auth.uid));
+      }
+
       // Email topics: the streams a recipient may leave one at a time.
       // Scoped like `lists` and for the same reason — a topic is authored
       // editorial content an agency writes once and points several sites at,

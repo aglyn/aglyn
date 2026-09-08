@@ -75,6 +75,7 @@ export const CRM_COLLECTIONS = {
   activities: 'crmActivities',
   contactFields: 'contactFields',
   views: 'crmViews',
+  emailTemplates: 'crmEmailTemplates',
 } as const
 
 export type CrmCollection = (typeof CRM_COLLECTIONS)[keyof typeof CRM_COLLECTIONS]

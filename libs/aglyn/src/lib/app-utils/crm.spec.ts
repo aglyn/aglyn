@@ -105,7 +105,7 @@ import {
 } from './crm'
 
 describe('CRM collections', () => {
-  it('names seven org subcollections, three of them prefixed', () => {
+  it('names eight org subcollections, four of them prefixed', () => {
     expect(Object.values(CRM_COLLECTIONS)).toEqual([
       'companies',
       'pipelines',
@@ -114,6 +114,7 @@ describe('CRM collections', () => {
       'crmActivities',
       'contactFields',
       'crmViews',
+      'crmEmailTemplates',
     ])
   })
 })

@@ -1245,6 +1245,20 @@
       ]
     },
     {
+      "collectionGroup": "crmEmailTemplates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "visibleTo",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crmTasks",
       "queryScope": "COLLECTION",
       "fields": [
