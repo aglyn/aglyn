@@ -238,7 +238,12 @@ export const tenantThemeDark: Theme = createResponsiveTheme({
  * absent: a customer on a platform subdomain is still a tenant.
  */
 export const PLATFORM_BRAND_HOSTS: ReadonlySet<string> = new Set(
-  (process.env['NEXT_PUBLIC_PLATFORM_BRAND_HOSTS'] ?? 'aglyn.com,aglyn.io')
+  // Dot notation, not brackets: Next substitutes `process.env.NAME`
+  // TEXTUALLY, and never the bracket form, so a bracket read is `undefined`
+  // in any browser or edge bundle and silently falls back to the default
+  // below — which on a self-host install would hand the operator Aglyn's
+  // hosts (AGL-2037).
+  (process.env.NEXT_PUBLIC_PLATFORM_BRAND_HOSTS ?? 'aglyn.com,aglyn.io')
     .split(',')
     .map((host) => host.trim().toLowerCase())
     .filter(Boolean),
