@@ -272,12 +272,17 @@ describeEmulated('media CDN scope boundary (AGL-1047)', () => {
       expect(res.captured.status).toBe(404)
     })
 
-    it('keeps no-store even on the stale-hash 404', async () => {
+    it('keeps no-store even on the stale-hash redirect', async () => {
       // The exit that used to escape the guard: a signed request for the
       // immutable URL with a hash that no longer matches overwrote
       // `private, no-store` with `public, max-age=60`. Every exit now goes
       // through one helper so a private asset cannot be shared-cached at
       // any of them.
+      //
+      // AGL-2685 made this exit a 302, which RAISES the stakes rather than
+      // retiring the test: the redirect carries `exp` and `sig` in its
+      // `Location`, so a shared cache holding it would hand one caller's
+      // signature to the next.
       const { mintMediaSignature } = await import('./media-signing')
       const scope = `org:${ORG}`
       const signature = mintMediaSignature(scope, 'm-private')
@@ -286,8 +291,12 @@ describeEmulated('media CDN scope boundary (AGL-1047)', () => {
         [scope, 'm-private', 'deadbeefdeadbeef'],
         signature,
       )
-      expect(res.captured.status).toBe(404)
+      expect(res.captured.status).toBe(302)
       expect(res.headers['cache-control']).toBe('private, no-store')
+      expect(String(res.headers['location'])).toContain(
+        `/api/media/cdn/${scope}/m-private?`,
+      )
+      expect(String(res.headers['location'])).toContain('sig=')
     }, 60_000)
 
     it('does not sign away the SCOPE check', async () => {

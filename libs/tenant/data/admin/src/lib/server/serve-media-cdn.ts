@@ -19,6 +19,7 @@ import {
   isLockdownActive,
   isOrgWideScope,
   type LockdownState,
+  MEDIA_CDN_ROUTE,
   normalizeHostLockdown,
   normalizeOrgLockdown,
   visibleToHost,
@@ -41,6 +42,36 @@ import { mediaStoragePathInScope } from './media-storage-path'
 export { MEDIA_CDN_VARIANT_WIDTHS } from '@aglyn/aglyn/server'
 
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * The query string to carry onto the stable URL when a stale content pin
+ * redirects (AGL-2685).
+ *
+ * REBUILT from the four parameters this handler reads, never forwarded whole.
+ * Two reasons, and the second is the one that matters:
+ *
+ * 1. Everything else is inert here — it would only split the CDN cache key
+ *    for a response that is identical either way.
+ * 2. `Location` is a header, and the value would otherwise be caller-supplied
+ *    text. Node rejects a CR or LF in a header value rather than splitting
+ *    the response, so this is a second lock on a door that is already shut —
+ *    which is the right number of locks for a header built from user input.
+ *
+ * `exp` and `sig` ride along because a private asset's signature covers
+ * (scope, mediaId, exp) and never the hash, so it is still valid at the
+ * target. Dropping them would turn a redirect into a 404 for exactly the
+ * assets whose delivery is most sensitive.
+ */
+export function mediaCdnForwardedQuery(query: NextApiRequest['query']): string {
+  const params = new URLSearchParams()
+  for (const key of ['w', 'download', 'exp', 'sig'] as const) {
+    const raw = query[key]
+    const value = Array.isArray(raw) ? raw[0] : raw
+    if (value !== undefined && value !== '') params.set(key, String(value))
+  }
+  const encoded = params.toString()
+  return encoded ? `?${encoded}` : ''
+}
 
 /**
  * The stable (non-content-hashed) URL's caching contract.
@@ -962,11 +993,46 @@ export async function serveMediaCdn(
         return
       }
     }
-    // The immutable form must pin the current content; a stale hash 404s so
-    // the edge never keeps serving replaced bytes under that URL.
+    /**
+     * A stale hash on the immutable form REDIRECTS to the stable URL
+     * (AGL-2685). It used to 404.
+     *
+     * The invariant the 404 protected is intact and is the reason this is a
+     * redirect rather than a body: **no version of this URL ever serves bytes
+     * that are not the ones its hash names.** A stale one now serves a
+     * pointer to the URL that is allowed to change instead of a dead end.
+     *
+     * What the 404 cost is what made the pin unusable. A pin lives in a
+     * published document; the first **replace** of an asset makes every
+     * document holding the old hash name a URL that 404s, so pinning meant
+     * every screen carrying that image broke until a backfill re-pinned it.
+     * With a redirect the same situation costs one extra hop and self-heals,
+     * which is what lets `resolveMediaSrc` emit this form at all.
+     *
+     * **302, not 301.** A hash can become current again — a replace reverted
+     * to the previous bytes restores it — and a permanent redirect is exactly
+     * the thing browsers refuse to forget.
+     *
+     * **The stable URL's own cache policy**, not a shorter one. The redirect
+     * is as re-checkable as the resource it points at, and it is the same
+     * answer for every caller, so there is no reason for the edge to hold it
+     * less well than it holds the target. `setCacheControl` still forces
+     * `private, no-store` for a signed asset.
+     *
+     * The query string is REBUILT from the parameters this handler reads
+     * rather than forwarded: `?w=`, `?download=` and the signature pair are
+     * the whole set, they are already validated by the code below, and
+     * echoing arbitrary caller input into a `Location` header is a habit
+     * worth not having. Dropping an unknown parameter costs a cache-key
+     * split and nothing else.
+     */
     if (hashed && currentHash !== hash) {
-      setCacheControl('public, max-age=60')
-      res.status(404).json({ error: 'Not found' })
+      setCacheControl(MEDIA_CDN_STABLE_CACHE_CONTROL)
+      res.setHeader(
+        'Location',
+        `${MEDIA_CDN_ROUTE}/${scopeSegment}/${mediaId}${mediaCdnForwardedQuery(req.query)}`,
+      )
+      res.status(302).end()
       return
     }
 
