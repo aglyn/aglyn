@@ -73,6 +73,7 @@ import {
 import {
   FUNCTIONS_ENTRY_FILE,
   FUNCTIONS_SOURCE_PATH,
+  FUNCTIONS_SOURCE_PATHSPECS,
   classifyFunctionsDrift,
   functionRegion,
   parseFunctionExports,
@@ -164,7 +165,7 @@ try {
     '--format=%H%x00%ct%x00%s',
     baselineSha,
     '--',
-    FUNCTIONS_SOURCE_PATH,
+    ...FUNCTIONS_SOURCE_PATHSPECS,
   ]).trim()
   if (line) {
     const [sha, seconds, subject] = line.split('\0')

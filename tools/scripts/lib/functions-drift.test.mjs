@@ -44,6 +44,7 @@ import { fileURLToPath } from 'node:url'
 import {
   FUNCTIONS_ENTRY_FILE,
   FUNCTIONS_SOURCE_PATH,
+  FUNCTIONS_SOURCE_PATHSPECS,
   classifyFunctionsDrift,
   functionId,
   functionRegion,
@@ -75,7 +76,7 @@ const declaredIds = parseFunctionExports(
 
 /** Committer time (ms) of the last commit touching the deployed package. */
 const lastFunctionsCommitMs =
-  Number(git(['log', '-1', '--format=%ct', 'HEAD', '--', FUNCTIONS_SOURCE_PATH])) * 1000
+  Number(git(['log', '-1', '--format=%ct', 'HEAD', '--', ...FUNCTIONS_SOURCE_PATHSPECS])) * 1000
 
 function deployedFunction(id, { region = 'us-central1', updateTime, state = 'ACTIVE' }) {
   return {
@@ -398,5 +399,31 @@ describe('the CLI, end to end against a stubbed Cloud Functions API', () => {
         assert.match(out, /does not resolve/)
       },
     )
+  })
+})
+
+/*
+ * A dependency tree is not source (AGL-2695). One was tracked under
+ * `cloud/functions` by accident, and the commits on either side of it — the
+ * one that added it and the one that removed it — each looked like a reason
+ * to redeploy. Firebase skips such a deploy as unchanged, correctly, so the
+ * timestamp the check waits for never arrives and it stays red for good.
+ */
+describe('what counts as a change to the deployed package', () => {
+  it('excludes an installed dependency tree', () => {
+    assert.deepEqual(
+      [...FUNCTIONS_SOURCE_PATHSPECS],
+      ['cloud/functions', ':(exclude)cloud/functions/node_modules'],
+    )
+    const withModules = git([
+      'log', '-1', '--format=%H', 'HEAD', '--', FUNCTIONS_SOURCE_PATH,
+    ]).trim()
+    const withoutModules = git([
+      'log', '-1', '--format=%H', 'HEAD', '--', ...FUNCTIONS_SOURCE_PATHSPECS,
+    ]).trim()
+  // Both resolve; the exclusion may or may not move the answer depending on
+  // where HEAD sits, but it must never widen it.
+    assert.ok(withModules.length === 40)
+    assert.ok(withoutModules.length === 40)
   })
 })
