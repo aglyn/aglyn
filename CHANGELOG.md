@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.101 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/41c7a50cd...v1.0.0-beta.101)
+
+### Fixed
+
+- **theme:** the marketing hosts are matched in the form the route carries ([AGL-2703](https://linear.app/aglyn/issue/AGL-2703))
+
 ## v1.0.0-beta.100 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/8e14d6849...v1.0.0-beta.100)
