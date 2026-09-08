@@ -134,7 +134,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 /** Weekday (0 = Sunday … 6 = Saturday) of an instant in a timezone. */
 function weekdayIn(atMs: number, timezone: string): number {
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  let label = 'Sun'
+  let label: string
   try {
     label = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
