@@ -51,6 +51,34 @@
  */
 export const TABLE_ROW_HEIGHT = 48
 
+/**
+ * The room a list reserves for its empty state, in pixels.
+ *
+ * MUI X sizes the no-rows overlay from `--DataGrid-overlayHeight` and falls
+ * back to two rows when nothing sets it. The console's empty state is taller
+ * than that on every list: a 120px illustration, a label, a create button and
+ * the paddings around them come to about 230px before a single line of
+ * description is counted. The overlay is centered in its slot and
+ * `.MuiDataGrid-main` clips what leaves it, so an empty state larger than the
+ * slot is not merely cramped — half of it is drawn over the column headers and
+ * the rest is cut off mid-sentence.
+ *
+ * 360 is that composition plus about six wrapped lines of description at
+ * body-2's 20px line box; the longest ones in the console today wrap to three
+ * or four against the 420px the description is capped at. The slack is the
+ * point. Reserving too much leaves an empty list looking airy, which is a
+ * paragraph of whitespace; reserving too little does not leave a gap, it puts
+ * the illustration back on the headers, and it does so on whichever list
+ * someone has just given a longer sentence.
+ *
+ * One number for every list, so that an empty list is the same height
+ * whichever one a reader is standing in, and so that no single call site's
+ * copy can make the reserve wrong. The loading overlay is sized from the same
+ * variable, so a list that comes back empty does not change height when the
+ * read lands.
+ */
+export const TABLE_EMPTY_STATE_HEIGHT = 360
+
 export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 /**
