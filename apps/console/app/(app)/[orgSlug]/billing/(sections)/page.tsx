@@ -394,9 +394,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     if (!subscribeCheckoutPending(orgId)) return
     reportPlatformAdConversion('subscribe', platformAdvertisingAllowed(), {
       transactionId: orgId,
+      // Enhanced conversions (AGL-2683): the signed-in buyer's address, hashed
+      // by the tag in the browser, so the subscription can be matched to the
+      // click after the cookie is gone.
+      userData: { email: user?.email },
     })
     clearSubscribeCheckoutPending()
-  }, [orgId, subscriptionActive])
+  }, [orgId, subscriptionActive, user?.email])
 
   const cancelAtPeriodEnd =
     (org?.subscription as any)?.cancelAtPeriodEnd === true

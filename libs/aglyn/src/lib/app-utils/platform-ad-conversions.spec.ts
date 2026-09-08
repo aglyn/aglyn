@@ -140,6 +140,55 @@ describe('reporting one', () => {
     expect(gtag).not.toHaveBeenCalled()
   })
 
+  it('sets the email as user_data right before the event — enhanced conversions', async () => {
+    /*
+     * AGL-2683. The tag hashes the address in the browser; what this asserts
+     * is the ORDER and the SHAPE: a `set user_data` immediately ahead of the
+     * `conversion` event, carrying the normalized address, so the hash rides
+     * this ping and not a later one.
+     */
+    const mod = await loadWith(AGLYN)
+    const gtag = jest.fn()
+    ;(globalThis as Record<string, unknown>)['gtag'] = gtag
+
+    expect(
+      mod.reportPlatformAdConversion('signup', true, {
+        userData: { email: '  Owner@Example.COM ' },
+      }),
+    ).toBe(true)
+    expect(gtag.mock.calls).toEqual([
+      ['set', 'user_data', { email: 'owner@example.com' }],
+      ['event', 'conversion', { send_to: 'AW-18401436785/AS8ICPWfmekcEPHIvsZE' }],
+    ])
+  })
+
+  it('sets no user_data without an email, and none for a blank one', async () => {
+    const mod = await loadWith(AGLYN)
+    const gtag = jest.fn()
+    ;(globalThis as Record<string, unknown>)['gtag'] = gtag
+
+    mod.reportPlatformAdConversion('signup', true)
+    mod.reportPlatformAdConversion('signup', true, { userData: { email: '   ' } })
+    mod.reportPlatformAdConversion('signup', true, { userData: { email: null } })
+    expect(gtag.mock.calls.filter(([verb]) => verb === 'set')).toEqual([])
+    expect(gtag).toHaveBeenCalledTimes(3)
+  })
+
+  it('sets no user_data for a visitor who refused, even with an email in hand', async () => {
+    // The consent door is the same door: a refused visitor's address must not
+    // reach the tag any more than their conversion may.
+    const mod = await loadWith(AGLYN)
+    const gtag = jest.fn()
+    ;(globalThis as Record<string, unknown>)['gtag'] = gtag
+
+    expect(
+      mod.reportPlatformAdConversion('signup', false, {
+        userData: { email: 'owner@example.com' },
+      }),
+    ).toBe(false)
+    expect(gtag).not.toHaveBeenCalled()
+  })
+
   it('does not throw when no tag has booted', async () => {
     /*
      * `gtag` is defined by the Analytics tag, which does not exist for a

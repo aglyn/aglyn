@@ -203,7 +203,26 @@ jobs:
       - if: steps.moved.outputs.skip != 'true'
         run: npm ci --prefix apps/docs
 
+      # `TYPECHECK_CONCURRENCY` because this runner has 4 vCPU and 16 GB, and
+      # the script's own sizing reads only the FIRST of those (AGL-2684). It
+      # picks its worker count from `cores - loadavg()`, which on an idle
+      # 4-core runner is 4 every time — and four `@typescript/native` programs
+      # for apps/console, apps/tenant, cloud/functions and libs/aglyn are
+      # resident together in the first wave, because those four are what the
+      # workers reach for once the two trivial console-e2e configs clear in
+      # under a second. In the green runs that wave is a 69-second gap with no
+      # output; in the red ones the job is SIGTERM'd inside it, 66-80s in,
+      # with no `error TS` anywhere and two or three live `tsc` processes left
+      # to be reaped as orphans. CPU headroom cannot see a memory ceiling, so
+      # the load average reads the same on both.
+      #
+      # nx-ci.yml runs these same 145 configs without this because it shards
+      # them across three runners (AGL-2505), which puts the heavy four on
+      # different machines. This job compiles the whole workspace on one, so
+      # the budget has to be stated here.
       - if: steps.moved.outputs.skip != 'true'
+        env:
+          TYPECHECK_CONCURRENCY: '2'
         run: npm run typecheck
       - if: steps.moved.outputs.skip != 'true'
         run: npx nx run docs:typecheck
@@ -307,7 +326,12 @@ jobs:
       - run: npm ci --prefix cloud/functions
       - run: npm ci --prefix apps/docs
 
-      - run: npm run typecheck
+      # Same 4-vCPU / 16 GB ceiling as the fast job above (AGL-2684). This job
+      # has never been seen to die in that wave, but it runs the identical
+      # command on the identical runner, so it sits on the same edge.
+      - env:
+          TYPECHECK_CONCURRENCY: '2'
+        run: npm run typecheck
       - run: npx nx run docs:typecheck
       - run: npx nx run-many -t lint --all --parallel=3
       - run: node tools/scripts/run-guards.mjs --concurrency 4

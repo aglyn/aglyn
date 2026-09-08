@@ -164,19 +164,18 @@ describe('every staff-writable quota has a non-comment reader (AGL-2133)', () =>
       .filter((file) => !EXCLUDED.includes(file))
     expect(candidates.length).toBeGreaterThan(1)
 
-    // What survives the filter is exactly one file, and its mention is not a
-    // comment at all but a STRING: `build-pricing-tables.mts` records in
-    // `EXPECTED_EXTRA` why the published compare table carries a row the
-    // codegen deliberately does not emit (AGL-1278). Named here rather than
-    // stripped, because the obvious generalisation is wrong — extending the
-    // stripper to string literals was measured to leave `servicesPerHost`,
+    // What survives the filter is nothing: every one of those mentions is a
+    // comment, and the stripper drops them all. That empty set is the whole
+    // point — a retired quota has no reader, and a guard that reported one
+    // would be reading epitaphs. The stripper is deliberately comment-only:
+    // extending it to string literals was measured to leave `servicesPerHost`,
     // `redirectsPerHost`, `inventoryLocations` and `extraDataGbMonthlyUsd`
     // with NO reader at all, since a quota handed to a checker as `'key'` is a
-    // perfectly real read. So the stripper stays comment-only and the single
-    // documented string is stated (AGL-2365).
-    expect(readerFiles('totalSiteSizeMb')).toEqual([
-      'tools/marketing/build-pricing-tables.mts',
-    ])
+    // perfectly real read (AGL-2365). The one string that used to name this
+    // quota — `build-pricing-tables.mts` explaining a compare-table row the
+    // codegen did not emit — left with that exemption (AGL-2679), so a string
+    // mention reappearing here is a real reader and must be accounted for.
+    expect(readerFiles('totalSiteSizeMb')).toEqual([])
   })
 
   it.each(

@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.90 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.89...v1.0.0-beta.90)
+
+### Added
+
+- **console:** the sign-up and subscribe conversions carry hashed user_data ([AGL-2683](https://linear.app/aglyn/issue/AGL-2683))
+- **tools:** `analyze:chunks` reads what the chunker actually emitted ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682))
+
+### Fixed
+
+- **ci:** the main gate's typecheck gets a memory budget, not just a CPU one ([AGL-2684](https://linear.app/aglyn/issue/AGL-2684))
+- **pricing:** the /pricing frames catch up, and four exemptions come out ([AGL-2679](https://linear.app/aglyn/issue/AGL-2679))
+
+### Performance
+
+- **tenant:** a console-only equality check drags 60 packages onto every page ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **release:** beta.89 names the gtag loader fix that shipped inside it ([AGL-2681](https://linear.app/aglyn/issue/AGL-2681))
+
+</details>
+
 ## v1.0.0-beta.89 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.87...v1.0.0-beta.89)

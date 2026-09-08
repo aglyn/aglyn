@@ -5,7 +5,7 @@
   "frameName": "Pricing — Tablet",
   "frameSize": {
     "width": 768,
-    "height": 8014
+    "height": 8074
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -319,7 +319,7 @@
               "name": "Frame",
               "cells": [
                 "Agency",
-                "$799 /mo"
+                "$1299 /mo"
               ]
             },
             {
@@ -371,7 +371,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 768,
-      "heightPx": 2780,
+      "heightPx": 2840,
       "groups": [
         {
           "figmaNodeId": "572:3095",
@@ -434,7 +434,7 @@
                 "$139",
                 "$249",
                 "$399",
-                "$799",
+                "$1299",
                 "Custom"
               ]
             },
@@ -487,21 +487,6 @@
                 "30 GB",
                 "40 GB",
                 "60 GB",
-                "Talk to us"
-              ]
-            },
-            {
-              "figmaNodeId": "572:3199",
-              "name": "row",
-              "cells": [
-                "Total site size",
-                "100 MB",
-                "1 GB",
-                "5 GB",
-                "25 GB",
-                "37.5 GB",
-                "50 GB",
-                "100 GB",
                 "Talk to us"
               ]
             },
@@ -708,6 +693,21 @@
               ]
             },
             {
+              "figmaNodeId": "1728:662",
+              "name": "row",
+              "cells": [
+                "Single sign-on (SAML/OIDC)",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "✓"
+              ]
+            },
+            {
               "figmaNodeId": "572:3467",
               "name": "grp",
               "cells": [
@@ -870,13 +870,28 @@
               "cells": [
                 "Email sends / mo",
                 "—",
-                "500",
+                "—",
                 "5,000",
                 "25,000",
                 "40,000",
                 "65,000",
                 "130,000",
                 "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "1728:643",
+              "name": "row",
+              "cells": [
+                "Send email from your own domain",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
               ]
             },
             {
@@ -1108,7 +1123,7 @@
               "name": "row",
               "cells": [
                 "CDN & responsive images",
-                "—",
+                "✓",
                 "✓",
                 "✓",
                 "✓",
@@ -1441,8 +1456,8 @@
               "name": "r",
               "cells": [
                 "Media & file storage",
-                "$0.03 / GB-mo",
-                "$0.039 / GB-mo"
+                "$0.026 / GB-mo",
+                "$0.0338 / GB-mo"
               ]
             },
             {
@@ -1459,8 +1474,8 @@
               "name": "r",
               "cells": [
                 "Form submissions",
-                "$0.50 / 1k",
-                "$0.65 / 1k"
+                "$0.05 / 1k",
+                "$0.065 / 1k"
               ]
             },
             {

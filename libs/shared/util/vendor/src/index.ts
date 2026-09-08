@@ -16,7 +16,23 @@
  */
 
 export * from './lib/change-case'
-export * from './lib/deep-equal'
+// deep-equal is NOT re-exported (AGL-2682), the same removal as
+// `platform-identification` below and by far the most expensive of the three.
+// `deep-equal` is an es-shim package: it reaches `object-inspect`,
+// `get-intrinsic`, `object-keys`, `es-get-iterator` and 47 more, and every
+// one of them rode this line onto every published customer page. Measured on
+// `aglyn.com/solutions/small-business` from the production source maps:
+// **51 packages, 47.6 KB raw**, in a chunk no visitor executes.
+//
+// It also explains a Lighthouse finding that looked like ours and was not.
+// The "Legacy JavaScript — `Object.assign` / `Object.is` / `Object.keys`
+// shims" charged against `42sr79qh0v5oi.js` is `object.assign`, `object-is`
+// and `object-keys` — members of THIS tree, not polyfills Next emitted for a
+// stale browserslist, and no browserslist setting would have moved them.
+//
+// The one consumer is `apps/console/components/theme-editor`, which is
+// console-only and now takes the deep import. Still importable as
+// `@aglyn/shared-util-vendor/deep-equal`.
 // fuse is NOT re-exported (AGL-2486), for the reason recorded below for
 // `platform-identification` and measured the same way. `export *` here put
 // `fuse.js` in front of every file that takes anything at all from this
