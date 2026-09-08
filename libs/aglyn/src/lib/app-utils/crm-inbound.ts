@@ -335,7 +335,7 @@ export function stripQuotedHistory(text: string): string {
 export function crmInboundExcerpt(text: unknown, html?: unknown): string {
   let body = String(text ?? '')
   if (!body.trim() && html) body = htmlToPlainText(html)
-  body = body.replace(/\r\n?/g, '\n').replace(/ /g, ' ')
+  body = body.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
   const forwarded = forwardedSection(body)
   if (forwarded) body = forwarded.body
   body = stripQuotedHistory(body)
