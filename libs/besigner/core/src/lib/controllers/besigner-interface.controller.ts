@@ -20,7 +20,6 @@ import { cloneDeep } from '@aglyn/shared-util-tools'
 import defaultsDeep from 'lodash-es/defaultsDeep'
 import isEqual from 'lodash-es/isEqual'
 import { BehaviorSubject } from 'rxjs'
-// import {persist} from 'effector-storage/local'
 import {
   BesignerDeviceFlag,
   BesignerPanelViewFlag,

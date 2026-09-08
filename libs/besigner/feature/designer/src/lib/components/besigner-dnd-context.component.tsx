@@ -30,7 +30,6 @@ import {
 import { getEventCoordinates } from '@dnd-kit/utilities'
 import type { BackendFactory } from 'dnd-core'
 import { DndProvider } from 'react-dnd'
-// import {TouchBackend} from 'react-dnd-touch-backend'
 import { HTML5Backend } from 'react-dnd-html5-backend'
 
 export const snapDraggingToCursor: Modifier = ({
