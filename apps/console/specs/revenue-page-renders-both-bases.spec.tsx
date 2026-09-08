@@ -298,21 +298,25 @@ describe('the accounting positions are STATED, not merely computed', () => {
     )
   })
 
-  it('flags storefront renewals that absorb the card cost', async () => {
+  it('counts storefront subscription cycles, and says which one reports no take', async () => {
+    // Since AGL-2655 a subscription cycle carries the card cost as a rate, so
+    // the page no longer flags renewals as absorbed; it names the one cycle a
+    // re-price cannot reach — the cycle billed before the re-price landed.
     render(<AdminRevenue />)
-    await waitFor(() =>
-      expect(
-        screen.getByText(/4 storefront subscription renewals recover no card cost/i),
-      ).toBeTruthy(),
-    )
+    expect(
+      await screen.findByText(
+        /4 storefront subscription cycles — one billed before its re-price reports no take/i,
+      ),
+    ).toBeTruthy()
   })
 
   it('says sales tax is the state money, and shows it as a deduction', async () => {
     render(<AdminRevenue />)
-    await waitFor(() =>
-      expect(screen.getByText(/Held and remitted, never revenue/i)).toBeTruthy(),
-    )
-    expect(screen.getByText('−$190.00')).toBeTruthy()
+    // The figure is the assertion the row's caption cannot stand in for: the
+    // caption is static and renders before the report lands, the deduction
+    // only once it has.
+    expect(await screen.findByText('−$190.00')).toBeTruthy()
+    expect(screen.getByText(/Held and remitted, never revenue/i)).toBeTruthy()
   })
 })
 
