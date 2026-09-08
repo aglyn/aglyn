@@ -114,15 +114,16 @@ cannot change it.
 
 A contact's, a lead's and a deal's page each carry **Send email**: one message,
 from you, to the person the record is about. It is a letter, not a campaign —
-there is no audience, no template and no unsubscribe footer — and it is logged on
-the timeline the moment it leaves, with its delivery state following.
+there is no audience, no designed layout and no unsubscribe footer — and it is
+logged on the timeline the moment it leaves, with its delivery state following.
 
 | Field | What it is |
 | --- | --- |
 | **To** | The record's own address. It cannot be changed here: a deal writes to its contact, a lead to the address it was captured with. |
 | **From** | The site's sending address — the same identity campaigns and transactional mail leave on — with your name in front of it. |
 | **Reply-to** | Your own address, so a reply lands in your inbox rather than the site's mailbox. |
-| **Subject** and **Message** | What you write. The message is plain text; a blank line starts a new paragraph. |
+| **Template** | A saved letter to start from — fills in the subject and the message. Shown once the workspace has one; see [Email templates & snippets](./email-templates.md). |
+| **Subject** and **Message** | What you write. The message is plain text; a blank line starts a new paragraph. **Insert** drops a snippet or a merge field — `{{contact.firstName}}`, `{{deal.amount}}` — at the cursor, filled in from the record when the email is sent, and **Save as template…** keeps the draft for next time. |
 
 The send is refused, and the dialog says why, when:
 
@@ -182,6 +183,7 @@ whole log lives.
 - [CRM overview](./overview.md)
 - [The contact record](./contact-record.md) — the page a contact's timeline lives on
 - [Tasks & follow-ups](./tasks.md) — what is owed, as opposed to what happened
+- [Email templates & snippets](./email-templates.md) — the letters **Send email** starts from, and the merge fields it fills in
 - [Automations for the CRM](./automations.md) — the **Log a CRM activity** step, and how a **Send an email** step lands on the timeline
 - [Sending domains](../../marketing-and-automation/email-campaigns/overview.md#sending-domains) — the identity a one-to-one email leaves on
 - [REST API — activities](/api/resources/activities)
