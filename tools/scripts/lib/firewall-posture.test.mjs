@@ -207,6 +207,7 @@ function healthyConsoleConfig() {
     '/api/email/events',
     '/api/campaigns/process-scheduled',
     '/api/lists/materialize',
+    '/api/crm/inbound',
   ]
   return {
     firewallEnabled: true,
@@ -571,7 +572,7 @@ test('a THIRTEENTH group for an undeclared path fails', () => {
   })
   const result = evalConsole(config)
   assert.equal(result.ok, false)
-  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq one of 14 declared paths/)
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq one of 15 declared paths/)
 })
 
 test('the finding NAMES what the offending group bypasses', () => {
