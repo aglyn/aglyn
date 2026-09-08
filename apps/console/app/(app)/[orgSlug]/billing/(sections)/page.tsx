@@ -48,6 +48,7 @@ import {
   useLoading,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -98,7 +99,6 @@ import { getBrowserStripe } from '../../../../../utils/browser-stripe'
 import { prorationQuote } from '../../../../../utils/proration-quote'
 import { purchaseConfirmQuote } from '../../../../../utils/purchase-confirm-quote'
 import { subscriptionPeriodNotice } from '../../../../../utils/subscription-period-notice'
-import CardColumns from '../../../../../components/card-columns.component'
 import {
   clearSubscribeCheckoutPending,
   markSubscribeCheckoutPending,

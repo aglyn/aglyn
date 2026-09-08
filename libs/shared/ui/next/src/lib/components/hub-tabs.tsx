@@ -149,6 +149,8 @@ export function HubTabs(props: HubTabsProps) {
   return (
     <TabContext value={tab}>
       <GridItems
+        // A navigation column beside its content, not a set of cards.
+        masonry={false}
         spacing={3}
         items={[
           {
@@ -283,6 +285,8 @@ export function HubSections(props: HubSectionsProps) {
 
   return (
     <GridItems
+      // The same navigation-beside-content split as above.
+      masonry={false}
       spacing={3}
       items={[
         {

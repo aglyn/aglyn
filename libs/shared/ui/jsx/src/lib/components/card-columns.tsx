@@ -90,7 +90,7 @@ export interface CardColumnsProps {
  * table in half. Below `md` the count drops to one and the cards read in
  * their authored order, which is the same collapse the flex grid had.
  */
-export default function CardColumns({
+export function CardColumns({
   items,
   columns = 2,
   spacing = 3,
@@ -135,3 +135,5 @@ export default function CardColumns({
     </Box>
   )
 }
+
+export default CardColumns

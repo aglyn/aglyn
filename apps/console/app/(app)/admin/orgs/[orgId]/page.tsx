@@ -33,7 +33,9 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -67,7 +69,6 @@ import { SITE_LOGO_HINT } from '../../../../../constants/media-size-hints'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
-import CardColumns from '../../../../../components/card-columns.component'
 import StaffOnly from '../../../../../components/staff-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'

@@ -28,6 +28,7 @@ import {
   Container,
   GridItems,
 } from '@aglyn/shared-ui-jsx'
+import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -50,7 +51,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
-import CardColumns from '../../../../../components/card-columns.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import MainLayout from '../../../../../components/layouts/main.layout'

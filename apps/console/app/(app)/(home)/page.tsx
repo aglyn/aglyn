@@ -466,6 +466,8 @@ function OrgJump() {
                 </Typography>
               </Box>
               <GridItems
+                // A gallery of workspace tiles, each the same shape. Rows are the point.
+                masonry={false}
                 spacing={3}
                 items={visibleOrgs.map((org) => ({
                   size: { xs: 12, sm: 6, md: 4 },

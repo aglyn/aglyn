@@ -34,6 +34,8 @@ export const GridButtons = forwardRef<any, GridButtonsProps<any>>(
     const { items = [], ItemComponent = Button, ...rest } = props
     return (
       <GridItems
+        // Buttons. Stacking them into columns would read as a menu, not a row.
+        masonry={false}
         ref={ref}
         items={items.map(({ GridItemProps, ...item }) => ({
           children: <ItemComponent {...item} />,

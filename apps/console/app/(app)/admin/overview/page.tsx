@@ -178,6 +178,8 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
             </Alert>
           ) : null}
           <GridItems
+            // A band of stat figures of equal height, which a row already aligns.
+            masonry={false}
             spacing={3}
             items={[
               ...[

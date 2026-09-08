@@ -268,6 +268,8 @@ function HostsContent() {
             basePath={buildRoute(Route.ORG_CRM, { orgSlug })}
           />
         <GridItems
+          // Site tiles, all one shape, read left to right. Rows are the point.
+          masonry={false}
           spacing={3}
           items={[
             ...(data || []).map((host) => ({

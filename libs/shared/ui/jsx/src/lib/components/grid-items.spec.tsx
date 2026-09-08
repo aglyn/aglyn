@@ -55,8 +55,21 @@ describe('GridItems masonry', () => {
     {size: {xs: 12}, children: card('storage-cap')},
   ]
 
-  it('leaves the plain row layout alone when `masonry` is not set', () => {
+  /*
+   * Cards of unequal height are the common case, so masonry is what a caller
+   * gets without asking. A ROW is now the deliberate choice — tiles, buttons,
+   * a navigation column beside its content — and it is spelled out.
+   */
+  it('gives masonry to a caller that asks for nothing', () => {
     const {baseElement} = render(<GridItems items={billingItems} spacing={3} />)
+    expect(baseElement.querySelector('.MuiGrid-container')).toBeNull()
+    expect(baseElement.querySelectorAll('[data-card]')).toHaveLength(4)
+  })
+
+  it('leaves the plain row layout alone when `masonry` is switched off', () => {
+    const {baseElement} = render(
+      <GridItems items={billingItems} spacing={3} masonry={false} />,
+    )
     // The untouched path is still MUI's flex Grid container, and every item is
     // a direct child of it rather than being wrapped in a column.
     const container = baseElement.querySelector('.MuiGrid-container')

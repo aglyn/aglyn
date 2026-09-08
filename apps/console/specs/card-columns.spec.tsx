@@ -33,9 +33,10 @@
 import { render } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import CardColumns, {
+import {
+  CardColumns,
   type CardColumnsProps,
-} from '../components/card-columns.component'
+} from '@aglyn/shared-ui-jsx/components/card-columns'
 
 /** Every rule emotion emitted for the rendered tree, as text. */
 const stylesheet = () =>

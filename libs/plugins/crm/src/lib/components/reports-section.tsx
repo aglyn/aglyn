@@ -19,7 +19,9 @@
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { mdiRefresh } from '@aglyn/shared-data-mdi'
-import { GridItems, MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  MdiIcon } from '@aglyn/shared-ui-jsx'
+import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import {
   Button,
   Stack,
@@ -204,70 +206,46 @@ export function ContactsReportsSection(props: ConsolePluginPageProps) {
         </Stack>
       </Stack>
       {report ? (
-        <GridItems
-          /*
-            MASONRY, not rows. These cards are as tall as the data behind
-            them — a funnel of stages against a fixed bar chart — and a row
-            is as tall as its tallest card, so the shorter one leaves a hole
-            the length of the difference. Measured on a live page before this
-            changed: 271, 272 and 111 pixels of dead space down one report,
-            and an odd card stranded with an empty column beside it.
-          */
-          masonry
-          spacing={2}
-          items={[
-            {
-              key: 'trend',
-              size: { xs: 12, lg: 6 },
-              children: (
-                <ContactsTrendCard report={report} totalContacts={totalContacts} />
-              ),
-            },
-            {
-              key: 'mix',
-              size: { xs: 12, lg: 6 },
-              children: (
-                <ContactsMixCard report={report} totalContacts={totalContacts} />
-              ),
-            },
-            {
-              key: 'source-conversion',
-              size: { xs: 12, lg: 6 },
-              children: <SourceConversionCard report={report} />,
-            },
-            {
-              key: 'lead-funnel',
-              size: { xs: 12, lg: 6 },
-              children: <LeadFunnelCard report={report} hostId={hostId} />,
-            },
-            {
-              key: 'pipeline',
-              size: { xs: 12, lg: 6 },
-              children: <PipelineCard report={report} />,
-            },
-            {
-              key: 'closed-deals',
-              size: { xs: 12, lg: 6 },
-              children: <ClosedDealsCard report={report} />,
-            },
-            {
-              key: 'won-lost-by-owner',
-              size: { xs: 12, lg: 6 },
-              children: <WonLostByOwnerCard report={report} />,
-            },
-            {
-              key: 'activity',
-              size: 12,
-              children: <ActivityCard report={report} />,
-            },
-            {
-              key: 'forecast',
-              size: 12,
-              children: <ForecastCard report={report} />,
-            },
-            { key: 'tasks', size: 12, children: <TasksCard report={report} /> },
-          ]}
-        />
+        <>
+          {/*
+            The same masonry the billing and staff pages use: columns as tall
+            as their own contents, so a short card beside a tall one leaves no
+            hole. Measured live before this changed — 271, 272 and 111 pixels
+            of dead space down one report, and an odd card stranded with an
+            empty column beside it.
+          */}
+          <CardColumns
+            spacing={2}
+            items={[
+              {
+                key: 'trend',
+                children: (
+                  <ContactsTrendCard report={report} totalContacts={totalContacts} />
+                ),
+              },
+              {
+                key: 'mix',
+                children: (
+                  <ContactsMixCard report={report} totalContacts={totalContacts} />
+                ),
+              },
+              { key: 'source-conversion', children: <SourceConversionCard report={report} /> },
+              { key: 'lead-funnel', children: <LeadFunnelCard report={report} hostId={hostId} /> },
+              { key: 'pipeline', children: <PipelineCard report={report} /> },
+              { key: 'closed-deals', children: <ClosedDealsCard report={report} /> },
+              { key: 'won-lost-by-owner', children: <WonLostByOwnerCard report={report} /> },
+            ]}
+          />
+          {/*
+            Outside the columns: multicol cannot span, and these three read
+            across the full width.
+          */}
+          <Stack spacing={2}>
+            <ActivityCard report={report} />
+            <ForecastCard report={report} />
+            <TasksCard report={report} />
+          </Stack>
+        </>
       ) : (
         <Typography variant="body2" color="text.secondary">
           {'Loading…'}

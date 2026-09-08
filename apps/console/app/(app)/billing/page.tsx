@@ -200,6 +200,8 @@ function BillingEntry() {
                 </Typography>
               </Box>
               <GridItems
+                // The workspace tiles again, picked from rather than read down.
+                masonry={false}
                 spacing={3}
                 items={visibleChoices.map((org) => ({
                   size: { xs: 12, sm: 6, md: 4 },
