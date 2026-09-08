@@ -332,6 +332,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'raw',
     why: 'The product.image and collection.image page tokens substitute the stored string straight into a merchant\'s own page copy, with no resolver between the store and the render.',
   },
+  'libs/plugins/crm/src/lib/components/record-files-card.tsx': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "A thumbnail of a file the team attached to a CRM record, drawn on the record page in the console. The reader is a member of the workspace that uploaded it, so the IP at risk is the team's own, not a visitor's. The `src` is `resolveMediaSrc` over a reference this card builds itself from the org id and a stored media id — no author string reaches it — and a file the reader may not see resolves to nothing and is listed by name with no image.",
+  },
   'libs/plugins/email/src/lib/components/email-blocks.tsx': {
     markers: 1,
     guard: 'off-tenant',
