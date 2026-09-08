@@ -66,8 +66,21 @@ import {
   type Verdict,
 } from '../status-model'
 
-/** How often an open tab re-reads every target. */
-const REFRESH_MS = 60_000
+/**
+ * How often a VISIBLE tab re-reads every target.
+ *
+ * `refresh` probes every configured target at once, and `DOCS_STATUS_TARGETS`
+ * currently names six — four of them the console's health doors, which are
+ * `force-dynamic` with `revalidate = 0` by design and call Stripe, GA4, GCS and
+ * Firestore on every hit (AGL-2687). At the old 60s that was 8,640 door
+ * invocations a day for one tab somebody forgot to close, against the most
+ * expensive routes in the estate.
+ *
+ * Five minutes because that is the cadence of the UptimeRobot monitors watching
+ * the same doors, and nobody reading a status page needs finer than the
+ * monitors that page it.
+ */
+const REFRESH_MS = 300_000
 
 export default function StatusPage(): ReactElement {
   const { siteConfig } = useDocusaurusContext()
@@ -98,11 +111,45 @@ export default function StatusPage(): ReactElement {
     setCheckedAt(new Date().toLocaleTimeString())
   }, [targets])
 
+  // A HIDDEN tab probes nothing (AGL-2687), and the guard has to be explicit:
+  // the browser's own background-timer throttle floors at roughly one tick a
+  // minute, which is slower than nothing but still leaves a status page open in
+  // a window nobody is looking at fanning out to six health doors forever.
+  //
+  // Re-showing probes immediately rather than waiting out the interval, so a
+  // reader returning to the tab sees now rather than a reading up to five
+  // minutes old. Cheaper and fresher are the same change here.
   useEffect(() => {
     if (!targets.length) return undefined
-    void refresh()
-    const timer = setInterval(() => void refresh(), REFRESH_MS)
-    return () => clearInterval(timer)
+    let timer: ReturnType<typeof setInterval> | undefined
+    const stop = () => {
+      if (timer !== undefined) clearInterval(timer)
+      timer = undefined
+    }
+    const start = () => {
+      if (timer !== undefined) return
+      void refresh()
+      timer = setInterval(() => void refresh(), REFRESH_MS)
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') stop()
+      else start()
+    }
+    // Guarded rather than assumed: this page prerenders under Docusaurus, and
+    // the effect body is client-only, but a jsdom test environment can hand us
+    // a document with no `visibilityState` at all.
+    if (document.visibilityState === 'hidden') {
+      // Nothing is probed until the tab is looked at — including the mount
+      // probe, which would otherwise fan out six requests for a tab opened in
+      // the background by a middle-click.
+    } else {
+      start()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      stop()
+    }
   }, [refresh, targets.length])
 
   const overall = overallStatus(targets, readings)
@@ -182,7 +229,7 @@ export default function StatusPage(): ReactElement {
 
         <p style={{ marginTop: '1.5rem', fontSize: '0.85rem', color: 'var(--ifm-color-emphasis-600)' }}>
           {checkedAt ? `Last checked ${checkedAt}. ` : ''}
-          Rechecks every minute.{' '}
+          Rechecks every five minutes while this tab is open.{' '}
           <button
             type="button"
             onClick={() => void refresh()}
@@ -207,7 +254,8 @@ export default function StatusPage(): ReactElement {
         <h2 style={{ fontSize: '1.1rem' }}>What this page does and does not tell you</h2>
         <p style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-700)' }}>
           Each service is checked <strong>live from your browser</strong> when this page
-          loads and every minute after that. Each check reaches a real dependency —
+          loads and every five minutes after that, for as long as this tab is the one
+          you are looking at. Each check reaches a real dependency —
           the data store, or an actual page render — rather than only asking whether
           the server answered. A service is shown as operational only when it returns
           its own health report saying so; anything this page cannot read is reported

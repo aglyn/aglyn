@@ -223,7 +223,29 @@ jobs:
           nx-head: ${{ needs.base.outputs.head }}
           cache-scope: typecheck-${{ matrix.shard }}
 
+      # `TYPECHECK_CONCURRENCY` for the same reason main-gate.yml states it
+      # (AGL-2684): the script sizes its worker pool from `cores - loadavg()`,
+      # which on an idle 4-vCPU runner is 4, and four `@typescript/native`
+      # programs resident together exhaust the 16 GB before any of them
+      # finishes. The job is SIGTERM'd mid-wave — exit 143, "the runner has
+      # received a shutdown signal", no `error TS` anywhere, live `tsc`
+      # processes reaped as orphans.
+      #
+      # AGL-2684 set the budget on main-gate.yml only, on the reasoning that
+      # sharding here "puts the heavy four on different machines". It does
+      # not, and the shard map says so: `shardConfigs` takes a CONTIGUOUS
+      # slice of a sorted list — deliberately, so sibling configs share a
+      # runner's compiler cache — and sorted order puts `apps/console`,
+      # `apps/tenant`, `cloud/functions` and `libs/aglyn` inside the first 51
+      # entries. All four land in shard 1, every time, which is why shard 1 is
+      # the one that dies. Measured on run 34229566106: `typecheck (1)`
+      # SIGTERM'd 75s in, two configs deep, on PR #1006.
+      #
+      # Contiguity is the right call and is not what changes here; the budget
+      # belongs on the job that has to survive the cluster it produces.
       - run: npm run typecheck -- --shard=${{ matrix.shard }}/3
+        env:
+          TYPECHECK_CONCURRENCY: '2'
 
   # Everything that is neither affected-scoped nor the type gate: the
   # generated-artifact checks, the tools/ self-tests, the weight and price

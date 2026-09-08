@@ -354,9 +354,16 @@ describe('THE ONE THAT MATTERS: ?download=1 widens nothing (AGL-1411)', () => {
     expect((await serve(['org:acme'], { download: '1' })).statusCode).toBe(400)
   })
 
-  it('does not survive a stale content hash on the immutable URL', async () => {
+  it('rides the stale-hash redirect rather than being dropped at it', async () => {
+    // AGL-2685 turned this exit from a 404 into a 302. The disposition is a
+    // query parameter, so a redirect that forgot it would hand the press kit
+    // a link that opens a tab instead of saving — the exact defect AGL-1411
+    // exists to prevent, reintroduced one layer down.
     const res = await serve(['org:acme', 'm1', 'stalehash'], { download: '1' })
-    expect(res.statusCode).toBe(404)
+    expect(res.statusCode).toBe(302)
+    expect(res.headers['location']).toBe(
+      '/api/media/cdn/org:acme/m1?download=1',
+    )
   })
 })
 

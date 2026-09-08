@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.92",
+  "version": "1.0.0-beta.93",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -114,6 +114,7 @@
     "test:firebase-credential-message": "node --test tools/scripts/lib/firebase-credential-message.test.mjs",
     "test:typecheck-shard": "node --test tools/scripts/lib/typecheck-shard.test.mjs",
     "test:typecheck-scope": "node --test tools/scripts/lib/typecheck-scope.test.mjs",
+    "test:media-content-pins": "node tools/scripts/backfill-media-content-pins.mjs --self-test",
     "test:ttl-policies": "node --test tools/scripts/lib/ttl-policies.test.mjs",
     "test:dependency-egress": "node --test tools/scripts/lib/dependency-egress.test.mjs",
     "test:standalone-installs": "node --test tools/scripts/lib/standalone-installs.test.mjs",
