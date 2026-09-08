@@ -46,6 +46,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  InputAdornment,
   Stack,
   TextField,
   Typography,
@@ -54,8 +55,13 @@ import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { BookMeetingButton, insertLinkAtCaret } from './book-meeting-action'
+import {
+  CAPTURE_ADDRESS_HELPER,
+  CopyCaptureAddressButton,
+} from './copy-capture-address-button'
 import { CrmSitePicker } from './crm-site-picker'
 import { useCrmApi } from './use-crm-api'
+import { useCrmInboundAddress } from './use-crm-inbound-address'
 import { useEmailsHubPath } from './use-emails-hub-path'
 import {
   useCrmEmailTemplates,
@@ -177,6 +183,10 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
   const sendHostId = hostId ?? mount?.createHostId ?? null
   const crmApi = useCrmApi(sendHostId)
   const emailsHub = useEmailsHubPath(sendHostId)
+  // The capture address (AGL-2657), for the reply this send will get: the
+  // console logs what IT sends, so the address is shown to be forwarded
+  // to or copied from a mailbox, never put on this message.
+  const capture = useCrmInboundAddress(sendHostId, { enabled: open })
   // The Sending section of the Emails console — the page that fixes a
   // missing identity. `null` on a surface that cannot name the site's hub,
   // so the refusal prints the section's name instead of a link to nowhere.
@@ -626,6 +636,25 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
           helperText="Replies come to you, not to the site's mailbox."
           slotProps={{ input: { readOnly: true }, inputLabel: { shrink: true } }}
         />
+        {capture.status === 'ready' ? (
+          <TextField
+            size="small"
+            label="Log replies"
+            value={capture.address}
+            helperText={CAPTURE_ADDRESS_HELPER}
+            slotProps={{
+              input: {
+                readOnly: true,
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <CopyCaptureAddressButton address={capture.address} />
+                  </InputAdornment>
+                ),
+              },
+              inputLabel: { shrink: true },
+            }}
+          />
+        ) : null}
         {pickable.length ? (
           <CrmTemplatePicker
             templates={pickable}

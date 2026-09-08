@@ -177,6 +177,16 @@ straight on to the record when exactly one person matches. No match leaves the
 filtered list on screen, which is the honest answer for a capture the audience
 band dropped.
 
+## Capture replies {#capture-replies}
+
+The CRM sends [one-to-one email](./activities.md#sending-an-email) and
+follows its delivery, but the reply lands in your own mailbox. To file it
+on the record, forward it — or BCC your own outgoing mail — to the
+workspace's capture address, `crm+…@in.aglyn.com`, shown in the **Send
+email** dialog and under [CRM → Settings](./settings.md#email-capture).
+The message is filed on the timeline of the contact or lead it was with, as
+[Captured email](./activities.md#captured-email) describes.
+
 ## At the organization level
 
 The **CRM** tab under **Organization** opens the same hub over **every site in

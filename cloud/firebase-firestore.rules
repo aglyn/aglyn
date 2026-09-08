@@ -479,6 +479,15 @@ service cloud.firestore {
       // client that could clear it would lift a ceiling the org chose; one
       // that could set it would switch an assistant off at the band. Written
       // only by /api/billing/assist-overage (billing.manage), Admin SDK.
+      //
+      // `crmInbound` joins all three lists (AGL-2657). It holds the token
+      // that IS the workspace's email capture address: mail addressed to
+      // `crm+<token>@…` is filed on this org's records. A client that could
+      // write it could set another workspace's token here and have that
+      // workspace's captured mail land on its own timeline. Member-readable
+      // — the address is what a member pastes into a mailbox — and written
+      // only by the CRM's `inbound-address` route, Admin SDK, which mints
+      // and rotates it.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'sso',
@@ -489,7 +498,7 @@ service cloud.firestore {
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
-             'suspendedEnforcement'])) ||
+             'suspendedEnforcement', 'crmInbound'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -502,7 +511,7 @@ service cloud.firestore {
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
-             'erasureRequestedAt'])) ||
+             'erasureRequestedAt', 'crmInbound'])) ||
         // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
         // that helper is a READ gate too — `billing/stripe` and the member
         // roster ask it — and folding verification in would refuse those.
@@ -536,7 +545,8 @@ service cloud.firestore {
              // FOUND by, independently of the name it displays: a workspace
              // reachable by somebody else's brand, or reachable by nothing at
              // all while looking perfectly normal on the staff list.
-             'nameLower', 'nameTokens', 'nameReversed']));
+             'nameLower', 'nameTokens', 'nameReversed',
+             'crmInbound']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site

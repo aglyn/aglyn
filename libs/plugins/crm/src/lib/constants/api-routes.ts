@@ -47,6 +47,12 @@ export const CRM_API_ROUTES = {
    * (AGL-2639), read off the stamps; see `server/recipe-routes.ts`.
    */
   recipeStatus: 'crm/recipe-status',
+  /**
+   * `POST` — the workspace's email capture address (AGL-2657), minted on
+   * the first ask and replaced with `rotate: true`; see
+   * `server/inbound-address.ts`.
+   */
+  inboundAddress: 'crm/inbound-address',
 } as const
 
 /**

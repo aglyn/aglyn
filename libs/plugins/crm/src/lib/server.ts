@@ -92,6 +92,7 @@ import {
 import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-merge'
 import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
 import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
+import { CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler } from './server/inbound-address'
 import {
   CRM_RECIPE_INSTALL_ROUTE,
   CRM_RECIPE_STATUS_ROUTE,
@@ -570,4 +571,8 @@ export function registerCrmConsoleApi(): void {
   // read back per site so the hub can say which sites carry which recipe.
   registerPluginApiRoute(CRM_RECIPE_INSTALL_ROUTE, crmRecipeInstallHandler)
   registerPluginApiRoute(CRM_RECIPE_STATUS_ROUTE, crmRecipeStatusHandler)
+  // The workspace's email capture address (AGL-2657): the token is minted
+  // and rotated here, behind the CRM's own gate, and the org document that
+  // carries it is closed to every client.
+  registerPluginApiRoute(CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler)
 }

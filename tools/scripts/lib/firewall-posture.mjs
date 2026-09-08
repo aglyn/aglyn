@@ -501,6 +501,13 @@ export const EXPECTED_POSTURE = Object.freeze([
               '/api/email/events',
               '/api/campaigns/process-scheduled',
               '/api/lists/materialize',
+              // The CRM's inbound capture webhook, added to the rule on
+              // 2026-09-08 with the route itself. Resend signs every delivery
+              // with the Svix HMAC the route checks against
+              // `CRM_INBOUND_WEBHOOK_SECRET`, answering 401 without it and 501
+              // when the secret is absent, so the bypass again removes the bot
+              // challenge and nothing else.
+              '/api/crm/inbound',
             ]),
           }),
         ]),

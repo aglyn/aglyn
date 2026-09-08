@@ -80,6 +80,11 @@ export * from './crm-digest'
 // say. Pure like `crm-digest`, read by the hourly route and by every
 // writer of the field.
 export * from './crm-task-reminders'
+// Email capture (AGL-2657): the address's shape and token, which of a
+// message's addresses is the correspondent, the excerpt, and the row a
+// captured message becomes. Pure like `crm-digest`; the webhook route and
+// the address route are the readers with Firestore.
+export * from './crm-inbound'
 // Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
 // mapping, the per-row normalizer and the chunk-result arithmetic the
 // console drawer and the `crm/contacts-import` route both read. Pure, and

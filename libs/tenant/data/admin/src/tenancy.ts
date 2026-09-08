@@ -131,5 +131,8 @@ export * from './lib/server/crm-email-activity'
 // What a confirmed booking files on the CRM record — the meeting and the
 // follow-up (AGL-2660).
 export * from './lib/server/crm-booking-activity'
+// The org's email capture token and the filing of one received message
+// on the record it was with (AGL-2657).
+export * from './lib/server/crm-inbound-email'
 export * from './lib/server/user-profiles'
 export * from './lib/server/legal-acceptance'

@@ -340,6 +340,31 @@ owner can do this**, and it cannot be worked around from the repo: a group's
 membership is Workspace state. Until a second member exists, treat this half of
 AGL-2400 as open regardless of what the auto-replies say.
 
+## Inbound: the CRM capture address (AGL-2657)
+
+The one address the PLATFORM receives on is the CRM's per-workspace capture
+address, `crm+<token>@in.aglyn.com` (`CRM_INBOUND_DOMAIN`). It is Resend
+receiving, not a Google Group: Resend accepts the mail, announces it as an
+`email.received` webhook to `POST https://app.aglyn.com/api/crm/inbound`
+(Svix-signed; `CRM_INBOUND_WEBHOOK_SECRET`, falling back to
+`RESEND_WEBHOOK_SECRET`), and the route reads the message back with
+`RESEND_READ_API_KEY` and files it on the matched contact or lead — see
+`apps/docs/docs/content-and-data/crm/activities.md#captured-email`.
+
+Setup, all of it outside the repo:
+
+1. Resend → Domains → add `in.aglyn.com` as a **receiving** domain.
+2. Vercel DNS for aglyn.com → publish the MX record Resend issues for
+   `in.aglyn.com`.
+3. Resend → Webhooks → subscribe `email.received` to
+   `https://app.aglyn.com/api/crm/inbound`; put its signing secret in the
+   console's `CRM_INBOUND_WEBHOOK_SECRET`.
+4. Vercel firewall → add `/api/crm/inbound` to the machine-traffic bypass,
+   as `/api/email/events` already is — bot protection answers a webhook `429`.
+
+Until then the address is minted and shown but nothing arrives; the route is
+inert. The Inbox plugin still receives no mail (`libs/plugins/inbox/src/lib/server.ts`).
+
 ## Current DNS facts (aglyn.com)
 
 - **DNS host:** **Vercel DNS** (`ns1/ns2.vercel-dns.com`) — manage records with
