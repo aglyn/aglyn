@@ -48,6 +48,7 @@ import { type CrmTaskRow, useCrmTaskList, useNowMs } from '../hooks/use-crm-task
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
+import { refreshCrmNextActivity } from '../model/next-activity-api'
 import { completeCrmTask } from '../model/task-api'
 import { crmTaskCallScope } from '../model/task-routes'
 import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
@@ -210,6 +211,8 @@ export function TasksSection(props: ConsolePluginPageProps) {
             },
           )
           enqueueSnackbar('Task reopened', { variant: 'success' })
+          // A client-direct write: the records it names are told (AGL-2661).
+          await refreshCrmNextActivity(user, crmTaskCallScope(hostId, orgId), [task])
         } else {
           // The route runs as the mounted site, which hears the event, or
           // at the organization level as the org — the org variant, which
@@ -313,7 +316,14 @@ export function TasksSection(props: ConsolePluginPageProps) {
               <TaskSnoozeMenu
                 dueAtMs={row.dueAtMs}
                 remindAtMs={row.remindAtMs}
-                target={{ write: { scope, taskId: row.$id } }}
+                target={{
+                  write: {
+                    scope,
+                    taskId: row.$id,
+                    call: crmTaskCallScope(hostId, orgId),
+                    links: row,
+                  },
+                }}
                 disabled={busyId === row.$id}
               />
             )}

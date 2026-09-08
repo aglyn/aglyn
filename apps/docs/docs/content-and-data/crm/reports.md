@@ -125,6 +125,9 @@ per-site window when any site held more.
   no pipeline at all, is listed separately and is worth nothing to the
   forecast.
 - **Top open deals** — the ten largest, each a link to the deal.
+- **Stuck deals** — the open deals with [no next activity](./tasks.md#next-activity):
+  nothing scheduled against them. Painted as a warning above zero and a link
+  to the deals list, whose **No next activity** chip lists them.
 
 Deals in more than one currency are added as numbers and shown in the most
 common currency, with a note saying so.

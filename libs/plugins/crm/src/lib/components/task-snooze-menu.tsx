@@ -20,7 +20,7 @@ import { CRM_COLLECTIONS } from '@aglyn/aglyn'
 import { mdiAlarmSnooze } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Box,
   Button,
@@ -36,6 +36,8 @@ import {
 } from '@mui/material'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useState } from 'react'
+import { refreshCrmNextActivity } from '../model/next-activity-api'
+import type { CrmTaskRouteScope } from '../model/task-routes'
 import {
   CRM_TASK_SNOOZE_OPTIONS,
   type CrmTaskSnoozeOption,
@@ -54,7 +56,19 @@ import {
  * for its due date and the save is the write.
  */
 export type TaskSnoozeTarget =
-  | { write: { scope: readonly [string, string]; taskId: string } }
+  | {
+      write: {
+        scope: readonly [string, string]
+        taskId: string
+        /**
+         * The route scope and the records the task names (AGL-2661): a
+         * snooze moves the due date the records' next activity is read
+         * from, and a client-direct write has to say so itself.
+         */
+        call?: CrmTaskRouteScope | null
+        links?: { contactId?: string | null; companyId?: string | null; dealId?: string | null }
+      }
+    }
   | { pick: (dueAtMs: number) => void }
 
 export interface TaskSnoozeMenuProps {
@@ -92,6 +106,7 @@ export interface TaskSnoozeMenuProps {
  */
 export function TaskSnoozeMenu(props: TaskSnoozeMenuProps) {
   const { dueAtMs, target, remindAtMs, variant = 'icon', disabled, onSnoozed } = props
+  const { data: user } = useUser()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -123,6 +138,7 @@ export function TaskSnoozeMenu(props: TaskSnoozeMenuProps) {
         { variant: 'success' },
       )
       onSnoozed?.(next)
+      await refreshCrmNextActivity(user, target.write.call ?? null, [target.write.links ?? {}])
     } catch (cause) {
       enqueueSnackbar(
         cause instanceof Error ? cause.message : 'The task could not be snoozed.',

@@ -24,10 +24,12 @@ import {
   type ConsentGroup,
   type ContactLifecycleStage,
   CRM_COLLECTIONS,
+  crmTelHref,
   normalizeAddress,
   normalizePhone,
 } from '@aglyn/aglyn'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { mdiPhoneOutline } from '@aglyn/shared-data-mdi'
+import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -35,7 +37,17 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material'
+import {
+  Button,
+  Grid,
+  IconButton,
+  InputAdornment,
+  MenuItem,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material'
 import { deleteField, doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { contactCompanyLinkWrites } from '../model/companies'
@@ -328,6 +340,9 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
    */
   const ownerKnown = members.options.some((option) => option.uid === ownerUid)
 
+  /** The number in the box as something a dialer takes, or nothing (AGL-2661). */
+  const telHref = crmTelHref(phone)
+
   return (
     <CardDisplay
       header={'Properties'}
@@ -383,6 +398,31 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             error={Boolean(phoneError)}
             helperText={phoneError || 'With the country code, like +1 512 555 0107'}
             fullWidth
+            slotProps={{
+              input: {
+                /*
+                 * Click-to-call (AGL-2661), off what is IN the box rather
+                 * than off the saved value: the number on screen is the one
+                 * a reader means to ring, and `crmTelHref` withholds the
+                 * link from anything half-typed.
+                 */
+                endAdornment: telHref ? (
+                  <InputAdornment position="end">
+                    <Tooltip title={`Call ${phone.trim()}`}>
+                      <IconButton
+                        component="a"
+                        href={telHref}
+                        size="small"
+                        edge="end"
+                        aria-label={`Call ${phone.trim()}`}
+                      >
+                        <MdiIcon path={mdiPhoneOutline.path} size={0.8} />
+                      </IconButton>
+                    </Tooltip>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>

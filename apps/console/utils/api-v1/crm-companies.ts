@@ -45,11 +45,15 @@ import {
   createPayload,
   crmCollection,
   crmCreateStamp,
+  crmCustomUpdate,
+  crmCustomView,
   crmRecordsBandRefusal,
   crmTimes,
   crmValidationFailed,
+  isoFromMs,
   listCrm,
   memberError,
+  readCrmCustomBody,
   readCrmSite,
   readEqualityFilters,
   readOptionalText,
@@ -72,6 +76,11 @@ function companyView(doc: FirebaseFirestore.DocumentSnapshot) {
     industry: data.industry ?? null,
     ownerUid: data.ownerUid ?? null,
     notes: data.notes ?? null,
+    // The org's company custom fields, keyed by field key (AGL-2661).
+    custom: crmCustomView(data),
+    // When the earliest open task against the company is due — see
+    // `CrmDeal.nextTaskAtMs`. Read-only: the tasks resource maintains it.
+    nextTaskAt: isoFromMs(data.nextTaskAtMs),
     siteId: data.hostId ?? null,
     ...crmTimes(data),
   }
@@ -86,6 +95,7 @@ const COMPANY_WRITABLE = new Set([
   'industry',
   'ownerUid',
   'notes',
+  'custom',
 ])
 
 interface CompanyInput {
@@ -189,6 +199,14 @@ function readCompanyInput(
   const notes = readOptionalText(body, 'notes', CRM_TEXT_MAX, errors)
   if (notes !== undefined) values.notes = notes
 
+  // `custom` is shape-checked here and judged against the org's
+  // definitions by the writers, which is where the read is paid.
+  if (body.custom !== undefined) {
+    if (!body.custom || typeof body.custom !== 'object' || Array.isArray(body.custom)) {
+      errors.custom = 'Must be an object of field values keyed by field key'
+    }
+  }
+
   return Object.keys(errors).length ? { errors } : { values }
 }
 
@@ -208,6 +226,11 @@ async function createCompany(
   if ('response' in site) return site.response
   const owner = await memberError(ctx, 'ownerUid', parsed.values.ownerUid)
   if (Object.keys(owner).length) return crmValidationFailed(ctx, 'company', owner)
+  // Judged against the org's company definitions, above the claim like
+  // every other deterministic 400 (AGL-2661).
+  const custom = await readCrmCustomBody(ctx, body, 'company')
+  if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'company', custom.errors)
+  const customValues = custom && 'values' in custom ? custom.values : {}
 
   const collection = crmCollection(ctx, CRM_COLLECTIONS.companies)
   const claimed = await claimWrite(
@@ -246,6 +269,11 @@ async function createCompany(
       // list searches the collection, not the page it fetched.
       ...nameSearchFields(name ?? ''),
       ...createPayload({ domain, ...rest }),
+      // An empty map writes no `custom` key at all; a `null` inside one is
+      // an explicit clear a fresh record has no use for.
+      ...(Object.keys(customValues).length
+        ? { custom: createPayload(customValues) }
+        : {}),
       ...crmCreateStamp(ctx, site.siteId),
     })
     const view = companyView(await collection.doc(id).get())
@@ -264,7 +292,8 @@ async function updateCompany(
   ctx: ApiV1Context,
   ref: FirebaseFirestore.DocumentReference,
 ): Promise<Response> {
-  const parsed = readCompanyInput(await readJsonBody(request), { partial: true })
+  const body = await readJsonBody(request)
+  const parsed = readCompanyInput(body, { partial: true })
   if ('errors' in parsed) return crmValidationFailed(ctx, 'company', parsed.errors)
   const snap = await ref.get()
   if (!snap.exists) {
@@ -272,6 +301,8 @@ async function updateCompany(
   }
   const owner = await memberError(ctx, 'ownerUid', parsed.values.ownerUid)
   if (Object.keys(owner).length) return crmValidationFailed(ctx, 'company', owner)
+  const custom = await readCrmCustomBody(ctx, body, 'company')
+  if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'company', custom.errors)
 
   const { name, domain, ...rest } = parsed.values
   if (domain && domain !== snap.get('domain')) {
@@ -287,6 +318,7 @@ async function updateCompany(
   const update: Record<string, unknown> = {
     ...(name !== undefined ? nameSearchFields(name) : {}),
     ...updatePayload({ domain, ...rest }),
+    ...(custom && 'values' in custom ? crmCustomUpdate(custom.values) : {}),
   }
   // An empty body is a no-op answered with the current company.
   if (Object.keys(update).length > 0) {

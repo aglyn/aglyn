@@ -36,6 +36,7 @@ import { deleteDoc, doc } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import type { CrmTaskRow } from '../hooks/use-crm-tasks'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
+import { refreshCrmNextActivity } from '../model/next-activity-api'
 import { saveCrmTask } from '../model/task-api'
 import {
   CRM_TASK_NOTES_MAX,
@@ -264,6 +265,8 @@ function TaskForm(props: TaskEditDrawerProps) {
       )
       enqueueSnackbar('Task deleted', { variant: 'success' })
       onClose()
+      // A client-direct write: the records it named are told (AGL-2661).
+      await refreshCrmNextActivity(user, routeScope, [task])
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The task could not be deleted.')
     } finally {

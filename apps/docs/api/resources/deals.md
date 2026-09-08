@@ -46,6 +46,8 @@ contacts and companies against the plan's records band, and on a plan that hard-
   "companyId": "c_1a2b",
   "lostReason": null,
   "notes": null,
+  "custom": { "segment": "enterprise" },
+  "nextTaskAt": "2026-09-12T15:00:00.000Z",
   "siteId": "site_a1b2c3",
   "created": "2026-09-01T09:00:00.000Z",
   "updated": "2026-09-05T18:23:23.941Z"
@@ -71,6 +73,8 @@ contacts and companies against the plan's records band, and on a plan that hard-
 | `companyId` | string \| null | The [company](companies.md) the deal is with. Must exist. Writable. |
 | `lostReason` | string \| null | Free text, 5,000 characters. Writable. |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
+| `custom` | object | The organization's [deal custom fields](/content-and-data/crm/custom-fields#over-the-api), keyed by field key; `{}` when the deal has none. Judged against the **deal** definitions: a key that is not one, a retired field, or a value the type cannot hold is a `400` naming `custom.<key>`. A `PATCH` merges the keys it sends; `null` clears one. Writable. |
+| `nextTaskAt` | string \| null | When the earliest **open** [task](tasks.md) filed against the deal is due, or `null` when none is — its [next activity](/content-and-data/crm/tasks#next-activity), and what the console's "stuck deals" figure counts. Maintained by every task write, this resource included. **Read-only.** |
 | `siteId` | string | The site the deal was created from. **Read-only.** |
 | `created` / `updated` | string \| null | ISO 8601. |
 
@@ -213,7 +217,7 @@ it.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `pipelineId` or `stageId` that does not exist, an archived `pipelineId`, a `status` that disagrees with the `stageId`, an `amountCents` that is not a whole number `0` or more or that is sent to a deal with line items, a `currency` that is not a three-letter code or that a deal's line items are not in, a line item that fails its [rules](#line-items), an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `pipelineId` or `stageId` that does not exist, an archived `pipelineId`, a `status` that disagrees with the `stageId`, an `amountCents` that is not a whole number `0` or more or that is sent to a deal with line items, a `currency` that is not a three-letter code or that a deal's line items are not in, a line item that fails its [rules](#line-items), an `expectedCloseAt` that is not an ISO 8601 instant, a `contactId` or `companyId` that does not exist, an `ownerUid` who is not a member, a `custom` entry that is not a deal field or does not fit its type (named as `custom.<key>`), or `pipelineId` on a `PATCH`. On the list, a `?status=` outside the three values or a malformed `?updatedAfter=`. `fields` names each key. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — the CRM records band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such deal"`. |

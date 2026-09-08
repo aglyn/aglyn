@@ -33,6 +33,7 @@ import {
   CONTACT_LIST_FILTER_HEADERS,
 } from '../constants/contact-filters'
 import type { ContactRecord } from '../model/contact-record'
+import { nextActivityColumn } from './crm-next-activity-column'
 
 /**
  * The filterable fields that get a column. The rest of
@@ -52,6 +53,7 @@ export const CONTACT_FILTER_COLUMNS = [
   'sources',
   'tags',
   'updatedAt',
+  'nextTaskAtMs',
 ]
 
 /**
@@ -275,6 +277,8 @@ export function contactListColumns(
         </Typography>
       ),
     },
+    // When the earliest open task against the person is due (AGL-2661).
+    nextActivityColumn(nowMs),
     {
       /*
        * When the person last opened or clicked one of this holder's

@@ -82,8 +82,11 @@ interface Draft {
   durationMinutes: string
 }
 
-const freshDraft = (): Draft => ({
-  kind: 'call',
+/** The kind a new activity opens on when the caller names none. */
+const DEFAULT_KIND: CrmActivityKind = 'call'
+
+const freshDraft = (kind: CrmActivityKind = DEFAULT_KIND): Draft => ({
+  kind,
   body: '',
   at: toLocalInput(Date.now()),
   outcome: '',
@@ -119,6 +122,13 @@ export interface LogActivityDialogProps {
    * said, when, and how it went can change.
    */
   activity?: CrmActivityRow | null
+  /**
+   * What a NEW activity opens as (AGL-2661) — the click-to-call button
+   * opens the dialog already a call, so logging one is the button and a
+   * sentence rather than the button, the kind and a sentence. Ignored for
+   * an edit, whose kind is the activity's own.
+   */
+  kind?: CrmActivityKind
 }
 
 /**
@@ -149,7 +159,7 @@ export interface LogActivityDialogProps {
  * so what reaches here has already passed the console's verdict.
  */
 export function LogActivityDialog(props: LogActivityDialogProps) {
-  const { open, onClose, scope, link, activity } = props
+  const { open, onClose, scope, link, activity, kind: presetKind } = props
   const { firestore, dataScope, hostId, mountedHostId, readTokens, writeTokens } =
     scope
   const { data: user } = useUser()
@@ -164,8 +174,8 @@ export function LogActivityDialog(props: LogActivityDialogProps) {
    * rather than from the last call's timestamp.
    */
   useEffect(() => {
-    if (open) setDraft(activity ? draftFrom(activity) : freshDraft())
-  }, [open, activity])
+    if (open) setDraft(activity ? draftFrom(activity) : freshDraft(presetKind))
+  }, [open, activity, presetKind])
 
   const hasOutcome = Aglyn.activityKindHasOutcome(draft.kind)
   const atMs = fromLocalInput(draft.at)

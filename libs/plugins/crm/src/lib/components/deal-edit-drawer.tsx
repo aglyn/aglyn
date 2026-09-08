@@ -59,6 +59,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import {
   type CrmOrgDoc,
@@ -68,6 +69,14 @@ import {
 } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { contactPrimaryGroup } from '../model/contact-record'
+import {
+  type CrmCustomDraft,
+  crmCustomDraftDocument,
+  crmCustomDraftMissingRequired,
+  crmCustomDraftValue,
+  crmCustomDraftWrites,
+} from '../model/crm-custom-draft'
+import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { CrmSitePicker } from './crm-site-picker'
 import {
   DEAL_CURRENCIES,
@@ -189,12 +198,21 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   )
   const owner = findOrgMember(roster.members, values.ownerUid)
   const [busy, setBusy] = useState(false)
+  /*
+   * THE CUSTOM FIELDS (AGL-2661): the org's deal definitions, and the keys
+   * the reader has touched over what the deal stores — saved as the
+   * difference (`crm-custom-draft`) in the same write as the fixed fields.
+   */
+  const fields = useContactFieldDefinitions(open ? orgId : null, 'deal')
+  const storedCustom = useMemo(() => deal?.custom ?? {}, [deal?.custom])
+  const [custom, setCustom] = useState<CrmCustomDraft>({})
 
   // Re-seeded on every open: an existing deal's stored values, or a blank
   // form aimed at the default pipeline with whatever the opener preselected.
   useEffect(() => {
     if (!open) return
     setValues(deal ? dealFormFromDoc(deal) : emptyDealForm(defaultPipeline, defaults))
+    setCustom({})
   }, [open, deal, defaultPipeline, defaults])
 
   const update = useCallback(
@@ -295,7 +313,10 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     ? { id: values.companyId, name: values.companyName }
     : null
 
-  const problem = dealFormProblem(values, mode)
+  const customMissing = crmCustomDraftMissingRequired(fields.active, storedCustom, custom, mode)
+  const problem =
+    dealFormProblem(values, mode) ??
+    (customMissing.length ? `${customMissing.join(', ')} is required.` : null)
   const amountDerived = Boolean(deal && dealHasLineItems(deal))
 
   /*
@@ -332,6 +353,8 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
               {
                 ...set,
                 ...Object.fromEntries(clear.map((key) => [key, deleteField()])),
+                // The custom keys that changed, merged into the stored map.
+                ...crmCustomDraftWrites(storedCustom, custom),
               },
             )
           },
@@ -346,14 +369,18 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         // Held by the button until the capturing site is known; checked
         // again here because a callback can outlive the render that held it.
         if (!createHostId) return
+        const customDocument = crmCustomDraftDocument(custom)
         const created = await addDoc(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
-          dealDocumentFromForm(values, {
-            visibleTo: [...createTokens],
-            hostId: createHostId,
-            uid: user.uid,
-            nowMs,
-          }),
+          {
+            ...dealDocumentFromForm(values, {
+              visibleTo: [...createTokens],
+              hostId: createHostId,
+              uid: user.uid,
+              nowMs,
+            }),
+            ...(customDocument ? { custom: customDocument } : {}),
+          },
         )
         // Setup → Activity shows CRM work (AGL-2622): the deal is org data,
         // but the act happened in this site's console and belongs in its
@@ -388,6 +415,8 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     enqueueSnackbar,
     onSaved,
     onClose,
+    storedCustom,
+    custom,
   ])
 
   return (
@@ -616,6 +645,22 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             fullWidth
             slotProps={{ htmlInput: { maxLength: DEAL_NOTES_MAX } }}
           />
+          {fields.active.length ? (
+            <>
+              <Typography variant="subtitle2">{'Custom fields'}</Typography>
+              {fields.active.map((definition) => (
+                <CrmCustomFieldControl
+                  key={definition.$id}
+                  definition={definition}
+                  value={crmCustomDraftValue(storedCustom, custom, definition.key)}
+                  onChange={(value) =>
+                    setCustom((current) => ({ ...current, [definition.key]: value }))
+                  }
+                  disabled={busy}
+                />
+              ))}
+            </>
+          ) : null}
           {bandFull ? (
             <Alert severity="warning">{CRM_RECORDS_BAND_FULL_MESSAGE}</Alert>
           ) : null}

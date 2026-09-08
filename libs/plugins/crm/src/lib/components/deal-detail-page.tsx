@@ -25,6 +25,7 @@ import { Button, Stack, Typography } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { CrmCreateSiteDefault } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
@@ -76,6 +77,8 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const nowMs = useMemo(() => Date.now(), [])
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // The org's deal fields (AGL-2661), for the properties card's rows.
+  const dealFields = useContactFieldDefinitions(scope.orgId, 'deal')
 
   const notFound = scope.ready && (!scope.orgId || (status !== 'loading' && !deal))
 
@@ -205,6 +208,7 @@ export function DealDetailPage(props: CrmDetailPageProps) {
                   pipeline={pipeline}
                   ownerLabel={roster.nameOf(deal.ownerUid)}
                   routes={routes}
+                  customFields={dealFields.active}
                 />
               </Stack>
               <Stack sx={{ flex: 1, minWidth: 0 }}>

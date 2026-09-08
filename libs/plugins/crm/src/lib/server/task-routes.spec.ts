@@ -46,6 +46,8 @@ const notifyUsers = jest.fn()
 const emitHostEvent = jest.fn()
 const resolveOrgPermissions = jest.fn()
 const getOrgDoc = jest.fn()
+/** The `nextTaskAtMs` writer (AGL-2661): a spy, because the recompute is the admin library's suite. */
+const recomputeCrmNextTaskAt = jest.fn(async () => ({ records: 0, missing: 0 }))
 
 let store: Record<string, Record<string, any>> = {}
 let autoId = 0
@@ -122,6 +124,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   notifyUsers: (...args: unknown[]) => notifyUsers(...args),
+  recomputeCrmNextTaskAt: (...args: unknown[]) => recomputeCrmNextTaskAt(...(args as [])),
+  crmNextActivityLinksOf: jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/crm-next-activity',
+  ).crmNextActivityLinksOf,
 }))
 
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './task-routes'
@@ -303,6 +309,33 @@ describe('crm/task-save', () => {
     expect('companyId' in row).toBe(false)
     expect('dealId' in row).toBe(false)
     expect(notifyUsers).not.toHaveBeenCalled()
+    // The contact the task names has its next activity recomputed (AGL-2661).
+    expect(recomputeCrmNextTaskAt).toHaveBeenCalledWith(firestoreHandle, ORG_ID, [
+      { contactId: 'c-1' },
+    ])
+  })
+
+  it('recomputes next activity for both the record a task leaves and the one it lands on (AGL-2661)', async () => {
+    store[`${TASKS}/t-1`] = {
+      title: 'Send the deck',
+      kind: 'email',
+      priority: 'high',
+      dueAtMs: 1757062800000,
+      notes: '',
+      dealId: 'd-old',
+      status: 'open',
+      visibleTo: ['host:site-1'],
+      hostId: HOST_ID,
+      createdByUid: WRITER,
+    }
+    const { status } = await call(crmTaskSaveHandler, {
+      body: { hostId: HOST_ID, taskId: 't-1', task: task({ dealId: 'd-new', assigneeUid: null }) },
+    })
+    expect(status).toBe(200)
+    expect(recomputeCrmNextTaskAt).toHaveBeenCalledWith(firestoreHandle, ORG_ID, [
+      { dealId: 'd-old' },
+      { dealId: 'd-new' },
+    ])
   })
 
   it('stamps the whole org when the org has widened its default scope', async () => {

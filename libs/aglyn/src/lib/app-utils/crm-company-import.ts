@@ -47,8 +47,15 @@
 import type { AglynPostalAddress } from '../foundation'
 import { normalizeAddress, normalizePhone } from '../foundation'
 import { normalizeContactEmail } from './contacts'
-import { normalizeCompanyDomain, normalizeCompanyWebsite } from './crm'
 import {
+  type ContactFieldDefinition,
+  type CrmCustomValue,
+  normalizeCompanyDomain,
+  normalizeCompanyWebsite,
+} from './crm'
+import { parseContactImportCustomValue } from './crm-import'
+import {
+  customImportTarget,
   CSV_IMPORT_CHUNK_SIZE,
   CSV_IMPORT_MAX_BODY_BYTES,
   CSV_IMPORT_MAX_ROWS,
@@ -143,14 +150,23 @@ const FIELD_ALIASES: Record<CompanyImportField, readonly string[]> = {
 
 const FIELD_ALIAS_KEYS = importAliasKeys(COMPANY_IMPORT_FIELDS, FIELD_ALIASES)
 
-/** Column index → field. A column absent from the map is not imported. */
-export type CompanyImportMapping = Record<number, CompanyImportField>
+/**
+ * Column index → field, or a company custom field as `custom:<key>` (AGL-2661).
+ * A column absent from the map is not imported.
+ */
+export type CompanyImportMapping = Record<number, CompanyImportField | `custom:${string}`>
 
-/** A proposed mapping from a file's header row, each field taken at most once. */
+/**
+ * A proposed mapping from a file's header row, each field taken at most
+ * once. `fields` is the org's COMPANY definitions (AGL-2661): a header
+ * matching one's label or key maps onto it, and wins over a standard
+ * alias, the contact import's rule.
+ */
 export function guessCompanyImportMapping(
   columns: readonly string[],
+  fields: readonly Pick<ContactFieldDefinition, 'key' | 'label'>[] = [],
 ): CompanyImportMapping {
-  return guessImportMapping(columns, COMPANY_IMPORT_FIELDS, FIELD_ALIAS_KEYS)
+  return guessImportMapping(columns, COMPANY_IMPORT_FIELDS, FIELD_ALIAS_KEYS, fields)
 }
 
 /**
@@ -158,21 +174,20 @@ export function guessCompanyImportMapping(
  * under the field they were mapped to, verbatim. `unknown` because the
  * server reads this off an untrusted body.
  */
-export type CompanyImportRawRow = Partial<Record<CompanyImportField, unknown>>
+export type CompanyImportRawRow = Partial<Record<CompanyImportField, unknown>> & {
+  /** Custom values by definition key, verbatim — judged by `normalizeCompanyImportRow`. */
+  custom?: unknown
+}
 
 /**
- * One parsed line under the mapping. Empty cells are left absent.
- *
- * Takes the shared drawer's mapping shape, which may name a custom target;
- * a company has no custom fields, so any such column is dropped here
- * rather than refused at the type.
+ * One parsed line under the mapping. Empty cells are left absent; custom
+ * values are gathered under `custom` by definition key (AGL-2661).
  */
 export function mapCompanyImportRow(
   cells: readonly string[],
-  mapping: Record<number, CompanyImportField | `custom:${string}`>,
+  mapping: CompanyImportMapping,
 ): CompanyImportRawRow {
-  const { custom: _custom, ...row } = mapImportRow(cells, mapping)
-  return row
+  return mapImportRow(cells, mapping)
 }
 
 /** Why one row was not stored. */
@@ -207,6 +222,12 @@ export interface CompanyImportRow {
   tags: string[]
   notes?: string
   dropped: ImportDroppedValue[]
+  /**
+   * Custom values under the org's COMPANY definitions (AGL-2661), each
+   * coerced by its type the way a contact's are. Empty when the file
+   * mapped none, or none survived.
+   */
+  custom: Record<string, CrmCustomValue>
 }
 
 export type CompanyImportRowVerdict =
@@ -220,6 +241,12 @@ export type CompanyImportRowVerdict =
  */
 export function normalizeCompanyImportRow(
   raw: CompanyImportRawRow,
+  /**
+   * The org's live COMPANY definitions (AGL-2661): a value under a key
+   * with no definition is dropped and reported, because a value nobody
+   * defined a field for is a value no surface will ever show.
+   */
+  fields: readonly Pick<ContactFieldDefinition, 'key' | 'type' | 'options'>[] = [],
 ): CompanyImportRowVerdict {
   const name = importTextValue(raw.name, NAME_MAX)?.replace(/\s+/g, ' ')
   if (!name) {
@@ -233,6 +260,7 @@ export function normalizeCompanyImportRow(
     name,
     tags: parseImportTags(raw.tags, COMPANY_IMPORT_TAGS_MAX),
     dropped,
+    custom: {},
   }
 
   const domainText = importTextValue(raw.domain, 300)
@@ -282,6 +310,26 @@ export function normalizeCompanyImportRow(
 
   const notes = importTextValue(raw.notes, NOTES_MAX)
   if (notes) row.notes = notes
+
+  // The contact import's custom rule, over the company's definitions.
+  const custom =
+    raw.custom && typeof raw.custom === 'object' && !Array.isArray(raw.custom)
+      ? (raw.custom as Record<string, unknown>)
+      : {}
+  const definitions = new Map(fields.map((field) => [field.key, field]))
+  for (const [key, value] of Object.entries(custom)) {
+    const definition = definitions.get(key)
+    if (!definition) {
+      dropped.push({ field: customImportTarget(key), value: String(value ?? '').trim() })
+      continue
+    }
+    const parsed = parseContactImportCustomValue(definition, value)
+    if (!parsed) {
+      dropped.push({ field: customImportTarget(key), value: String(value ?? '').trim() })
+    } else if (parsed.value !== undefined) {
+      row.custom[key] = parsed.value
+    }
+  }
 
   return { ok: true, row }
 }

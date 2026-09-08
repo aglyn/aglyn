@@ -51,7 +51,8 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -61,6 +62,14 @@ import {
   companyDraftFrom,
   EMPTY_COMPANY_DRAFT,
 } from '../model/companies'
+import {
+  type CrmCustomDraft,
+  crmCustomDraftDocument,
+  crmCustomDraftMissingRequired,
+  crmCustomDraftValue,
+  crmCustomDraftWrites,
+} from '../model/crm-custom-draft'
+import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { CrmSitePicker } from './crm-site-picker'
 
 export interface CompanyEditDrawerProps {
@@ -144,6 +153,15 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   /*
+   * THE CUSTOM FIELDS (AGL-2661): the org's company definitions, and the
+   * keys the reader has touched over what the company stores. Saved as the
+   * difference — see `crm-custom-draft` — beside the fixed fields, in the
+   * same write, so a company is never half-saved.
+   */
+  const fields = useContactFieldDefinitions(scope?.[1] ?? null, 'company')
+  const storedCustom = useMemo(() => company?.custom ?? {}, [company?.custom])
+  const [custom, setCustom] = useState<CrmCustomDraft>({})
+  /*
    * THE RECORDS BAND (AGL-2611), read only for a CREATE: a company is a
    * record of the band the contacts list is banded by, and on a Free org at
    * its hundred this drawer refuses the way `upsertHostContact` refuses a
@@ -170,6 +188,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
         ? companyDraftFrom(company)
         : { ...EMPTY_COMPANY_DRAFT, ownerUid: user?.uid ?? '' },
     )
+    setCustom({})
     setError('')
     // The stored fields are read once per opening; `company` is a new object
     // on every snapshot and must not re-seed.
@@ -194,6 +213,14 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     if (busy || !scope) return
     const result = companyDraftFields(draft)
     if (result.ok === false) return setError(result.error)
+    const missing = crmCustomDraftMissingRequired(
+      fields.active,
+      storedCustom,
+      custom,
+      company ? 'edit' : 'create',
+    )
+    if (missing.length) return setError(`${missing.join(', ')} is required.`)
+    const customDocument = crmCustomDraftDocument(custom)
     setError('')
     setBusy(true)
     try {
@@ -221,6 +248,8 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
               ...Object.fromEntries(
                 result.cleared.map((field) => [field, deleteField()]),
               ),
+              // The custom keys that changed, merged into the stored map.
+              ...crmCustomDraftWrites(storedCustom, custom),
               updatedAt: serverTimestamp(),
             })
           },
@@ -238,6 +267,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
           doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, id),
           {
             ...result.set,
+            ...(customDocument ? { custom: customDocument } : {}),
             /*
              * The scope every CRM creator stamps: the whole org when the org
              * shares by default, and otherwise the sites that present as one
@@ -285,6 +315,9 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     enqueueSnackbar,
     onSaved,
     onClose,
+    fields.active,
+    storedCustom,
+    custom,
   ])
 
   return (
@@ -429,6 +462,22 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             multiline
             minRows={3}
           />
+          {fields.active.length ? (
+            <>
+              <Typography variant="subtitle2">{'Custom fields'}</Typography>
+              {fields.active.map((definition) => (
+                <CrmCustomFieldControl
+                  key={definition.$id}
+                  definition={definition}
+                  value={crmCustomDraftValue(storedCustom, custom, definition.key)}
+                  onChange={(value) =>
+                    setCustom((current) => ({ ...current, [definition.key]: value }))
+                  }
+                  disabled={busy}
+                />
+              ))}
+            </>
+          ) : null}
           {error ? <Alert severity="warning">{error}</Alert> : null}
           <Stack direction="row" spacing={1}>
             <Button

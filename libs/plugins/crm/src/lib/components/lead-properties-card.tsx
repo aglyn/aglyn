@@ -42,6 +42,7 @@ import {
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useId, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
+import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -72,6 +73,8 @@ function Fact(props: { label: string; children: React.ReactNode }) {
 
 export interface LeadPropertiesCardProps {
   hostId: string
+  /** The org document the shell passed, for the activity scope a call is logged in. */
+  org?: Partial<AglynOrgBilling> | null
   leadId: string
   lead: Record<string, unknown> & CrmLeadFields
   leadStatus: FirestoreDocStatus
@@ -120,6 +123,7 @@ export interface LeadPropertiesCardProps {
 export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const {
     hostId,
+    org,
     leadId,
     lead,
     leadStatus,
@@ -140,6 +144,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const status = Aglyn.crmLeadStatus(lead)
   const converted = Boolean(lead.convertedContactId)
   const open = Aglyn.isCrmLeadOpen(lead) && !converted
+  /** What a capture that took a number left on the document (AGL-2661). */
+  const leadPhone = String(lead['phone'] ?? '').trim()
 
   const [notes, setNotes] = useState(String(lead.notes ?? ''))
   // The label's id, so the status combobox is named "Status" rather than
@@ -222,6 +228,13 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
               {'Convert'}
             </Button>
           )}
+          {/* Dial the number the capture carried, and log the call (AGL-2661). */}
+          <CrmCallButton
+            hostId={hostId}
+            org={org}
+            link={{ leadId }}
+            phone={leadPhone}
+          />
           <CrmSendEmailButton
             hostId={hostId}
             leadId={leadId}
@@ -256,6 +269,16 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     >
       <Stack spacing={3}>
         {banner}
+        {/*
+          Only when the capture carried one (AGL-2661): the sign-up and
+          booking doors write no phone, so a row for every lead would be a
+          permanent blank. A form that captures one fills this.
+        */}
+        {leadPhone ? (
+          <Fact label="Phone">
+            <CrmPhoneLink phone={leadPhone} />
+          </Fact>
+        ) : null}
         <Fact label="Marketing consent">{consentLine}</Fact>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           {converted ? (

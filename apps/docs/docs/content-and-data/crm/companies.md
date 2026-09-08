@@ -22,8 +22,10 @@ deals against your plan's records band — see
 ## The companies list
 
 The list shows every company your site may see, newest activity first, with
-its domain, how many **contacts** are linked to it, its owner and when it was
-last changed. Open the column filter on **Company** to find one by name — the
+its domain, how many **contacts** are linked to it, its owner, when it was
+last changed and its [**next activity**](./tasks.md#next-activity) — when the
+earliest open task against it is due, with a **No next activity** chip beside
+the view control to keep only the companies with nothing scheduled. Open the column filter on **Company** to find one by name — the
 search reaches every company, not only the page on screen — and filter
 **Owner** to see one teammate's accounts. Clicking a row opens the company's
 page.
@@ -57,10 +59,17 @@ The page names the company in the heading and the trail, and holds its
 properties, its contacts, its [deals](./deals.md), its open [tasks](./tasks.md)
 and the [activity](./activities.md) logged against it. The header of the
 first card carries the domain under the company's kind, the industry and the
-owner as chips, **Back to companies**, and **Edit**, which opens the same form
-the company was created with; **Delete company** is in the header's menu (⋮).
+owner as chips, **Back to companies**, **Call** and **Log a call** (see
+[click to call](./activities.md#click-to-call)), and **Edit**, which opens the
+same form the company was created with; **Delete company** is in the header's
+menu (⋮). The company's phone number is a link on the properties card too.
 Every CRM record page — contact, company, deal and lead — is headed the same
 way.
+
+Under the fixed properties the card lists every [custom field](./custom-fields.md)
+defined on the **Companies** tab of the Fields section, and **Edit** carries a control
+for each, so a company's own properties are saved in the same form as its name and
+domain.
 
 ## Contacts at a company
 
@@ -142,6 +151,7 @@ it maps itself.
 | **Owner** | The email address of a member of your organization. An address that matches nobody leaves the company without an owner, and the result names those addresses. |
 | **Address line 1, line 2, city, state, postal code, country** | The postal address. Country must be a two-letter code. |
 | **Tags** | Separated by `,` or `\|`, lowercased. Added to any tags the company already has. |
+| **Custom fields** | Every field defined on the **Companies** tab of [Fields](./custom-fields.md) is offered as a target, and a header that matches a field's label or key is proposed for it — ahead of a standard alias, so a company field called *Region* wins over the address's region. A value that does not fit the field's type is dropped and reported. On an update, only the fields the file carries are written. |
 
 A new company counts against your plan's [records band](../../workspace-and-billing/billing-and-plans/overview.md#crm-records);
 on a plan whose band is a hard limit, rows past it are skipped as

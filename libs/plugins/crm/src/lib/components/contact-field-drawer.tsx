@@ -20,6 +20,7 @@ import {
   CONTACT_FIELD_TYPE_LABELS,
   CONTACT_FIELD_TYPES,
   type ContactFieldType,
+  type CrmFieldObject,
   isContactFieldType,
   normalizeContactFieldKey,
 } from '@aglyn/aglyn'
@@ -59,6 +60,32 @@ export interface ContactFieldDrawerProps {
   takenKeys: readonly string[]
   /** Receives the draft; closing on success is the caller's job. */
   onSubmit: (draft: ContactFieldDraft) => Promise<void> | void
+  /**
+   * The record the field describes (AGL-2661) — the Fields section's
+   * current tab. Contacts when unsaid. The drawer's copy follows it, and it
+   * is the one thing here a form-field mapping cares about: a website form
+   * saves into a CONTACT field only, because a submission is a fact about
+   * a person, so the other objects' drawers say so instead of offering it.
+   */
+  object?: CrmFieldObject
+}
+
+/** How the object reads in the drawer's own sentences — singular, lowercase. */
+const OBJECT_NOUN: Record<CrmFieldObject, string> = {
+  contact: 'contact',
+  company: 'company',
+  deal: 'deal',
+}
+
+/**
+ * What the drawer says about website forms, per object — see
+ * {@link ContactFieldDrawerProps.object}.
+ */
+export function fieldDrawerMappingNote(object: CrmFieldObject): string {
+  return object === 'contact'
+    ? 'A website form field can save its answer into this field.'
+    : `A website form field saves into contact fields only; a ${OBJECT_NOUN[object]} ` +
+        'field is filled on the record, by CSV import or over the API.'
 }
 
 /** How many choices a select may declare, and how long each may be. */
@@ -102,8 +129,9 @@ function parseOptions(text: string): string[] {
  * retire, which the section's list offers.
  */
 export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
-  const { open, onClose, definition, takenKeys, onSubmit } = props
+  const { open, onClose, definition, takenKeys, onSubmit, object = 'contact' } = props
   const editing = Boolean(definition)
+  const noun = OBJECT_NOUN[object]
 
   const [label, setLabel] = useState('')
   const [key, setKey] = useState('')
@@ -176,7 +204,10 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Stack spacing={2} sx={{ width: 360, p: 3 }}>
         <Typography variant="h6">
-          {editing ? 'Edit field' : 'New field'}
+          {editing ? `Edit ${noun} field` : `New ${noun} field`}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {fieldDrawerMappingNote(object)}
         </Typography>
         <TextField
           size="small"
@@ -243,7 +274,7 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
               onChange={(event) => setRequired(event.target.checked)}
             />
           }
-          label="Required on the contact form"
+          label={`Required on the ${noun} form`}
         />
         {error ? (
           <Typography variant="body2" color="error">

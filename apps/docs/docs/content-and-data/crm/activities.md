@@ -123,6 +123,27 @@ for it, a **Follow up after &lt;service&gt;** [task](tasks.md) is filed beside t
 meeting, due one business day after the slot. Nothing is filed on a site where the
 CRM is switched off.
 
+## Click to call {#click-to-call}
+
+A contact's, a lead's and a company's page carries **Call** beside **Send
+email**: one tap dials the number the record holds, through whatever your
+device uses for a phone. The number itself is a link everywhere it is
+printed — on the record page and on the properties card — so it can be
+dialed from where you are reading it rather than copied out.
+
+Only a number a dialer can take is a link. Write phone numbers with the
+country code, like `+1 512 555 0107`; spaces, dots, dashes and parentheses
+are fine and are ignored. A value that is not a number — "ask reception",
+an extension typed as `x44` — is shown as plain text and **Call** says why
+it is unavailable, rather than offering a link that would ring nothing.
+
+**Log a call** sits beside it and opens the dialog above with the kind
+already set to **Call** and the record already bound, so logging what was
+said is one button and one sentence. It is there whether or not the record
+has a number: a call placed from your own mobile is still a call to log.
+The kind is a starting point, not a lock — change it in the dialog if the
+conversation turned out to be something else.
+
 ## Sending an email
 
 A contact's, a lead's and a deal's page each carry **Send email**: one message,
