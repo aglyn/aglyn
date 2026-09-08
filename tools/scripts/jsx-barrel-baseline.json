@@ -50,7 +50,6 @@
     "./lib/types",
     "./lib/utils/make-link-elements",
     "./lib/utils/make-meta-elements",
-    "./lib/utils/vendor",
     "@aglyn/shared-data-mdi"
   ],
   "packages": [
@@ -58,28 +57,19 @@
     "@emotion/react",
     "@mdi/js",
     "@mui/material",
-    "@mui/styles",
     "@mui/utils",
     "change-case",
     "clsx",
     "deepmerge-ts",
-    "flat",
     "hoist-non-react-statics",
     "js-cookie",
-    "jss",
-    "jss-rtl",
     "lodash-es",
-    "mitt",
     "mobx",
     "mobx-utils",
-    "mout",
     "nanoid",
-    "nanoid-dictionary",
     "next",
     "react",
     "react-dom",
-    "react-is",
-    "react-use",
-    "use-debounce"
+    "react-use"
   ]
 }

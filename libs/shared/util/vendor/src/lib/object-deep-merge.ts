@@ -41,8 +41,11 @@ export const objectDeepMergeReplaceArrays = deepmergeCustom({
   mergeArrays: false,
 })
 
-import objectDeepMergeFillIn from 'mout/object/deepFillIn'
-export { objectDeepMergeFillIn }
+// `objectDeepMergeFillIn` (`mout/object/deepFillIn`) lives in its own module
+// now — `@aglyn/shared-util-vendor/object-deep-fill-in` (AGL-2682). It rode
+// here as a second package inside a module whose OTHER export,
+// `objectDeepMergeReplaceArrays`, the host theme calls on every published
+// page, so `mout` was emitted to every visitor for a function nothing calls.
 
 // export function objectDeepMerge<T>(x: Partial<T>, y: Partial<T>, options?: DeepMergeOptions): T
 // export function objectDeepMerge<T1, T2>(x: Partial<T1>, y: Partial<T2>, options?:

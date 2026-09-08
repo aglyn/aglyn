@@ -16,7 +16,21 @@
  */
 
 export * from './vendor/emotion'
-export * from './vendor/jss'
+// `./vendor/jss` is NOT re-exported (AGL-2682), for the reason AGL-2486
+// recorded on the shared-util-vendor barrel and measured the same way. Its two
+// exports are `JSS` (the whole `jss` namespace) and `jssRtl`, and NOTHING in
+// the repo reads either of them from this index. The one real consumer,
+// `libs/shared/ui/jsx/src/lib/components/sandbox-frame.tsx`, imports `jss` and
+// `jss-rtl` from the packages directly — and that component is deliberately
+// absent from the shared-ui-jsx barrel, so it never reaches a published page.
+//
+// What the `export *` did instead was put `jss-rtl` — and through it
+// `rtl-css-js`, a full CSS property/value mirroring table — in front of every
+// file that takes anything at all from this index, which on the tenant is the
+// host theme, both theme providers and the emotion cache: everything a
+// customer page renders. Measured -7.9 KB raw off the published route's eager
+// chunk group. `sandbox-frame` is the pattern to copy: import `jss` and
+// `jss-rtl` where they are used.
 export * from './vendor/mui'
 
 export * from './lib/theme.types'

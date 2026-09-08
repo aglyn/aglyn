@@ -26,7 +26,7 @@ import { CardListItem, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useMdiIconsFuzzy } from '@aglyn/shared-ui-jsx/hooks/mdi-icon/use-mdi-icons-fuzzy'
 import { GridList } from '@aglyn/shared-ui-jsx/components/grid-list'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
-import { useDebouncedCallback } from '@aglyn/shared-util-vendor'
+import { useDebouncedCallback } from '@aglyn/shared-util-vendor/use-debounce'
 import {
   Box,
   Button,

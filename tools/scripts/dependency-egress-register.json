@@ -104,14 +104,6 @@
     ],
     "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
   },
-  "atomiks.github.io": {
-    "decision": "documentation",
-    "class": "vendor-host",
-    "packages": [
-      "tippy.js"
-    ],
-    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
-  },
   "babel.dev": {
     "decision": "documentation",
     "class": "vendor-host",
@@ -134,14 +126,6 @@
     "packages": [
       "@base-ui/react",
       "@base-ui/utils"
-    ],
-    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
-  },
-  "boosty.to": {
-    "decision": "documentation",
-    "class": "vendor-host",
-    "packages": [
-      "core-js"
     ],
     "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
   },
