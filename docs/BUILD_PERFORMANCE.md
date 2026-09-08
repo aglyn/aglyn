@@ -354,10 +354,18 @@ The tenant builds with **Turbopack** (`"webpack": false` on the production confi
 - The **webpack bundle analyser reports nothing meaningful** about a Turbopack build.
 - **Turbopack production chunks use numeric module ids**, not path-shaped ones, so reading
   the chunk's own module registry does not attribute it either.
-- **Sourcemap-based attribution is unreliable** — Turbopack ignores the browser sourcemap
-  settings, so there is nothing dependable to map against.
 - **Grepping a chunk for a package name is not attribution** and has produced wrong answers
   here before.
+
+This list used to carry a fourth entry — *"sourcemap-based attribution is unreliable,
+Turbopack ignores the browser sourcemap settings, so there is nothing dependable to map
+against"* — and it was **wrong** (AGL-2682). The browser sourcemap *settings* are indeed
+ignored; the production build emits a `.js.map` beside every chunk regardless, complete
+with `sources` and `sourcesContent`, and `mappings` assigns every span of generated text to
+one of them. That is precisely the instrument Lighthouse's own `duplicated-javascript`
+audit runs on, which is how a Lighthouse report can name `node_modules/@mui/material` in
+eleven chunks in a stack where nothing else can. The entry cost this repo the belief that
+the question was unanswerable; `npm run analyze:chunks` answers it.
 
 What does work:
 
@@ -368,7 +376,28 @@ What does work:
 | Which chunk cost the main thread? | Lighthouse `bootup-time` + `long-tasks`, per script URL |
 | What IS a given chunk? | Fetch it **through the browser** and read its head — the first few hundred bytes usually identify the framework |
 | What does the eager first-load graph contain? | `npm run check:jsx-barrel` / `check:aglyn-barrel` — computed from source, reported in **gzipped** bytes |
+| What is in a BUILT chunk, and what is in there twice? | `npm run analyze:chunks` — per-module emitted bytes decoded from the chunk's own source map |
+| Did a change do anything? | `npm run analyze:chunks -- --json > before.json`, rebuild, then `-- --json --against before.json` |
 | Is a change worth landing before it ships? | Lighthouse `blockedUrlPatterns` against the live page isolates one resource without a deploy |
 
 Always quote **gzipped** figures. Raw byte counts on this codebase run 3–4× the transferred
 size and are not what anyone waits for.
+
+#### The chunker's defaults are already at the right point (measured 2026-09-08)
+
+`experimental.turbopackChunking` is honoured in Next 16.3.2 and was swept against the
+tenant's published route, which is the setting to reach for when a report says the same
+module is in eleven chunks. Merging chunks is what duplicates a shared module, so the knob
+trades bytes against requests — and the trade is bad in both directions:
+
+| `minChunkSize` | eager chunks | gzip |
+| --- | --- | --- |
+| 5,000 | 73 | 414.3 KB |
+| **50,000 (default)** | **33** | **422.5 KB** |
+| 120,000 | 22 | 438.7 KB |
+
+Buying back 8 KB gzipped costs 40 extra requests; Turbopack's own `requestCost` default
+prices one request at ~200 KB of raw code and is right to. `maxMergeChunkSize: 50000`
+produced byte-identical output. **Leave it alone** — the duplication a Lighthouse report
+charges to this route is the price of not making those requests, and it is the cheaper
+half of the trade.
