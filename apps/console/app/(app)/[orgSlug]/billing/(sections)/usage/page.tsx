@@ -23,7 +23,9 @@ import {
   type AglynOrgBilling,
 } from '@aglyn/aglyn'
 import { Box, CircularProgress } from '@mui/material'
-import { CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
+import {
+  CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
+import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useMemo } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -33,7 +35,6 @@ import BillingStorageOverageCardComponent from '../../../../../../components/bil
 import BillingUsageBudgetCardComponent from '../../../../../../components/billing/billing-usage-budget-card.component'
 import BillingUsageHistoryComponent from '../../../../../../components/billing/billing-usage-history.component'
 import BillingUsageComponent from '../../../../../../components/billing/billing-usage.component'
-import CardColumns from '../../../../../../components/card-columns.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import useConfirmedDoc from '../../../../../../hooks/use-confirmed-doc'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'

@@ -16,10 +16,11 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import {
+  CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 
-import CardColumns from '../../../../../../components/card-columns.component'
 import BillingAddressCardComponent from '../../../../../../components/billing/billing-address-card.component'
 import BillingEmailCardComponent from '../../../../../../components/billing/billing-email-card.component'
 import BillingPaymentMethodsCardComponent from '../../../../../../components/billing/billing-payment-methods-card.component'

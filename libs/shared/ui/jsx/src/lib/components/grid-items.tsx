@@ -82,6 +82,15 @@ export interface GridItemsProps
   masonry?: boolean
 }
 
+/**
+ * Cards of unequal height are the common case, and a row is as tall as its
+ * tallest card, so the default leaves no hole for a short card to sit in.
+ * Pass `masonry={false}` where the items really are a ROW — tiles, buttons, a
+ * navigation column beside its content, a band of stat figures — and say so
+ * where you pass it, because a row is now the deliberate choice.
+ */
+const MASONRY_BY_DEFAULT = true
+
 /** A per-breakpoint column count, normalized from MUI's `size`. */
 type SpanProfile = Record<string, number>
 
@@ -236,7 +245,7 @@ export const GridItems = forwardRef<any, GridItemsProps>((props, ref) => {
   const {
     items = [],
     itemComponent: ItemComponent = Grid,
-    masonry,
+    masonry = MASONRY_BY_DEFAULT,
     spacing = 0,
     sx,
     ...rest

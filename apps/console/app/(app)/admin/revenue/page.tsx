@@ -412,6 +412,8 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterY
             >
               <GridItems
+                // Figures of equal height read as a band, not as a column each.
+                masonry={false}
                 spacing={3}
                 items={[
                   {
@@ -558,6 +560,8 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterY
             >
               <GridItems
+                // Figures again, three across.
+                masonry={false}
                 spacing={3}
                 items={[
                   {

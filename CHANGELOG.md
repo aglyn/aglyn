@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.99 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/0d584fb83...v1.0.0-beta.99)
+
+### Changed
+
+- **ui:** masonry is what a card grid gets without asking ([AGL-2698](https://linear.app/aglyn/issue/AGL-2698))
+
 ## v1.0.0-beta.98 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/940930cda...v1.0.0-beta.98)
