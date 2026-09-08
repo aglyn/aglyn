@@ -66,8 +66,6 @@
     "flat",
     "hoist-non-react-statics",
     "js-cookie",
-    "jss",
-    "jss-rtl",
     "lodash-es",
     "mitt",
     "mobx",
