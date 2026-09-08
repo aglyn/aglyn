@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.91 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.90...v1.0.0-beta.91)
+
+### Fixed
+
+- **console:** the media library's debounce follows use-debounce to its subpath ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682))
+
+### Performance
+
+- **ui:** two vendor re-exports with no readers hold @mui/styles and react-is ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682))
+- **vendor:** five packages ride the vendor barrel that no published page reads ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682))
+- **theme:** a JSS re-export nobody reads ships an RTL mirroring table to every visitor ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **deps:** drop nine dependencies nothing in the repo imports ([AGL-2682](https://linear.app/aglyn/issue/AGL-2682), [AGL-1238](https://linear.app/aglyn/issue/AGL-1238))
+
+</details>
+
 ## v1.0.0-beta.90 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.89...v1.0.0-beta.90)
