@@ -20,7 +20,7 @@
 // Without a top-level import or export TypeScript treats this file as a global
 // script, so its top-level `const`s collide with identically-named ones in
 // sibling specs (TS2451/TS2393). The marker makes it a module.
-export {}
+import { assistMonthOverage } from '@aglyn/aglyn/app-utils/assist-credits'
 
 /**
  * THE ROLLUP HAS TO CARRY THE ASSIST BILL (AGL-2280).
@@ -38,10 +38,13 @@ export {}
  * runs the SAME org twice with two different `estCostUsd` seeds and demands
  * the rollup change by exactly the delta.
  *
- * It also pins the boundary the other way: Assist is entitled by plan, not
- * metered on the invoice, and `billedCents` must be byte-for-byte what it was.
- * A cost that started charging customers because it started being measured
- * would be a far worse defect than the one being fixed.
+ * It also pins the boundary the other way, on both of its sides. Inside the
+ * plan's band Assist is entitled, not metered: `billedCents` must be
+ * byte-for-byte what it was, because a cost that started charging customers
+ * merely because it started being measured would be a far worse defect than
+ * the one being fixed. Past the band the org has agreed to a price — the
+ * plan's per-1,000-credit rate (AGL-2653) — so the overage, and only the
+ * overage, joins the invoice.
  */
 
 const mockDocs = new Map<string, Record<string, any>>()
@@ -195,6 +198,23 @@ const fetchMock = jest.fn(async (url: unknown, init?: any) => {
     meterEvents.push(new URLSearchParams(String(init?.body ?? '')))
     return { ok: true, json: async () => ({ object: 'billing.meter_event' }) }
   }
+  if (href.includes('/v1/subscriptions')) {
+    // A live subscription carrying the metered price: the org is billable,
+    // so an Assist overage past the band has somewhere to go.
+    return {
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            status: 'active',
+            items: {
+              data: [{ price: { id: 'price_plan' } }, { price: { id: 'price_metered_test' } }],
+            },
+          },
+        ],
+      }),
+    }
+  }
   throw new Error(`unexpected fetch: ${href}`)
 })
 
@@ -208,6 +228,7 @@ function seedOrg(assistEstCostUsd: number | undefined) {
   mockDocs.set('hosts/host-1', { orgId: 'org-1', screens: {} })
   mockDocs.set('orgs/org-1', {
     plan: 'business',
+    stripeCustomerId: 'cus_org1',
     subscription: { status: 'active' },
   })
   mockDocs.set('hosts/host-1/counters/media', { bytes: 12 * 1024 * 1024 })
@@ -229,6 +250,8 @@ function loadRoute() {
     ...ORIGINAL_ENV,
     STRIPE_SECRET_KEY: 'sk_test_not_a_real_key',
     STRIPE_METER_EVENT_NAME: 'aglyn_metered_usage',
+    STRIPE_PRICE_METERED: 'price_metered_test',
+    STRIPE_PRICE_METERED_YEARLY: 'price_metered_yearly_test',
     CRON_SECRET: 'test-cron-secret',
   } as NodeJS.ProcessEnv
   return require('../app/api/billing/report-usage/route').POST as (
@@ -301,23 +324,38 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
     expect(rollup['assistCostUsd']).toBe(0)
   })
 
-  it('does NOT charge for it — billedCents is unchanged by Assist', async () => {
+  it('charges past the band and only there — inside it billedCents is unchanged by Assist', async () => {
     /*
-      The boundary, asserted in the direction that would be worse to get
-      wrong. Assist is entitled by plan; it enters COGS because it is what an
-      org costs us, and it must not enter the invoice because nobody agreed to
-      a per-token price. Same org, one with a $1,200 Assist bill and one with
-      none: the meter event that reaches Stripe has to be identical.
+      The boundary, asserted in both directions. Business includes 7,500
+      credits ($7.50 of provider spend). Inside that band Assist enters COGS
+      because it is what an org costs us, and it must not enter the invoice:
+      same org, one with $6.50 of Assist and one with none, and the meter
+      event that reaches Stripe has to be identical. Past the band the org
+      has agreed to the plan's per-1,000-credit rate (AGL-2653), so the
+      overage — and nothing but the overage — is what `billedCents` grows by.
+      An org that chose the hard cap never gets here: assist stops at the
+      band, so no overage accrues to bill.
     */
     const none = await rollupFor(undefined)
     const noneEvents = meterEvents.map((event) => event.get('payload[value]'))
-    const huge = await rollupFor(1_204.5)
-    const hugeEvents = meterEvents.map((event) => event.get('payload[value]'))
+    const inside = await rollupFor(6.5)
+    const insideEvents = meterEvents.map((event) => event.get('payload[value]'))
 
-    expect(huge['billedCents']).toBe(none['billedCents'])
-    expect(hugeEvents).toEqual(noneEvents)
-    // And the recorded cost estimate — the one that DOES feed `billedCents`
-    // — must not have absorbed it either.
+    expect(inside['billedCents']).toBe(none['billedCents'])
+    expect(insideEvents).toEqual(noneEvents)
+    expect(inside['costUsd']).toBeCloseTo(none['costUsd'], 10)
+
+    const huge = await rollupFor(1_204.5)
+    const overage = assistMonthOverage({ plan: 'business' }, 1_204.5)
+    expect(overage.overageCredits).toBe(1_204_500 - 7_500)
+    expect(overage.overageMonthlyUsd).toBeGreaterThan(0)
+    expect(huge['billedCents']).toBe(
+      none['billedCents'] + Math.round(overage.overageMonthlyUsd * 100),
+    )
+    expect(huge['assistOverageUsd']).toBeCloseTo(overage.overageMonthlyUsd, 6)
+    // The recorded cost estimate — the one that feeds `billedCents` for every
+    // other metered line — has not absorbed the Assist bill on either side:
+    // the overage is its own line, never a markup folded into COGS.
     expect(huge['costUsd']).toBeCloseTo(none['costUsd'], 10)
   })
 })
