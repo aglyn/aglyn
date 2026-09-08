@@ -85,6 +85,7 @@ import {
 import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { leadSourceLabel, leadSources, leadTimeLabel } from './lead-history-card'
+import { LeadImportButton } from './lead-import-drawer'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { CONVERT_PENDING_ERASURE_REASON } from './lead-properties-card'
 import { LeadStatusChip } from './lead-status-chip'
@@ -460,6 +461,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 ))}
               </Select>
             </FormControl>
+            <LeadImportButton hostId={hostId} />
             <Button size="small" onClick={handleExport} disabled={!rows.length}>
               {'Export CSV'}
             </Button>
@@ -474,7 +476,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           {status === 'success' && window.length === 0 ? (
             <EmptyStateComponent
               label={'No leads yet'}
-              description={'Sign-ups, bookings and form submissions on your site become leads on their own.'}
+              description={'Sign-ups, bookings and form submissions on your site become leads on their own — or bring a list in with Import CSV.'}
             />
           ) : status === 'success' && rows.length === 0 ? (
             <Typography variant="body2" color="text.secondary">

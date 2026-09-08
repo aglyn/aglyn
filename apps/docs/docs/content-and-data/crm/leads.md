@@ -114,7 +114,47 @@ the **Show** view admits, not only the page on screen — as `leads.csv`:
 email, name, status, the owner by email address, the sources by name, first
 and last seen, the number of captures, the unqualified reason, when the lead
 converted, and notes. At the organization level the file also names each
-lead's **Site**. There is no leads import; the file is for reading elsewhere.
+lead's **Site**.
+
+### Import from CSV
+
+**Import CSV** beside **Export CSV** takes a spreadsheet of leads — another
+tool's export, a list from an event — and files each row under one of your
+sites. A lead is keyed by email address, so a person the site has already
+met is **updated** rather than added twice, and importing the same file
+again finishes what a closed drawer left. Importing needs the same **Manage
+data** permission as importing contacts.
+
+The three steps are the ones the [contacts import](./import.md) walks: choose
+the file (up to 5,000 rows), match its columns, check the ten-row preview,
+then import in batches of 200 with a result that says how many were
+**added**, **updated** and **skipped**, the skipped rows downloadable as a
+CSV that says why. **Download template** hands you the export's own header
+over no rows.
+
+| Field | What is read |
+| --- | --- |
+| **Email** | Required, and the identity. A row whose address cannot be read is skipped as *No usable email address*; two rows with the same address skip the second as a duplicate. |
+| **Name** | The person's name, as the list and campaign merge tags read it. |
+| **Status** | `new`, `working` or `unqualified`, by id or by label. **Qualified** is not a status a file may set — a lead becomes qualified by [converting](#converting-a-lead), beside the contact that conversion created — so a cell naming it is dropped and reported, and the lead keeps the status it has. |
+| **Owner** | The email address of a member of your organization. An address that matches nobody leaves the lead unassigned and is named at the end of the import. |
+| **Unqualified reason** | Kept only on a row whose **Status** is `unqualified`; on any other row it is dropped and reported, because the reason is what an unqualified lead was closed for. |
+| **Notes** | Free text. |
+
+The export's **Sources**, **First seen**, **Last seen** and **Captures**
+columns are proposed as **Do not import**: they are what the capture doors
+recorded about what the visitor actually did, and a file must not be able to
+rewrite it. **Converted** is left out for the same reason — it is stamped
+when a lead really becomes a contact. At the organization level the export's
+**Site** column is left out too: the drawer asks which site the file is
+filed under, and every row in the file goes there.
+
+**No marketing consent is recorded by an import.** A capture writes a
+consent basis only when the visitor ticked a box in front of them, and a
+spreadsheet is not that box, so there is no consent column to fill. An
+imported lead can be included in a campaign audience only if the site
+already holds a consent for that person from an earlier capture — see
+[Who a campaign is allowed to reach](../../marketing-and-automation/email-campaigns/overview.md#who-a-campaign-is-allowed-to-reach).
 
 ### Who owns a lead
 

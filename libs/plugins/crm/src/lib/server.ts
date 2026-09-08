@@ -85,6 +85,7 @@ import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes
 import { crmCompaniesImportHandler } from './server/companies-import'
 import { crmContactsImportHandler } from './server/contacts-import'
 import { crmDealsImportHandler } from './server/deals-import'
+import { crmLeadsImportHandler } from './server/leads-import'
 import { crmTasksImportHandler } from './server/tasks-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { crmEmailSendHandler } from './server/email-send'
@@ -547,6 +548,11 @@ export function registerCrmConsoleApi(): void {
   // when the org has no such name.
   registerPluginApiRoute('crm/deals-import', crmDealsImportHandler)
   registerPluginApiRoute('crm/tasks-import', crmTasksImportHandler)
+  // One chunk of a leads file (AGL-2701), written through `addHostLead` —
+  // the same door a sign-up, a booking and a form submission file a lead
+  // through, so an imported row is keyed, bounded and unconsented exactly
+  // as a captured one is.
+  registerPluginApiRoute('crm/leads-import', crmLeadsImportHandler)
   // The one writer of a deal's stage, won and lost (AGL-2598): the browser
   // could write the field, but only a server can emit the event an
   // automation listens for.
