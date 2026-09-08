@@ -68,6 +68,13 @@ jest.mock('./email-templates-card', () => ({
   default: () => null,
   EmailTemplatesCard: () => null,
 }))
+// The Email capture card (AGL-2657) has a spec of its own, and asks its
+// route on mount; stubbed for the same reason as the templates card above.
+jest.mock('./email-capture-card', () => ({
+  __esModule: true,
+  default: () => null,
+  EmailCaptureCard: () => null,
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),

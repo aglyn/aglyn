@@ -251,6 +251,7 @@ describe('through the routes', () => {
         contactId: 'c-ada',
         companyId: null,
         dealId: null,
+        remindAtMs: null,
       },
     })
   })
@@ -336,6 +337,7 @@ describe('beneath the organization hub (AGL-2637)', () => {
             contactId: 'c-ada',
             companyId: null,
             dealId: null,
+            remindAtMs: null,
           },
         },
         {
@@ -350,6 +352,7 @@ describe('beneath the organization hub (AGL-2637)', () => {
             contactId: null,
             companyId: null,
             dealId: null,
+            remindAtMs: null,
           },
         },
       ],
