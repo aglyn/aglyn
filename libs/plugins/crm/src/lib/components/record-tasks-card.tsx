@@ -237,6 +237,7 @@ export function RecordTasksCard(props: RecordTasksCardProps) {
                     {scope ? (
                       <TaskSnoozeMenu
                         dueAtMs={task.dueAtMs}
+                        remindAtMs={task.remindAtMs}
                         target={{ write: { scope, taskId: task.$id } }}
                         disabled={busyId === task.$id}
                       />

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 10
 title: Tasks & follow-ups
-description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, and a morning digest of what is owed.
+description: Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, a reminder at the task's own time, and a morning digest of what is owed.
 ---
 
 # Tasks & follow-ups
@@ -73,7 +73,9 @@ assignee by email address, the contact, company and deal by name, and notes. The
 **New task** opens a drawer over the list. Give the task a title, pick a kind and a
 priority, set a due date and time (or leave it empty for a task with no deadline), choose
 an assignee from your team, link it to a contact, a company or a deal by name, and add
-notes. A new task is assigned to you unless you pick somebody else.
+notes. A new task is assigned to you unless you pick somebody else. **Remind me**, under
+the due date, is the task's [reminder](#reminders): the due time unless you move it, or
+**No reminder**.
 
 Opening a row opens the same drawer to edit it. **Delete** at the bottom of the drawer
 removes the task for everyone who can see it; a task that was finished is better ticked
@@ -91,10 +93,10 @@ category in their account settings.
 The assignee must be a member of your organization; the picker offers the current
 roster.
 
-That notification is also the reminder for work due soon: assigning a task due within the
-next day tells the assignee once, with the due time in the message. There is no separate
-per-task alarm — the [daily digest](#the-daily-digest) below is what says, each morning,
-what is due today and what is already late.
+That notification says when the task is due, but it fires once, at assignment. The task's
+own alarm is its [reminder](#reminders), sent at the task's own time; the
+[daily digest](#the-daily-digest) is what says, each morning, what is due today and what
+is already late.
 
 ### Completing and reopening
 
@@ -140,10 +142,51 @@ first, with the same checkbox to complete one inline; the card's heading counts 
 are open and how many are done. **New task** on the card opens the drawer with the record
 already linked, and **All tasks** jumps to the section.
 
+## Reminders
+
+Every task with a due date and time has a **reminder** at that time. Within the hour
+after it, the assignee gets a console notification — **Task reminder**, opening the
+task's contact, deal or company page, or the tasks list when it is linked to nothing —
+and one email listing every task of theirs that fell due in that hour. The drawer's
+**Remind me** field, under **Due**, shows it.
+
+- **It follows the due date.** Move the due date — in the drawer, with a snooze, or over
+  the API — and a reminder that sat on the old due time moves with it. Set **Remind me**
+  to a time of your own (an hour before, the evening before) and it stays there when the
+  due date moves. The bulk bar's **Set due** moves due dates only; a reminder on a task
+  it touches stays where it was.
+- **No reminder** clears it. A task with no due date has no reminder unless you set one,
+  and a task made before reminders existed has none until you set one.
+- **It fires once.** A reminder that has been sent is not sent again; changing its time
+  makes a new one. Completing a task cancels a reminder that has not fired yet, and
+  reopening the task does not bring it back.
+- **It goes to the assignee**, and only to a member who can open the CRM (the same
+  **manage data** permission as everything else here). A task assigned to nobody reminds
+  nobody; the digest is where unassigned work shows up.
+
+Reminders are checked once an hour, at the top of the hour, so "remind me at 3:00"
+arrives between 3:00 and 4:00. The time in the message is written in the same time zone
+the [daily digest](#the-daily-digest) uses. Reminders are sent only in organizations
+whose plan includes the daily digest — a plan that gets no digest gets no reminders
+either.
+
+Tasks created by an [automation](./automations.md) or over the
+[REST API](/api/resources/tasks) get the same default: a reminder at the due time,
+unless the API call says otherwise (`remindAt`).
+
+### Turning reminders off
+
+A reminder is a **Forms & bookings** notification, like **Task assigned to you**. Muting
+that category under Account settings → **Notifications** stops both the console
+notification and the email, on every workspace you belong to. There is no separate
+switch, because a reminder is one message about one task rather than a schedule you keep;
+to silence one task, clear its **Remind me** field.
+
 ## The daily digest
 
-Because overdue and today are read off the clock, nothing on a task ever fires on its
-own. What does is the **daily CRM digest**: once a morning, at 8:00 (America/Chicago),
+Because overdue and today are read off the clock, nothing on a task fires on its own
+except its [reminder](#reminders). What says what is owed is the **daily CRM digest**:
+once a morning, at 8:00 (America/Chicago),
 every member with open work gets **one** console notification and **one** email saying
 what they owe — for example, "3 tasks due today, 2 overdue, 1 unworked lead".
 
@@ -169,7 +212,9 @@ permission as everything else here), and only in organizations whose plan includ
 **Daily CRM digest** is a switch under Account settings → **Notifications**, on by
 default. Off, it stops both the notification and the email, on every workspace you
 belong to. Muting the **Forms & bookings** category on that same page silences the
-console notification only — the email still arrives while the digest is on. See
+console notification only — the email still arrives while the digest is on. (A
+[reminder](#turning-reminders-off) is the other way round: the category mute is its only
+switch, and stops its email too.) See
 [Workspace settings & notifications](../../getting-started/console-tour.md#workspace-settings--notifications).
 
 ## The dashboard card

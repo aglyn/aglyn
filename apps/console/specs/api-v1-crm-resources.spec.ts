@@ -98,6 +98,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm-task-reminders'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
@@ -903,6 +904,62 @@ describe('/v1/tasks', () => {
       consentSiteId: 'host-1',
     })
     expect(Object.keys((await json(bad)).error.fields).sort()).toEqual(['dueAt', 'kind'])
+  })
+
+  it('gives a task a reminder at its due time unless told otherwise, and carries it as the task changes (AGL-2659)', async () => {
+    const task = await json(
+      await call('POST', 'tasks', {
+        title: 'Call back',
+        dueAt: '2026-09-10T15:00:00Z',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(task).toMatchObject({ remindAt: '2026-09-10T15:00:00.000Z', reminderSentAt: null })
+    // An explicit none, and an explicit time of its own.
+    const none = await json(
+      await call('POST', 'tasks', {
+        title: 'No alarm',
+        dueAt: '2026-09-10T15:00:00Z',
+        remindAt: null,
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(none.remindAt).toBeNull()
+    const early = await json(
+      await call('POST', 'tasks', {
+        title: 'Early',
+        dueAt: '2026-09-10T15:00:00Z',
+        remindAt: '2026-09-10T14:00:00Z',
+        consentSiteId: 'host-1',
+      }),
+    )
+    expect(early.remindAt).toBe('2026-09-10T14:00:00.000Z')
+
+    // A moved due date carries a reminder that sat on it, and takes the
+    // runner's mark off — it is a reminder not yet sent.
+    mockDocs.get(`${TASKS}/${task.id}`)!.reminderSentAtMs = 1_760_000_000_000
+    const moved = await json(
+      await call('PATCH', `tasks/${task.id}`, { dueAt: '2026-09-12T09:30:00Z' }),
+    )
+    expect(moved).toMatchObject({
+      dueAt: '2026-09-12T09:30:00.000Z',
+      remindAt: '2026-09-12T09:30:00.000Z',
+      reminderSentAt: null,
+    })
+    // …but leaves one set to a time of its own where it was.
+    const still = await json(
+      await call('PATCH', `tasks/${early.id}`, { dueAt: '2026-09-12T09:30:00Z' }),
+    )
+    expect(still.remindAt).toBe('2026-09-10T14:00:00.000Z')
+    // A PATCH that says nothing about it changes nothing about it.
+    const retitled = await json(await call('PATCH', `tasks/${early.id}`, { title: 'Earlier' }))
+    expect(retitled.remindAt).toBe('2026-09-10T14:00:00.000Z')
+    // Completing clears a reminder still owed.
+    const done = await json(await call('PATCH', `tasks/${task.id}`, { status: 'done' }))
+    expect(done).toMatchObject({ status: 'done', remindAt: null })
+
+    const bad = await call('POST', 'tasks', { title: 'X', remindAt: 'soon', consentSiteId: 'host-1' })
+    expect(Object.keys((await json(bad)).error.fields)).toEqual(['remindAt'])
   })
 
   it('filters on one clause, the assignee before the status', async () => {

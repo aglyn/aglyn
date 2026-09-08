@@ -312,6 +312,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
             {row.status === 'done' || !scope ? null : (
               <TaskSnoozeMenu
                 dueAtMs={row.dueAtMs}
+                remindAtMs={row.remindAtMs}
                 target={{ write: { scope, taskId: row.$id } }}
                 disabled={busyId === row.$id}
               />

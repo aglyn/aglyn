@@ -232,6 +232,87 @@ describe('under a site', () => {
   })
 })
 
+/**
+ * THE REMINDER (AGL-2659). A new task's reminder is left unsaid — the
+ * field shows the due time, the route decides — until the person touches
+ * it: typing a time says a time, "No reminder" says none. On an edit the
+ * field shows what is stored, and a reminder sitting on the due time
+ * follows a change to it as the route would carry it.
+ */
+describe('the reminder', () => {
+  const DUE = new Date(2026, 8, 10, 15, 0).getTime()
+  const LATER = new Date(2026, 8, 12, 9, 30).getTime()
+  const dueField = () => screen.getByLabelText(/^Due/) as HTMLInputElement
+  const remindField = () => screen.getByLabelText(/^Remind me/) as HTMLInputElement
+  const setDue = (value: string) => fireEvent.change(dueField(), { target: { value } })
+
+  it('shows the due time and says nothing to the route until the field is touched', async () => {
+    open({ hostId: 'host-a' })
+    expect(remindField().value).toBe('')
+    expect(screen.getByText('No reminder.')).toBeTruthy()
+    setDue('2026-09-10T15:00')
+    expect(remindField().value).toBe('2026-09-10T15:00')
+    expect(screen.getByText(/^At the due time/)).toBeTruthy()
+    create('Call Jane')
+    await waitFor(() => expect(saves).toHaveLength(1))
+    const sent = saves[0]['task'] as Record<string, unknown>
+    expect(sent['dueAtMs']).toBe(DUE)
+    expect(sent['remindAtMs']).toBeUndefined()
+  })
+
+  it('sends an explicit none for "No reminder", and a time for a time', async () => {
+    open({ hostId: 'host-a' })
+    setDue('2026-09-10T15:00')
+    fireEvent.click(screen.getByRole('button', { name: 'No reminder' }))
+    expect(remindField().value).toBe('')
+    expect(screen.getByText('No reminder.')).toBeTruthy()
+    create('Call Jane')
+    await waitFor(() => expect(saves).toHaveLength(1))
+    expect((saves[0]['task'] as Record<string, unknown>)['remindAtMs']).toBeNull()
+
+    fireEvent.change(remindField(), { target: { value: '2026-09-10T14:00' } })
+    // A time of its own stays put when the due date moves on.
+    setDue('2026-09-12T09:30')
+    expect(remindField().value).toBe('2026-09-10T14:00')
+    create('Call Jane')
+    await waitFor(() => expect(saves).toHaveLength(2))
+    expect((saves[1]['task'] as Record<string, unknown>)['remindAtMs']).toBe(
+      new Date(2026, 8, 10, 14, 0).getTime(),
+    )
+  })
+
+  it('follows the due date on an edit when it sat there, and stays when it did not', async () => {
+    open({
+      hostId: 'host-a',
+      task: task({ hostId: 'host-a', visibleTo: ['host:host-a'], dueAtMs: DUE, remindAtMs: DUE }),
+    })
+    expect(remindField().value).toBe('2026-09-10T15:00')
+    setDue('2026-09-12T09:30')
+    expect(remindField().value).toBe('2026-09-12T09:30')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(saves).toHaveLength(1))
+    expect(saves[0]['task']).toMatchObject({ dueAtMs: LATER, remindAtMs: LATER })
+  })
+
+  it('leaves a reminder somebody set to a time of their own', async () => {
+    open({
+      hostId: 'host-a',
+      task: task({
+        $id: 't-3',
+        hostId: 'host-a',
+        visibleTo: ['host:host-a'],
+        dueAtMs: DUE,
+        remindAtMs: DUE - 3_600_000,
+      }),
+    })
+    setDue('2026-09-12T09:30')
+    expect(remindField().value).toBe('2026-09-10T14:00')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(saves).toHaveLength(1))
+    expect(saves[0]['task']).toMatchObject({ dueAtMs: LATER, remindAtMs: DUE - 3_600_000 })
+  })
+})
+
 describe('an edit beneath the organization hub', () => {
   it("says an organization task is filed with no site, and saves it through the org variant", async () => {
     open({ hostId: null, task: task({ hostId: null }), wrapper: underOrg([SITE_A]) })

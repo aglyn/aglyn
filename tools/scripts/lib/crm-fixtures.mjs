@@ -538,6 +538,8 @@ export async function seedCrmFixtures(options) {
       createdByUid: ownerUid,
       visibleTo,
       hostId,
+      // The reminder the save route would give it (AGL-2659): its due time.
+      remindAtMs: fields.dueAtMs ?? null,
       ...fields,
     },
   })

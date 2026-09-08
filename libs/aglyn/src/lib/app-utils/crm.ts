@@ -538,6 +538,22 @@ export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
   contactId?: string
   companyId?: string
   dealId?: string
+  /**
+   * When the assignee is reminded (AGL-2659): the due time unless a person
+   * moved it, `null` for no reminder. The hourly `/api/crm/task-reminders`
+   * runner reads every open task whose reminder has come due, so a task
+   * that should never remind carries `null` rather than no field — a
+   * missing key and a null both fall outside the range, but the null says
+   * it was decided.
+   */
+  remindAtMs?: number | null
+  /**
+   * When the runner handled the reminder — sent it, or found nobody to
+   * send it to. Absent while the reminder is still owed, which is how a
+   * rerun over the same hour sends nothing twice; cleared again when the
+   * reminder moves, because a moved reminder is a new one.
+   */
+  reminderSentAtMs?: number
 }
 
 /**

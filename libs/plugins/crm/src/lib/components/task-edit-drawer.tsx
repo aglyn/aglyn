@@ -154,7 +154,9 @@ function TaskForm(props: TaskEditDrawerProps) {
     // A new task is the creator's own unless a button said otherwise: it
     // lands in "My tasks", and assigning it elsewhere is a choice made in
     // the picker rather than a default that notifies a teammate by accident.
-    return { ...base, assigneeUid: user?.uid ?? null, ...prefill }
+    // Its reminder is left UNSAID (AGL-2659) — the field shows the due time
+    // and the route decides — until the person touches it.
+    return { ...base, remindAtMs: undefined, assigneeUid: user?.uid ?? null, ...prefill }
   })
   const assignee = findOrgMember(directory.members, fields.assigneeUid)
   const [busy, setBusy] = useState(false)
@@ -162,6 +164,28 @@ function TaskForm(props: TaskEditDrawerProps) {
 
   const set = <K extends keyof CrmTaskFields>(key: K, value: CrmTaskFields[K]) =>
     setFields((prev) => ({ ...prev, [key]: value }))
+  /*
+   * The due date, and the reminder with it (AGL-2659): a reminder left
+   * unsaid shows the due time and needs no help, and one a person set to
+   * the due time follows it here as the route would follow it — so what
+   * the field shows after the change is what the save will store.
+   */
+  const setDue = (dueAtMs: number | null) =>
+    setFields((prev) => ({
+      ...prev,
+      dueAtMs,
+      ...(typeof prev.remindAtMs === 'number' && prev.remindAtMs === prev.dueAtMs
+        ? { remindAtMs: dueAtMs }
+        : {}),
+    }))
+  /** What the reminder field shows: the due time while nothing is said. */
+  const remindAtMs = fields.remindAtMs === undefined ? fields.dueAtMs : fields.remindAtMs
+  const reminderHelp =
+    remindAtMs === null
+      ? 'No reminder.'
+      : remindAtMs === fields.dueAtMs
+        ? 'At the due time — the assignee is reminded in the console and by email.'
+        : 'The assignee is reminded in the console and by email.'
 
   const save = async () => {
     if (!fields.title.trim()) {
@@ -328,7 +352,7 @@ function TaskForm(props: TaskEditDrawerProps) {
           label="Due"
           type="datetime-local"
           value={dueAtToLocalInput(fields.dueAtMs)}
-          onChange={(event) => set('dueAtMs', localInputToDueAt(event.target.value))}
+          onChange={(event) => setDue(localInputToDueAt(event.target.value))}
           size="small"
           slotProps={{ inputLabel: { shrink: true } }}
           helperText="Leave empty for a task with no due date."
@@ -343,14 +367,39 @@ function TaskForm(props: TaskEditDrawerProps) {
         <TaskSnoozeMenu
           variant="button"
           dueAtMs={fields.dueAtMs}
+          remindAtMs={remindAtMs}
           disabled={busy}
           target={
             task && scope
               ? { write: { scope, taskId: task.$id } }
-              : { pick: (dueAtMs) => set('dueAtMs', dueAtMs) }
+              : { pick: setDue }
           }
-          onSnoozed={(dueAtMs) => set('dueAtMs', dueAtMs)}
+          onSnoozed={setDue}
         />
+      </Stack>
+      {/*
+        The reminder (AGL-2659), beside the due date it follows by default.
+        Its own field rather than a switch, because "remind me an hour
+        before" is the second thing a person wants after "remind me".
+      */}
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+        <TextField
+          label="Remind me"
+          type="datetime-local"
+          value={dueAtToLocalInput(remindAtMs)}
+          onChange={(event) => set('remindAtMs', localInputToDueAt(event.target.value))}
+          size="small"
+          slotProps={{ inputLabel: { shrink: true } }}
+          helperText={reminderHelp}
+          sx={{ flex: 1 }}
+        />
+        <Button
+          size="small"
+          onClick={() => set('remindAtMs', null)}
+          disabled={busy || remindAtMs === null}
+        >
+          {'No reminder'}
+        </Button>
       </Stack>
       <TextField
         select

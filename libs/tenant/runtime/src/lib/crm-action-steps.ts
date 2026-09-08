@@ -29,6 +29,7 @@ import {
   type CrmTask,
   crmEmailDeliveryTags,
   crmScopeTokens,
+  crmTaskReminderAfterEdit,
   normalizeContactEmail,
   parseCrmMemberRef,
   readContactFacet,
@@ -352,12 +353,15 @@ export async function runCrmActionStep(
       if ('error' in named) return { error: named.error }
       assignee = named.uid
     }
+    const dueAtMs = nowMs + dueInDays * DAY_MS
     const task: CrmTask = {
       title,
       kind: step.kind,
       priority: 'normal',
       status: 'open',
-      dueAtMs: nowMs + dueInDays * DAY_MS,
+      dueAtMs,
+      // The reminder a person's task gets (AGL-2659): the due time.
+      remindAtMs: crmTaskReminderAfterEdit({ dueAtMs, previous: null }),
       ...(assignee ? { assigneeUid: assignee } : {}),
       createdByUid: '',
       sourceActionId: actionId,

@@ -51,6 +51,14 @@ export type AglynNotificationType =
   // (`system.`). Someone who has muted the operational stream has said they
   // do not want to be told about work as it arrives, and a task is work.
   | 'content.taskAssigned'
+  // A CRM task's reminder came due (AGL-2659): the hourly runner telling
+  // the assignee, at the task's own time, that the task is due. `content.`
+  // beside `taskAssigned` for the same reason it gives — work on the site,
+  // not standing — and so the one mute that stops "work arriving" stops
+  // "work falling due" with it. The mute governs the whole reminder, mail
+  // included, unlike the digest's: a reminder is one message about one
+  // task, and there is no schedule to keep separately from it.
+  | 'content.taskReminder'
   // A contact, or a lead, became the recipient's to work (AGL-2618): a
   // capture the assignment rules or the site's default owner routed to
   // them, a lead somebody converted and handed to them, or an automation's
@@ -216,6 +224,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.order': 'New order',
     'content.lowStock': 'Low stock',
     'content.taskAssigned': 'Task assigned to you',
+    'content.taskReminder': 'Task reminder',
     'content.contactAssigned': 'Contact assigned to you',
     'content.leadAssigned': 'Lead assigned to you',
     'content.crmDailyDigest': 'Daily CRM digest',

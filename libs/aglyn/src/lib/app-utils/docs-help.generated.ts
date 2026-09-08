@@ -115,7 +115,7 @@ export const PLUGIN_DOCS = {
   crmTasks: {
     path: '/content-and-data/crm/tasks',
     title: 'Tasks & follow-ups',
-    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, and a morning digest of what is owed.',
+    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the contact, company or deal they are for — overdue and today read off the clock, a snooze, a reminder at the task\'s own time, and a morning digest of what is owed.',
   },
   crmViews: {
     path: '/content-and-data/crm/views',
@@ -213,7 +213,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   crmLeads: ['#what-makes-a-lead', '#the-leads-list', '#working-a-lead-from-the-row', '#who-owns-a-lead', '#a-leads-page', '#converting-a-lead', '#unqualifying-a-lead', '#erasing-the-person', '#who-can-do-this', '#related'],
   crmReports: ['#choosing-a-period', '#contacts', '#sources-and-lifecycle', '#conversion-by-source', '#lead-funnel', '#pipeline', '#forecast-by-close-month', '#won-and-lost', '#activity-by-teammate', '#tasks', '#exporting-a-table', '#crm-at-a-glance', '#how-the-numbers-are-counted', '#related'],
   crmSettings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#recipes', '#related'],
-  crmTasks: ['#the-tasks-page', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
+  crmTasks: ['#the-tasks-page', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters-on-the-contacts-list', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   deals: ['#pipelines', '#stages', '#the-board-and-the-table', '#creating-a-deal', '#line-items', '#moving-winning-and-losing', '#a-won-deal-makes-its-contact-a-customer', '#a-deals-page', '#related'],

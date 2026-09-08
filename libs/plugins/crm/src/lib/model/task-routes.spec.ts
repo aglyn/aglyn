@@ -159,10 +159,16 @@ describe('crmTaskFieldsOf', () => {
       contactId: null,
       companyId: null,
       dealId: 'd-4',
+      // No field at all on a task from before reminders existed reads as
+      // no reminder, and goes back as an explicit none (AGL-2659).
+      remindAtMs: null,
     })
     // What the drawer sends back is what the server reads: a no-op save
     // changes no field the form owns.
     expect(readCrmTaskFields(fields)).toEqual({ ok: true, fields })
+    const reminded = crmTaskFieldsOf({ ...stored, remindAtMs: 1757059200000 })
+    expect(reminded.remindAtMs).toBe(1757059200000)
+    expect(readCrmTaskFields(reminded)).toEqual({ ok: true, fields: reminded })
   })
 
   it('treats an empty document as a blank form', () => {
@@ -176,7 +182,31 @@ describe('crmTaskFieldsOf', () => {
       contactId: null,
       companyId: null,
       dealId: null,
+      remindAtMs: null,
     })
+  })
+})
+
+describe('the reminder a body carries (AGL-2659)', () => {
+  it('reads a time, an explicit none, and nothing said as three different answers', () => {
+    const said = readCrmTaskFields({ title: 'x', remindAtMs: '1757059200000.4' })
+    expect(said.ok && said.fields.remindAtMs).toBe(1757059200000)
+    const none = readCrmTaskFields({ title: 'x', remindAtMs: null })
+    expect(none.ok && none.fields.remindAtMs).toBeNull()
+    const empty = readCrmTaskFields({ title: 'x', remindAtMs: '' })
+    expect(empty.ok && empty.fields.remindAtMs).toBeNull()
+    // Nothing said leaves the key OFF the fields, which is what lets the
+    // route apply its rule rather than read a null it did not mean.
+    const unsaid = readCrmTaskFields({ title: 'x' })
+    expect(unsaid.ok && 'remindAtMs' in unsaid.fields).toBe(false)
+  })
+
+  it('refuses a reminder time it cannot read', () => {
+    expect(readCrmTaskFields({ title: 'x', remindAtMs: 'soon' })).toEqual({
+      ok: false,
+      error: 'The reminder time could not be read.',
+    })
+    expect(readCrmTaskFields({ title: 'x', remindAtMs: 0 }).ok).toBe(false)
   })
 })
 

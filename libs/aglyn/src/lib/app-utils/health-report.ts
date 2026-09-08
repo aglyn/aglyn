@@ -2000,9 +2000,10 @@ export interface ScheduledJob {
 /**
  * THE INVENTORY.
  *
- * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) — the
- * weekly jobs plus the month-boundary usage-email sweep, for which an hour of
- * drift is nothing — and twelve rows driven by Cloud Scheduler out of
+ * Seven GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
+ * the weekly jobs, the month-boundary usage-email sweep and the hourly CRM
+ * task reminders, for which an hour of drift is nothing — and twelve rows
+ * driven by Cloud Scheduler out of
  * `cloud/functions/src/index.ts`: `pluginJobsBeat` (every minute), the four
  * the `consoleFastCrons` job carries every fifteen (AGL-1617), and one
  * `consoleDailyCron` export per daily job.
@@ -2122,6 +2123,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     graceMinutes: 360,
     drives:
       "Mails each org last month's usage summary, chunked across 48 hourly windows. If it stops, the month's summaries are simply never sent.",
+  },
+  {
+    id: 'crm-task-reminders',
+    label: 'CRM task reminders',
+    // Hourly, all month (AGL-2659). The grace is `usage-email`'s, for the
+    // reason that row gives about this runner: GitHub's dispatch is
+    // best-effort, and a reminder stays owed on the task until a run
+    // handles it, so a dropped hour costs lateness rather than silence.
+    cron: '0 * * * *',
+    runner: 'github-actions',
+    target: '/api/crm/task-reminders',
+    graceMinutes: 360,
+    drives:
+      'Sends each CRM task’s reminder at its own time — a console notification and an email to the assignee (AGL-2659). If it stops, every reminder a person set in the task drawer is silently late, and nothing but the morning digest says a task was due.',
   },
   {
     id: 'firestore-export',
