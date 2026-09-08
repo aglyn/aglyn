@@ -21,10 +21,10 @@ import {
   CRM_EMAIL_ORG_TAG,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
-import {
-  normalizeResendDeliveryEvents,
-  verifySvixSignature,
-} from '@aglyn/shared-util-email'
+import { normalizeResendDeliveryEvents } from '@aglyn/shared-util-email'
+// By its own path, not the barrel: the check holds a `crypto` HMAC, and the
+// barrel is reached from the browser through the campaign model (AGL-2657).
+import { verifySvixSignature } from '@aglyn/shared-util-email/svix-signature'
 // AGL-1771 lifted `isDocumentId` here from the local copy AGL-1768 wrote. The
 // copy's stated reason was wrong: `@nx/enforce-module-boundaries` does NOT
 // refuse an edge between two feature plugins — every plugin carries only

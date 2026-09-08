@@ -31,8 +31,10 @@ import {
   resendReceivedEmailSource,
   resendReceivedEventId,
   resendReceivedEventRecipients,
-  verifySvixSignature,
 } from '@aglyn/shared-util-email'
+// By its own path, not the barrel: the check holds a `crypto` HMAC, and the
+// barrel is reached from the browser through the campaign model.
+import { verifySvixSignature } from '@aglyn/shared-util-email/svix-signature'
 import {
   crmInboundHostIds,
   fileCrmInboundEmail,

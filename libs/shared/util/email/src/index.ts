@@ -31,9 +31,11 @@ export * from './lib/email-render'
 export * from './lib/text-email-html'
 export * from './lib/marketing-send'
 export * from './lib/email-delivery-events'
-// The one Svix signature check both Resend webhooks verify with, and the
-// received-mail reader the CRM's capture route files from (AGL-2657).
-export * from './lib/svix-signature'
+// The received-mail reader the CRM's capture route files from (AGL-2657).
+// Its neighbor `./lib/svix-signature` is deliberately NOT re-exported here:
+// it holds a `crypto` HMAC, and this barrel is reached from the browser
+// through `@aglyn/shared-ui-email-campaigns`, so a webhook imports it by its
+// own path — `@aglyn/shared-util-email/svix-signature`.
 export * from './lib/received-email'
 export * from './lib/email-revenue-window'
 // Exported so the console drift guard can pin it against @aglyn/aglyn.

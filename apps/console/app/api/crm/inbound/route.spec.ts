@@ -159,7 +159,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // ---------------------------------------------------------------------------
 
 import { CRM_INBOUND_UNMATCHED_ACTION, personKey } from '@aglyn/aglyn/server'
-import { type ReceivedEmail, signSvixPayload } from '@aglyn/shared-util-email'
+import type { ReceivedEmail } from '@aglyn/shared-util-email'
+import { signSvixPayload } from '@aglyn/shared-util-email/svix-signature'
 import { POST, inboundWebhookSecrets, setInboundReaderForTesting } from './route'
 
 const URL = 'https://app.aglyn.com/api/crm/inbound'
