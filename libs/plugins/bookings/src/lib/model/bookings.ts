@@ -15,6 +15,17 @@
  * limitations under the License.
  */
 
+// Leaf paths, not the barrel: this model is read by the client bundle and
+// the `/server` entry alike, and either barrel would drag the other's
+// surface into a bundle that has no use for it.
+import {
+  BOOKING_SERVICE_PARAM,
+  CRM_BOOKING_REF_PARAM,
+  type CrmBookingRef,
+  formatCrmBookingRef,
+} from '@aglyn/aglyn/app-utils/crm-booking'
+import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
+
 /**
  * Bookings v1 (AGL-159): services with weekly availability windows and
  * pure, timezone-explicit slot computation. All times are minutes since
@@ -37,6 +48,18 @@ export interface HostBookingService {
   windows?: Partial<Record<number, Array<{ start: number; end: number }>>>
   /** IANA timezone the windows are defined in, e.g. "America/Chicago". */
   timezone?: string
+  /**
+   * Create a follow-up task on the CRM record when this service is booked
+   * (AGL-2660) — due one business day after the slot, on whoever holds the
+   * relationship. Off unless the service says so.
+   */
+  crmFollowUpTask?: boolean
+  /**
+   * File the booking as a `meeting` on the CRM record's timeline (AGL-2660).
+   * Absent means ON: a booking is a meeting the record has, and the service
+   * has to opt out of saying so.
+   */
+  crmMeetingActivity?: boolean
 }
 
 /** Booked interval as epoch-ms instants. */
@@ -194,4 +217,55 @@ export function isSlotOpen(
     1,
   )
   return slots.length > 0 && slots[0].startsAtMs === startsAtMs
+}
+
+/**
+ * The page on the site that holds the Booking block, as the plugin's
+ * `bookingPath` setting stores it (AGL-2660). The site root by default: a
+ * site that put the block on its home page needs no setting, and a site
+ * that put it elsewhere says where once, per site.
+ */
+export const BOOKING_PATH_DEFAULT = '/'
+
+/** `/book`, `book/`, ` /book?x ` → `/book`; anything empty → the root. */
+export function normalizeBookingPath(raw: unknown): string {
+  const text = String(raw ?? '')
+    .trim()
+    .split(/[?#]/)[0]
+  if (!text) return BOOKING_PATH_DEFAULT
+  const leading = text.startsWith('/') ? text : `/${text}`
+  const trimmed = leading.replace(/\/+$/, '')
+  return trimmed || BOOKING_PATH_DEFAULT
+}
+
+export interface BookingLinkInput {
+  /** The host's public naming — its custom domain or its subdomain. */
+  site: { cname?: string | null; subdomain?: string | null } | null | undefined
+  /** The service the link opens the widget on. */
+  service: { id: string }
+  /** The site's `bookingPath` setting; the root when unset. */
+  path?: string | null
+  /** The CRM record the link is dropped from, when there is one. */
+  crmRef?: CrmBookingRef | null
+}
+
+/**
+ * The public URL a visitor books a service at (AGL-2660), or `null` for a
+ * site with no public origin yet.
+ *
+ * PER SERVICE, not per member: the model carries no staff or per-member
+ * notion — a service has one calendar — so there is one link per service
+ * and nothing narrower. The Bookings plugin renders no route of its own
+ * either; the widget is a block the site owner placed on a page, so the
+ * link is that page (the `bookingPath` setting) with the service
+ * preselected and, when dropped from a CRM record, the record carried
+ * along so the booking can be attributed even when the booker uses a
+ * different address.
+ */
+export function bookingLinkFor(input: BookingLinkInput): string | null {
+  const origin = hostPublicOrigin(input.site)
+  if (!origin) return null
+  const query = new URLSearchParams({ [BOOKING_SERVICE_PARAM]: input.service.id })
+  if (input.crmRef) query.set(CRM_BOOKING_REF_PARAM, formatCrmBookingRef(input.crmRef))
+  return `${origin}${normalizeBookingPath(input.path)}?${query.toString()}`
 }

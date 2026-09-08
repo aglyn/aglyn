@@ -39,6 +39,16 @@ import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
 import { bookingAnalyticsHandler } from './server/booking-analytics'
 import { bookingRefundHandler } from './server/refund'
+// The booking's way back to the CRM record (AGL-2660): the reference a
+// booking link carried, and the meeting a free booking files on landing.
+// The leaf, not the barrel: this library's specs substitute the barrel
+// wholesale, and a parser that vanished under them would fail every
+// booking they take.
+import {
+  formatCrmBookingRef,
+  parseCrmBookingRef,
+} from '@aglyn/aglyn/app-utils/crm-booking'
+import { fileBookingOnCrm } from './server/booking-crm'
 
 // Settings schema (AGL-428): registered here too so server-only loads
 // (API dispatchers) get defaults-merged getPluginConfig reads.
@@ -270,6 +280,10 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
   // consent to be emailed marketing, so this is only set when the visitor
   // checked it.
   const marketingConsent = req.body?.marketingConsent === true
+  // The CRM record the booking link named (AGL-2660), kept on the row so
+  // the booking can be attributed to it even when the visitor books with
+  // a different address. Parsed, never stored raw: this is a public door.
+  const crmRef = parseCrmBookingRef(req.body?.crmRef)
   if (!hostId || !serviceId || !Number.isFinite(startsAtMs) || !startsAtMs) {
     return res.status(400).json({ error: 'Invalid booking request' })
   }
@@ -502,6 +516,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         endsAtMs,
         status: paid ? 'pendingPayment' : 'confirmed',
         ...(paid && { expiresAtMs: Date.now() + 15 * 60_000 }),
+        ...(crmRef ? { crmRef: formatCrmBookingRef(crmRef) } : {}),
         createdAt: FieldValue.serverTimestamp(),
       })
       return bookingRef.id
@@ -775,6 +790,27 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       // that did not happen.
       await meterHostEmail(hostId)
     }
+
+    // THE RECORD'S MEETING (AGL-2660). A free booking is confirmed right
+    // here, so this is where it reaches the CRM: the meeting on the
+    // record's timeline and, when the service asks, the follow-up task. A
+    // paid booking waits for the webhook, which files it once the charge
+    // has cleared. Awaited, because a route handler is frozen the moment
+    // it answers (AGL-2327) — and never thrown: the slot is the guest's
+    // whatever the CRM did.
+    await fileBookingOnCrm(firestore, {
+      hostId,
+      bookingId,
+      booking: {
+        serviceId,
+        serviceName: service.name ?? '',
+        email,
+        startsAtMs,
+        endsAtMs,
+        ...(crmRef ? { crmRef: formatCrmBookingRef(crmRef) } : {}),
+      },
+      service,
+    })
 
     return res.status(200).json({ bookingId, startsAtMs, endsAtMs, alerts })
   } catch (error: unknown) {
