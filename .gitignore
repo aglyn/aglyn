@@ -10,7 +10,10 @@ tools/plugin-loader/realm/*/dist
 .rollup.cache
 
 # dependencies
-/node_modules
+# Unanchored: agent worktrees symlink an install into `cloud/functions` and
+# anywhere else a package lives, and an anchored rule ignored none of them —
+# one such link was committed with an absolute path to one machine (AGL-2695).
+node_modules/
 
 # IDEs and editors
 .project

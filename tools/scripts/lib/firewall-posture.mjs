@@ -508,6 +508,12 @@ export const EXPECTED_POSTURE = Object.freeze([
               // when the secret is absent, so the bypass again removes the bot
               // challenge and nothing else.
               '/api/crm/inbound',
+              // The hourly task-reminder job (AGL-2659), added on 2026-09-08
+              // when its first beat was challenged. Same shape as the two
+              // cron routes above: the route compares `x-cron-secret` (or a
+              // bearer) against `CRON_SECRET` and answers 401 without it,
+              // and 501 when the secret is unset.
+              '/api/crm/task-reminders',
             ]),
           }),
         ]),
