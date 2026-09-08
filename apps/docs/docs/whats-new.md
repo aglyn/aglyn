@@ -34,6 +34,15 @@ for the how-to.
   automations gain [CRM events and steps](content-and-data/crm/automations.md).
   Links to the older `/contacts` address still open the hub. Still release-flagged: it
   appears on its own once the rollout reaches your workspace.
+- **[Email templates and snippets](content-and-data/crm/email-templates.md)** — the
+  one-to-one email from a record picks a **Template** that fills the subject and body,
+  inserts a **Snippet** at the caret, and saves the letter you just wrote as either.
+  Both take [merge fields](content-and-data/crm/email-templates.md#merge-fields) —
+  `{{contact.firstName}}`, `{{deal.name}}`, `{{sender.name}}` — filled at send time
+  and previewed as you type, with the fields that have no value counted under the
+  message. Shared templates are every editor's; personal ones are yours. Managed
+  under [CRM → Settings](content-and-data/crm/settings.md#email-templates) and over
+  the [REST API](/api/resources/email-templates).
 - **[Saved views in the CRM](content-and-data/crm/views.md)** — every CRM list keeps
   its filters, columns and sort under a name: open a view from the views menu or from
   its link, share it with the team, make it your default for the section. The Contacts
