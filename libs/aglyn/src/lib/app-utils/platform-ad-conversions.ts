@@ -97,17 +97,37 @@ interface ConversionWindow {
  *
  * Returns whether anything was sent, so a caller can assert on it rather than
  * on a spy for a global.
+ *
+ * `userData.email` is the enhanced-conversions half (AGL-2683). Set through
+ * `gtag('set', 'user_data', …)` immediately before the event, the tag
+ * normalizes and SHA-256-hashes the address in the browser and sends only the
+ * hash with the conversion ping, which lets Google Ads match the conversion to
+ * a signed-in user when the click cookie is gone — a sign-up finished from the
+ * verification email on another device, or on Safari after its seven-day cap.
+ * It rides the SAME three doors as the event: not allowed, no ad account, or
+ * no tag means nothing is set, and an absent or blank email sets nothing
+ * either. Nothing here reads identity on its own; the caller passes what it
+ * already holds, exactly as it passes the consent verdict.
  */
 export function reportPlatformAdConversion(
   kind: PlatformAdConversion,
   allowed: boolean,
-  options: { transactionId?: string } = {},
+  options: {
+    transactionId?: string
+    userData?: { email?: string | null }
+  } = {},
 ): boolean {
   if (!allowed) return false
   const target = platformAdConversionTarget(kind)
   if (!target) return false
   const scope = globalThis as ConversionWindow
   if (typeof scope.gtag !== 'function') return false
+  // Enhanced conversions (AGL-2683): the address reaches the tag lower-cased
+  // and trimmed — gtag hashes it before anything leaves the browser. Set right
+  // before the event so it attaches to THIS conversion and cannot linger on a
+  // later, unrelated one.
+  const email = String(options.userData?.email ?? '').trim().toLowerCase()
+  if (email) scope.gtag('set', 'user_data', { email })
   /*
    * `transaction_id` is what makes a conversion SAFE TO REPORT TWICE.
    *

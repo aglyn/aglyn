@@ -543,7 +543,14 @@ function SignUp() {
            * tag has booted, which is precisely the visitor who refused. A
            * signup must never fail because a conversion could not be reported.
            */
-          reportPlatformAdConversion('signup', platformAdvertisingAllowed())
+          reportPlatformAdConversion('signup', platformAdvertisingAllowed(), {
+            // Enhanced conversions (AGL-2683): the address the account was
+            // just created with, hashed by the tag before it leaves the
+            // browser, so Ads can still match this sign-up to the click when
+            // the click cookie did not make the trip. Same consent door as
+            // the event — a refused visitor's address reaches nothing.
+            userData: { email: credential.user.email },
+          })
           // Record the acceptance FIRST (AGL-1497). Both branches below can
           // end in `window.location.assign`, which tears this page down — a
           // record started after that navigation is a record that sometimes

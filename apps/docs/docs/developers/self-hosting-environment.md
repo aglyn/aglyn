@@ -598,7 +598,10 @@ forced-failure lever for proving the alert path works.
 `NEXT_PUBLIC_ADS_CONVERSION_ID`, `NEXT_PUBLIC_ADS_SIGNUP_LABEL` and
 `NEXT_PUBLIC_ADS_SUBSCRIBE_LABEL` identify a Google Ads account and two
 conversion actions inside it, so that Aglyn's own signup and subscribe events
-reach Aglyn's own advertising account.
+reach Aglyn's own advertising account. Both events also hand the tag the
+account's email address for Google's **enhanced conversions**: the tag hashes
+it in the browser before anything is sent, and it goes nowhere when the visitor
+has not granted advertising, when the ids are unset, or when no tag is loaded.
 
 `NEXT_PUBLIC_META_PIXEL_ID`, `NEXT_PUBLIC_LINKEDIN_PARTNER_ID` and
 `NEXT_PUBLIC_GTM_CONTAINER_ID` are the same kind of value one step further: they
