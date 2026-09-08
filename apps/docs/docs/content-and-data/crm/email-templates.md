@@ -47,7 +47,7 @@ no amount, a field written for a lead on a contact's page — is filled with
 nothing, and so is a field the CRM does not know. That can leave "Hi ," in a
 letter, so the dialog **previews** the message with the fields filled as soon
 as it names one, and counts the empty ones under the message: *2 fields have
-no value: {{contact.firstName}}, {{deal.amount}}*. What the preview shows is
+no value: `{{contact.firstName}}`, `{{deal.amount}}`*. What the preview shows is
 what leaves — the server fills the fields with the same rules — and the
 timeline logs the letter as sent, not the template.
 
