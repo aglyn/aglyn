@@ -1,7 +1,7 @@
 ---
 sidebar_position: 13
 title: CRM settings
-description: What the CRM does on its own for every site — whether a company is created from a contact's work email domain, who a new contact is assigned to by default, by rule, or in turn, and the recipes installed on each site.
+description: What the CRM does on its own for every site — whether a company is created from a contact's work email domain, who a new contact is assigned to by default, by rule, or in turn, the address that files your mailbox's replies on a record, and the recipes installed on each site.
 ---
 
 # CRM settings
@@ -130,6 +130,29 @@ to two different people, and editing the pool — adding, removing or
 reordering a member — never skips or repeats anybody: the next record goes
 to whoever follows the last recipient in the pool as it now stands. A member
 who leaves the workspace is skipped. A pool can hold up to 50 members.
+
+## Email capture
+
+The **Email capture** card holds the workspace's one **capture address** —
+`crm+…@in.aglyn.com` — with **Copy** and **Rotate address**. A message
+forwarded to it, or sent with it in **BCC**, is filed on the timeline of the
+contact or lead it was with, so a reply that reached your own mailbox lands on
+the record too. How a message is matched, what is kept and what is dropped is
+described under [Captured email](./activities.md#captured-email).
+
+The address is the workspace's, not a site's: the card reads the same under
+every site and at the organization level, and the record's own site decides
+which timeline the message lands on. It is minted the first time somebody
+opens the card or the **Send email** dialog, and everybody who can open the
+CRM can copy it.
+
+**Rotate address** replaces it, behind a confirmation, and only a workspace
+owner or admin may. The moment the new address is written the old one goes
+quiet: mail sent to it afterwards is dropped without a trace, so a mailbox
+rule or a saved shortcut that carried the old address has to be updated.
+Rotate when the address has leaked outside the team — anybody who holds it
+can file mail on your records, though only mail from or to somebody already
+in the CRM is ever filed.
 
 ## Recipes
 

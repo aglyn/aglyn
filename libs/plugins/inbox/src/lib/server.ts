@@ -39,10 +39,14 @@
  *
  * ## The boundary this feature sits on, stated because the UI must say it too
  *
- * The Inbox is not a mailbox. Nothing in this platform receives mail: there
- * is no inbound route, no MX record pointed here, and no parser. A submission
+ * The Inbox is not a mailbox. Nothing in the INBOX receives mail: no route
+ * of its own, no MX record pointed at a submission, no parser. A submission
  * arrived as an HTTP POST, not as a message, so there is no `Message-ID` to
  * thread against and a reply is always the FIRST message in its conversation.
+ * (The platform's one receiving door is the CRM's capture address —
+ * `POST /api/crm/inbound` in the console app, AGL-2657 — which files a
+ * forwarded or copied message on a contact's timeline. It threads nothing
+ * here: a submission is not mail, and the Inbox's statement stands.)
  *
  * That decides two things:
  *

@@ -160,6 +160,40 @@ The chip only ever moves forward — a late "delivered" never replaces an "opene
 and a bounce or a complaint stands over anything that came before it. Hover the
 chip for when the state was reached.
 
+## Captured email {#captured-email}
+
+A reply to a sent email reaches *your* mailbox, because that is where
+**Reply-to** points — and the console cannot see your mailbox. To put the reply
+on the record, hand it the message: **forward** it to the workspace's capture
+address, or put that address in **BCC** when you write to a contact from your
+own mail client. The address is printed under **Reply-to** in the **Send
+email** dialog and on the [Email capture](./settings.md#email-capture) card
+under **CRM → Settings**, each with a copy button.
+
+A message that arrives is filed as **one** email entry on the timeline:
+
+- **Whose record.** The first address among **From**, **To** and **Cc** that
+  is not a workspace member's and belongs to a contact or a lead in the CRM.
+  A lead's message files on the lead. The record's own site is the site the
+  entry lands under, so at the organization level a capture works for every
+  site at once.
+- **Which way.** A message a correspondent wrote reads **Received**, with
+  the sender beside the time; a message a member wrote and copied in reads
+  **Sent**, without a delivery chip, because the platform did not carry it.
+  Neither carries the **Logged** chip — nobody logged them — and neither can
+  be edited, though whoever may delete an entry may delete these.
+- **What is kept.** The subject and a bounded plain-text excerpt of the
+  message, cut above the quoted history (`On … wrote:`), plus the message's
+  own identifier so a second delivery of the same message is filed once.
+  Attachments are not kept.
+- **What is dropped.** A message matching nobody in the CRM is not filed; the
+  organization's **Setup → Activity** feed notes *Inbound email matched no
+  record* with the sender's domain, never the message. A message to a
+  [rotated](./settings.md#email-capture) address is dropped silently.
+
+The console's own **Send email** already logs what it sends; there is no
+need to BCC the capture address from the dialog, and it does not.
+
 ## Where an activity is visible
 
 An activity is visible exactly where a contact captured on the same site would
