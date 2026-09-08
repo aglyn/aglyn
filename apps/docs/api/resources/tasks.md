@@ -26,6 +26,8 @@ Scopes and the site rule are shared with every CRM resource — see
   "priority": "high",
   "status": "open",
   "dueAt": "2026-09-10T15:00:00.000Z",
+  "remindAt": "2026-09-10T15:00:00.000Z",
+  "reminderSentAt": null,
   "completedAt": null,
   "assigneeUid": "u_9f1c",
   "contactId": "k7d2b9f104",
@@ -47,6 +49,8 @@ Scopes and the site rule are shared with every CRM resource — see
 | `priority` | string | `low`, `normal` or `high`. `normal` when never set. Writable. |
 | `status` | string | `open` or `done`. `open` when never set. Writable — marking a task `done` stamps `completedAt`; marking it `open` again clears it, so a reopened task never reads as completed on the day it was first closed. |
 | `dueAt` | string \| null | ISO 8601 instant. Writable. |
+| `remindAt` | string \| null | ISO 8601 instant. When the assignee is reminded — a console notification and an email, sent by an hourly runner, so it arrives within the hour after this time. Writable. Omitted on create, it is the due time (or `null` when there is none). Omitted on update, it **follows a moved `dueAt`** when it still sat on the old due time, and stays put when it was set to a time of its own; send `null` for no reminder. Marking the task `done` clears a reminder that has not yet been sent. |
+| `reminderSentAt` | string \| null | When the runner handled the reminder. **Read-only.** Cleared whenever `remindAt` changes, so a moved reminder is sent again. |
 | `completedAt` | string \| null | When the task was marked done. **Read-only.** |
 | `assigneeUid` | string \| null | Who owes it. Must be a member of your organization. Writable. |
 | `contactId`, `companyId`, `dealId` | string \| null | What the task is for. Each must exist. All optional. Writable. |
@@ -98,7 +102,14 @@ curl -X POST "https://app.aglyn.com/api/v1/tasks" \
 ```
 
 Returns **`201`**, or **`200`** with the original when an `Idempotency-Key` replays.
-A task created with `status: "done"` is completed the instant it is created.
+A task created with `status: "done"` is completed the instant it is created, and
+carries no reminder. A task created with a `dueAt` and no `remindAt` is reminded at
+its due time; pass `"remindAt": null` for a task that should not remind.
+
+Reminders reach only members who can open the CRM, in organizations whose plan
+includes the daily digest, and not a member who has muted the operational
+notification category — see
+[Tasks & follow-ups](/content-and-data/crm/tasks#reminders).
 
 ### Update a task
 
@@ -125,7 +136,7 @@ curl -X PATCH "https://app.aglyn.com/api/v1/tasks/t_5e0d" \
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `kind`, `priority` or `status` outside its list, a `dueAt` that is not an ISO 8601 instant, an `assigneeUid` who is not a member, or a `contactId`, `companyId` or `dealId` that does not exist. On the list, a `?status=` outside `open`/`done` or a malformed `?updatedAfter=`. `fields` names each key. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing `title` or `consentSiteId`, a `kind`, `priority` or `status` outside its list, a `dueAt` or `remindAt` that is not an ISO 8601 instant, an `assigneeUid` who is not a member, or a `contactId`, `companyId` or `dealId` that does not exist. On the list, a `?status=` outside `open`/`done` or a malformed `?updatedAfter=`. `fields` names each key. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such task"`. |
 | `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/tasks`, `GET, PATCH, DELETE` on one task. |

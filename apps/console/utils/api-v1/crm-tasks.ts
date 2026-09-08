@@ -24,17 +24,25 @@
  * `status` is the only state machine here and it has two states. Marking a
  * task `done` stamps `completedAtMs`; marking it `open` again clears it, so
  * a reopened task never reads as completed on the date it was first closed.
+ *
+ * `remindAt` (AGL-2659) is the task's reminder: the due time unless the
+ * body names a time or `null`, carried along when a moved due date leaves
+ * it behind, and cleared by completion while it is still owed — the rule
+ * in `crmTaskReminderAfterEdit`, the same one the console's drawer keeps.
+ * `reminderSentAt` is read-only: when the hourly runner handled it.
  */
 import {
   CRM_COLLECTIONS,
   type CrmTask,
   type CrmTaskKind,
   type CrmTaskPriority,
+  crmTaskReminderAfterEdit,
+  crmTaskReminderPending,
   type CrmTaskStatus,
   createResourceUid,
 } from '@aglyn/aglyn/server'
 import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
-import { Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, requireScope } from '../api-v1'
 import {
   type Clearable,
@@ -76,6 +84,8 @@ function taskView(doc: FirebaseFirestore.DocumentSnapshot) {
     priority: data.priority ?? 'normal',
     status: data.status ?? 'open',
     dueAt: isoFromMs(data.dueAtMs),
+    remindAt: isoFromMs(data.remindAtMs),
+    reminderSentAt: isoFromMs(data.reminderSentAtMs),
     completedAt: isoFromMs(data.completedAtMs),
     assigneeUid: data.assigneeUid ?? null,
     contactId: data.contactId ?? null,
@@ -93,6 +103,7 @@ const TASK_WRITABLE = new Set([
   'priority',
   'status',
   'dueAt',
+  'remindAt',
   'assigneeUid',
   'contactId',
   'companyId',
@@ -106,6 +117,7 @@ interface TaskInput {
   priority?: CrmTaskPriority
   status?: CrmTaskStatus
   dueAtMs?: Clearable<number>
+  remindAtMs?: Clearable<number>
   assigneeUid?: Clearable<string>
   contactId?: Clearable<string>
   companyId?: Clearable<string>
@@ -148,6 +160,19 @@ function readTaskInput(
         errors.dueAt = 'Must be an ISO 8601 instant, like 2026-09-10T15:00:00Z'
       } else {
         values.dueAtMs = ms
+      }
+    }
+  }
+
+  if (body.remindAt !== undefined) {
+    if (body.remindAt === null) {
+      values.remindAtMs = null
+    } else {
+      const ms = parseIsoInstant(body.remindAt)
+      if (ms === null) {
+        errors.remindAt = 'Must be an ISO 8601 instant, like 2026-09-10T14:00:00Z'
+      } else {
+        values.remindAtMs = ms
       }
     }
   }
@@ -198,7 +223,7 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
   const { claim } = claimed
 
   try {
-    const { title, kind, priority, status, ...rest } = parsed.values
+    const { title, kind, priority, status, remindAtMs, ...rest } = parsed.values
     const id = createResourceUid()
     const stamp = crmCreateStamp(ctx, site.siteId)
     await collection.doc(id).create({
@@ -209,7 +234,18 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
       // A task created done was completed the instant it was created — the
       // same instant its `createdAt` carries.
       ...(status === 'done' ? { completedAtMs: stamp.createdAt.toMillis() } : {}),
-      ...createPayload(rest),
+      ...createPayload({
+        ...rest,
+        // A reminder on a task created done is owed to nobody.
+        remindAtMs:
+          status === 'done'
+            ? null
+            : crmTaskReminderAfterEdit({
+                dueAtMs: rest.dueAtMs ?? null,
+                remindAtMs,
+                previous: null,
+              }),
+      }),
       ...stamp,
     })
     const view = taskView(await collection.doc(id).get())
@@ -236,13 +272,38 @@ async function updateTask(
   const refErrors = await taskRefErrors(ctx, parsed.values)
   if (Object.keys(refErrors).length) return crmValidationFailed(ctx, 'task', refErrors)
 
-  const { status, ...rest } = parsed.values
+  const { status, remindAtMs, ...rest } = parsed.values
   const update: Record<string, unknown> = updatePayload(rest)
   // One instant for the write: a task completed at T reads updated at T.
   const now = Timestamp.now()
+  const completing = status === 'done' && status !== snap.get('status')
   if (status !== undefined && status !== snap.get('status')) {
     update.status = status
     update.completedAtMs = status === 'done' ? now.toMillis() : null
+  }
+  /*
+   * The reminder the edit leaves: what the body said, else the rule over
+   * the stored task and the due date this PATCH moves it to. Completion
+   * clears one still owed. A reminder that MOVED — to a time or to none —
+   * is one not yet sent, so the runner's mark comes off with it; one that
+   * stayed keeps its mark.
+   */
+  const stored = snap.data() as Partial<CrmTask>
+  const previous = {
+    dueAtMs: typeof stored.dueAtMs === 'number' ? stored.dueAtMs : null,
+    remindAtMs: typeof stored.remindAtMs === 'number' ? stored.remindAtMs : null,
+  }
+  const nextRemindAtMs =
+    completing && crmTaskReminderPending(stored)
+      ? null
+      : crmTaskReminderAfterEdit({
+          dueAtMs: rest.dueAtMs === undefined ? previous.dueAtMs : rest.dueAtMs,
+          remindAtMs,
+          previous,
+        })
+  if (nextRemindAtMs !== previous.remindAtMs) {
+    update.remindAtMs = nextRemindAtMs === null ? FieldValue.delete() : nextRemindAtMs
+    update.reminderSentAtMs = FieldValue.delete()
   }
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: now })
