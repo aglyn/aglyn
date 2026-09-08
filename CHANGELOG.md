@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.97 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/85a72b06e...v1.0.0-beta.97)
+
+### Fixed
+
+- **crm:** the money on Reports needs the summed field in its index ([AGL-2697](https://linear.app/aglyn/issue/AGL-2697), [AGL-2696](https://linear.app/aglyn/issue/AGL-2696))
+
 ## v1.0.0-beta.96 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/a850c276b...v1.0.0-beta.96)
