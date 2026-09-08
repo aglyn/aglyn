@@ -70,6 +70,28 @@ can see it, so the body of the page can be entirely correct while search
 results and every shared link still advertise the old price. Fix it in the
 same pass as the body; it is a different field and it will not follow.
 
+## Enterprise has no price here, but it has bands
+
+`PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice
+Agency's band on every axis Agency bounds, and `UNLIMITED` only where Agency
+already is (2026-09-07 decision). Enterprise meters nothing and every rate on
+it is the "not for sale" sentinel, so the fallbacks are **caps**: past one the
+quota gates refuse, exactly as Free's do. They are what an agreement gets
+before its numbers are written down.
+
+The numbers are written as a **per-org `entitlements.*` override** on the org
+document — `resolveOrgEntitlements` honors a numeric override on every axis,
+and `plan-entitlements.spec.ts` proves the precedence key by key. Provisioning
+an Enterprise deal therefore has two halves: the plan, and the overrides its
+agreement names. A deal provisioned with the plan alone runs at the fallbacks,
+and the console's Enterprise card reads "does not currently enable everything
+Enterprise can include" for anything an override set below them.
+
+Workflow and action runs carry a cost since the same day —
+`ORG_COGS_UNIT_RATES_USD.perRun`, derived in its docblock — and reach
+`orgMonthlyCogsUsd` and the margin guard through it. No plan bills runs; the
+rate is COGS, not a price, and appears on no surface a customer reads.
+
 ## Saving the LIVE version revalidates; saving a draft does not
 
 Saving the version a screen currently points at drops the cached pages for it

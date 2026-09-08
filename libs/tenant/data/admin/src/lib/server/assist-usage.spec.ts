@@ -1169,17 +1169,18 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
   })
 
   it('takes a CONTRACTED Enterprise band over the plan fallback', async () => {
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 100 })
-    // The fallback is 87,000 credits — $87 — so this org is over it. No
-    // switch here: Enterprise sells no overage rate, so its band is a wall
-    // whatever the org's map says, and the refusal is still the band's.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 120 })
+    // The fallback is 116,000 credits — $116, twice Agency's band since
+    // 2026-09-07 — so this org is over it. No switch here: Enterprise sells
+    // no overage rate, so its band is a wall whatever the org's map says, and
+    // the refusal is still the band's.
     const onFallback = await reserveAssistMessage(firestore(), ORG, true, NOW, {
       plan: 'enterprise',
     })
     expect(onFallback).toMatchObject({
       allowed: false,
       refusedBy: 'band',
-      costLimitUsd: 87,
+      costLimitUsd: 116,
     })
     // The same spend against a contract that bought more.
     const contracted = await reserveAssistMessage(firestore(), ORG, true, NOW, {
@@ -1362,7 +1363,8 @@ describe('the band is SOLD past by default, and the org’s switch makes it a wa
   it('a plan with NO rate refuses at its band whatever the switch says', async () => {
     // Enterprise: nothing to sell the excess at, so the band stays the wall
     // it always was, and the refusal is the band's — not a spend ceiling's.
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 100 })
+    // The fallback band is 116,000 credits ($116), so $120 is over it.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 120 })
     for (const assistOverage of [undefined, { hardCap: false }, { hardCap: true }]) {
       const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
         plan: 'enterprise',
@@ -1371,7 +1373,7 @@ describe('the band is SOLD past by default, and the org’s switch makes it a wa
       expect(reservation).toMatchObject({
         allowed: false,
         refusedBy: 'band',
-        costLimitUsd: 87,
+        costLimitUsd: 116,
       })
     }
   })

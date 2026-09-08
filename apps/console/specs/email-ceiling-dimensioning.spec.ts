@@ -277,8 +277,8 @@ describe('R3 — which plans the platform can actually deliver', () => {
     // a 720-hour month, which is where the header's "room for bursts, retries
     // and domain warm-up" argument was made and is why this is the number.
     const model = modelFor('enterprise')
-    expect(model.planMonthly).toBe(250_000)
-    expect(model.hoursToSpendPlan).toBe(500)
+    expect(model.planMonthly).toBe(260_000)
+    expect(model.hoursToSpendPlan).toBe(520)
     expect(model.planMonthly).toBeGreaterThan(modelFor('agency').planMonthly)
     expect(model.planMonthly).toBeLessThanOrEqual(DELIVERABLE)
   })
@@ -324,7 +324,7 @@ describe('R3 — which plans the platform can actually deliver', () => {
       )
     }
     // …and the one that used to be the sentinel is the one to name.
-    expect(round.enterprise.emailSendsPerMonth).toBe(250_000)
+    expect(round.enterprise.emailSendsPerMonth).toBe(260_000)
   })
 
   it('does not lower any plan allowance to make the arithmetic work', () => {
@@ -358,13 +358,13 @@ describe('R3 — which plans the platform can actually deliver', () => {
      */
     const orgHourNeeded = Math.ceil(largestFinite / EMAIL_CEILING_MONTH_HOURS)
     const required = Math.ceil(orgHourNeeded / EMAIL_ORG_HOURLY_SHARE)
-    // Now that the top allowance is 250,000 the required rate is BELOW the
+    // Now that the top allowance is 260,000 the required rate is BELOW the
     // shipped 2,000/hour, so the arithmetic reads as headroom rather than as
     // a shortfall. Kept as a live calculation rather than deleted: it is the
     // thing that goes red first if an allowance is ever raised past what the
     // platform can carry, and it names the rate that would be needed.
-    expect(largestFinite).toBe(250_000)
-    expect(required).toBe(1_392)
+    expect(largestFinite).toBe(260_000)
+    expect(required).toBe(1_448)
     expect(required).toBeLessThanOrEqual(PLATFORM_PER_HOUR)
     expect(
       deliverableMonthlyCeiling(required),

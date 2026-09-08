@@ -437,13 +437,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     editWide('Plans', 'scale-strip', (strip) => {
       const scale = strip.records.find((r) => r.cells[1]?.includes('bandwidth'))
       assert.ok(scale, 'fixture no longer carries the Scale spec line')
-      scale.cells[1] = scale.cells[1].replace('700 GB bandwidth', '9 TB bandwidth')
+      scale.cells[1] = scale.cells[1].replace('290 GB bandwidth', '9 TB bandwidth')
     })
 
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /scale strip: CODE-vs-FRAME disagreements/)
-    assert.match(run.stderr, /Scale · spec 6 .*code=700 GB bandwidth {2}frame=9 TB bandwidth/)
+    assert.match(run.stderr, /Scale · spec 6 .*code=290 GB bandwidth {2}frame=9 TB bandwidth/)
   })
 
   it('fails when an ADD-ON CAPACITY rate disagrees with the code', () => {

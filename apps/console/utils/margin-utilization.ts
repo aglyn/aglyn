@@ -50,7 +50,7 @@ export { MARGIN_SCOPE_NOTE }
  * list yields 89.3% at the 3% column and 7.1% at the 100% one.
  *
  * Everything needed to answer it was already recorded and already priced. The
- * monthly rollup carries seven meters, `ORG_COGS_UNIT_RATES_USD` carries their
+ * monthly rollup carries the meters, `ORG_COGS_UNIT_RATES_USD` carries their
  * unit costs, and `orgMonthlyCogsUsd` already turns one into the other. What
  * did not exist was the DIVISION: usage over the band the plan sold, per org
  * and across the fleet.
@@ -95,7 +95,7 @@ export { MARGIN_SCOPE_NOTE }
 /**
  * A meter with an included band, keyed by the ROLLUP field it is measured by.
  *
- * The seven `orgMonthlyCogsUsd` prices, plus `hosts` and `assistCredits`.
+ * Every meter `orgMonthlyCogsUsd` prices, plus `hosts` and `assistCredits`.
  *
  * Assist is measured in CREDITS rather than in the dollars the rollup stores.
  * `assistCostUsd` is our provider bill and `assistCreditsPerMonth` is the band
@@ -139,26 +139,6 @@ export const UTILIZATION_BAND_LABELS: Record<UtilizationBand, string> = {
   workflowRuns: 'Workflow runs',
   actionRuns: 'Action runs',
 }
-
-/**
- * Bands that are MEASURED but not PRICED.
- *
- * `report-usage` records `workflowRuns` and `actionRuns` on every rollup and
- * every plan sells a band of them, so their utilization is a real figure. What
- * does not exist is a unit cost: `ORG_COGS_UNIT_RATES_USD` has no entry for
- * either, and the metering route declines to invent one rather than put a
- * made-up rate into a customer's invoice.
- *
- * That reasoning bounds the COST, not the MEASUREMENT. Utilization needs a
- * numerator and a denominator, and both are recorded — so these two bands are
- * reported here and contribute nothing to `cogs`. Marking them is the
- * alternative to either dropping a measurement the platform already pays to
- * collect, or implying a dollar figure nothing derives.
- */
-export const BANDS_WITHOUT_A_UNIT_COST: readonly UtilizationBand[] = [
-  'workflowRuns',
-  'actionRuns',
-]
 
 /**
  * Why a band has no percentage, or that it has one.
@@ -221,16 +201,13 @@ export interface OrgMarginRow {
 }
 
 /**
- * A rollup as this surface reads it: every field `orgMonthlyCogsUsd` prices,
- * plus the two that are recorded and banded but carry no unit cost.
+ * A rollup as this surface reads it: every field `orgMonthlyCogsUsd` prices.
  *
- * The extra keys are inert to the cost model, which reads by name — so a rollup
- * passed straight through prices exactly as it always did.
+ * The two run counters used to be the surface's own extension of that shape
+ * — recorded and banded but unpriced. Since 2026-09-07 the cost model prices
+ * them at `perRun`, so the shape is the model's and nothing here is extra.
  */
-export interface UtilizationRollup extends OrgUsageRollupInput {
-  workflowRuns?: number | null
-  actionRuns?: number | null
-}
+export type UtilizationRollup = OrgUsageRollupInput
 
 const finite = (value: unknown): number => {
   const parsed = Number(value ?? 0)
@@ -272,7 +249,8 @@ export function orgIncludedBands(
     // finite default. The band is a third-party liability rather than capacity
     // the platform already owns, so an uncapped one would be an uncapped bill.
     assistCredits: entitlements.assistCreditsPerMonth,
-    // Measured, banded, and unpriced — see `BANDS_WITHOUT_A_UNIT_COST`.
+    // Two bands, one rate: the cost model prices both counters at `perRun`,
+    // and the utilization is read against the band each builder sells.
     workflowRuns: entitlements.workflowRunsPerMonth,
     actionRuns: entitlements.actionRunsPerMonth,
   }

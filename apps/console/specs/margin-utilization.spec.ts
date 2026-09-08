@@ -59,7 +59,6 @@ import type { OrgPlan } from '@aglyn/aglyn'
 import { ESTIMATED_PAGE_TRANSFER_BYTES } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { ASSIST_CREDIT_COST_USD } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
-  BANDS_WITHOUT_A_UNIT_COST,
   UTILIZATION_BANDS,
   bandUtilization,
   byWorstMargin,
@@ -95,7 +94,9 @@ function tierBandCostUsd(plan: OrgPlan): number {
     (entitlements.dataStorageMbPerOrg / 1024) * rates.dataStoragePerGbMonth +
     entitlements.apiRequestsPerMonth * rates.perApiRequest +
     entitlements.contactsPerHost * rates.perContactMonth +
-    entitlements.emailSendsPerMonth * rates.perEmailSend
+    entitlements.emailSendsPerMonth * rates.perEmailSend +
+    (entitlements.workflowRunsPerMonth + entitlements.actionRunsPerMonth) *
+      rates.perRun
   )
 }
 
@@ -107,6 +108,23 @@ function orgOn(plan: OrgPlan, hosts = 1): Record<string, unknown> {
     hosts: Object.fromEntries(
       Array.from({ length: hosts }, (_, index) => [`site-${index}`, true]),
     ),
+  }
+}
+
+/**
+ * An Enterprise org whose agreement leaves three bands uncapped. Since
+ * 2026-09-07 the plan row itself is a finite fallback — twice Agency's on
+ * every axis — so `UNLIMITED` on an Enterprise org is what a contracted
+ * per-org override writes, and that is the shape the uncapped cases read.
+ */
+function contractedEnterprise(): Record<string, unknown> {
+  return {
+    ...orgOn('enterprise'),
+    entitlements: {
+      contactsPerHost: UNLIMITED,
+      apiRequestsPerMonth: UNLIMITED,
+      dataStorageMbPerOrg: UNLIMITED,
+    },
   }
 }
 
@@ -131,6 +149,8 @@ function rollupAt(
     apiRequests: at('apiRequests'),
     contactsCount: at('contactsCount'),
     emailSends: at('emailSends'),
+    workflowRuns: at('workflowRuns'),
+    actionRuns: at('actionRuns'),
   }
 }
 
@@ -188,34 +208,30 @@ describe('the bands are real, and the plan is what selects them', () => {
   })
 
   /**
-   * TWO BANDS ARE MEASURED AND BANDED BUT CARRY NO UNIT COST.
+   * THE TWO RUN BANDS ARE MEASURED, BANDED AND — since 2026-09-07 — PRICED.
    *
    * `report-usage` writes `workflowRuns` and `actionRuns` on every rollup, and
-   * every plan sells an allowance of them — so their utilization is a real
-   * number with a real denominator. `ORG_COGS_UNIT_RATES_USD` has no entry for
-   * either, and the metering route declines to invent one rather than put a
-   * made-up rate on an invoice.
-   *
-   * That argument bounds the cost, not the measurement. Reporting the
-   * utilization and NOT a dollar figure is the only answer that neither drops
-   * a meter the platform pays to collect nor implies a rate nothing derives.
+   * every plan sells an allowance of them, so their utilization was always a
+   * real number with a real denominator. What did not exist was a unit cost:
+   * this surface carried the two as "measured but unpriced", and Agency's
+   * 3,000,000 runs a month read as nothing. `ORG_COGS_UNIT_RATES_USD.perRun`
+   * closes that, and the two bands now reach `cogs` through the same model
+   * as every other meter.
    */
-  it('names the bands with no unit cost, and prices none of them', () => {
-    expect([...BANDS_WITHOUT_A_UNIT_COST]).toEqual(['workflowRuns', 'actionRuns'])
-    // Neither reaches the cost model: a rollup carrying both prices identically
-    // to one carrying neither.
+  it('prices both run bands through the cost model, on one line', () => {
     const withRuns = orgMonthlyCogsUsd(
       { workflowRuns: 500_000, actionRuns: 250_000 } as never,
       0,
     )
-    expect(withRuns.measuredUsd).toBe(0)
-    // CONTROL: a meter that IS priced moves the same figure, so the assertion
-    // above is about these two fields and not about the model ignoring
-    // everything.
-    expect(orgMonthlyCogsUsd({ pageViews: 500_000 } as never, 0).measuredUsd).toBeGreaterThan(0)
+    // 750,000 × $0.000012 = $9.00.
+    expect(withRuns.measuredUsd).toBeCloseTo(9, 6)
+    expect(withRuns.breakdown.runs).toBeCloseTo(9, 6)
+    // CONTROL: a rollup with no runs prices no runs, so the figure above is
+    // the two fields and not the model pricing something else.
+    expect(orgMonthlyCogsUsd({ pageViews: 500_000 } as never, 0).breakdown.runs).toBe(0)
   })
 
-  it('still measures those two bands against the plan’s allowance', () => {
+  it('measures those two bands against the plan’s allowance, and costs them', () => {
     const row = orgMarginRow({
       orgId: 'business-1',
       org: orgOn('business') as never,
@@ -225,7 +241,10 @@ describe('the bands are real, and the plan is what selects them', () => {
     // Business sells 50,000 workflow runs and 50,000 action runs.
     expect(row.bands.workflowRuns.fraction).toBeCloseTo(0.5, 9)
     expect(row.bands.actionRuns.fraction).toBeCloseTo(0.1, 9)
-    // …and contributed nothing to what the org cost.
+    // …and contributed 36¢ to what the org cost — under the $2 per-site
+    // floor, so the floor is still the figure, but the meter is no longer
+    // reading as free.
+    expect(row.cogs.measuredUsd).toBeCloseTo(0.36, 6)
     expect(row.cogs.basis).toBe('floor')
   })
 
@@ -379,12 +398,13 @@ describe('a band with no denominator yields no percentage', () => {
     expect(5 / 0).toBe(UNLIMITED)
   })
 
-  it('reads Enterprise’s three uncapped bands as uncapped, on the real table', () => {
-    // Not a synthetic band: Enterprise genuinely carries `UNLIMITED` on
-    // contacts, API requests and dataset storage.
+  it('reads a contracted Enterprise org’s three uncapped bands as uncapped', () => {
+    // Real entitlements resolved through the real resolver: the plan row is
+    // finite since 2026-09-07, and the agreement's override is what carries
+    // `UNLIMITED` on contacts, API requests and dataset storage.
     const row = orgMarginRow({
       orgId: 'ent',
-      org: orgOn('enterprise') as never,
+      org: contractedEnterprise() as never,
       month: '2026-07',
       rollup: { contactsCount: 900_000, apiRequests: 40_000_000, dataStorageMb: 900_000 },
     })
@@ -443,13 +463,17 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     }
   })
 
-  it('reproduces Agency’s pinned $1,122.29 at full utilization', () => {
-    // The one figure `tier-margin-floor.spec.ts` pins to the cent. Reaching it
-    // through this module's band table and `orgMonthlyCogsUsd` is what says
-    // the two files agree about the most expensive self-serve tier — the one
-    // whose uncapped band made it read as the cheapest.
+  it('reproduces the metered part of Agency’s pinned $1,003.13 at full utilization', () => {
+    // `tier-margin-floor.spec.ts` pins Agency at $1,003.13 a month with every
+    // band at 100%. $867.13 of that is the eight metered axes this module
+    // prices; the $100 between them is the two CRM decision terms — a seat a
+    // month per collaborator and the one-to-one email cap — that the rollup
+    // has no meter for. Reaching the metered part through this module's band
+    // table and `orgMonthlyCogsUsd` is what says the two files agree about
+    // the most expensive self-serve tier — the one whose uncapped band once
+    // made it read as the cheapest.
     const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    expect(cogs.cogsUsd).toBeCloseTo(1122.29, 2)
+    expect(cogs.cogsUsd).toBeCloseTo(903.13, 2)
     expect(cogs.basis).toBe('measured')
   })
 
@@ -540,7 +564,10 @@ describe('the realised margin', () => {
     const ladder = [0.03, 0.25, 0.5, 1].map(at)
     expect(ladder).toEqual([...ladder].sort((a, b) => b - a))
     // …and it really does reach a bad number, so the surface can find one.
-    expect(at(1)).toBeLessThan(0.4)
+    // 44% on Pro at the monthly price, over the metered axes alone — the
+    // 2026-09-07 bandwidth resize lifted it from 7%; the whole-plan figure at
+    // the annual price is under 1% (`tier-margin-floor.spec.ts`).
+    expect(at(1)).toBeLessThan(0.5)
     expect(at(0.03)).toBeGreaterThan(0.9)
   })
 
@@ -608,16 +635,17 @@ describe('the fleet distribution', () => {
   })
 
   it('EXCLUDES an uncapped band from the sample rather than scoring it 0', () => {
-    // One Enterprise org among four paid ones. Its contacts band is
-    // `UNLIMITED`, so it cannot be a data point — and if it were folded in as
-    // 0 it would drag the median down by a quarter of the sample.
+    // One contracted Enterprise org among four paid ones. Its contacts band
+    // is `UNLIMITED` by agreement, so it cannot be a data point — and if it
+    // were folded in as 0 it would drag the median down by a quarter of the
+    // sample.
     const rows = [
       rowFor('business', 0.5, 'a'),
       rowFor('scale', 0.5, 'b'),
       rowFor('advanced', 0.5, 'c'),
       orgMarginRow({
         orgId: 'ent',
-        org: orgOn('enterprise') as never,
+        org: contractedEnterprise() as never,
         month: '2026-07',
         rollup: { contactsCount: 2_000_000 },
       }),

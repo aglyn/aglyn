@@ -368,13 +368,13 @@ describe('the UNLIMITED sentinel (AGL-2482)', () => {
     mockMonthlyCampaignSends = 1_000
     const entitled = resolveOrgEntitlements(ENTERPRISE).emailSendsPerMonth
     expect(Number.isFinite(entitled)).toBe(true)
-    expect(entitled).toBe(250_000)
+    expect(entitled).toBe(260_000)
     render(<BillingUsageComponent org={ENTERPRISE} hosts={HOSTS} />)
     await waitFor(() => {
       expect(screen.getByText(HOURLY)).toBeTruthy()
     })
     const monthly = meterRow(MONTHLY)
-    expect(monthly.textContent).toContain('1000 / 250000')
+    expect(monthly.textContent).toContain('1000 / 260000')
     expect(monthly.textContent).not.toContain('Unlimited')
     // The two shapes a flattened sentinel takes, neither of which may appear.
     expect(monthly.textContent).not.toContain('/ 0')

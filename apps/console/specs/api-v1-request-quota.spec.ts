@@ -160,10 +160,21 @@ describe('the /api/v1 chokepoint enforces the monthly request quota (AGL-2163)',
     )
   })
 
-  it('every plan that ships with API access is never-blocks', async () => {
-    for (const plan of ['business', 'advanced', 'agency', 'enterprise']) {
+  it('every self-serve plan that ships with API access is never-blocks', async () => {
+    for (const plan of ['business', 'scale', 'advanced', 'agency']) {
       expect(apiRequestEnforcementShape({ plan } as never)).toBe('never-blocks')
     }
+    // Enterprise publishes no rate, and since 2026-09-07 its band is a finite
+    // fallback of 10,000,000 (twice Agency's) rather than UNLIMITED — so on
+    // the plan alone the quota MEASURES and refuses at the line, a cap an
+    // agreement raises; the contracted override is what makes it uncapped.
+    expect(apiRequestEnforcementShape({ plan: 'enterprise' } as never)).toBe('measure')
+    expect(
+      apiRequestEnforcementShape({
+        plan: 'enterprise',
+        entitlements: { apiRequestsPerMonth: Number.POSITIVE_INFINITY },
+      } as never),
+    ).toBe('never-blocks')
   })
 
   it('THE BRANCH: apiAccess granted with a ZERO band is refused', async () => {

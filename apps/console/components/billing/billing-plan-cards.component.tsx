@@ -68,7 +68,7 @@ const planTaglines = (brand: string): Record<OrgPlan, string> => ({
   scale: 'Room to grow — 15 sites and a 1% platform fee.',
   advanced: 'High-volume commerce with zero platform fees.',
   agency: 'Run many sites under one org at agency scale.',
-  enterprise: 'Unlimited everything, SSO, and a dedicated agreement.',
+  enterprise: 'Twice Agency’s capacity, more by agreement, SSO, and a dedicated contract.',
 })
 
 /**
@@ -137,14 +137,21 @@ export const ENTERPRISE_HIGHLIGHTS: Array<{
   holds: (org: Partial<AglynOrgBilling> | null | undefined) => boolean
 }> = [
   {
-    label: 'Unlimited sites, screens, seats, and storage',
+    // The plan row is a FINITE fallback since 2026-09-07 — twice Agency's
+    // band on every axis Agency bounds — and an agreement raises it through
+    // the per-org override. So the claim is "at least the fallback": an
+    // Enterprise org holds it from the plan alone, a comped marker on a
+    // lower base plan does not, and an agreement written BELOW the default
+    // reads as one that does not enable everything Enterprise can.
+    label: 'Twice Agency’s sites, seats and storage, unlimited screens, and more by agreement',
     holds: (org) => {
       const entitlements = resolveOrgEntitlements(org)
+      const agency = PLAN_ENTITLEMENTS.agency
       return (
-        entitlements.hostLimit === UNLIMITED &&
+        entitlements.hostLimit >= agency.hostLimit * 2 &&
         entitlements.screensPerHost === UNLIMITED &&
-        entitlements.managersPerOrg === UNLIMITED &&
-        entitlements.storagePerHostMb === UNLIMITED
+        entitlements.managersPerOrg >= agency.managersPerOrg * 2 &&
+        entitlements.storagePerHostMb >= agency.storagePerHostMb * 2
       )
     },
   },
@@ -1887,8 +1894,8 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           number, which is the only thing a comparison grid is for.
 
           The three-column row this used to be is gone. At `lg: 6` it gave the
-          highlights about a third of half a card, so "Unlimited sites,
-          screens, seats, and storage" wrapped every two or three words beside
+          highlights about a third of half a card, so "Twice Agency's sites,
+          seats and storage…" wrapped every two or three words beside
           a mostly empty card. */}
       <Grid size={{ xs: 12, sm: 6, lg: 6 }}>
         <Card
@@ -1983,9 +1990,9 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                 sentence read the other way. With no agreement to describe,
                 every row is forced true and the block stops being a per-org
                 answer: four of its five lines then restate rows printed a few
-                inches lower — "Unlimited sites, screens, seats, and storage"
-                over "Unlimited hosts · Unlimited screens per host · Unlimited
-                team seats · Unlimited storage", SSO and white-label over their
+                inches lower — "Twice Agency's sites, seats and storage…"
+                over "200 hosts · Unlimited screens per host · 200 team seats
+                · 120 GB storage", SSO and white-label over their
                 own checklist ticks, the fee line over the fee row — and the
                 card says everything twice. The offer is not reduced by
                 dropping it: the rows below state the tier in full, ticked, in
@@ -2048,8 +2055,9 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
               </>
             ) : null}
             {/* The tier's own numbers, in the same order as every card to the
-                left. Most read "Unlimited"; `emailSendsPerMonth` is the one
-                that does not, and a contracted default a customer cannot see
+                left. Every band reads as the finite fallback an agreement gets
+                before its numbers are written — twice Agency's, since
+                2026-09-07 — and a contracted default a customer cannot see
                 is a future refusal rather than a plan they agreed to. */}
             <PlanCardBody
               entitlements={PLAN_ENTITLEMENTS.enterprise}

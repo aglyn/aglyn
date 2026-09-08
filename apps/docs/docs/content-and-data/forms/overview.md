@@ -52,10 +52,11 @@ Each tier includes a monthly form-submission allowance, counted per site:
 | Free | 20 |
 | Starter | 200 |
 | Pro | 1,000 |
-| Business | 10,000 |
-| Scale | 50,000 |
-| Advanced | 100,000 |
-| Agency & Enterprise | Unlimited |
+| Business | 8,000 |
+| Scale | 25,000 |
+| Advanced | 40,000 |
+| Agency | 25,000 |
+| Enterprise | 50,000 by default; more by agreement |
 
 On **Free**, that allowance is a hard wall: at the cap, further submissions are
 **declined** — the visitor sees the form's error message rather than a fake success.
@@ -67,9 +68,10 @@ Either way the count resets with the calendar month (UTC), and the
 [billing page's usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
 warn you at 80% before you get there.
 
-**Unlimited** on Agency and Enterprise means exactly that about the *plan*: nothing
-meters your submission volume and nothing cuts you off for buying too small a tier.
-It is not a promise that the endpoint will take any number of requests from anyone —
+The allowance is **per site**. On Enterprise the figure is a default your agreement
+raises; Enterprise is not metered, so at that line further submissions are declined
+until the month turns or the agreement is updated. None of this is a promise that the
+endpoint will take any number of requests from anyone —
 every site, on every plan, sits under the
 [anti-abuse ceiling](#the-per-site-monthly-ceiling) below.
 

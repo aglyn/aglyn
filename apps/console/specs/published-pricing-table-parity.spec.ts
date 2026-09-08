@@ -204,14 +204,25 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(quotaColumn('storagePerHostMb')).toEqual(PUBLISHED)
     })
 
-    it('Bandwidth / mo — 2 · 50 · 225 · 400 · 700 GB · 1 · 3 TB', () => {
-      // Free's is the one band on that tier that can never be metered — there
-      // is no subscription to bill an overage onto, so it is a pure give at
-      // $0.175 a GB. Pro's 225 GB is the smallest proportional cut on the
-      // row, 10%, and the only one on a tier that was never negative: at
-      // 250 GB it held a 7.1% ceiling against 10-16% everywhere else
-      // (`tier-margin-floor.spec.ts`).
-      const PUBLISHED: Row = [2, 50, 225, 400, 700, 1000, 3000]
+    /**
+     * RE-TRANSCRIBED 2026-09-07 from the republish that carried the resized
+     * bands (screen `v0clP6xQl-`, version `5PkGJBlRra`): the cells read
+     * "2 GB · 50 GB · 125 GB · 185 GB · 290 GB · 345 GB · 1.54 TB", and the
+     * Scale room-to-grow strip reads "290 GB bandwidth". Terabytes are
+     * decimal and shown to the gigabyte — 1,540 GB is "1.54 TB", not the
+     * "1.5 TB" of a band 40 GB smaller.
+     *
+     * Free's is the one band on that tier that can never be metered — there
+     * is no subscription to bill an overage onto, so it is a pure give at
+     * $0.175 a GB. Every paid band was resized on 2026-09-07 to hold the
+     * platform's invariant at the ANNUAL price, net of Stripe's fee, with
+     * the CRM seat and one-to-one email terms counted: at 225 · 400 · 700 ·
+     * 1,000 · 3,000 GB every tier from Pro up ran 19–44% under water at that
+     * price with every band at 100% (`tier-margin-floor.spec.ts` carries the
+     * model and the mutation that proves it).
+     */
+    it('Bandwidth / mo — 2 · 50 · 125 · 185 · 290 · 345 GB · 1.54 TB', () => {
+      const PUBLISHED: Row = [2, 50, 125, 185, 290, 345, 1540]
       expect(quotaColumn('bandwidthGb')).toEqual(PUBLISHED)
     })
 
@@ -888,9 +899,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
        */
       expect(Number.isFinite(PLAN_ENTITLEMENTS.agency.contactsPerHost)).toBe(true)
       expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBe(0.4)
-      // The uncapped-band-carries-no-rate rule still holds where a band
-      // really is uncapped, which is Enterprise alone.
-      expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(UNLIMITED)
+      // Enterprise publishes no rate and, since 2026-09-07, no unbounded band
+      // either: its row is a finite fallback of twice Agency's that a
+      // contract raises, and the page still reads "Talk to us" for it.
+      expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(1_000_000)
       expect(PLAN_PRICING.enterprise.extraContactsUsdPer1k).toBeNull()
     })
   })

@@ -509,8 +509,8 @@ async function engageFreePlanBandwidthCap(options: {
 /**
  * Sum the month once, then ask BOTH bandwidth questions of it (AGL-2413).
  *
- * 1. the free plan's **band** — `bandwidthCapShouldEngage`, ~8,700 views; and
- * 2. the **abuse ceiling** — 10x the band, floor 100,000 views.
+ * 1. the free plan's **band** — `bandwidthCapShouldEngage`, ~3,500 views; and
+ * 2. the **abuse ceiling** — 3x the band, floor 100,000 views.
  *
  * ## Why the plan cap moved here (AGL-2413)
  *

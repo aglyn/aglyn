@@ -200,7 +200,7 @@ describe('the included campaign-email bands', () => {
       scale: 40_000,
       advanced: 65_000,
       agency: 130_000,
-      enterprise: 250_000,
+      enterprise: 260_000,
     })
   })
 
@@ -550,7 +550,7 @@ describe('priceEmailSendOverage', () => {
 // ---------------------------------------------------------------------------
 describe('the Enterprise band is contracted, finite, and survives the wire', () => {
   it('defaults to a figure the sending platform can actually deliver', () => {
-    expect(ENTERPRISE_EMAIL_SENDS_PER_MONTH).toBe(250_000)
+    expect(ENTERPRISE_EMAIL_SENDS_PER_MONTH).toBe(260_000)
     expect(PLAN_ENTITLEMENTS.enterprise.emailSendsPerMonth).toBe(
       ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     )
@@ -579,7 +579,7 @@ describe('the Enterprise band is contracted, finite, and survives the wire', () 
       JSON.stringify({ emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH }),
     )
     expect(typeof overTheWire.emailSendsPerMonth).toBe('number')
-    expect(overTheWire.emailSendsPerMonth).toBe(250_000)
+    expect(overTheWire.emailSendsPerMonth).toBe(260_000)
     expect(overTheWire.emailSendsPerMonth).not.toBeNull()
     expect(overTheWire.emailSendsPerMonth).not.toBe(0)
   })

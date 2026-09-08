@@ -1411,10 +1411,10 @@ async function handler(request: Request): Promise<Response> {
           // `ORG_COGS_UNIT_RATES_USD.perEmailSend` — every message the
           // provider charged for, campaigns and transactional alike — and its
           // OVERAGE is priced onto the invoice at the plan's retail
-          // per-1,000 rate. `workflowRuns` and `actionRuns` remain recorded
-          // and unpriced: no per-run rate exists, and inventing one here
-          // would put a made-up number into both the invoice and the discount
-          // guardrail on the same day.
+          // per-1,000 rate. `workflowRuns` and `actionRuns` are PRICED INTO
+          // COGS at `ORG_COGS_UNIT_RATES_USD.perRun` (2026-09-07) and never
+          // reach the invoice: no plan sells runs past its band, so there is
+          // no overage line for them to become.
           emailSends: counterTotals.emailSends,
           // Volume above the plan's included band, in emails (AGL-1438).
           // Mostly transactional, because that is the mail no cap may refuse

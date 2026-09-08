@@ -140,14 +140,18 @@ describe('POS register allocation (AGL-1775)', () => {
       ).toBe(PRO_CAP)
     })
 
-    it('keeps UNLIMITED unlimited on enterprise', () => {
-      // Enterprise's plan cap IS unbounded — that is what was sold — and
-      // `Infinity + n` must not become `NaN` or a finite number downstream.
+    it('keeps a contracted UNLIMITED unlimited on enterprise', () => {
+      // An agreement with no register ceiling writes the sentinel as a
+      // per-org override — the plan row itself is a finite fallback of 40,
+      // twice Agency's, since 2026-09-07 — and `Infinity + n` must not become
+      // `NaN` or a finite number downstream.
       const enterprise = {
         plan: 'enterprise',
+        entitlements: { posRegisters: UNLIMITED },
         seatAddons: { posRegisters: 5 },
         registerAllocations: { 'host-1': 5 },
       } as any
+      expect(resolveOrgEntitlements({ plan: 'enterprise' } as any).posRegisters).toBe(40)
       expect(resolveOrgEntitlements(enterprise).posRegisters).toBe(UNLIMITED)
       expect(resolveHostRegisterCap(enterprise, 'host-1')).toBe(UNLIMITED)
       expect(resolveHostRegisterCap(enterprise, 'host-2')).toBe(UNLIMITED)

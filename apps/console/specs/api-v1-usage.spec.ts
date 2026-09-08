@@ -327,10 +327,14 @@ describe('`metered` says what happens when you cross the band', () => {
 
 describe('an unlimited band is null, on purpose', () => {
   it('publishes null rather than letting Infinity become null by accident', async () => {
-    expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(
-      Number.POSITIVE_INFINITY,
-    )
-    mockOrg = { plan: 'enterprise' }
+    // Since 2026-09-07 no plan row carries the sentinel — Enterprise's row is
+    // a finite fallback of 1,000,000 — so an unlimited band is what a
+    // contracted per-org override writes, and that is the org read here.
+    expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(1_000_000)
+    mockOrg = {
+      plan: 'enterprise',
+      entitlements: { contactsPerHost: Number.POSITIVE_INFINITY },
+    }
     seedCollection('contacts', 7)
     const { body } = await getUsage()
     expect(body.contacts.used).toBe(7)

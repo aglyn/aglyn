@@ -36,24 +36,24 @@ copy that goes stale.
 | Scale | Higher product and site limits, lower fee again |
 | Advanced | Unlimited products, no transaction fee, high-volume commerce & API |
 | Agency | Many sites under one organization, white-label |
-| Enterprise | Unlimited everything, SSO, white-label, no transaction fee |
+| Enterprise | Twice Agency's capacity by default and more by agreement, SSO, white-label, no transaction fee |
 
 Transaction fees are Aglyn platform fees on the sales you take through your site —
 storefront orders, paid memberships and paid bookings alike — separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
 
-Every plan also includes an amount of monthly **traffic** — 5 GB on Free, rising to
-unlimited on Enterprise. Passing it is metered and billed on a paid plan, and pauses the
-site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
+Every plan also includes an amount of monthly **traffic** — 2 GB on Free, rising to
+3,080 GB on Enterprise by default (an agreement can set more). Passing it is metered and
+billed on a paid plan, and pauses the site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
 for what a paused site shows a visitor.
 
 ### Enterprise
 
 **Enterprise** is the one tier you cannot buy from the Billing page. It has no list
 price — the plan, term, and invoicing are agreed with us, and we provision the
-organization directly. On top of everything in Agency it lifts every quota to
-unlimited and adds **SAML / OIDC single sign-on**, so your team signs in through your
-own identity provider.
+organization directly. On top of everything in Agency it doubles every quota Agency
+bounds — and your agreement can set any of them higher — and adds **SAML / OIDC single
+sign-on**, so your team signs in through your own identity provider.
 
 To start a conversation, use the **Contact sales** button on the Enterprise card at the
 bottom of your Billing page. Once your organization is on Enterprise, plan changes go
@@ -140,8 +140,9 @@ takes effect immediately.
 :::info Free plans are never billed for storage
 On the Free plan there is no storage overage at all. Your included storage is a fixed
 cap: uploads stop there, nothing is metered, and no amount of usage produces a charge —
-so there is nothing to cap and nothing to configure. Enterprise storage is unlimited, so
-it has no overage either.
+so there is nothing to cap and nothing to configure. Enterprise storage is a fixed
+default of 120 GB per site that an agreement raises, with no overage either: uploads stop
+there.
 :::
 
 :::tip No surprise bills
@@ -229,7 +230,8 @@ records band**, not a hard cap. A record is a **contact, a company or a deal**; 
 logged activities, pipelines and custom fields are not counted.
 
 - Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 50,000,
-  Scale 100,000, Advanced 150,000, Agency 500,000 records. Enterprise is unlimited.
+  Scale 100,000, Advanced 150,000, Agency 500,000 records; Enterprise 1,000,000 by
+  default, and more by agreement.
 - On **paid tiers**, growing past the band never blocks or drops anything — extra
   records are **metered overage** on your monthly invoice, at a per-1,000 rate that
   falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
@@ -269,7 +271,8 @@ A **one-to-one email** is a message a teammate writes to one person from a CRM r
 — as against a [campaign](../../marketing-and-automation/email-campaigns/overview.md),
 which is one send over an audience, or the transactional mail your site sends on its
 own. It is capped **per organization per day (UTC)**: Free 0, Starter 50, Pro 150,
-Business 200, Scale 300, Advanced 500, Agency 1,000; Enterprise is unlimited. The cap
+Business 200, Scale 300, Advanced 500, Agency 1,000; Enterprise 2,000 by default, and
+more by agreement. The cap
 is a pace rather than a meter: at the cap the send is refused — the dialog says so and
 names the count — until the day turns over, and nothing is ever billed for it. An
 email an automation sends is metered as usage and does not count against the cap.
@@ -303,7 +306,7 @@ organization**:
 | Scale | 300,000 | Metered, at a lower rate than Business |
 | Advanced | 1,000,000 | Metered, lower again |
 | Agency | 5,000,000 | Metered, the lowest per-unit rate |
-| Enterprise | Unlimited | — |
+| Enterprise | 10,000,000 by default; more by agreement | — |
 
 - Requests past the included quota **keep working** and bill as metered overage on your
   monthly invoice — never a hard wall mid-integration.

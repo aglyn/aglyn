@@ -184,20 +184,23 @@ describe('Enterprise resolves to a finite number, never Infinity', () => {
 
   it('is anchored to the TOP OF THE LADDER, not to a price it does not have', () => {
     // Enterprise carries no list price, so the band cannot be sized against
-    // what a tier's other cost terms leave out of one. It takes the step the
-    // ladder already takes instead — 1.5x Agency — and that relation is
-    // asserted rather than described, so moving Agency's band without moving
-    // this one goes red instead of quietly flattening the top of the ladder.
+    // what a tier's other cost terms leave out of one. It is twice Agency's
+    // band instead — the rule every Enterprise fallback follows since the
+    // 2026-09-07 decision — and that relation is asserted rather than
+    // described, so moving Agency's band without moving this one goes red
+    // instead of quietly flattening the top of the ladder.
     expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBe(
-      PLAN_ENTITLEMENTS.agency.assistCreditsPerMonth * 1.5,
+      PLAN_ENTITLEMENTS.agency.assistCreditsPerMonth * 2,
     )
-    // And it stays a smaller share of the cheapest deal that is sold as
-    // Enterprise than Agency's own band is of $1,299 — a top rung that cost
-    // proportionally more than the one below it would be the wrong shape.
+    // As provider spend: $116 a month, under 9% of the cheapest deal that is
+    // sold as Enterprise — the Agency price is the floor a deal is written
+    // above — and a figure a contract raises rather than a share it is held
+    // to.
+    expect(assistUsdFromCredits(ENTERPRISE_ASSIST_CREDITS_PER_MONTH)).toBe(116)
     const agencyPrice = PLAN_PRICING.agency.basePriceMonthlyUsd
     expect(
       assistUsdFromCredits(ENTERPRISE_ASSIST_CREDITS_PER_MONTH) / agencyPrice,
-    ).toBeLessThan(0.07)
+    ).toBeLessThan(0.09)
   })
 
   it('takes a CONTRACTED per-org value over the fallback', () => {
@@ -408,9 +411,9 @@ describe('the overage is SOLD past the band at the plan rate, unless the org ask
       overageMonthlyUsd: 0,
       overageRateUsd: null,
     })
-    expect(assistMonthOverage({ plan: 'enterprise' }, 100)).toMatchObject({
+    expect(assistMonthOverage({ plan: 'enterprise' }, 200)).toMatchObject({
       bandCredits: ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
-      overageCredits: 100_000 - ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
+      overageCredits: 200_000 - ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
       overageMonthlyUsd: 0,
       overageRateUsd: null,
     })

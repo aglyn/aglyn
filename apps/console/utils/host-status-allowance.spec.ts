@@ -35,26 +35,44 @@ import { describeSiteAllowance } from './host-status'
  * neither of them gets from the real source proves only that they agree.
  */
 describe('the site allowance line (AGL-2223)', () => {
-  const enterpriseLimit = resolveOrgEntitlements({
+  /**
+   * Since 2026-09-07 the Enterprise plan row is a finite fallback (twice
+   * Agency's 100 sites), and the unlimited sentinel is what a contracted
+   * per-org override writes. Both shapes are real org documents, so both are
+   * read here.
+   */
+  const contractedLimit = resolveOrgEntitlements({
     plan: 'enterprise',
+    entitlements: { hostLimit: UNLIMITED },
   } as never).hostLimit
+  const fallbackLimit = resolveOrgEntitlements({ plan: 'enterprise' } as never).hostLimit
 
-  it('the enterprise host limit really is the unlimited sentinel', () => {
+  it('a contracted enterprise limit really is the unlimited sentinel', () => {
     // Anti-vacuity for the case below: if this ever became a finite number the
     // next assertion would pass for the wrong reason.
-    expect(enterpriseLimit).toBe(UNLIMITED)
-    expect(Number.isFinite(enterpriseLimit)).toBe(false)
+    expect(contractedLimit).toBe(UNLIMITED)
+    expect(Number.isFinite(contractedLimit)).toBe(false)
+    // …and the plan's own fallback is a number, not the sentinel.
+    expect(fallbackLimit).toBe(200)
   })
 
-  it('reads Unlimited for the enterprise limit, not Infinity', () => {
+  it('reads Unlimited for a contracted limit, not Infinity', () => {
     expect(
       describeSiteAllowance({
         used: 4,
-        limit: enterpriseLimit,
+        limit: contractedLimit,
         planLabel: 'Enterprise',
         ready: true,
       }),
     ).toBe('4 of Unlimited sites · Enterprise plan')
+    expect(
+      describeSiteAllowance({
+        used: 4,
+        limit: fallbackLimit,
+        planLabel: 'Enterprise',
+        ready: true,
+      }),
+    ).toBe('4 of 200 sites · Enterprise plan')
   })
 
   it('still reads a finite cap as a number', () => {

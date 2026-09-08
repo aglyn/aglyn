@@ -343,14 +343,14 @@ describe('what it serves', () => {
     expect(row.marginPct).not.toBeNull()
   })
 
-  it('forwards the meters that are recorded but NOT priced', async () => {
+  it('forwards the two run meters, banded and priced', async () => {
     /*
-     * `orgCogsInputFrom` is the PRICED field list and correctly omits
-     * `workflowRuns` and `actionRuns` — neither has a unit cost. A projection
-     * built only from it would therefore drop two bands that ARE recorded and
-     * ARE sold, and the surface would report every organization as consuming
-     * none of them. That is this repo's most-repeated defect: a projection
-     * that starves a model does not error, it just answers smaller.
+     * `workflowRuns` and `actionRuns` are recorded, sold, and — since
+     * 2026-09-07 — priced at `perRun`, so `orgCogsInputFrom` forwards them
+     * too. The route still names them beside it: a projection that dropped
+     * either would report every organization as consuming none of them,
+     * which is this repo's most-repeated defect — a projection that starves
+     * a model does not error, it just answers smaller.
      */
     mockVerifyIdToken.mockResolvedValue(STAFF)
     mockOrgDocs = [payingOrg('org-1', 'business')]
@@ -396,6 +396,10 @@ describe('what it serves', () => {
     // unbounded band becomes a band of zero. The STATE is what the client
     // reads, and it survives the round trip intact.
     mockVerifyIdToken.mockResolvedValue(STAFF)
+    // A CONTRACTED uncapped band: since 2026-09-07 the Enterprise plan row is
+    // a finite fallback (twice Agency's), so the sentinel on an org document
+    // is the per-org override an agreement writes — which is what the route
+    // reads through the real resolver here.
     mockOrgDocs = [
       {
         id: 'ent-1',
@@ -404,6 +408,7 @@ describe('what it serves', () => {
           plan: 'enterprise',
           subscription: { status: 'active', interval: 'month' },
           hosts: { 'site-1': true },
+          entitlements: { contactsPerHost: Number.POSITIVE_INFINITY },
         },
       },
     ]

@@ -90,7 +90,9 @@
 
 import type { AglynOrgBilling, OrgBandwidthCap } from '../foundation'
 import {
+  isCustomPricedPlan,
   planMetersInfraOverage,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
 } from './plan-entitlements'
 
@@ -128,10 +130,13 @@ export const BANDWIDTH_CAP_RETRY_AFTER_SECONDS = 3600
  *     off; that promise is older than this cap and this function is where it
  *     is kept. Re-derived from the CURRENT plan on every read, which is what
  *     releases an upgraded org without a write;
- *  3. the plan's band is finite. Enterprise also answers false to
- *     `planMetersInfraOverage` — its price is negotiated and every band is
- *     `UNLIMITED` — so without this an enterprise org carrying a marker some
- *     future writer left behind would be refused by a band it does not have.
+ *  3. the plan is not custom-priced, and its band is finite. Enterprise also
+ *     answers false to `planMetersInfraOverage` — its price is negotiated —
+ *     and since 2026-09-07 its band is a FINITE fallback (twice Agency's), so
+ *     "unmetered and finite" would describe a contracted customer exactly as
+ *     it describes a free one. Its traffic is paid for by agreement, not by
+ *     invoice, and this cap is the free plan's rule alone: an enterprise org
+ *     carrying a marker some future writer left behind is never refused.
  *     Belt and braces: today's writer cannot produce that marker, and this
  *     makes it impossible rather than merely unreachable.
  *
@@ -146,6 +151,7 @@ export function bandwidthCapEngaged(
 ): boolean {
   if (!org) return false
   if (planMetersInfraOverage(org)) return false
+  if (isCustomPricedPlan(resolveEffectivePlan(org))) return false
   if (!Number.isFinite(resolveOrgEntitlements(org).bandwidthGb)) return false
   const cap = org.bandwidthCap
   if (!cap || typeof cap !== 'object') return false
@@ -167,6 +173,9 @@ export function bandwidthCapShouldEngage(options: {
 }): boolean {
   const { org, usedBandwidthGb, includedBandwidthGb } = options
   if (planMetersInfraOverage(org)) return false
+  // The reader's third condition, kept in step: a custom-priced plan is paid
+  // for by agreement and is never paused, whatever its band resolves to.
+  if (isCustomPricedPlan(resolveEffectivePlan(org))) return false
   if (!Number.isFinite(includedBandwidthGb) || !(includedBandwidthGb > 0)) {
     return false
   }
