@@ -9,6 +9,75 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.94 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.93...v1.0.0-beta.94)
+
+### Added
+
+- **crm:** a contact, a company and a deal can carry files ([AGL-2662](https://linear.app/aglyn/issue/AGL-2662))
+- **crm:** an export that is the whole collection, streamed ([AGL-2662](https://linear.app/aglyn/issue/AGL-2662))
+- **crm:** click to call — a number is a link, and the call is one button to log ([AGL-2661](https://linear.app/aglyn/issue/AGL-2661))
+- **crm:** the capture address on the send dialog and a settings card ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **crm:** the timeline tells a captured email from a logged one ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **crm:** reports gain won and lost by owner, tasks gain a month ([AGL-2662](https://linear.app/aglyn/issue/AGL-2662))
+- **crm:** the next activity a record carries, kept by every task write ([AGL-2661](https://linear.app/aglyn/issue/AGL-2661))
+- **console:** the search palette reaches tasks, activities and org-level leads ([AGL-2662](https://linear.app/aglyn/issue/AGL-2662))
+- **crm:** deals and tasks take a CSV import through the shared drawer ([AGL-2662](https://linear.app/aglyn/issue/AGL-2662))
+- **crm:** the booking door on a record and in the email draft ([AGL-2660](https://linear.app/aglyn/issue/AGL-2660))
+- **crm:** the leads list gets a bulk bar and a CSV export ([AGL-2662](https://linear.app/aglyn/issue/AGL-2662))
+- **crm:** custom fields on companies and deals, one Fields tab per object ([AGL-2661](https://linear.app/aglyn/issue/AGL-2661), [AGL-2662](https://linear.app/aglyn/issue/AGL-2662))
+- **crm:** the REST v1 email-templates resource, with its API reference page ([AGL-2658](https://linear.app/aglyn/issue/AGL-2658))
+- **console:** the capture webhook files received mail on the record it was with ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **crm:** the Email templates card on Settings, at both levels, with its manual page ([AGL-2658](https://linear.app/aglyn/issue/AGL-2658))
+- **crm:** the inbound-address route mints and rotates the capture address ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **bookings:** the service editor's two CRM switches and the booker-narrowed list ([AGL-2660](https://linear.app/aglyn/issue/AGL-2660))
+- **bookings:** a booking link per service, and a booking files back on the CRM record ([AGL-2660](https://linear.app/aglyn/issue/AGL-2660))
+- **tenant-data-admin:** the org's capture token and the filing of a received message ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **api:** a task's reminder over the REST API ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659))
+- **crm:** the send dialog picks a template, inserts snippets and previews merge fields ([AGL-2658](https://linear.app/aglyn/issue/AGL-2658))
+- **crm:** an hourly runner sends each task's reminder at its own time ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659))
+- **email:** one Svix check for both Resend webhooks, and the received-mail reader ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **aglyn:** the CRM's email capture address, token and correspondent rule ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **tenant-data-admin:** a confirmed booking files a meeting and a follow-up ([AGL-2660](https://linear.app/aglyn/issue/AGL-2660))
+- **crm:** the send route fills merge fields off the documents it already read ([AGL-2658](https://linear.app/aglyn/issue/AGL-2658))
+- **crm:** the task drawer sets a reminder beside the due date ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659))
+- **aglyn:** the booking door's shared vocabulary and the booker-narrowed bookings link ([AGL-2660](https://linear.app/aglyn/issue/AGL-2660))
+- **crm:** the email-template model, merge-field resolver, rules and index ([AGL-2658](https://linear.app/aglyn/issue/AGL-2658))
+- **crm:** the task routes decide a reminder and clear one on completion ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659))
+- **crm:** a task carries a reminder at its own time ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659))
+
+### Fixed
+
+- **crm:** one org prop on the lead card, not the two the merge left ([AGL-2661](https://linear.app/aglyn/issue/AGL-2661))
+- **crm:** the flat contact record carries the next activity the list draws ([AGL-2661](https://linear.app/aglyn/issue/AGL-2661))
+- **aglyn:** the excerpt names its non-breaking space by escape ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **email:** the Svix check is imported by its own path, not the barrel ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **ci:** the docs ignore step judges the whole push, not its tip commit ([AGL-2688](https://linear.app/aglyn/issue/AGL-2688))
+- **tools:** the console's cron bypass is declared in the firewall posture ([AGL-2642](https://linear.app/aglyn/issue/AGL-2642))
+- **theme:** sites go dark on the default palette, with a per-site off switch ([AGL-2676](https://linear.app/aglyn/issue/AGL-2676))
+
+### Documentation
+
+- **crm:** the capture address, its card, and what a captured message keeps ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- the booking door, the two service switches and the meeting a booking files ([AGL-2660](https://linear.app/aglyn/issue/AGL-2660))
+- **api:** email templates join the scope, sync and idempotency tables ([AGL-2658](https://linear.app/aglyn/issue/AGL-2658))
+- **crm:** task reminders in the manual, the tour and the cron table ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659))
+
+<details>
+<summary>Also in this release: 6 test, 2 chore</summary>
+
+- **crm:** one firestore instance per render, so the record page settles ([AGL-2662](https://linear.app/aglyn/issue/AGL-2662))
+- **console:** the wave's two new tables are classified, and two docs blurbs fit ([AGL-2658](https://linear.app/aglyn/issue/AGL-2658))
+- **aglyn:** the capture domain's default is a declared self-host seam ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **crm:** two specs the wave's other branches moved out from under ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659), [AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **tools:** the capture webhook's bypass path is declared with the rest ([AGL-2657](https://linear.app/aglyn/issue/AGL-2657))
+- **bookings:** the create-route spec types its filing double ([AGL-2660](https://linear.app/aglyn/issue/AGL-2660))
+- **tools:** the e2e fixture's tasks carry the default reminder ([AGL-2659](https://linear.app/aglyn/issue/AGL-2659))
+- **bookings:** the create route keeps a well-formed crmRef and hands it to the filing ([AGL-2660](https://linear.app/aglyn/issue/AGL-2660))
+
+</details>
+
 ## v1.0.0-beta.93 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.92...v1.0.0-beta.93)
