@@ -410,10 +410,14 @@ describe('the CLI, end to end against a stubbed Cloud Functions API', () => {
  * timestamp the check waits for never arrives and it stays red for good.
  */
 describe('what counts as a change to the deployed package', () => {
-  it('excludes an installed dependency tree', () => {
+  it('excludes what cannot change what runs', () => {
     assert.deepEqual(
       [...FUNCTIONS_SOURCE_PATHSPECS],
-      ['cloud/functions', ':(exclude)cloud/functions/node_modules'],
+      [
+        'cloud/functions',
+        ':(exclude)cloud/functions/node_modules',
+        ':(exclude)cloud/functions/.gitignore',
+      ],
     )
     const withModules = git([
       'log', '-1', '--format=%H', 'HEAD', '--', FUNCTIONS_SOURCE_PATH,
