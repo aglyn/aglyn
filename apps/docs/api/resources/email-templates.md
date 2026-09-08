@@ -7,7 +7,7 @@ description: Read, add, edit and delete the CRM's email templates and snippets â
 # Email templates
 
 The letters your team sends from a record with **Send email** â€” see
-[Email templates & snippets](/docs/content-and-data/crm/email-templates) in the
+[Email templates & snippets](/content-and-data/crm/email-templates) in the
 manual. A **template** is a subject and a message under a name; a **snippet** is a
 paragraph under a name, inserted where the cursor is. Both may carry merge fields
 such as `{{contact.firstName}}` and `{{deal.amount}}`, which the send fills in from
