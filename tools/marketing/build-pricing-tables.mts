@@ -1036,17 +1036,17 @@ if (!frameTable) {
  * stale" has to be an argument someone made once, not a shrug the reconciler
  * repeats forever. An entry here that stops diverging fails too.
  */
-const EXPECTED_MISSING: Record<string, string> = {
-  'Single sign-on (SAML/OIDC)':
-    'added beyond the frame when AGL-1210 shipped self-serve SSO; `ssoEnabled` is real and Enterprise-only, and the page said so before the design did',
-  'Send email from your own domain':
-    '`customSendingDomain` is a capability the frame predates entirely — sending identity was not a published axis when it was drawn. It is real from Pro up, and it is the row that says a campaign leaves on a name whose reputation is the merchant’s. Resolves when the four responsive /pricing frames are hand-edited',
+const EXPECTED_MISSING: Record<string, string> = {}
+
+for (const [label, [why]] of injected('--declare-missing-row', 2)) {
+  EXPECTED_MISSING[label] = why
 }
 
 /** Rows the FRAME carries that we deliberately do not emit, each with why. */
-const EXPECTED_EXTRA: Record<string, string> = {
-  'Total site size':
-    'AGL-2133 retired `totalSiteSizeMb`: it was enforced by nothing, and AGL-678 caps a node map at 900 KB, so the measurable org total can only reach a fraction of it. There is no number left to publish',
+const EXPECTED_EXTRA: Record<string, string> = {}
+
+for (const [label, [why]] of injected('--declare-extra-row', 2)) {
+  EXPECTED_EXTRA[label] = why
 }
 
 // The plan header and the price strip are deliberately absent from this list.

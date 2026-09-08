@@ -5,7 +5,7 @@
   "frameName": "Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 9678
+    "height": 9718
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -392,7 +392,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 375,
-      "heightPx": 2571,
+      "heightPx": 2611,
       "groups": [
         {
           "figmaNodeId": "268:1992",
@@ -487,14 +487,6 @@
               "cells": [
                 "Storage per site",
                 "10 GB"
-              ]
-            },
-            {
-              "figmaNodeId": "268:2024",
-              "name": "row",
-              "cells": [
-                "Total site size",
-                "5 GB"
               ]
             },
             {
@@ -601,6 +593,14 @@
               ]
             },
             {
+              "figmaNodeId": "1732:608",
+              "name": "row",
+              "cells": [
+                "Single sign-on (SAML/OIDC)",
+                "—"
+              ]
+            },
+            {
               "figmaNodeId": "268:2065",
               "name": "group",
               "cells": [
@@ -693,6 +693,14 @@
               "cells": [
                 "Email sends / mo",
                 "5,000"
+              ]
+            },
+            {
+              "figmaNodeId": "1732:605",
+              "name": "row",
+              "cells": [
+                "Send email from your own domain",
+                "✓ Included"
               ]
             },
             {
@@ -944,7 +952,7 @@
               "name": "ourcost",
               "cells": [
                 "Our cost",
-                "$0.03 / GB-mo"
+                "$0.026 / GB-mo"
               ]
             },
             {
@@ -952,7 +960,7 @@
               "name": "youpay",
               "cells": [
                 "You pay",
-                "$0.039 / GB-mo"
+                "$0.0338 / GB-mo"
               ]
             },
             {
@@ -990,7 +998,7 @@
               "name": "ourcost",
               "cells": [
                 "Our cost",
-                "$0.50 / 1k"
+                "$0.05 / 1k"
               ]
             },
             {
@@ -998,7 +1006,7 @@
               "name": "youpay",
               "cells": [
                 "You pay",
-                "$0.65 / 1k"
+                "$0.065 / 1k"
               ]
             }
           ]

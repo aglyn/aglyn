@@ -5,7 +5,7 @@
   "frameName": "Pricing — Widescreen",
   "frameSize": {
     "width": 1920,
-    "height": 6705
+    "height": 6765
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -371,7 +371,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 1920,
-      "heightPx": 2733,
+      "heightPx": 2793,
       "groups": [
         {
           "figmaNodeId": "572:1423",
@@ -473,21 +473,6 @@
                 "30 GB",
                 "40 GB",
                 "60 GB",
-                "Talk to us"
-              ]
-            },
-            {
-              "figmaNodeId": "572:1527",
-              "name": "row",
-              "cells": [
-                "Total site size",
-                "100 MB",
-                "1 GB",
-                "5 GB",
-                "25 GB",
-                "37.5 GB",
-                "50 GB",
-                "100 GB",
                 "Talk to us"
               ]
             },
@@ -694,6 +679,21 @@
               ]
             },
             {
+              "figmaNodeId": "1728:624",
+              "name": "row",
+              "cells": [
+                "Single sign-on (SAML/OIDC)",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "✓"
+              ]
+            },
+            {
               "figmaNodeId": "572:1795",
               "name": "grp",
               "cells": [
@@ -863,6 +863,21 @@
                 "65,000",
                 "130,000",
                 "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "1728:605",
+              "name": "row",
+              "cells": [
+                "Send email from your own domain",
+                "—",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
               ]
             },
             {

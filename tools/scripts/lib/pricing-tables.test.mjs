@@ -232,27 +232,16 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     // and excuses nothing. This check found a real one on its first run:
     // `'Site backup & restore'` had been exempted as a frame-only row and the
     // frame has never carried that label — the row is `Site export & backup`.
+    // The fixture carries the SSO row, so declaring it ours-only is a
+    // declaration with nothing behind it. Injected rather than borrowed: the
+    // shipped set is empty whenever the frames are current, and a guard whose
+    // only coverage is a live exemption is uncovered the moment one is
+    // resolved — which is when the next gets written.
     resetFixtures()
-    const data = readFrame()
-    const table = featureTable(data)
-    // Give the frame the SSO row it lacks, which is the one declared
-    // ours-only divergence; the declaration is now stale.
-    table.records.push({
-      cells: [
-        'Single sign-on (SAML/OIDC)',
-        '—',
-        '—',
-        '—',
-        '—',
-        '—',
-        '—',
-        '—',
-        '✓',
-      ],
-    })
-    writeFrame(data)
 
-    const run = check()
+    const run = check([
+      '--declare-missing-row=Single sign-on (SAML/OIDC)|the frame predates self-serve SSO',
+    ])
     assert.equal(run.status, 1)
     assert.match(run.stderr, /declared in EXPECTED_MISSING but the frame now carries it/)
   })
