@@ -77,6 +77,24 @@ jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
   getDoc: (...args: unknown[]) => getDoc(...args),
 }))
+/*
+ * The booking door (AGL-2660) has a spec of its own; here it is one control
+ * that hands a link to the draft, recording which record and site it was
+ * opened for. Its real form reads the site document, which this spec has
+ * no interest in.
+ */
+let bookingDoorProps: Record<string, unknown> | null = null
+jest.mock('./book-meeting-action', () => ({
+  ...jest.requireActual('./book-meeting-action'),
+  BookMeetingButton: (props: Record<string, unknown> & { onInsert: (link: string) => void }) => {
+    bookingDoorProps = props
+    return (
+      <button type="button" onClick={() => props.onInsert('https://acme.aglyn.app/?service=s')}>
+        {'Insert booking link'}
+      </button>
+    )
+  },
+}))
 
 const READY = {
   response: { ok: true },
@@ -123,6 +141,7 @@ const draft = () => {
 beforeEach(() => {
   jest.clearAllMocks()
   hubPathAskedFor = []
+  bookingDoorProps = null
   crmApiHost = undefined
   sendingApi.mockResolvedValue(READY)
   crmApi.mockResolvedValue({ response: { ok: true }, payload: { ok: true, activityId: 'act-1' } })
@@ -204,6 +223,21 @@ describe('CrmSendEmailDialog', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('To')).toHaveProperty('value', 'Ada <deal@example.com>'),
     )
+  })
+
+  it('drops a booking link into the draft at the caret, for the most specific record', () => {
+    open({ dealId: 'deal-1', leadId: 'lead-1' })
+    const message = screen.getByLabelText('Message') as HTMLTextAreaElement
+    fireEvent.change(message, { target: { value: 'Pick a time.' } })
+    message.setSelectionRange(11, 11)
+    fireEvent.click(screen.getByText('Insert booking link'))
+    expect(message.value).toBe('Pick a time https://acme.aglyn.app/?service=s .')
+    expect(bookingDoorProps).toMatchObject({
+      variant: 'chip',
+      hostId: 'site-1',
+      kind: 'deal',
+      recordId: 'deal-1',
+    })
   })
 })
 

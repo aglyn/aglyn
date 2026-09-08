@@ -63,6 +63,12 @@ export interface ContactAssociationsCardProps {
   seed: { status: 'loading' | 'success' | 'error'; fromCache: boolean }
   /** The hub's own path, for the link to this person's lead. */
   basePath: string
+  /**
+   * The site's Bookings page narrowed to this person's address (AGL-2660),
+   * or nothing where the site has no booking door — the page decides, and
+   * the row is simply not drawn.
+   */
+  bookingsHref?: string | null
 }
 
 /**
@@ -102,7 +108,7 @@ export interface ContactAssociationsCardProps {
  * chip is simply not there.
  */
 export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
-  const { hostId, record, row, consentGroup, scope, seed, basePath } = props
+  const { hostId, record, row, consentGroup, scope, seed, basePath, bookingsHref } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const routes = crmRoutes(basePath)
@@ -248,6 +254,23 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
             </Typography>
           )}
         </Stack>
+        {/*
+          The person's bookings on this site (AGL-2660): every booking
+          taken with their address, past ones too, on the Bookings page —
+          the appointments are that page's records, and this card only
+          points at them.
+        */}
+        {bookingsHref ? (
+          <Stack spacing={0.5}>
+            <Typography variant="subtitle2">{'Bookings'}</Typography>
+            <Typography variant="body2">
+              <AppLink href={bookingsHref}>{'Bookings on this site'}</AppLink>
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {'Every booking made with this address, upcoming and past.'}
+            </Typography>
+          </Stack>
+        ) : null}
         {hostId ? (
           <ConversionAttribution hostId={hostId} kind="contact" refId={record.$id} />
         ) : null}

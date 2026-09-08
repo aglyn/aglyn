@@ -126,6 +126,12 @@ export function DealDetailPage(props: CrmDetailPageProps) {
           backHref={routes.section('deals')}
           backLabel="Back to deals"
           loading={!deal && !notFound}
+          // The booking door (AGL-2660): the deal's own site's services.
+          booking={
+            deal
+              ? { hostId: hostId ?? deal.hostId ?? null, org, kind: 'deal', recordId: deal.$id }
+              : undefined
+          }
           actions={
             deal ? (
               <>
