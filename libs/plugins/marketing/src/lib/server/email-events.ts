@@ -21,7 +21,10 @@ import {
   CRM_EMAIL_ORG_TAG,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
-import { normalizeResendDeliveryEvents } from '@aglyn/shared-util-email'
+import {
+  normalizeResendDeliveryEvents,
+  verifySvixSignature,
+} from '@aglyn/shared-util-email'
 // AGL-1771 lifted `isDocumentId` here from the local copy AGL-1768 wrote. The
 // copy's stated reason was wrong: `@nx/enforce-module-boundaries` does NOT
 // refuse an edge between two feature plugins — every plugin carries only
@@ -63,43 +66,18 @@ import {
   CAMPAIGN_LINK_ROLLUP_MAX,
   campaignLinkKey,
 } from '@aglyn/shared-ui-email-campaigns/model'
-import { createHash, createHmac, timingSafeEqual } from 'crypto'
+import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'
 // The one list `campaign-send` reads, keyed the one way it keys it.
 import { suppressionId } from './campaign-send'
 
 /**
- * Svix signature check (Resend webhooks): HMAC-SHA256 over
- * `{id}.{timestamp}.{payload}` with the base64 secret after `whsec_`;
- * the header carries space-delimited `v1,<base64sig>` entries.
+ * Svix signature check (Resend webhooks): the shared implementation in
+ * `@aglyn/shared-util-email`, which the CRM's capture webhook (AGL-2657)
+ * verifies with too, so the constant-time comparison lives once.
  */
-function verifySvix(
-  secret: string,
-  id: string,
-  timestamp: string,
-  payload: Buffer,
-  signatureHeader: string,
-): boolean {
-  try {
-    const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64')
-    const expected = createHmac('sha256', key)
-      .update(`${id}.${timestamp}.`)
-      .update(payload)
-      .digest()
-    return signatureHeader.split(' ').some((entry) => {
-      const [, signature] = entry.split(',')
-      if (!signature) return false
-      const candidate = Buffer.from(signature, 'base64')
-      return (
-        candidate.length === expected.length &&
-        timingSafeEqual(candidate, expected)
-      )
-    })
-  } catch {
-    return false
-  }
-}
+const verifySvix = verifySvixSignature
 
 /** Tags arrive as an array of {name, value} or a plain map — accept both. */
 function tagMap(raw: unknown): Record<string, string> {
