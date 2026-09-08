@@ -49,6 +49,10 @@ export * from './person-key-web'
 // it because `ContactFacet` names its lifecycle stage and custom-value types;
 // the scope stamp every CRM creator writes lives here too.
 export * from './crm'
+// The booking door's shared vocabulary (AGL-2660): the query keys a booking
+// link carries, the record reference inside it, and the wording and due
+// date of what a booking files back on the record.
+export * from './crm-booking'
 // Two contact documents folded into one (AGL-2625): the plan the console
 // previews and the server writes, reading the facet shape from `contacts`
 // and the company mirror from `crm`.

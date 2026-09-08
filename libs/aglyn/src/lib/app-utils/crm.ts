@@ -763,6 +763,12 @@ export interface CrmActivity extends CrmScoped {
   deliveryState?: CrmEmailDeliveryState
   /** When the delivery state last moved, epoch ms. */
   deliveryAtMs?: number
+  /**
+   * `hosts/{hostId}/bookings/{bookingId}` — the booking a `meeting` was
+   * filed from (AGL-2660), so a row the Bookings plugin wrote can be told
+   * from one a person logged, and a booking is never filed twice.
+   */
+  bookingId?: string
 }
 
 /** An activity as a listener hands it back: the document plus its id. */
