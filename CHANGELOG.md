@@ -19,6 +19,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ci:** the typecheck shards get the memory budget too, not just the main gate ([AGL-2684](https://linear.app/aglyn/issue/AGL-2684))
 - **media:** a stale content hash redirects to the stable URL instead of 404ing ([AGL-2685](https://linear.app/aglyn/issue/AGL-2685))
 
 ### Performance
