@@ -67,6 +67,7 @@ import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import AssignmentRuleDrawer from './assignment-rule-drawer'
+import EmailCaptureCard from './email-capture-card'
 import RecipesCard from './recipes-card'
 
 export type CrmSettingsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
@@ -721,12 +722,18 @@ RoundRobinCard.displayName = 'RoundRobinCard'
 export function CrmSettingsSection(props: CrmSettingsSectionProps) {
   const { hostId, org } = props
   const mount = useCrmOrgMount()
+  // The Email capture card (AGL-2657) rotates on the same owner-or-admin
+  // bar every other card writes on; the scope and the role are resolved
+  // here once and handed down, since the card itself writes no document.
+  const { orgId, ready: scopeReady } = useCrmScope({ hostId, org })
+  const { canManage, ready: roleReady } = useCanManageCrmSettings(orgId)
   return (
     <Stack spacing={3}>
       <AutoCreateCompaniesCard hostId={hostId} org={org} />
       <DefaultOwnerCard hostId={hostId} org={org} />
       <AssignmentRulesCard hostId={hostId} org={org} />
       <RoundRobinCard hostId={hostId} org={org} />
+      <EmailCaptureCard hostId={hostId} canManage={canManage} ready={scopeReady && roleReady} />
       {mount ? <RecipesCard org={org} /> : null}
     </Stack>
   )

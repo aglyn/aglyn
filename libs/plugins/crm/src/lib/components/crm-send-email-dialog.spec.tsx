@@ -72,6 +72,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ href, children }: { href: string; children: React.ReactNode }) => (
     <a href={href}>{children}</a>
   ),
+  MdiIcon: () => null,
 }))
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
@@ -100,6 +101,8 @@ const REFUSED = {
 
 const onClose = jest.fn()
 
+const CAPTURE_ADDRESS = 'crm+abcdefghijklmnopqrstuvwxyz012345@in.aglyn.com'
+
 const open = (props: Partial<React.ComponentProps<typeof CrmSendEmailDialog>> = {}) =>
   render(
     <CrmSendEmailDialog
@@ -125,7 +128,12 @@ beforeEach(() => {
   hubPathAskedFor = []
   crmApiHost = undefined
   sendingApi.mockResolvedValue(READY)
-  crmApi.mockResolvedValue({ response: { ok: true }, payload: { ok: true, activityId: 'act-1' } })
+  // One door, two routes: the send, and the capture address (AGL-2657).
+  crmApi.mockImplementation(async (route: string) =>
+    route === 'inbound-address'
+      ? { response: { ok: true }, payload: { address: CAPTURE_ADDRESS } }
+      : { response: { ok: true }, payload: { ok: true, activityId: 'act-1' } },
+  )
 })
 
 describe('CrmSendEmailDialog', () => {
@@ -163,7 +171,7 @@ describe('CrmSendEmailDialog', () => {
     expect(link.getAttribute('href')).toBe('/acme/hosts/site/emails/sending')
     draft()
     expect(sendButton()).toHaveProperty('disabled', true)
-    expect(crmApi).not.toHaveBeenCalled()
+    expect(crmApi).not.toHaveBeenCalledWith('email-send', expect.anything())
   })
 
   it('posts the record and the draft, then closes with a toast', async () => {
@@ -204,6 +212,36 @@ describe('CrmSendEmailDialog', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('To')).toHaveProperty('value', 'Ada <deal@example.com>'),
     )
+  })
+
+  /*
+   * THE CAPTURE ADDRESS (AGL-2657): asked for when the dialog opens, and
+   * printed as a read-only line the member copies into a mailbox — never
+   * put on the message itself, since the console logs what it sends.
+   */
+  it('shows the capture address under Reply-to with a copy button, and never sends to it', async () => {
+    open()
+    expect(crmApi).toHaveBeenCalledWith('inbound-address', {})
+    await waitFor(() =>
+      expect(screen.getByLabelText('Log replies')).toHaveProperty('value', CAPTURE_ADDRESS),
+    )
+    expect(screen.getByRole('button', { name: 'Copy the capture address' })).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Forward a reply, or BCC this address from your mailbox, to file it on this record.',
+      ),
+    ).toBeTruthy()
+    await waitFor(() => expect(screen.getByLabelText('From')).toHaveProperty('value', 'hello@site.mail.aglyn.app'))
+    draft()
+    fireEvent.click(sendButton())
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    const send = crmApi.mock.calls.find(([route]) => route === 'email-send')
+    expect(send?.[1]).toEqual({ contactId: 'contact-1', subject: 'Hello', body: 'A note.' })
+  })
+
+  it('does not ask for the capture address while closed', () => {
+    open({ open: false })
+    expect(crmApi).not.toHaveBeenCalled()
   })
 })
 

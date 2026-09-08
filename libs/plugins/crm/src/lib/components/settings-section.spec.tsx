@@ -100,6 +100,18 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
   MdiIcon: () => null,
   SrOnly: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  useConfirmationContext: () => ({ confirm: jest.fn().mockResolvedValue(undefined) }),
+}))
+// The Email capture card's route (AGL-2657) has a spec of its own; here it
+// only has to answer, so the section renders whole. One function for every
+// render, as the real hook memoizes: a fresh identity each time would run
+// the card's effect forever.
+const mockInboundApi = jest.fn(async () => ({
+  response: { ok: true },
+  payload: { address: 'crm+abcdefghijklmnopqrstuvwxyz012345@in.aglyn.com' },
+}))
+jest.mock('./use-crm-api', () => ({
+  useCrmApi: () => mockInboundApi,
 }))
 
 const LABEL = 'Create companies from work email domains'
