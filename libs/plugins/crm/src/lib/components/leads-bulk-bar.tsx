@@ -70,6 +70,7 @@ import {
   CrmBulkValueDialog,
   countNoun,
 } from './crm-bulk-bar-frame'
+import CrmExportAllButton from './crm-export-all-button'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { UNQUALIFY_REASON_MAX } from './lead-unqualify-dialog'
 
@@ -88,6 +89,13 @@ export interface LeadsBulkBarProps {
   roster: OrgMemberOptions
   /** How the export names the owner and, at the org level, the site — the list's own. */
   csv?: LeadCsvOptions
+  /** The organization these leads belong to; null while it is unresolved. */
+  orgId?: string | null
+  /**
+   * The site the list is read under, or `null` at the organization level
+   * where the complete export spans every site (AGL-2662).
+   */
+  hostId?: string | null
 }
 
 const NOUN: CrmBulkNoun = { singular: 'lead', plural: 'leads' }
@@ -115,6 +123,8 @@ LeadsBulkBar.displayName = 'LeadsBulkBar'
 
 function LeadsBulkBarBody(props: LeadsBulkBarProps) {
   const { rows, selected, onSelectedChange, roster, csv } = props
+  const orgId = props.orgId ?? null
+  const hostId = props.hostId ?? null
   const firestore = useFirestore()
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'lead' })
 
@@ -299,6 +309,16 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       <Button size="small" disabled={busy} onClick={handleExport}>
         {'Export CSV'}
       </Button>
+      {/*
+        The selection's file is the rows on screen; this one is the whole
+        collection, streamed by the server (AGL-2662).
+      */}
+      <CrmExportAllButton
+        resource="leads"
+        orgId={orgId}
+        hostId={hostId}
+        disabled={busy}
+      />
     </CrmBulkBarFrame>
   )
 }

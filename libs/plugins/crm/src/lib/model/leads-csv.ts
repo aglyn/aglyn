@@ -34,90 +34,11 @@
  * read well.
  */
 
-import {
-  CRM_LEAD_STATUS_LABELS,
-  type CrmLeadFields,
-  crmLeadStatus,
-  csvDocument,
+/* The writer moved to `@aglyn/aglyn` under AGL-2662 — see `deals-csv.ts`. */
+export {
+  LEAD_CSV_COLUMNS,
+  leadCsvHeader,
+  leadsCsv,
+  type LeadCsvOptions,
+  type LeadCsvRow,
 } from '@aglyn/aglyn'
-import { leadSourceLabel, leadSources } from '../components/lead-history-card'
-import { csvInstant } from './deals-csv'
-
-/** As much of a lead row as the file reads. */
-export type LeadCsvRow = Record<string, unknown> &
-  Pick<
-    CrmLeadFields,
-    'status' | 'ownerUid' | 'notes' | 'unqualifiedReason' | 'convertedAtMs'
-  > & {
-    /** The site the lead lives under — what the `Site` column names. */
-    hostId?: string
-  }
-
-export interface LeadCsvOptions {
-  /** The owner's address for a stored uid; absent, the uid is written. */
-  ownerEmail?: (uid: string) => string
-  /**
-   * The site's name for a row's `hostId`. Given, the file carries a `Site`
-   * column — the organization-level file; absent, it does not.
-   */
-  siteName?: (hostId: string) => string | undefined
-}
-
-/** The columns every leads file carries, in the list's order. */
-export const LEAD_CSV_COLUMNS = [
-  'Email',
-  'Name',
-  'Status',
-  'Owner',
-  'Sources',
-  'First seen',
-  'Last seen',
-  'Captures',
-  'Unqualified reason',
-  'Converted',
-  'Notes',
-] as const
-
-/** The header row: the standard columns, with `Site` after `Owner` at the org level. */
-export function leadCsvHeader(options: LeadCsvOptions = {}): string[] {
-  const columns: string[] = [...LEAD_CSV_COLUMNS]
-  if (options.siteName) columns.splice(columns.indexOf('Owner') + 1, 0, 'Site')
-  return columns
-}
-
-/** Epoch millis or a Firestore timestamp as an ISO instant, or `''`. */
-function leadInstant(value: unknown): string {
-  if (typeof value === 'number') return csvInstant(value)
-  const asDate = (value as { toDate?: () => Date } | null | undefined)?.toDate?.()
-  return asDate ? asDate.toISOString() : ''
-}
-
-/** The whole file, header first. */
-export function leadsCsv(
-  rows: readonly LeadCsvRow[],
-  options: LeadCsvOptions = {},
-): string {
-  const { ownerEmail, siteName } = options
-  return csvDocument(
-    leadCsvHeader(options),
-    rows.map((lead) => {
-      const hostId = String(lead.hostId ?? '')
-      const sources = leadSources(lead).map(leadSourceLabel).join('|')
-      const captures = Number(lead['submissionCount'] ?? 0)
-      return [
-        String(lead['email'] ?? ''),
-        String(lead['name'] ?? ''),
-        CRM_LEAD_STATUS_LABELS[crmLeadStatus(lead)],
-        lead.ownerUid ? (ownerEmail?.(lead.ownerUid) ?? lead.ownerUid) : '',
-        ...(siteName ? [siteName(hostId) ?? hostId] : []),
-        sources,
-        leadInstant(lead['firstSeenAtMs'] ?? lead['createdAt']),
-        leadInstant(lead['lastSeenAtMs'] ?? lead['createdAt']),
-        Number.isFinite(captures) && captures > 0 ? String(captures) : '',
-        lead.unqualifiedReason ?? '',
-        csvInstant(lead.convertedAtMs),
-        lead.notes ?? '',
-      ]
-    }),
-  )
-}

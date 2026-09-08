@@ -489,6 +489,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 onSelectedChange={setSelectedIds}
                 roster={roster}
                 csv={csvOptions}
+                orgId={orgId}
+                hostId={hostId}
               />
               <CrmColumnOrderProvider value={grid.columnOrder}>
                 <ListTable

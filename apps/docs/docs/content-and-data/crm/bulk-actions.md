@@ -11,8 +11,36 @@ checkbox in the header for the whole page — and a bar appears above the table
 saying how many are selected, with one action for all of them. The rows on
 offer are the ones the open [view](./views.md) shows, so narrowing to "my leads
 in Texas" first and ticking the header checkbox acts on exactly those. Each
-section's bar offers what that record can do; every bar has **Export CSV** and
-**Clear**.
+section's bar offers what that record can do; every bar has **Export CSV**,
+**Export all…** and **Clear**.
+
+## Two exports, and the difference matters
+
+- **Export CSV** writes the rows on screen — the selection, or the page the
+  table has loaded. Instant, and exactly what you are looking at.
+- **Export all…** writes the **whole collection**, whatever the view is
+  narrowed to and however many rows there are. The server streams it, so a
+  workspace with forty thousand contacts gets forty thousand rows.
+
+Both files have the same columns in the same order, so the two open the same
+way in a spreadsheet.
+
+**Export all…** checks itself. The server counts the collection before it
+starts sending and states that number in the response; if fewer rows arrive
+than were promised — a connection dropped mid-download — **nothing is saved**
+and you are told how many of how many arrived. A half-written export that
+looks complete is worse than no export, because nothing about a shorter file
+says it is short.
+
+A complete export writes what the SERVER can resolve: owners and assignees by
+email address, a deal's pipeline and stage by name, and a task's contact,
+company and deal by name. Past the first two thousand linked records a task
+file writes the record's id instead.
+
+Who can take one: the same people who can open the CRM — the surface has to be
+available to you and your role must be able to manage data. A collaborator
+scoped to some of the workspace's sites gets **their** rows and not the
+workspace's, enforced on the server rather than in the browser.
 
 ## Contacts
 
@@ -102,7 +130,14 @@ writes one line into the organization's activity feed (**Team → Activity**) �
 "Owner set on 3 deals" — where a site's hub writes into the site's own feed. A
 stage move or a loss over deals is recorded per deal instead, by the move
 itself. The leads bar writes each lead under the site that captured it, and
-its export gains a **Site** column after **Owner**, naming which.
+its export gains a **Site** column after **Owner**, naming which — and
+**Export all…** there covers every site's leads in one file, up to two hundred
+sites.
+
+**Export all…** for contacts writes each person through their **primary
+holder** at the organization level — the first site that captured them — which
+is the profile the organization's own table shows. Under a site it writes that
+site's, as the table does.
 
 The tasks bar's **Complete** and **Assign** run there as **one request for the
 whole selection**, authorized by the organization rather than task by task

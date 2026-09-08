@@ -27,85 +27,10 @@
  * and a spreadsheet renders it in whatever zone it is opened in.
  */
 
-import {
-  CRM_TASK_KIND_LABELS,
-  type CrmTask,
-  csvDocument,
+/* The writer moved to `@aglyn/aglyn` under AGL-2662 — see `deals-csv.ts`. */
+export {
+  TASK_CSV_COLUMNS,
+  tasksCsv,
+  type TaskCsvOptions,
+  type TaskCsvRow,
 } from '@aglyn/aglyn'
-import { csvInstant } from './deals-csv'
-
-/** As much of a task row as the file reads. */
-export type TaskCsvRow = Partial<
-  Pick<
-    CrmTask,
-    | 'title'
-    | 'kind'
-    | 'priority'
-    | 'status'
-    | 'dueAtMs'
-    | 'completedAtMs'
-    | 'assigneeUid'
-    | 'contactId'
-    | 'companyId'
-    | 'dealId'
-    | 'notes'
-  >
->
-
-export interface TaskCsvOptions {
-  /** The assignee's address for a stored uid; absent, the uid is written. */
-  assigneeEmail?: (uid: string) => string
-  /** What a linked record is called; absent, the id is written. */
-  recordName?: (kind: 'contact' | 'company' | 'deal', id: string) => string | undefined
-}
-
-export const TASK_CSV_COLUMNS = [
-  'Title',
-  'Kind',
-  'Priority',
-  'Status',
-  'Due',
-  'Assignee',
-  'Contact',
-  'Company',
-  'Deal',
-  'Completed',
-  'Notes',
-] as const
-
-const PRIORITY_LABELS: Record<string, string> = {
-  low: 'Low',
-  normal: 'Normal',
-  high: 'High',
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Open',
-  done: 'Done',
-}
-
-/** The whole file, header first. */
-export function tasksCsv(
-  rows: readonly TaskCsvRow[],
-  options: TaskCsvOptions = {},
-): string {
-  const { assigneeEmail, recordName } = options
-  const named = (kind: 'contact' | 'company' | 'deal', id: string | undefined) =>
-    id ? (recordName?.(kind, id) || id) : ''
-  return csvDocument(
-    TASK_CSV_COLUMNS,
-    rows.map((task) => [
-      task.title ?? '',
-      task.kind ? (CRM_TASK_KIND_LABELS[task.kind] ?? task.kind) : '',
-      task.priority ? (PRIORITY_LABELS[task.priority] ?? task.priority) : '',
-      task.status ? (STATUS_LABELS[task.status] ?? task.status) : '',
-      csvInstant(task.dueAtMs),
-      task.assigneeUid ? (assigneeEmail?.(task.assigneeUid) ?? task.assigneeUid) : '',
-      named('contact', task.contactId),
-      named('company', task.companyId),
-      named('deal', task.dealId),
-      csvInstant(task.completedAtMs),
-      task.notes ?? '',
-    ]),
-  )
-}
