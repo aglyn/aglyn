@@ -42,6 +42,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { unpublishScreenRoute } from '../constants/screen-publishing'
+import revalidateLivePages from '../utils/revalidate-live-pages'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
@@ -199,19 +200,49 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
     [firestore, hostId, enqueueSnackbar, user],
   )
 
+  /**
+   * The toggle, and the cache drop that makes it true (AGL-2690).
+   *
+   * `maintenance` is read by the tenant loader, and the pages that loader
+   * produces are ISR-cached. Without the drop, flipping this changed nothing a
+   * visitor could see until the page's window expired — so the snackbar below
+   * announced that visitors see the 503 screen while the site carried on
+   * serving, and turning it back OFF stranded the notice for just as long.
+   * That second direction is the one that matters: a site kept down after its
+   * owner brought it back is an outage they cannot end.
+   *
+   * `entireHost` rather than a screen fan-out because maintenance replaces
+   * EVERY path, including the addresses no screen document holds.
+   *
+   * AWAITED, unlike the publish call sites that fire this helper and move on.
+   * They can: a publish has already succeeded and the page is live-but-stale
+   * for a bounded window. Here the write and the drop together ARE the
+   * feature, and the snackbar is a claim about what visitors see — so it
+   * waits, and says something weaker when the drop did not land.
+   */
   const handleMaintenance = useCallback(
     async (enabled: boolean) => {
       await updateDoc(doc(firestore, 'hosts', hostId), {
         maintenance: enabled || deleteField(),
       })
+      const dropped = await revalidateLivePages({
+        user,
+        hostId,
+        entireHost: true,
+      })
+      const landed = dropped?.reason === 'ok'
       enqueueSnackbar(
         enabled
-          ? 'Maintenance mode on — visitors see the 503 screen'
-          : 'Maintenance mode off',
+          ? landed
+            ? 'Maintenance mode on — visitors see the 503 screen'
+            : 'Maintenance mode on — live pages may take a few minutes to switch over'
+          : landed
+            ? 'Maintenance mode off'
+            : 'Maintenance mode off — live pages may take a few minutes to come back',
         { variant: enabled ? 'warning' : 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, user, enqueueSnackbar],
   )
 
   const errorScreens = host?.errorScreens ?? {}

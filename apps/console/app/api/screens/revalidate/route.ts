@@ -62,7 +62,10 @@ import {
   screenIdsUsingLayoutDeep,
 } from '../../../../utils/server/scan-artifact-usage'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
-import { postTenantRevalidate } from '../../../../utils/server/tenant-revalidate'
+import {
+  postTenantRevalidate,
+  revalidateEntireHost,
+} from '../../../../utils/server/tenant-revalidate'
 
 export const dynamic = 'force-dynamic'
 
@@ -529,9 +532,13 @@ export async function POST(request: Request): Promise<Response> {
           .filter((slug) => slug && !slug.includes('/') && !slug.includes('..'))
           .slice(0, 2) as string[])
       : []
+    // The whole-site drop (AGL-2690) — see the branch below for why it is an
+    // explicit flag and not the empty-selector case.
+    const entireHost = (payload as { entireHost?: unknown })?.entireHost === true
     if (
       !hostId ||
-      (!screenId &&
+      (!entireHost &&
+        !screenId &&
         !layoutId &&
         !componentId &&
         !formId &&
@@ -542,7 +549,7 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json(
         {
           error:
-            'Missing hostId, and one of screenId, layoutId, componentId, formId, collectionId, redirectPath or paths',
+            'Missing hostId, and one of entireHost, screenId, layoutId, componentId, formId, collectionId, redirectPath or paths',
         },
         { status: 400 },
       )
@@ -584,6 +591,39 @@ export async function POST(request: Request): Promise<Response> {
       host: hostSnapshot.data(),
     })
     if (locked) return locked
+
+    /**
+     * THE WHOLE SITE, for a change that is not addressed by any screen
+     * (AGL-2690).
+     *
+     * Every other selector on this route names something in the routing map
+     * and fans out from it. Maintenance mode names nothing: it replaces EVERY
+     * path with the 503 screen, including addresses no screen document holds
+     * — the sitemap, the feeds, a collection entry's URL. A screen fan-out
+     * would leave all of those serving the site.
+     *
+     * It is also the branch that must not be reachable by accident, which is
+     * why it is an explicit flag rather than "no selector means everything":
+     * the 400 below already refuses a selector-less body, and turning that
+     * into a whole-site drop would make every malformed caller expensive.
+     *
+     * Authorization is the same `mayRevalidate` the screen branches passed
+     * above — host `admin`/`editor`, which is exactly who can flip the
+     * maintenance toggle. Dropping a site's own cached HTML is bounded by
+     * that: the worst a caller can do to a site they may already edit is make
+     * it regenerate.
+     */
+    if (entireHost) {
+      const whole = await revalidateEntireHost(firestore, hostId)
+      return Response.json(
+        {
+          revalidated: whole.revalidated,
+          reason: whole.reason ?? 'ok',
+          ...(whole.pathsDropped ? { pathsDropped: whole.pathsDropped } : {}),
+        },
+        { status: 200 },
+      )
+    }
 
     const subdomain = String(hostSnapshot.get('subdomain') ?? '')
     if (!subdomain) {

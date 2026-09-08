@@ -64,6 +64,8 @@
 
 import {
   bandwidthCapEngaged,
+  bandwidthCeilingDegradesHost,
+  bandwidthCeilingMonthKey,
   isLockdownActive,
   lockdownMode,
   lockdownNotice,
@@ -108,6 +110,7 @@ function lockedVerdict(
   facts: {
     attribution: boolean
     overQuota: boolean
+    contained: boolean
     approvedImageHosts?: string[]
     approvedMediaHosts?: string[]
     approvedFontHosts?: string[]
@@ -125,6 +128,7 @@ function lockedVerdict(
       locked: true,
       attribution: facts.attribution,
       overQuota: facts.overQuota,
+      contained: facts.contained,
       approvedImageHosts: facts.approvedImageHosts ?? [],
       approvedMediaHosts: facts.approvedMediaHosts ?? [],
       approvedFontHosts: facts.approvedFontHosts ?? [],
@@ -187,6 +191,7 @@ export async function GET(request: Request): Promise<Response> {
             locked: false,
             attribution: false,
             overQuota: false,
+            contained: false,
             approvedImageHosts: [],
             approvedMediaHosts: [],
             approvedFontHosts: [],
@@ -200,6 +205,7 @@ export async function GET(request: Request): Promise<Response> {
       return lockedVerdict(domain, {
         attribution: false,
         overQuota: false,
+        contained: false,
         approvedImageHosts: [],
         approvedMediaHosts: [],
         approvedFontHosts: [],
@@ -222,6 +228,29 @@ export async function GET(request: Request): Promise<Response> {
     // nothing here that is not already implied by the notice the visitor is
     // about to read.
     const overQuota = bandwidthCapEngaged(orgRes.org)
+    /**
+     * The abuse CEILING (AGL-2155) — a FIFTH answer, and it rides here for a
+     * reason the other four do not have (AGL-2690).
+     *
+     * The cap above is a property of the ORG doc, so a change to it is a write
+     * something can hook. The ceiling is not: it engages by a stamp on the host
+     * and DISENGAGES by the calendar, when `bandwidthCeilingMonthKey()` stops
+     * matching the month the stamp names. Nothing writes at that moment, so
+     * nothing can bust a cache for it — and a contained site's notice is served
+     * from the ISR cache, which means the page kept telling visitors the site
+     * was over its limit for a full window into a month where it was not.
+     *
+     * Evaluated here, the answer is recomputed every time the middleware's memo
+     * expires, so the month roll clears it within thirty seconds and no
+     * scheduled job has to exist to notice midnight. That is what lets the
+     * page's own `revalidate` go to an hour without stranding this state.
+     *
+     * Zero added reads: the host doc is already in hand.
+     */
+    const contained = bandwidthCeilingDegradesHost(
+      hostRes.host as never,
+      bandwidthCeilingMonthKey(),
+    )
     /**
      * The site's owner-approved image hosts (AGL-1152) — a FOURTH answer on
      * this verdict, riding here for the reason the other three do: the route
@@ -340,6 +369,7 @@ export async function GET(request: Request): Promise<Response> {
           locked: false,
           attribution,
           overQuota,
+          contained,
           approvedImageHosts,
           approvedMediaHosts,
           approvedFontHosts,
@@ -355,6 +385,7 @@ export async function GET(request: Request): Promise<Response> {
     return lockedVerdict(state, {
       attribution,
       overQuota,
+      contained,
       approvedImageHosts,
       approvedMediaHosts,
       approvedFontHosts,
@@ -381,6 +412,7 @@ export async function GET(request: Request): Promise<Response> {
         locked: false,
         attribution: false,
         overQuota: false,
+        contained: false,
         // ABSENT, not empty: the middleware distinguishes "this site approved
         // nothing" from "we could not ask", and retains its last known good
         // list for the second. An empty list here would blank every approved

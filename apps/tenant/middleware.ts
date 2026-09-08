@@ -205,6 +205,7 @@ const lockdownVerdicts = new Map<
     blocked: boolean
     attribution: boolean
     overQuota: boolean
+    contained: boolean
     approvedImageHosts: string[]
     approvedMediaHosts: string[]
     approvedFontHosts: string[]
@@ -237,6 +238,7 @@ async function hostVerdict(
   blocked: boolean
   attribution: boolean
   overQuota: boolean
+  contained: boolean
   approvedImageHosts: string[]
   approvedMediaHosts: string[]
   approvedFontHosts: string[]
@@ -252,6 +254,7 @@ async function hostVerdict(
       blocked: cached.blocked,
       attribution: cached.attribution,
       overQuota: cached.overQuota,
+      contained: cached.contained,
       approvedImageHosts: cached.approvedImageHosts,
       approvedMediaHosts: cached.approvedMediaHosts,
       approvedFontHosts: cached.approvedFontHosts,
@@ -289,6 +292,10 @@ async function hostVerdict(
   // viral free site keep serving its hot pages indefinitely while the cap
   // "engaged" against pages nobody was requesting.
   let overQuota = false
+  // The abuse ceiling (AGL-2690) rides the same verdict and fails the same
+  // way: false when the route is unreachable, so a verdict we could not read
+  // never takes a site off the air.
+  let contained = false
   /**
    * ⚠️ THIS ONE FAILS BY GOING STALE, not by emptying (AGL-1152).
    *
@@ -340,6 +347,7 @@ async function hostVerdict(
         mode?: string
         attribution?: boolean
         overQuota?: boolean
+        contained?: boolean
         approvedImageHosts?: unknown
         approvedMediaHosts?: unknown
         approvedFontHosts?: unknown
@@ -352,6 +360,7 @@ async function hostVerdict(
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
       overQuota = data?.overQuota === true
+      contained = data?.contained === true
       // Only an ARRAY replaces what we hold. `null` is the route saying it
       // could not read the host doc, and an older deployment that predates
       // this field sends nothing at all — both must keep the last known good
@@ -397,6 +406,7 @@ async function hostVerdict(
     blocked,
     attribution,
     overQuota,
+    contained,
     approvedImageHosts,
     approvedMediaHosts,
     approvedFontHosts,
@@ -410,6 +420,7 @@ async function hostVerdict(
     blocked,
     attribution,
     overQuota,
+    contained,
     approvedImageHosts,
     approvedMediaHosts,
     approvedFontHosts,
@@ -639,11 +650,19 @@ export const middleware: NextMiddleware = async (req, event) => {
   // cached HTML can answer. Checked ahead of the SEO rewrites on purpose so
   // a taken-down site stops advertising its content too.
   const verdict = await hostVerdict(req.nextUrl.origin, tenantHost)
-  // The bandwidth cap (AGL-2155) rewrites to the SAME notice route, which
-  // re-derives which of the two it is and words itself accordingly. A lock
-  // OUTRANKS a cap by falling first: both serve a 503, but a staff takedown
-  // must not be described to a visitor as a traffic limit.
-  if (verdict.blocked || verdict.overQuota) {
+  // The bandwidth cap (AGL-2155) and the abuse ceiling (AGL-2690) rewrite to
+  // the SAME notice route, which re-derives which of the three it is and words
+  // itself accordingly. A lock OUTRANKS a cap outranks a containment by
+  // falling first: all three serve a 503, but a staff takedown must not be
+  // described to a visitor as a traffic limit.
+  //
+  // The ceiling is here rather than left to the loader for the reason the cap
+  // is: the notice a contained site serves comes out of the ISR cache, so a
+  // state the loader alone decides is a state cached pages sail straight past.
+  // It is also the state with no write to hook — it clears by the calendar —
+  // so this verdict, recomputed every time the memo expires, is what bounds
+  // the month roll to seconds instead of to the page's revalidate window.
+  if (verdict.blocked || verdict.overQuota || verdict.contained) {
     const lockedUrl = req.nextUrl.clone()
     lockedUrl.pathname = '/api/locked'
     lockedUrl.search = ''

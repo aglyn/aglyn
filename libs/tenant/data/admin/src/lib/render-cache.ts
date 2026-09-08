@@ -133,13 +133,20 @@ export const PUBLISHED_SITE_DATA_TTL_SECONDS = 3600
  * the expensive reads — the compose bundle, the node trees — at the hour the
  * cost review set.
  *
- * The number is the tenant catch-all's own ISR window
- * (`apps/tenant/app/[host]/[[...slug]]/page.tsx`, `revalidate = 600`) and must
- * move with it. That is the principle rather than a tuned figure: the pointer
- * should never be staler than the HTML that reads it. Below the window it buys
- * nothing, because a cached page does not re-render to observe it; above it,
- * the page regenerates and faithfully rebuilds itself from a stale pointer,
- * which is the failure being closed.
+ * The principle rather than a tuned figure: **the pointer must never be staler
+ * than the HTML that reads it** — `<=` the tenant catch-all's ISR window
+ * (`apps/tenant/app/[host]/[[...slug]]/page.tsx`), which
+ * `publish-pointer-tracks-page-window.spec.ts` enforces. Above the window, the
+ * page regenerates and faithfully rebuilds itself from a stale pointer, which
+ * is the failure being closed.
+ *
+ * It matched that window exactly while the window was also 600s. It no longer
+ * does, and staying at 600 under an hour-long window is the deliberate choice
+ * (AGL-2690): the loader runs only when the page regenerates, so a shorter TTL
+ * here costs the same single read per regeneration — a miss instead of a hit —
+ * and buys a rebuild from data at most ten minutes old rather than up to an
+ * hour old. That difference only shows when the publish announce is down, and
+ * the announce has been down for eleven days once already.
  *
  * The read cost this adds is one document per page REGENERATION rather than
  * one per hour — regenerations are already bounded by the ISR window, so the

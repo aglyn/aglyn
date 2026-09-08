@@ -42,6 +42,9 @@
 import {
   bandwidthCapEngaged,
   bandwidthCapNotice,
+  bandwidthCeilingDegradesHost,
+  bandwidthCeilingMonthKey,
+  bandwidthCeilingNotice,
   BANDWIDTH_CAP_RETRY_AFTER_SECONDS,
   lockdownNotice,
   lockdownRetryAfterSeconds,
@@ -67,16 +70,21 @@ const escapeHtml = (value: string): string =>
     .replace(/"/g, '&quot;')
 
 /**
- * Which of the two refusals is this? (AGL-2155)
+ * Which of the refusals is this? (AGL-2155, AGL-2690)
  *
- * `lock` outranks `cap` wherever both are true, and the order below is the
- * whole of that rule. A staff takedown described to a visitor as a traffic
- * limit would be a false statement about why a site is gone, and would hand
- * anyone probing a suspended site a tidier story than the truth.
+ * `lock` outranks `cap` outranks `contained`, and the order below is the whole
+ * of that rule. A staff takedown described to a visitor as a traffic limit
+ * would be a false statement about why a site is gone, and would hand anyone
+ * probing a suspended site a tidier story than the truth. The same reasoning
+ * puts the plan CAP ahead of the abuse CEILING: an org over 10x its band is
+ * necessarily over 1x, and the cap's wording — "over its plan's bandwidth",
+ * actionable by the owner — is the truer of the two for a site that is merely
+ * popular.
  */
 type Refusal =
   | { kind: 'lock'; state: LockdownState }
   | { kind: 'cap' }
+  | { kind: 'contained' }
   | { kind: 'none' }
 
 function noticeHtml(refusal: Refusal): string {
@@ -85,6 +93,11 @@ function noticeHtml(refusal: Refusal): string {
       ? lockdownNotice(refusal.state)
       : refusal.kind === 'cap'
         ? { ...bandwidthCapNotice(), contact: undefined as string | undefined }
+        : refusal.kind === 'contained'
+        ? {
+            ...bandwidthCeilingNotice(),
+            contact: undefined as string | undefined,
+          }
         : {
             title: 'Temporarily unavailable',
             body: 'This site is temporarily unavailable. Please check back shortly.',
@@ -161,7 +174,16 @@ export async function GET(request: Request): Promise<Response> {
           ? { kind: 'lock', state }
           : bandwidthCapEngaged(orgRes.org)
             ? { kind: 'cap' }
-            : { kind: 'none' }
+            : // The abuse CEILING (AGL-2155), re-derived here for the reason
+              // the two above are: the month key is computed now, so this
+              // answers false the moment the month rolls without anything
+              // having to write to the host (AGL-2690).
+              bandwidthCeilingDegradesHost(
+                  hostRes.host as never,
+                  bandwidthCeilingMonthKey(),
+                )
+              ? { kind: 'contained' }
+              : { kind: 'none' }
       }
     }
   } catch (error) {
@@ -170,7 +192,7 @@ export async function GET(request: Request): Promise<Response> {
   const retryAfter =
     refusal.kind === 'lock'
       ? lockdownRetryAfterSeconds(refusal.state, Date.now())
-      : refusal.kind === 'cap'
+      : refusal.kind === 'cap' || refusal.kind === 'contained'
         ? BANDWIDTH_CAP_RETRY_AFTER_SECONDS
         : undefined
   return new Response(noticeHtml(refusal), {
