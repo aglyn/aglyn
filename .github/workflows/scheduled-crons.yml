@@ -124,6 +124,23 @@ on:
     # The route records its beat regardless, so the row can be added once a
     # beat exists.
     - cron: '0 13 * * *' # crm-daily-digest — daily 13:00 UTC (08:00 America/Chicago)
+    # A task's reminder at its own time (AGL-2659): every hour, per org,
+    # the open tasks whose `remindAtMs` has come — the due time unless a
+    # person moved it — and one console notification per task plus one
+    # email per assignee. Hourly is the promise the drawer makes: "remind
+    # me at 3:00" arrives between 3:00 and 4:00.
+    #
+    # ON THIS RUNNER, like the digest: an hour of GitHub's drift is inside
+    # the promise, and a dropped hour is caught by the next one — a
+    # reminder stays owed until it is handled (`reminderSentAtMs`), and the
+    # route reads the NEWEST reminders due first, so what fell due last
+    # hour is at the top of this hour's window. Not sub-hourly, by the
+    # AGL-1617 rule below.
+    #
+    # IN `SCHEDULED_JOBS`, unlike the digest: the crons door reds against
+    # today's fire time until the first beat is recorded after promotion,
+    # and that first beat is recorded on purpose at promotion time.
+    - cron: '0 * * * *' # crm-task-reminders — hourly
     # Weekly Firestore GCS export (AGL-1843) — the independent copy that
     # exists because the managed backups kept flipping READY → NOT_AVAILABLE
     # at ~day 7. Mondays 05:00 UTC: the day after the Sunday managed backup,
@@ -246,6 +263,11 @@ on:
           # idempotent per member per UTC day, so a second run on the same
           # day reaches only whoever the first one did not.
           - /api/crm/daily-digest
+          # Task reminders (AGL-2659). A GET reports the plan; the scheduled
+          # POST sends. Safe to run by hand at any time — a handled reminder
+          # is stamped on the task, so a second run reaches only what the
+          # first one did not.
+          - /api/crm/task-reminders
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
@@ -276,6 +298,7 @@ jobs:
           case "$FIRED_SCHEDULE" in
             '0 * 1-2 * *') path=/api/billing/usage-email ;;
             '0 13 * * *') path=/api/crm/daily-digest ;;
+            '0 * * * *') path=/api/crm/task-reminders ;;
             '0 5 * * 1') path=/api/admin/firestore-export ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
