@@ -136,7 +136,11 @@ const vendorLibrary = () =>
     ),
   )
 
-async function renderGate(host: Record<string, any>, hostId = HOST_ID) {
+async function renderGate(
+  host: Record<string, any>,
+  hostId = HOST_ID,
+  extra: { sharedLibraries?: readonly string[] } = {},
+) {
   let result!: ReturnType<typeof render>
   await act(async () => {
     result = render(
@@ -147,6 +151,7 @@ async function renderGate(host: Record<string, any>, hostId = HOST_ID) {
             'null',
         )}
         ready
+        {...extra}
       />,
     )
   })

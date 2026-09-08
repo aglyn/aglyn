@@ -113,6 +113,28 @@ export interface AdvertisingTagMountsProps {
    * nothing is refused.
    */
   readonly nonce?: string
+  /**
+   * Libraries the HOST PAGE mounts itself, named by the needle a vendor
+   * declares in `sharesLibrary` (AGL-2681).
+   *
+   * {@link sharedLibraryPresent} reads the document at render time, and that
+   * is the right instrument for a loader some other party put there. It is
+   * the wrong one for a loader the SAME render is about to create. On the
+   * tenant the GA pair and this component both wait on `consent.ready`, so
+   * the first render that may emit either emits both — GA's `<Script>` is not
+   * in the document yet when this component looks, the check honestly says
+   * "absent", and the visitor downloads `gtag.js` twice: once as ours with
+   * `?id=AW-…`, once as gtag's own destination fetch for the `config` that
+   * follows. Measured on `aglyn.com/solutions/small-business` with
+   * advertising granted: two 147 KiB loaders for one account.
+   *
+   * A page that KNOWS it renders the library says so here, from the same
+   * condition that renders it, and the document check stays as the fallback
+   * for loaders it does not know about. Naming the needle rather than passing
+   * a boolean keeps the declaration per library: a page that mounts gtag has
+   * said nothing about the Meta pixel.
+   */
+  readonly sharedLibraries?: readonly string[]
 }
 
 /**
@@ -123,6 +145,9 @@ export interface AdvertisingTagMountsProps {
  * already appended it. `document` is guarded because this component renders on
  * the server too, where nothing is mounted and the honest answer is "no" — the
  * client render then re-evaluates with the real document.
+ *
+ * Blind to a loader the current render is creating alongside this one — see
+ * `sharedLibraries` on the props for the case that needs the page to say so.
  */
 export function sharedLibraryPresent(needle: string): boolean {
   if (typeof document === 'undefined') return false
@@ -140,7 +165,11 @@ export default function AdvertisingTagMounts({
   tags,
   resolve,
   nonce,
+  sharedLibraries,
 }: AdvertisingTagMountsProps): ReactElement | null {
+  /** Declared by the page, or found in the document: either means "ride it". */
+  const libraryProvided = (needle: string): boolean =>
+    (sharedLibraries?.includes(needle) ?? false) || sharedLibraryPresent(needle)
   /*
    * The resolver is held in a ref rather than listed as an effect dependency.
    *
@@ -197,9 +226,10 @@ export default function AdvertisingTagMounts({
               would fetch it twice and define `gtag()` twice — and the boot
               above would be the second voice in a consent conversation the
               first one already had. One library, several `config` calls, is
-              how gtag carries several products. */}
-          {vendor.sharesLibrary &&
-          sharedLibraryPresent(vendor.sharesLibrary) ? null : (
+              how gtag carries several products. The page's own declaration is
+              consulted first (AGL-2681): the document cannot yet show a loader
+              this same render is creating. */}
+          {vendor.sharesLibrary && libraryProvided(vendor.sharesLibrary) ? null : (
             <Script
               id={`ad-tag-${vendor.id}-src`}
               strategy="afterInteractive"
