@@ -1220,6 +1220,56 @@ describe('a shared library is fetched once, not once per product', () => {
     ).toBe(1)
   })
 
+  it('skips its own copy when the PAGE declares the library, before any element exists', async () => {
+    /*
+     * AGL-2681. On the tenant the GA pair and this component first render in
+     * the SAME pass — both wait on `consent.ready` — so when this component
+     * looks for a loader to share, GA's `<Script>` has not been appended yet.
+     * The document check honestly says "absent", and the visitor downloads
+     * `gtag.js` twice: once as ours with `?id=AW-…`, once as gtag's own
+     * destination fetch for the `config` that follows. Measured on
+     * aglyn.com/solutions/small-business with advertising granted: two
+     * 147 KiB loaders for one account.
+     *
+     * The page therefore declares the library from the condition that renders
+     * it, and the declaration is enough on its own: the document here is
+     * empty, exactly as it is in that first render.
+     */
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    expect(
+      document.querySelectorAll(
+        `script[src*="${GOOGLE_ADS_VENDOR.scriptMatch}"]`,
+      ).length,
+    ).toBe(0)
+    await renderGate(withAds, HOST_ID, {
+      sharedLibraries: [GOOGLE_ADS_VENDOR.sharesLibrary as string],
+    })
+    expect(adsLibrary().length).toBe(0)
+    // The boot still mounts — the `config` is what puts the second product
+    // on the library the page brings.
+    const boots = adsScripts().filter((element) => !element.getAttribute('src'))
+    expect(boots.length).toBe(1)
+    expect(boots[0].textContent).toContain(ADS_ID)
+  })
+
+  it('a declaration naming some OTHER library changes nothing', async () => {
+    // Per library, not a boolean: a page that mounts the Meta pixel itself
+    // has said nothing about gtag, so Google Ads still brings its own.
+    storeVisitorConsent(HOST_ID, {
+      status: 'accepted',
+      country: 'US',
+      advertising: true,
+    })
+    await renderGate(withAds, HOST_ID, {
+      sharedLibraries: [META_PIXEL_VENDOR.scriptMatch as string],
+    })
+    expect(adsLibrary().length).toBe(1)
+  })
+
   it('still boots, so the second product is configured on the one library', async () => {
     /*
      * The skip must drop the LIBRARY and keep the BOOT. Dropping both would
