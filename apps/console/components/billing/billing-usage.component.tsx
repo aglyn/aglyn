@@ -950,24 +950,32 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           (AGL-1438), so a meter labelled "Emails" would promise a limit the
           product does not enforce and alarm a merchant whose receipts are
           fine. Org-wide, matching the entitlement and the counter the claim
-          is taken against. */}
-      <UsageMeter
-        label="Campaign emails (this month, organization)"
-        used={campaignEmails}
-        limit={entitlements.emailSendsPerMonth}
-        /* The section that says what this cap does and does NOT govern —
-           not the topic root, and not `#recipient-count`, which is about the
-           audience size of one send. A meter whose help lands on the wrong
-           heading is the presence-not-correctness failure. */
-        help={docsHelp('emailCampaigns', { anchor: '#monthly-send-cap' })}
-      />
+          is taken against.
+
+          Rendered only where a band is sold, the same test the one-to-one
+          pace above uses: Free and Starter carry `emailSendsPerMonth: 0`, no
+          campaign can leave them, and "0 / 0" is not a readout of anything —
+          it is a meter for a quantity that has no permitted values. */}
+      {entitlements.emailSendsPerMonth > 0 ? (
+        <UsageMeter
+          label="Campaign emails (this month, organization)"
+          used={campaignEmails}
+          limit={entitlements.emailSendsPerMonth}
+          /* The section that says what this cap does and does NOT govern —
+             not the topic root, and not `#recipient-count`, which is about
+             the audience size of one send. A meter whose help lands on the
+             wrong heading is the presence-not-correctness failure. */
+          help={docsHelp('emailCampaigns', { anchor: '#monthly-send-cap' })}
+        />
+      ) : null}
       {/* WHEN the meter above goes back to zero. The counter is keyed
           `YYYY-MM` in UTC, so the allowance returns at midnight UTC on the
           1st — not at midnight wherever the reader is, which is a different
           instant for most of the planet and the one a merchant plans a send
           around. Stated for a FINITE allowance only: an unlimited plan has
           nothing to wait for. */}
-      {entitlements.emailSendsPerMonth !== UNLIMITED ? (
+      {entitlements.emailSendsPerMonth !== UNLIMITED &&
+      entitlements.emailSendsPerMonth > 0 ? (
         <Typography
           variant="caption"
           color="text.secondary"

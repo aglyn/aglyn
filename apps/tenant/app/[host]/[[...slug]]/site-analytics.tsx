@@ -49,7 +49,21 @@ import {
   resolveGtmContainerId,
   type VisitorConsentHost,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
+import { GOOGLE_ADS_VENDOR } from '@aglyn/aglyn/app-utils/advertising-tags'
 import AdvertisingTags from './advertising-tags'
+
+/**
+ * The library the GA pair below brings to the page, named the way the Google
+ * Ads vendor declares the one it shares (AGL-2681). Handed to the advertising
+ * tags whenever the pair renders, so they ride the GA loader instead of
+ * fetching `gtag.js` a second time — the document alone cannot tell them,
+ * because both first render in the same pass.
+ */
+const GTAG_SHARED_LIBRARIES: readonly string[] = Object.freeze(
+  [GOOGLE_ADS_VENDOR.sharesLibrary].filter(
+    (needle): needle is string => typeof needle === 'string' && needle !== '',
+  ),
+)
 // The platform's own GA4 property (AGL-1857). `aglyn.com` is a tenant site
 // pointed at this id, and it is the ONE host whose pageviews should carry
 // `content_group: 'marketing'` — the GA4 axis that separates marketing from
@@ -352,6 +366,14 @@ export default function SiteAnalytics({
   const analyticsAllowed = consentRequired
     ? consent.ready && isAnalyticsAllowed(host, consent.stored)
     : true
+  // The GA pair renders on exactly this condition, and the first render that
+  // satisfies it is also the first render in which the advertising tags may
+  // mount — so the pair is not in the document yet when they look for a
+  // loader to share (AGL-2681). Named once and handed to both, so the JSX
+  // below and the declaration passed to `AdvertisingTags` cannot disagree.
+  const gaLoaderRendered = Boolean(
+    gaMeasurementId && analyticsAllowed && analyticsMayEmit(),
+  )
   // Advertising storage (AGL-1649). Off unless the host turned the question
   // on AND this visitor explicitly answered yes to that category; every
   // other path — no record yet, a visitor merely defaulted into analytics by
@@ -488,7 +510,7 @@ export default function SiteAnalytics({
           opt-in — a build that emits because someone asked it to is ours by
           definition, and the hatch must not reopen the hole it stands beside.
       */}
-      {gaMeasurementId && analyticsAllowed && analyticsMayEmit() ? (
+      {gaLoaderRendered ? (
         <>
           <Script id="ga-init" strategy="afterInteractive" nonce={nonce}>
             {'window.dataLayer=window.dataLayer||[];' +
@@ -612,6 +634,7 @@ export default function SiteAnalytics({
         stored={consent.stored}
         ready={consent.ready}
         nonce={nonce}
+        sharedLibraries={gaLoaderRendered ? GTAG_SHARED_LIBRARIES : undefined}
       />
       {/* Visitor consent surfaces (AGL-1498): only when the machinery is
           live — the tool is active AND the site uses a gated feature. A

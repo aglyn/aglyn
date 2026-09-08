@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.89 — 2026-09-08
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.87...v1.0.0-beta.89)
+
+### Fixed
+
+- **billing:** a zero campaign band reads as an absence, not a ration ([AGL-2679](https://linear.app/aglyn/issue/AGL-2679))
+- **billing:** the campaign meter is hidden where no band is sold ([AGL-2679](https://linear.app/aglyn/issue/AGL-2679))
+- **plugins-mui:** the screen's hero is a lead image beside the layout logo ([AGL-2678](https://linear.app/aglyn/issue/AGL-2678))
+- **tenant:** the advertising tags ride the GA loader the page renders instead of fetching gtag.js twice ([AGL-2681](https://linear.app/aglyn/issue/AGL-2681))
+
+### Documentation
+
+- **pricing:** a new version comes before the edit, not after it ([AGL-2679](https://linear.app/aglyn/issue/AGL-2679))
+- **perf:** record the per-origin lead image and the unsized shared heroes ([AGL-2678](https://linear.app/aglyn/issue/AGL-2678))
+
 ## v1.0.0-beta.87 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/c26f25316...v1.0.0-beta.87)

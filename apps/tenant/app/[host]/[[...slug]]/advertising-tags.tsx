@@ -84,6 +84,13 @@ export interface AdvertisingTagsProps {
    * stamped; the mount refuses nothing without it because nothing refuses.
    */
   nonce?: string
+  /**
+   * Libraries this page renders itself, by the vendor's `sharesLibrary`
+   * needle (AGL-2681). `site-analytics.tsx` names gtag here from the very
+   * condition that renders the GA pair, because the pair and these tags first
+   * render together and the document cannot yet show one to the other.
+   */
+  sharedLibraries?: readonly string[]
 }
 
 export default function AdvertisingTags({
@@ -91,6 +98,7 @@ export default function AdvertisingTags({
   stored,
   ready,
   nonce,
+  sharedLibraries,
 }: AdvertisingTagsProps): ReactElement | null {
   const hostId = host?.$id
   // Our own marketing site, or nothing at all. Evaluated before the verdict as
@@ -116,6 +124,7 @@ export default function AdvertisingTags({
       tags={tags}
       resolve={resolve}
       nonce={nonce}
+      sharedLibraries={sharedLibraries}
     />
   )
 }

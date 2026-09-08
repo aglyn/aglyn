@@ -313,15 +313,38 @@ before believing it did not.
 
 ### A `fetchpriority` hint aimed at the wrong element is worse than none
 
-Recorded because it is counter-intuitive and still open. The Image component
-marks the first image in document order `loading="eager"` +
-`fetchpriority="high"` on the reasoning that the first image is almost always
-the LCP element. On a text-hero page it is not: on `northwind-coffee` Lighthouse
-names the `<h1>` as LCP, and the heuristic was promoting a 357 KB PNG to high
-priority ahead of what the real LCP needed. A priority hint does not merely fail
-to help when it is aimed wrong — it **competes**. If the heuristic is revisited,
-it needs to consider whether a text element outranks the first image, not just
-which image comes first.
+Recorded because it is counter-intuitive. The Image component used to mark the
+first image in document order `loading="eager"` + `fetchpriority="high"` on the
+reasoning that the first image is almost always the LCP element. On a text-hero
+page it is not: on `northwind-coffee` Lighthouse names the `<h1>` as LCP, and
+the heuristic was promoting a 357 KB PNG to high priority ahead of what the real
+LCP needed. A priority hint does not merely fail to help when it is aimed wrong —
+it **competes**. The `high` hint is gone (AGL-2486); lead images are `eager`
+and nothing else, and every later image is `lazy` + `low`.
+
+### One lead image per ORIGIN, not per page (AGL-2678)
+
+The other half of the same heuristic failed the opposite way. "The first image
+in document order" on any site whose layout carries a header logo is the logo,
+so the screen's own hero — the LCP element on every `aglyn.com` solution page at
+375x812 — was the one image on the page *not* allowed to be early: `lazy` +
+`low`, skipped by the preload scanner, requested 1.5 s after the HTML arrived
+and then queued behind 67 scripts for another 1.5 s (a 13 KB WebP; LCP 3.7 s).
+
+Composition namespaces layout nodes by origin (`isLayoutComposedNodeId`), so
+the Image element now keeps one lead per origin: the layout's first image (the
+logo) and the screen's first image (the hero). A later layout image — the nav's
+mega-menu illustration, the footer mark — stays deferred. Still no
+`fetchpriority="high"` on either: "first of its origin" is not evidence that an
+element outranks the stylesheet a text LCP is waiting on.
+
+Same page, same run: the shared hero components rendered `{{prop.mockup}}` with
+no intrinsic `width`/`height`, so the hero was 0 px tall until it decoded and
+the section beneath it jumped by the full image height (CLS 0.114, all of it on
+that one section). That is a document fix, not a code fix — the dimensions ride
+on the node (`intrinsicWidth` / `intrinsicHeight`, see `media-metadata.ts`),
+and components authored before AGL-2486 started copying them off the media
+document have none until someone writes them.
 
 ### What attribution you can and cannot trust in this stack
 

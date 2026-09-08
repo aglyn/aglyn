@@ -92,6 +92,76 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-08 — Campaign email begins at Pro; Starter's band stays 0, and the sending-domain entitlements stay with it
+
+- **Decided by:** the account owner, 2026-09-08, asked whether to restore Starter's 500-send band — removed on 2026-08-31 by three commits carrying no Linear id and no entry here — or to ratify the removal. Ratify it, with the revisit condition recorded beside it.
+- **Scope:** packaging
+- **Evidence:** `PLAN_ENTITLEMENTS.starter.emailSendsPerMonth = 0` and `PLAN_PRICING.starter.extraEmailSendsUsdPer1k = null` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`, set by `55f728b50` and `1eb666afb`; `features.customSendingDomain` / `features.dedicatedSendingDomain` from Pro, set by `4c06a5a55`; per-tier refusal proven in `libs/plugins/marketing/src/lib/server/campaign-send.spec.ts` (38/38); `npm run check:pricing-tables` reconciliation clean; the live `/pricing` compare row read back from the published nodes of screen version `f5K2cG9xXE`; Stripe live `price_1TuaFuDYHP4psn7hXw4sxU1w` / `price_1TuaFvDYHP4psn7hAQ4q3Gcy` unchanged at $25 and $192; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2679, and AGL-2680 for the question this leaves open.
+
+**No charged price moves, and no entitlement moves.** What moves is the record.
+Starter's campaign band has been 0 since 2026-08-31; until today nothing said
+who decided that.
+
+| | Locked 2026-08-18 | In force |
+|---|---|---|
+| Starter campaign emails / mo | 500 | **0** |
+| Starter email overage, per 1,000 | $2.50 | **—** (no rate can price a zero band) |
+| `customSendingDomain` | Agency and above, via `whiteLabel` | **Pro** |
+| `dedicatedSendingDomain` | Pro | Pro |
+
+### Why the removal is ratified rather than reversed
+
+Starter carries no custom sending domain, so its campaign mail would leave on
+the platform's shared pool under `p=reject`. The 2026-08-30 decision lowered
+Advanced's and Agency's allowances on exactly that ground — one tenant's spam
+run lands on the reputation every other tenant sends from — and set the
+condition for raising any allowance again: abuse controls proven, domain
+warm-up done, the capacity affordable and justifiable. **Nothing has met that
+condition since**, and Starter is the cheapest paid tier, which makes it the
+least-vetted door in the product.
+
+Cost is not the argument and was never offered as one: the 500-send band was
+about $0.45 a month of provider spend against a $16 annual-per-month price.
+`55f728b50` recorded the margin effect as 61.5% → 63.3% at full band
+utilization, which is a consequence of the decision and not a reason for it.
+
+`4c06a5a55` is ratified on its own merits. It corrected an inversion: the
+sending shape that costs the platform nothing — a domain the customer owns and
+publishes records for — was gated at `whiteLabel`, while the shape that costs a
+provider slot and three zone records was the default from Pro up.
+
+### The condition for raising it
+
+**A floor to raise, not a permanent shape** — the same words the 2026-08-30
+entry used, and the same test. When the abuse controls are proven and warm-up
+is done, Starter gets a band. Until then it is 0, and a tier that cannot send
+says so rather than advertising a ration of zero.
+
+### What this changes
+
+- **Stripe: nothing.** There is no per-feature entitlement and no email-overage
+  price object in the account; Starter's two price objects are untouched.
+- **`aglyn.com/pricing`: nothing.** The 2026-09-07 republish already carried the
+  row on all nine surfaces it appears on — one desktop compare build and eight
+  mobile tab panels.
+- **The console** stops printing `0 campaign emails/mo` on Starter's plan card,
+  its comparison grid row and the current-plan chip. A band of zero now reads as
+  the absence it is, matching the one-to-one row beside it.
+- **The four responsive `/pricing` Figma frames still draw 500.** Declared in
+  `FRAME_STALE_CELLS` in `tools/marketing/build-pricing-tables.mts`; the
+  reconciler stays green and the divergence expires when the frames are edited.
+
+### What it leaves open
+
+Starter may send 50 one-to-one emails a day — about 1,500 a month, three times
+the band removed — on the same shared pool, because that cap was sized against
+COGS rather than against the reputation posture this decision rests on. The
+one-to-one path also does not go through the new-workspace ramp that governs
+campaigns. AGL-2680 carries it; it should be settled before `release_contacts`
+is turned on.
+
+---
+
 ## 2026-09-07 — The three `a1e8aaaca` rates are ratified: extra site $8 above Starter, dataset storage $0.36, CRM records $0.40 on Advanced and Agency
 
 - **Decided by:** the account owner, 2026-09-07, asked whether to keep the three rates `a1e8aaaca` shipped on 2026-08-30 without an entry or to revert them to the 2026-08-18 lock's figures. Keep them; the Drive Pricing Decision Log entry of the same date carries the line-margin arithmetic behind each.

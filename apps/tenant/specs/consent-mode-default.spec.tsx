@@ -349,4 +349,55 @@ describe('the consent-mode default (AGL-1622)', () => {
       expect(GA_CONSENT_DEFAULT_SNIPPET).not.toContain(GA_ID)
     })
   })
+
+  describe('the GA pair and the ad tag first render together (AGL-2681)', () => {
+    const ADS_ID = 'AW-18401436785'
+    const ADS_HOST = {
+      ...PLATFORM_HOST,
+      analytics: {
+        ...PLATFORM_HOST.analytics,
+        adTags: { 'google-ads': ADS_ID },
+      },
+      consent: { advertising: true },
+    }
+    /** Every gtag loader the page put on itself, GA's and the ad tag's alike. */
+    const gtagLoaders = () =>
+      Array.from(document.querySelectorAll('script[data-gasrc]')).filter(
+        (element) =>
+          String(element.getAttribute('data-gasrc')).includes(
+            'googletagmanager.com/gtag/js',
+          ),
+      )
+
+    it('ONE gtag loader reaches the page, and it is the GA pair’s', async () => {
+      /*
+       * The whole page, not the gate alone: `sharedLibraryPresent` reads the
+       * document at render time, and in the render where `consent.ready`
+       * first turns true the GA `<Script>` and the ad tag's are created
+       * together — so the document cannot yet show one to the other. Before
+       * AGL-2681 this counted two loaders for one visitor (147 KiB each on
+       * aglyn.com); the page now says which library it brings.
+       */
+      storeVisitorConsent(ADS_HOST.$id, {
+        status: 'accepted',
+        country: 'US',
+        advertising: true,
+      })
+      plantRegion('US')
+      await renderPage(ADS_HOST)
+      await waitFor(() => expect(gaScript()).toBeTruthy())
+      await waitFor(() =>
+        expect(screen.queryByTestId('ad-tag-google-ads-init')).toBeTruthy(),
+      )
+      const loaders = gtagLoaders()
+      expect(loaders.length).toBe(1)
+      expect(loaders[0].getAttribute('data-gasrc')).toContain(
+        `id=${PLATFORM_GA_MEASUREMENT_ID}`,
+      )
+      // The second product still boots: one library, a `config` per product.
+      expect(
+        screen.queryByTestId('ad-tag-google-ads-init')?.textContent ?? '',
+      ).toContain(ADS_ID)
+    })
+  })
 })

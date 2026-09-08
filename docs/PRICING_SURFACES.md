@@ -92,6 +92,32 @@ Workflow and action runs carry a cost since the same day —
 `orgMonthlyCogsUsd` and the margin guard through it. No plan bills runs; the
 rate is COGS, not a price, and appears on no surface a customer reads.
 
+## Make a new version FIRST, then edit it, then publish it
+
+**Standing rule for every published surface — screens, components, layouts,
+templates, emails.** Never edit the live one in place, however small the edit.
+Create a new version from what is live, make the change there, publish that.
+
+The reason is revert. With a version in between, undoing a bad publish is a
+pointer move back to the previous version: instant, complete, and it needs no
+memory of which cells the edit touched. Editing in place leaves nothing to go
+back to, and a besigner subtree edit drops anything the edit did not carry
+over — so "revert" becomes "reconstruct", against a page nobody has a clean
+copy of.
+
+Name the version after the work, the way the existing ones are named —
+`Bandwidth bands and extra-site rate (AGL-2651)`, `Compare tables: cells fill
+wrapped rows (AGL-2666)`. The versions panel is the only place "what shipped,
+and when" is answerable, and `Copy of…` answers neither.
+
+⛔ **A component is the one shape where the revert is not a pointer move.** The
+tenant renders the component document's own `nodes`/`rootId`, so moving a
+component's `versionId` changes what the editor opens and not what the site
+serves. Make the new version anyway — it is what you revert *from* — but
+reverting means republishing the previous version's nodes onto the document,
+then announcing the revalidate. Screens are the simple case: the tenant follows
+the screen's `versionId`.
+
 ## Saving the LIVE version revalidates; saving a draft does not
 
 Saving the version a screen currently points at drops the cached pages for it
