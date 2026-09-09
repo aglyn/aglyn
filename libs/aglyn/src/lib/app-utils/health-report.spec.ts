@@ -49,6 +49,10 @@ import {
   SIGNUP_CANARY_STALE_AFTER_MS,
 
   type SignupCanaryMarker,
+  appCheckAttestationHealth,
+  APP_CHECK_GRADED_SERVICE,
+  APP_CHECK_MIN_REQUESTS,
+  APP_CHECK_MIN_ALLOW_RATE,
 } from './health-report'
 
 const OK = { ok: true, ms: 12 }
@@ -1991,5 +1995,139 @@ describe('signupCanaryHealth (AGL-2715)', () => {
       'staleAfterMs',
       'walkMs',
     ])
+  })
+})
+
+
+/**
+ * AGL-2715 — the check that makes the canary's debug token survivable.
+ *
+ * The canary attests with a debug token, so it cannot notice App Check
+ * refusing real people. This grades that directly, from counts a token cannot
+ * move: one canary request an hour against roughly a thousand a day.
+ */
+describe('appCheckAttestationHealth (AGL-2715)', () => {
+  const IDP = APP_CHECK_GRADED_SERVICE
+  const OTHER = 'firestore.googleapis.com'
+  const sample = (result: string, count: number, service = IDP, security = 'VALID') =>
+    ({ result, count, service, security })
+
+  it('greens on a healthy allow rate', () => {
+    // The measured shape on 2026-09-09: 939 allowed, 3 denied.
+    const check = appCheckAttestationHealth(
+      [sample('ALLOW', 939), sample('DENY', 3, IDP, 'INVALID')],
+      2,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.allowRate).toBeCloseTo(0.99681, 4)
+  })
+
+  it('REDS when attestation collapses — the allowlist failure', () => {
+    /**
+     * `recaptcha-allowlist.ts` documents the shape: an origin attached and
+     * routed but not allowlisted renders a console that can never sign anyone
+     * in, and it presents as a Firestore permission denial, which is why it is
+     * routinely misdiagnosed as a rules problem. It reads as ~0%, not 85%.
+     */
+    const check = appCheckAttestationHealth(
+      [sample('ALLOW', 2), sample('DENY', 400, IDP, 'INVALID')],
+      2,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('attestation-failing')
+    expect(check.deniedBy).toEqual({ INVALID: 400 })
+  })
+
+  it('an unreadable metric is degraded, never calm', () => {
+    // "We did not look" reported as "it is fine" is the failure this whole
+    // area exists to stop.
+    const check = appCheckAttestationHealth(null, 2)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('attestation-unavailable')
+    expect(check.allowRate).toBeNull()
+  })
+
+  it('abstains on too little traffic, and SAYS so', () => {
+    // A ratio over three requests is noise wearing a percentage. Green, but
+    // never silently — an on-call person reading this deserves to know it
+    // had no opinion.
+    const check = appCheckAttestationHealth([sample('ALLOW', 3)], 2)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBe('not-enough-traffic')
+    expect(check.allowRate).toBeNull()
+  })
+
+  it('grades ONLY Identity Platform, and ignores the noisy siblings', () => {
+    /**
+     * Client Firestore reads are reached by crawlers and stale tabs that
+     * legitimately fail attestation — 5493 allowed against 1046 denied in the
+     * same window Identity Platform ran at 99.7%. Folding that in would force
+     * a floor low enough to mute this check.
+     */
+    const check = appCheckAttestationHealth(
+      [
+        sample('ALLOW', 939),
+        sample('DENY', 3, IDP, 'INVALID'),
+        sample('ALLOW', 5493, OTHER),
+        sample('DENY', 1046, OTHER, 'INVALID'),
+      ],
+      2,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.allowed).toBe(939)
+    expect(check.denied).toBe(3)
+  })
+
+  it('reds at exactly the floor, not merely past it', () => {
+    const atFloor = appCheckAttestationHealth(
+      [sample('ALLOW', 90), sample('DENY', 10, IDP, 'INVALID')],
+      2,
+    )
+    expect(atFloor.allowRate).toBeCloseTo(0.9, 6)
+    expect(atFloor.ok).toBe(true)
+
+    const under = appCheckAttestationHealth(
+      [sample('ALLOW', 89), sample('DENY', 11, IDP, 'INVALID')],
+      2,
+    )
+    expect(under.ok).toBe(false)
+  })
+
+  it('a corrupt count cannot become NaN and mute the alarm', () => {
+    const check = appCheckAttestationHealth(
+      [
+        sample('ALLOW', 'lots' as unknown as number),
+        sample('DENY', 400, IDP, 'INVALID'),
+      ],
+      2,
+    )
+    expect(check.allowed).toBe(0)
+    expect(check.ok).toBe(false)
+  })
+
+  it('the thresholds are pinned to their VALUES', () => {
+    /**
+     * The cases around this one take them symbolically and so would pass at
+     * any value at all — including a floor of 0, which grades nothing, or a
+     * minimum of 100,000 requests, which never grades anything.
+     */
+    expect(APP_CHECK_MIN_ALLOW_RATE).toBe(0.9)
+    expect(APP_CHECK_MIN_REQUESTS).toBe(20)
+    expect(APP_CHECK_GRADED_SERVICE).toBe('identitytoolkit.googleapis.com')
+  })
+
+  it('names how it broke, for the body', () => {
+    const check = appCheckAttestationHealth(
+      [
+        sample('ALLOW', 1),
+        sample('DENY', 300, IDP, 'MISSING_UNKNOWN_ORIGIN'),
+        sample('DENY', 100, IDP, 'INVALID'),
+      ],
+      2,
+    )
+    // MISSING_UNKNOWN_ORIGIN is the allowlist shape; INVALID is a bad token.
+    // Which one dominates is the first thing worth knowing.
+    expect(check.deniedBy).toEqual({ MISSING_UNKNOWN_ORIGIN: 300, INVALID: 100 })
   })
 })

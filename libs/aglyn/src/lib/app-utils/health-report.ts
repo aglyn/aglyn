@@ -2889,3 +2889,168 @@ export function signupCanaryHealth(
   }
   return { ...carried, ok: true }
 }
+
+/**
+ * IS ATTESTATION WORKING FOR REAL PEOPLE? (AGL-2715)
+ *
+ * The signup canary walks the real journey, but it attests with an App Check
+ * DEBUG TOKEN — because this project's provider is reCAPTCHA Enterprise, which
+ * is built to score headless automation as a bot and always will. Everything
+ * else in that walk is real; the attestation step is not. So the canary is
+ * structurally blind to the one failure it sits closest to: App Check refusing
+ * the people it is supposed to admit.
+ *
+ * That blindness is not acceptable on its own, and it is not fixed by
+ * argument. It is fixed by measuring the thing directly.
+ *
+ * ## What this reads, and why a token cannot fool it
+ *
+ * Firebase publishes `firebaseappcheck.googleapis.com/services/verification_count`
+ * to Cloud Monitoring, labelled by `result` (ALLOW / DENY) and `security`
+ * (VALID / INVALID / MISSING_UNKNOWN_ORIGIN), per service. Those counts are
+ * every request from every visitor.
+ *
+ * The canary contributes at most one verification an hour against roughly a
+ * thousand a day, and its debug-token attestation lands in the same ALLOW
+ * bucket as everyone else's. So it cannot hold this green: if attestation
+ * collapses for real people the rate collapses with it, one canary request
+ * notwithstanding.
+ *
+ * ## Why only Identity Platform is graded
+ *
+ * `identitytoolkit.googleapis.com` is the service signup depends on, and it
+ * runs clean — 939 ALLOW against 3 DENY over the 24 hours to 2026-09-09.
+ * `firestore.googleapis.com` in the same window was 5493 ALLOW against 1046
+ * DENY, because client Firestore reads are reached by crawlers and stale tabs
+ * that legitimately fail attestation. Grading that number would either mute
+ * this check with a floor low enough to admit the noise, or page on the noise.
+ * The other services are reported for diagnosis and decide nothing.
+ */
+export interface AppCheckVerificationSample {
+  /** `ALLOW` or `DENY`. */
+  result?: string
+  /** `VALID`, `INVALID`, `MISSING_UNKNOWN_ORIGIN`, … — for the body only. */
+  security?: string
+  /** The service the verdict was rendered for. */
+  service?: string
+  /** Requests in this bucket over the window. */
+  count?: number
+}
+
+export interface AppCheckAttestationCheck extends HealthCheck {
+  /** Allowed over total for the graded service, or null with no traffic. */
+  allowRate: number | null
+  /** Requests the rate is taken over. */
+  allowed: number
+  denied: number
+  /** Below this many requests the rate says nothing and is not graded. */
+  minimumRequests: number
+  /** The floor the rate must clear. */
+  minimumAllowRate: number
+  /** The service graded. Everything else is context. */
+  service: string
+  /** Denials by `security`, so a red says which way it broke. */
+  deniedBy: Record<string, number>
+  /** The window the counts cover. */
+  windowMinutes: number
+}
+
+/** The service signup depends on. See the docblock for why it is the only one. */
+export const APP_CHECK_GRADED_SERVICE = 'identitytoolkit.googleapis.com'
+
+/**
+ * Window the attestation rate is taken over.
+ *
+ * Six hours, not one. This metric is aggregated by Google on its own schedule
+ * and arrives late, so a one-hour window reads empty for reasons that have
+ * nothing to do with attestation. Six hours is long enough to always carry
+ * traffic on this platform and short enough that a real collapse is caught the
+ * same working day.
+ */
+export const APP_CHECK_WINDOW_MINUTES = 6 * 60
+
+/**
+ * Requests below which the rate is not graded.
+ *
+ * A ratio over three requests is noise wearing a percentage. Twenty is a
+ * fraction of the ~940 a day Identity Platform sees, so a healthy platform
+ * always clears it, and a platform quiet enough not to is a platform where
+ * this check has nothing to say.
+ */
+export const APP_CHECK_MIN_REQUESTS = 20
+
+/**
+ * The floor the allow rate must clear.
+ *
+ * 0.90, against a measured 0.997. The gap is deliberate: a handful of genuine
+ * denials is ordinary — a stale tab, a bot, a browser that failed its
+ * reCAPTCHA — and a floor set near the observed rate would page on those.
+ *
+ * What this is built to catch is not a drift of a few percent; it is the
+ * documented failure mode of `recaptcha-allowlist.ts`, where an origin that is
+ * attached and routed but not allowlisted renders a console that can never
+ * sign anyone in. That reads as ~0%, not 85%.
+ */
+export const APP_CHECK_MIN_ALLOW_RATE = 0.9
+
+/**
+ * Grade attestation for real visitors.
+ *
+ * Pure, like every sibling: something else reads Cloud Monitoring, this
+ * decides. Null samples are degraded rather than calm — an unreadable metric
+ * is not evidence that attestation works, and this check exists precisely
+ * because "we did not look" was being reported as "it is fine".
+ */
+export function appCheckAttestationHealth(
+  samples: AppCheckVerificationSample[] | null,
+  ms: number,
+  service: string = APP_CHECK_GRADED_SERVICE,
+  minimumRequests: number = APP_CHECK_MIN_REQUESTS,
+  minimumAllowRate: number = APP_CHECK_MIN_ALLOW_RATE,
+  windowMinutes: number = APP_CHECK_WINDOW_MINUTES,
+): AppCheckAttestationCheck {
+  const base: Omit<AppCheckAttestationCheck, 'ok' | 'code'> = {
+    ms,
+    allowRate: null,
+    allowed: 0,
+    denied: 0,
+    minimumRequests,
+    minimumAllowRate,
+    service,
+    deniedBy: {},
+    windowMinutes,
+  }
+  if (samples === null) {
+    return { ...base, ok: false, code: 'attestation-unavailable' }
+  }
+  let allowed = 0
+  let denied = 0
+  const deniedBy: Record<string, number> = {}
+  for (const sample of samples) {
+    if (sample.service !== service) continue
+    // `Number(...) || 0` for the reason every sibling gives: a corrupt count
+    // must not turn the total into NaN, which compares false against every
+    // threshold and would report calm forever.
+    const count = Number(sample.count) || 0
+    if (sample.result === 'ALLOW') allowed += count
+    else if (sample.result === 'DENY') {
+      denied += count
+      const why = sample.security || 'UNKNOWN'
+      deniedBy[why] = (deniedBy[why] ?? 0) + count
+    }
+  }
+  const total = allowed + denied
+  const carried = { ...base, allowed, denied, deniedBy }
+  // Too little traffic to say anything. Reported, not hidden: an on-call
+  // person reading a green body deserves to know this one abstained.
+  if (total < minimumRequests) {
+    return { ...carried, ok: true, code: 'not-enough-traffic', allowRate: null }
+  }
+  const allowRate = allowed / total
+  return {
+    ...carried,
+    allowRate,
+    ok: allowRate >= minimumAllowRate,
+    ...(allowRate >= minimumAllowRate ? {} : { code: 'attestation-failing' }),
+  }
+}
