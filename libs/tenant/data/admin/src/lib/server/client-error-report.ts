@@ -44,12 +44,19 @@ import '@aglyn/shared-util-fbserver'
 // The readable half of the server-error signal (AGL-1921) — see the block
 // comment in `reportServerError`.
 import {
+  beaconHealth,
   deploymentCommitRef,
   deploymentEnvironmentLabel,
   isDeployedRuntime,
+  isTransientBeaconCode,
+  type BeaconCheck,
 } from '@aglyn/aglyn/server'
 
-import { recordServerError } from './rate-limit-store'
+import {
+  readBeaconHeartbeat,
+  recordBeaconHeartbeat,
+  recordServerError,
+} from './rate-limit-store'
 
 const MAX_EVENTS_PER_REQUEST = 10
 const MAX_MESSAGE = 1_024
@@ -177,18 +184,57 @@ export async function beaconLoggingTarget(): Promise<{
   token: string
   projectId: string
 } | null> {
-  let token: string | undefined
-  let projectId: string | undefined
+  return (await resolveBeaconLoggingTarget()).target
+}
+
+/** The credential, plus WHY there isn't one when there isn't. */
+export interface BeaconTargetResolution {
+  target: { token: string; projectId: string } | null
+  /** Set only when `target` is null. */
+  code?: 'no-credential' | 'credential-unavailable'
+}
+
+/**
+ * The same resolution, saying which of two very different things went wrong
+ * (AGL-2713).
+ *
+ * `no-credential` used to cover both, and the collapse is what made
+ * `/api/health/error-beacon` cry wolf: one of the two is permanent and one is
+ * a cold lambda's first outbound connection.
+ *
+ * - **`no-credential`** — there is no admin app, or it has no project, or it
+ *   has no credential object. `initializeApp` runs at module load and is
+ *   guarded on `FIREBASE_PRIVATE_KEY` + `FIREBASE_CLIENT_EMAIL` +
+ *   `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, so this is a STATIC fact about the
+ *   deployment's environment: it cannot heal on the next request, and every
+ *   browser error is being dropped for as long as it holds. Red immediately —
+ *   which is exactly what the remedy text on the staff board already says
+ *   (`no-credential` is the deployment `FIREBASE_*` env).
+ * - **`credential-unavailable`** — the app and the certificate are both there
+ *   and `getAccessToken()` did not produce a token on THIS attempt. That is a
+ *   JWT-bearer exchange against `oauth2.googleapis.com`, and on a cold
+ *   instance it is the first outbound TLS handshake the sandbox has ever made.
+ *   Nothing was decided, so nothing about the beacon has been established.
+ */
+export async function resolveBeaconLoggingTarget(): Promise<BeaconTargetResolution> {
+  let app
   try {
-    const app = getApp()
-    projectId = (app.options.projectId ??
-      process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID']) as string | undefined
-    token = (await app.options.credential?.getAccessToken())?.access_token
+    app = getApp()
+  } catch {
+    return { target: null, code: 'no-credential' }
+  }
+  const projectId = (app.options.projectId ??
+    process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID']) as string | undefined
+  const credential = app.options.credential
+  if (!projectId || !credential) return { target: null, code: 'no-credential' }
+  let token: string | undefined
+  try {
+    token = (await credential.getAccessToken())?.access_token
   } catch {
     token = undefined
   }
-  if (!token || !projectId) return null
-  return { token, projectId }
+  if (!token) return { target: null, code: 'credential-unavailable' }
+  return { target: { token, projectId } }
 }
 
 /**
@@ -605,8 +651,8 @@ export interface BeaconHeartbeatResult {
 export async function writeBeaconHeartbeat(options: {
   service: string
 }): Promise<BeaconHeartbeatResult> {
-  const target = await beaconLoggingTarget()
-  if (!target) return { ok: false, code: 'no-credential' }
+  const { target, code } = await resolveBeaconLoggingTarget()
+  if (!target) return { ok: false, code: code ?? 'no-credential' }
   try {
     const response = await fetch('https://logging.googleapis.com/v2/entries:write', {
       method: 'POST',
@@ -644,4 +690,157 @@ export async function writeBeaconHeartbeat(options: {
       code: `transport-${String((error as { name?: string })?.name ?? 'unknown')}`,
     }
   }
+}
+
+/**
+ * How long the probe waits before its second attempt (AGL-2713).
+ *
+ * Long enough for a JWT-bearer exchange that lost its first connection to get
+ * another one, short enough that it is invisible next to a probe already
+ * budgeted at 4s for the Logging write. It is a delay, not a backoff schedule:
+ * a second attempt either establishes something or it does not, and a third
+ * would only spend a public endpoint's time proving the same point.
+ */
+export const BEACON_HEARTBEAT_RETRY_DELAY_MS = 250
+
+/**
+ * How long a missed heartbeat is forgiven after the last one that landed.
+ *
+ * One monitor interval. The uptime workflow reads this door every 15 minutes,
+ * so a grace of exactly that means the FIRST probe after a miss can be
+ * forgiven and the second cannot — "tolerate a single miss, red on a
+ * sustained one", stated in the only unit the reader actually samples in.
+ *
+ * The bound this puts on a real outage: the marker is refreshed by every
+ * successful probe, and this endpoint is polled every 5 minutes, so the last
+ * landing is at most one probe TTL old when a sustained failure starts. Worst
+ * case the door reds 20 minutes later than it does today, and the 15-minute
+ * workflow sees it on its next run.
+ */
+export const BEACON_HEARTBEAT_GRACE_MS = 15 * 60_000
+
+/** Injectable clock, sleep, writer and store, so a spec can drive every branch. */
+export interface BeaconHeartbeatProbeOptions {
+  service: string
+  now?: () => number
+  sleep?: (ms: number) => Promise<void>
+  firestore?: any
+  graceMs?: number
+  retryDelayMs?: number
+  /**
+   * The heartbeat writer. Defaults to the real one, and exists as a seam
+   * because the belt below catches a contract `writeBeaconHeartbeat` is
+   * documented never to break — a branch that is otherwise unreachable, and
+   * therefore one nobody has ever watched work.
+   */
+  write?: (options: { service: string }) => Promise<BeaconHeartbeatResult>
+}
+
+/**
+ * One heartbeat probe, graded — the whole of what both doors do (AGL-2713).
+ *
+ * ## Why this is one function and not two copies
+ *
+ * `apps/console` and `apps/tenant` each own a copy of
+ * `/api/health/error-beacon`, and they must: the deployments carry different
+ * admin credentials, so a console heartbeat proves nothing about the tenant
+ * one. What they do NOT need is two copies of the policy. Before this the two
+ * route files were byte-identical apart from a service name, which is the
+ * arrangement that guarantees a fix reaches one door and not the other. The
+ * per-deployment part (which credential, which service name, which memo) stays
+ * in the routes; the grading lives here, once.
+ *
+ * ## The sequence, and why each step is where it is
+ *
+ * 1. Write. If it lands, record the durable marker and report green — the
+ *    marker being the evidence a LATER miss will be forgiven with.
+ * 2. If it did not land and the code is a refusal — `http-401`/`http-403`
+ *    (a lost `logging.logEntries.create` grant), `http-429` (quota),
+ *    `no-credential` (the deployment env) — report red NOW, with no retry and
+ *    no grace. Those are permanent until a person acts, and re-asking a
+ *    credential that has been revoked only delays the page.
+ * 3. Otherwise nothing was decided, so ask once more after a short delay. On a
+ *    cold lambda this is the step that actually fixes the measured incident:
+ *    the memo is per-instance, so a fresh instance has no history to be
+ *    forgiving WITH, and the only tolerance available inside the request is
+ *    another attempt.
+ * 4. If the second attempt misses too, forgive only against the durable
+ *    marker — see {@link beaconHealth}, which will not forgive without proof.
+ *
+ * `attempts` and `ms` ride in the body on every outcome, including green ones,
+ * because a retry that is quietly always needed is a credential on its way out
+ * and a door that hid it would be back where it started.
+ */
+export async function beaconHeartbeatProbe(
+  options: BeaconHeartbeatProbeOptions,
+): Promise<BeaconCheck> {
+  const clock = options.now ?? Date.now
+  const pause =
+    options.sleep ??
+    ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  const graceMs = options.graceMs ?? BEACON_HEARTBEAT_GRACE_MS
+  const startedAt = clock()
+  const service = options.service
+
+  const write = options.write ?? writeBeaconHeartbeat
+
+  const attempt = async (): Promise<BeaconHeartbeatResult | null> => {
+    try {
+      return await write({ service })
+    } catch {
+      // `writeBeaconHeartbeat` is documented never to throw; this is the belt
+      // that keeps a monitoring probe from ever being the outage it reports.
+      // A null result is degraded by contract — "we could not determine
+      // whether the beacon works" IS the condition this endpoint exists to
+      // catch, and unlike a missed write it is a broken contract rather than
+      // a quiet network, so it is never one of the tolerated shapes.
+      return null
+    }
+  }
+
+  const graded = (
+    write: BeaconHeartbeatResult | null,
+    attempts: number,
+    landedAtMs: number | null,
+  ): BeaconCheck =>
+    beaconHealth(write, BEACON_HEARTBEAT_LOG_ID, service, clock() - startedAt, {
+      attempts,
+      landedAtMs,
+      graceMs,
+      now: clock(),
+    })
+
+  const first = await attempt()
+  if (first?.ok) {
+    const landedAtMs = clock()
+    recordBeaconHeartbeat(service, {
+      now: landedAtMs,
+      firestore: options.firestore,
+    })
+    return graded(first, 1, landedAtMs)
+  }
+  if (first === null || !isTransientBeaconCode(first.code)) {
+    return graded(first, 1, null)
+  }
+
+  await pause(options.retryDelayMs ?? BEACON_HEARTBEAT_RETRY_DELAY_MS)
+
+  const second = await attempt()
+  if (second?.ok) {
+    const landedAtMs = clock()
+    recordBeaconHeartbeat(service, {
+      now: landedAtMs,
+      firestore: options.firestore,
+    })
+    return graded(second, 2, landedAtMs)
+  }
+  if (second === null || !isTransientBeaconCode(second.code)) {
+    return graded(second, 2, null)
+  }
+  // Both attempts came back with nothing decided. The only thing that can
+  // forgive that is proof another instance landed a heartbeat recently, and
+  // a store that cannot answer is not proof.
+  return graded(second, 2, await readBeaconHeartbeat(service, {
+    firestore: options.firestore,
+  }))
 }

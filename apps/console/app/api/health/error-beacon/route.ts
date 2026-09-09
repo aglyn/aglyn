@@ -48,10 +48,18 @@
  * SELF-CLEARING. A failed write degrades; the next successful write clears
  * it, within one probe TTL. Nothing here latches, which is the AGL-1843 rule
  * applied before the fact rather than after an incident.
+ *
+ * IT TOLERATES ONE MISS AND NOT TWO (AGL-2713). This answered a 503 reading
+ * `no-credential` twice on 2026-09-09, minutes after new capacity from that
+ * day's deploy, and self-cleared both times — taking the 15-minute uptime
+ * workflow red and opening four alert events for a beacon that was working.
+ * The policy that fixed it lives in `beaconHeartbeatProbe`, shared with the
+ * sibling route so the two doors cannot drift: a refusal still reds on the
+ * first sample, only an undecided attempt is retried, and forgiving one needs
+ * durable proof that a heartbeat landed inside the grace window.
  */
-import { BEACON_HEARTBEAT_LOG_ID, writeBeaconHeartbeat } from '@aglyn/tenant-data-admin'
+import { beaconHeartbeatProbe } from '@aglyn/tenant-data-admin'
 import {
-  beaconHealth,
   deploymentCommitRef,
   deploymentEnvironmentLabel,
   healthBody,
@@ -86,19 +94,9 @@ const PROBE_TTL_MS = 5 * 60_000
  */
 const SERVICE = 'console-web'
 
-const beaconProbe = memoizeWithTtl<BeaconCheck>(PROBE_TTL_MS, async () => {
-  const startedAt = Date.now()
-  try {
-    const write = await writeBeaconHeartbeat({ service: SERVICE })
-    return beaconHealth(write, BEACON_HEARTBEAT_LOG_ID, SERVICE, Date.now() - startedAt)
-  } catch {
-    // `writeBeaconHeartbeat` is documented never to throw; this is the belt
-    // that keeps a monitoring probe from ever being the outage it reports.
-    // A null result is degraded by contract — "we could not determine whether
-    // the beacon works" IS the condition this endpoint exists to catch.
-    return beaconHealth(null, BEACON_HEARTBEAT_LOG_ID, SERVICE, Date.now() - startedAt)
-  }
-})
+const beaconProbe = memoizeWithTtl<BeaconCheck>(PROBE_TTL_MS, () =>
+  beaconHeartbeatProbe({ service: SERVICE }),
+)
 
 export async function GET(): Promise<Response> {
   const checks = { beacon: await beaconProbe() }

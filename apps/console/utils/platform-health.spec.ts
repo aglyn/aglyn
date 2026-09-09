@@ -99,6 +99,64 @@ describe('readHealthResponse', () => {
     expect(facts).toContain('last fallback 7 min ago')
   })
 
+  it('words what a tolerated beacon miss COST, so a green row is not a silent one', () => {
+    // AGL-2713. The door now forgives one undecided heartbeat, and a
+    // forgiveness the board cannot see is the same shape as a door quietly
+    // widened until it stopped reporting.
+    const result = readHealthResponse(200, {
+      status: 'ok',
+      checks: {
+        beacon: {
+          ok: true,
+          ms: 40,
+          code: 'heartbeat-missed',
+          logId: 'client-error-beacon-heartbeat',
+          service: 'console-web',
+          attempts: 2,
+          minutesSinceHeartbeat: 4.2,
+          graceMinutes: 15,
+        },
+      },
+    })
+    expect(result.verdict).toBe('ok')
+    // The code survives onto a GREEN line: it is the searchable thing an
+    // operator sees, and hiding it would make the tolerance invisible.
+    expect(result.checks[0].code).toBe('heartbeat-missed')
+    const facts = result.checks[0].facts
+    expect(facts).toContain('heartbeat needed 2 attempts')
+    expect(facts).toContain('last heartbeat landed 4.2 min ago')
+    expect(facts).toContain('grace 15 min')
+  })
+
+  it('says outright when a beacon row has no landing to forgive a miss with', () => {
+    const result = readHealthResponse(503, {
+      status: 'degraded',
+      checks: {
+        beacon: {
+          ok: false,
+          ms: 40,
+          code: 'credential-unavailable',
+          attempts: 2,
+          minutesSinceHeartbeat: null,
+          graceMinutes: 15,
+        },
+      },
+    })
+    expect(result.checks[0].facts).toContain(
+      'no heartbeat landing on record — nothing to forgive a miss with',
+    )
+  })
+
+  it('says nothing about attempts on a first-try probe', () => {
+    // One attempt is the ordinary case; a line saying so on every green row
+    // would be noise, and noise is what stops a real one being read.
+    const result = readHealthResponse(200, {
+      status: 'ok',
+      checks: { beacon: { ok: true, ms: 40, attempts: 1 } },
+    })
+    expect(result.checks[0].facts).not.toContain('heartbeat needed 1 attempts')
+  })
+
   it('says so when no usable backup exists at all', () => {
     const result = readHealthResponse(503, {
       status: 'degraded',

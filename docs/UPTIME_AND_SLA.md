@@ -1043,15 +1043,52 @@ Notes that keep these honest:
   transport, and 503s when that write does not land: `no-credential`
   (the deployment's `FIREBASE_*` admin credential is missing or unparsable),
   `http-401`/`http-403` (the service account lost `logging.logEntries.create`),
-  `http-429` (Logging quota), `transport-TimeoutError` (Logging unreachable
-  within 4s). **Two deployments, two checks, deliberately** — `/api/errors`
-  exists in both the console and the tenant runtime with different admin
-  credentials, so a console heartbeat proves nothing about the tenant one.
+  `http-429` (Logging quota), `credential-unavailable` (the credential is
+  configured and did not mint a token on this attempt), `transport-TimeoutError`
+  (Logging unreachable within 4s). **Two deployments, two checks,
+  deliberately** — `/api/errors` exists in both the console and the tenant
+  runtime with different admin credentials, so a console heartbeat proves
+  nothing about the tenant one.
   **Clearing event:** the next heartbeat write that reaches Cloud Logging;
   nothing latches, so recovery shows within one probe TTL (5 min) plus one
   check period (15 min). The heartbeat log id is *not* `client-errors` on
   purpose — writing there at `severity >= ERROR` would trip the existing
   policy on every probe, building the alert fatigue this exists to prevent.
+- **⚑ ONE MISS IS TOLERATED, TWO ARE NOT (AGL-2713).** The console's beacon
+  door answered `503 no-credential` twice on 2026-09-09 — 15:12 and 17:22 UTC,
+  each minutes after new capacity from the 15:08 deploy of v1.0.0-beta.103,
+  each self-clearing (`status: ok` in 140 ms minutes later). The tenant door,
+  which has its own credential, stayed up throughout, and the beacon code path
+  had changed by one comment line since the previous release. Between them the
+  two blips took the 15-minute `Uptime probe` workflow red (17/18 up) and
+  opened four GCP alert events; UptimeRobot's 5-minute poll saw neither and
+  still reads 100.000%. A monitor that cries wolf is worse than the gap it
+  covers, so the door now grades a heartbeat rather than a sample:
+    - **A refusal still reds on the first sample.** `http-401`, `http-403`,
+      `http-429` and `no-credential` are permanent until a person acts, so
+      they are never retried and never forgiven. They page exactly as fast as
+      they did before.
+    - **An undecided attempt is retried once**, 250 ms later.
+      `credential-unavailable` (new: the admin app and certificate are both
+      present and `getAccessToken()` produced nothing — a JWT-bearer exchange
+      that on a cold lambda is the instance's first outbound TLS) and
+      `transport-*` are the only two codes that mean nothing was established.
+    - **A second miss is forgiven only against proof**, and the proof is a
+      durable marker — `rateLimits/beaconHeartbeat_{service}`, field
+      `heartbeatAtMs`, written by every successful probe and swept by the
+      collection's existing `expiresAt` TTL policy. Inside a 15-minute grace
+      the door answers 200 with `code: heartbeat-missed` and carries
+      `attempts` and `minutesSinceHeartbeat` so the tolerance is visible on
+      the staff board. Outside it, or with no marker, or with a marker that
+      cannot be read, it reds.
+    - **Nothing here can produce a door that never reds.** The marker records
+      landings only, so a deployment whose credential has never worked has
+      nothing to forgive with; an unreadable store fails closed; a landing
+      timestamped in the future is refused. Worst case a sustained failure
+      reds about 20 minutes later than it used to — one grace window plus one
+      probe TTL — and the 15-minute workflow sees it on its next run.
+    Both apps run the same `beaconHeartbeatProbe`; the routes differ only in
+    which credential and service name they carry.
 - **Hydration mismatches are split off into a RATE policy (AGL-2523).** React
   #418/#423/#425 are reported by `onRecoverableError` — the visitor has a
   working page, React re-rendered — and a page translator or an in-app-browser

@@ -1257,10 +1257,12 @@ export function memoizeWithTtl<T>(
  * ## It must be able to go GREEN
  *
  * The condition is an EVENT, not a state. A failed write degrades; the next
- * successful write clears it, within one probe TTL — no marker, no latch, no
- * retention window to age out of. That is the AGL-1843 rule applied before
- * the fact: the clearing event is named, and it is "the next heartbeat that
- * reaches Cloud Logging".
+ * successful write clears it, within one probe TTL — nothing latches and
+ * there is no retention window to age out of. That is the AGL-1843 rule
+ * applied before the fact: the clearing event is named, and it is "the next
+ * heartbeat that reaches Cloud Logging". The durable marker AGL-2713 added is
+ * evidence of a LANDING, never of a failure, so it can only ever shorten the
+ * red — a stale one forgives nothing.
  *
  * Pure on purpose, like its siblings: the route writes, this decides, the
  * spec exercises every branch without a network.
@@ -1273,28 +1275,139 @@ export interface BeaconCheck extends HealthCheck {
   logId: string
   /** Which deployment's credential was exercised — console and tenant differ. */
   service: string
+  /**
+   * How many heartbeat writes this probe attempted. Two means the first one
+   * missed, which is a fact a green row must still carry: a credential that
+   * needs a second attempt every time is on its way to failing outright.
+   */
+  attempts: number
+  /**
+   * Minutes since a heartbeat last durably landed, or null when the answer
+   * could not be established — which includes "none ever has". Null is what
+   * makes a missed heartbeat unforgivable, so the two cases fold safely.
+   */
+  minutesSinceHeartbeat: number | null
+  /** How long a missed heartbeat is tolerated before this door reds. */
+  graceMinutes: number
 }
 
+/**
+ * Codes that mean the heartbeat got no ANSWER, as opposed to a refusal
+ * (AGL-2713).
+ *
+ * The distinction is the whole of the tolerance below, so it is named once
+ * and asserted directly rather than being spelled inline at the branch.
+ *
+ * - `credential-unavailable` — the admin app is configured and its credential
+ *   simply did not mint a token on this attempt. On a cold lambda that is the
+ *   first outbound TLS of the instance's life, and it is the measured shape of
+ *   both 2026-09-09 blips.
+ * - `transport-*` — the Logging write never came back inside its 4s deadline,
+ *   or the fetch layer failed. Same class: nothing was decided.
+ *
+ * Everything else is a DECISION and must never be tolerated. `http-401` and
+ * `http-403` are a lost `logging.logEntries.create` grant, `http-429` is
+ * quota, and `no-credential` is a deployment whose `FIREBASE_*` env is absent
+ * — every one of them permanent until a person fixes it, and every one of
+ * them a state in which browser errors are being collected by nothing. So is
+ * `heartbeat-unavailable`, which means a writer documented never to throw
+ * threw.
+ */
+export function isTransientBeaconCode(code: string | undefined): boolean {
+  return code === 'credential-unavailable' || (code ?? '').startsWith('transport-')
+}
+
+/**
+ * How a missed heartbeat is graded (AGL-2713).
+ *
+ * `landedAtMs` is the durable, cross-instance fact — the last time ANY
+ * instance of this deployment put an entry in the log. It has to be durable:
+ * the probe memo dies with the lambda, so an in-process counter is at one on
+ * every cold start and would forgive nothing at all on the one shape this
+ * exists for.
+ */
+export interface BeaconTolerance {
+  /** Heartbeat writes this probe made. Defaults to the single-attempt shape. */
+  attempts?: number
+  /** When a heartbeat last durably landed; null when that cannot be shown. */
+  landedAtMs?: number | null
+  /** How long a miss is forgiven after the last landing. Zero forgives none. */
+  graceMs?: number
+  now?: number
+}
+
+/**
+ * ## Tolerating ONE miss without becoming a door that cannot red (AGL-2713)
+ *
+ * `/api/health/error-beacon` on the console answered `503 no-credential` twice
+ * on 2026-09-09 — 15:12 and 17:22 UTC, each shortly after new capacity from
+ * the 15:08 deploy, each self-clearing within minutes, with the beacon code
+ * path changed by one comment line since the previous release. Between them
+ * they took the 15-minute uptime workflow red and opened four GCP alert
+ * events, on a monitor whose entire value is that somebody believes it.
+ *
+ * The tolerance is deliberately NOT "forgive a failure". It is three
+ * conditions that must all hold, and each one is what keeps the door able to
+ * go red:
+ *
+ *  1. the code says nothing was decided ({@link isTransientBeaconCode});
+ *  2. a heartbeat is PROVEN to have landed within `graceMs` — proof being a
+ *     durable marker a successful write left behind, so a deployment whose
+ *     credential never worked has nothing to forgive with and reds on its
+ *     first probe;
+ *  3. that proof is not from the future, because a clock that ran backwards
+ *     must not mint an unbounded grace.
+ *
+ * Absence of proof reds. A marker store that cannot be read reds. That is the
+ * same rule the `*-unavailable` arms of every sibling grader apply, pointed at
+ * the evidence for calm rather than at the evidence for alarm.
+ */
 export function beaconHealth(
   write: { ok: boolean; code?: string } | null,
   logId: string,
   service: string,
   ms: number,
+  tolerance: BeaconTolerance = {},
 ): BeaconCheck {
+  const {
+    attempts = 1,
+    landedAtMs = null,
+    graceMs = 0,
+    now = Date.now(),
+  } = tolerance
+  const sinceLanded = landedAtMs === null ? null : now - landedAtMs
+  const base = {
+    ms,
+    logId,
+    service,
+    attempts,
+    minutesSinceHeartbeat:
+      sinceLanded === null
+        ? null
+        : Math.max(0, Math.round((sinceLanded / 60_000) * 10) / 10),
+    graceMinutes: Math.round(graceMs / 60_000),
+  }
   // A null result is degraded by contract, the same rule `signupsHealth` and
   // `rateLimitsHealth` follow: an alarm that cannot see the thing it watches
   // must not report calm. Here it is stronger than a convention — "we could
   // not determine whether the beacon works" IS the AGL-1923 condition.
   if (write === null) {
-    return { ok: false, ms, code: 'heartbeat-unavailable', logId, service }
+    return { ...base, ok: false, code: 'heartbeat-unavailable' }
   }
-  return {
-    ok: write.ok,
-    ms,
-    ...(write.ok ? {} : { code: write.code ?? 'heartbeat-failed' }),
-    logId,
-    service,
+  if (write.ok) return { ...base, ok: true }
+  const code = write.code ?? 'heartbeat-failed'
+  if (
+    isTransientBeaconCode(code) &&
+    sinceLanded !== null &&
+    sinceLanded >= 0 &&
+    sinceLanded <= graceMs
+  ) {
+    // Green, and saying so out loud. A tolerance nobody can see on the board
+    // is indistinguishable from a door that was widened until it stopped
+    // reporting, which is the failure this whole change had to avoid being.
+    return { ...base, ok: true, code: 'heartbeat-missed' }
   }
+  return { ...base, ok: false, code }
 }
 
 /**
