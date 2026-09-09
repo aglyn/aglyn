@@ -82,8 +82,17 @@
 import { getApp } from 'firebase-admin/app'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, exactly like the sibling health route.
-import { firebaseAdmin, getPlatformLockdown } from '@aglyn/tenant-data-admin'
-import { isLockdownActive, lockdownBlocks } from '@aglyn/aglyn/server'
+import {
+  firebaseAdmin,
+  getPlatformLockdown,
+  readSignupCanaryWalk,
+} from '@aglyn/tenant-data-admin'
+import {
+  isLockdownActive,
+  lockdownBlocks,
+  signupCanaryHealth,
+  type SignupCanaryCheck,
+} from '@aglyn/aglyn/server'
 
 import { PUBLISH_OUTBOX_COLLECTION } from '../../../../constants/publish-outbox'
 import {
@@ -126,7 +135,13 @@ export interface JourneysProbeResult {
   create: CreateCheck
   publishRules: PublishRulesCheck
   publishAnnounce: PublishAnnounceCheck
+  /**
+   * Absent until the canary is switched on (AGL-2715). See
+   * `signupCanaryEnabled` for why this is omitted rather than reported green.
+   */
+  signupCanary?: SignupCanaryCheck
 }
+
 
 /**
  * The preflight reads every create path makes, plus the valve that refuses
@@ -268,11 +283,42 @@ export async function probePublishAnnounce(): Promise<PublishAnnounceCheck> {
 }
 
 /** All three, in parallel. Each is independent and each memoises separately. */
+/**
+ * Did a stranger actually sign up? (AGL-2715)
+ *
+ * The only check on this endpoint that reports a DEMONSTRATION rather than a
+ * precondition. `probeCreate` above reads that the platform is unlocked and
+ * the probe's name is free; this reads what happened when something actually
+ * walked the whole path — account, verification, session, org — and deleted
+ * what it made.
+ *
+ * A read of one document. The walk itself is a scheduled job, because this
+ * endpoint is public and unauthenticated and a probe that created an account
+ * would be an org factory for anyone with `curl`.
+ */
+import { signupCanaryEnabled } from './journeys-verdict'
+export { signupCanaryEnabled }
+
+export async function probeSignupCanary(): Promise<SignupCanaryCheck> {
+  const startedAt = Date.now()
+  const marker = await readSignupCanaryWalk()
+  return signupCanaryHealth(marker, Date.now() - startedAt)
+}
+
+/** All four, in parallel. Each is independent and each memoises separately. */
 export async function probeJourneys(): Promise<JourneysProbeResult> {
-  const [create, publishRules, publishAnnounce] = await Promise.all([
-    probeCreate(),
-    probePublishRules(),
-    probePublishAnnounce(),
-  ])
-  return { create, publishRules, publishAnnounce }
+  const canaryOn = signupCanaryEnabled()
+  const [create, publishRules, publishAnnounce, signupCanary] =
+    await Promise.all([
+      probeCreate(),
+      probePublishRules(),
+      probePublishAnnounce(),
+      canaryOn ? probeSignupCanary() : Promise.resolve(undefined),
+    ])
+  return {
+    create,
+    publishRules,
+    publishAnnounce,
+    ...(signupCanary ? { signupCanary } : {}),
+  }
 }

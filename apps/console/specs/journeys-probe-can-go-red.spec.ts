@@ -46,7 +46,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { HEALTH_NO_STORE } from '@aglyn/aglyn/server'
+import {
+  HEALTH_NO_STORE,
+  signupCanaryHealth,
+} from '@aglyn/aglyn/server'
 
 import {
   PUBLISH_OUTBOX_FIELDS,
@@ -108,6 +111,19 @@ const HEALTHY: JourneysProbeResult = {
   create: createJourneyHealth({ kind: 'open' }, 1),
   publishRules: publishRulesHealth(REPO_RULES, 1),
   publishAnnounce: publishAnnounceHealth([], 1),
+  // A walk recorded a minute ago (AGL-2715). Fixed relative to `Date.now()`
+  // rather than pinned, because the verdict grades FRESHNESS — a literal
+  // timestamp would pass today and go stale on its own tomorrow.
+  signupCanary: signupCanaryHealth(
+    {
+      walkedAtMs: Date.now() - 60_000,
+      ok: true,
+      failedStep: null,
+      elapsedMs: 4_200,
+      reapedCleanly: true,
+    },
+    1,
+  ),
 }
 
 describe('the rules the publish batch needs', () => {

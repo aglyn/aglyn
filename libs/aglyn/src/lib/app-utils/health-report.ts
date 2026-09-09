@@ -2713,3 +2713,132 @@ export async function writeCronBeat(
     return false
   }
 }
+
+/**
+ * DID A STRANGER ACTUALLY SIGN UP? (AGL-2715)
+ *
+ * Every other signup check on this platform is an inference. The auth doors
+ * assert that Identity Platform is reachable and refuses an account that
+ * cannot exist — configuration, not a signup. `probeCreate` reads that the
+ * platform is unlocked and the probe's name is free — preconditions, not a
+ * signup. `signupVolume`, `signupRefusals` and `signupDrought` count what
+ * happened afterwards — a consequence, observed late.
+ *
+ * The strongest thing any of them could say, on the day AGL-2714 paged, was
+ * "somebody got an account recently", and recently was 24 hours ago. AGL-2581
+ * is what that costs: signup refused every visitor for three days while the
+ * monitor named for signups stayed green.
+ *
+ * So something has to WALK it. A canary creates an account, verifies it,
+ * mints a session, provisions an org, and deletes all of it — against
+ * production, on a schedule — then stamps what happened into one marker. This
+ * verdict reads that marker.
+ *
+ * ## Why the walk is not done here
+ *
+ * Health probes on this platform are read-only and cost-bounded by contract,
+ * and this one is served from a PUBLIC unauthenticated endpoint. A probe that
+ * created an account would hand anyone with `curl` an org factory. The write
+ * lives in a scheduled job; the door only reports. Same split as the beacon
+ * heartbeat (AGL-2713), for the same reason.
+ *
+ * ## The four ways this reds, and why residue is one of them
+ *
+ * A canary that walks perfectly and fails to clean up is not a success. It
+ * leaves a real org, with a real slug reservation and a real host, on the
+ * production estate — every hour, forever. `canary-left-residue` is red even
+ * though the signup itself worked, because the alternative is a monitor that
+ * quietly fills the database it is monitoring.
+ */
+export interface SignupCanaryMarker {
+  /** When the walk finished. The freshness clock. */
+  walkedAtMs?: number
+  /** Whether every step of the walk succeeded. */
+  ok?: boolean
+  /** Which step broke, for the body. Never an error message, never a uid. */
+  failedStep?: string | null
+  /** Wall clock for the whole walk. */
+  elapsedMs?: number
+  /** Whether the walk deleted everything it created. */
+  reapedCleanly?: boolean
+}
+
+export interface SignupCanaryCheck extends HealthCheck {
+  /** Age of the last recorded walk, or null when there is no marker. */
+  ageMs: number | null
+  /** Which step broke on that walk, when one did. */
+  failedStep: string | null
+  /** How long the walk took, for the latency graph. */
+  walkMs: number | null
+  /** Whether it cleaned up after itself. */
+  reapedCleanly: boolean | null
+  /** The age past which a walk stops counting as evidence. */
+  staleAfterMs: number
+}
+
+/**
+ * How old the last successful walk may be before this reds.
+ *
+ * Two hours against an hourly schedule — one missed run is tolerated, two are
+ * not. A canary that runs hourly and reds at 61 minutes would page on every
+ * GitHub Actions queue delay, and an alarm that cries wolf on infrastructure
+ * latency is one nobody reads by the time signup actually breaks. Two misses
+ * is a pattern rather than a hiccup.
+ *
+ * This is deliberately NOT generous enough to sleep through AGL-2581: three
+ * days of refused signups would red this inside two hours.
+ */
+export const SIGNUP_CANARY_STALE_AFTER_MS = 2 * 60 * 60 * 1000
+
+/**
+ * Grade the last recorded signup walk.
+ *
+ * Pure, like every sibling: the route reads the marker, this decides. Ordered
+ * by which mistake costs most — a missing marker is treated as failure, never
+ * as calm, because "no evidence" and "evidence of success" are the two
+ * readings this whole issue exists to stop anyone from confusing.
+ */
+export function signupCanaryHealth(
+  marker: SignupCanaryMarker | null,
+  ms: number,
+  nowMs: number = Date.now(),
+  staleAfterMs: number = SIGNUP_CANARY_STALE_AFTER_MS,
+): SignupCanaryCheck {
+  const base: Omit<SignupCanaryCheck, 'ok' | 'code'> = {
+    ms,
+    ageMs: null,
+    failedStep: null,
+    walkMs: null,
+    reapedCleanly: null,
+    staleAfterMs,
+  }
+  // No marker at all, or a store that would not answer. The canary has never
+  // run, or cannot be read — either way nothing here has demonstrated that a
+  // stranger can sign up, and this check exists to say so out loud.
+  if (!marker || typeof marker.walkedAtMs !== 'number') {
+    return { ...base, ok: false, code: 'canary-unavailable' }
+  }
+  const ageMs = Math.max(0, nowMs - marker.walkedAtMs)
+  const walkMs = typeof marker.elapsedMs === 'number' ? marker.elapsedMs : null
+  const reapedCleanly =
+    typeof marker.reapedCleanly === 'boolean' ? marker.reapedCleanly : null
+  const failedStep =
+    typeof marker.failedStep === 'string' ? marker.failedStep : null
+  const carried = { ...base, ageMs, walkMs, reapedCleanly, failedStep }
+
+  // A stale PASS is not a pass. The walk that succeeded two hours ago says
+  // nothing about the door now, and the whole point of a canary is currency.
+  // Checked before the verdict so a stale failure reports as stale rather
+  // than as a failure that may since have healed.
+  if (ageMs > staleAfterMs) {
+    return { ...carried, ok: false, code: 'canary-stale' }
+  }
+  if (marker.ok !== true) {
+    return { ...carried, ok: false, code: 'signup-walk-failed' }
+  }
+  // Walked fine, did not clean up. Red anyway — see the docblock.
+  if (reapedCleanly === false) {
+    return { ...carried, ok: false, code: 'canary-left-residue' }
+  }
+  return { ...carried, ok: true }
+}

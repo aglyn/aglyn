@@ -45,6 +45,10 @@ import {
   MAX_SERVER_ERRORS_PER_WINDOW,
   SERVER_ERROR_WINDOW_MINUTES,
   serverErrorsHealth,
+  signupCanaryHealth,
+  SIGNUP_CANARY_STALE_AFTER_MS,
+
+  type SignupCanaryMarker,
 } from './health-report'
 
 const OK = { ok: true, ms: 12 }
@@ -1843,5 +1847,149 @@ describe('serverErrorsHealth (AGL-1921)', () => {
     expect(forced.ok).toBe(false)
     expect(forced.code).toBe('server-error-spike')
     expect(forced.threshold).toBe(-1)
+  })
+})
+
+
+/**
+ * AGL-2715 — the only check on this platform that reports a DEMONSTRATION.
+ *
+ * Ordered by which mistake costs most. Reporting "no evidence" as calm is the
+ * failure this whole check exists to prevent — it is the shape of AGL-2581,
+ * where the monitor named for signups stayed green through three days of
+ * every account being refused.
+ */
+describe('signupCanaryHealth (AGL-2715)', () => {
+  const NOW = 1_788_000_000_000
+  const ok = (
+    over: Partial<SignupCanaryMarker> = {},
+  ): SignupCanaryMarker => ({
+    walkedAtMs: NOW - 60_000,
+    ok: true,
+    failedStep: null,
+    elapsedMs: 4_200,
+    reapedCleanly: true,
+    ...over,
+  })
+
+  it('NO MARKER is a failure, never calm — "no evidence" is not "evidence"', () => {
+    const check = signupCanaryHealth(null, 3, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('canary-unavailable')
+    expect(check.ageMs).toBeNull()
+  })
+
+  it('a marker with no timestamp is unavailable too', () => {
+    // A half-written document is not a walk. Reading its `ok: true` and
+    // reporting green would trust a record nothing finished writing.
+    const check = signupCanaryHealth({ ok: true } as never, 3, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('canary-unavailable')
+  })
+
+  it('a fresh successful walk is the green case', () => {
+    const check = signupCanaryHealth(ok(), 3, NOW)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.ageMs).toBe(60_000)
+    expect(check.walkMs).toBe(4_200)
+    expect(check.reapedCleanly).toBe(true)
+  })
+
+  it('a failed walk reds and names the step that broke', () => {
+    const check = signupCanaryHealth(
+      ok({ ok: false, failedStep: 'org-create' }),
+      3,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('signup-walk-failed')
+    expect(check.failedStep).toBe('org-create')
+  })
+
+  it('a STALE pass is not a pass', () => {
+    // The walk that worked two hours ago says nothing about the door now.
+    const check = signupCanaryHealth(
+      ok({ walkedAtMs: NOW - SIGNUP_CANARY_STALE_AFTER_MS - 1 }),
+      3,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('canary-stale')
+  })
+
+  it('reds at exactly one tick past the window, and not at the window', () => {
+    const atEdge = signupCanaryHealth(
+      ok({ walkedAtMs: NOW - SIGNUP_CANARY_STALE_AFTER_MS }),
+      3,
+      NOW,
+    )
+    expect(atEdge.ok).toBe(true)
+    const pastEdge = signupCanaryHealth(
+      ok({ walkedAtMs: NOW - SIGNUP_CANARY_STALE_AFTER_MS - 1 }),
+      3,
+      NOW,
+    )
+    expect(pastEdge.ok).toBe(false)
+  })
+
+  it('staleness outranks failure, so a stale red reports as stale', () => {
+    // Otherwise an old failure looks like a live one and sends the first
+    // responder after a door that may have healed hours ago.
+    const check = signupCanaryHealth(
+      ok({ ok: false, failedStep: 'session', walkedAtMs: NOW - 10 * 60 * 60 * 1000 }),
+      3,
+      NOW,
+    )
+    expect(check.code).toBe('canary-stale')
+  })
+
+  it('a perfect walk that left residue is RED', () => {
+    /**
+     * Signup worked; the canary did not clean up. Green here would mean a
+     * monitor that fills the production estate it is monitoring — a real org,
+     * slug reservation and host every hour, forever.
+     */
+    const check = signupCanaryHealth(ok({ reapedCleanly: false }), 3, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('canary-left-residue')
+    // and it does not pretend the signup itself failed
+    expect(check.failedStep).toBeNull()
+  })
+
+  it('an unknown reap outcome does not red on its own', () => {
+    // `undefined` is an older marker shape, not a claim of residue. Treating
+    // absence as failure would red every deploy that predates the field.
+    const check = signupCanaryHealth(ok({ reapedCleanly: undefined }), 3, NOW)
+    expect(check.ok).toBe(true)
+    expect(check.reapedCleanly).toBeNull()
+  })
+
+  it('a walk stamped in the FUTURE cannot buy freshness forever', () => {
+    // A clock skew or a hand-edited marker must not mint permanent green.
+    // Age floors at 0, so a future stamp reads as fresh — and that is the one
+    // case where the marker's own `ok` is all that is left holding the line.
+    const check = signupCanaryHealth(ok({ walkedAtMs: NOW + 86_400_000, ok: false }), 3, NOW)
+    expect(check.ageMs).toBe(0)
+    expect(check.ok).toBe(false)
+  })
+
+  it('the staleness window tolerates one missed hourly run, not two', () => {
+    // Pinned to the VALUE. The cases around this one take the window
+    // symbolically and so would pass at any window at all, including a week.
+    expect(SIGNUP_CANARY_STALE_AFTER_MS).toBe(2 * 60 * 60 * 1000)
+  })
+
+  it('publishes counts and codes only — no uid, no email, no org', () => {
+    const check = signupCanaryHealth(ok(), 3, NOW)
+    expect(Object.keys(check).sort()).toEqual([
+      'ageMs',
+      'failedStep',
+      'ms',
+      'ok',
+      'reapedCleanly',
+      'staleAfterMs',
+      'walkMs',
+    ])
   })
 })
