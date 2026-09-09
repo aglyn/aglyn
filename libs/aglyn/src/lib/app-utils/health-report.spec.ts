@@ -1519,87 +1519,153 @@ describe('signupRefusalsHealth (AGL-1907)', () => {
  * whole reason this exists, and paging on a quiet night is what would get it
  * muted before it ever fired for real.
  */
-describe('signupDroughtHealth (AGL-2583)', () => {
+describe('signupDroughtHealth (AGL-2583, denominator re-cut by AGL-2714)', () => {
   const NOW = 1_755_100_800_000
   const served = (serves: number) => [{ serves, servedAtMs: NOW }]
+  const tried = (attempts: number) => [{ attempts, attemptedAtMs: NOW }]
 
-  it('REDS when the signup page was served and no account was created', () => {
-    // The AGL-2581 hour, exactly: people arrived, `beforeUserCreated` refused
-    // every one of them, and the org count stayed at zero.
-    const check = signupDroughtHealth(served(40), 0, 7)
+  it('REDS when people asked for an org and not one was created', () => {
+    // The AGL-2581 hour, exactly: people arrived, every creation was refused,
+    // and the org count stayed at zero.
+    const check = signupDroughtHealth(served(40), tried(40), 0, 7)
     expect(check.ok).toBe(false)
     expect(check.code).toBe('signup-drought')
-    expect(check.signupPagesServed).toBe(40)
+    expect(check.signupAttempts).toBe(40)
     expect(check.orgCreations).toBe(0)
   })
 
-  it('reds at exactly the traffic floor, not merely past it', () => {
+  it('a busy page with NOBODY trying is not an outage (AGL-2714)', () => {
+    // The false page of 2026-09-09. Six hits on the signup page — crawlers, a
+    // reader who closed the tab, and the diagnostic load made while
+    // investigating the alert — and not one person submitted the form. Under
+    // the old serves denominator this reported the service down while every
+    // door was verified open.
+    const check = signupDroughtHealth(served(6), tried(0), 0, 7)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    // Serves are still reported, because "was anybody even looking" is the
+    // second question an on-call person asks.
+    expect(check.signupPagesServed).toBe(6)
+    expect(check.signupAttempts).toBe(0)
+  })
+
+  it('the floor is 3 attempts, and moving it is an argument (AGL-2714)', () => {
+    /**
+     * Pinned to the VALUE, not to the constant. The cases around this one
+     * take the floor symbolically so they keep testing the boundary wherever
+     * it sits — which means they pass at any floor at all, including the ones
+     * that would make this check useless.
+     *
+     * Two of those, named so a future edit has to answer them:
+     *
+     *  - **1** pages on a single abandoned attempt. A browser can lose a
+     *    request and a person can walk away between authenticating and the
+     *    org write, so one is noise wearing an outage's clothes — the same
+     *    mistake in a different unit as the serves denominator this replaced.
+     *  - **10** waits for ten failures. At a handful of signups a week that
+     *    is days, and a door that stopped opening has to be caught inside the
+     *    hour or the check has no reason to exist.
+     */
+    expect(MIN_SIGNUP_TRAFFIC_FOR_DROUGHT).toBe(3)
+
+    // And the floor means attempts, not serves: a thousand lookers with two
+    // people trying is still under it.
+    expect(signupDroughtHealth(served(1_000), tried(2), 0, 7).ok).toBe(true)
+    expect(signupDroughtHealth(served(0), tried(3), 0, 7).ok).toBe(false)
+  })
+
+  it('reds at exactly the attempt floor, not merely past it', () => {
     const atFloor = signupDroughtHealth(
-      served(MIN_SIGNUP_TRAFFIC_FOR_DROUGHT),
+      served(99),
+      tried(MIN_SIGNUP_TRAFFIC_FOR_DROUGHT),
       0,
       7,
     )
     expect(atFloor.ok).toBe(false)
 
     const underFloor = signupDroughtHealth(
-      served(MIN_SIGNUP_TRAFFIC_FOR_DROUGHT - 1),
+      served(99),
+      tried(MIN_SIGNUP_TRAFFIC_FOR_DROUGHT - 1),
       0,
       7,
     )
     expect(underFloor.ok).toBe(true)
   })
 
-  it('a quiet night is NOT an outage — zero traffic, zero accounts, green', () => {
+  it('a quiet night is NOT an outage — no traffic, no attempts, green', () => {
     // The false positive that would get this muted. Nobody came, nobody
     // signed up, nothing is wrong.
-    const check = signupDroughtHealth([], 0, 7)
+    const check = signupDroughtHealth([], [], 0, 7)
     expect(check.ok).toBe(true)
     expect(check.code).toBeUndefined()
     expect(check.signupPagesServed).toBe(0)
+    expect(check.signupAttempts).toBe(0)
   })
 
-  it('one account created clears it, however much traffic there was', () => {
+  it('one account created clears it, however many attempts there were', () => {
     // The verdict is "not one of them", not a conversion rate. This check
     // must never become a marketing metric that pages an engineer.
-    const check = signupDroughtHealth(served(5_000), 1, 7)
+    const check = signupDroughtHealth(served(5_000), tried(5_000), 1, 7)
     expect(check.ok).toBe(true)
   })
 
-  it('sums serves across the minute buckets in the window', () => {
+  it('sums attempts across the minute buckets in the window', () => {
     const check = signupDroughtHealth(
+      served(9),
       [
-        { serves: 2, servedAtMs: NOW },
-        { serves: 2, servedAtMs: NOW - 60_000 },
-        { serves: 1, servedAtMs: NOW - 120_000 },
+        { attempts: 2, attemptedAtMs: NOW },
+        { attempts: 1, attemptedAtMs: NOW - 60_000 },
+        { attempts: 1, attemptedAtMs: NOW - 120_000 },
       ],
       0,
       7,
     )
-    expect(check.signupPagesServed).toBe(5)
+    expect(check.signupAttempts).toBe(4)
     expect(check.ok).toBe(false)
   })
 
-  it('a corrupt serve count cannot become NaN and mute the alarm', () => {
+  it('a corrupt attempt count cannot become NaN and mute the alarm', () => {
     // NaN compares false against every threshold, which would report calm
     // forever — the same trap the refusal verdict guards against.
     const check = signupDroughtHealth(
-      [{ serves: 'lots' as unknown as number, servedAtMs: NOW }, { serves: 9 }],
+      served(9),
+      [
+        { attempts: 'lots' as unknown as number, attemptedAtMs: NOW },
+        { attempts: 9 },
+      ],
       0,
       7,
     )
-    expect(check.signupPagesServed).toBe(9)
+    expect(check.signupAttempts).toBe(9)
     expect(check.ok).toBe(false)
   })
 
-  it('an unreadable denominator is degraded, never calm', () => {
-    const check = signupDroughtHealth(null, 0, 7)
+  it('an unreadable ATTEMPT denominator is degraded, never calm', () => {
+    const check = signupDroughtHealth(served(6), null, 0, 7)
     expect(check.ok).toBe(false)
     expect(check.code).toBe('traffic-unavailable')
+    expect(check.signupAttempts).toBeNull()
+    // Serves are context and survive the failure of the thing beside them.
+    expect(check.signupPagesServed).toBe(6)
+  })
+
+  it('unreadable SERVES alone decide nothing — context, not verdict', () => {
+    // Serves stopped being the denominator, so losing them must not turn a
+    // healthy hour degraded. Only the attempt read can do that.
+    const check = signupDroughtHealth(null, tried(0), 0, 7)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
     expect(check.signupPagesServed).toBeNull()
   })
 
+  it('and unreadable serves still cannot HIDE a drought', () => {
+    const check = signupDroughtHealth(null, tried(40), 0, 7)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('signup-drought')
+  })
+
   it('an unreadable numerator is degraded too', () => {
-    const check = signupDroughtHealth(served(40), null, 7)
+    const check = signupDroughtHealth(served(40), tried(40), null, 7)
     expect(check.ok).toBe(false)
     expect(check.code).toBe('count-unavailable')
     expect(check.orgCreations).toBeNull()
@@ -1609,14 +1675,14 @@ describe('signupDroughtHealth (AGL-2583)', () => {
     // The documented synthetic failure. Every hour with no creations is a
     // drought under a floor of zero, so the deployed alert can be proven
     // without breaking signup for a single visitor.
-    const check = signupDroughtHealth([], 0, 7, 0)
+    const check = signupDroughtHealth([], [], 0, 7, 0)
     expect(check.ok).toBe(false)
     expect(check.code).toBe('signup-drought')
     expect(check.minimumTraffic).toBe(0)
   })
 
   it('describes its own window, and exposes counts only', () => {
-    const check = signupDroughtHealth(served(6), 0, 7)
+    const check = signupDroughtHealth(served(6), tried(6), 0, 7)
     expect(check.windowMinutes).toBe(SIGNUP_DROUGHT_WINDOW_MINUTES)
     expect(Object.keys(check).sort()).toEqual([
       'code',
@@ -1624,6 +1690,7 @@ describe('signupDroughtHealth (AGL-2583)', () => {
       'ms',
       'ok',
       'orgCreations',
+      'signupAttempts',
       'signupPagesServed',
       'windowMinutes',
     ])

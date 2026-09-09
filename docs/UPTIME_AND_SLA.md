@@ -2437,20 +2437,39 @@ working with no reconfiguration. Repointing it at the new path is tidier and
 optional; the GitHub probe watches BOTH, so the compatibility path is
 continuously exercised rather than merely tolerated.
 
-### The drought: zero accounts WHILE people were arriving
+### The drought: zero accounts WHILE people were TRYING
 
 Zero is meaningless without a denominator — a quiet Tuesday night and a total
-outage produce the same number. `signupDrought` reds when the signup page was
-served at least `MIN_SIGNUP_TRAFFIC_FOR_DROUGHT` times (5) in the trailing hour
-and **not one account came out of it**.
+outage produce the same number. `signupDrought` reds when at least
+`MIN_SIGNUP_TRAFFIC_FOR_DROUGHT` attempts (3) to create an org arrived in the
+trailing hour and **not one account came out of it**.
 
-**Where the denominator comes from.** The signup page fetches
-`/api/lockdown-status?feature=signups` once per render to decide whether to
-show the paused notice, so that route is the one server touch every real
-arrival makes. It increments a `rateLimits/signupServed_{minute}` marker —
-coalesced in process to at most one write per instance per five seconds,
-carrying a count and a timestamp and nothing else. No visitor, no IP, no
-referrer; the health body that reads it is public.
+**Where the denominator comes from.** `/api/orgs/create` increments a
+`rateLimits/signupAttempted_{minute}` marker at the top of the handler — after
+the caller is known to be a real authenticated session, before every refusal
+below it — so the marker means "somebody asked for an org" whatever the answer
+turns out to be. A count and a timestamp and nothing else. No visitor, no IP,
+no referrer; the health body that reads it is public.
+
+Writing it BEFORE the outcome is what makes this stronger than the refusal
+check beside it: `signupRefusals` counts what the route chose to turn away, so
+a request that 500s, hangs, or dies in the platform between the limiter and
+the write leaves no refusal at all — and leaves an attempt with no org.
+
+> **It used to count page SERVES, and that was wrong (AGL-2714).** The
+> denominator was a hit on `/api/lockdown-status?feature=signups`, which the
+> signup page fetches on every render — so it counted lookers: crawlers, link
+> previews, a reader who closed the tab. On 2026-09-09 it paged "Signups is
+> down" on an hour with six such hits and no account, while the signup page
+> rendered clean, the lockdown was off, all seven auth doors were green and
+> not one signup had been refused. One of the six hits was the diagnostic page
+> load made while investigating the alert. At this platform's conversion rate
+> a quiet hour and a broken door produced the same reading, so no threshold on
+> serves could separate them — the quantity was wrong, not the number.
+>
+> Serves are still read and still reported as `signupPagesServed`, as context.
+> They cost nothing extra and they answer the second question an on-call
+> person asks: was anybody even looking.
 
 **Deliberately not GA4**, despite the numbers being there. Its API needs a
 service account and an OAuth round trip from a public health route, its data

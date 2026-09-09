@@ -53,6 +53,7 @@ const mockCountGet = jest.fn()
 const mockRefusalGet = jest.fn()
 /** AGL-2583 signup-page serve markers — the drought denominator. */
 const mockServedGet = jest.fn()
+const mockAttemptGet = jest.fn()
 const queries: {
   collection: string
   field: string
@@ -69,6 +70,13 @@ const refusalQueries: {
 }[] = []
 /** AGL-2583 serve listings, kept apart for the same reason. */
 const servedQueries: {
+  collection: string
+  field: string
+  op: string
+  cutoffMs: number
+  limit: number
+}[] = []
+const attemptQueries: {
   collection: string
   field: string
   op: string
@@ -117,6 +125,10 @@ jest.mock('firebase-admin/firestore', () => ({
                 servedQueries.push(record)
                 return mockServedGet()
               }
+              if (field === 'attemptedAtMs') {
+                attemptQueries.push(record)
+                return mockAttemptGet()
+              }
               refusalQueries.push(record)
               return mockRefusalGet()
             },
@@ -134,6 +146,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   RATE_LIMIT_COLLECTION: 'rateLimits',
   SIGNUP_REFUSAL_DOC_PREFIX: 'signupRefused_',
   SIGNUP_SERVED_DOC_PREFIX: 'signupServed_',
+  SIGNUP_ATTEMPT_DOC_PREFIX: 'signupAttempted_',
 }))
 
 /** A refusal marker as Firestore hands it back. */
@@ -152,6 +165,14 @@ const serveMarker = (id: string, serves: number) => ({
 
 const servesOf = (...docs: unknown[]) => async () => ({ docs })
 
+/** An org-creation attempt marker as Firestore hands it back (AGL-2714). */
+const attemptMarker = (id: string, attempts: number) => ({
+  id,
+  data: () => ({ attempts, attemptedAtMs: Date.now() - 60_000 }),
+})
+
+const attemptsOf = (...docs: unknown[]) => async () => ({ docs })
+
 type RouteModule = typeof import('../app/api/health/signup-volume/route')
 
 async function freshRoute(): Promise<RouteModule> {
@@ -165,15 +186,18 @@ beforeEach(() => {
   mockCountGet.mockReset()
   mockRefusalGet.mockReset()
   mockServedGet.mockReset()
+  mockAttemptGet.mockReset()
   // A quiet hour is the default so every AGL-1536 test below reads the
   // verdict it was written for.
   mockRefusalGet.mockImplementation(refusalsOf())
   // No signup traffic by default, so the AGL-2583 drought check stays green
   // and cannot turn an unrelated test red for its own reasons.
   mockServedGet.mockImplementation(servesOf())
+  mockAttemptGet.mockImplementation(attemptsOf())
   queries.length = 0
   refusalQueries.length = 0
   servedQueries.length = 0
+  attemptQueries.length = 0
   delete process.env['SIGNUP_ALARM_MAX_PER_HOUR']
   delete process.env['SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR']
   delete process.env['SIGNUP_DROUGHT_MIN_TRAFFIC']
@@ -471,14 +495,21 @@ describe('AGL-1907 · /api/health/signup-volume reports REFUSED creations too', 
  * drought reaches the status code monitors actually read.
  */
 describe('AGL-2583 · the drought — traffic arrived and nobody got an account', () => {
-  it('REDS when the signup page was served and zero orgs were created', async () => {
+  it('REDS when people asked for an org and zero were created', async () => {
     // The AGL-2581 hour. The wave check is perfectly green in this state —
-    // that is the whole reason this one had to be built.
+    // that is the whole reason this one had to be built. The denominator is
+    // ATTEMPTS since AGL-2714; serves ride along as context.
     mockCountGet.mockImplementation(countOf(0))
     mockServedGet.mockImplementation(
       servesOf(
         serveMarker('signupServed_2', 30),
         serveMarker('signupServed_1', 12),
+      ),
+    )
+    mockAttemptGet.mockImplementation(
+      attemptsOf(
+        attemptMarker('signupAttempted_2', 30),
+        attemptMarker('signupAttempted_1', 12),
       ),
     )
     const response = await (await freshRoute()).GET()
@@ -489,6 +520,7 @@ describe('AGL-2583 · the drought — traffic arrived and nobody got an account'
       ok: false,
       code: 'signup-drought',
       signupPagesServed: 42,
+      signupAttempts: 42,
       orgCreations: 0,
     })
     // The point, stated as an assertion: the check named for signups is
@@ -543,17 +575,30 @@ describe('AGL-2583 · the drought — traffic arrived and nobody got an account'
     expect((await response.json()).checks.signupDrought.signupPagesServed).toBe(2)
   })
 
-  it('a failed traffic query is a 503, never calm — and leaks no error detail', async () => {
+  it('a failed ATTEMPT query is a 503, never calm — and leaks no error detail', async () => {
     mockCountGet.mockImplementation(countOf(0))
-    mockServedGet.mockRejectedValue(
+    mockAttemptGet.mockRejectedValue(
       new Error('7 PERMISSION_DENIED: projects/aglyn-main/rateLimits'),
     )
     const response = await (await freshRoute()).GET()
     expect(response.status).toBe(503)
     const body = await response.json()
     expect(body.checks.signupDrought.code).toBe('traffic-unavailable')
-    expect(body.checks.signupDrought.signupPagesServed).toBeNull()
+    expect(body.checks.signupDrought.signupAttempts).toBeNull()
     expect(JSON.stringify(body)).not.toContain('PERMISSION_DENIED')
+  })
+
+  it('a failed SERVE query alone stays calm — context, not verdict (AGL-2714)', async () => {
+    // Serves stopped deciding anything, so losing them must not manufacture a
+    // degraded reading on an hour when nobody was even trying.
+    mockCountGet.mockImplementation(countOf(0))
+    mockServedGet.mockRejectedValue(new Error('7 PERMISSION_DENIED'))
+    mockAttemptGet.mockImplementation(attemptsOf())
+    const response = await (await freshRoute()).GET()
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.checks.signupDrought.ok).toBe(true)
+    expect(body.checks.signupDrought.signupPagesServed).toBeNull()
   })
 
   it('SIGNUP_DROUGHT_MIN_TRAFFIC=0 forces the red — the alert-path lever', async () => {
@@ -576,7 +621,9 @@ describe('AGL-2583 · the drought — traffic arrived and nobody got an account'
     mockCountGet.mockImplementation(countOf(0))
     const response = await (await freshRoute()).GET()
     expect(response.status).toBe(200)
-    expect((await response.json()).checks.signupDrought.minimumTraffic).toBe(5)
+    // 3, in ATTEMPTS, since AGL-2714 — it was 5 while the floor was counted
+    // in signup-page serves, and the unit changing is why the number did.
+    expect((await response.json()).checks.signupDrought.minimumTraffic).toBe(3)
   })
 
   it('spends ONE org count on both verdicts, not two', async () => {
@@ -595,12 +642,16 @@ describe('AGL-2583 · the drought — traffic arrived and nobody got an account'
   it('publishes counts only — no visitor, no IP, no referrer', async () => {
     mockCountGet.mockImplementation(countOf(1))
     mockServedGet.mockImplementation(servesOf(serveMarker('signupServed_1', 3)))
+    mockAttemptGet.mockImplementation(
+      attemptsOf(attemptMarker('signupAttempted_1', 3)),
+    )
     const body = await (await (await freshRoute()).GET()).json()
     expect(Object.keys(body.checks.signupDrought).sort()).toEqual([
       'minimumTraffic',
       'ms',
       'ok',
       'orgCreations',
+      'signupAttempts',
       'signupPagesServed',
       'windowMinutes',
     ])
@@ -636,6 +687,9 @@ describe('AGL-2583 · the old /api/health/signups path still answers', () => {
   it('goes RED with the renamed route — a working alias, not a green stub', async () => {
     mockCountGet.mockImplementation(countOf(0))
     mockServedGet.mockImplementation(servesOf(serveMarker('signupServed_1', 50)))
+    mockAttemptGet.mockImplementation(
+      attemptsOf(attemptMarker('signupAttempted_1', 50)),
+    )
     jest.resetModules()
     const alias = await import('../app/api/health/signups/route')
     const response = await alias.GET()

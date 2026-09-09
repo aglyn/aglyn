@@ -35,9 +35,10 @@
  *  - `signupVolume` — too MANY creations (AGL-1536), the abuse wave.
  *  - `signupRefusals` — refusals, and any fail-closed `unreadable` one
  *    (AGL-1907, AGL-2583).
- *  - `signupDrought` — traffic arrived at the signup page and NOT ONE
- *    account came out of it (AGL-2583). This is the one that would have
- *    caught AGL-2581 on its first hour.
+ *  - `signupDrought` — people ASKED for an org and NOT ONE came out of it
+ *    (AGL-2583; denominator re-cut from page serves to attempts by
+ *    AGL-2714). This is the one that would have caught AGL-2581 on its
+ *    first hour.
  *
  * ## Below: the wave check, as it was
  *
@@ -75,6 +76,7 @@ import {
   firebaseAdmin,
   RATE_LIMIT_COLLECTION,
   SIGNUP_REFUSAL_DOC_PREFIX,
+  SIGNUP_ATTEMPT_DOC_PREFIX,
   SIGNUP_SERVED_DOC_PREFIX,
 } from '@aglyn/tenant-data-admin'
 import {
@@ -96,6 +98,7 @@ import {
   type SignupDroughtCheck,
   type SignupRefusalMarker,
   type SignupRefusalsCheck,
+  type SignupAttemptMarker,
   type SignupServedMarker,
   type SignupsCheck,
 } from '@aglyn/aglyn/server'
@@ -305,13 +308,60 @@ const servedProbe = memoizeWithTtl<{
   }
 })
 
+/**
+ * Org-creation attempts in the trailing hour — the drought DENOMINATOR
+ * (AGL-2714).
+ *
+ * Serves used to be this number and are now context beside it: they count
+ * every rendering of a public page, so an hour of ordinary browsing read
+ * identically to a door that would not open. An attempt is somebody who
+ * authenticated, filled the form and asked for an org, which is a statement
+ * about the door rather than about demand.
+ *
+ * The same index-free shape as its siblings: a range on ONE field ordered by
+ * the same field, served by the automatic single-field index. `attemptedAtMs`
+ * exists only on attempt markers, so this query cannot pick up a live counter,
+ * a degradation marker, a refusal marker, a serve marker or a server-error
+ * marker — and none of their range queries can pick up these.
+ */
+const attemptsProbe = memoizeWithTtl<{
+  markers: SignupAttemptMarker[] | null
+  ms: number
+}>(PROBE_TTL_MS, async () => {
+  const startedAt = Date.now()
+  try {
+    void firebaseAdmin
+    const db = getFirestore(getApp())
+    const cutoff = Date.now() - SIGNUP_DROUGHT_WINDOW_MINUTES * 60_000
+    const snapshot = await db
+      .collection(RATE_LIMIT_COLLECTION)
+      .where('attemptedAtMs', '>=', cutoff)
+      .orderBy('attemptedAtMs', 'desc')
+      .limit(SERVED_MARKER_READ_LIMIT)
+      .get()
+    const markers: SignupAttemptMarker[] = snapshot.docs
+      .filter((doc: { id: string }) =>
+        doc.id.startsWith(SIGNUP_ATTEMPT_DOC_PREFIX),
+      )
+      .map((doc: { data: () => SignupAttemptMarker }) => doc.data())
+    return { markers, ms: Date.now() - startedAt }
+  } catch {
+    // Null markers are degraded by contract (`traffic-unavailable`), the same
+    // rule the serve probe follows: with no denominator this check has no
+    // opinion, and a check with no opinion must not spend it saying
+    // everything is fine.
+    return { markers: null, ms: Date.now() - startedAt }
+  }
+})
+
 export async function GET(): Promise<Response> {
   // Every probe in parallel — each memoizes independently, so a warm one
   // costs nothing and the endpoint's worst case stays one round trip.
-  const [orgCreations, signupRefusals, served] = await Promise.all([
+  const [orgCreations, signupRefusals, served, attempts] = await Promise.all([
     orgCreationsProbe(),
     refusalsProbe(),
     servedProbe(),
+    attemptsProbe(),
   ])
   const signupVolume: SignupsCheck = signupsHealth(
     orgCreations.count,
@@ -320,8 +370,11 @@ export async function GET(): Promise<Response> {
   )
   const signupDrought: SignupDroughtCheck = signupDroughtHealth(
     served.markers,
+    attempts.markers,
     orgCreations.count,
-    served.ms,
+    // The slower of the two reads, so the reported cost is the one the
+    // endpoint actually waited for rather than whichever finished first.
+    Math.max(served.ms, attempts.ms),
     configuredMinimumTraffic(),
   )
   const checks = { signupVolume, signupRefusals, signupDrought }

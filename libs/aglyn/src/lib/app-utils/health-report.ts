@@ -759,21 +759,45 @@ export function signupRefusalsHealth(
  * mutes. What makes zero mean something is TRAFFIC: people arrived at the
  * signup page and none of them ended up with an account.
  *
- * The denominator is counted first-party, from `signupServed_` markers the
- * console writes when the signup page asks `/api/lockdown-status?feature=
- * signups` — the one server request every rendering of that page makes. Not
- * GA4: its API needs a service account and an OAuth round trip from a public
- * health route, its data lands with hours of latency, and a monitor that
- * depends on an analytics vendor is a monitor that reports an outage every
- * time that vendor has one. The markers are in the store this route family
- * already reads, cost one increment per instance per five seconds, and are
- * counted by exactly the same range query shape as its siblings.
+ * ## The denominator is ATTEMPTS, and was once SERVES (AGL-2714)
  *
- * The denominator UNDER-counts on purpose and that is the safe direction:
- * the lockdown answer is edge-cacheable for a minute, so a burst of visitors
- * behind one CDN node can land as a single origin hit. Under-counting can
- * only make this check quieter, never louder — it cannot invent traffic that
- * did not happen, so it cannot invent an outage.
+ * It began as signup-page serves — `signupServed_` markers written when the
+ * page asks `/api/lockdown-status?feature=signups`, the one server request
+ * every rendering makes. That counts LOOKERS: crawlers, link previews, a
+ * person reading the plan names and closing the tab. On 2026-09-09 it paged
+ * "Signups is down" on an hour with six such hits and no account, while the
+ * signup page rendered clean, the lockdown was off, all seven auth doors were
+ * green and not one signup had been refused. One of the six was the
+ * diagnostic load made while investigating the alert.
+ *
+ * At this platform's conversion rate a quiet hour and a broken door produce
+ * the same reading, so no threshold on serves could separate them. The
+ * quantity was wrong, not the number.
+ *
+ * `signupAttempted_` markers are the right one: written at the top of
+ * `/api/orgs/create` before any outcome is known, so an attempt means
+ * somebody authenticated, filled the form and asked for an org. Arrivals with
+ * no account is then a statement about the door rather than about demand.
+ *
+ * Writing the marker BEFORE the outcome is what makes this stronger than the
+ * refusal check beside it: `signupRefusals` counts what the route chose to
+ * turn away, so a request that 500s, hangs, or dies between the limiter and
+ * the write leaves no refusal at all — and leaves an attempt with no org,
+ * which is exactly this verdict.
+ *
+ * Not GA4, for the reason it was never GA4: its API needs a service account
+ * and an OAuth round trip from a public health route, its data lands with
+ * hours of latency, and a monitor that depends on an analytics vendor is a
+ * monitor that reports an outage every time that vendor has one.
+ *
+ * The denominator UNDER-counts on purpose and that is the safe direction: a
+ * marker write is fire-and-forget and a lost one is simply not counted.
+ * Under-counting can only make this check quieter, never louder — it cannot
+ * invent attempts that did not happen, so it cannot invent an outage.
+ *
+ * Serves are still read and still reported, as CONTEXT. They cost nothing
+ * extra and they answer the second question an on-call person asks: was
+ * anybody even looking.
  *
  * Pure on purpose, like its siblings: the route counts, this decides.
  */
@@ -784,6 +808,13 @@ export interface SignupServedMarker {
   servedAtMs?: number
 }
 
+export interface SignupAttemptMarker {
+  /** Org-creation attempts merged into this minute bucket. */
+  attempts?: number
+  /** When the most recent attempt in this bucket happened. */
+  attemptedAtMs?: number
+}
+
 export interface SignupDroughtCheck extends HealthCheck {
   /**
    * Signup pages served inside the trailing window — the denominator. A
@@ -791,11 +822,21 @@ export interface SignupDroughtCheck extends HealthCheck {
    * when the query itself failed.
    */
   signupPagesServed: number | null
+  /**
+   * Org-creation attempts inside the same window — the denominator the
+   * verdict is actually taken on (AGL-2714). Null when that query failed.
+   */
+  signupAttempts: number | null
   /** Accounts (orgs) actually created in the same window. The numerator. */
   orgCreations: number | null
-  /** The trailing window both numbers cover, so the body is self-describing. */
+  /** The trailing window all three numbers cover, so the body is self-describing. */
   windowMinutes: number
-  /** Serves below which zero creations is treated as a quiet hour, not an outage. */
+  /**
+   * Attempts below which zero creations is treated as a quiet hour rather
+   * than an outage. Named `minimumTraffic` still, because it is the same
+   * question — how much has to have happened before zero means something —
+   * and renaming it would break every monitor body that reads it.
+   */
   minimumTraffic: number
 }
 
@@ -807,43 +848,63 @@ export interface SignupDroughtCheck extends HealthCheck {
 export const SIGNUP_DROUGHT_WINDOW_MINUTES = 60
 
 /**
- * Serves in the window below which zero accounts means nothing.
+ * Attempts in the window below which zero accounts means nothing.
  *
- * Five, not one. One person can open the signup page, think better of it and
- * close the tab; five doing so in an hour with not one account created is the
- * shape of a door that does not open. Calibrated against the under-counting
- * above: with the lockdown answer cacheable for a minute, five origin hits is
- * a genuine trickle of arrivals rather than a single refreshing visitor.
+ * Three, against attempts rather than the five it once meant against serves
+ * (AGL-2714). The unit changed, so the number had to be re-argued rather than
+ * carried over.
+ *
+ * Not one: a browser can lose a request, and a person can start the form and
+ * abandon it between authenticating and the org write. Not ten either — at a
+ * handful of signups a week, waiting for ten attempts to fail would mean
+ * waiting days to notice a door that stopped opening, which is the failure
+ * this check exists to catch inside an hour.
+ *
+ * Three distinct requests to create an org, none of which produced one and
+ * none of which was refused, is a door that does not open. That reading has
+ * no quiet-hour interpretation: nobody attempts three times by browsing.
  */
-export const MIN_SIGNUP_TRAFFIC_FOR_DROUGHT = 5
+export const MIN_SIGNUP_TRAFFIC_FOR_DROUGHT = 3
 
 export function signupDroughtHealth(
   markers: SignupServedMarker[] | null,
+  attemptMarkers: SignupAttemptMarker[] | null,
   orgCreations: number | null,
   ms: number,
   minimumTraffic: number = MIN_SIGNUP_TRAFFIC_FOR_DROUGHT,
   windowMinutes: number = SIGNUP_DROUGHT_WINDOW_MINUTES,
 ): SignupDroughtCheck {
-  // A failed traffic query is degraded, not ok — the same rule the siblings
+  // Serves are context, not the verdict, so they are summed wherever they are
+  // readable and reported as null when they are not — a missing context line
+  // must not decide anything on its own.
+  let signupPagesServed: number | null = null
+  if (markers !== null) {
+    signupPagesServed = 0
+    for (const marker of markers) {
+      // `Number(...) || 0` for the reason the sibling gives: a corrupt
+      // Firestore field must not turn the total into NaN, which compares
+      // false against every threshold and would report calm forever.
+      signupPagesServed += Number(marker.serves) || 0
+    }
+  }
+  // A failed ATTEMPT query is degraded, not ok — the same rule the siblings
   // follow. Without the denominator this check has no opinion at all, and a
   // check with no opinion must not spend it saying everything is fine.
-  if (markers === null) {
+  if (attemptMarkers === null) {
     return {
       ok: false,
       ms,
       code: 'traffic-unavailable',
-      signupPagesServed: null,
+      signupPagesServed,
+      signupAttempts: null,
       orgCreations,
       windowMinutes,
       minimumTraffic,
     }
   }
-  let signupPagesServed = 0
-  for (const marker of markers) {
-    // `Number(...) || 0` for the reason the sibling gives: a corrupt Firestore
-    // field must not turn the total into NaN, which compares false against
-    // every threshold and would report calm forever.
-    signupPagesServed += Number(marker.serves) || 0
+  let signupAttempts = 0
+  for (const marker of attemptMarkers) {
+    signupAttempts += Number(marker.attempts) || 0
   }
   if (orgCreations === null) {
     return {
@@ -851,18 +912,20 @@ export function signupDroughtHealth(
       ms,
       code: 'count-unavailable',
       signupPagesServed,
+      signupAttempts,
       orgCreations: null,
       windowMinutes,
       minimumTraffic,
     }
   }
-  // The whole verdict: traffic arrived and NOT ONE of them got an account.
-  const drought = signupPagesServed >= minimumTraffic && orgCreations === 0
+  // The whole verdict: people ASKED for an org and NOT ONE of them got it.
+  const drought = signupAttempts >= minimumTraffic && orgCreations === 0
   return {
     ok: !drought,
     ms,
     ...(drought ? { code: 'signup-drought' } : {}),
     signupPagesServed,
+    signupAttempts,
     orgCreations,
     windowMinutes,
     minimumTraffic,

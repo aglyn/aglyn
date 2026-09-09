@@ -34,6 +34,7 @@ import {
   lockdownRefusal,
   meterOrgEmail,
   OrgSlugTakenError,
+  recordSignupAttempt,
   recordSignupRefusal,
 } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
@@ -78,6 +79,25 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    /*
+     * The drought DENOMINATOR (AGL-2714).
+     *
+     * Counted here — after the caller is known to be a real authenticated
+     * session, before every refusal below it — so the marker means "somebody
+     * asked for an org" whatever the answer turns out to be. That span is the
+     * point: `/api/health/signup-volume` compares attempts against orgs
+     * actually created, so a request that is refused, that 500s, or that dies
+     * in the platform between here and the write all read as an attempt with
+     * no org, which is the shape of a door that does not open.
+     *
+     * It replaces signup-page SERVES, which counted every rendering of a
+     * public page and so could not tell an hour of browsing from an outage.
+     *
+     * Deliberately not awaited, like `recordSignupRefusal` below: creating
+     * the org is the control, and a monitoring breadcrumb must never be able
+     * to delay or fail it.
+     */
+    recordSignupAttempt()
     /*
      * NOBODY CLAIMS A WORKSPACE ADDRESS UNTIL THEY HAVE PROVED THE EMAIL
      * (AGL-2590).
