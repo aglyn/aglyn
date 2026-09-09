@@ -114,39 +114,42 @@ export * from './lib/components/sr-only'
 export * from './lib/contexts/confirmation.context'
 export * from './lib/contexts/loading.context'
 
+// Nineteen hooks were DELETED here, not merely un-exported (AGL-2706):
+// use-client-rect, use-debounce, use-debounced-transition,
+// use-effect-post-mount, use-element-position, use-interval,
+// use-local-storage-item-state, use-mouse-enter, use-mouse-over,
+// use-mouse-position, use-node-property, use-observer-intersection,
+// use-observer-mutation, use-observer-resize, use-on-mouse-enter,
+// use-on-mouse-over, use-tag-name, use-timeout and use-timeout-delay.
+//
+// Not one had a caller — not an app, not a plugin, not a tool — and a React
+// hook cannot be reached except by importing it, so nothing could have. The
+// AGL-2486 note that stood here for `use-observer-resize` said exactly this
+// and stopped at dropping the re-export; the rest were in the same position
+// and had been for as long.
+//
+// `useLocalStorageItemState` is the one worth naming, because it is the one
+// that was TRIED. Roughly twenty places in the console, the plugins and the
+// besigner keep a value in `localStorage` and hand-roll the same hook beside
+// it, and every one of them reads storage in a mount effect with the same
+// comment: reading during render hydrate-mismatches, because there is no
+// `localStorage` on the server. This hook seeded `useState` from storage
+// directly, which is precisely the defect they were each working around, so
+// adopting it would have been a regression. Deleted rather than widened: the
+// shape those callers actually need is a patch update over typed defaults,
+// which is not this signature, and designing a second one against no caller
+// is how the first got here.
+//
+// Deleting cost zero bytes — the barrel declares `sideEffects: false` and
+// every one of these was already tree-shaken out of both apps. What it buys
+// is that nobody adopts them by mistake.
 export * from './lib/hooks/router-events'
 export * from './lib/hooks/use-callback-param-ref'
 export * from './lib/hooks/use-async-effect'
-export * from './lib/hooks/use-client-rect'
-export * from './lib/hooks/use-debounce'
-export * from './lib/hooks/use-debounced-transition'
-export * from './lib/hooks/use-effect-post-mount'
-export * from './lib/hooks/use-element-position'
 export * from './lib/hooks/use-id'
-export * from './lib/hooks/use-observer-intersection'
-export * from './lib/hooks/use-interval'
 export * from './lib/hooks/use-isomorphic-layout-effect'
-export * from './lib/hooks/use-local-storage-item-state'
 export * from './lib/hooks/use-merge-refs'
-export * from './lib/hooks/use-mouse-enter'
-export * from './lib/hooks/use-mouse-over'
-export * from './lib/hooks/use-mouse-position'
-export * from './lib/hooks/use-observer-mutation'
-export * from './lib/hooks/use-node-property'
-export * from './lib/hooks/use-on-mouse-enter'
-export * from './lib/hooks/use-on-mouse-over'
-// use-observer-resize is NOT re-exported (AGL-2486). It has no consumers at
-// all — not in the apps, not in any plugin — so nothing can call it, and a
-// React hook cannot be reached except by importing it. Its only cost was
-// dragging `resize-observer-polyfill` into the eager graph of every
-// published customer page, for an API that has been baseline in every
-// browser since 2020. Measured at -2.3 KB gz off the barrel's transitive
-// graph. Importable by subpath if a caller ever appears — at which point
-// it should use the native ResizeObserver rather than the polyfill.
 export * from './lib/hooks/use-subscribable'
-export * from './lib/hooks/use-tag-name'
-export * from './lib/hooks/use-timeout'
-export * from './lib/hooks/use-timeout-delay'
 
 // prebuilt-components is a module-scope `<LoadingModal open />` — rendering
 // at import time is exactly the impurity the rule above exists for.
