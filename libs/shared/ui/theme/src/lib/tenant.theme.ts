@@ -232,11 +232,15 @@ export const tenantThemeDark: Theme = createResponsiveTheme({
  * keep its brand. Setting the variable to an empty string puts every host,
  * including the operator's own, on the tenant default.
  *
- * Matched on the registrable domain the `[host]` route resolves, so a preview
- * deployment — which resolves the same host document — is covered by the same
- * entry. `aglyn.app` subdomains are CUSTOMER sites and are deliberately
- * absent: a customer on a platform subdomain is still a tenant.
+ * Matched on the registrable domain, after stripping the `cname--` prefix the
+ * tenant middleware puts on a CUSTOM DOMAIN before it becomes the `[host]`
+ * route segment: the param this is handed reads `cname--example.com`, never
+ * the bare apex. A platform subdomain resolves to a bare label instead
+ * (`acme` for `acme.aglyn.app`), which correctly matches nothing — a customer
+ * on a platform subdomain is still a tenant.
  */
+const CNAME_PREFIX = 'cname--'
+
 export const PLATFORM_BRAND_HOSTS: ReadonlySet<string> = new Set(
   // Dot notation, not brackets: Next substitutes `process.env.NAME`
   // TEXTUALLY, and never the bracket form, so a bracket read is `undefined`
@@ -250,5 +254,11 @@ export const PLATFORM_BRAND_HOSTS: ReadonlySet<string> = new Set(
 )
 
 export function wearsPlatformBrand(host: string | undefined): boolean {
-  return !!host && PLATFORM_BRAND_HOSTS.has(host.trim().toLowerCase())
+  if (!host) return false
+  const normalized = host.trim().toLowerCase()
+  return PLATFORM_BRAND_HOSTS.has(
+    normalized.startsWith(CNAME_PREFIX)
+      ? normalized.slice(CNAME_PREFIX.length)
+      : normalized,
+  )
 }
