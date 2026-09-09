@@ -184,6 +184,76 @@ const PROBE_BYPASS_RULE = Object.freeze({
  * invocations, not confidentiality — so the proportionate control if it is
  * ever abused is a rate limit on this User-Agent set, not a deny.
  */
+/**
+ * The AI agent allowlist (AGL-2716).
+ *
+ * ## The finding
+ *
+ * An agent-readiness audit of `aglyn.com` on 2026-09-09 failed both of its
+ * ESSENTIAL reachability checks: GPTBot, ClaudeBot, ChatGPT-User,
+ * PerplexityBot, Google-Extended and the auditor's own `ora-agent` were all
+ * answered with a Vercel challenge. Re-measured the same day with an ordinary
+ * desktop Chrome User-Agent: `HTTP/2 429`, `x-vercel-mitigated: challenge`. So
+ * this is not an agent-specific refusal — the page challenge answers everyone
+ * — but the consequence lands almost entirely on agents, because a browser
+ * solves the challenge and a fetch tool cannot.
+ *
+ * The audit's own wording is worth keeping straight: a challenge is an
+ * identity check that a VERIFIED crawler passes, so it did not prove these
+ * agents are blocked. It proved that the unverified ones are, and that is most
+ * of them.
+ *
+ * ## Why a User-Agent match, which is the weakest condition in this table
+ *
+ * The same reason the social crawler rule beside it uses one: `bot_category`
+ * and `bot_name`, which Vercel verifies by reverse DNS rather than by a
+ * spoofable string, both answer `401 This feature requires an Advanced
+ * Project` on our plan.
+ *
+ * ## What it costs, stated plainly
+ *
+ * Anyone can send `User-Agent: ClaudeBot`. What they gain by doing so is a
+ * bypass of the bot CHALLENGE and nothing else — no auth is lifted, no
+ * endpoint is opened, and everything reachable through it is public HTML that
+ * the same person could already fetch by solving a challenge in a headless
+ * browser. The exposure is function invocations, not confidentiality.
+ *
+ * If that is ever abused, the proportionate control is a rate limit on this
+ * User-Agent set — not a deny, and not a narrowing that would put us back to
+ * being unreadable.
+ *
+ * ## Why the trainers are admitted too, and not only the live fetchers
+ *
+ * The fetchers (`ChatGPT-User`, `Claude-User`, `Perplexity-User`) act for a
+ * person asking about the site right now; refusing one only means that person
+ * gets an answer written without our words in it. The trainers and indexers
+ * (`GPTBot`, `ClaudeBot`, `Google-Extended`, …) read for a corpus, and being
+ * absent from the corpus means being absent from the answers. Both are
+ * admitted, and `robots.txt` says so in `AI_AGENT_USER_AGENTS` — the two MUST
+ * stay in step, because a site that names ClaudeBot in `robots.txt` and
+ * challenges it at the edge has published an invitation it does not honor.
+ *
+ * A per-site opt-out already exists and is the right lever for a customer who
+ * disagrees: `seo.discourageSearchEngines` turns `robots.txt` into
+ * `Disallow: /` and withholds `/llms.txt` and `/openapi.json` outright.
+ */
+const AI_AGENT_BYPASS_RULE = Object.freeze({
+  name: 'AI agent bypass',
+  why: 'an agent-readiness audit failed both essential reachability checks: every AI agent User-Agent it tried was answered with a challenge no fetch tool can solve',
+  conditions: Object.freeze([
+    Object.freeze({
+      type: 'user_agent',
+      op: 're',
+      // Kept in step with `AI_AGENT_USER_AGENTS` in
+      // `libs/aglyn/src/lib/app-utils/search-indexing.ts`, which is what
+      // `robots.txt` publishes. `check:agent-readiness` fails when the two
+      // disagree, so this is asserted rather than remembered.
+      value:
+        'GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|anthropic-ai|Google-Extended|PerplexityBot|Perplexity-User|Applebot-Extended|meta-externalagent|Amazonbot|Bytespider|CCBot|cohere-ai|DeepSeekBot|Diffbot|MistralAI-User|Omgilibot|Timpibot|YouBot|ora-agent',
+    }),
+  ]),
+})
+
 const SOCIAL_CRAWLER_BYPASS_RULE = Object.freeze({
   name: 'Social preview crawler bypass',
   why: 'a link-preview crawler cannot solve a JavaScript challenge, so a 429 checkpoint means it never reads og:image and every shared link renders bare',
@@ -400,6 +470,19 @@ export const EXPECTED_POSTURE = Object.freeze([
               '/manifest.webmanifest',
               '/api/manifest',
               '/api/collections-rss',
+              // Agent discovery (AGL-2716). Same class as the five above:
+              // public, read-only, secrets-free, and fetched by clients that
+              // are by definition not browsers able to solve a challenge.
+              //
+              // These two are named here — rather than left to the AI agent
+              // User-Agent rule — because they are what an UNNAMED agent
+              // reads first. A tool with a User-Agent nobody has heard of
+              // still gets to learn what the site is and what it serves, and
+              // both files are a few kilobytes off a five-minute cache.
+              '/llms.txt',
+              '/openapi.json',
+              '/api/llms',
+              '/api/openapi',
             ]),
           }),
         ]),
@@ -424,9 +507,31 @@ export const EXPECTED_POSTURE = Object.freeze([
         // answers an empty `<urlset>` for a section that does not exist.
         alsoRequiresGroups: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/sitemaps/' }),
+          /*
+            The LINKABLE feed path, `/{collection}/rss.xml` (AGL-2716).
+
+            `/api/collections-rss` is on the exact-path list above and has been
+            since the rule went in — but that is the REWRITE TARGET, and a WAF
+            matches the path the client asked for. So the only address anybody
+            can link to was never covered. MEASURED on production 2026-09-09:
+            `https://aglyn.com/blog/rss.xml` answered 429 Vercel Security
+            Checkpoint while `/robots.txt` and `/sitemap.xml` beside it
+            answered 200.
+
+            A feed is read by feed readers, by agents and by nothing that can
+            solve a JavaScript challenge, so this is the same class as the five
+            paths above — public, read-only, secrets-free.
+
+            A regex rather than a prefix: the collection slug is the customer's
+            own data and cannot be enumerated here, and `pre` has nothing to
+            anchor to. Anchored at the END so a page a customer publishes at
+            `/rss.xml/something` is not admitted by it.
+          */
+          Object.freeze({ type: 'path', op: 're', value: '/rss\\.xml$' }),
         ]),
       }),
       SOCIAL_CRAWLER_BYPASS_RULE,
+      AI_AGENT_BYPASS_RULE,
     ]),
   }),
   Object.freeze({
@@ -437,6 +542,10 @@ export const EXPECTED_POSTURE = Object.freeze([
     bypassRules: Object.freeze([
       PROBE_BYPASS_RULE,
       SOCIAL_CRAWLER_BYPASS_RULE,
+      // The API reference is the one surface an agent MUST be able to read to
+      // call anything (AGL-2716), so this project carries the allowlist for
+      // the same reason the tenant does.
+      AI_AGENT_BYPASS_RULE,
       Object.freeze({
         name: 'Crawler metadata bypass',
         why: 'robots.txt and sitemap.xml answered 429, so the exclusions and the URL set a crawler is meant to read were both unreachable',

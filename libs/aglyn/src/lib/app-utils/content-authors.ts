@@ -721,6 +721,24 @@ export interface HostSeoEntity {
   type?: HostEntityType | string | number
   name?: string
   logo?: string
+  /** What the publisher IS, in a sentence (AGL-2716). */
+  description?: string
+  /** The publisher's canonical address, when it is not this site. */
+  url?: string
+  /** Profiles that identify the same entity. */
+  sameAs?: string[]
+  /** Contact details, assembled into a `contactPoint` at serialization. */
+  email?: string
+  telephone?: string
+  contactType?: string
+  /** Postal address, emitted as a `PostalAddress`. */
+  address?: {
+    streetAddress?: string
+    addressLocality?: string
+    addressRegion?: string
+    postalCode?: string
+    addressCountry?: string
+  }
 }
 
 /**
@@ -858,4 +876,142 @@ export function resolveEntryAuthorName(
   authors?: readonly ContentAuthorRecord[] | null,
 ): string {
   return resolveEntryAuthor(entry, authors)?.name ?? ''
+}
+
+
+/** The site fields {@link siteEntityJsonLd} falls back to. */
+export interface SiteEntityHost {
+  $id?: string
+  displayName?: string
+  seo?: {
+    title?: string
+    description?: string
+    entity?: HostSeoEntity | null
+  } | null
+}
+
+/** The fragment identifier the site entity is published under. */
+export const SITE_ENTITY_FRAGMENT = '#organization'
+
+/**
+ * The site's publisher as a STANDALONE, fully populated `schema.org` node
+ * (AGL-2716).
+ *
+ * ## Why this exists next to {@link hostSeoEntityJsonLd}
+ *
+ * That function builds the value `publisher` takes: a `@type` and a `name`,
+ * nested inside a `WebSite` or an `Article`, gated on the author having filled
+ * in the Entity form. It is deliberately narrow, and every call site nests it.
+ *
+ * A consumer asking "who runs this site, and how do I reach them" — an AI
+ * assistant answering a contact question, a readiness audit checking whether a
+ * business is identifiable — looks for a TOP-LEVEL node of type `Organization`
+ * carrying `name`, `description`, `contactPoint` and `address`. A publisher
+ * nested two levels inside a `WebSite` answers a different question, and a
+ * publisher that is absent because nobody filled in a form answers none.
+ *
+ * So this one:
+ *
+ * - is emitted as its own `<script type="application/ld+json">`, at the top
+ *   level, where it can be found without walking into another node;
+ * - FALLS BACK to the site's own identity when the Entity form is empty, so
+ *   every site on the platform publishes a complete entity rather than only
+ *   the sites whose author found the form;
+ * - carries the contact and address fields, which are what turn "a name" into
+ *   "a business a consumer can verify".
+ *
+ * ## Why the fallback is safe
+ *
+ * It changes nothing that already exists: `hostSeoEntityJsonLd` still gates on
+ * `entity.name`, so `publisher` appears exactly where it appeared before. The
+ * fallback only decides what THIS node says, and a site's display name is its
+ * publisher's name on the overwhelming majority of sites — the two differ when
+ * a company's trading name differs from its site's, which is precisely the case
+ * the Entity form exists to express.
+ *
+ * ## `@id`
+ *
+ * Both this node and the nested `publisher` carry the same `@id` when an
+ * origin is known, so a consumer merges them into one entity instead of
+ * reading a site that names its publisher twice with different detail.
+ *
+ * Returns `undefined` only when there is no name to be had from anywhere —
+ * a host document with no entity, no display name and no SEO title.
+ */
+export function siteEntityJsonLd(
+  host: SiteEntityHost | null | undefined,
+  context?: ContentAuthorImageContext,
+): Record<string, unknown> | undefined {
+  const entity = host?.seo?.entity ?? undefined
+  const name =
+    text(entity?.name, 400) ||
+    text(host?.displayName, 400) ||
+    text(host?.seo?.title, 400)
+  if (!name) return undefined
+
+  const origin = context?.origin?.replace(/\/+$/, '') ?? ''
+  const description =
+    text(entity?.description, 800) || text(host?.seo?.description, 800)
+  const url = text(entity?.url, 800) || origin
+
+  /*
+    `sameAs` is de-duplicated and https-only, matching the author serializer:
+    a profile URL that is not fetchable teaches a consumer nothing, and the
+    same profile listed twice reads as two identities.
+  */
+  const sameAs = Array.from(
+    new Set(
+      (entity?.sameAs ?? [])
+        .map((value) => text(value, 800))
+        .filter((value) => /^https:\/\//i.test(value)),
+    ),
+  ).slice(0, AUTHOR_SAME_AS_MAX)
+
+  /*
+    A contactPoint needs something to contact. `contactType` alone is a label
+    on nothing, so the point is emitted only when an address or a number is
+    present — `schema.org` requires neither, and a consumer that finds a
+    ContactPoint with no channel has been told less than it would learn from
+    its absence.
+  */
+  const email = text(entity?.email, 320)
+  const telephone = text(entity?.telephone, 64)
+  const contactType = text(entity?.contactType, 120) || 'customer support'
+  const contactPoint =
+    email || telephone
+      ? {
+          '@type': 'ContactPoint',
+          contactType,
+          ...(email ? { email } : {}),
+          ...(telephone ? { telephone } : {}),
+        }
+      : undefined
+
+  const addressFields = {
+    streetAddress: text(entity?.address?.streetAddress, 200),
+    addressLocality: text(entity?.address?.addressLocality, 120),
+    addressRegion: text(entity?.address?.addressRegion, 120),
+    postalCode: text(entity?.address?.postalCode, 40),
+    addressCountry: text(entity?.address?.addressCountry, 120),
+  }
+  const address = Object.entries(addressFields).filter(([, value]) => value)
+  const schemaType = contentAuthorSchemaType(entity?.type)
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': schemaType,
+    ...(origin ? { '@id': `${origin}/${SITE_ENTITY_FRAGMENT}` } : {}),
+    name,
+    ...(description ? { description } : {}),
+    ...(url ? { url } : {}),
+    // `logo` for an Organization, `image` for a Person — the one field whose
+    // KEY the branch changes. Shared with the nested publisher so the two
+    // nodes cannot describe the same entity with different pictures.
+    ...hostSeoEntityImageJsonLd(entity, context),
+    ...(sameAs.length ? { sameAs } : {}),
+    ...(contactPoint ? { contactPoint } : {}),
+    ...(address.length
+      ? { address: { '@type': 'PostalAddress', ...Object.fromEntries(address) } }
+      : {}),
+  }
 }

@@ -161,6 +161,7 @@
     "check:stripe-dunning-drift": "node tools/scripts/check-stripe-dunning-drift.mjs",
     "check:upload-cors": "node tools/scripts/check-upload-cors.mjs",
     "check:firewall-posture": "node tools/scripts/check-firewall-posture.mjs",
+    "check:agent-readiness": "node tools/scripts/check-agent-readiness.mjs",
     "check:render-errors": "node tools/scripts/check-render-errors.mjs",
     "check:env-isolation": "node tools/deploy/verify-env-isolation.mjs",
     "check:standalone-installs": "node tools/scripts/check-standalone-installs.mjs",

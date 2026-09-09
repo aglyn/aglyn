@@ -677,6 +677,22 @@ function withAglyn(nextConfig = {}) {
    * @returns WithAglynOptions
    **/
   const handleUserConfig = (userConfig = {}) => {
+    /*
+      CAPTURED BEFORE THE MERGE, because the merge cannot preserve it
+      (AGL-2716).
+
+      `deepFillIn` fills MISSING keys and MUTATES its first argument, so
+      `merged.headers` is always `AGLYN_CONFIG.headers` — the base config
+      already defines that key, so an app's own function loses. The
+      `headers()` below then read `merged.headers`, found the base function,
+      and returned the base rules TWICE while silently discarding the app's.
+
+      MEASURED: a rule added to `apps/tenant/next.config.js` produced no header
+      on any response, and neither did a probe header beside it. Nothing
+      errored — an app-level `headers()` was simply inert, and had been for as
+      long as this wrapper has existed.
+    */
+    const userHeaders = userConfig?.headers
     const { aglyn: aglynConfig, ...merged } = deepFillIn(
       AGLYN_CONFIG,
       userConfig,
@@ -701,10 +717,12 @@ function withAglyn(nextConfig = {}) {
 
       headers: async () => {
         const aglynConfigHeaders = await AGLYN_CONFIG.headers()
+        // `userHeaders`, captured above — NOT `merged.headers`, which the
+        // merge guarantees is the base function. See the note there.
         const nextConfigHeaders =
-          typeof merged.headers === 'function'
-            ? (await merged.headers()) || []
-            : merged?.headers || []
+          typeof userHeaders === 'function'
+            ? (await userHeaders()) || []
+            : userHeaders || []
 
         return [...aglynConfigHeaders, ...nextConfigHeaders]
       },

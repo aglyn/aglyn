@@ -318,6 +318,13 @@ const TENANT_UNGATED_READS: Record<string, UngatedRead> = {
   'apps/tenant/app/api/host/[hostId]/route.ts': {
     why: 'the allow-listed public projection of the host doc (display name, logo, locales, SEO)',
   },
+  'apps/tenant/app/api/host/route.ts': {
+    why: 'the SAME handler as `host/[hostId]`, re-exported at the segmentless path so it can be named in /openapi.json (AGL-2716); one route, two addresses, one disposition',
+    // The scan follows the re-export, so the write-freeze obligation below is
+    // asserted against the handler this file points at rather than against a
+    // file that contains one `export` line.
+    alsoScan: ['apps/tenant/app/api/host/[hostId]/route.ts'],
+  },
   'apps/tenant/app/api/screen/route.ts': {
     why: 'the published screen LIST for a host — an allow-listed projection, never the screen documents',
   },

@@ -139,13 +139,28 @@ describe('the tenant page response negotiates the color-scheme hint', () => {
     )
   })
 
-  it('varies on that field ALONE, and never on `*`', async () => {
+  it('varies on named fields only, and never on `*`', async () => {
     // `Vary: *` makes every response uncacheable by anything, which is the
     // opposite of what splitting by scheme is for: two cacheable documents,
     // not none. The list is also left open — Next appends `RSC`,
     // `Next-Router-State-Tree` and friends to this same header for app-router
     // responses — so what is asserted is the contribution, not the field.
+    //
+    // `Accept` joined the hint in AGL-2716: the same URL serves HTML and
+    // Markdown by negotiation, so a cache that did not split on it would hand
+    // one representation to a client that asked for the other. Asserted as an
+    // exact list rather than a `toContain`, because the failure this test
+    // exists to catch is a field appearing that NOBODY decided to split the
+    // cache on — every entry here costs cache hit rate.
     const vary = (await pageResponse('hint-vary-list')).headers.get('Vary')
-    expect(vary?.split(',').map((token) => token.trim())).toEqual([HINT])
+    expect(vary?.split(',').map((token) => token.trim())).toEqual([
+      HINT,
+      'Accept',
+    ])
+  })
+
+  it('varies on Accept, so no cache answers an agent with HTML', async () => {
+    const vary = (await pageResponse('accept-vary')).headers.get('Vary')
+    expect(vary).toContain('Accept')
   })
 })

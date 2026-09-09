@@ -130,7 +130,21 @@ interface QueryState {
   filters: Array<[string, unknown]>
   fields: string[] | null
   limit: number
+  /** Which field the query ordered by, or null — see `orderedBy` below. */
+  orderBy: string | null
+  /** The `startAfter` cursor, exclusive. */
+  after: string | null
 }
+
+/**
+ * The order the query asked for, captured so a test can assert that ONE was
+ * asked for at all (AGL-2716).
+ *
+ * `limit()` with no `orderBy` returns an arbitrary slice, and a cursor into an
+ * arbitrary order pages through a different set on every call — so "the
+ * response looked right" is not evidence here. This is.
+ */
+let orderedBy: string | null = null
 
 function mockMakeQuery(state: QueryState) {
   const query = {
@@ -140,22 +154,32 @@ function mockMakeQuery(state: QueryState) {
       requestedProjection = fields
       return mockMakeQuery({ ...state, fields })
     },
+    orderBy: (field: string) => {
+      orderedBy = field
+      return mockMakeQuery({ ...state, orderBy: field })
+    },
+    startAfter: (after: string) => mockMakeQuery({ ...state, after }),
     limit: (limit: number) => mockMakeQuery({ ...state, limit }),
     get: async () => {
-      const matched = storedScreens
-        .filter((screen) =>
-          state.filters.every(([field, value]) => screen.doc[field] === value),
-        )
-        .slice(0, state.limit)
-        .map((screen) => ({
-          id: screen.id,
-          data: () => applyProjection(screen.doc, state.fields),
-        }))
+      let matched = storedScreens.filter((screen) =>
+        state.filters.every(([field, value]) => screen.doc[field] === value),
+      )
+      // `__name__` is the document id. Ordering by anything else is not
+      // modelled, because nothing asks for it.
+      if (state.orderBy === '__name__') {
+        matched = [...matched].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      }
+      if (state.after) {
+        matched = matched.filter((screen) => screen.id > (state.after as string))
+      }
+      const page = matched.slice(0, state.limit).map((screen) => ({
+        id: screen.id,
+        data: () => applyProjection(screen.doc, state.fields),
+      }))
       return {
-        size: matched.length,
-        docs: matched,
-        forEach: (fn: (doc: (typeof matched)[number]) => void) =>
-          matched.forEach(fn),
+        size: page.length,
+        docs: page,
+        forEach: (fn: (doc: (typeof page)[number]) => void) => page.forEach(fn),
       }
     },
   }
@@ -170,7 +194,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         collection: () => ({
           doc: () => ({
             collection: () =>
-              mockMakeQuery({ filters: [], fields: null, limit: Infinity }),
+              mockMakeQuery({
+                filters: [],
+                fields: null,
+                limit: Infinity,
+                orderBy: null,
+                after: null,
+              }),
           }),
         }),
       }),
@@ -181,16 +211,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { GET } = require('../app/api/screen/route')
 
-async function callRoute(): Promise<{ raw: string; body: any }> {
-  const response = await GET(
-    new Request('https://demo.aglyn.app/api/screen?host=demo'),
-  )
+async function callRoute(query = '?host=demo'): Promise<{ raw: string; body: any }> {
+  const response = await GET(new Request(`https://demo.aglyn.app/api/screen${query}`))
   const raw = await response.text()
   return { raw, body: JSON.parse(raw) }
 }
 
 beforeEach(() => {
   requestedProjection = null
+  orderedBy = null
 })
 
 describe('GET /api/screen response projection (AGL-2191)', () => {
@@ -268,5 +297,89 @@ describe('GET /api/screen response projection (AGL-2191)', () => {
     // Not just the id — the TITLE of a members-only page is itself something
     // an anonymous listing should not disclose.
     expect(raw).not.toContain('Investor update Q3')
+  })
+})
+
+/**
+ * The cursor `nextPageToken` names (AGL-2716). It was accepted by the route,
+ * threaded into the reader, and read by nothing: the query was a bare
+ * `.limit(5)` and the token came back `''` every time, so a site's sixth page
+ * was unreachable through this endpoint.
+ */
+describe('GET /api/screen pagination (AGL-2716)', () => {
+  it('orders the query — a cursor into an unordered slice pages nothing', () => {
+    return callRoute().then(() => {
+      expect(orderedBy).toBe('__name__')
+    })
+  })
+
+  it('hands back a cursor when the page is full, and none when it is not', async () => {
+    const first = await callRoute('?host=demo&limit=1')
+    expect(first.body.data.screens.length).toBe(1)
+    expect(first.body.data.nextPageToken).toBeTruthy()
+
+    const last = await callRoute('?host=demo&limit=100')
+    expect(last.body.data.nextPageToken).toBe('')
+  })
+
+  it('continues from the cursor without repeating a page', async () => {
+    const first = await callRoute('?host=demo&limit=1')
+    const second = await callRoute(
+      `?host=demo&limit=1&nextPageToken=${first.body.data.nextPageToken}`,
+    )
+    const firstIds = first.body.data.screens.map((screen: any) => screen.$id)
+    const secondIds = second.body.data.screens.map((screen: any) => screen.$id)
+    expect(secondIds).not.toEqual(firstIds)
+    for (const id of secondIds) expect(firstIds).not.toContain(id)
+  })
+
+  it('reaches every published, indexable screen by following the cursor', async () => {
+    const seen: string[] = []
+    let token = ''
+    for (let request = 0; request < 20; request += 1) {
+      const page: { body: any } = await callRoute(
+        `?host=demo&limit=1${token ? `&nextPageToken=${token}` : ''}`,
+      )
+      for (const screen of page.body.data.screens) seen.push(screen.$id)
+      token = page.body.data.nextPageToken
+      if (!token) break
+    }
+    expect(seen).toContain('screen-about')
+    expect(seen).not.toContain('screen-unpublished')
+    expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  it('clamps a limit nobody should be able to ask for', async () => {
+    // A caller asking for 100,000 pages is asking for a Firestore sweep on an
+    // anonymous endpoint.
+    const huge = await callRoute('?host=demo&limit=100000')
+    expect(huge.body.data.screens.length).toBeLessThanOrEqual(100)
+    const zero = await callRoute('?host=demo&limit=0')
+    expect(zero.body.status).toBe('success')
+    const nonsense = await callRoute('?host=demo&limit=abc')
+    expect(nonsense.body.status).toBe('success')
+  })
+
+  it('resolves the site from the request host when no parameter is given', async () => {
+    /*
+      The spelling a stranger can guess — before this the endpoint answered
+      `Bad request` to it, which made it undescribable in `/openapi.json`.
+
+      The `Host` header is set explicitly because a `Request` built in a test
+      carries none; a real one always does, which is the whole point of reading
+      it. `getAllScreens` is reached with whatever this resolves to, and the
+      mocked Firestore answers the same fixtures for any site.
+    */
+    const response = await GET(
+      new Request('https://demo.aglyn.app/api/screen', {
+        headers: { host: 'demo.aglyn.app' },
+      }),
+    )
+    expect(response.status).toBe(200)
+  })
+
+  it('still refuses when there is no site to resolve at all', async () => {
+    const response = await GET(new Request('https://demo.aglyn.app/api/screen'))
+    expect(response.status).not.toBe(200)
   })
 })

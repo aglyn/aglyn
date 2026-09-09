@@ -26,6 +26,7 @@ import {
   isScreenIndexable,
   isSearchDiscouraged,
   newestSitemapLastmod,
+  statusPageScreenIds,
   parseSitemapSectionPath,
   screenRoutePathToUrl,
   sitemapIndexXml,
@@ -157,7 +158,17 @@ export async function GET(request: Request): Promise<Response> {
   // sees would otherwise turn every child sitemap into the index.
   const requested =
     parseSitemapSectionPath(url.pathname) ??
-    parseSitemapSectionPath(url.searchParams.get('sitemapPath') ?? '')
+    parseSitemapSectionPath(
+      // The header first, then the query (AGL-2716) — a rewrite target's query
+      // is not guaranteed to reach a handler, which is the whole reason the
+      // path is forwarded at all. `url.pathname` above already covers the case
+      // where the handler DOES see the original URL, so this is the third of
+      // three ways to learn the same thing and the only one a rewrite cannot
+      // lose.
+      request.headers.get('x-aglyn-sitemap-path') ??
+        url.searchParams.get('sitemapPath') ??
+        '',
+    )
   const section = requested?.section ?? ''
   const page = requested?.page ?? 1
 
@@ -532,34 +543,11 @@ async function buildPageUrls(
     excluded.add(screenId)
   }
 
-  // Error screens are not pages either (AGL-2486). `aglyn.com` published
-  // `/401`, `/404` and `/503` into its sitemap, which hands a brand-new domain
-  // the worst possible first crawl: Google fetches them, gets the status code
-  // each one exists to represent, and logs crawl errors and soft-404s against
-  // a site it has never seen before. Measured on production 2026-08-23, the
-  // sitemap carried all three among 97 URLs.
-  //
-  // BOTH sources are excluded, because the binding is not how these exist
-  // today. `resolveNotFoundScreenId` records that `errorScreens` was unset on
-  // EVERY host as of 2026-08-19, and that an error screen on this platform is
-  // simply a screen published at the status path — so filtering only the
-  // bound ids would have changed nothing on the site that has the problem.
-  // Filtering only the path would miss a host that did bind one.
-  const errorScreens = (host as unknown as {
-    errorScreens?: Record<string, string | undefined>
-    notFoundScreenId?: string
-  } | null) ?? {}
-  for (const bound of [
-    ...Object.values(errorScreens.errorScreens ?? {}),
-    errorScreens.notFoundScreenId,
-  ]) {
-    if (typeof bound === 'string' && bound) excluded.add(bound)
-  }
-  for (const [screenId, path] of Object.entries(host.screens ?? {})) {
-    // A bare HTTP status code as the whole path. Anchored so a real page at
-    // `/404-guide` or `/products/503` keeps its place in the sitemap.
-    if (/^\/?[1-5][0-9][0-9]$/.test(String(path))) excluded.add(screenId)
-  }
+  // Error screens are not pages either (AGL-2486) — see `statusPageScreenIds`,
+  // which carries the reasoning and is now shared with `/llms.txt` (AGL-2716).
+  // Sharing it is the point: the two surfaces disagreeing is how a site
+  // advertises to agents the URLs it withheld from crawlers.
+  for (const screenId of statusPageScreenIds(host as never)) excluded.add(screenId)
 
   const urls = Object.entries(host.screens ?? {})
     .filter(([screenId]) => !excluded.has(screenId))
