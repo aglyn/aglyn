@@ -44,7 +44,7 @@ import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 // which is the largest first-party module a published page can reach. The
 // badge needs the brand, not the plan table.
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand'
-import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context'
+import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
 import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
 import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
