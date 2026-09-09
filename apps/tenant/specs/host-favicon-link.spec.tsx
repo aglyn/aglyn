@@ -96,6 +96,18 @@ jest.mock('../utils/get-site-nav', () => ({
   default: async () => [],
 }))
 
+/**
+ * The layout reads the visitor's stored light/dark choice off the request so
+ * the site's first paint is the scheme they asked for. `cookies()` throws
+ * outside a request scope, which a direct call to the layout function is, and
+ * the choice is nothing this suite asserts about — an empty jar is the shape
+ * an anonymous first visit has.
+ */
+jest.mock('next/headers', () => ({
+  __esModule: true,
+  cookies: async () => ({ get: () => undefined }),
+}))
+
 import HostLayout from '../app/[host]/layout'
 
 const HOST_ID = 'DXnRbPH4CQ'

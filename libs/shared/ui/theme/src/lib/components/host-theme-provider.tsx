@@ -23,6 +23,7 @@ import { createContext, useContext, useMemo } from 'react'
 import type { Theme, ThemeOptions } from '../../vendor/mui'
 import { ThemeProvider } from '../../vendor/mui'
 import {
+  type ThemeMode,
   ThemeContextDispatch,
   type UseThemeMode,
   useThemeModeState,
@@ -62,6 +63,15 @@ export type HostThemeProviderProps = {
   baseOptions?: ThemeOptions | [light: ThemeOptions, dark: ThemeOptions]
   /** Extra options merged into both generated schemes (e.g. portal container defaults). */
   themeOptions?: ThemeOptions
+  /**
+   * The visitor's stored light/dark choice, resolved from the request's
+   * cookies by the server component above this one; `null` when they have
+   * chosen nothing. It is what the first render is built from, so a visitor
+   * who asked for dark gets dark in the first byte rather than a light page
+   * that repaints once React has hydrated. Omitted, the mode is read from
+   * `document.cookie`, which no server render can see.
+   */
+  initialMode?: ThemeMode
   disableCssBaseline?: boolean
   children?: JSX.Children
 }
@@ -71,6 +81,14 @@ export type HostThemeProviderProps = {
  * MUI theme, resolving light/dark via the shared cookie +
  * prefers-color-scheme mode state (same machinery as
  * `createWithThemeProvider`, so `useThemeMode` toggles keep working).
+ *
+ * An explicit choice is decided before paint, from `initialMode`. Device
+ * default is not: `prefers-color-scheme` is answerable only in a browser, so a
+ * visitor who follows their device gets the light scheme in the server's HTML
+ * and the dark one once the page has hydrated. A site resolves its dark scheme
+ * in JS — a single-mode theme swapped between schemes, and node styles whose
+ * `@scheme dark` slices are merged against `palette.mode` — so there is no CSS
+ * form of that decision for a media query to make instead.
  */
 export function HostThemeProvider(props: HostThemeProviderProps) {
   const {
@@ -78,12 +96,13 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
     fallback,
     baseOptions,
     themeOptions,
+    initialMode,
     disableCssBaseline,
     children,
   } = props
   const contextTheme = useHostThemeDocument()
   const hostTheme = theme ?? contextTheme
-  const themeModeState = useThemeModeState()
+  const themeModeState = useThemeModeState(initialMode)
   const [[, themeMode], toggleThemeMode, cookieMode] = themeModeState
   const requested = themeMode === 'dark' ? 'dark' : 'light'
 

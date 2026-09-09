@@ -30,6 +30,7 @@ import {
   tenantOptionsDark,
   tenantThemeDark,
   tenantThemeLight,
+  type ThemeMode,
   wearsPlatformBrand,
 } from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
@@ -58,6 +59,7 @@ import { HostBrandProvider } from './host-brand.context'
  */
 export function HostThemeProviders({
   hostTheme,
+  initialThemeMode,
   brandLogoUrl,
   brandName,
   siteLinks,
@@ -67,6 +69,14 @@ export function HostThemeProviders({
   children,
 }: {
   hostTheme?: HostTheme
+  /**
+   * The visitor's stored light/dark choice, read from the request by the
+   * server layout. It reaches the provider as the mode the first render is
+   * built from, which is the only way a chosen scheme survives into the HTML:
+   * the browser-side reader has no `document.cookie` on the server, so without
+   * it every visitor's first paint is light.
+   */
+  initialThemeMode?: ThemeMode
   brandLogoUrl?: string
   brandName?: string
   siteLinks?: SiteNavLink[]
@@ -108,6 +118,7 @@ export function HostThemeProviders({
       theme={hostTheme}
       fallback={fallback}
       baseOptions={baseOptions}
+      initialMode={initialThemeMode}
     >
       <HostBrandProvider
         brandLogoUrl={brandLogoUrl}
