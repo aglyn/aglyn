@@ -303,9 +303,14 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
             in: 'query',
             required: false,
             description:
-              'Which site to describe: its custom domain, its ' +
-              '`{subdomain}.aglyn.app` address, or its bare subdomain. ' +
-              "Defaults to the domain the request was sent to, so an agent " +
+              // NO PLATFORM APEX HERE. This string is published in the
+              // OpenAPI document of EVERY site, including a self-hosted
+              // operator's — naming Aglyn's own apex would tell their callers
+              // to address a domain that is not theirs (the self-host ratchet
+              // in `selfhost-hardcoded-hosts.spec.ts` is what caught it).
+              'Which site to describe: its custom domain, its platform ' +
+              'subdomain address, or its bare subdomain. ' +
+              'Defaults to the domain the request was sent to, so an agent ' +
               'talking to one site never needs it.',
             schema: { type: 'string' },
           },

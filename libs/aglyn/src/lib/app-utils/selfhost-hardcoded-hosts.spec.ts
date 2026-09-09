@@ -500,9 +500,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'tools/scripts/lib/firewall-posture.mjs',
-    count: 1,
+    count: 5,
     reason:
-      "One `serves` label — 'every customer site on *.aglyn.app and their custom domains' — naming which Aglyn-operated Vercel project a posture row is about. Internal ops tool: it asserts the WAF configuration of Aglyn's OWN Vercel projects through the Vercel API, so a self-hoster has nothing for it to check and never runs it. The hostname is report text for a human reading the output, not an input to any behaviour. RATCHETED 5 -> 1 on 2026-08-23 (AGL-2486): the AGL-2483 pass moved the other four into prose that `stripComments` removes. The ratchet compares EXACTLY, so a decrease fails too — deliberately, because an allowance nobody tightens stops describing the file it guards (AGL-2483).",
+      "Five `serves` / `why` labels naming which Aglyn-operated Vercel project a posture row is about: the tenant's '*.aglyn.app and their custom domains', 'docs.aglyn.com', 'app.aglyn.com', 'plugins.aglyn.com' and the plugin loader's 'plugins.aglyn.com/load'. Internal ops tool: it asserts the WAF configuration of Aglyn's OWN Vercel projects through the Vercel API, so a self-hoster has nothing for it to check and never runs it. Every one is report text for a human reading the output, not an input to any behaviour. ⚠️ THE PREVIOUS COUNT OF 1 WAS AN ARTIFACT, not a ratchet (corrected 2026-09-09, AGL-2716). It claimed 'RATCHETED 5 -> 1 … the AGL-2483 pass moved the other four into prose that stripComments removes'. The four were never moved: `stripComments` pairs `/*` with the NEXT `*/` non-greedily, and a comment boundary in that file happened to span these four CODE lines and swallow them. Adding an unrelated block comment re-paired the boundary and all five reappeared at once — the same four, still in code, never having gone anywhere. The ratchet compares EXACTLY, so a decrease fails too; if these ever genuinely go away, lower the count and say what removed them.",
   },
   {
     file: 'tools/scripts/lib/stripe-webhook-health.mjs',
