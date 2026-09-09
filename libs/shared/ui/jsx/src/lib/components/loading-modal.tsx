@@ -19,6 +19,7 @@
 import dynamic from 'next/dynamic'
 import { forwardRef, Fragment, useEffect, useState } from 'react'
 import { LoadingContext } from '../contexts/loading.context'
+import { onFirstNavigationIntent } from './navigation-intent'
 import type { LoadingModalOverlayProps } from './loading-modal-overlay'
 
 /**
@@ -30,9 +31,6 @@ const importOverlay = () => import('./loading-modal-overlay')
 const LoadingOverlay = dynamic(importOverlay, { ssr: false })
 
 export type LoadingModalProps = LoadingModalOverlayProps
-
-/** Events that precede a click on a link, in pointer, touch and keyboard order. */
-const INTENT_EVENTS = ['pointerover', 'touchstart', 'focusin'] as const
 
 /**
  * Warms the overlay chunk the first time a visitor reaches for a link.
@@ -46,35 +44,17 @@ const INTENT_EVENTS = ['pointerover', 'touchstart', 'focusin'] as const
  * off the wire, and adds a round trip doing it. Metered per page view, that
  * costs the same as never having deferred it.
  *
- * Pointing, touching or tabbing to a link is the earliest honest evidence a
- * navigation may happen, and it precedes the click by long enough to cover
- * the fetch. One delegated listener rather than a per-link handler, so
- * anchors a plugin or a hand-built menu renders count too; it detaches once
- * it has fired, and every path is best-effort because the render below
- * fetches the module on demand regardless.
+ * Best-effort, because the render below fetches the module on demand
+ * regardless.
  */
 function useOverlayWarmUp(): void {
-  useEffect(() => {
-    const target = globalThis.document
-    if (!target) return
-    const onIntent = (event: Event) => {
-      const node = event.target
-      // `closest` reaches the anchor from whatever inside it was pointed at —
-      // a label, an icon, a nested span.
-      if (!(node instanceof Element) || !node.closest('a[href]')) return
-      detach()
-      void importOverlay().catch(() => undefined)
-    }
-    const detach = () => {
-      for (const name of INTENT_EVENTS)
-        target.removeEventListener(name, onIntent, true)
-    }
-    // Capture phase: a link that stops propagation on its own handlers must
-    // not also suppress the warm-up.
-    for (const name of INTENT_EVENTS)
-      target.addEventListener(name, onIntent, true)
-    return detach
-  }, [])
+  useEffect(
+    () =>
+      onFirstNavigationIntent(() => {
+        void importOverlay().catch(() => undefined)
+      }),
+    [],
+  )
 }
 
 /**
