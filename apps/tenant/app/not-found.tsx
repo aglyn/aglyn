@@ -23,7 +23,7 @@ import { NOT_FOUND_PAGE_NAME } from '../utils/not-found-title'
  * Root not-found boundary (AGL-2074).
  *
  * Almost every tenant request is rewritten into `[host]/…` by the middleware
- * and lands on the branded `[host]/not-found.tsx` instead — this catches the
+ * and lands on the branded `[host]/[scheme]/not-found.tsx` instead — this catches the
  * remainder: a path the middleware matcher excluded that matches no route,
  * and a `notFound()` thrown before any host segment is entered.
  *

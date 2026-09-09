@@ -153,8 +153,13 @@ describe('the middleware matcher only reserves whole path segments', () => {
    * is the ordinary host rewrite and not something that re-loses the segment.
    */
   it('composes the ordinary host rewrite for /api-docs', async () => {
-    await expect(rewriteFor('/api-docs')).resolves.toContain(
-      `/${TENANT_DEMO_HOST}/api-docs`,
+    // The scheme segment the middleware spends between the host and the slug
+    // (AGL-2708) is matched as either of its two spellings rather than the one
+    // a hint-less request happens to resolve to: what this case is about is
+    // that `api-docs` survives as the SLUG, and pinning the scheme here would
+    // make it fail for a reason that has nothing to do with the matcher.
+    await expect(rewriteFor('/api-docs')).resolves.toMatch(
+      new RegExp(`/${TENANT_DEMO_HOST}/(light|dark)/api-docs$`),
     )
   })
 })

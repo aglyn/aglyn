@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-// lockdown-423: via apps/tenant/app/[host]/[[...slug]]/load-page-data.ts
+// lockdown-423: via apps/tenant/app/[host]/[scheme]/[[...slug]]/load-page-data.ts
 // This route deliberately composes nothing itself: it calls the same loader the
 // page uses, so the loader's lockdown branch (and protection, membership,
 // maintenance, org suspension) answers `nodes: null` and this returns 404.

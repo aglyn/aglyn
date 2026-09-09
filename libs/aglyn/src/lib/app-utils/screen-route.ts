@@ -68,7 +68,7 @@ export function normalizeScreenSlug(
  *
  * Every entry was measured against production on 2026-08-19 with a fresh
  * `x-vercel-cache: MISS`, because a stale negative always passes. Two
- * mechanisms, both of which resolve ahead of `[host]/[[...slug]]`:
+ * mechanisms, both of which resolve ahead of `[host]/[scheme]/[[...slug]]`:
  *
  *  - `404`, `500` — Next emits `pages/404.html` and `pages/500.html` even for
  *    an app-router-only build, and the deployed filesystem answers them as
@@ -79,7 +79,7 @@ export function normalizeScreenSlug(
  *    that beats them, which is why the honest fix is to refuse the slug at
  *    authoring time rather than to keep promising an address that is dead.
  *  - `search`, `api`, `_next`, `_static` — routes and exclusions the tenant
- *    app owns. `/search` matches `app/[host]/search`; the other three are the
+ *    app owns. `/search` matches `app/[host]/[scheme]/search`; the other three are the
  *    middleware matcher's exclusions, so no host rewrite happens at all and
  *    the path is parsed as `[host]` with an empty slug.
  *

@@ -37,6 +37,11 @@ import { HostThemeProviders } from '../host-theme-providers'
  * it depends on the resolved host, so it lives under `[host]` rather than
  * the host-agnostic root layout. Wraps both the catch-all render route and
  * the search route.
+ *
+ * It sits under `[scheme]` as well because the scheme is the other thing the
+ * theme depends on and the other thing every route beneath shares (AGL-2708):
+ * one layout builds the document in the scheme its path names, and the two
+ * schemes cache separately.
  */
 export default async function HostLayout({
   children,

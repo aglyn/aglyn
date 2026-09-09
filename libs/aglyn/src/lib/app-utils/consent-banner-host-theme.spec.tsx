@@ -36,7 +36,7 @@
  * broken. `SiteAnalytics` — which mounts this — is deliberately a SIBLING of
  * the page body and sits above the plugin gate, so it does not inherit
  * anything the page body provides. It is under the host's theme only because
- * `[host]/layout.tsx` wraps the whole route in `HostThemeProviders`. Moving
+ * `[host]/[scheme]/layout.tsx` wraps the whole route in `HostThemeProviders`. Moving
  * this mount, or moving that provider, would leave every consent surface on
  * every customer site silently unstyled, and no existing test would notice.
  *

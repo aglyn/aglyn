@@ -20,7 +20,7 @@
  *
  * `reservedScreenRouteSegment` names the handful of addresses the published
  * site cannot answer — `404` and `500` are static files in Vercel's own
- * filesystem, `search` is `app/[host]/search`, and `api`/`_next`/`_static` are
+ * filesystem, `search` is `app/[host]/[scheme]/search`, and `api`/`_next`/`_static` are
  * the tenant middleware's exclusions. The rule and its measurements live in
  * `libs/aglyn/src/lib/app-utils/screen-route.ts`, and the tenant side is
  * proven in `apps/tenant/specs/reserved-screen-slugs.spec.ts`.

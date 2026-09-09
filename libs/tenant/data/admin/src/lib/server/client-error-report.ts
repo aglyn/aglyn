@@ -316,7 +316,7 @@ export const SERVER_ERROR_LOG_ID = 'server-errors'
 /**
  * One server-side error, as `onRequestError` sees it.
  *
- * `route` is the route PATTERN (`/[host]/[[...slug]]`), never the resolved
+ * `route` is the route PATTERN (`/[host]/[scheme]/[[...slug]]`), never the resolved
  * path: the resolved path carries org slugs, document ids and whatever a
  * visitor typed into a URL, and this payload leaves our origin for a Google
  * log. The pattern is what you group and alert on anyway.

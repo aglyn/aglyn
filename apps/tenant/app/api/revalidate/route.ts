@@ -195,6 +195,13 @@ export async function POST(request: Request): Promise<Response> {
   const truncated = requested - accepted.length
 
   const revalidated: string[] = []
+  // Counted separately from `revalidated`, which holds one entry per SCHEME
+  // since AGL-2708. `count` answers the caller's question — "how many of the
+  // paths I sent did you take" — and it is read beside `requested` and
+  // `truncated`, which are path counts too. Letting it drift to cache-key
+  // units would report `count: 96` for 48 paths and quietly break the one
+  // comparison AGL-1161 exists to make.
+  let pathsRevalidated = 0
   for (const raw of accepted) {
     const path = String(raw ?? '')
     // Only absolute, same-host paths. `..` in a cache key is not a traversal
@@ -217,6 +224,7 @@ export async function POST(request: Request): Promise<Response> {
       revalidatePath(target)
       revalidated.push(target)
     }
+    pathsRevalidated += 1
   }
 
   if (truncated > 0) {
@@ -235,8 +243,11 @@ export async function POST(request: Request): Promise<Response> {
 
   return Response.json(
     {
+      // The cache keys that were dropped, two per path since AGL-2708 — the
+      // record of what happened, in the units the cache is keyed in.
       revalidated,
-      count: revalidated.length,
+      // Paths, not cache keys: this is the caller's own number coming back.
+      count: pathsRevalidated,
       // `requested` and `truncated` are what let a caller tell "everything you
       // asked for" apart from "as much as I would take".
       requested,

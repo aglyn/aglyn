@@ -48,7 +48,7 @@ import SiteStatusScreen from './site-status-screen.component'
  *     ISR and a plain route, so it is not something about this app. (The one
  *     escape, `experimental.cacheComponents`, is the Cache Components rewrite.)
  *     The `<head>` of that seed IS rendered, from the `not-found` convention's
- *     own metadata — which is where the title comes from; see `[host]/not-found.tsx`.
+ *     own metadata — which is where the title comes from; see `[host]/[scheme]/not-found.tsx`.
  *  2. **A `not-found` boundary is rendered into every SUCCESSFUL response
  *     too.** A 200 page carries its boundary's fully rendered output in the
  *     payload. So composing a screen inside the boundary would put a screen
@@ -112,7 +112,7 @@ export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
    * The tab says what the page is (AGL-2291), on a CLIENT-SIDE arrival.
    *
    * A full document load no longer needs this: the served `<head>` carries
-   * the title, written by `[host]/not-found.tsx`'s `generateMetadata` (AGL-2648)
+   * the title, written by `[host]/[scheme]/not-found.tsx`'s `generateMetadata` (AGL-2648)
    * — the one part of the `__next_error__` shell Next does render on the
    * server. What still arrives with no title is a client-side navigation to a
    * missing URL: no document is loaded, the router carries the previous page's

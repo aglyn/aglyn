@@ -168,7 +168,7 @@ must be registered *before first render*, and it says of its first criterion:
 The loop is `if (node?.pluginId) needed.add(node.pluginId)`. So a node saved
 before an element moved still names the old bundle, and the new one is not in
 the blocking set. The consequence is bounded but real:
-`apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx:111-112` loads the
+`apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx:111-112` loads the
 rest of the enabled set straight after hydration and ticks a re-render, so the
 element appears **late** rather than never — a visible pop-in on a published
 page, on exactly the pages that already contain the element.
@@ -450,7 +450,7 @@ saying the boundary bothers him.
 | --- | --- |
 | canvas element | `libs/plugins/mui/src/lib/components/search-box.tsx`, id `searchBox`, `category: FORMS`, mui bundle line 134 |
 | second element | `Collection.CollectionSearch` in `libs/plugins/mui/src/lib/components/collection.tsx` |
-| tenant page | `apps/tenant/app/[host]/search/page.tsx` + `search-results.component.tsx` |
+| tenant page | `apps/tenant/app/[host]/[scheme]/search/page.tsx` + `search-results.component.tsx` |
 | server logic | `apps/tenant/utils/search-content.ts` (309 lines) and `search-facets.ts` |
 | console surface | **none** |
 | storage | **none of its own** — it queries screens, collection entries and dataset records live, cached per query |

@@ -65,8 +65,15 @@ const flag = (name, fallback) => {
 // `resolve`, not `join`: an absolute --next or --against (a build kept aside
 // under /tmp while you rebuild) has to survive being handed a repo root.
 const NEXT_DIR = resolve(REPO_ROOT, flag('--next', 'dist/apps/tenant/.next'))
-/** The published page. Every customer site is served by this one route. */
-const ROUTE = flag('--route', '[host]/[[...slug]]')
+/**
+ * The published page. Every customer site is served by this one route.
+ *
+ * The `[scheme]` segment is the visitor's resolved light/dark, spent as a path
+ * so the page stays cacheable (AGL-2708). It splits the CACHE, not the client
+ * graph: both schemes are the same build output, so weighing either one weighs
+ * the page.
+ */
+const ROUTE = flag('--route', '[host]/[scheme]/[[...slug]]')
 const TOP = Number(flag('--top', '15'))
 const asJson = args.includes('--json')
 const AGAINST = flag('--against', null)

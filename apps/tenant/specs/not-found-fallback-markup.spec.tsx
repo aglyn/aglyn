@@ -23,7 +23,7 @@
  * What the host boundary puts on the page once it renders (AGL-2648).
  *
  * The served HTML of a tenant 404 has an empty body — a framework fact, see
- * `[host]/not-found.tsx` — so the document a visitor actually reads is the
+ * `[host]/[scheme]/not-found.tsx` — so the document a visitor actually reads is the
  * one this boundary renders after hydration, and for a site that designed no
  * 404 that is `SiteStatusScreen`. These assert that document is a real one:
  * an `<h1>`, the one `main` landmark, the site's mark, its public pages in a

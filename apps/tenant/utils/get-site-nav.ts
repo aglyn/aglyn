@@ -30,7 +30,7 @@ import {
 
 /**
  * The read behind {@link buildSiteNavLinks} (AGL-2187) — the site's public
- * top-level pages, resolved in `[host]/layout.tsx` so the error boundaries can
+ * top-level pages, resolved in `[host]/[scheme]/layout.tsx` so the error boundaries can
  * offer somewhere to go.
  *
  * ## Why it is cached, and why 5 minutes

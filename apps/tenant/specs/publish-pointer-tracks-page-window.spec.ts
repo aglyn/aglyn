@@ -46,6 +46,7 @@ const CATCH_ALL_PAGE = join(
   '..',
   'app',
   '[host]',
+  '[scheme]',
   '[[...slug]]',
   'page.tsx',
 )

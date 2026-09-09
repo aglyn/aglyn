@@ -945,7 +945,7 @@ describe('heading-anchor coverage across the markdown renderers (AGL-1162)', () 
       'libs/plugins/mui/src/lib/components/collection.tsx',
     )
     expect(files).toContain(
-      'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx',
+      'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx',
     )
   })
 
