@@ -40,13 +40,25 @@
 
 name: Signup canary
 
+# ⛔ THE SCHEDULE WAITS FOR THE EXCLUSION TO BE LIVE (AGL-2715).
+#
+# The walk passes — three consecutive green runs on production. What is not
+# yet on production is the exclusion that stops it tripping the alarm it
+# watches: the canary creates a real org and deletes it, so its durable attempt
+# marker outlives the org and `signupDrought` sees +1 denominator, +0
+# numerator, every hour. It fired that way on 2026-09-09 at
+# `signupAttempts=6, orgCreations=0`.
+#
+# `isSignupCanaryOrgSlug` in `/api/orgs/create` fixes it, and it only takes
+# effect once that route is DEPLOYED. Turning the cron on before then would
+# manufacture an hourly outage on a healthy platform — the third false alarm on
+# this monitor in one day.
+#
+# Restore the cron after the promotion carrying the exclusion is live and one
+# manual run has been shown not to move `signupAttempts`.
 on:
-  schedule:
-    # Hourly, on the 25th minute — off the top of the hour, where every other
-    # scheduled job in this repo clusters and Actions queues are deepest.
-    # SIGNUP_CANARY_STALE_AFTER_MS is two hours, so one missed run is tolerated
-    # and two are not.
-    - cron: '25 * * * *'
+  # schedule:
+  #   - cron: '25 * * * *'   # hourly, off the top where Actions queues cluster
   workflow_dispatch: {}
 
 # One walk at a time. Two concurrent runs would race for the same orphan sweep

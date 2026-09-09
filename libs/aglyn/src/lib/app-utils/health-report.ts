@@ -2788,6 +2788,53 @@ export interface SignupCanaryCheck extends HealthCheck {
  * This is deliberately NOT generous enough to sleep through AGL-2581: three
  * days of refused signups would red this inside two hours.
  */
+/**
+ * Workspace-slug prefix the signup canary owns, and the one piece of the
+ * product that has to know the canary exists (AGL-2715).
+ *
+ * ## Why an exclusion is not optional
+ *
+ * The canary creates a real org and then deletes it. `signupDrought` compares
+ * durable ATTEMPT markers against a live COUNT of orgs — and a deleted org
+ * leaves the count while its attempt marker stays. So every canary walk adds
+ * 1 to the denominator and 0 to the numerator, and after three walks the
+ * platform reports `signup-drought` with nothing wrong.
+ *
+ * That is not theoretical. It fired on 2026-09-09 at `signupAttempts=6,
+ * orgCreations=0` — six walks that had each just proved, end to end, that a
+ * stranger could sign up. A monitor that manufactures the outage it watches
+ * for is worse than no monitor, and it is the same alarm fatigue AGL-2714
+ * removed, arriving from inside the house.
+ *
+ * ## Why the slug, and what that costs
+ *
+ * `/api/orgs/create` receives the requested slug before it does anything, so
+ * this needs no secret, no header and no second code path — the canary is
+ * excluded by being what it says it is.
+ *
+ * The cost is that the prefix is caller-supplied: someone naming their
+ * workspace `signup-canary-…` would not be counted in the drought's
+ * denominator. That is bounded to one uncounted attempt per such workspace,
+ * and it cannot hide an outage, because an outage is many attempts by many
+ * people and only the oddly-named ones would go missing.
+ *
+ * The canary declares the same prefix in `tools/e2e/signup-canary.mjs`, which
+ * cannot import this file — it runs outside the workspace. They are held
+ * together by `apps/console/specs/signup-canary-marker-wiring.spec.ts`.
+ */
+export const SIGNUP_CANARY_ORG_SLUG_PREFIX = 'signup-canary-'
+
+/**
+ * Is this org creation the canary's own?
+ *
+ * Exported as a function rather than leaving callers to compare strings, so
+ * the one place that decides is the one place to read when asking why a
+ * number looks wrong.
+ */
+export function isSignupCanaryOrgSlug(slug: string | null | undefined): boolean {
+  return typeof slug === 'string' && slug.startsWith(SIGNUP_CANARY_ORG_SLUG_PREFIX)
+}
+
 export const SIGNUP_CANARY_STALE_AFTER_MS = 2 * 60 * 60 * 1000
 
 /**

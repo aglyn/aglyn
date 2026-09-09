@@ -39,9 +39,18 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import {
+  SIGNUP_CANARY_ORG_SLUG_PREFIX,
+  isSignupCanaryOrgSlug,
+} from '@aglyn/aglyn/server'
+
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 const CANARY = readFileSync(
   join(REPO_ROOT, 'tools/e2e/signup-canary.mjs'),
+  'utf8',
+)
+const CREATE_ROUTE = readFileSync(
+  join(REPO_ROOT, 'apps/console/app/api/orgs/create/route.ts'),
   'utf8',
 )
 const STORE = readFileSync(
@@ -204,5 +213,49 @@ describe('the walk cannot quietly stop being a walk', () => {
     // It creates a real account on production. A shell that happens to carry
     // production credentials must not be able to start it by accident.
     expect(CANARY).toContain("process.env['SIGNUP_CANARY_ENABLE'] !== '1'")
+  })
+})
+
+/**
+ * The canary must not manufacture the outage it watches for (AGL-2715).
+ *
+ * It creates a real org and then deletes it. `signupDrought` compares durable
+ * ATTEMPT markers against a live COUNT of orgs, so without an exclusion each
+ * walk adds 1 to the denominator and 0 to the numerator — and three walks
+ * report `signup-drought` on a platform that has just proved, three times,
+ * that a stranger can sign up.
+ *
+ * It fired exactly that way on 2026-09-09 at `signupAttempts=6,
+ * orgCreations=0`, hours after AGL-2714 removed the previous false alarm on
+ * the same monitor. This file is what stops the third one.
+ */
+describe('the canary is excluded from the drought it would otherwise trip', () => {
+  it('the route skips the attempt marker for a canary slug', () => {
+    expect(CREATE_ROUTE).toContain('isSignupCanaryOrgSlug(slug)')
+    // Guarded, not merely imported: an unguarded call records every walk.
+    expect(CREATE_ROUTE).toMatch(
+      /if \(!isSignupCanaryOrgSlug\(slug\)\)\s*recordSignupAttempt\(\)/,
+    )
+    expect(CREATE_ROUTE).not.toMatch(/^\s*recordSignupAttempt\(\)\s*$/m)
+  })
+
+  it('the prefix the product excludes is the prefix the canary uses', () => {
+    // The canary cannot import the constant — it runs outside the workspace —
+    // so the two are held together here. Drift means the exclusion silently
+    // stops matching and the false drought comes back.
+    expect(SIGNUP_CANARY_ORG_SLUG_PREFIX).toBe('signup-canary-')
+    expect(CANARY).toContain(
+      `const CANARY_SLUG_PREFIX = '${SIGNUP_CANARY_ORG_SLUG_PREFIX}'`,
+    )
+  })
+
+  it('recognizes a canary slug and leaves everything else alone', () => {
+    expect(isSignupCanaryOrgSlug('signup-canary-m2rso9ab12')).toBe(true)
+    // A real customer's workspace must still be counted.
+    expect(isSignupCanaryOrgSlug('acme-inc')).toBe(false)
+    expect(isSignupCanaryOrgSlug('signup')).toBe(false)
+    expect(isSignupCanaryOrgSlug('')).toBe(false)
+    expect(isSignupCanaryOrgSlug(null)).toBe(false)
+    expect(isSignupCanaryOrgSlug(undefined)).toBe(false)
   })
 })
