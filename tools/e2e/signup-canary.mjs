@@ -29,31 +29,31 @@
  * AGL-2581 is what that costs: signup refused every visitor for three days
  * while the monitor named for signups stayed green.
  *
- * ## The walk, in two halves
+ * ## The walk
  *
- * **The mechanism**, over the real HTTP surfaces: create an account through
- * Identity Platform's own REST API — the same endpoint the browser SDK calls —
- * verify the email by minting the link and redeeming its `oobCode`, mint a
- * session at `/api/auth/session`, provision an org at `/api/orgs/create`, and
- * read the org back out of Firestore. Then delete every artifact and verify
- * each one is gone.
+ * In a real browser, because it has to be. Identity Platform enforces App
+ * Check and this project's provider is reCAPTCHA Enterprise, which has no
+ * server-side equivalent: `accounts:signUp` from any script is refused
+ * `401 Firebase App Check token is invalid`. That is the control working, not
+ * a wall to climb.
  *
- * **The front door**, in a real browser with NO bypass header: load `/signup`
- * as an anonymous visitor and assert the form is actually there. This half
- * exists because the mechanism half is structurally blind to the thing that
- * has actually bitten this platform — bot protection answering real people
- * with a challenge. The mechanism walk carries `x-aglyn-probe` and sails past
- * the edge; a visitor does not. Measured 2026-09-09: an ordinary desktop
- * Chrome User-Agent gets `429 x-vercel-mitigated: challenge` on a plain fetch,
- * and a browser solves it. So a fetch-only canary would report green through
- * an edge that was refusing everybody.
+ * Fill the real signup form, submit, land on `/verify-email`, mint the
+ * verification link, open the URL a person would click, arrive on the
+ * workspace dashboard with an org provisioned, read it back out of Firestore —
+ * then delete every artifact and prove each one is gone.
  *
- * ## Why the mechanism half is allowed to use the bypass
+ * A browser also means the edge is exercised for real. The walk carries no
+ * bypass header of any kind, so if bot protection starts refusing visitors the
+ * canary is refused with them. That is the point, and the reason this is not a
+ * fetch script carrying the CI bypass that `uptime-probe.yml` uses.
  *
- * `x-aglyn-probe` is the existing "CI and uptime probe bypass" that
- * `uptime-probe.yml` already depends on, and `firewall-posture.mjs` asserts
- * its scope so it cannot be silently widened. Using it here punches no new
- * hole. The front-door half is what keeps the bypass from hiding anything.
+ * ## ⚠️ The one carve-out, and what it costs
+ *
+ * An App Check **debug token** is injected before page scripts run, because
+ * reCAPTCHA Enterprise is designed to score headless automation as a bot and
+ * always will. Everything else in the journey is real; the attestation step is
+ * not. So this canary CANNOT detect App Check being misconfigured for real
+ * visitors — named here rather than left to be discovered.
  *
  * ## Residue is a failure, even when the signup worked
  *
@@ -98,8 +98,6 @@ const { getFirestore } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
 
 const CONSOLE = process.env['SIGNUP_CANARY_ORIGIN'] ?? 'https://app.aglyn.com'
-const PROBE = process.env['AGLYN_PROBE_TOKEN'] ?? ''
-const API_KEY = process.env['NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY'] ?? ''
 /**
  * Where the canary's welcome mail goes.
  *
@@ -110,7 +108,6 @@ const API_KEY = process.env['NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY'] ?? ''
  */
 const EMAIL_BASE =
   process.env['SIGNUP_CANARY_EMAIL'] ?? 'zach+signup-canary@aglyn.com'
-const IDP = 'https://identitytoolkit.googleapis.com/v1'
 
 /**
  * Every slug this canary creates starts here, and the orphan sweep is bounded
@@ -131,36 +128,6 @@ function done(detail = '') {
   const s = steps[steps.length - 1]
   s.ms = Date.now() - s.startedAt
   console.log(`ok ${s.ms}ms ${detail}`)
-}
-
-/** `fetch`, with the bypass header and a hard budget. Never used by the browser half. */
-async function api(path, init = {}) {
-  const res = await fetch(`${CONSOLE}${path}`, {
-    ...init,
-    headers: {
-      'content-type': 'application/json',
-      // The existing CI/uptime bypass. See the docblock.
-      ...(PROBE ? { 'x-aglyn-probe': PROBE } : {}),
-      ...(init.headers ?? {}),
-    },
-    signal: AbortSignal.timeout(30_000),
-  })
-  return res
-}
-
-async function idp(method, body) {
-  const res = await fetch(`${IDP}/${method}?key=${API_KEY}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    // Identity Platform's error bodies name the account. Carry the CODE only.
-    throw new Error(`${method} ${res.status} ${json?.error?.message ?? ''}`)
-  }
-  return json
 }
 
 /**
@@ -231,35 +198,178 @@ async function sweepOrphans(db, auth) {
 }
 
 /**
- * The front door, as a stranger sees it: a real browser, no bypass header.
+ * The walk, in a real browser, as a stranger performs it.
  *
- * Asserts the signup form is actually reachable and rendered. This is the half
- * the mechanism walk cannot do for itself — it carries the probe header and so
- * cannot observe the edge refusing everybody.
+ * Everything below happens on a page — not in `fetch` — because it has to.
+ * Identity Platform enforces App Check and this project's provider is
+ * reCAPTCHA Enterprise, which has no server-side equivalent: `accounts:signUp`
+ * from any script is refused `401 Firebase App Check token is invalid`. That
+ * is not a wall to climb, it is the control working.
+ *
+ * A browser also means bot protection is exercised for real. The walk carries
+ * no bypass header of any kind, so if the edge starts refusing visitors the
+ * canary is refused with them — which is the whole point, and the reason this
+ * is not a fetch script riding the CI bypass.
+ *
+ * ⚠️ THE ONE CARVE-OUT, AND WHAT IT COSTS. An App Check **debug token** is
+ * injected before page scripts run, because reCAPTCHA Enterprise is designed
+ * to score headless automation as a bot and will always do so. Everything else
+ * in the journey is real; the attestation step is not. So this canary CANNOT
+ * detect App Check being misconfigured for real visitors. That gap is named
+ * here rather than left to be discovered, and it is the reason the token is a
+ * secret with a single purpose and a name that says so.
  */
-async function walkFrontDoor() {
-  const { chromium } = require('playwright-core')
-  const executablePath =
-    process.env['CHROME_PATH'] ??
-    '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta'
-  const browser = await chromium.launch({ executablePath, headless: true })
-  try {
-    const page = await browser.newPage()
-    const response = await page.goto(`${CONSOLE}/signup`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 45_000,
-    })
-    const status = response?.status() ?? 0
-    if (status !== 200) throw new Error(`/signup answered ${status}`)
-    // The fields a person types into. Rendering the shell is not enough — the
-    // outage this guards against served a challenge page with a 200.
-    await page.waitForSelector('input[type="password"]', { timeout: 20_000 })
-    const fields = await page.$$eval('input', (nodes) => nodes.length)
-    if (fields < 4) throw new Error(`only ${fields} inputs on /signup`)
-    return { status, fields }
-  } finally {
-    await browser.close().catch(() => undefined)
+async function walk(page, db, auth, identity, created) {
+  const { email, password, org, slug } = identity
+
+  begin('signup-form')
+  await page.goto(`${CONSOLE}/signup`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 45_000,
+  })
+  // The password field, not just the shell: a Vercel challenge page is served
+  // with a 200 and no form on it, so waiting for the document proves nothing.
+  await page.waitForSelector('input[name="Passwd"]', { timeout: 20_000 })
+  done()
+
+  begin('account')
+  await page.fill('input[name="firstName"]', 'Signup')
+  await page.fill('input[name="lastName"]', 'Canary')
+  await page.fill('input[name="organization"]', org)
+  await page.fill('input[name="email"]', email)
+  await page.fill('input[name="Passwd"]', password)
+  await page.fill('input[name="ConfirmPasswd"]', password)
+  // The clickwrap is load-bearing: the launch smoke asserts an unticked box
+  // refuses the signup.
+  await page.check('input[type="checkbox"]')
+  await page.click('button[type="submit"]')
+  await page.waitForURL(/\/verify-email/, { timeout: 45_000 })
+  const user = await auth.getUserByEmail(email)
+  created.uid = user.uid
+  if (user.emailVerified) throw new Error('a new account arrived pre-verified')
+  done(`uid ${user.uid.slice(0, 6)}…`)
+
+  begin('hold-name')
+  /**
+   * Wait for the typed workspace name to be DURABLE before touching anything.
+   *
+   * An unverified signup does not create the org — `rememberPendingSignUpWorkspace`
+   * writes the typed name to `users/{uid}.pendingSignUpWorkspace` from the
+   * browser, and the workspace is provisioned from it on the first verified
+   * session. That is a client-side Firestore write, and redeeming the code
+   * before it lands loses the name: the account verifies, no org is ever
+   * created, and the walk fails at a step that looks unrelated.
+   *
+   * This was found the expensive way. An early run passed only because an
+   * unrelated retry loop happened to stall for 75 seconds first, and every run
+   * without that accident failed. Waiting on the document rather than on a
+   * timer is what makes it deterministic.
+   */
+  const heldBy = Date.now() + 45_000
+  let held = false
+  while (Date.now() < heldBy && !held) {
+    const snap = await db.collection('users').doc(created.uid).get()
+    held = Boolean(snap.exists && snap.get('pendingSignUpWorkspace')?.name)
+    if (!held) await new Promise((r) => setTimeout(r, 1_500))
   }
+  if (!held) {
+    throw new Error('the typed workspace name was never held for provisioning')
+  }
+  done()
+
+  begin('verify-mint')
+  /**
+   * No `url` in the settings. `app.aglyn.com` is not an authorized continue
+   * domain and passing it fails the generate call itself with
+   * `auth/internal-error`; the product discards Firebase's handler URL anyway
+   * and keeps only the code.
+   *
+   * Retried, because the signup page fires its own verification send and a
+   * mint immediately behind it is throttled — measured at five refusals
+   * before the sixth attempt succeeded.
+   */
+  let link = null
+  let lastCode = ''
+  for (let attempt = 1; attempt <= 8 && !link; attempt++) {
+    try {
+      link = await auth.generateEmailVerificationLink(email)
+    } catch (error) {
+      lastCode = String(error?.code ?? error)
+      if (attempt === 8) throw new Error(`link never minted (${lastCode})`)
+      await new Promise((r) => setTimeout(r, 6_000 + attempt * 4_000))
+    }
+  }
+  const oobCode = new URL(link).searchParams.get('oobCode')
+  if (!oobCode) throw new Error('minted link carried no oobCode')
+  done(lastCode ? `after retries (${lastCode})` : '')
+
+  begin('verify-click')
+  /**
+   * The SAME tab, which is what actually happens.
+   *
+   * A mail client opens the link in the browser the person is already using,
+   * and `/verify-email?mode=verifyEmail&oobCode=…` is an Aglyn page that
+   * redeems the code and carries the session straight on to the workspace it
+   * provisions. Redeeming in a sibling tab instead leaves the original signed
+   * out at `/signin` and no org is ever created — measured, both ways.
+   *
+   * Built the way `authActionUrl` builds it: Firebase's own handler is
+   * bypassed by the product, which keeps only the code.
+   */
+  await page.goto(
+    `${CONSOLE}/verify-email?mode=verifyEmail&oobCode=${encodeURIComponent(oobCode)}`,
+    { waitUntil: 'domcontentloaded', timeout: 45_000 },
+  )
+  /**
+   * Poll the FACTS, not the URL.
+   *
+   * A verified first arrival lands on the workspace dashboard and the org is
+   * provisioned on the way, so the redirect is real — but it is the last thing
+   * to happen, and how long it takes depends on how long the page has had to
+   * settle. Waiting on the address bar made this step fail or pass according
+   * to how quickly the unrelated `verify-mint` retry loop happened to finish.
+   *
+   * What actually has to be true is that the account is verified and exactly
+   * one org exists. Those are the assertions; the URL is a diagnostic.
+   */
+  let verified = false
+  let orgs = null
+  const deadline = Date.now() + 90_000
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3_000))
+    if (!verified) {
+      verified = (await auth.getUser(created.uid)).emailVerified === true
+    }
+    if (verified) {
+      orgs = await db
+        .collection('orgs')
+        .where('ownerUid', '==', created.uid)
+        .get()
+      if (orgs.size >= 1) break
+    }
+  }
+  if (!verified) throw new Error('still unverified after redeeming the code')
+  if (!orgs || orgs.size === 0) {
+    throw new Error(`verified, but no org was provisioned (at ${page.url()})`)
+  }
+  done(page.url().replace(CONSOLE, ''))
+
+  begin('assert')
+  if (orgs.size !== 1) throw new Error(`expected 1 org, found ${orgs.size}`)
+  created.orgId = orgs.docs[0].id
+  created.slug = orgs.docs[0].get('slug')
+  // Prefix rather than equality: the product owns how a typed name becomes a
+  // workspace address, and this asserts the two things that matter — the org
+  // came from THIS walk's name, and it is inside the namespace the orphan
+  // sweep is bounded to. An exact match would break on any future slug rule
+  // without anything actually being wrong.
+  if (!created.slug || !created.slug.startsWith(CANARY_SLUG_PREFIX)) {
+    throw new Error(`org slug ${created.slug} is outside the canary namespace`)
+  }
+  if (!slug.startsWith(created.slug.slice(0, 20))) {
+    throw new Error(`org slug is ${created.slug}, expected ${slug}`)
+  }
+  done(`org ${created.orgId}`)
 }
 
 async function main() {
@@ -269,113 +379,70 @@ async function main() {
     )
     process.exit(2)
   }
-  if (!API_KEY)
-    throw new Error('NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY is not set')
-  if (!PROBE) throw new Error('AGLYN_PROBE_TOKEN is not set')
-
   const sa = readServiceAccount()
   if (!sa) throw new Error('admin credentials are not in the environment')
-  const app = initializeApp(
-    {
-      credential: cert({
-        projectId: sa.projectId,
-        clientEmail: sa.clientEmail,
-        privateKey: sa.privateKey,
-      }),
-    },
-    `canary-${Date.now()}`,
-  )
+
+  const app = initializeApp({ credential: cert(sa) }, `canary-${Date.now()}`)
   const db = getFirestore(app)
   const auth = getAuth(app)
 
-  const stamp = `${Date.now()}${randomBytes(2).toString('hex')}`
+  /**
+   * Short on purpose. A workspace URL is capped at 30 characters, and the
+   * typed organization name becomes the slug — so a stamp long enough to push
+   * past the cap gets silently truncated, and the walk then fails asserting
+   * its own name back. Base36 plus two bytes keeps `signup-canary-…` at 26.
+   */
+  const stamp = `${Date.now().toString(36)}${randomBytes(2).toString('hex')}`
   const [local, domain] = EMAIL_BASE.split('@')
-  const email = `${local}-${stamp}@${domain}`
-  const password = `Cy-${randomBytes(18).toString('base64url')}`
-  const slug = `${CANARY_SLUG_PREFIX}${stamp}`
+  const identity = {
+    email: `${local}-${stamp}@${domain}`,
+    password: `Cy-${randomBytes(18).toString('base64url')}-Aa1!`,
+    org: `Signup canary ${stamp}`,
+    // The typed organization name becomes the slug, so the two must agree or
+    // the orphan sweep cannot find what a crashed run left.
+    slug: `${CANARY_SLUG_PREFIX}${stamp}`,
+  }
   const created = { uid: null, orgId: null, slug: null }
 
   let failedStep = null
-  let reapedCleanly = false
-  let frontDoor = null
+  const { chromium } = require('playwright-core')
+  const browser = await chromium.launch({
+    executablePath:
+      process.env['CHROME_PATH'] ||
+      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
+    headless: true,
+  })
 
   try {
     begin('sweep-orphans')
     const swept = await sweepOrphans(db, auth)
     done(swept.length ? `cleared ${swept.length} from a previous run` : '')
 
-    begin('account')
-    const signUp = await idp('accounts:signUp', {
-      email,
-      password,
-      returnSecureToken: true,
-    })
-    created.uid = signUp.localId
-    done(`uid ${String(signUp.localId).slice(0, 6)}…`)
+    const debugToken = process.env['FIREBASE_APPCHECK_DEBUG_TOKEN'] ?? ''
+    if (!debugToken) throw new Error('FIREBASE_APPCHECK_DEBUG_TOKEN is not set')
+    // One CONTEXT, so the verification tab shares the signup tab's session and
+    // storage the way two tabs of one browser do. `browser.newPage()` would
+    // give each its own context and the second tab would arrive signed out.
+    const context = await browser.newContext()
+    // Before any page script: the SDK reads this the moment App Check
+    // initializes, and after that it is too late.
+    await context.addInitScript((token) => {
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = token
+    }, debugToken)
+    const page = await context.newPage()
 
-    begin('verify')
-    // Minted rather than read from an inbox — see the docblock. This still
-    // exercises the REDEMPTION path, which is the half that breaks.
-    const link = await auth.generateEmailVerificationLink(email)
-    const oobCode = new URL(link).searchParams.get('oobCode')
-    if (!oobCode) throw new Error('no oobCode on the verification link')
-    await idp('accounts:update', { oobCode })
-    // The token minted at signup still says unverified. The session door
-    // refuses those, so the walk needs a fresh one — which is also the proof
-    // that verification actually took.
-    const signIn = await idp('accounts:signInWithPassword', {
-      email,
-      password,
-      returnSecureToken: true,
-    })
-    const decoded = await auth.verifyIdToken(signIn.idToken, true)
-    if (!decoded.email_verified)
-      throw new Error('still unverified after redeem')
-    done()
-
-    begin('session')
-    const session = await api('/api/auth/session', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${signIn.idToken}` },
-    })
-    if (!session.ok) throw new Error(`session answered ${session.status}`)
-    done()
-
-    begin('org-create')
-    const orgRes = await api('/api/orgs/create', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${signIn.idToken}` },
-      body: JSON.stringify({ name: `Signup canary ${stamp}`, slug }),
-    })
-    const orgBody = await orgRes.json().catch(() => ({}))
-    if (!orgRes.ok) {
-      throw new Error(`org-create ${orgRes.status} ${orgBody?.error ?? ''}`)
-    }
-    created.orgId = orgBody.orgId ?? orgBody.id ?? null
-    created.slug = slug
-    if (!created.orgId) throw new Error('org-create returned no id')
-    done(`org ${created.orgId}`)
-
-    begin('assert')
-    const org = await db.collection('orgs').doc(created.orgId).get()
-    if (!org.exists) throw new Error('the org the API returned does not exist')
-    if (org.get('ownerUid') !== created.uid) {
-      throw new Error('the org is owned by somebody else')
-    }
-    done()
-
-    begin('front-door')
-    frontDoor = await walkFrontDoor()
-    done(`${frontDoor.fields} inputs`)
+    await walk(page, db, auth, identity, created)
   } catch (error) {
     failedStep = step
-    console.log(`FAILED at ${step}: ${String(error).slice(0, 200)}`)
+    console.log(`FAILED at ${step}: ${String(error).slice(0, 220)}`)
+  } finally {
+    await browser.close().catch(() => undefined)
   }
 
   // Always, on every path. A failed walk that leaves residue is two problems.
   begin('reap')
   const missed = await reap(db, auth, created)
-  reapedCleanly = missed.length === 0
+  const reapedCleanly = missed.length === 0
   done(reapedCleanly ? 'clean' : `MISSED ${missed.join(', ')}`)
 
   const elapsedMs = Date.now() - t0
@@ -384,8 +451,7 @@ async function main() {
   // The marker the health door reads. Written with the admin SDK rather than
   // through the workspace lib because this runs outside the app; the field
   // names are asserted against the reader by
-  // `apps/console/specs/signup-canary-marker-wiring.spec.ts`, so the two
-  // cannot drift.
+  // `apps/console/specs/signup-canary-marker-wiring.spec.ts`.
   await db
     .collection('rateLimits')
     .doc('signupCanary_production')

@@ -49,11 +49,8 @@ const STORE = readFileSync(
   'utf8',
 )
 
-const frontDoorSource = () =>
-  CANARY.slice(
-    CANARY.indexOf('async function walkFrontDoor'),
-    CANARY.indexOf('async function main'),
-  )
+const walkSource = () =>
+  CANARY.slice(CANARY.indexOf('async function walk('), CANARY.indexOf('async function main'))
 
 describe('the canary writes the document the health door reads', () => {
   it('writes to the id the reader opens', () => {
@@ -98,38 +95,79 @@ describe('the walk cannot quietly stop being a walk', () => {
     // `failedStep` is what the on-call person reads first. A step renamed
     // here and not in the runbook sends them to the wrong door.
     for (const step of [
+      'sweep-orphans',
+      'signup-form',
       'account',
-      'verify',
-      'session',
-      'org-create',
+      'hold-name',
+      'verify-mint',
+      'verify-click',
       'assert',
-      'front-door',
       'reap',
     ]) {
       expect(CANARY).toContain(`'${step}'`)
     }
   })
 
-  it('walks the FRONT DOOR without the bypass header', () => {
+  it('carries NO bypass header anywhere', () => {
     /**
-     * The whole reason the browser half exists. The mechanism half carries
-     * `x-aglyn-probe` and therefore cannot observe bot protection refusing
-     * real visitors — which is not hypothetical: an ordinary desktop Chrome
-     * User-Agent measured `429 x-vercel-mitigated: challenge` on 2026-09-09.
-     *
-     * `api()` is the only function that attaches the header, so the front
-     * door stays honest exactly as long as it does not go through `api()`.
+     * The walk is a real browser on the real front door, so if bot protection
+     * starts refusing visitors the canary is refused with them. That property
+     * survives only while nothing reaches for the CI bypass: `x-aglyn-probe`
+     * would sail the canary past an edge that was turning everybody away.
      */
-    const frontDoor = frontDoorSource()
-    expect(frontDoor).toContain('playwright-core')
-    expect(frontDoor).not.toContain('api(')
-    expect(frontDoor).not.toContain('x-aglyn-probe')
+    expect(CANARY).not.toContain('x-aglyn-probe')
+    expect(CANARY).not.toContain('AGLYN_PROBE_TOKEN')
+  })
+
+  it('drives a real browser, not fetch', () => {
+    // Identity Platform enforces App Check and the provider is reCAPTCHA
+    // Enterprise, which has no server-side equivalent: `accounts:signUp` from
+    // any script is refused 401. A fetch-based walk cannot exist.
+    expect(CANARY).toContain('playwright-core')
+    expect(walkSource()).toContain("page.goto(`${CONSOLE}/signup`")
   })
 
   it('asserts the form, not merely a 200', () => {
     // A Vercel challenge page is served with a 200 and no form on it, so a
     // status check alone would pass straight through the outage this watches.
-    expect(frontDoorSource()).toContain('input[type="password"]')
+    expect(walkSource()).toContain("waitForSelector('input[name=\"Passwd\"]'")
+  })
+
+  it('waits for the typed name to be HELD before redeeming the code', () => {
+    /**
+     * An unverified signup creates no org. The typed name is written to
+     * `users/{uid}.pendingSignUpWorkspace` from the browser and the workspace
+     * is provisioned from it on the first verified session — so redeeming
+     * before that write lands loses the name, and the walk fails much later
+     * at a step that looks unrelated. Found the expensive way: an early run
+     * passed only because an unrelated retry loop stalled 75 seconds first.
+     */
+    const walk = walkSource()
+    expect(walk).toContain('pendingSignUpWorkspace')
+    expect(walk.indexOf('pendingSignUpWorkspace')).toBeLessThan(
+      walk.indexOf('oobCode'),
+    )
+  })
+
+  it('redeems the code in the SAME tab', () => {
+    // A sibling tab leaves the original signed out at /signin and no org is
+    // ever created. Measured both ways.
+    expect(walkSource()).not.toContain('newPage()')
+  })
+
+  it('asserts the FACTS, not the address bar', () => {
+    // Whether the redirect to the dashboard has landed depends on how long
+    // the page has had to settle, so waiting on the URL made this pass or
+    // fail according to an unrelated retry loop's timing. What has to be true
+    // is that the account is verified and exactly one org exists.
+    const walk = walkSource()
+    expect(walk).toContain('emailVerified')
+    expect(walk).toContain("where('ownerUid', '==', created.uid)")
+    // Waiting for /verify-email after the form submits is fine — that
+    // navigation is the form's own result. What must not be waited on is the
+    // dashboard redirect, which is the slow, timing-dependent one.
+    const afterRedeem = walk.slice(walk.indexOf("begin('verify-click')"))
+    expect(afterRedeem).not.toContain('waitForURL')
   })
 
   it('reaps on every path, including a failed walk', () => {

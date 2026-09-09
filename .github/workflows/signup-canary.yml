@@ -20,14 +20,17 @@
 # queue delay; running less often would let the staleness window expire on a
 # healthy platform.
 #
-# ## Two halves, and the second one is why Chrome is here
+# ## Why a browser, and why no bypass header
 #
-# The mechanism half carries `x-aglyn-probe` — the existing CI/uptime bypass —
-# and so sails past the edge. That makes it structurally blind to bot
-# protection refusing real visitors, which is not hypothetical: an ordinary
-# desktop Chrome User-Agent measured `429 x-vercel-mitigated: challenge` on
-# 2026-09-09. The front-door half loads `/signup` in a real browser with NO
-# bypass header, which is the only way to see that.
+# Identity Platform enforces App Check and this project's provider is reCAPTCHA
+# Enterprise, which has no server-side equivalent — `accounts:signUp` from any
+# script is refused 401. So the walk has to happen on a page.
+#
+# That turns out to be the better design anyway: a browser exercises the edge
+# for real. The walk carries no bypass header of any kind, so if bot protection
+# starts refusing visitors the canary is refused with them. An ordinary desktop
+# Chrome User-Agent measured `429 x-vercel-mitigated: challenge` on 2026-09-09,
+# so this is not hypothetical.
 #
 # ## Failure is reported by the marker, not by this job's exit code
 #
@@ -37,26 +40,13 @@
 
 name: Signup canary
 
-# ⛔ THE HOURLY SCHEDULE IS COMMENTED OUT UNTIL THE WALK PASSES (AGL-2715).
-#
-# The account step cannot work as written. Identity Platform enforces App
-# Check, and this project's App Check provider is reCAPTCHA v3 — a browser-side
-# attestation. `accounts:signUp` from any REST client is refused:
-#
-#     accounts:signUp 401 Firebase App Check token is invalid.
-#
-# There is no server-side way to mint that token, so the account step has to
-# happen in a real browser page, not in `fetch`. Until it does, an hourly
-# schedule would fail every hour — which is precisely the alarm fatigue
-# AGL-2714 was filed to remove, arriving by a different road.
-#
-# Restore the schedule in the same commit that makes the walk pass, and not
-# before.
 on:
-  # schedule:
-  #   # Hourly, on the 25th minute — off the top of the hour, where every other
-  #   # scheduled job in this repo clusters and Actions queues are deepest.
-  #   - cron: '25 * * * *'
+  schedule:
+    # Hourly, on the 25th minute — off the top of the hour, where every other
+    # scheduled job in this repo clusters and Actions queues are deepest.
+    # SIGNUP_CANARY_STALE_AFTER_MS is two hours, so one missed run is tolerated
+    # and two are not.
+    - cron: '25 * * * *'
   workflow_dispatch: {}
 
 # One walk at a time. Two concurrent runs would race for the same orphan sweep
@@ -92,13 +82,20 @@ jobs:
       - name: Walk the signup
         env:
           SIGNUP_CANARY_ENABLE: '1'
-          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          # The repo convention: an optional var with the project as the default.
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
-          # Public by design — it ships in the client bundle — so a repo
-          # variable rather than a secret, which keeps it readable in logs
-          # where a masked value would only make failures harder to read.
-          NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY }}
+          # ⚠️ An App Check bypass. reCAPTCHA Enterprise is designed to score
+          # headless automation as a bot and always will, so this is the only
+          # way the walk can attest at all — and it is the one part of the
+          # journey that is therefore NOT real. Single purpose, named in the
+          # Firebase console as `signup-canary (AGL-2715) — CI only`, and
+          # revocable there in one click.
+          FIREBASE_APPCHECK_DEBUG_TOKEN: ${{ secrets.FIREBASE_APPCHECK_DEBUG_TOKEN }}
+          # Where the welcome mail lands. Org creation welcomes the owner of a
+          # first workspace, so this must be a REAL deliverable address — an
+          # address that hard-bounces would cost the sending domain a bounce
+          # every hour. Defaults to a plus-address on the owner's mailbox.
           SIGNUP_CANARY_EMAIL: ${{ vars.SIGNUP_CANARY_EMAIL }}
         run: node tools/e2e/signup-canary.mjs
