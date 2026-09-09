@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import { normalizeMediaTags } from '@aglyn/aglyn'
 
 /**
  * The asset-detail drawer's two new decisions, out of the component (AGL-2143).
@@ -108,15 +108,15 @@ export function describeMediaDelivery(
  * happened, because it is.
  */
 export function addMediaTag(current: string, draft: string): string | null {
-  const existing = Aglyn.normalizeMediaTags(current ?? '')
-  const next = Aglyn.normalizeMediaTags([...existing, draft ?? ''])
+  const existing = normalizeMediaTags(current ?? '')
+  const next = normalizeMediaTags([...existing, draft ?? ''])
   if (next.length === existing.length) return null
   return next.join(', ')
 }
 
 /** Removes one tag, preserving the stored comma-joined shape. */
 export function removeMediaTag(current: string, tag: string): string {
-  return Aglyn.normalizeMediaTags(current ?? '')
+  return normalizeMediaTags(current ?? '')
     .filter((entry) => entry !== tag)
     .join(', ')
 }

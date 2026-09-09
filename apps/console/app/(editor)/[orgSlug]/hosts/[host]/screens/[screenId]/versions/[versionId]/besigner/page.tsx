@@ -21,7 +21,27 @@ import {
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  buildScreenRouteEntries,
+  canvas,
+  CANVAS_ROOT_ELEMENT_ID,
+  composeLayoutChainAndScreenNodes,
+  composeScreenRoutePath,
+  decodeStoredNodes,
+  findScreenIdByRoutePath,
+  HostViewType,
+  MAX_LAYOUT_CHAIN_DEPTH,
+  normalizeScreenSlug,
+  ownScreenSlugFromRoutePath,
+  reservedScreenRouteMessage,
+  reservedScreenRouteSegment,
+  SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
+  ScreenLinkContext,
+  screenRoutePathToUrl,
+  screenSlugHasPathSeparator,
+  wouldCreateScreenCycle,
+} from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
@@ -203,7 +223,7 @@ function BesignerPage(props) {
   // so nothing here can be found with a document query.
   const { elements: canvasElements } = useRenderedCanvasElements()
   const getCanvasRoot = useCallback(
-    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    () => canvasElements.current?.[CANVAS_ROOT_ELEMENT_ID]?.node,
     [canvasElements],
   )
   const presence = usePresence({
@@ -416,8 +436,8 @@ function BesignerPage(props) {
     // to the email plugin's email-safe blocks.
     viewType:
       screenKind === 'email'
-        ? Aglyn.HostViewType.EMAIL
-        : Aglyn.HostViewType.SCREEN,
+        ? HostViewType.EMAIL
+        : HostViewType.SCREEN,
     documentKey: `${hostId}:${screenId}:${versionId}`,
     draft: {
       scope: hostId,
@@ -518,7 +538,7 @@ function BesignerPage(props) {
     docId: screenId,
     versionId,
     storedStamp: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
-    loaded: Aglyn.canvas.didSetInitial,
+    loaded: canvas.didSetInitial,
   })
   clearMirrorRef.current = coediting.clearMirror
 
@@ -736,15 +756,15 @@ function BesignerPage(props) {
   const slugValue =
     slugInput ??
     screenResult?.data?.slug ??
-    Aglyn.ownScreenSlugFromRoutePath(publishedPath) ??
+    ownScreenSlugFromRoutePath(publishedPath) ??
     ''
   // A `/` the author typed INSIDE the value (AGL-2572). The field holds one
   // segment and `normalizeScreenSlug` reaches one by deleting the separator,
   // so `alternatives/webflow` would be stored as `alternativeswebflow`. Read
   // off the RAW value, before normalizing, because after it there is nothing
   // left to notice.
-  const slugPathSeparator = Aglyn.screenSlugHasPathSeparator(slugValue)
-  const normalizedSlug = Aglyn.normalizeScreenSlug(slugValue)
+  const slugPathSeparator = screenSlugHasPathSeparator(slugValue)
+  const normalizedSlug = normalizeScreenSlug(slugValue)
   // Candidate map with the pending slug applied, so the composed path and
   // conflict check reflect what Publish would write.
   const candidateById = useMemo(
@@ -759,17 +779,17 @@ function BesignerPage(props) {
     [screensById, screenId, normalizedSlug, parentId],
   )
   const composedPath = normalizedSlug
-    ? Aglyn.composeScreenRoutePath(screenId, candidateById)
+    ? composeScreenRoutePath(screenId, candidateById)
     : undefined
   const slugOwner = composedPath
-    ? Aglyn.findScreenIdByRoutePath(routingMap, composedPath)
+    ? findScreenIdByRoutePath(routingMap, composedPath)
     : undefined
   const slugConflict = Boolean(slugOwner && slugOwner !== screenId)
   const unpublishedAncestor = Boolean(normalizedSlug && !composedPath)
   // An address the published site cannot answer, whatever the routing map says
   // (AGL-2076). Read off the COMPOSED path so a `search` nested under a parent
   // — `docs/search`, which serves fine — is not refused with it.
-  const reservedSegment = Aglyn.reservedScreenRouteSegment(
+  const reservedSegment = reservedScreenRouteSegment(
     composedPath ?? normalizedSlug,
   )
 
@@ -781,7 +801,7 @@ function BesignerPage(props) {
     (
       byId: Record<string, Aglyn.ScreenRouteNode | undefined>,
       options?: Aglyn.BuildScreenRouteEntriesOptions,
-    ) => Aglyn.buildScreenRouteEntries(screenId, byId, routingMap, options),
+    ) => buildScreenRouteEntries(screenId, byId, routingMap, options),
     [screenId, routingMap],
   )
 
@@ -1076,7 +1096,7 @@ function BesignerPage(props) {
                 collectionTemplatePublishMessage(
                   routesByScreenId.get(screenId),
                   { isTemplateScreen: isCollectionTemplate },
-                ) ?? `Published at ${Aglyn.screenRoutePathToUrl(composedPath)}`,
+                ) ?? `Published at ${screenRoutePathToUrl(composedPath)}`,
                 { variant: 'success', persist: false },
               )
             })
@@ -1184,9 +1204,9 @@ function BesignerPage(props) {
           slugConflict
             ? 'Another screen is already published at this path'
             : reservedSegment
-              ? Aglyn.reservedScreenRouteMessage(reservedSegment)
+              ? reservedScreenRouteMessage(reservedSegment)
               : slugPathSeparator
-                ? Aglyn.SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
+                ? SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
                 : 'Publish the parent screen first',
           { variant: 'warning', persist: false },
         )
@@ -1221,7 +1241,7 @@ function BesignerPage(props) {
         collectionTemplatePublishMessage(routesByScreenId.get(screenId), {
           isTemplateScreen: isCollectionTemplate,
         }) ??
-          `Published at ${Aglyn.screenRoutePathToUrl(composedPath as string)}`,
+          `Published at ${screenRoutePathToUrl(composedPath as string)}`,
         { variant: 'success', persist: false },
       )
     } catch (e) {
@@ -1298,9 +1318,9 @@ function BesignerPage(props) {
         slugConflict
           ? 'Another screen is already published at this path'
           : reservedSegment
-            ? Aglyn.reservedScreenRouteMessage(reservedSegment)
+            ? reservedScreenRouteMessage(reservedSegment)
             : slugPathSeparator
-              ? Aglyn.SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
+              ? SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
               : 'Publish the parent screen first',
         { variant: 'warning', persist: false },
       )
@@ -1330,7 +1350,7 @@ function BesignerPage(props) {
       setSlugInput(null)
       enqueueSnackbar(
         publishedPath && composedPath
-          ? `Now served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
+          ? `Now served at ${screenRoutePathToUrl(composedPath)}`
           : 'Slug saved — press Publish to put this screen on your site',
         { variant: 'success', persist: false },
       )
@@ -1364,7 +1384,7 @@ function BesignerPage(props) {
     async (event) => {
       const value = event.target.value as string
       const nextParentId = value === '__none__' ? undefined : value
-      if (Aglyn.wouldCreateScreenCycle(screenId, nextParentId, screensById)) {
+      if (wouldCreateScreenCycle(screenId, nextParentId, screensById)) {
         return enqueueSnackbar(
           "A screen can't be nested inside itself or its own children",
           { variant: 'warning', persist: false },
@@ -1374,13 +1394,13 @@ function BesignerPage(props) {
         ...screensById,
         [screenId]: { ...screensById[screenId], parentId: nextParentId },
       }
-      const nextSelfPath = Aglyn.composeScreenRoutePath(screenId, nextById)
+      const nextSelfPath = composeScreenRoutePath(screenId, nextById)
       const owner = nextSelfPath
-        ? Aglyn.findScreenIdByRoutePath(routingMap, nextSelfPath)
+        ? findScreenIdByRoutePath(routingMap, nextSelfPath)
         : undefined
       if (owner && owner !== screenId) {
         return enqueueSnackbar(
-          `Another screen is already published at ${Aglyn.screenRoutePathToUrl(nextSelfPath as string)}`,
+          `Another screen is already published at ${screenRoutePathToUrl(nextSelfPath as string)}`,
           { variant: 'warning', persist: false },
         )
       }
@@ -1452,7 +1472,7 @@ function BesignerPage(props) {
       while (
         parentId &&
         !seen.has(String(parentId)) &&
-        chain.length < Aglyn.MAX_LAYOUT_CHAIN_DEPTH
+        chain.length < MAX_LAYOUT_CHAIN_DEPTH
       ) {
         seen.add(String(parentId))
         try {
@@ -1483,7 +1503,7 @@ function BesignerPage(props) {
           // raw `getDoc` walks the GRANDPARENT chain with no converter, so
           // every ancestor came back as a `Bytes` and composed to nothing —
           // preview silently lost the outer chrome.
-          chain.push(Aglyn.decodeStoredNodes(versionSnapshot.get('nodes')))
+          chain.push(decodeStoredNodes(versionSnapshot.get('nodes')))
           parentId = layoutSnapshot.get('layoutId')
         } catch (error) {
           // A preview is worth showing without the outer chrome; it is not
@@ -1493,9 +1513,9 @@ function BesignerPage(props) {
         }
       }
     }
-    const composed = Aglyn.composeLayoutChainAndScreenNodes(
+    const composed = composeLayoutChainAndScreenNodes(
       chain as any,
-      Aglyn.canvas.toJSON().nodes as any,
+      canvas.toJSON().nodes as any,
     )
     writePreviewState(ids, composed as any, hostTheme)
     window.open(
@@ -1557,7 +1577,7 @@ function BesignerPage(props) {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
-      <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+      <ScreenLinkContext.Provider value={screenLinks}>
         <EntityPickerProvider hostId={hostId}>
           <ReusableComponentsProvider hostId={hostId}>
             <BindingPickerProvider hostId={hostId}>
@@ -1610,7 +1630,7 @@ function BesignerPage(props) {
                                   ? `Live — this template renders ${templateRoutes}`
                                   : 'Live as a collection template — no path of its own'
                                 : publishedPath
-                                  ? `Live at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                                  ? `Live at ${screenRoutePathToUrl(publishedPath)}`
                                   : 'Publish this version to your site'
                           }
                         >
@@ -1715,15 +1735,15 @@ function BesignerPage(props) {
                           {
                             id: 'center-nav-edit-undo',
                             children: 'Undo',
-                            onClick: () => Aglyn.canvas.undo(),
-                            disabled: !Aglyn.canvas.canUndo,
+                            onClick: () => canvas.undo(),
+                            disabled: !canvas.canUndo,
                             ListItemTextProps: { inset: true },
                           },
                           {
                             id: 'center-nav-edit-redo',
                             children: 'Redo',
-                            onClick: () => Aglyn.canvas.redo(),
-                            disabled: !Aglyn.canvas.canRedo,
+                            onClick: () => canvas.redo(),
+                            disabled: !canvas.canRedo,
                             ListItemTextProps: { inset: true },
                           },
                           {
@@ -1918,7 +1938,7 @@ function BesignerPage(props) {
                           .filter(
                             (screen) =>
                               screen.$id !== screenId &&
-                              !Aglyn.wouldCreateScreenCycle(
+                              !wouldCreateScreenCycle(
                                 screenId,
                                 screen.$id,
                                 screensById,
@@ -1949,11 +1969,11 @@ function BesignerPage(props) {
                           )}
                           helperText={
                             slugPathSeparator
-                              ? Aglyn.SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
+                              ? SCREEN_SLUG_PATH_SEPARATOR_MESSAGE
                               : slugConflict
                               ? 'Another screen already uses this path'
                               : reservedSegment
-                                ? Aglyn.reservedScreenRouteMessage(
+                                ? reservedScreenRouteMessage(
                                     reservedSegment,
                                   )
                                 : unpublishedAncestor
@@ -1972,13 +1992,13 @@ function BesignerPage(props) {
                                       // site from a text field.
                                       composedPath === publishedPath &&
                                         composedPath
-                                      ? `Served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
+                                      ? `Served at ${screenRoutePathToUrl(composedPath)}`
                                       : composedPath && publishedPath
-                                        ? `Served at ${Aglyn.screenRoutePathToUrl(publishedPath)} — Done moves it to ${Aglyn.screenRoutePathToUrl(composedPath)}`
+                                        ? `Served at ${screenRoutePathToUrl(publishedPath)} — Done moves it to ${screenRoutePathToUrl(composedPath)}`
                                         : composedPath
-                                          ? `Not published — Publish puts this screen at ${Aglyn.screenRoutePathToUrl(composedPath)}`
+                                          ? `Not published — Publish puts this screen at ${screenRoutePathToUrl(composedPath)}`
                                           : publishedPath
-                                            ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                                            ? `Currently published at ${screenRoutePathToUrl(publishedPath)}`
                                             : 'Not published'
                           }
                         />
@@ -2142,12 +2162,12 @@ function BesignerPage(props) {
                       </Stack>
                     </Stack>
                   </PropertiesDialogComponent>
-                  {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
+                  {Boolean(canvas.rootNode && jsonOpen) && (
                     <JsonEditor
-                      open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
+                      open={Boolean(canvas.rootNode && jsonOpen)}
                       onClose={closeJsonEditor}
                       onSave={handleJsonSave}
-                      defaultValue={Aglyn.canvas.nestedNodes as any}
+                      defaultValue={canvas.nestedNodes as any}
                     />
                   )}
                 </BesignerMediaPickerProvider>
@@ -2155,7 +2175,7 @@ function BesignerPage(props) {
             </BindingPickerProvider>
           </ReusableComponentsProvider>
         </EntityPickerProvider>
-      </Aglyn.ScreenLinkContext.Provider>
+      </ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   )
 }

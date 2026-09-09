@@ -20,7 +20,13 @@ import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../../../../../../../../../utils/revalidate-live-pages'
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  CANVAS_ROOT_ELEMENT_ID,
+  HostViewType,
+  ScreenLinkContext,
+} from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
@@ -231,7 +237,7 @@ function LayoutBesignerPage(props) {
   const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
   const { elements: canvasElements } = useRenderedCanvasElements()
   const getCanvasRoot = useCallback(
-    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    () => canvasElements.current?.[CANVAS_ROOT_ELEMENT_ID]?.node,
     [canvasElements],
   )
   const presence = usePresence({
@@ -274,7 +280,7 @@ function LayoutBesignerPage(props) {
     error,
     save: saveLayoutVersion,
     noun: 'layout',
-    viewType: Aglyn.HostViewType.LAYOUT,
+    viewType: HostViewType.LAYOUT,
     documentKey: `${hostId}:${layoutId}:${versionId}`,
     draft: {
       scope: hostId,
@@ -360,7 +366,7 @@ function LayoutBesignerPage(props) {
     docId: layoutId,
     versionId,
     storedStamp: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
-    loaded: Aglyn.canvas.didSetInitial,
+    loaded: canvas.didSetInitial,
   })
   clearMirrorRef.current = coediting.clearMirror
 
@@ -549,7 +555,7 @@ function LayoutBesignerPage(props) {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
-      <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+      <ScreenLinkContext.Provider value={screenLinks}>
         <EntityPickerProvider hostId={hostId}>
           <ReusableComponentsProvider hostId={hostId}>
             <BindingPickerProvider hostId={hostId}>
@@ -627,15 +633,15 @@ function LayoutBesignerPage(props) {
                           {
                             id: 'center-nav-edit-undo',
                             children: 'Undo',
-                            onClick: () => Aglyn.canvas.undo(),
-                            disabled: !Aglyn.canvas.canUndo,
+                            onClick: () => canvas.undo(),
+                            disabled: !canvas.canUndo,
                             ListItemTextProps: { inset: true },
                           },
                           {
                             id: 'center-nav-edit-redo',
                             children: 'Redo',
-                            onClick: () => Aglyn.canvas.redo(),
-                            disabled: !Aglyn.canvas.canRedo,
+                            onClick: () => canvas.redo(),
+                            disabled: !canvas.canRedo,
                             ListItemTextProps: { inset: true },
                           },
                           {
@@ -735,12 +741,12 @@ function LayoutBesignerPage(props) {
                       </>
                     )}
                   </MainLayout>
-                  {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
+                  {Boolean(canvas.rootNode && jsonOpen) && (
                     <JsonEditor
-                      open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
+                      open={Boolean(canvas.rootNode && jsonOpen)}
                       onClose={closeJsonEditor}
                       onSave={handleJsonSave}
-                      defaultValue={Aglyn.canvas.nestedNodes as any}
+                      defaultValue={canvas.nestedNodes as any}
                     />
                   )}
                 </BesignerMediaPickerProvider>
@@ -748,7 +754,7 @@ function LayoutBesignerPage(props) {
             </BindingPickerProvider>
           </ReusableComponentsProvider>
         </EntityPickerProvider>
-      </Aglyn.ScreenLinkContext.Provider>
+      </ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   )
 }

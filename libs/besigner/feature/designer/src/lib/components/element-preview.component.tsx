@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  aglyn,
+  CanvasManager,
+  NODE_ROOT_ID,
+  ScreenLinkContext,
+  SiteContext,
+} from '@aglyn/aglyn'
 // Deep import, NOT the barrel (AGL-2486) — see `plugin-styles-ui.tsx`.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
@@ -111,7 +118,7 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
     const data = node?.data
     if (!data) return undefined
     try {
-      const store = new Aglyn.CanvasManager(Aglyn.aglyn)
+      const store = new CanvasManager(aglyn)
       // Seed an empty root, then insert through the SAME path the drawer
       // uses. Handing `preset.data` straight to `processNodesToDenormalized`
       // looks equivalent and is not: it keys nodes by `$id` and maps each
@@ -121,10 +128,10 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
       // which is what assigns them.
       store.setNodes(
         store.processNodesToDenormalized([
-          { $id: Aglyn.NODE_ROOT_ID, componentId: 'div', nodes: [] } as any,
+          { $id: NODE_ROOT_ID, componentId: 'div', nodes: [] } as any,
         ]),
       )
-      const rootNode = store.getNode(Aglyn.NODE_ROOT_ID)
+      const rootNode = store.getNode(NODE_ROOT_ID)
       store.addNodeFromPreset(node, rootNode)
       return store
     } catch (error) {
@@ -134,7 +141,7 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
     }
   }, [node])
 
-  const root = canvas?.getNode(Aglyn.NODE_ROOT_ID)
+  const root = canvas?.getNode(NODE_ROOT_ID)
 
   // Hoisted above the early return — every hook this component calls has to
   // run on every render, including the one where there is nothing to draw.
@@ -282,20 +289,20 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
                 plugin element that ignores the plugin's own CSS is a thumbnail
                 of something the site will never render. */}
             <PluginStyles scope="shadow" />
-            <Aglyn.SiteContext.Provider
+            <SiteContext.Provider
               // No `hostId`: data-backed elements take their own placeholder
               // branch rather than fetching a site's real content into a
               // thumbnail. `preview` additionally 423s any write.
               value={siteValue}
             >
-              <Aglyn.ScreenLinkContext.Provider
+              <ScreenLinkContext.Provider
                 value={linkValue}
               >
                 <PreviewThemed hostThemeDoc={hostThemeDoc}>
                   <AglynNodeRenderer node={root} />
                 </PreviewThemed>
-              </Aglyn.ScreenLinkContext.Provider>
-            </Aglyn.SiteContext.Provider>
+              </ScreenLinkContext.Provider>
+            </SiteContext.Provider>
           </PreviewShadowDom>
         </Box>
       </InertStage>

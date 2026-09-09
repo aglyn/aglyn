@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
 // The leaf module, not the 68 KB package bundle — see the note there.
 import { computedFn } from '@aglyn/shared-util-vendor/mobx-computed-fn'
@@ -329,7 +330,7 @@ export function resolveSelectionAfterDeletion(
 ): Aglyn.NodeSchema<any>[] {
   const anchor = nodes.find((node) => node?.$id && node?.parentId)
   if (!anchor) return []
-  const parent = Aglyn.canvas.getNode(anchor.parentId!)
+  const parent = canvas.getNode(anchor.parentId!)
   if (!parent) return []
 
   const siblings = parent.nodes ?? []
@@ -337,11 +338,11 @@ export function resolveSelectionAfterDeletion(
   const candidates: Aglyn.NodeSchema<any>[] = []
   if (index > -1) {
     for (let i = index + 1; i < siblings.length; i += 1) {
-      const sibling = Aglyn.canvas.getNode(siblings[i])
+      const sibling = canvas.getNode(siblings[i])
       if (sibling) candidates.push(sibling)
     }
     for (let i = index - 1; i >= 0; i -= 1) {
-      const sibling = Aglyn.canvas.getNode(siblings[i])
+      const sibling = canvas.getNode(siblings[i])
       if (sibling) candidates.push(sibling)
     }
   }
@@ -357,7 +358,7 @@ export function resolveSelectionAfterDeletion(
 export function selectFirstSurviving(
   candidates: readonly Aglyn.NodeSchema<any>[],
 ): void {
-  const survivor = candidates.find((node) => !!Aglyn.canvas.getNode(node.$id))
+  const survivor = candidates.find((node) => !!canvas.getNode(node.$id))
   if (survivor) setSelectedNode(survivor)
   else clearSelection()
 }
@@ -369,13 +370,13 @@ export function selectFirstSurviving(
  */
 export function getVisibleNodeOrder(): Aglyn.NodeSchema<any>[] {
   const result: Aglyn.NodeSchema<any>[] = []
-  const root = Aglyn.canvas.rootNode
+  const root = canvas.rootNode
   if (!root) return result
   const walk = (node: Aglyn.NodeSchema<any>) => {
     result.push(node)
     if (node.$id !== root.$id && !state.isNodeEffectivelyExpanded(node)) return
     for (const id of node.nodes ?? []) {
-      const child = Aglyn.canvas.getNode(id)
+      const child = canvas.getNode(id)
       if (child) walk(child)
     }
   }

@@ -15,14 +15,22 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  components,
+  HostViewType,
+  isCategoryCapabilityEnabled,
+  isFromEnabledPlugin,
+  LAYOUT_SLOT_COMPONENT_ID,
+  useEnabledPlugins,
+} from '@aglyn/aglyn'
 import useAglynBesignerFlag from './use-aglyn-besigner-flag'
 
 /** Bundle id of the email designer's blocks (AGL-395). */
 const EMAIL_PLUGIN_ID = 'email'
 
 function isLayoutOnlyPreset(preset: Aglyn.PresetSchema | undefined) {
-  return preset?.data?.componentId === Aglyn.LAYOUT_SLOT_COMPONENT_ID
+  return preset?.data?.componentId === LAYOUT_SLOT_COMPONENT_ID
 }
 
 function isEmailComponent(item: { pluginId?: string } | undefined) {
@@ -50,37 +58,36 @@ export function useVisibleComponentCategories() {
   // session, so without this the drawer offers — and inserts — components
   // from a plugin the site has switched off, which the published site then
   // refuses to render. Undefined off host surfaces, which filters nothing.
-  const enabled = Aglyn.useEnabledPlugins()
+  const enabled = useEnabledPlugins()
 
-  if (viewType === Aglyn.HostViewType.EMAIL) {
-    return Aglyn.components.schemasBySortedCategories
+  if (viewType === HostViewType.EMAIL) {
+    return components.schemasBySortedCategories
       .map((category) => ({
         ...category,
-        items: Aglyn.isCategoryCapabilityEnabled(category.label, enabled)
+        items: isCategoryCapabilityEnabled(category.label, enabled)
           ? category.items?.filter(
               (item) =>
-                isEmailComponent(item) &&
-                Aglyn.isFromEnabledPlugin(item, enabled),
+                isEmailComponent(item) && isFromEnabledPlugin(item, enabled),
             )
           : [],
       }))
       .filter((category) => category.items?.length)
   }
 
-  const isLayout = viewType === Aglyn.HostViewType.LAYOUT
-  return Aglyn.components.schemasBySortedCategories
+  const isLayout = viewType === HostViewType.LAYOUT
+  return components.schemasBySortedCategories
     .map((category) => ({
       ...category,
       // A category whose CAPABILITY is off contributes nothing, heading
       // included (AGL-2486) — an empty "Members" heading still advertises a
       // capability the site does not have. Emptying it here rather than
       // filtering item by item is what makes the final `.filter` drop it.
-      items: !Aglyn.isCategoryCapabilityEnabled(category.label, enabled)
+      items: !isCategoryCapabilityEnabled(category.label, enabled)
         ? []
         : category.items?.filter(
             (item) =>
               // A plugin this site has switched off offers nothing.
-              Aglyn.isFromEnabledPlugin(item, enabled) &&
+              isFromEnabledPlugin(item, enabled) &&
               // Email blocks never appear outside an email document.
               !isEmailComponent(item) &&
               // The LayoutSlot outlet is layout-only.

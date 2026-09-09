@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import { canvas, LAYOUT_SLOT_COMPONENT_ID, NODE_ROOT_ID } from '@aglyn/aglyn'
 // Deep import, NOT the barrel (AGL-2486) — see `plugin-styles-ui.tsx`.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import {
@@ -226,7 +226,7 @@ const ThemedElementContainer = ({ children }) => {
 
 const EditableScreenRenderer = observer(() => (
   <AglynNodeRenderer
-    node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)!}
+    node={canvas.getNode(NODE_ROOT_ID)!}
     LeafComponent={NodeLeaf}
   />
 ))
@@ -241,7 +241,7 @@ EditableScreenRenderer.displayName = 'EditableScreenRenderer'
  */
 const LayoutChromeLeaf = forwardRef<any, any>((props, ref) => {
   const { node, children, ...rest } = props
-  if (node?.componentId === Aglyn.LAYOUT_SLOT_COMPONENT_ID) {
+  if (node?.componentId === LAYOUT_SLOT_COMPONENT_ID) {
     return (
       <Leaf ref={ref} node={node} {...rest}>
         {children}
@@ -261,7 +261,7 @@ const SiteContainer = observer(
   forwardRef<any, SiteShadowDomProps>((props, ref) => {
     const { ...rest } = props
     const { chromeCanvas } = useLayoutChromeContext()
-    const chromeRoot = chromeCanvas?.getNode(Aglyn.NODE_ROOT_ID)
+    const chromeRoot = chromeCanvas?.getNode(NODE_ROOT_ID)
     return (
       <SiteShadowDom
         ref={ref}

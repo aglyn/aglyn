@@ -32,7 +32,14 @@
  * in Firestore — no HTML is ever persisted.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  isSupportedImageSrc,
+  isSupportedLinkHref,
+  parseMarkdownLite,
+  resolveMediaSrc,
+  serializeMarkdownLite,
+} from '@aglyn/aglyn'
 import {
   Box,
   Button,
@@ -186,7 +193,7 @@ const emptyParagraph = (): TextRow => ({
 /** Flattens parsed blocks to editable rows (lists become item rows). */
 export function markdownToRows(markdown: string): EditorRow[] {
   const rows: EditorRow[] = []
-  for (const block of Aglyn.parseMarkdownLite(markdown)) {
+  for (const block of parseMarkdownLite(markdown)) {
     if (block.type === 'heading') {
       rows.push({
         key: nextRowKey(),
@@ -272,7 +279,7 @@ export function rowsToMarkdown(rows: EditorRow[]): string {
       })
     }
   }
-  return Aglyn.serializeMarkdownLite(blocks)
+  return serializeMarkdownLite(blocks)
 }
 
 const rowPlainText = (inlines: Aglyn.MarkdownInline[]): string =>
@@ -624,7 +631,7 @@ const BlockRowView = memo(function BlockRowView({
         // be editing next to a broken-image icon while the published page
         // rendered correctly.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={Aglyn.resolveMediaSrc(row.src)} alt={row.alt} />
+        <img src={resolveMediaSrc(row.src)} alt={row.alt} />
       ) : row.kind === 'code' ? (
         <Box
           sx={{
@@ -969,8 +976,8 @@ const HISTORY_LIMIT = 100
  * additionally accept a well-formed `media:` reference (AGL-1215), which is
  * now what the media picker inserts.
  */
-const isValidLinkUrl = (url: string): boolean => Aglyn.isSupportedLinkHref(url)
-const isValidImageUrl = (url: string): boolean => Aglyn.isSupportedImageSrc(url)
+const isValidLinkUrl = (url: string): boolean => isSupportedLinkHref(url)
+const isValidImageUrl = (url: string): boolean => isSupportedImageSrc(url)
 
 interface UrlDialogState {
   kind: 'link' | 'image'

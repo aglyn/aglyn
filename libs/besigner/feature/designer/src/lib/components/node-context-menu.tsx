@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
   BesignerPanelTabFlag,
@@ -77,7 +78,7 @@ export const NodeContextMenu = observer(
   forwardRef<any, NodeContextMenuProps>((props, ref) => {
     const { node, onAction, ...rest } = props
 
-    const isRootNode = Aglyn.canvas.isRootNode(node)
+    const isRootNode = canvas.isRootNode(node)
     // Multi-selection (AGL-11): ambiguous single-target actions hide or
     // disable; Duplicate/Delete apply to the whole selection.
     const multi = Besigner.focus.hasMultipleSelected()
@@ -97,8 +98,8 @@ export const NodeContextMenu = observer(
         onAction?.()
         const targets = multi ? Besigner.focus.getSelected() : [node]
         for (const target of targets) {
-          if (target && !Aglyn.canvas.isRootNode(target)) {
-            Aglyn.canvas.duplicateNode(target)
+          if (target && !canvas.isRootNode(target)) {
+            canvas.duplicateNode(target)
           }
         }
       },
@@ -123,14 +124,14 @@ export const NodeContextMenu = observer(
     const handleMoveUp = useCallback(
       (e: ChangeEvent<unknown>) => {
         if (isRootNode) return
-        Aglyn.canvas.reorderNode(node, node?.index - 1)
+        canvas.reorderNode(node, node?.index - 1)
       },
       [node, isRootNode],
     )
     const handleMoveDown = useCallback(
       (e: ChangeEvent<unknown>) => {
         if (isRootNode) return
-        Aglyn.canvas.reorderNode(node, node?.index + 1)
+        canvas.reorderNode(node, node?.index + 1)
       },
       [node, isRootNode],
     )
@@ -226,7 +227,7 @@ export const NodeContextMenu = observer(
       const changed: string[] = []
       action(() => {
         for (const target of targets) {
-          if (!target || Aglyn.canvas.isRootNode(target)) continue
+          if (!target || canvas.isRootNode(target)) continue
           const props = nodePropsWithHiddenOnSite(target as never, !hiddenOnSite)
           if (!props) continue
           target.props = props as never
@@ -272,7 +273,7 @@ export const NodeContextMenu = observer(
       onAction?.()
       const targets = multi ? Besigner.focus.getSelected() : [node]
       for (const target of targets) {
-        if (target && !Aglyn.canvas.isRootNode(target)) {
+        if (target && !canvas.isRootNode(target)) {
           Besigner.styleClipboard.pasteStyles(target)
         }
       }

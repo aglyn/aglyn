@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import { mergeNodeSx, mergeSchemeValue } from '@aglyn/aglyn'
 import type { BesignerStateFlag } from '@aglyn/besigner'
 import isEqual from 'lodash-es/isEqual'
 
@@ -256,7 +256,7 @@ export function stateScopedSx(
   // is merged in below, and a SIBLING state's block is not part of what this
   // state looks like.
   const base = stripStateSlices(sx)
-  return Aglyn.mergeNodeSx(base, slice) as Record<string, any>
+  return mergeNodeSx(base, slice) as Record<string, any>
 }
 
 /**
@@ -421,7 +421,7 @@ export function hoistStateSx<T>(sx: T, state: SxState | null): T {
   const out: Record<string, any> = { ...(sx as Record<string, any>) }
   delete out[selector]
   for (const [key, value] of Object.entries(slice)) {
-    const merged = Aglyn.mergeSchemeValue(out[key], value)
+    const merged = mergeSchemeValue(out[key], value)
     if (merged === undefined) delete out[key]
     else out[key] = merged
   }

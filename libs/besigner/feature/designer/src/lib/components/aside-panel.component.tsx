@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
   type BesignerPanelKey,
@@ -201,7 +201,7 @@ function withLastSelectedNode<P>(
      * for that case — there is no live node to prefer.
      */
     const lastSelected = selected
-      ? Aglyn.canvas.getNode(selected.$id) ?? selected
+      ? canvas.getNode(selected.$id) ?? selected
       : selected
 
     return (

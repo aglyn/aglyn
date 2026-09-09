@@ -54,7 +54,17 @@ const CONSOLE_SHELL = SHELL_ENTRIES[0]
 /** The module that held it, and cost 214.3 KB gzipped on every console route. */
 const OFFENDER = join(REPO_ROOT, 'apps/console/utils/realm-plugins.client.ts')
 
-const read = (file) => readFileSync(file, 'utf8')
+// Shared across the shell walks below for the reason the CLI shares them:
+// nine entries whose closures overlap almost entirely, and a resolver or a
+// source read per entry is most of the run.
+const sources = new Map()
+const read = (file) => {
+  let source = sources.get(file)
+  if (source === undefined)
+    sources.set(file, (source = readFileSync(file, 'utf8')))
+  return source
+}
+const resolve = createResolver(REPO_ROOT)
 
 test('reads a value namespace import of the core barrel', () => {
   assert.deepEqual(
@@ -105,7 +115,7 @@ test('every shell entry reaches zero namespace pins today', () => {
     const measured = measureNamespacePins({
       entry: join(REPO_ROOT, entry),
       read,
-      resolve: createResolver(REPO_ROOT),
+      resolve,
     })
     assert.equal(
       measured.pins.length,
@@ -137,7 +147,7 @@ test('FORCED RED: the AGL-2706 import, replayed in memory, reddens the console s
   assert.equal(measured.pins[0].local, 'Aglyn')
 })
 
-test('the CLI exits 0 and names both shells', () => {
+test('the CLI exits 0 and names every shell', () => {
   const output = execFileSync('node', [CLI], { encoding: 'utf8' })
   for (const entry of SHELL_ENTRIES) assert.ok(output.includes(entry), output)
   assert.ok(output.includes('0 namespace pin(s)'), output)

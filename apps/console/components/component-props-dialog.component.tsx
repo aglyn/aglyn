@@ -17,7 +17,8 @@
 
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { COMPONENT_PROP_NAME_PATTERN } from '@aglyn/aglyn'
 import { mdiDelete, mdiPlus } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ScreenLinkValuePicker } from '@aglyn/besigner-ui'
@@ -92,7 +93,7 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
     return draft.map((prop) => {
       const name = prop.name?.trim() ?? ''
       if (!name) return 'A name is required'
-      if (!Aglyn.COMPONENT_PROP_NAME_PATTERN.test(name)) {
+      if (!COMPONENT_PROP_NAME_PATTERN.test(name)) {
         return 'Letters, numbers and underscores only, not starting with a number'
       }
       if (seen.has(name)) return 'Already used by another property'

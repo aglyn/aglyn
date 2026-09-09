@@ -81,10 +81,10 @@ import {
 export const BARREL = 'libs/shared/ui/jsx/src/index.ts'
 
 /**
- * The OTHER barrel a published customer page imports statically (AGL-2486).
+ * The OTHER barrel the app shells import statically (AGL-2486).
  *
- * `apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx` opens with
- * `import * as Aglyn from '@aglyn/aglyn'`, so this entry bills the same way
+ * `apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx` used to open with
+ * `import * as Aglyn from '@aglyn/aglyn'`, so this entry billed the same way
  * `BARREL` does — and until AGL-2486 nothing watched it. Two heavy packages
  * had walked in through it and nothing went red:
  *
@@ -100,6 +100,14 @@ export const BARREL = 'libs/shared/ui/jsx/src/index.ts'
  * Both are one-line mistakes that compile, lint, typecheck and test green.
  * That is precisely the class this detector already exists for, so it guards
  * this entry with the same two pins rather than a second mechanism.
+ *
+ * AGL-2706 took the value namespace off that page — it reaches core by
+ * subpath now, and the namespace it keeps is `import type`, which TypeScript
+ * erases — so the published page no longer reaches this barrel at all. The
+ * measurement is still worth taking: the console shell and the seven besigner
+ * editors reach it, the tenant's own instance hooks open it by name, and a
+ * named import shakes only down to what the export it names reaches. Both
+ * packages above arrived inside a module some page did name.
  */
 export const AGLYN_BARREL = 'libs/aglyn/src/index.ts'
 
@@ -279,12 +287,15 @@ export const WHY =
  * (AGL-2486) — a subpath or the `/server` entry, not "drop the export".
  */
 export const WHY_AGLYN =
-  'Everything reachable from `libs/aglyn/src/index.ts` ships eagerly on ' +
-  'EVERY published customer page: `catch-all-client.tsx` opens with ' +
-  "`import * as Aglyn from '@aglyn/aglyn'`, and a module with a top-level " +
-  'singleton (`lib/aglyn.ts` builds one) is not something a bundler will ' +
-  'shake. A package appearing here means some module in the graph grew a ' +
-  'value import of it — usually through ANOTHER barrel, which is how ' +
+  'Everything reachable from `libs/aglyn/src/index.ts` is one named import ' +
+  "away from an app shell's first load: the console shell and the seven " +
+  'besigner editors reach this barrel, the tenant instance hooks open it by ' +
+  'name, and a module with a top-level singleton (`lib/aglyn.ts` builds one) ' +
+  'evaluates whole the moment anything names one of its exports. The ' +
+  'published customer page stopped reaching it at AGL-2706, which moved that ' +
+  'page onto subpaths and a type-only namespace. A package appearing here ' +
+  'means some module in the graph grew a value import of it — usually ' +
+  'through ANOTHER barrel, which is how ' +
   '`firebase/auth` and `acorn` both got in. The fix is almost never to ' +
   'delete the code: import the file you actually want by subpath ' +
   "('@aglyn/shared-data-enums/styles'), or, if it is server-only, hang it " +

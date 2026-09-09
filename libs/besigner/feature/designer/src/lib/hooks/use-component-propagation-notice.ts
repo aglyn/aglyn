@@ -16,7 +16,8 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { collectReferencedComponentIds } from '@aglyn/aglyn'
 import { useEffect, useRef } from 'react'
 
 /** What happened to one definition this document renders. */
@@ -131,7 +132,7 @@ export function diffRenderedComponentDefinitions(options: {
   const referenced = new Set<string>()
   for (const document of documents) {
     if (!document) continue
-    for (const id of Aglyn.collectReferencedComponentIds(
+    for (const id of collectReferencedComponentIds(
       document as Record<string, Aglyn.AglynNodeSchema | undefined>,
       merged,
     )) {

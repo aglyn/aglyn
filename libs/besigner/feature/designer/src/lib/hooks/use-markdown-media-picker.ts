@@ -16,7 +16,7 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import { inheritedMediaAlt, isSupportedImageSrc } from '@aglyn/aglyn'
 import type { MarkdownFieldHandle } from '@aglyn/aglyn-markdown-editor'
 import { useCallback, useContext, useMemo, useRef } from 'react'
 import { MediaPickerContext } from '../contexts/media-picker-context'
@@ -99,7 +99,7 @@ export function useMarkdownMediaPicker(): MarkdownMediaPicker {
         // the next load with nothing logged, which is exactly how AGL-1645
         // shipped broken. `insertImage` re-checks with the same predicate, so
         // this is the early, reportable refusal rather than the guard.
-        if (!stored || !Aglyn.isSupportedImageSrc(stored)) return
+        if (!stored || !isSupportedImageSrc(stored)) return
         // The asset's stored alt fills a blank dialog field (AGL-1896).
         // This surface needs the default MORE than the others, not less: an
         // image row's alt is fixed at insert time and the editor offers no
@@ -108,7 +108,7 @@ export function useMarkdownMediaPicker(): MarkdownMediaPicker {
         // A typed alt still wins — `inheritedMediaAlt` returns undefined for
         // one, and the `?? alt` below keeps it verbatim.
         const resolvedAlt =
-          Aglyn.inheritedMediaAlt({
+          inheritedMediaAlt({
             placementAlt: alt,
             assetAlt: asset?.alt,
           }) ?? alt

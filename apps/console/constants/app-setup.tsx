@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+// The core component registry by name, not the whole namespace: a namespace
+// held as a VALUE is opaque to the bundler, and every editor route imports
+// this file for its side effect. The devtools handle below does need the
+// namespace, and lives behind a relative `import()` for that reason.
+import { components as componentRegistry } from '@aglyn/aglyn'
 import {
   doesBesignerAppExist,
   getBesignerApp,
@@ -72,7 +76,7 @@ const c5 = createAglynComponent(
 const components = [c1, c2, c3, c4, c5]
 
 components.forEach((i) => {
-  Aglyn.components.registerComponent(i.component, i.schema)
+  componentRegistry.registerComponent(i.component, i.schema)
 })
 
 declare global {
@@ -99,7 +103,9 @@ try {
     // so that a gate looking for brand copy could not tell.
     if (!IS_PRODUCTION) console.info('set globalThis.Aglyn', _Aglyn)
     if (!IS_PRODUCTION) {
-      ;(window as unknown as { AglynModule: typeof Aglyn }).AglynModule = Aglyn
+      void import('../utils/core-module-handle.client').then((module) =>
+        module.exposeCoreModule(),
+      )
     }
 
   } else if (!_Aglyn && doesBesignerAppExist() && hasWindow) {

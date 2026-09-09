@@ -16,7 +16,18 @@
  */
 
 import type { Firestore } from 'firebase/firestore'
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  ConcurrentEditError,
+  ensureCanvasRoot,
+  formatBytes,
+  hasConcurrentWrite,
+  HostViewType,
+  incorporatesStoredNodes,
+  measureNodeMap,
+  versionStamp,
+} from '@aglyn/aglyn'
 import isEqual from 'lodash-es/isEqual'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Besigner from '@aglyn/besigner'
@@ -298,9 +309,9 @@ const noopNotify: BesignerNotify = () => undefined
  * can be added that forgets.
  */
 export function setLocalNodes(value: Aglyn.ProcessableNodes) {
-  const parsed = Aglyn.canvas.processNodesToDenormalized(value)
-  return Aglyn.canvas.setNodes(
-    Aglyn.ensureCanvasRoot(parsed) as typeof parsed,
+  const parsed = canvas.processNodesToDenormalized(value)
+  return canvas.setNodes(
+    ensureCanvasRoot(parsed) as typeof parsed,
   )
 }
 
@@ -342,7 +353,7 @@ export function useBesignerDocument<TData = unknown>(
     fromCanvasNodes,
   } = options
 
-  const saveAvailable = !Aglyn.canvas.isInitialSame
+  const saveAvailable = !canvas.isInitialSame
   const errored = Boolean(error) || status === 'error'
   // See `UseBesignerDocumentResult.hasError` — an errored read that still has
   // a document to show is stale, not missing (AGL-1066).
@@ -364,7 +375,7 @@ export function useBesignerDocument<TData = unknown>(
   // could save) this one's nodes.
   useEffect(() => {
     return () => {
-      Aglyn.canvas.reset()
+      canvas.reset()
       Besigner.focus.clearFocusStatus()
     }
   }, [documentKey])
@@ -380,7 +391,7 @@ export function useBesignerDocument<TData = unknown>(
     return () => {
       Besigner.setBesignerFlag(app, {
         flag: 'viewType',
-        value: () => Aglyn.HostViewType.SCREEN,
+        value: () => HostViewType.SCREEN,
       })
     }
   }, [viewType])
@@ -448,7 +459,7 @@ export function useBesignerDocument<TData = unknown>(
   const [remoteChanged, setRemoteChanged] = useState(false)
 
   useEffect(() => {
-    if (nodes && !Aglyn.canvas.didSetInitial) {
+    if (nodes && !canvas.didSetInitial) {
       setLocalNodes(toCanvasNodes ? toCanvasNodes(nodes) : nodes)
       // The loaded document becomes the "saved" baseline ONLY when the store
       // has acknowledged it. A snapshot still carrying our own queued write
@@ -457,10 +468,10 @@ export function useBesignerDocument<TData = unknown>(
       // (AGL-1262). Without this the editor adopts an unacknowledged edit as
       // the saved state and can never save again — not by re-editing, not by
       // restoring the draft, whose content is the same.
-      Aglyn.canvas.updateInitialNodes(undefined, {
+      canvas.updateInitialNodes(undefined, {
         confirmed: !pendingWrites,
       })
-      baseStampRef.current = Aglyn.versionStamp(updatedAt)
+      baseStampRef.current = versionStamp(updatedAt)
       baseNodesRef.current = nodes
       return
     }
@@ -471,8 +482,8 @@ export function useBesignerDocument<TData = unknown>(
     // has edited. `confirmInitialNodes` refuses if the canvas has moved on
     // since, so an author who edited in that window keeps their Save
     // (AGL-1262) — the store vouched for the earlier write, not for theirs.
-    if (nodes && !pendingWrites && !Aglyn.canvas.isInitialConfirmed) {
-      Aglyn.canvas.confirmInitialNodes()
+    if (nodes && !pendingWrites && !canvas.isInitialConfirmed) {
+      canvas.confirmInitialNodes()
     }
   }, [nodes, pendingWrites])
 
@@ -487,16 +498,16 @@ export function useBesignerDocument<TData = unknown>(
    * conflict rather than as agreement.
    */
   const storedShapeOfCanvas = useCallback((): Record<string, unknown> | null => {
-    if (!Aglyn.canvas.didSetInitial) return null
-    const canvasNodes = Aglyn.canvas.toJSON().nodes as Record<string, unknown>
+    if (!canvas.didSetInitial) return null
+    const canvasNodes = canvas.toJSON().nodes as Record<string, unknown>
     if (!fromCanvasNodes) return canvasNodes
     const prepared = fromCanvasNodes(canvasNodes)
     return 'error' in prepared ? null : prepared.nodes
   }, [fromCanvasNodes])
 
   useEffect(() => {
-    const stored = Aglyn.versionStamp(updatedAt)
-    const stampMoved = Aglyn.hasConcurrentWrite(baseStampRef.current, stored)
+    const stored = versionStamp(updatedAt)
+    const stampMoved = hasConcurrentWrite(baseStampRef.current, stored)
     // A writer that forgot the stamp still cannot hide: the content moved.
     const nodesMoved =
       nodes != null &&
@@ -531,7 +542,7 @@ export function useBesignerDocument<TData = unknown>(
     // racing the conflict by milliseconds is refused" is untouched — the
     // client simply stops refusing saves the server would have accepted.
     const ourNodes = storedShapeOfCanvas()
-    if (Aglyn.incorporatesStoredNodes(baseNodesRef.current, nodes, ourNodes)) {
+    if (incorporatesStoredNodes(baseNodesRef.current, nodes, ourNodes)) {
       expectOwnWriteRef.current = null
       baseStampRef.current = stored
       baseNodesRef.current = nodes
@@ -543,7 +554,7 @@ export function useBesignerDocument<TData = unknown>(
       // dirty against a baseline recorded at load, and their save is what
       // made that baseline stale rather than the canvas wrong. No argument,
       // so the canvas as it stands becomes the saved state.
-      if (isEqual(ourNodes, nodes)) Aglyn.canvas.updateInitialNodes()
+      if (isEqual(ourNodes, nodes)) canvas.updateInitialNodes()
       return
     }
     // Our own expectation is void too: whatever it was waiting for either
@@ -561,14 +572,14 @@ export function useBesignerDocument<TData = unknown>(
     // Given one, the shared working draft joins the local crash net and wins
     // when both exist (AGL-1152).
     firestore: options.firestore,
-    loaded: Aglyn.canvas.didSetInitial,
+    loaded: canvas.didSetInitial,
     dirty: saveAvailable,
-    storedStamp: Aglyn.versionStamp(updatedAt),
+    storedStamp: versionStamp(updatedAt),
     roomSessions,
   })
 
   const handleSave = useCallback(async () => {
-    const canvasNodes = Aglyn.canvas.toJSON().nodes as Record<string, unknown>
+    const canvasNodes = canvas.toJSON().nodes as Record<string, unknown>
     const prepared = fromCanvasNodes
       ? fromCanvasNodes(canvasNodes)
       : { nodes: canvasNodes }
@@ -592,7 +603,7 @@ export function useBesignerDocument<TData = unknown>(
     // in the canvas either way.
     if (remoteChanged) {
       onSaveRefused?.()
-      return notify(new Aglyn.ConcurrentEditError().message, {
+      return notify(new ConcurrentEditError().message, {
         variant: 'warning',
         allowDuplicate: true,
       })
@@ -612,24 +623,24 @@ export function useBesignerDocument<TData = unknown>(
     // Firestore rejects documents over 1 MiB. Nothing checked this before,
     // so an oversized document simply stopped saving with a generic error
     // and no way to tell which content was to blame.
-    const size = Aglyn.measureNodeMap(nextNodes)
+    const size = measureNodeMap(nextNodes)
     if (size.tooLarge) {
       dequeueLoading()
       onSaveRefused?.()
       const worst = size.largest[0]
       return notify(
-        `This ${noun} is ${Aglyn.formatBytes(size.bytes)} and too large to ` +
+        `This ${noun} is ${formatBytes(size.bytes)} and too large to ` +
           'save. Move repeated sections into reusable components, or replace ' +
           'inlined images with uploads from the media library' +
           (worst
-            ? ` — the largest element is ${Aglyn.formatBytes(worst.bytes)}.`
+            ? ` — the largest element is ${formatBytes(worst.bytes)}.`
             : '.'),
         { variant: 'error', allowDuplicate: true },
       )
     }
     if (size.nearLimit) {
       notify(
-        `Heads up: this ${noun} is ${Aglyn.formatBytes(size.bytes)}. Past ` +
+        `Heads up: this ${noun} is ${formatBytes(size.bytes)}. Past ` +
           'about 900 KB it stops saving — moving repeated sections into ' +
           'reusable components is the usual fix.',
         { variant: 'warning', persist: false },
@@ -644,7 +655,7 @@ export function useBesignerDocument<TData = unknown>(
         baseStamp: baseStampRef.current,
         baseNodes: baseNodesRef.current,
       })
-      Aglyn.canvas.updateInitialNodes(nextNodes as never)
+      canvas.updateInitialNodes(nextNodes as never)
       // The draft dies with the save that made it redundant (AGL-1256). This
       // is the rule that keeps a crash net from quietly becoming free version
       // history: a draft can only ever hold work that was never saved, so it
@@ -710,8 +721,8 @@ export function useBesignerDocument<TData = unknown>(
       const firestore = options.firestore
       if (!firestore || !draftIds) return 'failed'
       return writeServerDraft(firestore, draftIds, {
-        nodes: Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes,
-        baseStamp: Aglyn.versionStamp(updatedAt),
+        nodes: canvas.toJSON().nodes as Aglyn.ProcessableNodes,
+        baseStamp: versionStamp(updatedAt),
         updatedByUid: author?.uid ?? null,
         updatedByEmail: author?.email ?? null,
       }).catch(() => 'failed' as const)
@@ -733,7 +744,7 @@ export function useBesignerDocument<TData = unknown>(
   const openJsonEditor = useCallback(() => setJsonOpen(true), [])
   const closeJsonEditor = useCallback(() => setJsonOpen(false), [])
   const handleJsonSave = useCallback((_event: unknown, value: unknown) => {
-    Aglyn.canvas.applyNodes(value as never)
+    canvas.applyNodes(value as never)
     setJsonOpen(false)
   }, [])
 
