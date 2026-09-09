@@ -37,11 +37,26 @@
 
 name: Signup canary
 
+# ⛔ THE HOURLY SCHEDULE IS COMMENTED OUT UNTIL THE WALK PASSES (AGL-2715).
+#
+# The account step cannot work as written. Identity Platform enforces App
+# Check, and this project's App Check provider is reCAPTCHA v3 — a browser-side
+# attestation. `accounts:signUp` from any REST client is refused:
+#
+#     accounts:signUp 401 Firebase App Check token is invalid.
+#
+# There is no server-side way to mint that token, so the account step has to
+# happen in a real browser page, not in `fetch`. Until it does, an hourly
+# schedule would fail every hour — which is precisely the alarm fatigue
+# AGL-2714 was filed to remove, arriving by a different road.
+#
+# Restore the schedule in the same commit that makes the walk pass, and not
+# before.
 on:
-  schedule:
-    # Hourly, on the 25th minute — off the top of the hour where every other
-    # scheduled job in this repo clusters and Actions queues are deepest.
-    - cron: '25 * * * *'
+  # schedule:
+  #   # Hourly, on the 25th minute — off the top of the hour, where every other
+  #   # scheduled job in this repo clusters and Actions queues are deepest.
+  #   - cron: '25 * * * *'
   workflow_dispatch: {}
 
 # One walk at a time. Two concurrent runs would race for the same orphan sweep
