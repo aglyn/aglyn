@@ -25,7 +25,7 @@ export function base64IsomorphicDecode(
   encoding: BufferEncoding = 'utf8',
 ): string {
   if (typeof window === 'undefined') {
-    return Buffer.from(value, 'base64').toString(encoding)
+    return globalThis.Buffer.from(value, 'base64').toString(encoding)
   }
   return window.atob(value)
 }
