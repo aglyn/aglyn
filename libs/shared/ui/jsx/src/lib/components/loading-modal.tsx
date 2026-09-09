@@ -28,7 +28,7 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { forwardRef, Fragment } from 'react'
-import { AglynLogoFull } from '../const/svg-icons'
+import { AglynLogoFull } from '../const/aglyn-logo-full'
 import { LoadingContext } from '../contexts/loading.context'
 import LoadingTextComponent from './loading-text.component'
 
