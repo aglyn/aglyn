@@ -20,6 +20,22 @@
  * limitations under the License.
  */
 
+/*
+  MODULE, not a script (AGL-2718).
+
+  Everything below is `require`d rather than `import`ed, and a file with no
+  top-level `import`/`export` is a global SCRIPT: its `const SITE` lands in the
+  global namespace, where it collided with `search-results-facets.spec.ts`'s own
+  `SITE` and broke `apps/tenant/tsconfig.json` with TS2451. Only that config
+  compiles every spec together, so `tsconfig.dev.json` and `tsconfig.spec.json`
+  both stayed green and nothing pointed at it.
+
+  One marker takes this file's declarations out of the global namespace. The
+  alternative — renaming the const — leaves the next script-shaped spec free to
+  collide with something else.
+*/
+export {}
+
 const {
   GOOGLE_CCTLD_ORIGINS,
   MEASUREMENT_CONNECT_ORIGINS,
