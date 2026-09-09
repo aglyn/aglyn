@@ -51,8 +51,10 @@
 
 import {
   FRONT_DOOR_PREFIX,
+  cacheNote,
   frontDoorPlan,
   gradeFrontDoor,
+  readCacheState,
 } from './lib/front-door.mjs'
 import { withProbeHeaders } from './lib/probe-headers.mjs'
 // WHAT is probed lives in a module of its own so a test can assert it without
@@ -225,7 +227,19 @@ async function probePage(name, base, path) {
     // Recorded, never graded. Next serves a stale ISR document while a fresh
     // render fails, so a HIT is the one state a green row here cannot rule an
     // outage out from — the log line has to say which state it saw.
-    const cache = response.headers.get('x-nextjs-cache')
+    //
+    // ⛔ It read `x-nextjs-cache`, and Vercel does not send that header
+    // (AGL-2709). Measured 2026-09-09 against both front doors: the edge
+    // answers `x-vercel-cache` and `age`, so the one note on this board that
+    // acknowledged the ISR cache was absent from every production row. The
+    // note `cacheNote` writes is the closure of the REPORTING half — a green
+    // row that says nothing implies it verified the render, and it did not.
+    const cache = readCacheState({
+      vercelCache: response.headers.get('x-vercel-cache'),
+      nextCache: response.headers.get('x-nextjs-cache'),
+      age: response.headers.get('age'),
+    })
+    const note = cacheNote(cache)
     return {
       name,
       url,
@@ -234,7 +248,10 @@ async function probePage(name, base, path) {
       ok: verdict.ok,
       challenged: verdict.challenged,
       status: response.status,
-      detail: cache ? `${verdict.detail} · cache=${cache}` : verdict.detail,
+      cache: cache.state,
+      rendered: cache.rendered,
+      ageSeconds: cache.ageSeconds,
+      detail: note ? `${verdict.detail} · ${note}` : verdict.detail,
     }
   } catch (error) {
     const aborted = error?.name === 'TimeoutError' || error?.name === 'AbortError'

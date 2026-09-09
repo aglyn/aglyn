@@ -46,7 +46,13 @@
  * 2. **Filter before writing.** `isServerErrorEntry` is the cost gate: an
  *    entry that is not a server error costs one predicate and zero writes.
  * 3. **Never our own route.** See `RECEIVER_ROUTE_PATH`.
- * 4. **A per-instance budget per window**, with suppression REPORTED. A
+ * 4. **Never a deliberate 5xx.** A 503 is how the lockdown notice and every
+ *    health contract SAY something, and forwarding a verdict as a fault makes
+ *    the stream unreadable: measured over the 48 hours to 2026-09-09, 229 of
+ *    the 251 entries in this log were `/api/health/*` reporting degraded and
+ *    22 were the only real outage in the window. See `isLockdownNoticeEntry`
+ *    and `isHealthContractEntry` (AGL-2709).
+ * 5. **A per-instance budget per window**, with suppression REPORTED. A
  *    monitoring path that hides its own lossiness is the bug shape this repo
  *    keeps rediscovering.
  *
@@ -286,12 +292,71 @@ export function isLockdownNoticeEntry(entry: VercelDrainEntry): boolean {
   const statuses = [entry.statusCode, entry.proxy?.statusCode].filter(
     (status): status is number => typeof status === 'number',
   )
-  if (!statuses.length || statuses.some((status) => status !== 503)) return false
+  if (!statuses.length || statuses.some((status) => status !== 503))
+    return false
   return [entry.path, entry.proxy?.path].some((path) => {
     if (typeof path !== 'string') return false
     // `proxy.path` carries the query string; compare the path part only.
     const [pathname] = path.split('?')
     return pathname === LOCKDOWN_NOTICE_ROUTE_PATH
+  })
+}
+
+/**
+ * The health contract's routes, whose 503 is a VERDICT and not a fault.
+ *
+ * Prefix, not an exact path: every endpoint under it speaks the same contract
+ * — `healthHttpStatus` answers 200 while a check reports ok and 503 the moment
+ * it reports degraded — so `/api/health`, `/api/health/crons` and
+ * `/api/health/render/site` are all the same case.
+ */
+export const HEALTH_ROUTE_PREFIX = '/api/health'
+
+/**
+ * Is this a health endpoint answering 503 because it is doing its job?
+ * (AGL-2709)
+ *
+ * ⚠️ THE STREAM WAS 91% THIS. Measured over the 48 hours to 2026-09-09, the
+ * drain forwarded 251 entries into `vercel-runtime`. **229 were `/api/health/*`
+ * answering 503** — `crons` 113, `funnel` 73, `server-errors` 18 — and 22 were
+ * the AGL-2708 outage, the only real server errors in the window. The policy
+ * on that log (`logName=~"vercel" AND severity>=ERROR`, one notification an
+ * hour) therefore mails about a working health check for as long as any
+ * subsystem is degraded: `/api/health/crons` was CORRECTLY reporting a broken
+ * job for six hours on 2026-09-07, which is six hours of "server errors" mail
+ * arriving in the same inbox that then had to notice 04:02 on 2026-09-09.
+ *
+ * Excusing it removes a DUPLICATE, not a signal, and the reason is structural
+ * rather than a judgement call: every `/api/health/*` route both apps ship has
+ * a monitor reading it, and `evaluateSubsystemReaders` fails the build if one
+ * ever does not. The 503 is already on the uptime probe's board, in an
+ * UptimeRobot monitor and on `docs.aglyn.com/status`, said in a body that
+ * names WHICH check failed — which the drain entry never could.
+ *
+ * Narrow in exactly the same three ways as {@link isLockdownNoticeEntry}, and
+ * each one is load-bearing:
+ *
+ *  - a clean 503 only. A 500 the handler threw means the health route itself
+ *    is broken, and a check that cannot answer must never look calm;
+ *  - never a `fatal` line, which is process death rather than a verdict;
+ *  - never `statusCode -1`, the crashed-lambda sentinel, which is not 503 and
+ *    so fails the status test above.
+ */
+export function isHealthContractEntry(entry: VercelDrainEntry): boolean {
+  if (entry.level === 'fatal' || entry.type === 'fatal') return false
+  const statuses = [entry.statusCode, entry.proxy?.statusCode].filter(
+    (status): status is number => typeof status === 'number',
+  )
+  if (!statuses.length || statuses.some((status) => status !== 503))
+    return false
+  return [entry.path, entry.proxy?.path].some((path) => {
+    if (typeof path !== 'string') return false
+    // `proxy.path` carries the query string; compare the path part only.
+    const [pathname] = path.split('?')
+    return (
+      pathname === HEALTH_ROUTE_PREFIX ||
+      pathname.startsWith(`${HEALTH_ROUTE_PREFIX}/`)
+    )
   })
 }
 
@@ -341,6 +406,7 @@ export function selectForwardableEntries(
     (entry) =>
       !isReceiverEntry(entry) &&
       !isLockdownNoticeEntry(entry) &&
+      !isHealthContractEntry(entry) &&
       isServerErrorEntry(entry),
   )
 }

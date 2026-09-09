@@ -36,9 +36,11 @@ import { fileURLToPath } from 'node:url'
 import {
   FRONT_DOORS,
   FRONT_DOOR_PATH,
+  cacheNote,
   evaluateFrontDoorReaders,
   frontDoorPlan,
   gradeFrontDoor,
+  readCacheState,
 } from './front-door.mjs'
 import { DEFAULT_TARGETS, markPendingDeployments } from './uptime-targets.mjs'
 
@@ -321,5 +323,85 @@ describe('a front-door row is never laundered into PENDING', () => {
     ])
     assert.equal(page.pending, undefined)
     assert.equal(page.ok, false)
+  })
+})
+
+describe('a 200 says where the bytes came from (AGL-2709)', () => {
+  /**
+   * ⛔ THE HEADER THE PROBE USED TO READ IS NOT SENT.
+   *
+   * Measured 2026-09-09 against both front doors, from a client carrying the
+   * bypass token: `demo.aglyn.app/` answered `x-vercel-cache: STALE, age: 105`
+   * and `aglyn.com/` answered `x-vercel-cache: HIT, age: 50`. Neither carried
+   * `x-nextjs-cache` — Vercel's edge answers in its own header — so the note
+   * that was supposed to acknowledge the ISR cache never appeared on a single
+   * production row.
+   */
+  it('reads the header Vercel actually sends, with the age', () => {
+    assert.deepEqual(
+      readCacheState({ vercelCache: 'STALE', nextCache: null, age: '105' }),
+      {
+        state: 'STALE',
+        header: 'x-vercel-cache',
+        rendered: false,
+        ageSeconds: 105,
+      },
+    )
+  })
+
+  /** The probe can be pointed at a local `next start`, which has no edge. */
+  it('falls back to Next.js own header off Vercel', () => {
+    const cache = readCacheState({ nextCache: 'HIT' })
+    assert.equal(cache.header, 'x-nextjs-cache')
+    assert.equal(cache.state, 'HIT')
+    assert.equal(cache.rendered, false)
+  })
+
+  it('knows which states mean a render just ran', () => {
+    for (const state of ['MISS', 'BYPASS', 'REVALIDATED']) {
+      assert.equal(readCacheState({ vercelCache: state }).rendered, true, state)
+    }
+    for (const state of ['HIT', 'STALE', 'PRERENDER']) {
+      assert.equal(
+        readCacheState({ vercelCache: state }).rendered,
+        false,
+        state,
+      )
+    }
+  })
+
+  /** No header at all is "we do not know", never "it was rendered". */
+  it('reports an absent header as unknown rather than as a render', () => {
+    const cache = readCacheState({})
+    assert.equal(cache.state, null)
+    assert.equal(cache.rendered, null)
+    assert.equal(cacheNote(cache), null)
+  })
+
+  /**
+   * ⚠️ The note is the whole closure of the reporting half. A green row that
+   * says nothing implies it verified the render, and that implication is what
+   * let both page monitors read 100.000% through the outage.
+   */
+  it('a cached 200 says plainly what it does NOT prove', () => {
+    const note = cacheNote(readCacheState({ vercelCache: 'HIT', age: '50' }))
+    assert.match(note, /cache=HIT age=50s/)
+    assert.match(note, /not evidence the render works/)
+    assert.match(note, /check-render-errors/)
+  })
+
+  it('a rendered 200 makes no such disclaimer', () => {
+    const note = cacheNote(readCacheState({ vercelCache: 'MISS' }))
+    assert.match(note, /rendered now/)
+    assert.doesNotMatch(note, /not evidence/)
+  })
+
+  /**
+   * Recorded, NEVER graded. Grading a cache hit red would fire on ordinary
+   * traffic every fifteen minutes — the false alarm that got the two GCP page
+   * checks repointed off real pages in the first place.
+   */
+  it('does not change the verdict — a stale page is still a page', () => {
+    assert.equal(gradeFrontDoor(HEALTHY).ok, true)
   })
 })

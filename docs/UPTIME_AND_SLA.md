@@ -746,9 +746,42 @@ reports `CHAL` on each, exit 1.
 
 **What a green front-door row still cannot rule out.** Next serves a stale ISR
 document while a fresh render fails, so a `HIT` can outlive the render that
-would produce it. The row records `x-nextjs-cache` in its detail line and does
-not grade on it; nothing here watches for a deployment whose cache is healthy
-and whose renders are not. That gap is real and is not closed.
+would produce it — and not only for one `revalidate` window: an entry the
+platform cannot replace is served until the deployment changes.
+
+The row now says so. It reads **`x-vercel-cache`** and **`age`**, and a 200 that
+came out of the cache prints the disclaimer with it:
+
+```
+UP  front-door/site  a visitor gets a page · cache=STALE age=111s — FROM CACHE,
+                     so this 200 is not evidence the render works
+                     (check-render-errors.mjs is)
+```
+
+:::danger It was reading a header Vercel does not send
+Until 2026-09-09 the row recorded **`x-nextjs-cache`**, and the Vercel edge
+answers in its own header. Measured that day against both front doors with a
+bypass token: `demo.aglyn.app/` -> `x-vercel-cache: STALE`, `age: 105`;
+`aglyn.com/` -> `x-vercel-cache: HIT`, `age: 50`. Neither carried
+`x-nextjs-cache` at all. So the one note on this whole board that acknowledged
+the ISR cache was **absent from every production row**. `x-nextjs-cache` is kept
+as the fallback because the probe can be pointed at a local `next start`, which
+has no edge in front of it.
+:::
+
+**And it is still not graded, now with a measurement behind that.** Sampled
+twice twenty minutes apart on 2026-09-09, `demo.aglyn.app/` read `STALE` both
+times (`age` 105s, then 111s) and `aglyn.com/` read `HIT` then `STALE` (50s,
+69s) — with nothing wrong. The route sends `cache-control: public, max-age=0,
+must-revalidate` and no `s-maxage`, so the edge revalidates against the ISR
+store on essentially every request and `STALE` is its normal resting state. A
+check that reddened on `STALE`, or on `age` past some threshold, would fire
+every fifteen minutes forever. That is the false alarm that got the two GCP page
+checks repointed off real pages in the first place, and it is not worth
+repeating for a signal this weak.
+
+**What closes it is the 5xx rate split by route** — see
+[Reading the drain](#reading-the-drain).
 
 Every render canary must have a front door of the same name, checked from the
 filesystem by `npm run test:front-door` in both directions — a third canary
@@ -1613,12 +1646,23 @@ is the platform demonstration site the middleware falls back to for
   render/route-handler errors across BOTH deployments in a trailing 30-minute
   window.
 
-  ⚠️ **One reader watches it, and it is the one that cannot email you.** The
-  15-minute GitHub probe reads the endpoint and fails its run; the UptimeRobot
-  monitor that would mail the operator **does not exist yet** (measured
-  2026-08-24 — ten monitors, none of them this one), and it is deliberately not
-  a status-page card. So a spike today reddens a workflow and pages nobody.
-  Runbook step 1 below closes it in two minutes.
+  ✅ **It reaches a human two ways now, and it did** (re-measured 2026-09-09;
+  this paragraph used to say it reached nobody). The **Server errors**
+  UptimeRobot monitor was created 2026-08-25 and is one of the eleven that page
+  email, SMS and voice; the 15-minute GitHub probe both fails its run and posts
+  the red row to Slack `#ci` (AGL-2586). Read live from the status page on
+  2026-09-09, **Server errors** went down at **04:07:47** for 2133s — the first
+  500 was at 04:02:13 — while `Published sites` and `Marketing site` read
+  100.000%, no downtime recorded, through the same ten minutes. So the one
+  monitor that noticed was the count, not either page check, and it noticed five
+  and a half minutes in against the GCP policy's ninety seconds.
+
+  ⚠️ **Reaching somebody is not the same as seeing the thing.** The endpoint
+  counts **5 errors in a trailing 30 minutes** across both deployments, which is
+  right for what it counts and structurally blind to a broken ISR regeneration:
+  `revalidate = 3600` means at most one error per path per hour, so the
+  threshold is not crossed until ten paths fail at once. See
+  [Reading the drain](#reading-the-drain).
 
   What remains unwatched even after that is precisely the set that never
   reaches our code:
@@ -1660,15 +1704,26 @@ is the platform demonstration site the middleware falls back to for
   has failed loudly rather than silently so far; revisit if that stops being
   true.
 - **A page served from a STALE ISR cache while every fresh render fails**
-  (AGL-2709). [The front door](#the-front-door) closed the "no monitor fetches
-  a page" gap, and this is the one it does not close: Next serves the cached
-  document while background revalidation throws, so a `HIT` can outlive the
-  render that produced it. The probe records `x-nextjs-cache` and does not
-  grade on it, because grading on it would red every legitimately cached hit.
-  What would actually close this is the server-error rate above, split by
-  route — a spike of `DYNAMIC_SERVER_USAGE` while pages read 200 is precisely
-  that state, and it is the signal that caught the 2026-09-09 outage in about
-  90 seconds when nothing else did.
+  (AGL-2709). **Answerable now, and still not automated.**
+  [The front door](#the-front-door) closed "no monitor fetches a page"; this is
+  the state it cannot see, because Next serves the cached document while
+  background revalidation throws.
+
+  What answers it is the server-error rate **split by route**, and
+  `npm run check:render-errors` is that reader — see
+  [Reading the drain](#reading-the-drain). Run against the outage window it
+  reports `22x aglyn-tenant /[host]/[[...slug]] status=500` and exits 1; run
+  against 2026-09-07, a day carrying **210** drained 5xx that were all health
+  contracts reporting degraded, it exits 0.
+
+  ⚠️ **Nothing runs it on a schedule, and nothing can yet.** The repo's service
+  account is refused `entries:list` on `aglyn-main` — re-measured 2026-09-09,
+  `403 Permission denied for all log views`, on `vercel-runtime` as well as on
+  `server-errors` — so no workflow can read the stream. The one-line grant that
+  would change that is written out under
+  [Reading the drain](#reading-the-drain) and **has not been applied**. Until it
+  is, this is a triage tool a person or an agent runs during an incident, and
+  the only thing that pages anyone is the GCP policy.
 - **Any customer's own site.** Both front doors are hosts Aglyn owns, on
   purpose: a monitor that reds because a customer unpublished a page is a
   monitor people learn to ignore. A per-customer availability signal is not the
@@ -1761,6 +1816,13 @@ Four things about it that are decisions rather than details:
   and billing alarms, a healthy day can produce the occasional uncaught error,
   and an alarm that pages on the first one gets muted before the real one
   arrives. `SERVER_ERROR_ALARM_MAX_ERRORS` retunes it without a deploy.
+
+  ⚠️ It is therefore blind to a **broken ISR regeneration**, and lowering the
+  number is not the fix (AGL-2709). A count across both deployments cannot
+  distinguish "one page route is failing every time it regenerates" — at most
+  one error per path per hour at `revalidate = 3600` — from a quiet day. The
+  signal that can is the same 5xx **split by route**:
+  [Reading the drain](#reading-the-drain).
 - **Cost is bounded by coalescing, not by dropping.** Errors accumulate in
   process and land at most once per five seconds per instance — twelve writes a
   minute at worst — with the first error of each minute written immediately so a
@@ -1782,6 +1844,122 @@ therefore reported `PENDING — promote main` and does not fail the run. It is
 narrow on purpose (never the root, never a non-404, never while the root is
 down), and the review-time `missing` check above is what stops a deleted route
 hiding behind it forever.
+:::
+
+#### Reading the drain — the 5xx rate split by route (AGL-2709) {#reading-the-drain}
+
+The question a page fetch cannot answer: **is the render throwing while the
+cache serves?** `/api/health/server-errors` cannot answer it either, and the
+arithmetic says why rather than the taste. The catch-all page carries
+`export const revalidate = 3600`, so a broken regeneration produces at most
+**one error per path per hour**. The threshold is **5 in a trailing 30
+minutes**. Nothing crosses it until ten distinct paths are failing at once, and
+the shape being watched for is one deployment quietly failing to regenerate.
+That endpoint is correctly tuned for what it counts — every uncaught error
+across both deployments, route handlers included — and is structurally blind to
+this.
+
+The Vercel log drain is not. It records the route pattern, so:
+
+```bash
+npm run check:render-errors                                  # last 60 minutes
+node tools/scripts/check-render-errors.mjs --minutes 30
+node tools/scripts/check-render-errors.mjs \
+  --since 2026-09-09T04:00:00Z --until 2026-09-09T04:15:00Z
+```
+
+Exit **0** clean, **1** a page route 5xx'd, **2** the question could not be
+asked — the third is load-bearing, for the same reason `serverErrorsHealth`
+answers `errors-unavailable` rather than zero.
+
+**Proved both ways, against production's own record.** The outage window — this
+is `main` at `ada762669` (v1.0.0-beta.102) running in production, promoted as
+`8c834a0`, which is the `serviceContext.version` on every one of the matching
+`server-errors` entries:
+
+```
+render errors · 2026-09-09T04:00:00Z .. 2026-09-09T04:15:00Z
+  ERRORS 22 page-route 5xx on 1 route(s) — a cached 200 is not evidence the render works
+     22x aglyn-tenant /[host]/[[...slug]] status=500
+        2026-09-09T04:02:13Z .. 2026-09-09T04:09:16Z  hosts: aglyn.com, demo.aglyn.app
+  exit 1
+```
+
+and 2026-09-07, a day with **210 drained 5xx in it** and nothing wrong:
+
+```
+render errors · 2026-09-07T00:00:00Z .. 2026-09-08T00:00:00Z
+  CLEAN no page-route 5xx (0 handler · 210 health-contract 503 not graded)
+  exit 0
+```
+
+:::danger That stream was 91% deliberate 503s
+Over the 48 hours to 2026-09-09 the drain forwarded **251** entries into
+`vercel-runtime`. **229 were `/api/health/*` answering 503** — `crons` 113,
+`funnel` 73, `server-errors` 18 — which is not a failure at all: 503 is what
+`healthHttpStatus` returns the moment a check reports degraded. The remaining
+**22** were the outage.
+
+The policy on that log (`Server errors: Vercel runtime 5xx via log drain`,
+filter `logName=~"vercel" AND severity>=ERROR`, one notification an hour) mails
+about all of them. `/api/health/crons` was _correct_ about a broken job for six
+hours on 2026-09-07; that is six hours of "Server errors" mail about a working
+health check, landing in the same single mailbox that then had to notice 04:02
+on 2026-09-09.
+
+`isHealthContractEntry` in `vercel-log-drain.ts` now declines to forward a clean
+health-contract 503, narrowed exactly as the lockdown-notice exemption is: only
+a clean 503, never a 500, never `statusCode -1`, never a `fatal` line. It
+removes a **duplicate**, not a signal — every `/api/health/*` route both apps
+ship already has a monitor reading it, and `evaluateSubsystemReaders` fails the
+build if one ever does not.
+
+⚠️ **The receiver runs from `cloud/log-drain` on Cloud Run and bundles this
+library at build time, so the change does not bite until it is redeployed.**
+Nothing in this repository has redeployed it. `check-render-errors.mjs` applies
+the same exemption on the reading side, so a window spanning the redeploy still
+reads correctly either way.
+:::
+
+**False alarms, stated plainly.** The grader tolerates **zero** 5xx on a page
+route, which is measured rather than brave — the organic rate over the 48-hour
+production record above is exactly zero outside the incident, the same argument
+the rate-limiter and billing alarms make for their own zero. But at zero, a
+single transient page 500 (one Firestore deadline inside one render) reads red.
+That is right for a triage tool somebody runs while asking the question, and
+wrong for a pager. If this is ever wired to one, pass `--tolerated 2` and give
+it a sustained-failure window; do not point a 15-minute notifier at the default.
+
+:::caution No credential in this repo can run it unattended
+The service account is **refused**:
+
+```
+POST https://logging.googleapis.com/v2/entries:list
+  filter: logName="projects/aglyn-main/logs/vercel-runtime"
+-> 403  { "message": "Permission denied for all log views" }
+```
+
+Re-measured 2026-09-09, on `vercel-runtime` as well as on `server-errors`. So
+the script falls back to a person's own Application Default Credentials, which
+is what makes it usable during an incident today and is why nothing schedules
+it.
+
+The grant that would change that — **proposed, NOT applied by anything in this
+repository**:
+
+```bash
+# Read-only. `logging.viewer` covers entries:list on the _Default bucket,
+# which is where both drain logs live. Run as an owner of aglyn-main.
+gcloud projects add-iam-policy-binding aglyn-main \
+  --member="serviceAccount:$(grep -m1 '^FIREBASE_CLIENT_EMAIL=' .env | cut -d= -f2- | tr -d '\"')" \
+  --role="roles/logging.viewer"
+
+# Then confirm the refusal is gone before wiring anything to it:
+npm run check:render-errors -- --minutes 15
+```
+
+Only after that is it worth adding a row to `.github/workflows/uptime-probe.yml`
+— and read the false-alarm paragraph above first.
 :::
 
 #### Ordered steps — the account owner

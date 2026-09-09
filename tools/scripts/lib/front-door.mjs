@@ -47,6 +47,16 @@
  * its own verdict, because reporting a checkpoint as DOWN produces the false
  * alarm that got the checks repointed the first time, and reporting it as UP
  * is the silence this issue is about. It is red, and it says which red it is.
+ *
+ * ⚠️ AND A 200 IS NOT A RENDER. Next serves the cached ISR document while
+ * every regeneration underneath it throws, so a green row here is a statement
+ * about the cache and not about the code. `readCacheState` reads where the
+ * bytes came from — `x-vercel-cache` on Vercel, `x-nextjs-cache` on a local
+ * `next start` — and `cacheNote` makes the row say so in words. It is not
+ * GRADED, because grading a cache hit red would fire on ordinary traffic every
+ * fifteen minutes, which is how the two GCP page checks got repointed off real
+ * pages the first time. The check that does answer it is
+ * `tools/scripts/check-render-errors.mjs`.
  */
 
 /**
@@ -175,6 +185,95 @@ export function gradeFrontDoor({
   }
 
   return { ok: true, challenged: false, detail: 'a visitor gets a page' }
+}
+
+/**
+ * Cache states that mean THESE BYTES WERE RENDERED, against states that mean
+ * they came out of a store.
+ *
+ * The distinction is the whole of the stale-ISR blind spot. A 200 from `HIT`
+ * proves a render succeeded at some point in the past and nothing about
+ * whether one would succeed now; a 200 from `MISS` was produced by a render
+ * that ran during this request.
+ *
+ * ⚠️ `STALE` IS NOT A SIGNAL ON THIS DEPLOYMENT, and that was measured rather
+ * than assumed. Both front doors read `STALE` at ages of 50–111 seconds on
+ * 2026-09-09 with nothing wrong — the route sends `cache-control: public,
+ * max-age=0, must-revalidate` and no `s-maxage`, so the edge revalidates
+ * against the ISR store on essentially every request and `STALE` is its
+ * resting state. Grading it, or grading `age` past a threshold, would red the
+ * board every fifteen minutes forever. Both are REPORTED and neither is
+ * graded; `check-render-errors.mjs` is what answers the question they only
+ * hint at.
+ */
+const RENDERED_STATES = new Set(['MISS', 'BYPASS', 'REVALIDATED'])
+
+/**
+ * Where the bytes came from, read off the response headers.
+ *
+ * ⛔ `x-nextjs-cache` IS NOT SENT BY VERCEL. Measured 2026-09-09 against both
+ * front doors with a bypass token: `demo.aglyn.app/` and `aglyn.com/` answer
+ * `x-vercel-cache: STALE` / `HIT` plus `age`, `x-matched-path` and
+ * `x-nextjs-prerender`, and no `x-nextjs-cache` at all. So the header this
+ * probe originally recorded was absent on every production row, and the note
+ * it was supposed to leave in the log — the one thing on the board that
+ * acknowledged the ISR cache — never appeared.
+ *
+ * `x-nextjs-cache` stays as the fallback because it is Next's own server
+ * header and this probe can be pointed at a local `next start` (see
+ * `frontDoorPlan`), where there is no Vercel edge to rewrite it.
+ *
+ * `age` is the CDN's, in seconds. Reported beside the state because "HIT" on
+ * its own does not say whether the document is a minute or a week old.
+ *
+ * @param {{vercelCache?: string|null, nextCache?: string|null,
+ *   age?: string|null}} headers
+ * @returns {{state: string|null, header: string|null, rendered: boolean|null,
+ *   ageSeconds: number|null}}
+ */
+export function readCacheState({
+  vercelCache = null,
+  nextCache = null,
+  age = null,
+} = {}) {
+  const raw = vercelCache ?? nextCache
+  const header = vercelCache
+    ? 'x-vercel-cache'
+    : nextCache
+      ? 'x-nextjs-cache'
+      : null
+  const state = raw ? raw.trim().toUpperCase() : null
+  const parsedAge = Number.parseInt(age ?? '', 10)
+  return {
+    state,
+    header,
+    rendered: state === null ? null : RENDERED_STATES.has(state),
+    ageSeconds: Number.isFinite(parsedAge) ? parsedAge : null,
+  }
+}
+
+/**
+ * The sentence a green page row adds about its own provenance.
+ *
+ * A green row that says nothing implies more than it measured, and that
+ * implication is the AGL-2709 gap in one line: every check on the board read
+ * 100.000% through ten minutes of every page answering 500. So a row served
+ * out of the cache says so, and says what it therefore does NOT prove, and
+ * names the check that does — `tools/scripts/check-render-errors.mjs`, which
+ * reads the drained 5xx split by route.
+ *
+ * Nothing here changes a verdict. Grading a cache hit red would fire on
+ * ordinary traffic every fifteen minutes, which is how the two GCP page checks
+ * got repointed off real pages in the first place.
+ */
+export function cacheNote(cache) {
+  if (!cache || cache.state === null) return null
+  const age = cache.ageSeconds === null ? '' : ` age=${cache.ageSeconds}s`
+  if (cache.rendered) return `cache=${cache.state}${age} — rendered now`
+  return (
+    `cache=${cache.state}${age} — FROM CACHE, so this 200 is not evidence ` +
+    'the render works (check-render-errors.mjs is)'
+  )
 }
 
 /**

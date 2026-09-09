@@ -345,6 +345,22 @@ jobs:
       # only the proxy measurement pointed at it. Pure node.
       - run: npm run test:front-door
 
+      # test:render-errors  Is a PAGE ROUTE throwing (AGL-2709)? The half the
+      # front door does not close: Next serves the cached ISR document while
+      # every regeneration underneath it fails, so a 200 is a statement about
+      # the cache and not about the code. The signal that answers it is the
+      # Vercel log drain's 5xx SPLIT BY ROUTE — it named
+      # `route=/[host]/[[...slug]] status=500` within about ninety seconds on
+      # 2026-09-09 while every other check was green.
+      #
+      # The split is the point, and this suite is written around the green
+      # case rather than the red one: over the 48 hours to 2026-09-09 that
+      # stream carried 251 entries, 229 of them `/api/health/*` answering 503
+      # exactly as designed. A grader that reddened on any 5xx would have been
+      # red for six hours on 2026-09-07 while a health check was correctly
+      # reporting a broken cron. Fixtures are real entries. Pure node.
+      - run: npm run test:render-errors
+
       # test:week-one-preflight  The launch pre-flight's OWN self-test
       # (AGL-1617). The script implements every mechanically-checkable item of
       # runbook precondition P4, including the per-host brand-content
