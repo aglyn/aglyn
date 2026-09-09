@@ -125,13 +125,25 @@ export default async function HostLayout({
    * the palette would leave those author overrides on their light values —
    * half a dark page.
    *
-   * ⚠️ COST. `cookies()` is a dynamic API, so this renders the route per
-   * request instead of serving it from the ISR window the catch-all page
-   * declares, and the loader beside it is cached per render rather than
-   * across them. That is inherent rather than incidental: one cached document
-   * is shared by every visitor, so it cannot carry a per-visitor scheme at
-   * all. Per-visitor theming and a shared cache are the same choice made two
-   * ways, and this line is where it is made.
+   * ⚠️ COST, and what it is NOT. `cookies()` is a dynamic API, so this renders
+   * the route per request instead of serving it from the ISR window the
+   * catch-all page declares. That much is inherent rather than incidental: one
+   * cached document is shared by every visitor, so it cannot carry a
+   * per-visitor scheme at all. Per-visitor theming and a shared HTML cache are
+   * the same choice made two ways, and this line is where it is made.
+   *
+   * What it does NOT give up is the database. Every read underneath — the host
+   * document and its id resolution, the screen, its version, the components,
+   * the layout version, collections, forms, variables — goes through
+   * `withRenderCache`, an `unstable_cache` keyed per host and held for
+   * `PUBLISHED_SITE_DATA_TTL_SECONDS`, busted by the publish path's
+   * `revalidateTag`. Those are shared ACROSS requests, not per render. So the
+   * cost that scales with traffic here is render CPU, not Firestore reads,
+   * which is the axis that carries a per-operation price.
+   *
+   * If render CPU ever becomes the constraint, the way to keep both is to fold
+   * the resolved scheme into the cache key — one entry per scheme rather than
+   * one per visitor — not to take the scheme back off the server.
    */
   const initialThemeMode = parseThemeModeCookie(
     (await cookies()).get(THEME_MODE_COOKIE)?.value,
