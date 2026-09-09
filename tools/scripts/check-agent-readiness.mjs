@@ -93,7 +93,20 @@ function readRobotsAgents() {
         'renamed or reshaped, update this parser rather than deleting the check.',
     )
   }
-  const agents = [...match[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
+  /*
+    COMMENTS COME OUT FIRST. The entries are quoted strings, and an apostrophe
+    inside a comment in the same array — `a person's behalf` — is a quote
+    character to a regex that does not know it is in a comment. MEASURED: the
+    first comment added inside this array made the guard report half a
+    paragraph as a user-agent token.
+
+    Stripped in the order that cannot mis-pair: line comments first, so a `//`
+    containing `/*` cannot open a block that swallows real entries.
+  */
+  const body = match[1]
+    .replace(/(^|[^:])\/\/.*$/gm, '$1 ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  const agents = [...body.matchAll(/'([^']+)'/g)].map((entry) => entry[1])
   if (agents.length === 0) fail('`AI_AGENT_USER_AGENTS` parsed as empty')
   return agents
 }

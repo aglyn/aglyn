@@ -36,7 +36,10 @@ interface Call {
 
 /** A stub `fetch` plus the streams, so no command touches a real process. */
 function harness(
-  responder: (url: string, call: Call) => { status?: number; body?: string },
+  responder: (
+    url: string,
+    call: Call,
+  ) => { status?: number; body?: string; contentType?: string },
   env: Record<string, string | undefined> = {},
 ) {
   const calls: Call[] = []
@@ -57,8 +60,11 @@ function harness(
         userAgent: headers.get('User-Agent') ?? '',
       }
       calls.push(call)
-      const { status = 200, body = '' } = responder(url, call)
-      return new Response(body, { status })
+      const { status = 200, body = '', contentType } = responder(url, call)
+      return new Response(body, {
+        status,
+        headers: contentType ? { 'Content-Type': contentType } : undefined,
+      })
     }) as typeof globalThis.fetch,
   }
   return { context, calls, out: () => out.join(''), err: () => err.join('') }
@@ -157,7 +163,10 @@ describe('runCli — help and version', () => {
 
 describe('runCli — read', () => {
   it('asks for Markdown, which is the whole point', async () => {
-    const h = harness(() => ({ body: '# Pricing\n\nPlans.\n' }))
+    const h = harness(() => ({
+      body: '# Pricing\n\nPlans.\n',
+      contentType: 'text/markdown; charset=utf-8',
+    }))
     expect(await runCli(['read', 'https://example.com/pricing'], h.context)).toBe(EXIT_OK)
     expect(h.calls[0].accept).toBe('text/markdown')
     expect(h.calls[0].url).toBe('https://example.com/pricing')
@@ -417,5 +426,39 @@ describe('runCli — the client names itself', () => {
     const h = harness(() => ({ body: '{}' }), { AGLYN_API_KEY: 'k' })
     await runCli(['api', 'GET', '/sites'], h.context, '2.3.4')
     expect(h.calls[0].userAgent).toContain('aglyn-cli/2.3.4')
+  })
+})
+
+describe('runCli — read says so when the site ignored the negotiation', () => {
+  it('warns on STDERR when the answer is HTML, and still prints the body', async () => {
+    /*
+      A server that does not negotiate answers `200 text/html`. Printing that
+      unremarked is the silent fallback acceptmarkdown.com warns about:
+      `aglyn read url > page.md` writes HTML into a file named `.md` and
+      nothing says so. MEASURED against production before the negotiation
+      shipped — the CLI printed a full HTML document as if it were Markdown.
+    */
+    const h = harness(() => ({ body: '<!DOCTYPE html><p>hi', contentType: 'text/html; charset=utf-8' }))
+    expect(await runCli(['read', 'example.com'], h.context)).toBe(EXIT_OK)
+    expect(h.err()).toContain('answered text/html')
+    expect(h.err()).toContain('not a Markdown rendering')
+    // The body still reaches stdout, so a pipe keeps working.
+    expect(h.out()).toBe('<!DOCTYPE html><p>hi')
+  })
+
+  it('stays quiet when the answer really is Markdown', async () => {
+    const h = harness(() => ({ body: '# Real', contentType: 'text/markdown; charset=utf-8' }))
+    await runCli(['read', 'example.com'], h.context)
+    expect(h.err()).toBe('')
+  })
+
+  it('names whatever type came back, rather than assuming HTML', async () => {
+    // A site answering `application/json` is equally not negotiating, and a
+    // warning that calls a JSON body "its HTML" is one the reader stops
+    // trusting.
+    const h = harness(() => ({ body: '{}', contentType: 'application/json' }))
+    await runCli(['read', 'example.com'], h.context)
+    expect(h.err()).toContain('answered application/json')
+    expect(h.err()).not.toContain('HTML')
   })
 })

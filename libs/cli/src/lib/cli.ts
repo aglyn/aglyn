@@ -219,6 +219,7 @@ async function get(
     return {
       ok: false,
       status: 0,
+      contentType: '',
       // The message a DNS failure or a refused connection produces is the most
       // useful thing there is here, so it is passed through rather than
       // replaced with "request failed".
@@ -226,7 +227,12 @@ async function get(
     }
   }
   const body = await response.text()
-  return { ok: response.ok, status: response.status, body }
+  return {
+    ok: response.ok,
+    status: response.status,
+    body,
+    contentType: response.headers.get('Content-Type') ?? '',
+  }
 }
 
 /** `data` out of the platform's JSON envelope, or null. */
@@ -291,6 +297,29 @@ export async function runCli(
               : `${result.body}\n`,
         )
         return EXIT_FAILED
+      }
+      /*
+        SAY SO WHEN THE SITE IGNORED THE NEGOTIATION.
+
+        A server that does not negotiate answers `200 text/html` to
+        `Accept: text/markdown`, and printing that to stdout unremarked is the
+        silent fallback acceptmarkdown.com warns about: `aglyn read url >
+        page.md` writes HTML into a file named `.md` and nothing ever says so.
+
+        The warning goes to STDERR and the body still goes to stdout, so a
+        pipe keeps working and a person watching the terminal learns the truth.
+        Exit stays 0 — content did come back, and failing here would break
+        `set -e` scripts over a server-side shortcoming.
+      */
+      if (!/^text\/markdown\b/i.test(result.contentType)) {
+        // Names the type it DID send rather than assuming HTML — a site that
+        // answers `text/plain` or `application/json` here is equally not
+        // negotiating, and a message that says "this is its HTML" about a JSON
+        // body is a message the reader stops trusting.
+        context.err(
+          `warning: ${asUrl} answered ${result.contentType || 'no content type'}, ` +
+            'not text/markdown — this is not a Markdown rendering of the page.\n',
+        )
       }
       context.out(result.body)
       return EXIT_OK

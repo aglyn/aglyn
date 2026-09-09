@@ -249,7 +249,7 @@ const AI_AGENT_BYPASS_RULE = Object.freeze({
       // `robots.txt` publishes. `check:agent-readiness` fails when the two
       // disagree, so this is asserted rather than remembered.
       value:
-        'GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|anthropic-ai|Google-Extended|PerplexityBot|Perplexity-User|Applebot-Extended|meta-externalagent|Amazonbot|Bytespider|CCBot|cohere-ai|DeepSeekBot|Diffbot|MistralAI-User|Omgilibot|Timpibot|YouBot|ora-agent',
+        'GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|anthropic-ai|Google-Extended|PerplexityBot|Perplexity-User|Applebot-Extended|meta-externalagent|Amazonbot|Bytespider|CCBot|cohere-ai|DeepSeekBot|Diffbot|MistralAI-User|Omgilibot|Timpibot|YouBot|ora-agent|aglyn-cli',
     }),
   ]),
 })

@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read and script any site built on Aglyn \u2014 pages as Markdown, llms.txt, OpenAPI, and the REST API.",
   "license": "Apache-2.0",
   "type": "module",

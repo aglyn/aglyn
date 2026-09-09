@@ -212,6 +212,22 @@ export const AI_AGENT_USER_AGENTS: readonly string[] = [
   'Timpibot',
   'YouBot',
   'ora-agent',
+  /*
+    OUR OWN CLI (AGL-2717), and it belongs in this list rather than beside it.
+
+    `@aglyn/cli` reads a site on a person's behalf — the same job
+    `ChatGPT-User` and `Perplexity-User` do, and the same reason they are here.
+    It names itself `aglyn-cli/<version> (+https://aglyn.com)` so a site
+    operator has something to match on and somewhere to complain to.
+
+    It is in THIS list, and not only in the WAF, because
+    `check:agent-readiness` asserts the two are the same set: a client admitted
+    at the edge but unnamed here is a client nobody reading `robots.txt` knows
+    is admitted. The wildcard above already allows it, so the group changes
+    nothing functionally — it is the statement that matters, exactly as for the
+    twenty-three above.
+  */
+  'aglyn-cli',
 ]
 
 /**
