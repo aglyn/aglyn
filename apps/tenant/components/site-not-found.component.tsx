@@ -19,7 +19,6 @@
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import dynamic from 'next/dynamic'
 import { Suspense, useEffect, useState } from 'react'
-import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
 import type { Props } from '../app/[host]/[[...slug]]/types'
 import { useHostBrand } from '../app/[host]/host-brand.context'
 import { resolveNotFoundTitle } from '../utils/not-found-title'
@@ -41,6 +40,21 @@ import { resolveNotFoundTitle } from '../utils/not-found-title'
  */
 const SiteStatusScreen = dynamic(
   () => import('./site-status-screen.component'),
+  { ssr: false },
+)
+
+/**
+ * The renderer, likewise deferred.
+ *
+ * Nothing here can render a designed screen before the fetch below returns
+ * one, so the static edge only ever bought this boundary its own copy of the
+ * page's shared modules: Turbopack gives each client boundary a chunk group,
+ * and this one duplicated the canvas's style tables, media resolver and host
+ * naming beside the page's. The page itself is unaffected — it imports the
+ * renderer directly and keeps it in first paint, where it belongs.
+ */
+const CatchAllClient = dynamic(
+  () => import('../app/[host]/[[...slug]]/catch-all-client'),
   { ssr: false },
 )
 
