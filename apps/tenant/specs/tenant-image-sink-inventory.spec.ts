@@ -223,9 +223,14 @@ interface DeclaredSinkFile {
  */
 const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
   'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx': {
-    markers: 4,
+    markers: 2,
     guard: 'media-ref',
-    why: 'The fallback renderer: entry cover, markdown body images and the white-label brand logo, each through resolveMediaSrc. Its <style> carries ELEMENT_HIDDEN_STYLE_TEXT, a build-time constant.',
+    why: 'The white-label brand logo through resolveMediaSrc. Its <style> carries ELEMENT_HIDDEN_STYLE_TEXT, a build-time constant. The entry cover and the markdown body images moved to collection-fallback.tsx with the renderer that emits them (AGL-2706) — same two sinks, same resolver, one file along.',
+  },
+  'apps/tenant/app/[host]/[scheme]/[[...slug]]/collection-fallback.tsx': {
+    markers: 2,
+    guard: 'media-ref',
+    why: 'The legacy collection renderer, split out of catch-all-client so its markdown parser is not on every page (AGL-2706): the entry cover and the markdown body images, both through resolveMediaSrc, exactly as they were. The body image is additionally scheme-checked at parse time by markdown-lite\'s safeImageUrl (AGL-1713); the cover is not.',
   },
   'apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx': {
     markers: 13,
