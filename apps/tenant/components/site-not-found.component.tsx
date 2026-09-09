@@ -17,12 +17,37 @@
 'use client'
 
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
-import { Suspense, useEffect, useState } from 'react'
-import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import type { Props } from '../app/[host]/[[...slug]]/types'
 import { useHostBrand } from '../app/[host]/host-brand.context'
 import { resolveNotFoundTitle } from '../utils/not-found-title'
 import SiteStatusScreen from './site-status-screen.component'
+
+/**
+ * The renderer reaches this boundary through a lazy import, and nothing else
+ * here may import it statically (AGL-2706).
+ *
+ * This module is a client entry of its own, so Turbopack gives it a chunk
+ * group separate from the page's. A static import put the whole renderer
+ * subtree in both groups, and the modules the chunker declined to hoist into a
+ * shared chunk were then emitted TWICE — `media-ref`, `author-css`,
+ * `host-naming`, `platform-brand`, `attribution-guard` and the enum modules
+ * each had a second copy, alongside private copies of `mobx-react-lite` and
+ * `lodash-es`.
+ *
+ * That second copy was not a cold-path cost. A `not-found` boundary is mounted
+ * into every SUCCESSFUL response too, so its chunks are fetched on ordinary
+ * page views of every site on the platform — page views this page is billed
+ * for. The lazy boundary keeps the renderer in the page's own chunk group,
+ * where a 200 already pays for it once.
+ *
+ * The laziness is only real while the import stays dynamic: a static and a
+ * dynamic import of the same module resolve to the same module, and the static
+ * one wins. `site-not-found-stays-lazy.spec.ts` asserts that it stays dynamic.
+ */
+const CatchAllClient = lazy(
+  () => import('../app/[host]/[[...slug]]/catch-all-client'),
+)
 
 /**
  * The body of a tenant 404 (AGL-2342).
@@ -156,11 +181,14 @@ export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
 
   return (
     <ErrorBoundaryComponent fallback={fallback}>
-      {/* The renderer's plugin gate suspends (`use(...)` in
-          `catch-all-client`). On the page that suspension is deliberately
-          unwrapped so it blocks the streamed shell (AGL-1541); here there is
-          no shell left to block — this mounts on the client, after a fetch —
-          so a boundary is what keeps it from throwing. */}
+      {/* Two things suspend under here. The renderer's plugin gate does
+          (`use(...)` in `catch-all-client`): on the page that suspension is
+          deliberately unwrapped so it blocks the streamed shell (AGL-1541);
+          here there is no shell left to block — this mounts on the client,
+          after a fetch — so a boundary is what keeps it from throwing. The
+          lazy chunk does too, and wants the same `null`: the visitor is
+          already looking at a blank body, so resolving to nothing for another
+          moment is the state they are in, not a new one. */}
       <Suspense fallback={null}>
         <CatchAllClient {...screen} />
       </Suspense>
