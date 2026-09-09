@@ -499,6 +499,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'unlisted in 94b6a011c, which left this ratchet red on main.',
   },
   {
+    file: 'libs/cli/src/lib/cli.ts',
+    count: 2,
+    reason:
+      "AGL-2717. Two literals in the published `@aglyn/cli`, and neither is a host a self-hoster's deployment resolves. (1) `'https://app.aglyn.com/api/v1'` is the `??` DEFAULT of `AGLYN_API_URL` and nothing else reads it — the shape this allowlist's own guidance names as belonging here — so an operator points that variable, or `--base`, at their own instance and the literal is never evaluated. (2) `(+https://aglyn.com)` is the contact URL inside this client's own User-Agent, which is correct however the client is pointed: a self-hoster running `@aglyn/cli` is running OUR tool, and the operator of a site it fetches needs somewhere to complain about the tool rather than about the instance. Neither is reachable by a tenant site's runtime; this file ships only in the CLI package.",
+  },
+  {
     file: 'tools/scripts/lib/firewall-posture.mjs',
     count: 5,
     reason:
