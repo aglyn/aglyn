@@ -25,35 +25,10 @@
  */
 
 import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
+import { ELEMENT_HIDDEN_CLASS } from './element-hidden-style'
 import { COMPONENT_NODE_ID_PREFIX } from './reusable-component-keys'
 
-/**
- * Class the show/hide steps toggle. The tenant page ships
- * `ELEMENT_HIDDEN_STYLE_TEXT` in its SSR HTML so an author-applied
- * "start hidden" class paints hidden from the first frame; the besigner
- * canvas deliberately omits the rule so hidden elements stay editable
- * (same posture as the AGL-557 reveal outcome).
- */
-export const ELEMENT_HIDDEN_CLASS = 'aglyn-hidden'
-
-/** Stylesheet rule backing {@link ELEMENT_HIDDEN_CLASS}. */
-export const ELEMENT_HIDDEN_STYLE_TEXT = `.${ELEMENT_HIDDEN_CLASS}{display:none !important}`
-
-/** Id of the injected fallback style tag (idempotence marker). */
-export const ELEMENT_HIDDEN_STYLE_ID = 'aglyn-element-hidden-style'
-
-/**
- * Ensures the hidden-class rule exists in the document (the tenant page
- * renders it during SSR; this is the belt-and-braces path for other
- * surfaces, e.g. the interaction builder's Test button).
- */
-export function ensureElementHiddenStyle(doc: Document = document): void {
-  if (doc.getElementById(ELEMENT_HIDDEN_STYLE_ID)) return
-  const style = doc.createElement('style')
-  style.id = ELEMENT_HIDDEN_STYLE_ID
-  style.textContent = ELEMENT_HIDDEN_STYLE_TEXT
-  doc.head.appendChild(style)
-}
+export * from './element-hidden-style'
 
 export type ElementVisibilityCommand = 'show' | 'hide' | 'toggle'
 
