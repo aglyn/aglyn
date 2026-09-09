@@ -17,6 +17,8 @@ content on the marketing site and is written separately.
 
 - **health:** grade the beacon door on a heartbeat, not on one sample ([AGL-2713](https://linear.app/aglyn/issue/AGL-2713))
 
+- **pricing:** assert the reviewed headroom, not a 5% rounding ([AGL-2711](https://linear.app/aglyn/issue/AGL-2711))
+
 <details>
 <summary>Also in this release: 2 chore</summary>
 
