@@ -243,7 +243,11 @@ describe('the drain receiver ingest path (AGL-1921)', () => {
       level: 'error',
       statusCode: 503,
       path: mod.LOCKDOWN_NOTICE_ROUTE_PATH,
-      proxy: { method: 'GET', statusCode: 503, path: mod.LOCKDOWN_NOTICE_ROUTE_PATH },
+      proxy: {
+        method: 'GET',
+        statusCode: 503,
+        path: mod.LOCKDOWN_NOTICE_ROUTE_PATH,
+      },
     }
     const result = await mod.ingestDrainDelivery([notice])
     expect(result).toMatchObject({ received: 1, matched: 0, forwarded: 0 })
@@ -297,6 +301,87 @@ describe('the drain receiver ingest path (AGL-1921)', () => {
     ).toBe(false)
     // A 503 the platform served with no route attached stays forwardable.
     expect(mod.isLockdownNoticeEntry({ statusCode: 503 })).toBe(false)
+  })
+
+  /*========================================================================
+   * THE OTHER DELIBERATE 503, and it was NINE TENTHS OF THE STREAM
+   * (AGL-2709). Every `/api/health/*` route answers 503 the moment its check
+   * reports degraded. Measured over the 48 hours to 2026-09-09: 251 entries
+   * in `vercel-runtime`, 229 of them health contracts saying so correctly and
+   * 22 of them the outage. The alert policy on that log mailed about the 229.
+   *======================================================================*/
+
+  it('DROPS a health contract 503 — 229 of 251 entries were this', async () => {
+    const fetchMock = mockFetch()
+    const mod = await load()
+    // Copied from the real entry: `/api/health/crons` was right about a broken
+    // job for six hours on 2026-09-07 and every hour of it mailed the operator
+    // under the heading "Server errors".
+    const degraded = {
+      id: '20',
+      source: 'lambda',
+      host: 'app.aglyn.com',
+      level: 'error',
+      statusCode: 503,
+      path: '/api/health/crons',
+      proxy: { method: 'GET', statusCode: 503, path: '/api/health/crons' },
+    }
+    const result = await mod.ingestDrainDelivery([degraded])
+    expect(result).toMatchObject({ received: 1, matched: 0, forwarded: 0 })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('exempts the whole contract, root and nested alike', async () => {
+    const mod = await load()
+    for (const path of [
+      '/api/health',
+      '/api/health/server-errors',
+      '/api/health/render/site',
+    ]) {
+      expect(mod.isHealthContractEntry({ statusCode: 503, path })).toBe(true)
+    }
+    // A prefix, not a substring: a route that merely starts with the same
+    // letters is a different route.
+    expect(
+      mod.isHealthContractEntry({ statusCode: 503, path: '/api/healthcheck' }),
+    ).toBe(false)
+  })
+
+  it('still forwards a health route that is itself BROKEN', async () => {
+    // The exemption is for the CONTRACT, never for the path. A check that
+    // cannot answer must not be able to look calm — the same rule
+    // `serverErrorsHealth` applies to its own failed query.
+    const fetchMock = mockFetch()
+    const mod = await load()
+    const base = { id: '21', source: 'lambda', path: '/api/health/crons' }
+    expect(mod.isHealthContractEntry({ ...base, statusCode: 500 })).toBe(false)
+    expect(mod.isHealthContractEntry({ ...base, statusCode: -1 })).toBe(false)
+    expect(
+      mod.isHealthContractEntry({ ...base, statusCode: 503, level: 'fatal' }),
+    ).toBe(false)
+
+    const result = await mod.ingestDrainDelivery([{ ...base, statusCode: 500 }])
+    expect(result).toMatchObject({ matched: 1, forwarded: 1 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('never excuses a PAGE route — the outage still forwards', async () => {
+    // The 22 entries that mattered, in the shape the drain recorded them.
+    const fetchMock = mockFetch()
+    const mod = await load()
+    const outage = {
+      id: '22',
+      source: 'lambda',
+      host: 'demo.aglyn.app',
+      level: 'error',
+      statusCode: 500,
+      path: '/[host]/[[...slug]]',
+      proxy: { method: 'GET', statusCode: 500, path: '/' },
+    }
+    expect(mod.isHealthContractEntry(outage)).toBe(false)
+    const result = await mod.ingestDrainDelivery([outage])
+    expect(result).toMatchObject({ matched: 1, forwarded: 1 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   /*========================================================================

@@ -332,6 +332,35 @@ jobs:
       # place a deleted route could hide.
       - run: npm run test:uptime-targets
 
+      # test:front-door  Does a VISITOR get a page (AGL-2709)? Every monitor on
+      # the board asked a health route, and a health route answers from inside
+      # a route handler that never enters the ISR path. On 2026-09-09 every
+      # tenant page answered 500 for ten minutes while `Published sites` and
+      # `Marketing site` — both pointed at render canaries — reported
+      # 100.000% with no downtime recorded. This guards the grader that reads
+      # a real page fetch, in both directions: the 500, the 429 checkpoint, the
+      # redirect and the valid-HTML-that-is-not-ours all have to be red, and a
+      # real render has to be green. It also pairs the canary list with the
+      # front-door list from the filesystem, so a third canary cannot ship with
+      # only the proxy measurement pointed at it. Pure node.
+      - run: npm run test:front-door
+
+      # test:render-errors  Is a PAGE ROUTE throwing (AGL-2709)? The half the
+      # front door does not close: Next serves the cached ISR document while
+      # every regeneration underneath it fails, so a 200 is a statement about
+      # the cache and not about the code. The signal that answers it is the
+      # Vercel log drain's 5xx SPLIT BY ROUTE — it named
+      # `route=/[host]/[[...slug]] status=500` within about ninety seconds on
+      # 2026-09-09 while every other check was green.
+      #
+      # The split is the point, and this suite is written around the green
+      # case rather than the red one: over the 48 hours to 2026-09-09 that
+      # stream carried 251 entries, 229 of them `/api/health/*` answering 503
+      # exactly as designed. A grader that reddened on any 5xx would have been
+      # red for six hours on 2026-09-07 while a health check was correctly
+      # reporting a broken cron. Fixtures are real entries. Pure node.
+      - run: npm run test:render-errors
+
       # test:week-one-preflight  The launch pre-flight's OWN self-test
       # (AGL-1617). The script implements every mechanically-checkable item of
       # runbook precondition P4, including the per-host brand-content

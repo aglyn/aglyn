@@ -1,0 +1,148 @@
+name: Tenant production smoke
+
+# ---------------------------------------------------------------------------
+# THE CHECK THAT WAS WRITTEN FOR THIS AND WIRED TO NOTHING (AGL-2709)
+# ---------------------------------------------------------------------------
+# On 2026-09-09 every tenant page in production answered HTTP 500 with a
+# `DYNAMIC_SERVER_USAGE` digest. The commit that did it shipped under 28 green
+# PR checks: tests, typecheck, lint, every derived guard, the emulator specs
+# and BOTH production builds passed, because a production BUILD does not
+# render an ISR route at request time and nothing else in CI does either.
+#
+# `tools/e2e/tenant-prod-smoke.mjs` catches exactly that. It was written after
+# the AGL-594 outage — the same shape, `useSearchParams()` without a Suspense
+# boundary — and its own docblock calls itself "the pre-deploy gate for
+# request-time-only failures that dev servers and successful builds both miss".
+# It was referenced by no workflow and by no phase of `tools/gate.sh`. Run
+# against the broken commit it fails all three routes and prints "do NOT deploy
+# tenant changes"; nothing ever ran it.
+#
+# So the defect was never the check. It was that the check was not a gate.
+#
+# ---------------------------------------------------------------------------
+# WHY HERE, AND NOT IN THE THREE PLACES THAT LOOK CLOSER
+# ---------------------------------------------------------------------------
+# Main Gate's `full` job. It already runs the production builds, so the smoke
+# looks like one more step. It is not, because `full` is DEBOUNCED: `sweep-due`
+# asks whether the last sweep has aged out and skips otherwise, and the
+# measured delivery of its cron backstop was 6 runs of 24. A check that is
+# absent from most shas is not a gate, and `promotion-verdict.yml` says so in
+# its own words — a tip with `fast` green and no `full` grades as exit 3, a
+# WARNING that explicitly does not block. Putting the smoke there would let a
+# promotion carry an unrun smoke exactly as `d1cbc338f` carried unrun tests.
+#
+# `promotion-verdict.yml`. Right moment, wrong job. That workflow is a READER:
+# it walks commit statuses Main Gate already wrote, has no checkout cost worth
+# naming, and is deliberately cheap so it cannot itself become a reason a
+# promotion stalls. Hanging a JVM, an emulator and a production build off it
+# would change what it is, and its one blocking condition (a tip Main Gate
+# graded RED) would then be sharing a job with a thirty-minute build.
+#
+# `tools/gate.sh`. It is what a promotion runs by hand, and a phase there was
+# the first instinct. Two things rule it out. It gates from an isolated temp
+# worktree with no emulator, no JVM and no seeded fixtures, so the phase would
+# have to build all of that per run; and the standing instruction is that the
+# PR is the gate and the local one is not to be run. A phase nobody runs is
+# the defect this file exists to close, restated.
+#
+# So: a workflow of its own, triggered on the event that IS a promotion.
+# `pull_request` against `production` fires on every promotion PR, always,
+# with no cadence, no debounce and no staleness question — the properties the
+# other three homes each lack one of.
+#
+# ---------------------------------------------------------------------------
+# WHAT THE SCHEDULE IS AND IS NOT
+# ---------------------------------------------------------------------------
+# The cron is a BACKSTOP, not the gate, and the distinction is the one this
+# repo has now recorded twice. GitHub delivered 13 of 120 requested runs when
+# `main-gate.yml` measured it and 6 of 24 when it measured the hourly sweep, so
+# a schedule cannot be the thing standing between a break and production. It is
+# here so a request-time break found on `main` costs someone a day rather than
+# being discovered at the moment the promotion is opened, which is the moment
+# it is most expensive.
+#
+# It does not page anyone, deliberately. This job exists to make a promotion
+# uneventful, not to detect a live outage — the front doors added beside it in
+# `probe-uptime.mjs` are what watch production, from off our infrastructure,
+# every fifteen minutes, and those DO alert to Slack `#ci`.
+#
+# ⚠️ NO `paths:` FILTER, for the reason `emulator-guards.yml` gives. The
+# failure this catches is a RENDER-TIME behavior, and it can arrive from
+# anywhere — a layout, a middleware, a shared helper, a theme token, a
+# dependency bump. Any path list would be a guess about which edits can 500 a
+# page, and a wrong guess reads as green.
+
+on:
+  # THE GATE. Every promotion PR, unconditionally.
+  pull_request:
+    branches:
+      - production
+  schedule:
+    # Four times a day, offset off the hour — GitHub's scheduler is most
+    # congested on the hour and its runs are best-effort. See above for why
+    # this is a backstop and not the cadence anything depends on.
+    - cron: '41 1,7,13,19 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Keyed per PR, so two promotion PRs never contend. Cancelling in progress is
+  # correct HERE and not in `emulator-guards.yml`: a superseded run graded a
+  # head the PR has moved past, and a cancelled check does not read as a pass.
+  group: tenant-prod-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: a real production server serves the seeded routes
+    runs-on: ubuntu-latest
+    # An uncached tenant production build measured a few minutes locally and
+    # this runner has 4 vCPU, plus an emulator boot, a seed and the requests.
+    # Bounded well above the spread on purpose: a bound below the real
+    # distribution turns an honest slow run into a cancellation, which is the
+    # AGL-2378 mistake.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+
+      # The Firestore emulator is a JVM jar. ubuntu-latest ships a JDK today;
+      # pinning it means this job does not silently depend on that staying
+      # true. Same reasoning, same version as `emulator-guards.yml`.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Root install only. The smoke builds `apps/tenant`, which is in the root
+      # workspace; it reaches neither `cloud/functions` nor `apps/docs`, so this
+      # job does not pay for their installs.
+      - run: npm ci
+
+      # firebase-tools is deliberately not a package.json dependency, so every
+      # emulator-running job installs it globally. Pinned for the reason
+      # `emulator-guards.yml` gives: an emulator that changes behavior under us
+      # would read here as a broken page.
+      - run: npm i -g firebase-tools@15.24.0
+
+      # Emulators, seed, environment and the smoke — see the script's header
+      # for why it carries no production credential. NOT piped: a pipe makes
+      # `emulators:exec` report success on a child's failure.
+      - run: npm run smoke:tenant:prod:ci
+
+      # The one line that must never be inferred from an absence. A job that
+      # reached this step ran the routes; a job that did not says so by not
+      # printing it.
+      - run: |
+          {
+            echo "### Tenant production smoke"
+            echo
+            echo "A real \`next start\` server answered the seeded routes."
+            echo "Gated \`$(git rev-parse --short HEAD)\`."
+          } >> "$GITHUB_STEP_SUMMARY"

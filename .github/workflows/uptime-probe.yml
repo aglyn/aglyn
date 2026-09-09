@@ -21,6 +21,17 @@ name: Uptime probe
 #
 # The run history IS the record. A failed run is where an incident starts.
 #
+# IT NOW FETCHES PAGES, NOT ONLY HEALTH ROUTES (AGL-2709). Every row here was a
+# JSON health contract until 2026-09-09, when every tenant page answered 500 for
+# ten minutes and both page-shaped monitors reported 100.000% with no downtime
+# recorded — a health route answers from inside a route handler and never
+# enters the ISR path that was broken. Two `front-door/*` rows now request
+# `https://demo.aglyn.app/` and `https://aglyn.com/` and grade the response the
+# way a visitor experiences it. They ride the same `AGLYN_PROBE_TOKEN` bypass
+# as everything else below; a row that gets the checkpoint anyway reports
+# CHALLENGED, which is red and is explicitly not a claim about the site. See
+# `tools/scripts/lib/front-door.mjs` and docs/UPTIME_AND_SLA.md.
+#
 # Optional:
 #   var CONSOLE_BASE_URL — defaults to https://app.aglyn.com
 #   var TENANT_BASE_URL  — defaults to https://demo.aglyn.app
