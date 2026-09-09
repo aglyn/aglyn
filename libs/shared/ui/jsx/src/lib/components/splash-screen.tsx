@@ -26,7 +26,7 @@ import {
   Stack,
 } from '@mui/material'
 import { forwardRef } from 'react'
-import { AglynLogoFull } from '../const/svg-icons'
+import { AglynLogoFull } from '../const/aglyn-logo-full'
 import LoadingTextComponent from './loading-text.component'
 
 export interface SplashScreenProps extends Partial<MuiModalProps<any, any>> {}

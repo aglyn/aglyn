@@ -23,6 +23,7 @@ import { createContext, useContext, useMemo } from 'react'
 import type { Theme, ThemeOptions } from '../../vendor/mui'
 import { ThemeProvider } from '../../vendor/mui'
 import {
+  type ThemeMode,
   ThemeContextDispatch,
   type UseThemeMode,
   useThemeModeState,
@@ -62,6 +63,24 @@ export type HostThemeProviderProps = {
   baseOptions?: ThemeOptions | [light: ThemeOptions, dark: ThemeOptions]
   /** Extra options merged into both generated schemes (e.g. portal container defaults). */
   themeOptions?: ThemeOptions
+  /**
+   * The visitor's stored light/dark choice, resolved from the request's
+   * cookies by the server component above this one; `null` when they have
+   * chosen nothing. It is what the first render is built from, so a visitor
+   * who asked for dark gets dark in the first byte rather than a light page
+   * that repaints once React has hydrated. Omitted, the mode is read from
+   * `document.cookie`, which no server render can see.
+   */
+  initialMode?: ThemeMode
+  /**
+   * The DEVICE's light/dark preference, read from the request's
+   * `Sec-CH-Prefers-Color-Scheme` client hint by the server component above
+   * this one; `null` on a browser that sends no hint. It decides the scheme
+   * only for a visitor who has chosen nothing — `initialMode` outranks it —
+   * and it is what keeps "Device default" from meaning "light until the page
+   * has hydrated" on a dark device.
+   */
+  initialDeviceMode?: ThemeMode
   disableCssBaseline?: boolean
   children?: JSX.Children
 }
@@ -71,6 +90,16 @@ export type HostThemeProviderProps = {
  * MUI theme, resolving light/dark via the shared cookie +
  * prefers-color-scheme mode state (same machinery as
  * `createWithThemeProvider`, so `useThemeMode` toggles keep working).
+ *
+ * Both layers are decided before paint where the request can answer them: the
+ * explicit choice from `initialMode`, the device's own preference from
+ * `initialDeviceMode`. Neither has a CSS form to fall back on, because a site
+ * resolves its dark scheme in JS — a single-mode theme swapped between
+ * schemes, and node styles whose `@scheme dark` slices are merged against
+ * `palette.mode` — so a media query in a stylesheet could not make the
+ * decision instead. On a browser that sends no color-scheme client hint the
+ * device layer is unanswerable on the server and settles at hydration, which
+ * is why `useMediaQuery` remains the authority once there is one.
  */
 export function HostThemeProvider(props: HostThemeProviderProps) {
   const {
@@ -78,12 +107,14 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
     fallback,
     baseOptions,
     themeOptions,
+    initialMode,
+    initialDeviceMode,
     disableCssBaseline,
     children,
   } = props
   const contextTheme = useHostThemeDocument()
   const hostTheme = theme ?? contextTheme
-  const themeModeState = useThemeModeState()
+  const themeModeState = useThemeModeState(initialMode, initialDeviceMode)
   const [[, themeMode], toggleThemeMode, cookieMode] = themeModeState
   const requested = themeMode === 'dark' ? 'dark' : 'light'
 

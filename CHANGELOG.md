@@ -9,13 +9,49 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.102 — 2026-09-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/3a72e4870...v1.0.0-beta.102)
+
+### Fixed
+
+- **theme:** resolve the device's scheme from the color-scheme client hint ([AGL-2707](https://linear.app/aglyn/issue/AGL-2707))
+- **theme:** resolve the visitor's scheme on the server, not after hydration ([AGL-2705](https://linear.app/aglyn/issue/AGL-2705))
+
+### Performance
+
+- **tools:** reach Buffer through globalThis so no browser bundle polyfills it ([AGL-2706](https://linear.app/aglyn/issue/AGL-2706))
+- **aglyn:** the reusable-component keys leave the graft that reads them ([AGL-2706](https://linear.app/aglyn/issue/AGL-2706))
+- **aglyn:** give the page's two one-function reads their own modules ([AGL-2706](https://linear.app/aglyn/issue/AGL-2706))
+- **ui:** split the Aglyn wordmark out of the six-logo module ([AGL-2706](https://linear.app/aglyn/issue/AGL-2706))
+
+### Documentation
+
+- **pricing:** record why the page-view rate was measured and not moved ([AGL-2706](https://linear.app/aglyn/issue/AGL-2706))
+- **tenant:** name what the dynamic render costs and what it does not ([AGL-2705](https://linear.app/aglyn/issue/AGL-2705))
+
+<details>
+<summary>Also in this release: 4 chore</summary>
+
+- **perf:** re-baseline the tenant page budget after the first-paint cut ([AGL-2706](https://linear.app/aglyn/issue/AGL-2706))
+- **tools:** baseline the wordmark's own accessible name in its new module ([AGL-2706](https://linear.app/aglyn/issue/AGL-2706))
+- **pricing:** record the measured page the view rate is priced against ([AGL-2706](https://linear.app/aglyn/issue/AGL-2706))
+- **release:** carry the theme-mode fix into the v1.0.0-beta.101 notes ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
 ## v1.0.0-beta.101 — 2026-09-08
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/41c7a50cd...v1.0.0-beta.101)
 
 ### Fixed
 
+- **theme:** resolve the visitor's scheme on the server, not after hydration ([AGL-2705](https://linear.app/aglyn/issue/AGL-2705))
 - **theme:** the marketing hosts are matched in the form the route carries ([AGL-2703](https://linear.app/aglyn/issue/AGL-2703))
+
+### Documentation
+
+- **tenant:** name what the dynamic render costs and what it does not ([AGL-2705](https://linear.app/aglyn/issue/AGL-2705))
 
 ## v1.0.0-beta.100 — 2026-09-08
 

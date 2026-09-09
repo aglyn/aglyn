@@ -96,6 +96,20 @@ jest.mock('../utils/get-site-nav', () => ({
   default: async () => [],
 }))
 
+/**
+ * The layout reads the visitor's light/dark preference off the request so the
+ * site's first paint is the scheme they want — their stored choice from the
+ * cookie jar, their device's own from the color-scheme client hint. Both APIs
+ * throw outside a request scope, which a direct call to the layout function
+ * is, and neither answer is anything this suite asserts about: an empty jar
+ * and a header-less request are the shape an anonymous first visit has.
+ */
+jest.mock('next/headers', () => ({
+  __esModule: true,
+  cookies: async () => ({ get: () => undefined }),
+  headers: async () => new Headers(),
+}))
+
 import HostLayout from '../app/[host]/layout'
 
 const HOST_ID = 'DXnRbPH4CQ'

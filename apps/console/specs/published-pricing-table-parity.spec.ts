@@ -944,24 +944,25 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * the physical page a customer's visitor actually downloads.
      *
      * `perPageView` is a COST, calibrated once against a 627 KB cold load. A
-     * cold load of `aglyn.com/` now measures 1054.3 KB of first-party encoded
-     * bytes with every image accounted for, so the same per-KB basis gives
-     * $0.000168 and a billed $0.22 per 1,000. At the published $0.13 the meter
-     * runs at roughly -29% margin, and 792.4 KB of that page is JavaScript
-     * every visitor to every published site pays whatever the page contains.
+     * cold load of `aglyn.com/` now measures 1010.3 KB of first-party encoded
+     * bytes at first paint, so the same per-KB basis gives $0.000161 and a
+     * billed $0.21 per 1,000. At the published $0.13 the meter runs at roughly
+     * -19% margin, and about 958 KB of that page is JavaScript — every visitor
+     * to every published site pays whatever the page contains.
      *
-     * It is pinned here rather than fixed because the published figure is
-     * inside the locked launch price set: correcting the cost moves
-     * `METERED_BILLED_RATES_USD` and therefore a customer's invoice, which is
-     * a pricing decision. What the test can do is refuse to let the gap be
-     * forgotten, and refuse to let it be closed by editing the published
-     * figure alone.
+     * The gap is REVIEWED and deliberately still open. Correcting the cost
+     * moves `METERED_BILLED_RATES_USD` and therefore a customer's invoice, so
+     * it is a pricing decision, and the standing one is that reducing the page
+     * weight is preferred over repricing the promise: a re-peg made now is a
+     * price change a successful reduction would immediately have to walk back.
+     * What the test can do is refuse to let the gap be forgotten, and refuse
+     * to let it be closed by editing the published figure alone.
      *
      * `tools/tenant-page-budget.json` holds the measurement and
      * `npm run check:page-view-rate` holds the gap; this asserts the two
      * agree, so the record cannot drift from the rate it describes.
      */
-    it('the $0.13 is priced for a 627 KB page that now measures 1054.3 KB', () => {
+    it('the $0.13 is priced for a 627 KB page that now measures 1010.3 KB', () => {
       const { wireCalibration } = JSON.parse(
         readFileSync(
           join(__dirname, '..', '..', '..', 'tools', 'tenant-page-budget.json'),
@@ -969,7 +970,7 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         ),
       )
       expect(wireCalibration.pricedForKb).toBe(627)
-      expect(wireCalibration.measuredKb).toBe(1054.3)
+      expect(wireCalibration.measuredKb).toBe(1010.3)
       // The rate on the page is the one the 627 KB basis implies…
       expect(METERED_UNIT_RATES_USD.perPageView).toBeCloseTo(
         (0.0001 * wireCalibration.pricedForKb) / 627,
@@ -982,11 +983,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(impliedByMeasured).toBeGreaterThan(
         METERED_UNIT_RATES_USD.perPageView * 1.5,
       )
-      // Rounded the way a published figure would be: $0.22 per 1,000 against
+      // Rounded the way a published figure would be: $0.21 per 1,000 against
       // the $0.13 the page states.
       expect(
         Math.round(impliedByMeasured * METERED_MARKUP * 1000 * 100) / 100,
-      ).toBe(0.22)
+      ).toBe(0.21)
     })
 
     it('Form submissions — $0.065 / 1,000', () => {

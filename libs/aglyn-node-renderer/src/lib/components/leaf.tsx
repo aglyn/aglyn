@@ -27,7 +27,7 @@ import { pinRampedTypographySx } from '@aglyn/aglyn/app-utils/responsive-typogra
 import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
-} from '@aglyn/aglyn/app-utils/compose-reusable-components'
+} from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import {
   NODE_ANIMATION_DELAY_PROP,
   NODE_ANIMATION_DURATION_PROP,

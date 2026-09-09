@@ -19,7 +19,16 @@
 // theme lib's createContext HOCs into the RSC graph (AGL-405).
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import {
+  COLOR_SCHEME_HINT_HEADER,
+  parseColorSchemeHint,
+} from '@aglyn/shared-ui-theme/util/color-scheme-hint'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
+import {
+  parseThemeModeCookie,
+  THEME_MODE_COOKIE,
+} from '@aglyn/shared-ui-theme/util/theme-mode-cookie'
+import { cookies, headers } from 'next/headers'
 import type { ReactNode } from 'react'
 import getSiteNav from '../../utils/get-site-nav'
 import { hostSeoTitleParts } from '../../utils/not-found-title'
@@ -100,6 +109,88 @@ export default async function HostLayout({
   const siteLinks = await getSiteNav(hostRes.host)
 
   /**
+   * The visitor's own light/dark choice, decided here rather than in the
+   * browser.
+   *
+   * The switcher stores the choice in a cookie and the provider reads it with
+   * `js-cookie`, which reads `document.cookie` — a global no server render
+   * has. Left to that reader alone, a visitor who asked for dark is served a
+   * light document and waits for React to hydrate the whole page before it
+   * flips: on a screen of a few thousand nodes that is seconds of the wrong
+   * scheme, and no flip at all where hydration never finishes. The cookie is
+   * on the request; reading it here is what puts the chosen scheme in the
+   * first byte.
+   *
+   * It has to be the SERVER that decides, not a media query or a pre-paint
+   * script, because a site's dark scheme is resolved in JS and has no CSS
+   * form: the MUI theme is single-mode and swapped between schemes, and every
+   * node's persisted `@scheme dark` slice is merged against the active
+   * theme's `palette.mode` while the tree renders. A stylesheet that flipped
+   * the palette would leave those author overrides on their light values —
+   * half a dark page.
+   *
+   * ⚠️ COST, and what it is NOT. `cookies()` is a dynamic API, so this renders
+   * the route per request instead of serving it from the ISR window the
+   * catch-all page declares. That much is inherent rather than incidental: one
+   * cached document is shared by every visitor, so it cannot carry a
+   * per-visitor scheme at all. Per-visitor theming and a shared HTML cache are
+   * the same choice made two ways, and this line is where it is made.
+   *
+   * What it does NOT give up is the database. Every read underneath — the host
+   * document and its id resolution, the screen, its version, the components,
+   * the layout version, collections, forms, variables — goes through
+   * `withRenderCache`, an `unstable_cache` keyed per host and held for
+   * `PUBLISHED_SITE_DATA_TTL_SECONDS`, busted by the publish path's
+   * `revalidateTag`. Those are shared ACROSS requests, not per render. So the
+   * cost that scales with traffic here is render CPU, not Firestore reads,
+   * which is the axis that carries a per-operation price.
+   *
+   * If render CPU ever becomes the constraint, the way to keep both is to fold
+   * the resolved scheme into the cache key — one entry per scheme rather than
+   * one per visitor — not to take the scheme back off the server.
+   */
+  const initialThemeMode = parseThemeModeCookie(
+    (await cookies()).get(THEME_MODE_COOKIE)?.value,
+  )
+
+  /**
+   * The visitor's DEVICE preference, for the visitor who has chosen nothing.
+   *
+   * "Device default" is the mode almost everyone is on, and it is the half the
+   * cookie cannot answer: the preference lives in `prefers-color-scheme`, a
+   * media feature with no meaning outside a browser. Read from the cookie
+   * alone, such a visitor is served a light document on a dark laptop and the
+   * page turns over piecemeal as the tree hydrates — the navbar before its own
+   * items, because every leaf has to re-render before it can pick up the new
+   * scheme.
+   *
+   * `Sec-CH-Prefers-Color-Scheme` is that media feature as a request header,
+   * which is a form this layout CAN read. The middleware advertises it in
+   * `Accept-CH` and `Critical-CH`, so it is present from the first navigation
+   * on the browsers that implement it.
+   *
+   * ⚠️ It is a SEPARATE value from the cookie rather than a fallback folded
+   * into it, and that separation is the precedence rule: the provider consults
+   * the device only where the cookie named no scheme, so a visitor who chose
+   * Light keeps light on a dark device, and the switcher still shows "Device
+   * default" checked rather than the scheme the device happens to be in.
+   *
+   * ⚠️ CHROMIUM ONLY. Firefox and Safari send no such header, so there the
+   * value is `null` and the scheme settles at hydration instead. That absence
+   * is not an edge case to guard against: it is also what a request from any
+   * browser looks like before `Accept-CH` has been seen, so the render path
+   * below has to be correct without an answer either way.
+   *
+   * It costs no extra dynamism. `cookies()` above already takes this route out
+   * of the ISR window the catch-all page declares, and `headers()` is the same
+   * class of dynamic API — reading a second field of the same request changes
+   * nothing about how often the route renders.
+   */
+  const initialDeviceMode = parseColorSchemeHint(
+    (await headers()).get(COLOR_SCHEME_HINT_HEADER),
+  )
+
+  /**
    * The white-label half AGL-1421 left open (AGL-2183).
    *
    * The comment above is right that an EMPTY href is worse than none — but
@@ -141,6 +232,8 @@ export default async function HostLayout({
   return (
     <HostThemeProviders
       hostTheme={hostTheme}
+      initialThemeMode={initialThemeMode}
+      initialDeviceMode={initialDeviceMode}
       brandLogoUrl={brandLogoUrl}
       brandName={hostRes.host?.displayName}
       siteLinks={siteLinks}

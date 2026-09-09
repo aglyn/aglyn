@@ -1488,7 +1488,7 @@ describe('the infra pass-through is priced by a different rule', () => {
    * cannot be closed by editing the published figure alone.
    */
   it('at the page weight the platform actually serves, the annual invariant does not hold', () => {
-    const measuredViewRate = (0.0001 * 1054.3) / 627
+    const measuredViewRate = (0.0001 * 1010.3) / 627
     const rates = ORG_COGS_UNIT_RATES_USD as unknown as Record<string, number>
     const original = rates.perPageView
     let atMeasured: Record<string, [number, number]>
@@ -1501,12 +1501,12 @@ describe('the infra pass-through is priced by a different rule', () => {
       rates.perPageView = original
     }
     expect(atMeasured).toEqual({
-      starter: [29.2, -7.3],
-      pro: [2.7, -37.8],
-      business: [12.1, -22],
-      scale: [13.9, -18.5],
-      advanced: [15, -12.4],
-      agency: [5.7, -16],
+      starter: [31.7, -3.4],
+      pro: [5.4, -33.9],
+      business: [13.7, -19.7],
+      scale: [15.3, -16.5],
+      advanced: [16, -11],
+      agency: [7.2, -14.2],
     })
     // …and the rate really was restored, or every pin above this line would
     // be the next run's surprise.

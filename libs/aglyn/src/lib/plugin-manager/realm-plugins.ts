@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginArtifactPath } from '../app-utils/plugin-manifest'
+import { pluginArtifactPath } from '../app-utils/plugin-artifact-path'
 import { capturePluginStyles } from './plugin-styles'
 
 /**
@@ -82,8 +82,11 @@ const decodeBase64 = (value: string): Uint8Array => {
   if (typeof atob === 'function') {
     return Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
   }
-  // Node without atob (never in practice on >=16, kept for safety).
-  return new Uint8Array(Buffer.from(value, 'base64'))
+  // Node without atob (never in practice on the pinned runtime, kept for
+  // safety). Reached through `globalThis` rather than as a bare global: a
+  // free `Buffer` identifier makes a browser bundler inject its 22 KB
+  // polyfill for a branch no browser can enter.
+  return new Uint8Array(globalThis.Buffer.from(value, 'base64'))
 }
 
 export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {

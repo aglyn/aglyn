@@ -32,6 +32,10 @@ import {
 } from 'react'
 import { useIsomorphicLayoutEffect } from 'react-use'
 import { createTheme, type Theme, ThemeProvider } from '../../vendor/mui'
+import {
+  parseThemeModeCookie,
+  THEME_MODE_COOKIE,
+} from '../util/theme-mode-cookie'
 
 export type ThemeMode = 'light' | 'dark' | 'system' | null
 export type ThemeModeType = 'user' | 'system'
@@ -58,7 +62,13 @@ export const getThemeModeDisplayName = (theme: ThemeMode) => {
   return THEME_DISPLAY_NAME[theme] || THEME_DISPLAY_NAME.system
 }
 
-export const COOKIE_THEME_KEY = 'theme-color-mode'
+/**
+ * The cookie the visitor's choice is persisted in, spelled out as a type so
+ * the name has one definition across the browser reader here and the
+ * server-side one in `util/theme-mode-cookie`: the annotation fails to compile
+ * if the two ever name different cookies.
+ */
+export const COOKIE_THEME_KEY: 'theme-color-mode' = THEME_MODE_COOKIE
 export const ThemeContextDispatch = createContext<UseThemeMode>([
   ['system', 'system'],
   noop,
@@ -69,19 +79,41 @@ export function useThemeMode() {
   return useContext(ThemeContextDispatch)
 }
 
+/**
+ * The stored choice as this browser reads it.
+ *
+ * `js-cookie` reads `document.cookie`, so on a server render there is nothing
+ * to read and every visitor looks like one who has chosen nothing. That is why
+ * a server-rendered surface passes the mode it resolved from the request's
+ * cookies into {@link useCookieThemeMode} instead of relying on this.
+ */
 function getCookieThemeMode(): ThemeMode {
-  const cookieMode = Cookies.get(COOKIE_THEME_KEY)
-  if (cookieMode === 'dark' || cookieMode === 'light') {
-    return cookieMode
-  }
-  return null
+  return parseThemeModeCookie(Cookies.get(COOKIE_THEME_KEY))
 }
 
-export function useCookieThemeMode(): [ThemeMode, (mode: ThemeMode) => void] {
-  const [mode, setMode] = useState<ThemeMode>(() => getCookieThemeMode())
+/**
+ * The visitor's stored light/dark choice, and a setter that persists it.
+ *
+ * `initialMode` is the mode the surface's server render resolved from the
+ * request's cookies — `null` when the request carried no choice. Supplying it
+ * is what makes the FIRST render right: the state starts at the visitor's
+ * choice on the server and at the identical value through hydration, rather
+ * than starting empty and being corrected by the effect below once React has
+ * hydrated the whole page. Omit it on a surface that only ever renders in a
+ * browser, and the cookie is read directly.
+ */
+export function useCookieThemeMode(
+  initialMode?: ThemeMode,
+): [ThemeMode, (mode: ThemeMode) => void] {
+  const [mode, setMode] = useState<ThemeMode>(() =>
+    initialMode === undefined ? getCookieThemeMode() : initialMode,
+  )
 
   /**
-   * Update value on each paint if changed
+   * Keeps the state in step with the cookie on each paint — another tab's
+   * switcher, or a seed that went stale between the server render and
+   * hydration. Browser-only: effects do not run during a server render, so
+   * this never overwrites the seed with the server's empty read.
    */
   useIsomorphicLayoutEffect(() => {
     const cookieMode = getCookieThemeMode()
@@ -96,9 +128,38 @@ export function useCookieThemeMode(): [ThemeMode, (mode: ThemeMode) => void] {
   return useMemo(() => [mode, setCookieThemeMode], [mode, setCookieThemeMode])
 }
 
-export function useThemeModeState(): UseThemeMode {
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)')
-  const [cookieMode, setCookieMode] = useCookieThemeMode()
+/**
+ * The resolved theme mode, in two layers with the visitor's own choice on top.
+ *
+ * An EXPLICIT choice comes from the cookie, which a server render can read
+ * from the request — pass it as `initialMode` and the surface paints that
+ * scheme in its first byte. It outranks the device: a visitor who asked for
+ * light gets light on a dark laptop, and the ordering below is the only thing
+ * that decides it, so the two layers are kept as separate inputs rather than
+ * collapsed into one seed by the caller.
+ *
+ * DEVICE DEFAULT is the other layer. `prefers-color-scheme` is a media
+ * feature, so a server has nothing to evaluate it against and `useMediaQuery`
+ * answers light for every server render. `initialDeviceMode` supplies that
+ * answer from the request instead — the `Sec-CH-Prefers-Color-Scheme` client
+ * hint, where the browser sends one.
+ *
+ * It is fed in as `defaultMatches` rather than substituted for the media query
+ * because that is the value React reads for BOTH the server render and the
+ * hydration render: `useMediaQuery` publishes `defaultMatches` as its server
+ * snapshot and only switches to the live `matchMedia` result once hydration is
+ * complete. Seeding any earlier layer instead leaves the media query answering
+ * light for the hydration commit, and the tree repaints light before the real
+ * snapshot arrives — the flash this exists to remove, moved one frame later.
+ */
+export function useThemeModeState(
+  initialMode?: ThemeMode,
+  initialDeviceMode?: ThemeMode,
+): UseThemeMode {
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)', {
+    defaultMatches: initialDeviceMode === 'dark',
+  })
+  const [cookieMode, setCookieMode] = useCookieThemeMode(initialMode)
 
   const systemMode = useMemo<ThemeMode>(() => {
     return prefersDark ? 'dark' : 'light'

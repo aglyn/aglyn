@@ -92,6 +92,32 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-09 — The page-view rate is re-measured at 1010.3 KB and deliberately not re-pegged
+
+- **Decided by:** the account owner, 2026-09-09, asked whether to correct `perPageView` now that the measured page is 1.61x the weight it is priced for. Hold the price and reduce the weight instead, per the standing 2026-08-30 rule.
+- **Scope:** pricing
+- **Evidence:** re-measured on production v1.0.0-beta.101 — `aglyn.com/` at first paint is 1010.3 KB of first-party encoded bytes in a visible signed-in tab at 2560x1209, corroborated at 1006.1 KB in an anonymous context, cross-route RSC prefetch excluded; recorded in `tools/tenant-page-budget.json` with `measuredKb` 1010.3, `sourceGraphBytes` 1304783 and `acknowledgedShortfall` 1.62 against a 1.6113 actual; `npm run check:page-view-rate` green; `METERED_UNIT_RATES_USD.perPageView` and `ORG_COGS_UNIT_RATES_USD.perPageView` both still 0.0001 and `/pricing` still states $0.13 / 1,000; margins re-pinned in `apps/console/specs/tier-margin-floor.spec.ts`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2706.
+
+**No charged price moves.** What moves is the record. The rate has been priced
+for a 627 KB page since it was calibrated; the page is 1010.3 KB, so the meter
+runs at roughly -19% margin against the published $0.13 / 1,000.
+
+The re-peg was computed and held: cost $0.000161, published $0.2093 / 1,000.
+Shipping it now would be a customer-facing price change that a successful page-weight
+reduction — in progress — would immediately have to walk back. Re-peg only if that
+reduction lands and the page is still over 627 KB, and then measure once and price once.
+
+Two findings worth carrying forward:
+
+- **Composition changed more than size.** The old basis was 1054.3 KB with 792.4 KB
+  of JavaScript; it is now ~1010 KB with ~958 KB of JavaScript. The rate is exposed
+  to our own bundle, not to customer content.
+- **Cross-route prefetch must not be counted.** A scrolled reading came to 1928.7 KB,
+  of which ~919 KB was Next.js prefetching other routes as the footer's links entered
+  the viewport. Those routes bill as their own page views, so counting them here would
+  charge for the same bytes twice. The 1338.9 KB "scrolled" figure recorded on
+  2026-08-30 most likely carries the same inflation.
+
 ## 2026-09-08 — Campaign email begins at Pro; Starter's band stays 0, and the sending-domain entitlements stay with it
 
 - **Decided by:** the account owner, 2026-09-08, asked whether to restore Starter's 500-send band — removed on 2026-08-31 by three commits carrying no Linear id and no entry here — or to ratify the removal. Ratify it, with the revisit condition recorded beside it.
