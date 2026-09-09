@@ -80,13 +80,24 @@ describe('the page renderer stays out of the 404 boundary chunk group', () => {
   })
 
   it('keeps the fallback screen in a module the renderer does not own', () => {
-    // The fallback is rendered while the lazy chunk loads and whenever there
-    // is no designed screen, so it must not live behind the same boundary —
-    // a fallback imported from the lazily-loaded module cancels the laziness.
-    const specifiers = staticValueImportSpecifiers(SOURCE)
-    expect(specifiers).toContain('./site-status-screen.component')
+    /**
+     * The fallback is rendered while the lazy chunk loads and whenever there
+     * is no designed screen, so it must not live behind the same boundary —
+     * a fallback imported from the lazily-loaded module cancels the laziness.
+     *
+     * What matters is the SEPARATION, not that the fallback is eager. It is
+     * itself dynamic (AGL-2706): reaching it statically pulled the
+     * `TextField` → `Select` → `Menu` → `Popover` → `Modal` cluster onto
+     * first paint of every page, to draw a screen most visitors never see.
+     * Two lazy modules are still two chunk groups.
+     */
+    expect(SOURCE).toMatch(
+      /import\(\s*'\.\/site-status-screen\.component'\s*\)/,
+    )
     expect(
-      specifiers.filter((one) => one.includes('catch-all-client')),
+      staticValueImportSpecifiers(SOURCE).filter((one) =>
+        one.includes('catch-all-client'),
+      ),
     ).toEqual([])
   })
 
