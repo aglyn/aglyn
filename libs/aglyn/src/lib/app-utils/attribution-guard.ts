@@ -79,10 +79,24 @@
  * install must be able to run before any effect. Deliberately NO 'use client'
  * directive — inside this shared lib the directive forks the module graph
  * (AGL-52), and every importer is already a client module.
+ *
+ * ## Reached through a dynamic `import()`
+ *
+ * Nothing on the tenant's eager path names this module. The renderer marks
+ * its elements with `ATTRIBUTION_ATTRIBUTE`, which lives in a module of its
+ * own for exactly that reason, and `attribution-guard.component.tsx` imports
+ * this one from inside its effect — so the sites that show no attribution,
+ * which is every paid site, never fetch it (AGL-2706). The element copies the
+ * repair rebuilds from are taken by the component BEFORE the chunk is asked
+ * for; see `shipped` below.
  */
 
-/** Marks an element this guard is responsible for keeping visible. */
-export const ATTRIBUTION_ATTRIBUTE = 'data-aglyn-attribution'
+// The attribute the page marks its elements with. Re-exported so this module
+// still offers the whole surface under one name — the page itself takes it
+// from the leaf, which is what keeps this file off the eager path.
+export { ATTRIBUTION_ATTRIBUTE } from './attribution-attribute'
+
+import { ATTRIBUTION_ATTRIBUTE } from './attribution-attribute'
 
 /** Why a check failed. Reported verbatim, so keep these short and stable. */
 export type AttributionSuppression =
@@ -100,6 +114,19 @@ export interface AttributionGuardOptions {
   endpoint?: string
   /** The site being checked, so the report names one without a lookup. */
   hostId?: string
+  /**
+   * What the page rendered, keyed by subject, captured before this module
+   * was even fetched.
+   *
+   * The caller takes these because the repair rebuilds a suppressed element
+   * from a copy of the original, and by the time one is missing there is
+   * nothing left to clone. This module arrives through a dynamic `import()`,
+   * so a capture taken here would be a capture taken a chunk fetch late.
+   *
+   * Omitted, the document is read directly — which is what a test does, and
+   * what any caller that is already on the page's critical path may do.
+   */
+  shipped?: ReadonlyMap<string, Element>
   /** Overridable for tests; the real one is `window`. */
   view?: Window & typeof globalThis
 }
@@ -321,21 +348,28 @@ export function installAttributionGuard(
 
   // What this page rendered, captured before anything has had a chance to
   // take it away — the repair needs a copy of the element to rebuild, and by
-  // the time one is missing there is nothing left to clone.
-  const shipped: string[] = []
+  // the time one is missing there is nothing left to clone. Supplied by the
+  // caller where it can be taken earlier than this module exists; see
+  // `shipped` on the options.
   const templates = new Map<string, Element>()
   try {
-    for (const element of Array.from(
-      doc.querySelectorAll(`[${ATTRIBUTION_ATTRIBUTE}]`),
-    )) {
-      const subject = element.getAttribute(ATTRIBUTION_ATTRIBUTE) ?? ''
-      if (!subject || templates.has(subject)) continue
-      shipped.push(subject)
-      templates.set(subject, element.cloneNode(true) as Element)
+    if (options.shipped) {
+      for (const [subject, element] of options.shipped) {
+        if (subject) templates.set(subject, element)
+      }
+    } else {
+      for (const element of Array.from(
+        doc.querySelectorAll(`[${ATTRIBUTION_ATTRIBUTE}]`),
+      )) {
+        const subject = element.getAttribute(ATTRIBUTION_ATTRIBUTE) ?? ''
+        if (!subject || templates.has(subject)) continue
+        templates.set(subject, element.cloneNode(true) as Element)
+      }
     }
   } catch {
     return
   }
+  const shipped = [...templates.keys()]
   if (!shipped.length) return
 
   const check = (): void => {

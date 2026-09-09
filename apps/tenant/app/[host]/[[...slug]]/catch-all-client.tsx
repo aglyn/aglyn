@@ -30,7 +30,9 @@
 // runtime edge.
 import type * as Aglyn from '@aglyn/aglyn'
 import { canvas, emitter } from '@aglyn/aglyn/aglyn'
-import { ATTRIBUTION_ATTRIBUTE } from '@aglyn/aglyn/app-utils/attribution-guard'
+// The leaf, NOT `attribution-guard` — naming the attribute must not pull
+// the guard onto every page's first load. See the note in either module.
+import { ATTRIBUTION_ATTRIBUTE } from '@aglyn/aglyn/app-utils/attribution-attribute'
 import { formatCollectionEntryDate } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { ELEMENT_HIDDEN_STYLE_TEXT } from '@aglyn/aglyn/app-utils/element-hidden-style'
 import {
