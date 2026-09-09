@@ -250,6 +250,54 @@ describe('installAttributionGuard', () => {
     )
   })
 
+  /**
+   * The guard reaches the page through a dynamic `import()` (AGL-2706), so
+   * its caller takes the element copies and hands them over. That is the
+   * whole point of `shipped`: an element already removed by the time the
+   * chunk lands is still reported and still repaired, because the copy of it
+   * was taken while it was there.
+   */
+  it('works from copies the caller took before this module existed', async () => {
+    const element = makeBadge('badge')
+    document.elementFromPoint = () => element
+    const sendBeacon = jest.fn()
+    Object.defineProperty(navigator, 'sendBeacon', {
+      value: sendBeacon,
+      configurable: true,
+    })
+    const shipped = new Map<string, Element>([
+      ['badge', element.cloneNode(true) as Element],
+    ])
+    // Gone before the guard is even called — the case a late install has and
+    // an eager one does not.
+    element.remove()
+    installAttributionGuard({ hostId: 'h1', shipped })
+    await flush()
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(String(sendBeacon.mock.calls[0][1]))).toMatchObject({
+      reason: 'removed',
+      subject: 'badge',
+    })
+    // Repaired into a host of its own, from the copy.
+    expect(document.body.children).toHaveLength(1)
+  })
+
+  it('does nothing when the caller hands it no marked element', async () => {
+    makeBadge('badge')
+    const sendBeacon = jest.fn()
+    Object.defineProperty(navigator, 'sendBeacon', {
+      value: sendBeacon,
+      configurable: true,
+    })
+    // An empty map is an ANSWER — "this page shipped none" — and must not
+    // fall through to reading the document, or the caller's capture stops
+    // being the thing that decides.
+    installAttributionGuard({ hostId: 'h1', shipped: new Map() })
+    await flush()
+    expect(sendBeacon).not.toHaveBeenCalled()
+  })
+
   it('installs once, however many times it is called', async () => {
     const element = makeBadge()
     document.elementFromPoint = () => element

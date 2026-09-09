@@ -51,14 +51,14 @@ import {
   operatorIdentity,
 } from '@aglyn/aglyn/server'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+// The shared escaper, not a local one: this module's own copy left `'`
+// unescaped, and a single quote delimits an attribute exactly as well as a
+// double quote does. Subpath, not the library index — see the note there.
+import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 
-/** Escape a string for interpolation into HTML text or an attribute value. */
-export const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+// Re-exported because both intake routes escape through this module rather
+// than reaching past it, which is what keeps the two forms one form.
+export { escapeHtml }
 
 /**
  * The reporter's address, or `null` when nothing readable named one.

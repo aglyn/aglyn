@@ -18,6 +18,8 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiCodeBraces } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
+// Subpath, not the library index — see the note there.
+import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 import { Box, Button, IconButton, Paper } from '@mui/material'
 import type { Theme } from '@mui/material/styles'
 import type { SystemStyleObject } from '@mui/system'
@@ -133,12 +135,16 @@ const BOXED_SURFACE_SX = {
   boxShadow: 4,
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
+/**
+ * Plain text as the markup that renders it, newlines included.
+ *
+ * Named for what it does rather than `escapeHtml`, which it is not: the
+ * `<br>` is a CONVERSION, and a reader who takes this for the escaper will
+ * eventually reach for it somewhere a line break must stay literal. The
+ * escaping half is the shared one.
+ */
+function textToHtml(text: string): string {
+  return escapeHtml(text).replace(/\n/g, '<br>')
 }
 
 /**
@@ -310,7 +316,7 @@ export const InlineTextEditorComponent = observer(
           const initial =
             typeof props?.html === 'string' && props.html
               ? (props.html as string)
-              : escapeHtml(text)
+              : textToHtml(text)
           target.innerHTML = initial
           // Raw {{tokens}} in the stored markup become pills (AGL-586).
           materializeTokenPillsInElement(target, resolve)

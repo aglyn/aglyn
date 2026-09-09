@@ -57,17 +57,14 @@ import {
   getDomainLockdown,
   getPlatformLockdown,
 } from '@aglyn/tenant-data-admin'
+// The shared escaper, not a local one: the copy that stood here left `'`
+// unescaped, and a single quote delimits an attribute exactly as well as a
+// double quote does. Subpath, not the library index — see the note there.
+import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
 
 export const dynamic = 'force-dynamic'
-
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 
 /**
  * Which of the refusals is this? (AGL-2155, AGL-2690)

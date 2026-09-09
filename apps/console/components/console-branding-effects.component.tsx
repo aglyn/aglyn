@@ -17,6 +17,8 @@
 'use client'
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+// Subpath, not the library index — see the note there.
+import { prefersDarkInk } from '@aglyn/shared-util-tools/contrast'
 import { darken, lighten } from '@mui/material/styles'
 import { useEffect } from 'react'
 import useBranding from '../hooks/use-branding'
@@ -217,18 +219,17 @@ function hexToChannel(color: string): string | null {
   return `${r} ${g} ${b}`
 }
 
-/** Black or white, whichever reads on the brand color (WCAG relative luminance). */
+/**
+ * Black or white, whichever reads on the brand color.
+ *
+ * The split is `INK_SWITCH_LUMINANCE`, not the 0.5 this used to use. That is
+ * a correctness fix, not a rounding one: a mid-tone brand color took white
+ * text at about 3:1 where black would have given 7:1, which is the difference
+ * between failing AA and clearing AAA. An unreadable color keeps the white
+ * this always fell back to.
+ */
 function readableText(color: string): string {
-  const channel = hexToChannel(color)
-  if (!channel) return '#ffffff'
-  const [r, g, b] = channel.split(' ').map(Number)
-  const toLinear = (c: number) => {
-    const s = c / 255
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
-  }
-  const luminance =
-    0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
-  return luminance > 0.5 ? '#000000' : '#ffffff'
+  return prefersDarkInk(color) === true ? '#000000' : '#ffffff'
 }
 
 export default ConsoleBrandingEffects
