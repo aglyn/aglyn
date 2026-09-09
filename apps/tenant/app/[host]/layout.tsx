@@ -19,12 +19,16 @@
 // theme lib's createContext HOCs into the RSC graph (AGL-405).
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import {
+  COLOR_SCHEME_HINT_HEADER,
+  parseColorSchemeHint,
+} from '@aglyn/shared-ui-theme/util/color-scheme-hint'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import {
   parseThemeModeCookie,
   THEME_MODE_COOKIE,
 } from '@aglyn/shared-ui-theme/util/theme-mode-cookie'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import type { ReactNode } from 'react'
 import getSiteNav from '../../utils/get-site-nav'
 import { hostSeoTitleParts } from '../../utils/not-found-title'
@@ -150,6 +154,43 @@ export default async function HostLayout({
   )
 
   /**
+   * The visitor's DEVICE preference, for the visitor who has chosen nothing.
+   *
+   * "Device default" is the mode almost everyone is on, and it is the half the
+   * cookie cannot answer: the preference lives in `prefers-color-scheme`, a
+   * media feature with no meaning outside a browser. Read from the cookie
+   * alone, such a visitor is served a light document on a dark laptop and the
+   * page turns over piecemeal as the tree hydrates — the navbar before its own
+   * items, because every leaf has to re-render before it can pick up the new
+   * scheme.
+   *
+   * `Sec-CH-Prefers-Color-Scheme` is that media feature as a request header,
+   * which is a form this layout CAN read. The middleware advertises it in
+   * `Accept-CH` and `Critical-CH`, so it is present from the first navigation
+   * on the browsers that implement it.
+   *
+   * ⚠️ It is a SEPARATE value from the cookie rather than a fallback folded
+   * into it, and that separation is the precedence rule: the provider consults
+   * the device only where the cookie named no scheme, so a visitor who chose
+   * Light keeps light on a dark device, and the switcher still shows "Device
+   * default" checked rather than the scheme the device happens to be in.
+   *
+   * ⚠️ CHROMIUM ONLY. Firefox and Safari send no such header, so there the
+   * value is `null` and the scheme settles at hydration instead. That absence
+   * is not an edge case to guard against: it is also what a request from any
+   * browser looks like before `Accept-CH` has been seen, so the render path
+   * below has to be correct without an answer either way.
+   *
+   * It costs no extra dynamism. `cookies()` above already takes this route out
+   * of the ISR window the catch-all page declares, and `headers()` is the same
+   * class of dynamic API — reading a second field of the same request changes
+   * nothing about how often the route renders.
+   */
+  const initialDeviceMode = parseColorSchemeHint(
+    (await headers()).get(COLOR_SCHEME_HINT_HEADER),
+  )
+
+  /**
    * The white-label half AGL-1421 left open (AGL-2183).
    *
    * The comment above is right that an EMPTY href is worse than none — but
@@ -192,6 +233,7 @@ export default async function HostLayout({
     <HostThemeProviders
       hostTheme={hostTheme}
       initialThemeMode={initialThemeMode}
+      initialDeviceMode={initialDeviceMode}
       brandLogoUrl={brandLogoUrl}
       brandName={hostRes.host?.displayName}
       siteLinks={siteLinks}
