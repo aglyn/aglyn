@@ -1,0 +1,35 @@
+{
+  "name": "@aglyn/cli",
+  "version": "0.0.1",
+  "description": "Read and script any site built on Aglyn \u2014 pages as Markdown, llms.txt, OpenAPI, and the REST API.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "aglyn": "./src/bin.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "aglyn",
+    "cli",
+    "markdown",
+    "llms-txt",
+    "openapi",
+    "ai-agent"
+  ],
+  "repository": "github:aglyn/aglyn",
+  "homepage": "https://aglyn.com",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ]
+}
