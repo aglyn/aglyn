@@ -16,7 +16,11 @@
  */
 
 import type { Palette, PaletteColor, Theme } from '../../vendor/mui'
-import { AA_TEXT_CONTRAST, contrastRatio } from './accessible-shade'
+import {
+  AA_TEXT_CONTRAST,
+  accessibleShade,
+  contrastRatio,
+} from './accessible-shade'
 
 /**
  * The palette slot that carries "this accent, rendered AS TEXT on the
@@ -78,6 +82,56 @@ export function accentTextColor(
   return typeof accent === 'string' ? accent : undefined
 }
 
+/**
+ * The accent shade a FILLED surface can paint under the accent's own ink —
+ * the counterpart to {@link accentTextColor}, and a different value for a
+ * different question (AGL-2704).
+ *
+ * {@link ACCENT_TEXT_SHADE} answers "this accent, READ ON the page", so it
+ * inverts direction per scheme: darker than `main` in light, LIGHTER in
+ * dark. That makes it wrong as a fill in exactly one scheme. The console's
+ * `primary.dark` is `#0077ad` in light, where white on it measures 4.95:1,
+ * and `#4dc8ff` in dark, where the same white measures 1.91:1 — below the
+ * 2.43:1 the brand fill it replaced already scored.
+ *
+ * This shade answers "this accent, PAINTED UNDER its own `contrastText`"
+ * instead. The constraint is the ink, not the page, so the walk starts at
+ * `main` and darkens until the ink clears the bar — and the answer is the
+ * SAME in both schemes, which is the property a token reference needs. An
+ * `sx` value resolves against whichever scheme is active, so a fill token
+ * that only holds in one of them cannot be authored safely.
+ *
+ * Takes a resolved `Palette`, never `theme.vars`: the walk decomposes real
+ * colors, and a CSS-variable mirror hands it `var(--mui-palette-…)`.
+ *
+ * @param palette a resolved (non-`vars`) palette
+ * @param color a palette key — `'primary'`, `'error'`, …
+ * @param minContrast the bar the ink must clear. Default
+ *   {@link AA_TEXT_CONTRAST}.
+ */
+export function accentFillColor(
+  palette: Palette | undefined,
+  color: string | undefined,
+  minContrast: number = AA_TEXT_CONTRAST,
+): string | undefined {
+  if (!palette || !color) return undefined
+  const paletteColor = (palette as unknown as Record<string, unknown>)[
+    color
+  ] as Record<string, string> | undefined
+  if (!paletteColor || typeof paletteColor !== 'object') return undefined
+  const { main, contrastText } = paletteColor
+  if (typeof main !== 'string' || typeof contrastText !== 'string') {
+    return undefined
+  }
+  try {
+    return accessibleShade(main, [contrastText], 'darken', { minContrast })
+  } catch {
+    // Unparseable color (a `color()` literal, an unresolved variable). A
+    // caller gets nothing rather than a guess, the same as `accentTextColor`.
+    return undefined
+  }
+}
+
 /** One measured way a palette fails its accessibility contract. */
 export type PaletteContrastViolation = {
   /** Palette key — `'primary'`, `'error'`, … */
@@ -85,8 +139,11 @@ export type PaletteContrastViolation = {
   /**
    * `accentText` — the accent painted as text on the scheme's surfaces.
    * `contrastText` — the foreground painted ON that accent.
+   * `accentFill` — that same foreground painted on the accent's TEXT shade,
+   *   i.e. a surface filled with {@link ACCENT_TEXT_SHADE}. Off by default;
+   *   see {@link AuditPaletteContrastOptions.roles}.
    */
-  role: 'accentText' | 'contrastText'
+  role: 'accentText' | 'contrastText' | 'accentFill'
   /** The foreground colour that failed. */
   value: string
   /** The background it failed against. */
@@ -193,7 +250,26 @@ export type AuditPaletteContrastOptions = {
    * waiver documents a number rather than hiding one.
    */
   includeExempt?: boolean
+  /**
+   * Which roles to measure. Default {@link DEFAULT_AUDITED_ROLES} — the two
+   * pairings every palette owes unconditionally.
+   *
+   * `accentFill` is opt-in because it is a question about a SURFACE, not
+   * about the palette: it asks what a fill painted with
+   * {@link ACCENT_TEXT_SHADE} does to the accent's own ink. In a dark scheme
+   * that shade is lighter than `main` by design, so every accent fails it —
+   * correctly, and uselessly for a palette that fills with nothing. Pass it
+   * where something actually does (AGL-2704: the marketing pricing page
+   * filled a nav CTA and a badge with `primary.dark`, which held in light at
+   * 4.95:1 and collapsed to 1.91:1 in dark).
+   */
+  roles?: ReadonlyArray<PaletteContrastViolation['role']>
 }
+
+/** The roles {@link auditPaletteContrast} measures unless told otherwise. */
+export const DEFAULT_AUDITED_ROLES: ReadonlyArray<
+  PaletteContrastViolation['role']
+> = ['accentText', 'contrastText']
 
 /**
  * Measures whether a palette actually keeps the AGL-1293 promise, rather
@@ -217,7 +293,10 @@ export function auditPaletteContrast(
     minContrast = AA_TEXT_CONTRAST,
     colors = AUDITED_COLOR_KEYS,
     includeExempt = false,
+    roles = DEFAULT_AUDITED_ROLES,
   } = options
+  const measures = (role: PaletteContrastViolation['role']) =>
+    roles.includes(role)
   const violations: PaletteContrastViolation[] = []
   /** Records a measured failure unless a documented decision waives it. */
   const record = (violation: PaletteContrastViolation) => {
@@ -244,7 +323,7 @@ export function auditPaletteContrast(
       ACCENT_TEXT_SHADE
     ]
     for (const background of backgrounds) {
-      if (typeof accent !== 'string') continue
+      if (!measures('accentText') || typeof accent !== 'string') continue
       try {
         const ratio = contrastRatio(accent, background)
         if (ratio < minContrast) {
@@ -264,20 +343,44 @@ export function auditPaletteContrast(
       }
     }
     if (typeof color.contrastText !== 'string') continue
-    try {
-      const ratio = contrastRatio(color.contrastText, color.main)
-      if (ratio < minContrast) {
-        record({
-          color: key,
-          role: 'contrastText',
-          value: color.contrastText,
-          against: color.main,
-          ratio,
-          required: minContrast,
-        })
+    if (measures('contrastText')) {
+      try {
+        const ratio = contrastRatio(color.contrastText, color.main)
+        if (ratio < minContrast) {
+          record({
+            color: key,
+            role: 'contrastText',
+            value: color.contrastText,
+            against: color.main,
+            ratio,
+            required: minContrast,
+          })
+        }
+      } catch {
+        // As above.
       }
-    } catch {
-      // As above.
+    }
+    // The same ink, on a surface filled with the accent's TEXT shade. That
+    // shade is chosen to be READ ON the page, so in a dark scheme it sits
+    // lighter than `main` and cannot carry a light ink — which is invisible
+    // to the `contrastText` measure above, because that one only ever looks
+    // at `main`.
+    if (measures('accentFill') && typeof accent === 'string') {
+      try {
+        const ratio = contrastRatio(color.contrastText, accent)
+        if (ratio < minContrast) {
+          record({
+            color: key,
+            role: 'accentFill',
+            value: color.contrastText,
+            against: accent,
+            ratio,
+            required: minContrast,
+          })
+        }
+      } catch {
+        // As above.
+      }
     }
   }
   return violations

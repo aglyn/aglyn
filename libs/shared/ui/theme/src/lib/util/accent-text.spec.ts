@@ -51,6 +51,7 @@ import {
 import { createTheme, type Theme } from '../../vendor/mui'
 import {
   AA_NON_TEXT_CONTRAST,
+  accentFillColor,
   accentTextColor,
   auditPaletteContrast,
   DOCUMENTED_CONTRAST_EXCEPTIONS,
@@ -517,5 +518,99 @@ describe('the exemption is scoped to ONE pairing and cannot widen', () => {
       color: 'primary',
     })
     expect(violations[0].exemption).toBeUndefined()
+  })
+})
+
+describe('the accent as a FILL, not as text (AGL-2704)', () => {
+  it('measures what white does on `primary.dark` in each scheme', () => {
+    // The numbers AGL-2704 turns on, pinned as measurements rather than
+    // recomputed by a reader. `primary.dark` is the accent-TEXT shade, so it
+    // points darker in light and LIGHTER in dark; a surface filled with it
+    // keeps the accent's own white ink either way.
+    const white = consoleThemeLight.palette.primary.contrastText
+    expect(white).toBe('#FFFFFF')
+    expect(consoleThemeDark.palette.primary.contrastText).toBe(white)
+
+    const lightFill = consoleThemeLight.palette.primary.dark
+    const darkFill = consoleThemeDark.palette.primary.dark
+    expect([lightFill, darkFill]).toEqual(['#0077ad', '#4dc8ff'])
+
+    expect(contrastRatio(white, lightFill)).toBeCloseTo(4.95, 2)
+    expect(contrastRatio(white, darkFill)).toBeCloseTo(1.91, 2)
+    // Worse than the brand fill it replaced, which is the whole finding: the
+    // repair that cleared AA in light took the dark scheme BELOW where it
+    // started.
+    expect(contrastRatio(white, darkFill)).toBeLessThan(
+      contrastRatio(white, consoleThemeDark.palette.primary.main),
+    )
+  })
+
+  it('the default audit is blind to it, and the `accentFill` role is not', () => {
+    // Why this went unmeasured: `contrastText` only ever looks at `main`, and
+    // `main` is unchanged. Nothing in the default pair asks what the ink does
+    // on the shade a surface was actually filled with.
+    const defaults = auditPaletteContrast(consoleThemeDark.palette, {
+      colors: ['primary'],
+    })
+    expect(defaults).toEqual([])
+
+    const [measured, ...rest] = auditPaletteContrast(
+      consoleThemeDark.palette,
+      { colors: ['primary'], roles: ['accentFill'] },
+    )
+    expect(rest).toEqual([])
+    expect(measured).toMatchObject({
+      color: 'primary',
+      role: 'accentFill',
+      value: '#FFFFFF',
+      against: '#4dc8ff',
+      required: AA_TEXT_CONTRAST,
+    })
+    expect(measured.ratio).toBeCloseTo(1.91, 2)
+    // The signed-off white-on-`#00b0ff` waiver pins all four coordinates, so
+    // it does not reach across to this pairing.
+    expect(measured.exemption).toBeUndefined()
+  })
+
+  it('the same role passes in light, so it is not simply always red', () => {
+    expect(
+      auditPaletteContrast(consoleThemeLight.palette, {
+        colors: ['primary'],
+        roles: ['accentFill'],
+      }),
+    ).toEqual([])
+  })
+
+  it('`accentFillColor` answers with one shade that holds in BOTH schemes', () => {
+    // The property a token reference needs and `primary.dark` lacks: an `sx`
+    // value resolves against whichever scheme is active, so a fill has to
+    // clear the bar in both. Constraining on the INK rather than the page
+    // gives the same answer either side.
+    const light = accentFillColor(consoleThemeLight.palette, 'primary')
+    const dark = accentFillColor(consoleThemeDark.palette, 'primary')
+    expect(light).toBe(dark)
+    for (const scheme of [consoleThemeLight, consoleThemeDark]) {
+      expect(
+        contrastRatio(scheme.palette.primary.contrastText, light),
+      ).toBeGreaterThanOrEqual(AA_TEXT_CONTRAST)
+    }
+    // Never `main` itself — the brand blue carries white at 2.43:1 — and
+    // never lighter than it, because the walk only darkens.
+    expect(light).not.toBe(BRAND_BLUE)
+  })
+
+  it('returns nothing rather than a guess when it cannot measure', () => {
+    expect(accentFillColor(undefined, 'primary')).toBeUndefined()
+    expect(accentFillColor(consoleThemeLight.palette, undefined)).toBeUndefined()
+    expect(accentFillColor(consoleThemeLight.palette, 'inherit')).toBeUndefined()
+    // A `vars` mirror hands the walk `var(--mui-palette-…)`, which decomposes
+    // to nothing measurable.
+    expect(
+      accentFillColor(
+        (consoleThemeCssVar as unknown as { vars: { palette: any } }).vars
+          .palette,
+        'primary',
+      ),
+    ).toBeUndefined()
   })
 })
