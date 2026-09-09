@@ -17,6 +17,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+// Every character that could close an attribute or open a tag, escaped by the
+// one implementation rather than a fifth copy of it. Subpath, not the library
+// index — see the note there.
+import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 import { Box, Stack, Typography } from '@mui/material'
 import { useMemo } from 'react'
 
@@ -41,16 +45,6 @@ function findFormNodeId(nodes: Record<string, any> | null): string | undefined {
   return Object.keys(nodes ?? {}).find(
     (id) => nodes?.[id]?.componentId === 'form',
   )
-}
-
-/** Every character that could close an attribute or open a tag. */
-function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }
 
 /**

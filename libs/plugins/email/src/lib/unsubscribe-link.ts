@@ -40,6 +40,8 @@ import { absoluteMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { personKey, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { BRAND } from '@aglyn/shared-data-enums'
 import type { HostTheme } from '@aglyn/shared-data-types'
+// Subpath, not the library index — see the note there.
+import { prefersDarkInk } from '@aglyn/shared-util-tools/contrast'
 // The leaf module, not the barrel: it imports `node:crypto` and nothing else,
 // which is what keeps this file free of Firestore. See `signedConfirmSubject`.
 import { confirmSignatureSubject } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
@@ -172,34 +174,21 @@ function safeColor(value: unknown, fallback: string): string {
   return HEX_COLOR.test(text) ? text : fallback
 }
 
-/** `#abc` / `#abcd` → `#aabbcc`, so one luminance path handles every form. */
-function expandHex(color: string): string {
-  const body = color.slice(1)
-  if (body.length > 4) return body.slice(0, 6)
-  return body
-    .slice(0, 3)
-    .split('')
-    .map((char) => char + char)
-    .join('')
-}
-
 /**
  * Black or white text for a filled button, whichever the eye can actually read.
  *
  * Without this, a host whose primary is a pale yellow gets white-on-white and
  * the recipient cannot find the button that unsubscribes them — a legibility
- * failure on this page is a compliance failure, not a cosmetic one. sRGB
- * relative luminance (WCAG 2.x) with the standard 0.179 split.
+ * failure on this page is a compliance failure, not a cosmetic one.
+ *
+ * The luminance and the split come from `shared-util-tools/contrast`, which
+ * is the same math this file used to carry and the console carried a wrong
+ * copy of. `safeColor` has already refused anything but a hex literal by the
+ * time a color reaches here, so an unmeasurable one is impossible rather than
+ * merely unlikely — and it still falls back to the on-brand ink if one does.
  */
 function readableInkOn(background: string): string {
-  const hex = expandHex(background)
-  const channel = (offset: number): number => {
-    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-  }
-  const luminance =
-    0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
-  return luminance > 0.179 ? PAL.ink : PAL.onBrand
+  return prefersDarkInk(background) === true ? PAL.ink : PAL.onBrand
 }
 
 /**
