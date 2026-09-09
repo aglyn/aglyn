@@ -275,6 +275,8 @@ export interface PluginRevocation {
   reviewVersions?: string[]
 }
 
+export * from './plugin-artifact-path'
+
 export const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/
 export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+$/
 export const PLUGIN_MAX_NETWORK_ORIGINS = 10
@@ -595,18 +597,6 @@ export function validatePluginManifest(
   }
 }
 
-/**
- * Content-addressed artifact object path in the isolated artifacts bucket.
- * Immutable per `{listingId}/{version}/{sha256}` — a new build is a new
- * path, so a consumer's pinned install can never be swapped underneath it.
- */
-export function pluginArtifactPath(
-  listingId: string,
-  version: string,
-  sha256: string,
-): string {
-  return `artifacts/${listingId}/${version}/${sha256}.bundle`
-}
 
 /**
  * The sandbox CSP is NOT built here (AGL-1092).

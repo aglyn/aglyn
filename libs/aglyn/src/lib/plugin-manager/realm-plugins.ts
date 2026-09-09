@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginArtifactPath } from '../app-utils/plugin-manifest'
+import { pluginArtifactPath } from '../app-utils/plugin-artifact-path'
 import { capturePluginStyles } from './plugin-styles'
 
 /**
