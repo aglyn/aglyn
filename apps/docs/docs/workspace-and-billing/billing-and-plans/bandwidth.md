@@ -109,10 +109,10 @@ For developers and operators. None of this is needed to use the feature.
 ### How usage is counted
 
 Bandwidth is derived from page views rather than measured byte-for-byte at the edge. The
-platform uses a fixed accounting figure of **600 KB per page view** and converts in both
+platform uses a fixed accounting figure of **1,012.8 KB per page view** and converts in both
 directions, so the meter you read in GB and the counters the analytics pipeline writes are
-the same number expressed differently. On Free, 2 GB works out to roughly **3,500 page
-views** a month; on Starter, 50 GB is roughly **87,000**, and the same division gives every
+the same number expressed differently. On Free, 2 GB works out to roughly **2,070 page
+views** a month; on Starter, 50 GB is roughly **51,800**, and the same division gives every
 other band.
 
 ### Which views are counted
@@ -134,13 +134,18 @@ traffic are deliberately not counted, so they neither bill nor consume your band
 Editing your site does not count either: the design canvas and the console's preview never
 report a view, so building a page is free however long you spend on it.
 
-That 600 KB is a **billing convention, not a measurement of your pages**, and the
-difference currently runs in your favor. A real page load measured against our own site
-comes in nearer **1 MB**, so the 3,500 views a Free plan converts to move closer to 3.5 GB
-of actual traffic than to 2 GB. Your allowance is charged at the convention, so the extra is
-not billed to you and not deducted from your band.
+That 1,012.8 KB is a **billing convention, not a measurement of your pages**. It is set
+from a real cold load of one of our own published pages, which measures 976.1 KB, and it is
+set slightly above that measurement on purpose: the convention is the figure your allowance
+is charged at, so erring high means the next correction can only be downward.
 
-Two things follow. Pages heavier than 600 KB do **not** consume your allowance faster —
+The figure was 600 KB until September 2026, when it was brought into line with the page the
+platform actually serves. If you are comparing an older invoice or an older reading of the
+meter, the same traffic now converts to more gigabytes — the traffic did not change, the
+accounting figure did, and it is the **gigabyte bands that are the promise**. Your plan's
+band has not moved.
+
+Two things follow. Pages heavier than 1,012.8 KB do **not** consume your allowance faster —
 the counter moves per view, whatever the page weighs. And a page you make lighter does not
 stretch the allowance further, for the same reason: if you want more views, the lever is the
 plan's band, not the page.

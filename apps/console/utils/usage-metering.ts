@@ -77,7 +77,8 @@ export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
  * - `storagePerGbMonth` **0.026** (2026-08-09) — GCS Standard **US
  *   multi-region** list, the SKU actually on our invoice. Was 0.03, ~15% over.
  * - `perPageView` **0.00016153846** (2026-09-09, AGL-2711) — folds bandwidth
- *   (~0.6 MB avg transfer at ~$0.15/GB, see `ESTIMATED_PAGE_TRANSFER_BYTES`)
+ *   (~1.0 MB avg transfer at ~$0.15/GB, see `ESTIMATED_PAGE_TRANSFER_BYTES`,
+ *   which states this same page in bytes and moves only with this rate)
  *   together with the Firestore reads behind a render. The per-KB cost is the
  *   one AGL-1280 fixed on 2026-08-09: a real cold tenant page load of 24
  *   requests and **627 KB encoded** gave ~$0.000088 transfer + ~40 reads @

@@ -194,9 +194,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      *
      * `storagePerHostMb` and `bandwidthGb` are per-tier bands whose cost was
      * never multiplied against the tier's price. Bandwidth is the largest
-     * single line item on every plan above Pro — one GB is 1,748 page views
-     * at `ESTIMATED_PAGE_TRANSFER_BYTES`, which is $0.175 of measured cost —
-     * so Agency's 20 TB alone was $3,495/month against a $799 subscription.
+     * single line item on every plan above Pro — a GB of it costs $0.167 of
+     * measured cost, `ESTIMATED_PAGE_TRANSFER_BYTES` divided into a gigabyte
+     * and priced at `perPageView` — so Agency's 20 TB alone was $3,495/month
+     * against a $799 subscription at the $0.175 a GB then in force.
      * `tier-margin-floor.spec.ts` carries the model and the resulting figures.
      */
     it('Storage per site — 250 MB · 2 · 10 · 20 · 30 · 40 · 60 GB', () => {
@@ -214,10 +215,10 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      *
      * Free's is the one band on that tier that can never be metered — there
      * is no subscription to bill an overage onto, so it is a pure give at
-     * $0.175 a GB. Every paid band was resized on 2026-09-07 to hold the
+     * $0.167 a GB. Every paid band was resized on 2026-09-07 to hold the
      * platform's invariant at the ANNUAL price, net of Stripe's fee, with
      * the CRM seat and one-to-one email terms counted: at 225 · 400 · 700 ·
-     * 1,000 · 3,000 GB every tier from Pro up ran 19–44% under water at that
+     * 1,000 · 3,000 GB every tier from Pro up runs 21–40% under water at that
      * price with every band at 100% (`tier-margin-floor.spec.ts` carries the
      * model and the mutation that proves it).
      */

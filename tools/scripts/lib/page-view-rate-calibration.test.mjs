@@ -46,7 +46,10 @@ import {
   CALIBRATED_USD_PER_VIEW,
   PAGE_VIEW_CALIBRATION_BASIS_KB,
   basisKbForRate,
+  basisKbForTransferBytes,
+  costPerGbUsd,
   evaluateRateCalibration,
+  parseTransferBytes,
   rateForWeightKb,
 } from './page-view-rate-calibration.mjs'
 import { parseUnitRates } from './pricing-drift.mjs'
@@ -68,7 +71,8 @@ const CALIBRATION = BUDGET.wireCalibration
 const METERED_MARKUP = 1.3
 
 /**
- * The rate tables read through the CLI's own parser.
+ * The rate tables and the conversion constant, read through the CLI's own
+ * parsers.
  *
  * Deliberately not a second regex written for the test: a fixture that parsed
  * the files its own way could agree with the checked-in numbers while the
@@ -77,15 +81,21 @@ const METERED_MARKUP = 1.3
  */
 function realRates() {
   const read = (...parts) => readFileSync(join(REPO_ROOT, ...parts), 'utf8')
+  const cogsSource = read(
+    'libs',
+    'aglyn',
+    'src',
+    'lib',
+    'app-utils',
+    'plan-entitlements.ts',
+  )
   return {
     meteredRate: parseUnitRates(
       read('apps', 'console', 'utils', 'usage-metering.ts'),
       'METERED_UNIT_RATES_USD',
     )?.perPageView,
-    cogsRate: parseUnitRates(
-      read('libs', 'aglyn', 'src', 'lib', 'app-utils', 'plan-entitlements.ts'),
-      'ORG_COGS_UNIT_RATES_USD',
-    )?.perPageView,
+    cogsRate: parseUnitRates(cogsSource, 'ORG_COGS_UNIT_RATES_USD')?.perPageView,
+    transferBytes: parseTransferBytes(cogsSource),
   }
 }
 
@@ -113,6 +123,11 @@ function consistentInput(overrides = {}) {
   return {
     meteredRate: rate,
     cogsRate: overrides.cogsRate ?? rate,
+    // Derived from the RATE rather than from the record, because the pairing
+    // is a claim about the two constants and not about the JSON: a fixture
+    // that took its bytes from `pricedForKb` would go on agreeing with itself
+    // in exactly the cases where the rate had walked away from both.
+    transferBytes: overrides.transferBytes ?? basisKbForRate(rate) * 1024,
     calibration,
     sourceGraphBytes:
       overrides.sourceGraphBytes ?? calibration.sourceGraphBytes,
@@ -172,21 +187,23 @@ test('POSITIVE CONTROL — the checked-in record is self-consistent', () => {
 })
 
 test('POSITIVE CONTROL — the real tree passes the real gate', () => {
-  const { meteredRate, cogsRate } = realRates()
+  const { meteredRate, cogsRate, transferBytes } = realRates()
   const verdict = evaluateRateCalibration({
     meteredRate,
     cogsRate,
+    transferBytes,
     calibration: CALIBRATION,
     sourceGraphBytes: measureRealGraph(),
   })
-  // Spelled out rather than a bare `ok`, so a failure names which of the five
+  // Spelled out rather than a bare `ok`, so a failure names which of the six
   // went red instead of printing `false !== true`.
   assert.equal(
-    `mispriced=${verdict.rateMispriced} exceeded=${verdict.weightRatioExceeded} ` +
+    `mispriced=${verdict.rateMispriced} paired=${!verdict.conversionMispriced} ` +
+      `exceeded=${verdict.weightRatioExceeded} ` +
       `underprices=${verdict.acceptedRatioUnderprices} ` +
       `stale=${verdict.calibrationStale} disagree=${verdict.tablesDisagree} ` +
       `unreadable=${verdict.unreadable}`,
-    'mispriced=false exceeded=false underprices=false stale=false ' +
+    'mispriced=false paired=true exceeded=false underprices=false stale=false ' +
       'disagree=false unreadable=',
   )
   assert.equal(verdict.ok, true)
@@ -305,6 +322,128 @@ test('FORCED RED — an unreadable rate is not a silent pass', () => {
   // wrong file for a fault that is in the parser.
   assert.equal(verdict.tablesDisagree, false)
   assert.equal(verdict.rateMispriced, false)
+})
+
+// ── the pair: dollars per view and bytes per view ──────────────────────────
+
+test('the checked-in constants describe the same page', () => {
+  // The claim in one line: `perPageView` and `ESTIMATED_PAGE_TRANSFER_BYTES`
+  // are one measurement in two units, so the weight recovered from each has to
+  // be the same weight.
+  const { meteredRate, transferBytes } = realRates()
+  assert.equal(basisKbForTransferBytes(transferBytes), basisKbForRate(meteredRate))
+  assert.equal(basisKbForTransferBytes(transferBytes), CALIBRATION.pricedForKb)
+})
+
+test('the constant is READ from the source, not assumed', () => {
+  // The parser is the half of this gate that can fail silently. A regex that
+  // stopped matching would return null, and null must reach the `unreadable`
+  // verdict rather than pass for a number — proved from the real file and
+  // from a shape the parser must refuse.
+  const { transferBytes } = realRates()
+  assert.equal(transferBytes, 1012.8 * 1024)
+  assert.equal(parseTransferBytes('export const SOMETHING_ELSE = 1 * 1024'), null)
+  assert.equal(
+    parseTransferBytes('export const ESTIMATED_PAGE_TRANSFER_BYTES = kb * 1024'),
+    null,
+  )
+  assert.equal(
+    parseTransferBytes('export const ESTIMATED_PAGE_TRANSFER_BYTES = 600 * 1024'),
+    614400,
+  )
+})
+
+test('the pair states the cost of a gigabyte, which neither half does alone', () => {
+  // The quantity every `bandwidthGb` band was sized against. Asserted as a
+  // number so the band arithmetic in the decision log can be checked against
+  // this file rather than believed.
+  const { meteredRate, transferBytes } = realRates()
+  assert.ok(
+    Math.abs(costPerGbUsd(meteredRate, transferBytes) - 0.16724) < 0.00001,
+    `a GB costs ${costPerGbUsd(meteredRate, transferBytes)}`,
+  )
+  // …and the unpaired figure the 2026-09-09 re-peg left behind, which is what
+  // took every paid tier under water at the annual price: the same rate over
+  // an unmoved 600 KB is 1.69x as much per gigabyte.
+  assert.ok(
+    Math.abs(costPerGbUsd(meteredRate, 600 * 1024) - 0.28231) < 0.00001,
+  )
+})
+
+test('FORCED RED — the rate re-pegged and the byte constant left behind', () => {
+  // THE DEFECT, exactly as it landed. `perPageView` moved to a 1012.8 KB page
+  // and `ESTIMATED_PAGE_TRANSFER_BYTES` stayed at 600 KB, so the two disagreed
+  // about the page by 69% and every GB band silently re-priced.
+  const verdict = evaluateRateCalibration(
+    consistentInput({ transferBytes: 600 * 1024 }),
+  )
+  assert.equal(verdict.conversionMispriced, true)
+  assert.equal(verdict.ok, false)
+  // It is the PAIR that is faulted, not the rate against the record — the
+  // rate still agrees with the JSON, which is why nothing else caught this.
+  assert.equal(verdict.rateMispriced, false)
+  assert.equal(verdict.convertedBasisKb, 600)
+  assert.equal(verdict.impliedBasisKb, CALIBRATION.pricedForKb)
+})
+
+test('FORCED RED — the byte constant moved and the rate left behind', () => {
+  // The same break from the other side: somebody re-measures the page, updates
+  // the conversion, and does not touch the price. Both halves, because a gate
+  // that only caught one direction would be satisfied by whichever edit
+  // happened to come second.
+  const verdict = evaluateRateCalibration(
+    consistentInput({ transferBytes: 1500 * 1024 }),
+  )
+  assert.equal(verdict.conversionMispriced, true)
+  assert.equal(verdict.convertedBasisKb, 1500)
+  assert.equal(verdict.ok, false)
+})
+
+test('FORCED RED — one grid step of pairing drift', () => {
+  // The smallest divergence the comparison must still see: a tenth of a KB,
+  // which is 103 bytes out of a million and a fifth of a percent on the cost
+  // of a gigabyte.
+  const verdict = evaluateRateCalibration(
+    consistentInput({
+      transferBytes: (CALIBRATION.pricedForKb + 0.1) * 1024,
+    }),
+  )
+  assert.equal(verdict.conversionMispriced, true)
+  assert.equal(verdict.ok, false)
+})
+
+test('POSITIVE CONTROL — a re-peg that moves BOTH halves is green', () => {
+  // The pairing must not block a legitimate re-peg, only an unpaired one. A
+  // page that doubled, priced and converted together, passes.
+  const doubled = CALIBRATION.pricedForKb * 2
+  const verdict = evaluateRateCalibration(
+    consistentInput({
+      rate: rateForWeightKb(doubled),
+      transferBytes: doubled * 1024,
+      calibration: { pricedForKb: doubled, measuredKb: CALIBRATION.measuredKb },
+    }),
+  )
+  assert.equal(verdict.conversionMispriced, false)
+  assert.equal(verdict.rateMispriced, false)
+  assert.equal(verdict.ok, true)
+  // …and the cost of a gigabyte did not move, which is the property that makes
+  // a paired re-peg safe for the bands.
+  assert.ok(
+    Math.abs(verdict.costPerGbUsd - costPerGbUsd(rateForWeightKb(CALIBRATION.pricedForKb), CALIBRATION.pricedForKb * 1024)) <
+      1e-9,
+  )
+})
+
+test('FORCED RED — an unreadable byte constant is not a silent pass', () => {
+  const verdict = evaluateRateCalibration({
+    ...consistentInput(),
+    transferBytes: null,
+  })
+  assert.deepEqual(verdict.unreadable, ['ESTIMATED_PAGE_TRANSFER_BYTES'])
+  assert.equal(verdict.ok, false)
+  // …and it must not masquerade as a pairing fault, which would send the
+  // reader to change a constant that is fine.
+  assert.equal(verdict.conversionMispriced, false)
 })
 
 // ── forced reds: the page moved against what the rate is priced for ────────
@@ -531,4 +670,8 @@ test('the CLI passes on the real tree and states the headroom', () => {
   // rate went stale the first time.
   assert.match(out, /priced for 1012\.8 KB/)
   assert.match(out, /last measured 976\.1 KB/)
+  // The pair, and the quantity it implies. A green run that printed the rate
+  // without the bytes beside it would let the two part again in silence.
+  assert.match(out, /paired with 1037107\.2 bytes per view/)
+  assert.match(out, /one GB of included bandwidth costs \$0\.16724/)
 })

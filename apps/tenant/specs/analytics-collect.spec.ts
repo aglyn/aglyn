@@ -668,7 +668,8 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
 
   it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
     // Same traffic, same route, same month — only the plan differs. Starter's
-    // ceiling is 262,144, so 150,000 is ordinary growth and nothing happens.
+    // ceiling is 155,299 — 50 GB of views times three — so 150,000 is still
+    // ordinary growth and nothing happens.
     mockOrgForHost = { $id: 'org-1', plan: 'starter' }
     plantMonthViews(150_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
@@ -684,7 +685,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     mockOrgForHost = { $id: 'org-1', plan: 'starter' }
     plantMonthViews(1_000_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
-    expect(flag()).toMatchObject({ ceiling: 262_144, degraded: false })
+    expect(flag()).toMatchObject({ ceiling: 155_299, degraded: false })
     expect(mockStaffNotices).toHaveLength(1) // still an incident
   })
 
