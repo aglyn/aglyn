@@ -65,11 +65,16 @@ import AdvertisingTags from './advertising-tags'
  *
  * The console mounts the same component directly, under its region simulator
  * and its document preview, and is untouched by this.
+ *
+ * The deferred module is `./consent-banner-chunk`, a relative re-export, and
+ * not the core specifier it holds: an `import()` of `@aglyn/aglyn/...`
+ * registers a dynamic nx edge on the whole `tenant → aglyn` pair, which
+ * forbids every STATIC import of core across the app. That file's docblock
+ * carries the reasoning.
  */
-const ConsentBannerUi = dynamic(
-  () => import('@aglyn/aglyn/app-utils/consent-banner-ui'),
-  { ssr: false },
-)
+const ConsentBannerUi = dynamic(() => import('./consent-banner-chunk'), {
+  ssr: false,
+})
 
 /**
  * The library the GA pair below brings to the page, named the way the Google
