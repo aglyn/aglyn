@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
 import { FieldMuteButton } from '@aglyn/shared-ui-jsx-forms'
 import { Autocomplete, Chip, TextField } from '@mui/material'
 import { action } from 'mobx'

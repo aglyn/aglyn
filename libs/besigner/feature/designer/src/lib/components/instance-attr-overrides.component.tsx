@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  components,
+  listInstanceStyleTargets,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  STYLE_OVERRIDES_ROOT_KEY,
+} from '@aglyn/aglyn'
 import {
   FormRenderer,
   type FormRendererProps,
@@ -166,11 +173,11 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
   // the only form that cannot strand itself, and reading it inside an
   // `observer` is also what re-renders this section after an undo.
   const node = (selectedNode?.$id
-    ? (Aglyn.canvas.getNode(selectedNode.$id) ?? selectedNode)
+    ? (canvas.getNode(selectedNode.$id) ?? selectedNode)
     : selectedNode) as Aglyn.NodeSchema<any> | undefined
 
   const { definitions } = useContext(ComponentPromotionContext)
-  const isInstance = node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
+  const isInstance = node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
   const definition = useMemo(() => {
     if (!isInstance) return undefined
     const refId = (node?.props as { refId?: string } | undefined)?.refId
@@ -181,7 +188,7 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
   // the two panels name the same parts of a component in the same order and
   // an override written by one is addressed identically by the other.
   const targets = useMemo(
-    () => Aglyn.listInstanceStyleTargets(definition),
+    () => listInstanceStyleTargets(definition),
     [definition],
   )
 
@@ -190,19 +197,19 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
   // from the current `node.$id` cannot render one frame aimed at the
   // PREVIOUS instance's leaf.
   const [picked, setPicked] = useState<{ nodeId?: string; key: string }>({
-    key: Aglyn.STYLE_OVERRIDES_ROOT_KEY,
+    key: STYLE_OVERRIDES_ROOT_KEY,
   })
   const pickedKey =
     picked.nodeId && picked.nodeId === node?.$id
       ? picked.key
-      : Aglyn.STYLE_OVERRIDES_ROOT_KEY
+      : STYLE_OVERRIDES_ROOT_KEY
   // A leaf the component no longer has falls back to the root rather than
   // aiming the panel at a slice nothing renders. An unloaded definition
   // offers nothing yet, so it is not evidence the key is stale.
   const overrideKey =
     !targets.length || targets.some((entry) => entry.key === pickedKey)
       ? pickedKey
-      : Aglyn.STYLE_OVERRIDES_ROOT_KEY
+      : STYLE_OVERRIDES_ROOT_KEY
 
   const target = useMemo(
     () => getNodeAttrTarget(node, overrideKey),
@@ -229,7 +236,7 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
       entry.isRoot
         ? 'Component root'
         : entry.name ||
-          (entry.componentId && Aglyn.components.getLabel(entry.componentId)) ||
+          (entry.componentId && components.getLabel(entry.componentId)) ||
           entry.componentInternalId,
     [],
   )
@@ -246,7 +253,7 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
       // One undoable step. `setAttrs` drops every non-override value by key,
       // so a form that hands back a field per declared attribute — most of
       // them empty — stores only what this instance actually chose.
-      Aglyn.canvas.transact(() => target.setAttrs(values))
+      canvas.transact(() => target.setAttrs(values))
     },
     [target],
   )
@@ -255,7 +262,7 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
     (prop: string) => () => {
       // Undoable and uncoalesced: clearing a chip DISCARDS an override, which
       // is the one edit here that most needs a way back.
-      Aglyn.canvas.transact(() => target.clearAttr(prop))
+      canvas.transact(() => target.clearAttr(prop))
     },
     [target],
   )

@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  components,
+  FEATURE_FLAG,
+  LinealDirectiveFlag,
+  schemaAcceptsChildren,
+} from '@aglyn/aglyn'
 
 /**
  * One derived statement about an element (AGL-2486).
@@ -69,7 +75,7 @@ const BUILT_IN_PLUGIN_IDS = new Set(['mui'])
 
 function label(componentId?: string): string | undefined {
   if (!componentId) return undefined
-  return Aglyn.components.getLabel(componentId) ?? componentId
+  return components.getLabel(componentId) ?? componentId
 }
 
 /**
@@ -91,11 +97,11 @@ function linealLabels(
 }
 
 function isEnabled(flag?: Aglyn.FEATURE_FLAG): boolean {
-  return Boolean(flag) && Boolean(flag & Aglyn.FEATURE_FLAG.ENABLED)
+  return Boolean(flag) && Boolean(flag & FEATURE_FLAG.ENABLED)
 }
 
 function isDisabled(flag?: Aglyn.FEATURE_FLAG): boolean {
-  return Boolean(flag) && Boolean(flag & Aglyn.FEATURE_FLAG.DISABLED)
+  return Boolean(flag) && Boolean(flag & FEATURE_FLAG.DISABLED)
 }
 
 /**
@@ -114,7 +120,7 @@ function resolveComponentSchema(item: any): {
   if (!componentId) return {}
   return {
     componentId,
-    schema: Aglyn.components.getSchema(componentId) as Aglyn.ComponentSchema,
+    schema: components.getSchema(componentId) as Aglyn.ComponentSchema,
   }
 }
 
@@ -142,7 +148,7 @@ export function describeElement(item: any): ElementDetail | null {
 
   // 1. Can it hold anything? The single most useful thing to know before
   //    dropping one, and the question the child contract already answers.
-  const acceptsChildren = Aglyn.schemaAcceptsChildren(schema)
+  const acceptsChildren = schemaAcceptsChildren(schema)
   facts.push({
     id: 'children',
     label: acceptsChildren
@@ -153,7 +159,7 @@ export function describeElement(item: any): ElementDetail | null {
   // 2. Lineal relationships, both directions.
   const onlyChildren = linealLabels(
     schema?.restrictChildren,
-    Aglyn.LinealDirectiveFlag.LIMIT_TO,
+    LinealDirectiveFlag.LIMIT_TO,
   )
   if (onlyChildren.length) {
     facts.push({
@@ -163,7 +169,7 @@ export function describeElement(item: any): ElementDetail | null {
   }
   const noChildren = linealLabels(
     schema?.restrictChildren,
-    Aglyn.LinealDirectiveFlag.DISALLOW,
+    LinealDirectiveFlag.DISALLOW,
   )
   if (noChildren.length) {
     facts.push({
@@ -173,7 +179,7 @@ export function describeElement(item: any): ElementDetail | null {
   }
   const onlyParents = linealLabels(
     schema?.restrictParent,
-    Aglyn.LinealDirectiveFlag.LIMIT_TO,
+    LinealDirectiveFlag.LIMIT_TO,
   )
   if (onlyParents.length) {
     facts.push({
@@ -183,7 +189,7 @@ export function describeElement(item: any): ElementDetail | null {
   }
   const notInside = linealLabels(
     schema?.restrictParent,
-    Aglyn.LinealDirectiveFlag.DISALLOW,
+    LinealDirectiveFlag.DISALLOW,
   )
   if (notInside.length) {
     facts.push({

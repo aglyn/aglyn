@@ -16,7 +16,8 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { components } from '@aglyn/aglyn'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { Typography } from '@mui/material'
 import { useMemo, useState, type SyntheticEvent } from 'react'
@@ -37,7 +38,7 @@ export function ElementInfoDetails({
 }: {
   node: Aglyn.NodeSchema<any>
 }) {
-  const schema = Aglyn.components.getSchema(node?.componentId)
+  const schema = components.getSchema(node?.componentId)
   const failoverText = 'n/a'
   const details = useMemo(
     () => [

@@ -16,7 +16,31 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  checkEntitlement,
+  defaultScopeForNewResource,
+  describeScope,
+  folderDepth,
+  formatQuotaLimit,
+  hostScopeToken,
+  isOrgWideScope,
+  isSiblingNameTaken,
+  MEDIA_ALT_MAX_LENGTH,
+  MEDIA_FOLDER_MAX_DEPTH,
+  mediaFolderChoices,
+  narrowsScope,
+  newMediaFolderDoc,
+  normalizeFolderName,
+  normalizeMediaTags,
+  normalizeVisibleTo,
+  ORG_SCOPE_TOKEN,
+  planLabelGrantingFeature,
+  planLegacyFolderMigration,
+  storedScope,
+  visibleToHost,
+  wouldCreateCycle,
+} from '@aglyn/aglyn'
 import {
   hostContentCollectionLabel,
   PLUGIN_CONTENT_ROUTE_SLUG,
@@ -453,7 +477,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const scopeTokens = useMemo(
     () =>
       forHostId
-        ? [Aglyn.ORG_SCOPE_TOKEN, Aglyn.hostScopeToken(forHostId)]
+        ? [ORG_SCOPE_TOKEN, hostScopeToken(forHostId)]
         : viewerTokens,
     [forHostId, viewerTokens],
   )
@@ -501,11 +525,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * answers NO, and the library is one of the first things opened on a cold
    * console.
    */
-  const fileUploads = orgReady && Aglyn.checkEntitlement(org as never, 'videoMedia')
-  const cdnDelivery = orgReady && Aglyn.checkEntitlement(org as never, 'mediaCdn')
+  const fileUploads = orgReady && checkEntitlement(org as never, 'videoMedia')
+  const cdnDelivery = orgReady && checkEntitlement(org as never, 'mediaCdn')
   const fileUploadPlanLabel =
-    Aglyn.planLabelGrantingFeature('videoMedia') ?? 'a higher plan'
-  const cdnPlanLabel = Aglyn.planLabelGrantingFeature('mediaCdn') ?? 'a higher plan'
+    planLabelGrantingFeature('videoMedia') ?? 'a higher plan'
+  const cdnPlanLabel = planLabelGrantingFeature('mediaCdn') ?? 'a higher plan'
   /**
    * The scope stored on a folder created here (AGL-1466).
    *
@@ -525,7 +549,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const newFolderScope = useMemo<Aglyn.ScopeToken[] | null>(
     () =>
       orgId
-        ? Aglyn.defaultScopeForNewResource({
+        ? defaultScopeForNewResource({
             defaultResourceScope: (org as any)?.defaultResourceScope,
             hostId: forHostId ?? null,
           })
@@ -855,7 +879,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * a bare name is actively unsafe rather than merely terse.
    */
   const folderChoices = useMemo(
-    () => Aglyn.mediaFolderChoices(folderList as any),
+    () => mediaFolderChoices(folderList as any),
     [folderList],
   )
   /** `Blog / Covers` by id — what the move snackbar names as a destination. */
@@ -873,7 +897,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const migratedRef = useRef(false)
   useEffect(() => {
     if (migratedRef.current || !mediaDocs || !folderDocs) return
-    const plan = Aglyn.planLegacyFolderMigration(
+    const plan = planLegacyFolderMigration(
       mediaDocs as any[],
       folderDocs as any[],
     )
@@ -898,11 +922,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // folder holds nothing but a name.
       batch.set(
         ref,
-        Aglyn.newMediaFolderDoc({
+        newMediaFolderDoc({
           name,
           parentId: null,
           createdAt: serverTimestamp(),
-          visibleTo: orgId ? [Aglyn.ORG_SCOPE_TOKEN] : null,
+          visibleTo: orgId ? [ORG_SCOPE_TOKEN] : null,
         }),
       )
     }
@@ -1141,9 +1165,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
   const handleFolderCreate = useCallback(
     async (rawName: string, parentId: string | null) => {
-      const name = Aglyn.normalizeFolderName(rawName)
+      const name = normalizeFolderName(rawName)
       if (!name) return null
-      if (Aglyn.isSiblingNameTaken(name, parentId, folderList as any)) {
+      if (isSiblingNameTaken(name, parentId, folderList as any)) {
         enqueueSnackbar('A folder with that name already exists here', {
           variant: 'warning',
           persist: false,
@@ -1151,11 +1175,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         return null
       }
       const parentDepth = parentId
-        ? Aglyn.folderDepth(parentId, foldersById as any)
+        ? folderDepth(parentId, foldersById as any)
         : 0
-      if (parentDepth + 1 > Aglyn.MEDIA_FOLDER_MAX_DEPTH) {
+      if (parentDepth + 1 > MEDIA_FOLDER_MAX_DEPTH) {
         enqueueSnackbar(
-          `Folders can nest at most ${Aglyn.MEDIA_FOLDER_MAX_DEPTH} levels`,
+          `Folders can nest at most ${MEDIA_FOLDER_MAX_DEPTH} levels`,
           { variant: 'warning', persist: false },
         )
         return null
@@ -1164,7 +1188,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const batch = writeBatch(firestore)
       batch.set(
         ref,
-        Aglyn.newMediaFolderDoc({
+        newMediaFolderDoc({
           name,
           parentId,
           createdAt: serverTimestamp(),
@@ -1214,10 +1238,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
   const handleFolderRename = useCallback(
     async (folder: Aglyn.AglynHostMediaFolder, rawName: string) => {
-      const name = Aglyn.normalizeFolderName(rawName)
+      const name = normalizeFolderName(rawName)
       if (!name) return
       if (
-        Aglyn.isSiblingNameTaken(
+        isSiblingNameTaken(
           name,
           folder.parentId ?? null,
           folderList as any,
@@ -1605,7 +1629,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         if (folderId === targetId) return
         if (
           targetId &&
-          Aglyn.wouldCreateCycle(folderId, targetId, foldersById as any)
+          wouldCreateCycle(folderId, targetId, foldersById as any)
         ) {
           return void enqueueSnackbar(
             'Cannot move a folder into itself or its subfolders',
@@ -1615,7 +1639,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         const folder = foldersById[folderId]
         if (!folder) return
         if (
-          Aglyn.isSiblingNameTaken(
+          isSiblingNameTaken(
             folder.name,
             targetId,
             folderList as any,
@@ -1628,11 +1652,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           )
         }
         const targetDepth = targetId
-          ? Aglyn.folderDepth(targetId, foldersById as any)
+          ? folderDepth(targetId, foldersById as any)
           : 0
-        if (targetDepth + 1 > Aglyn.MEDIA_FOLDER_MAX_DEPTH) {
+        if (targetDepth + 1 > MEDIA_FOLDER_MAX_DEPTH) {
           return void enqueueSnackbar(
-            `Folders can nest at most ${Aglyn.MEDIA_FOLDER_MAX_DEPTH} levels`,
+            `Folders can nest at most ${MEDIA_FOLDER_MAX_DEPTH} levels`,
             { variant: 'warning', persist: false },
           )
         }
@@ -1713,7 +1737,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
      * equal to the default and be dropped, which is the one save this dialog
      * most needs to land.
      */
-    const previousScope: string[] = Aglyn.storedScope(editor.media?.visibleTo) ?? []
+    const previousScope: string[] = storedScope(editor.media?.visibleTo) ?? []
     const scopeChanged =
       JSON.stringify([...previousScope].sort()) !==
       JSON.stringify([...editor.visibleTo].sort())
@@ -1721,7 +1745,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     // away from a site, find out which sites actually use it and name them
     // — silently breaking a published client site is the worst outcome this
     // project could produce. Widening needs no confirmation.
-    if (scopeChanged && Aglyn.narrowsScope(previousScope, editor.visibleTo)) {
+    if (scopeChanged && narrowsScope(previousScope, editor.visibleTo)) {
       // Inline rather than reusing runReferenceAudit below: that one drives
       // the drawer's "Used on" panel state, and this needs a plain answer.
       //
@@ -1736,7 +1760,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         // An org-level reference (the org's own logo) names no site, and a
         // site scope decides nothing about it.
         .filter((host) => host.hostId)
-        .filter((host) => !Aglyn.visibleToHost(editor.visibleTo, host.hostId))
+        .filter((host) => !visibleToHost(editor.visibleTo, host.hostId))
       const names = [...new Set(losing.map((host) => host.hostSubdomain))]
       const proceed = await confirm({
         title: 'Limit who can use this file?',
@@ -1764,15 +1788,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           // it — the AGL-1042 rules deny anyone else, so sending it would
           // fail the whole write rather than just this field.
           ...(orgId && viewerOrgWide && scopeChanged
-            ? { visibleTo: Aglyn.normalizeVisibleTo(editor.visibleTo) ?? [Aglyn.ORG_SCOPE_TOKEN] }
+            ? { visibleTo: normalizeVisibleTo(editor.visibleTo) ?? [ORG_SCOPE_TOKEN] }
             : {}),
           // Rename (AGL-184): display-name only; the Storage object id/URL
           // stays stable so existing references keep resolving.
           ...(editor.fileName.trim()
             ? { fileName: editor.fileName.trim().slice(0, 200) }
             : {}),
-          tags: Aglyn.normalizeMediaTags(editor.tags),
-          alt: editor.alt.trim().slice(0, Aglyn.MEDIA_ALT_MAX_LENGTH),
+          tags: normalizeMediaTags(editor.tags),
+          alt: editor.alt.trim().slice(0, MEDIA_ALT_MAX_LENGTH),
           description: editor.description.trim(),
         },
       )
@@ -1826,7 +1850,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * silently discarded, which is what made a trailing space look like a tag.
    */
   const editorTags = useMemo(
-    () => Aglyn.normalizeMediaTags(editor?.tags ?? ''),
+    () => normalizeMediaTags(editor?.tags ?? ''),
     [editor?.tags],
   )
   const [tagDraft, setTagDraft] = useState('')
@@ -1938,7 +1962,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   } | null>(null)
   const handleBulkTag = useCallback(async () => {
     if (!bulkTag) return
-    const [tag] = Aglyn.normalizeMediaTags(bulkTag.value)
+    const [tag] = normalizeMediaTags(bulkTag.value)
     if (!tag) return void setBulkTag(null)
     const batch = writeBatch(firestore)
     for (const item of items as any[]) {
@@ -1946,7 +1970,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const tags: string[] = item.tags ?? []
       const next =
         bulkTag.mode === 'add'
-          ? Aglyn.normalizeMediaTags([...tags, tag])
+          ? normalizeMediaTags([...tags, tag])
           : tags.filter((existing) => existing !== tag)
       batch.update(doc(firestore, scopeCollection, scopeId, 'media', item.$id), {
         tags: next,
@@ -1964,7 +1988,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       return {
         tags:
           bulkTag.mode === 'add'
-            ? Aglyn.normalizeMediaTags([...tags, tag])
+            ? normalizeMediaTags([...tags, tag])
             : tags.filter((existing) => existing !== tag),
       }
     })
@@ -2231,7 +2255,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * every card — still saying "All sites".
    */
   const scopeOfMedia = useCallback(
-    (media: any): string[] | null => Aglyn.storedScope(media?.visibleTo),
+    (media: any): string[] | null => storedScope(media?.visibleTo),
     [],
   )
 
@@ -2292,7 +2316,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             // not depend on the scope — but the route refuses an unusable
             // one, so an unset folder sends the org token to get its number
             // rather than a 400. Nothing is written on a preview.
-            visibleTo: stored ?? [Aglyn.ORG_SCOPE_TOKEN],
+            visibleTo: stored ?? [ORG_SCOPE_TOKEN],
             preview: true,
           }),
         })
@@ -2332,7 +2356,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           scans
             .flatMap((scan) => scan.items)
             .filter((ref) => ref.hostId)
-            .filter((ref) => !Aglyn.visibleToHost(nextScope, ref.hostId))
+            .filter((ref) => !visibleToHost(nextScope, ref.hostId))
             .map((ref) => ref.hostSubdomain),
         ),
       ]
@@ -2343,7 +2367,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const applyScopeToSelection = useCallback(
     async (ids: string[], next: string[]) => {
       const narrowing = ids.filter((id) =>
-        Aglyn.narrowsScope(
+        narrowsScope(
           scopeOfMedia(items.find((item: any) => item.$id === id)),
           next,
         ),
@@ -2373,7 +2397,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // write would take the other 49 down with it.
       for (const [index, id] of ids.entries()) {
         await updateDoc(doc(firestore, scopeCollection, scopeId, 'media', id), {
-          visibleTo: Aglyn.normalizeVisibleTo(next) ?? [Aglyn.ORG_SCOPE_TOKEN],
+          visibleTo: normalizeVisibleTo(next) ?? [ORG_SCOPE_TOKEN],
         })
         setScopeRun({ done: index + 1, total: ids.length, running: true })
       }
@@ -2435,7 +2459,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const handleScopeApply = useCallback(async () => {
     if (!scopeDialog) return
-    const next = Aglyn.normalizeVisibleTo(scopeDialog.visibleTo)
+    const next = normalizeVisibleTo(scopeDialog.visibleTo)
     if (!next?.length) return
     try {
       const finished =
@@ -2686,7 +2710,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // opened on a cold console.
       if (
         requiresFileUploadEntitlement(contentType) &&
-        !Aglyn.checkEntitlement(org as never, 'videoMedia')
+        !checkEntitlement(org as never, 'videoMedia')
       ) {
         enqueueSnackbar(
           `"${file.name}" needs ${fileUploadPlanLabel} — images upload on ` +
@@ -2701,7 +2725,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           // `formatQuotaLimit`, not the raw number: `UNLIMITED` is
           // `Number.POSITIVE_INFINITY`, so an uncapped plan that ever reached
           // this branch would read "Storage limit reached (Infinity MB)".
-          `Storage limit reached (${Aglyn.formatQuotaLimit(
+          `Storage limit reached (${formatQuotaLimit(
             quota.limit,
             'MB',
           )}) — see Billing to upgrade`,
@@ -3606,8 +3630,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 scopeLabel={
                   orgId &&
                   Array.isArray((folder as any).visibleTo) &&
-                  !Aglyn.isOrgWideScope((folder as any).visibleTo)
-                    ? Aglyn.describeScope((folder as any).visibleTo, hostNameById)
+                  !isOrgWideScope((folder as any).visibleTo)
+                    ? describeScope((folder as any).visibleTo, hostNameById)
                     : undefined
                 }
               />
@@ -3672,7 +3696,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     // drawer would write, the write cascades, the AGL-1042
                     // rules refuse it from anyone who is not org-wide, and it
                     // repairs only what somebody happens to look at.
-                    const storedScope = Aglyn.storedScope(media.visibleTo)
+                    const storedVisibleTo = storedScope(media.visibleTo)
                     setEditor({
                       id: media.$id as string,
                       media,
@@ -3684,8 +3708,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       customMeta: Object.entries(
                         (media as any).customMetadata ?? {},
                       ).map(([key, value]) => ({ key, value: String(value) })),
-                      visibleTo: storedScope ?? [],
-                      scopeUnset: !storedScope,
+                      visibleTo: storedVisibleTo ?? [],
+                      scopeUnset: !storedVisibleTo,
                     })
                   }}
                   onDelete={handleDelete(media)}
@@ -3974,7 +3998,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             // dropped the latter from the TextField prop union, so it does
             // not compile.
             slotProps={{
-              htmlInput: { maxLength: Aglyn.MEDIA_ALT_MAX_LENGTH },
+              htmlInput: { maxLength: MEDIA_ALT_MAX_LENGTH },
             }}
             helperText={
               'Describes the image for screen readers and search engines. ' +
@@ -4030,7 +4054,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     size="small"
                     fullWidth
                     value={
-                      (editor?.visibleTo ?? []).includes(Aglyn.ORG_SCOPE_TOKEN)
+                      (editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN)
                         ? 'org'
                         : editor?.scopeUnset
                           ? 'unset'
@@ -4047,7 +4071,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                               scopeUnset: false,
                               visibleTo:
                                 event.target.value === 'org'
-                                  ? [Aglyn.ORG_SCOPE_TOKEN]
+                                  ? [ORG_SCOPE_TOKEN]
                                   : // Default the narrowed case to the site
                                     // being browsed, or none — never a guess
                                     // at which sites the author meant.
@@ -4072,10 +4096,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
                   </Select>
                   {!editor?.scopeUnset &&
-                  !(editor?.visibleTo ?? []).includes(Aglyn.ORG_SCOPE_TOKEN) ? (
+                  !(editor?.visibleTo ?? []).includes(ORG_SCOPE_TOKEN) ? (
                     <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {orgHostList.map((host) => {
-                        const token = Aglyn.hostScopeToken(host.$id)
+                        const token = hostScopeToken(host.$id)
                         const on = (editor?.visibleTo ?? []).includes(token)
                         return (
                           <Chip
@@ -4113,7 +4137,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   */}
                   {editor?.scopeUnset
                     ? 'Never shared — hidden from every site'
-                    : Aglyn.describeScope(editor?.visibleTo, hostNameById)}
+                    : describeScope(editor?.visibleTo, hostNameById)}
                 </Typography>
               )}
             </Box>
@@ -4542,7 +4566,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               size="small"
               fullWidth
               value={
-                scopeDialog?.visibleTo.includes(Aglyn.ORG_SCOPE_TOKEN)
+                scopeDialog?.visibleTo.includes(ORG_SCOPE_TOKEN)
                   ? 'org'
                   : scopeDialog?.unset
                     ? 'unset'
@@ -4559,7 +4583,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         unset: false,
                         visibleTo:
                           event.target.value === 'org'
-                            ? [Aglyn.ORG_SCOPE_TOKEN]
+                            ? [ORG_SCOPE_TOKEN]
                             : [],
                       }
                     : prev,
@@ -4580,10 +4604,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               <MenuItem value="hosts">{'Selected sites…'}</MenuItem>
             </Select>
             {!scopeDialog?.unset &&
-            !scopeDialog?.visibleTo.includes(Aglyn.ORG_SCOPE_TOKEN) ? (
+            !scopeDialog?.visibleTo.includes(ORG_SCOPE_TOKEN) ? (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 {orgHostList.map((host: any) => {
-                  const token = Aglyn.hostScopeToken(host.$id)
+                  const token = hostScopeToken(host.$id)
                   const on = Boolean(scopeDialog?.visibleTo.includes(token))
                   return (
                     <Chip
@@ -4676,7 +4700,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             color="primary"
             disabled={
               scopeRun?.running ||
-              !Aglyn.normalizeVisibleTo(scopeDialog?.visibleTo ?? [])?.length
+              !normalizeVisibleTo(scopeDialog?.visibleTo ?? [])?.length
             }
             onClick={handleScopeApply}
           >

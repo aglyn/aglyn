@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  collectThirdPartyAuthorCssUrlHosts,
+  collectThirdPartyAuthorSxUrlHosts,
+} from '@aglyn/aglyn'
 import { mdiClose, mdiPlus } from '@aglyn/shared-data-mdi'
 import {
   canonicalSxProperties,
@@ -434,19 +439,16 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
   // this form commits (an attribute panel edit commits on blur, and that
   // behavior is load-bearing).
   const thirdPartyHosts = useMemo<string[]>(() => {
-    if (mode === 'css')
-      return Aglyn.collectThirdPartyAuthorCssUrlHosts(cssDraft)
+    if (mode === 'css') return collectThirdPartyAuthorCssUrlHosts(cssDraft)
     if (mode === 'json') {
       try {
-        return Aglyn.collectThirdPartyAuthorSxUrlHosts(
-          JSON.parse(jsonDraft || '{}'),
-        )
+        return collectThirdPartyAuthorSxUrlHosts(JSON.parse(jsonDraft || '{}'))
       } catch {
         // Mid-edit JSON — scan the raw text so the hint tracks typing.
-        return Aglyn.collectThirdPartyAuthorCssUrlHosts(jsonDraft)
+        return collectThirdPartyAuthorCssUrlHosts(jsonDraft)
       }
     }
-    return Aglyn.collectThirdPartyAuthorSxUrlHosts(nodeSx)
+    return collectThirdPartyAuthorSxUrlHosts(nodeSx)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, cssDraft, jsonDraft, JSON.stringify(nodeSx)])
 
@@ -458,7 +460,7 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
       // different property starts another. The write goes through the style
       // target (AGL-1306), so this is undoable on an instance's override
       // layer exactly as on a plain node's own sx.
-      Aglyn.canvas.transact(
+      canvas.transact(
         () => {
           target.setSx(
             applyCustomCssEdits(
@@ -479,7 +481,7 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
     const parsed = parseCssDeclarations(cssDraft)
     // Uncoalesced: pressing Apply is one deliberate commit, however many
     // declarations it carries (AGL-1204).
-    Aglyn.canvas.transact(() => {
+    canvas.transact(() => {
       // One edit map, applied once: declarations no longer in the draft
       // clear, the rest write. Both halves resolve their spelling through
       // `applyCustomCssEdits`, so a row the author deleted takes the alias
@@ -527,7 +529,7 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
     const parsed = JSON.parse(jsonDraft.trim())
     // Replacing sx wholesale is the single most destructive edit this panel
     // offers, so it is the one that most needs to be undoable (AGL-1204).
-    Aglyn.canvas.transact(() => {
+    canvas.transact(() => {
       target.setSx(parsed)
     })
     setError(null)

@@ -26,7 +26,7 @@
  * Five call sites in three files each wrote that longhand, and each one
  * rendered "All sites" over a document no site could see — because both
  * enforcement layers fail CLOSED on the missing field. AGL-1466 removed two
- * of them, AGL-1480 removed two more and added `Aglyn.storedScope` so a fifth
+ * of them, AGL-1480 removed two more and added `storedScope` so a fifth
  * would not be written by hand, and AGL-1484 removed the last pair, in the
  * Data plugin's schema dialog.
  *

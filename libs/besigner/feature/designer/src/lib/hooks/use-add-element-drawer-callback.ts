@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, components } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { type NodeId } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -67,14 +68,12 @@ export function useAddElementDrawerCallback(): Response {
           // pushed onto a detached `nodes` array, never reaching the
           // hierarchy, canvas, or saves (AGL-537).
           const { parent: parentNode, index } =
-            Aglyn.canvas.resolveInsertTarget(parent)
+            canvas.resolveInsertTarget(parent)
 
           // Inserting follows the same lineal placement rules as dnd —
           // without this, forbidden arrangements get created here that
           // drag-and-drop then (correctly) refuses to move.
-          const itemSchema = Aglyn.components.getSchema(
-            preset?.data?.componentId,
-          )
+          const itemSchema = components.getSchema(preset?.data?.componentId)
           const item: Besigner.LinealItem = {
             componentId: preset?.data?.componentId,
             pluginId: preset?.data?.pluginId,
@@ -103,7 +102,7 @@ export function useAddElementDrawerCallback(): Response {
             return undefined
           }
 
-          const node = Aglyn.canvas.addNodeFromPreset(preset, parentNode, index)
+          const node = canvas.addNodeFromPreset(preset, parentNode, index)
 
           // Preset-declared interactions (AGL-589): resolve the authored
           // presetRef markers against the freshly minted subtree and hand

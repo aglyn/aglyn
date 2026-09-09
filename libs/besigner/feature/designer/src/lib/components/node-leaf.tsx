@@ -15,7 +15,18 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import {
+  composeReusableComponentNodes,
+  displayBindingTokens,
+  FORM_COMPONENT_ID,
+  hasBindings,
+  HostViewType,
+  LAYOUT_SLOT_COMPONENT_ID,
+  NODE_ROOT_ID,
+  placedFormPlacement,
+  resolveBindings,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+} from '@aglyn/aglyn'
 import {
   Branch,
   Leaf,
@@ -201,8 +212,8 @@ export const NodeLeaf = observer(
       [ref, $id, elements, setElementRef, deleteElementRef],
     )
     const showSlotMarker =
-      node?.componentId === Aglyn.LAYOUT_SLOT_COMPONENT_ID &&
-      viewType === Aglyn.HostViewType.LAYOUT
+      node?.componentId === LAYOUT_SLOT_COMPONENT_ID &&
+      viewType === HostViewType.LAYOUT
     // A document with no nodes has nothing to aim at. Wrapped in a shared
     // layout it is worse than empty — the slot passes its children straight
     // through, so the root collapses to a zero-height strip between locked
@@ -210,9 +221,9 @@ export const NodeLeaf = observer(
     // leaf, which is already inside `DraggableDroppable`, so giving it height
     // is all a drop needs to resolve against the document root.
     const showEmptyDocumentSlot =
-      node?.$id === Aglyn.NODE_ROOT_ID &&
+      node?.$id === NODE_ROOT_ID &&
       !node?.nodes?.length &&
-      viewType !== Aglyn.HostViewType.LAYOUT
+      viewType !== HostViewType.LAYOUT
 
     // Nodes the author has opened up for designing (AGL-592). Through a
     // context rather than the flag itself: the canvas subscribes once and
@@ -228,7 +239,7 @@ export const NodeLeaf = observer(
     const boundProps = useMemo(
       () =>
         Object.entries(node?.props ?? {}).filter(
-          ([, value]) => typeof value === 'string' && Aglyn.hasBindings(value),
+          ([, value]) => typeof value === 'string' && hasBindings(value),
         ),
       // MobX props are observable; the JSON string keys the memo cheaply.
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -248,12 +259,12 @@ export const NodeLeaf = observer(
         // the referent's CURRENT name (AGL-186), never raw doc ids.
         resolved[key] =
           resolveFlag === false
-            ? Aglyn.displayBindingTokens(
+            ? displayBindingTokens(
                 value as string,
                 (variables ?? {}) as any,
                 (functions ?? {}) as any,
               )
-            : Aglyn.resolveBindings(
+            : resolveBindings(
                 value as string,
                 (variables ?? {}) as any,
                 (functions ?? {}) as any,
@@ -283,7 +294,7 @@ export const NodeLeaf = observer(
     // selection and dnd keep the original node.
     const { definitions, formDesigns } = useContext(ComponentPromotionContext)
     const instanceTree = useMemo(() => {
-      if (node?.componentId !== Aglyn.REUSABLE_INSTANCE_COMPONENT_ID) {
+      if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) {
         return undefined
       }
       // Already expanded into this canvas — the layout-chrome store grafts
@@ -296,11 +307,11 @@ export const NodeLeaf = observer(
       // Reuse the real graft so the canvas resolves `{{prop.*}}` exactly as
       // the published page will — one substitution path, not a second one
       // that could disagree about which value wins.
-      const composed = Aglyn.composeReusableComponentNodes(
+      const composed = composeReusableComponentNodes(
         {
           [node.$id]: {
             $id: node.$id,
-            componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+            componentId: REUSABLE_INSTANCE_COMPONENT_ID,
             // Plain snapshot: props are MobX observables and the graft
             // reads nested `propValues` off them.
             props: JSON.parse(JSON.stringify(node.props ?? {})),
@@ -344,8 +355,7 @@ export const NodeLeaf = observer(
       // instance's own id. Reading `nodes[0]` here would render the root's
       // FIRST CHILD and drop the component's outer element with its siblings.
       const grafted = composed[node.$id]
-      return grafted &&
-        grafted.componentId !== Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
+      return grafted && grafted.componentId !== REUSABLE_INSTANCE_COMPONENT_ID
         ? denormalizeTree(composed, node.$id)
         : undefined
       // Observable props/overrides: the JSON strings key the memo, as above.
@@ -380,14 +390,14 @@ export const NodeLeaf = observer(
      * entity existed.
      */
     const placedFormTree = useMemo(() => {
-      if (node?.componentId !== Aglyn.FORM_COMPONENT_ID) return undefined
+      if (node?.componentId !== FORM_COMPONENT_ID) return undefined
       const formId = (node?.props as { formId?: unknown } | undefined)?.formId
       if (typeof formId !== 'string' || !formId) return undefined
-      const composed = Aglyn.composeReusableComponentNodes(
+      const composed = composeReusableComponentNodes(
         {
           [node.$id]: {
             $id: node.$id,
-            componentId: Aglyn.FORM_COMPONENT_ID,
+            componentId: FORM_COMPONENT_ID,
             // Plain snapshot: props are MobX observables, as above.
             props: JSON.parse(JSON.stringify(node.props ?? {})),
             nodes: [],
@@ -397,7 +407,7 @@ export const NodeLeaf = observer(
         // design expands; the map is safe to pass whole for the reason the
         // instance graft above states — the one node handed in is this form.
         definitions as any,
-        [Aglyn.placedFormPlacement(formDesigns as any)],
+        [placedFormPlacement(formDesigns as any)],
       )
       const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
       return graftedRootId

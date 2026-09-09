@@ -15,7 +15,16 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  FEATURE_FLAG,
+  getInstanceEffectivePropText,
+  inheritedMediaAlt,
+  resolveInstanceLeafBinding,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  REUSABLE_INSTANCE_PROP_VALUES_KEY,
+} from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { mergeRefs, useId } from '@aglyn/shared-ui-jsx'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
@@ -268,7 +277,7 @@ export const DraggableDroppable = observer(
         // selection this dblclick's mousedowns already made puts AGL-1303's
         // "Edit component" in the panel — nothing extra to build).
         if (
-          node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID &&
+          node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID &&
           Besigner.dnd.canDragNode(node)
         ) {
           if (handleInstanceDoubleClick(e as globalThis.MouseEvent)) {
@@ -284,7 +293,7 @@ export const DraggableDroppable = observer(
         // Inline text editing for components that declare textEditable.
         const flag = node?.componentSchema?.flags?.textEditable
         const editable =
-          typeof flag === 'number' && (flag & Aglyn.FEATURE_FLAG.ENABLED) !== 0
+          typeof flag === 'number' && (flag & FEATURE_FLAG.ENABLED) !== 0
         if (editable) {
           e.preventDefault()
           e.stopPropagation()
@@ -368,7 +377,7 @@ export const DraggableDroppable = observer(
         // the EXISTING inline editor, anchored on the clicked leaf, and the
         // commit writes propValues[prop] on the instance (one undo entry,
         // mirrored to peers like any node edit).
-        const text = Aglyn.resolveInstanceLeafBinding(
+        const text = resolveInstanceLeafBinding(
           hit.graftedId,
           node.$id,
           definition,
@@ -385,7 +394,7 @@ export const DraggableDroppable = observer(
             },
             {
               propName: text.boundProp,
-              initialText: Aglyn.getInstanceEffectivePropText(
+              initialText: getInstanceEffectivePropText(
                 node.props,
                 definition.props,
                 text.boundProp,
@@ -401,7 +410,7 @@ export const DraggableDroppable = observer(
         // Image half: `src` fed by a declared prop opens the host's media
         // picker, committing the picked value to the same propValues slot —
         // the exact pipeline the Attributes panel's Browse button uses.
-        const src = Aglyn.resolveInstanceLeafBinding(
+        const src = resolveInstanceLeafBinding(
           hit.graftedId,
           node.$id,
           definition,
@@ -416,7 +425,7 @@ export const DraggableDroppable = observer(
           // image's alt" is a lookup rather than a guess. The attributes
           // panel only ever sees a declared prop's NAME, and no convention
           // says which other prop is its alt — so it does not try.
-          const altBinding = Aglyn.resolveInstanceLeafBinding(
+          const altBinding = resolveInstanceLeafBinding(
             hit.graftedId,
             node.$id,
             definition,
@@ -426,31 +435,31 @@ export const DraggableDroppable = observer(
             // Written through verbatim (media reference or raw URL — the
             // host app decides; AGL-1215). Snapshot via toJSON like the
             // panel: updateNodeProps REPLACES the props object.
-            const current = (
-              Aglyn.canvas.toJSON().nodes as Record<string, any>
-            )[node.$id]
+            const current = (canvas.toJSON().nodes as Record<string, any>)[
+              node.$id
+            ]
             // What the instance renders for the alt prop TODAY — its own
             // override, else the component's default. Not the raw override:
             // a component whose default alt is already a real sentence must
             // not have it replaced just because this instance never set one.
             const altPropName = altBinding?.boundProp
             const effectiveAlt = altPropName
-              ? Aglyn.getInstanceEffectivePropText(
+              ? getInstanceEffectivePropText(
                   current?.props,
                   definition.props,
                   altPropName,
                 )
               : undefined
             const inheritedAlt = altPropName
-              ? Aglyn.inheritedMediaAlt({
+              ? inheritedMediaAlt({
                   placementAlt: effectiveAlt,
                   assetAlt: asset?.alt,
                 })
               : undefined
-            Aglyn.canvas.updateNodeProps(node, {
+            canvas.updateNodeProps(node, {
               ...current?.props,
-              [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
-                ...current?.props?.[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY],
+              [REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
+                ...current?.props?.[REUSABLE_INSTANCE_PROP_VALUES_KEY],
                 [propName]: value,
                 ...(inheritedAlt && altPropName
                   ? { [altPropName]: inheritedAlt }

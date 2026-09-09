@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { FieldComponentType } from '@aglyn/aglyn'
 import { makeAutoObservable, observable } from 'mobx'
 
 export interface InlineMarkdownEditRect {
@@ -41,7 +42,7 @@ export function findMarkdownAttributeName(
   node: Aglyn.NodeSchema<any> | undefined,
 ): string | undefined {
   for (const attribute of node?.componentSchema?.attributes ?? []) {
-    if (attribute?.component === Aglyn.FieldComponentType.MARKDOWN) {
+    if (attribute?.component === FieldComponentType.MARKDOWN) {
       return attribute.name
     }
   }

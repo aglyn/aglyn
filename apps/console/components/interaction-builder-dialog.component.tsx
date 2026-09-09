@@ -16,7 +16,23 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  ACTION_EVENT_PARAM_NAME_MAX_LENGTH,
+  ACTION_MAX_EVENT_PARAMS,
+  applyElementVisibility,
+  canvas,
+  checkEntitlement,
+  components,
+  createResourceUid,
+  ELEMENT_VISIBILITY_MAX_DELAY_MS,
+  ensureElementHiddenStyle,
+  isClientActionStep,
+  isClientStepEntitled,
+  isInteractionAttributeAllowed,
+  planLabelGrantingFeature,
+  validateHostAction,
+} from '@aglyn/aglyn'
 // The analytics module is not on the `@aglyn/aglyn` barrel — it is imported by
 // the plugin SERVER graph, where the barrel's React contexts break the RSC
 // build (AGL-830) — so its constants come from the subpath, as every other
@@ -258,7 +274,7 @@ function EventParamsEditor(props: {
     const named = next.filter(([key]) => key.trim())
     onChange(named.length ? Object.fromEntries(named) : undefined)
   }
-  const full = rows.length >= Aglyn.ACTION_MAX_EVENT_PARAMS
+  const full = rows.length >= ACTION_MAX_EVENT_PARAMS
   return (
     <Stack spacing={1} sx={{ pl: 0.5 }}>
       {rows.map(([key, value], row) => (
@@ -289,7 +305,7 @@ function EventParamsEditor(props: {
             }
             slotProps={{
               htmlInput: {
-                maxLength: Aglyn.ACTION_EVENT_PARAM_NAME_MAX_LENGTH,
+                maxLength: ACTION_EVENT_PARAM_NAME_MAX_LENGTH,
               },
             }}
           />
@@ -334,7 +350,7 @@ function EventParamsEditor(props: {
         </Button>
         <Typography variant="caption" color="text.secondary">
           {full
-            ? `An event carries at most ${Aglyn.ACTION_MAX_EVENT_PARAMS} parameters.`
+            ? `An event carries at most ${ACTION_MAX_EVENT_PARAMS} parameters.`
             : 'Fixed labels only — a parameter that carries personal ' +
               'details is stripped before the event is sent.'}
         </Typography>
@@ -390,8 +406,8 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
   const { org, ready: orgReady } = useOrgPlan(hostId)
   const stepEntitlements = useMemo(
     () => ({
-      actionsEntitled: Aglyn.checkEntitlement(org as never, 'actions'),
-      allowJs: Aglyn.checkEntitlement(org as never, 'webhooks'),
+      actionsEntitled: checkEntitlement(org as never, 'actions'),
+      allowJs: checkEntitlement(org as never, 'webhooks'),
     }),
     [org],
   )
@@ -410,11 +426,11 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     (type: string): StepPlanGate => {
       const step = { type } as unknown as Aglyn.HostActionStep
       return {
-        entitled: Aglyn.isClientActionStep(step)
-          ? Aglyn.isClientStepEntitled(step, stepEntitlements)
+        entitled: isClientActionStep(step)
+          ? isClientStepEntitled(step, stepEntitlements)
           : stepEntitlements.actionsEntitled,
         planLabel:
-          Aglyn.planLabelGrantingFeature(
+          planLabelGrantingFeature(
             type === 'runJs' ? 'webhooks' : 'actions',
           ) ?? 'a higher plan',
       }
@@ -511,7 +527,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
   // Canvas element targets for the show/hide + drawer steps (AGL-562):
   // the same live-canvas resolution the props panel's NODE_SELECT uses.
   const canvasNodes = useMemo(
-    () => (Aglyn.canvas.toJSON().nodes ?? {}) as Record<string, any>,
+    () => (canvas.toJSON().nodes ?? {}) as Record<string, any>,
     [],
   )
   const elementTargetOptions = useMemo(
@@ -520,7 +536,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
         .filter(([id]) => Boolean(id))
         .map(([id, node]) => {
           const displayName =
-            Aglyn.components.getSchema(node?.componentId)?.displayName ??
+            components.getSchema(node?.componentId)?.displayName ??
             node?.componentId ??
             'Element'
           const text =
@@ -555,7 +571,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     [elementTargetOptions],
   )
 
-  const problem = Aglyn.validateHostAction(candidate as any)
+  const problem = validateHostAction(candidate as any)
 
   // Test (AGL-314/319): class steps execute against the canvas DOM so
   // the designer sees the result immediately; everything else explains
@@ -582,8 +598,8 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
       ) {
         // Element choreography (AGL-562): try the live DOM; the canvas
         // shadow root is closed, so a zero-match run explains itself.
-        Aglyn.ensureElementHiddenStyle()
-        const touched = Aglyn.applyElementVisibility(
+        ensureElementHiddenStyle()
+        const touched = applyElementVisibility(
           step.type === 'showElement'
             ? 'show'
             : step.type === 'hideElement'
@@ -627,7 +643,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
 
   const handleSave = useCallback(async () => {
     if (problem) return
-    const id = state.id ?? Aglyn.createResourceUid()
+    const id = state.id ?? createResourceUid()
     /**
      * Node-scoped save. Takes the whole Firestore path below with
      * it — the server-side create, the staleness guard, the merge-set — and
@@ -1060,11 +1076,11 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     placeholder="aria-expanded"
                     error={
                       Boolean(step.name) &&
-                      !Aglyn.isInteractionAttributeAllowed(step.name)
+                      !isInteractionAttributeAllowed(step.name)
                     }
                     helperText={
                       Boolean(step.name) &&
-                      !Aglyn.isInteractionAttributeAllowed(step.name)
+                      !isInteractionAttributeAllowed(step.name)
                         ? 'Must start with aria- or data-'
                         : undefined
                     }
@@ -1283,7 +1299,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                   slotProps={{
                     htmlInput: {
                       min: 0,
-                      max: Aglyn.ELEMENT_VISIBILITY_MAX_DELAY_MS,
+                      max: ELEMENT_VISIBILITY_MAX_DELAY_MS,
                       step: 50,
                     },
                   }}

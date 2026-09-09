@@ -16,7 +16,8 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import { MarkdownField } from '@aglyn/aglyn-markdown-editor'
 import * as Besigner from '@aglyn/besigner'
 import { Box, Button, Paper, Typography } from '@mui/material'
@@ -104,7 +105,7 @@ const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurfac
     // Read the node's props at commit time, not at open: `updateNodeProps`
     // REPLACES the props object, so anything a peer or the panel changed while
     // the editor was open has to be spread from the live node.
-    Aglyn.canvas.updateNodeProps(current, {
+    canvas.updateNodeProps(current, {
       ...current.props,
       [attributeName]: latestRef.current,
     })

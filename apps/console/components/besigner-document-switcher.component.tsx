@@ -16,7 +16,7 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import { canvas, nameSearchKey, screenRoutePathToUrl } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_COMPONENT,
   ICON_VARIANT_DOCUMENT,
@@ -198,10 +198,10 @@ export const BesignerDocumentSwitcherComponent = observer(
       )
       // Match the screens' server-side prefix semantics (name-starts-with) so
       // both sections filter the same way, using the same normalization.
-      const key = Aglyn.nameSearchKey(queryText)
+      const key = nameSearchKey(queryText)
       if (!key) return sorted
       return sorted.filter((layout: any) =>
-        Aglyn.nameSearchKey(layout.displayName ?? layout.$id).startsWith(key),
+        nameSearchKey(layout.displayName ?? layout.$id).startsWith(key),
       )
     }, [layoutDocs, current.kind, currentDoc, queryText])
 
@@ -222,19 +222,17 @@ export const BesignerDocumentSwitcherComponent = observer(
       const sorted = docs.sort((a: any, b: any) =>
         (a.displayName ?? a.$id).localeCompare(b.displayName ?? b.$id),
       )
-      const key = Aglyn.nameSearchKey(queryText)
+      const key = nameSearchKey(queryText)
       if (!key) return sorted
       return sorted.filter((component: any) =>
-        Aglyn.nameSearchKey(component.displayName ?? component.$id).startsWith(
-          key,
-        ),
+        nameSearchKey(component.displayName ?? component.$id).startsWith(key),
       )
     }, [componentDocs, current.kind, currentDoc, queryText])
 
     const pathLabel = useCallback(
       (screenId: string) => {
         const path = routingMap?.[screenId]
-        return path ? Aglyn.screenRoutePathToUrl(path) : 'not published'
+        return path ? screenRoutePathToUrl(path) : 'not published'
       },
       [routingMap],
     )
@@ -253,7 +251,7 @@ export const BesignerDocumentSwitcherComponent = observer(
         const target = pool.find((item: any) => item.$id === id)
         if (!target?.versionId) return
 
-        if (!Aglyn.canvas.isInitialSame) {
+        if (!canvas.isInitialSame) {
           const confirmed = await confirm({
             title: 'Discard unsaved changes?',
             description:

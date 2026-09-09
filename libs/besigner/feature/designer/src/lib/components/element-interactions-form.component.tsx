@@ -16,7 +16,7 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 import {
   Button,

@@ -170,7 +170,9 @@ describe('the besigner publish path is gated on the contract', () => {
     // A computed-and-ignored result is the shape this is guarding against.
     // The early return has to sit between the two positions above.
     const text = source()
-    const refusedAt = text.indexOf('if (!Aglyn.formContractIsSatisfied(violations)) {')
+    const refusedAt = text.search(
+      /if \(!(?:Aglyn\.)?formContractIsSatisfied\(violations\)\) \{/,
+    )
     const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
     expect(refusedAt).toBeGreaterThan(-1)
     expect(refusedAt).toBeLessThan(publishedAt)
@@ -181,7 +183,9 @@ describe('the besigner publish path is gated on the contract', () => {
     // An auto-dismissed warning is how somebody walks away believing the form
     // shipped.
     const text = source()
-    const refusedAt = text.indexOf('if (!Aglyn.formContractIsSatisfied(violations)) {')
+    const refusedAt = text.search(
+      /if \(!(?:Aglyn\.)?formContractIsSatisfied\(violations\)\) \{/,
+    )
     const publishedAt = text.indexOf("updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId)")
     expect(text.slice(refusedAt, publishedAt)).toContain('persist: true')
   })

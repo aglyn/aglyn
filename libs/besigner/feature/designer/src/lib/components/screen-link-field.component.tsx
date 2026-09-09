@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  formatScreenLinkValue,
+  parseScreenLinkValue,
+  ScreenLinkContext,
+  unavailableScreenLabel,
+} from '@aglyn/aglyn'
 import {
   FormFieldGrid,
   type FormFieldGridProps,
@@ -99,8 +105,8 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
     name,
     error,
   } = props
-  const { screens, labels } = useContext(Aglyn.ScreenLinkContext)
-  const screenId = Aglyn.parseScreenLinkValue(value)
+  const { screens, labels } = useContext(ScreenLinkContext)
+  const screenId = parseScreenLinkValue(value)
   const literal = screenId ? '' : (value ?? '')
 
   // Mode is remembered, not derived, for one reason: choosing "External
@@ -131,7 +137,7 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
 
   const describeDefault = () => {
     if (!defaultValue) return undefined
-    const defaultScreen = Aglyn.parseScreenLinkValue(defaultValue)
+    const defaultScreen = parseScreenLinkValue(defaultValue)
     if (!defaultScreen) return defaultValue
     return labels?.[defaultScreen] ?? screens?.[defaultScreen] ?? undefined
   }
@@ -146,7 +152,7 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
   // A default that is a screen reference is not a URL, so it must not be
   // offered as one in the text box.
   const urlPlaceholder =
-    placeholder && !Aglyn.parseScreenLinkValue(placeholder)
+    placeholder && !parseScreenLinkValue(placeholder)
       ? placeholder
       : 'https://example.com'
 
@@ -167,7 +173,7 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
         return
       }
       setExternal(false)
-      onChange(next ? Aglyn.formatScreenLinkValue(next) : '')
+      onChange(next ? formatScreenLinkValue(next) : '')
     },
     [literal, onChange],
   )
@@ -203,7 +209,7 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
                 "Unknown screen" reads as "we cannot look it up" rather than
                 "this link is dead". The value stays the bare id — this
                 select re-wraps it through `formatScreenLinkValue`. */}
-            {Aglyn.unavailableScreenLabel(
+            {unavailableScreenLabel(
               unknownScreen,
               !!screens && Object.keys(screens).length > 0,
             )}

@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  clearCanvasNodes,
+  components,
+  repairCanvasNodes,
+} from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import Alert from '@mui/material/Alert'
@@ -46,8 +52,8 @@ import { useCallback } from 'react'
  * there is a peer to lose.
  */
 function replaceDocument(nodes: Record<string, any>): void {
-  Aglyn.canvas.saveHistory()
-  Aglyn.canvas.setNodes(nodes as never)
+  canvas.saveHistory()
+  canvas.setNodes(nodes as never)
   Besigner.focus.clearFocusStatus()
 }
 
@@ -63,9 +69,9 @@ function replaceDocument(nodes: Record<string, any>): void {
 function componentResolver():
   | ((componentId: string) => boolean)
   | undefined {
-  if (!Object.keys(Aglyn.components.factories ?? {}).length) return undefined
+  if (!Object.keys(components.factories ?? {}).length) return undefined
   return (componentId: string) =>
-    Boolean(Aglyn.components.getFactory(componentId as never))
+    Boolean(components.getFactory(componentId as never))
 }
 
 /** Groups findings for the preview, most consequential first. */
@@ -134,8 +140,8 @@ export function useRepairDocumentCallback(
   const { confirm } = useConfirmationContext()
 
   return useCallback(async () => {
-    const current = Aglyn.canvas.toJSON().nodes as Record<string, any>
-    const result = Aglyn.repairCanvasNodes(current, {
+    const current = canvas.toJSON().nodes as Record<string, any>
+    const result = repairCanvasNodes(current, {
       isKnownComponent: componentResolver(),
     })
 
@@ -202,7 +208,7 @@ export function useClearCanvasCallback(
   const { confirm } = useConfirmationContext()
 
   return useCallback(() => {
-    const remote = Aglyn.canvas.hasRemoteEdits
+    const remote = canvas.hasRemoteEdits
     return confirm({
       title: 'Clear canvas?',
       description: (
@@ -221,8 +227,8 @@ export function useClearCanvasCallback(
       confirmationButtonProps: { color: 'error' },
     })
       .then(() => {
-        const current = Aglyn.canvas.toJSON().nodes as Record<string, any>
-        replaceDocument(Aglyn.clearCanvasNodes(current))
+        const current = canvas.toJSON().nodes as Record<string, any>
+        replaceDocument(clearCanvasNodes(current))
       })
       .catch(() => {})
   }, [confirm, noun])

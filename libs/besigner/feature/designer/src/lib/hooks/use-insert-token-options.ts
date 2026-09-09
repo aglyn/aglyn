@@ -15,7 +15,19 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  AUTHOR_TOKEN_CATALOG,
+  canvas,
+  COLLECTION_ENTRIES_COMPONENT_ID,
+  COLLECTION_TOKEN_CATALOG,
+  COMPONENT_PROP_NAME_PATTERN,
+  COMPONENT_PROP_TOKEN_PREFIX,
+  datasetItemToken,
+  EntityPickerContext,
+  entityValueNeedsResolution,
+  ENTRY_TOKEN_CATALOG,
+} from '@aglyn/aglyn'
 import { useContext, useEffect, useMemo } from 'react'
 
 import {
@@ -54,10 +66,10 @@ export function useInsertTokenOptions(
     functions: bindingFunctions,
     componentProps,
   } = useContext(BindingPickerContext)
-  const entityOptions = useContext(Aglyn.EntityPickerContext)
+  const entityOptions = useContext(EntityPickerContext)
 
   const insertContext = useMemo(() => {
-    const nodes = (Aglyn.canvas.toJSON().nodes ?? {}) as Record<string, any>
+    const nodes = (canvas.toJSON().nodes ?? {}) as Record<string, any>
     let repeatDatasetKey: string | undefined
     let inCollectionEntries = false
     let current = node?.$id ? nodes[node.$id] : undefined
@@ -70,7 +82,7 @@ export function useInsertTokenOptions(
       ) {
         repeatDatasetKey = props.repeatDataset.trim()
       }
-      if (current.componentId === Aglyn.COLLECTION_ENTRIES_COMPONENT_ID) {
+      if (current.componentId === COLLECTION_ENTRIES_COMPONENT_ID) {
         inCollectionEntries = true
       }
       current = current.parentId ? nodes[current.parentId] : undefined
@@ -128,7 +140,7 @@ export function useInsertTokenOptions(
     // window — reading a document at that name as though it were an id would
     // be a read that could only ever miss.
     if (insertContext.datasetLabel) return
-    const id = Aglyn.entityValueNeedsResolution(entityOptions, 'datasets', key)
+    const id = entityValueNeedsResolution(entityOptions, 'datasets', key)
     if (id) resolveEntity?.('datasets', id)
   }, [
     requestEntities,
@@ -152,12 +164,12 @@ export function useInsertTokenOptions(
      * substitute.
      */
     for (const prop of componentProps ?? []) {
-      if (!Aglyn.COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? '')) continue
+      if (!COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? '')) continue
       assembled.push({
         group: 'Properties',
         groupHint: 'Set per page in the Attributes panel of each instance',
         label: prop.label || prop.name,
-        token: `{{${Aglyn.COMPONENT_PROP_TOKEN_PREFIX}${prop.name}}}`,
+        token: `{{${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}}}`,
         preview: prop.defaultValue
           ? `Defaults to "${prop.defaultValue}"`
           : 'No default — renders as nothing until a page sets it',
@@ -166,7 +178,7 @@ export function useInsertTokenOptions(
     const entryHint = insertContext.inCollectionEntries
       ? undefined
       : 'Resolves in Collection entries blocks and on entry pages'
-    for (const entry of Aglyn.ENTRY_TOKEN_CATALOG) {
+    for (const entry of ENTRY_TOKEN_CATALOG) {
       assembled.push({
         group: 'Entry',
         label: entry.label,
@@ -175,7 +187,7 @@ export function useInsertTokenOptions(
         ...(entryHint ? { groupHint: entryHint } : {}),
       })
     }
-    for (const entry of Aglyn.COLLECTION_TOKEN_CATALOG) {
+    for (const entry of COLLECTION_TOKEN_CATALOG) {
       assembled.push({
         group: 'Collection',
         label: entry.label,
@@ -184,7 +196,7 @@ export function useInsertTokenOptions(
         groupHint: 'Resolves on collection pages',
       })
     }
-    for (const entry of Aglyn.AUTHOR_TOKEN_CATALOG) {
+    for (const entry of AUTHOR_TOKEN_CATALOG) {
       assembled.push({
         group: 'Author',
         label: entry.label,
@@ -197,7 +209,7 @@ export function useInsertTokenOptions(
       assembled.push({
         group: 'Dataset item',
         label: field.label,
-        token: Aglyn.datasetItemToken(field.id),
+        token: datasetItemToken(field.id),
         ...(insertContext.datasetLabel
           ? { groupHint: `From dataset "${insertContext.datasetLabel}"` }
           : {}),

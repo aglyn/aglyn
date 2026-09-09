@@ -16,7 +16,11 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import {
+  getKnownPluginInstall,
+  resolvePluginPropFields,
+  unknownPluginPropKeys,
+} from '@aglyn/aglyn'
 import { useFieldApi, useFormApi } from '@aglyn/shared-ui-jsx-forms'
 import {
   Alert,
@@ -103,16 +107,16 @@ export function PluginSettingsField(props: Record<string, unknown>) {
   const listingId = String(
     (formApi.getState().values as Record<string, unknown>)?.['listingId'] ?? '',
   )
-  const install = Aglyn.getKnownPluginInstall(listingId || undefined)
+  const install = getKnownPluginInstall(listingId || undefined)
   const fields = useMemo(
-    () => Aglyn.resolvePluginPropFields(install),
+    () => resolvePluginPropFields(install),
     [install],
   )
 
   const settings = useMemo(() => parseSettings(input.value), [input.value])
   const broken = isBrokenJson(input.value)
   const unknownKeys = useMemo(
-    () => Aglyn.unknownPluginPropKeys(install, settings),
+    () => unknownPluginPropKeys(install, settings),
     [install, settings],
   )
 

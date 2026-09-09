@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import { linkableScreenRoutes, SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn'
 import { useMemo } from 'react'
 import type { UseCollectionTemplatesResult } from './use-collection-templates'
 
@@ -81,9 +81,9 @@ export function useScreenLinkRoutes(
     // promote the screen back to a page.
     for (const screen of screens ?? []) {
       if (!screen?.$id) continue
-      if (screen.kind === Aglyn.SCREEN_KIND_TEMPLATE) unrouted.add(screen.$id)
+      if (screen.kind === SCREEN_KIND_TEMPLATE) unrouted.add(screen.$id)
     }
-    return Aglyn.linkableScreenRoutes(routingMap, {
+    return linkableScreenRoutes(routingMap, {
       routedElsewhere: listRoutesByScreenId,
       unrouted,
     })

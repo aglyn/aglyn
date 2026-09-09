@@ -16,7 +16,7 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import {

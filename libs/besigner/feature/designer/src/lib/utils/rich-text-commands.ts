@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { RICH_TEXT_COMMANDS } from '@aglyn/aglyn'
 
 /**
  * What a schema gets when it names nothing — everything (AGL-2557).
@@ -26,9 +27,9 @@ import * as Aglyn from '@aglyn/aglyn'
  * would silently take bold away from the element that had it.
  */
 const EVERY_GROUP: readonly Aglyn.RICH_TEXT_COMMANDS[] = [
-  Aglyn.RICH_TEXT_COMMANDS.EMPHASIS,
-  Aglyn.RICH_TEXT_COMMANDS.LIST,
-  Aglyn.RICH_TEXT_COMMANDS.LINK,
+  RICH_TEXT_COMMANDS.EMPHASIS,
+  RICH_TEXT_COMMANDS.LIST,
+  RICH_TEXT_COMMANDS.LINK,
 ]
 
 /**

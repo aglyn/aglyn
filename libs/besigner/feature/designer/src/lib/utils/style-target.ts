@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  mergeNodeSx,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  STYLE_OVERRIDES_ROOT_KEY,
+} from '@aglyn/aglyn'
 import { expandSxAliases } from '@aglyn/shared-data-enums'
 import isEqual from 'lodash-es/isEqual'
 import { action, toJS } from 'mobx'
@@ -111,7 +116,7 @@ function composedNodeSx(
   const propsSx = nodePropsSx(node)
   if (!propsSx) return nodeSx
   if (nodeSx !== undefined && !isPlainRecord(nodeSx)) return nodeSx
-  return Aglyn.mergeNodeSx(toJS(propsSx), toJS(nodeSx)) as Record<string, any>
+  return mergeNodeSx(toJS(propsSx), toJS(nodeSx)) as Record<string, any>
 }
 
 /**
@@ -214,7 +219,7 @@ export function getNodeStyleTarget(
   overrideKey?: string | null,
 ): NodeStyleTarget {
   const isInstance =
-    node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
+    node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
   if (!node || !isInstance) {
     return {
       isInstanceOverride: false,
@@ -238,11 +243,11 @@ export function getNodeStyleTarget(
   // exactly the distinction the override badge and the Background Fill
   // control exist to keep. A `props.sx` on a definition node is shown and
   // cleared where it lives, by selecting that node inside the component.
-  const key = overrideKey || Aglyn.STYLE_OVERRIDES_ROOT_KEY
+  const key = overrideKey || STYLE_OVERRIDES_ROOT_KEY
   return {
     isInstanceOverride: true,
     overrideKey: key,
-    isLeafOverride: key !== Aglyn.STYLE_OVERRIDES_ROOT_KEY,
+    isLeafOverride: key !== STYLE_OVERRIDES_ROOT_KEY,
     get sx() {
       return (node.styleOverrides as Record<string, any> | undefined)?.[key]
     },

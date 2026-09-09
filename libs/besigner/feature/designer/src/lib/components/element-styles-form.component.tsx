@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  components,
+  listInstanceStyleTargets,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  STYLE_OVERRIDES_ROOT_KEY,
+} from '@aglyn/aglyn'
 import { BoxStyler, Measurements } from '../box-styler'
 import { ButtonGroupFormControl, ToggleButtonFormControl } from '../form-fields'
 import { FieldComponentType } from '@aglyn/aglyn'
@@ -631,7 +638,7 @@ const ElementStylesForm = observer(
     // rather than blanking the panel.
     const node = (
       selectedNode?.$id
-        ? (Aglyn.canvas.getNode(selectedNode.$id) ?? selectedNode)
+        ? (canvas.getNode(selectedNode.$id) ?? selectedNode)
         : selectedNode
     ) as Aglyn.NodeSchema | undefined
 
@@ -641,14 +648,14 @@ const ElementStylesForm = observer(
     // only ever offer targets the graft will actually consult.
     const { definitions } = useContext(ComponentPromotionContext)
     const definition = useMemo(() => {
-      if (node?.componentId !== Aglyn.REUSABLE_INSTANCE_COMPONENT_ID) {
+      if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) {
         return undefined
       }
       const refId = (node?.props as { refId?: string } | undefined)?.refId
       return refId ? definitions?.[refId] : undefined
     }, [node, definitions])
     const styleTargets = useMemo(
-      () => Aglyn.listInstanceStyleTargets(definition),
+      () => listInstanceStyleTargets(definition),
       [definition],
     )
 
@@ -657,12 +664,12 @@ const ElementStylesForm = observer(
     // component root, and deriving that from the current `node.$id` cannot
     // render one frame aimed at the PREVIOUS instance's leaf.
     const [picked, setPicked] = useState<{ nodeId?: string; key: string }>({
-      key: Aglyn.STYLE_OVERRIDES_ROOT_KEY,
+      key: STYLE_OVERRIDES_ROOT_KEY,
     })
     const pickedKey =
       picked.nodeId && picked.nodeId === node?.$id
         ? picked.key
-        : Aglyn.STYLE_OVERRIDES_ROOT_KEY
+        : STYLE_OVERRIDES_ROOT_KEY
     // A leaf the component no longer has falls back to the root instead of
     // aiming the panel at a slice nothing renders (the definition may have
     // been edited since). An unloaded definition offers nothing yet, so it
@@ -671,7 +678,7 @@ const ElementStylesForm = observer(
       !styleTargets.length ||
       styleTargets.some((entry) => entry.key === pickedKey)
         ? pickedKey
-        : Aglyn.STYLE_OVERRIDES_ROOT_KEY
+        : STYLE_OVERRIDES_ROOT_KEY
 
     // Where edits land (AGL-1306 root, AGL-1332 leaves): a plain node's own
     // sx, or — for a reusable-component instance — one slice of its
@@ -799,7 +806,7 @@ const ElementStylesForm = observer(
     const clearState = useCallback(
       (state: SxState) => {
         if (!node) return
-        Aglyn.canvas.transact(() => {
+        canvas.transact(() => {
           target.setSx(
             writeStateSlice(
               (target.sx ?? {}) as Record<string, any>,
@@ -844,7 +851,7 @@ const ElementStylesForm = observer(
         // step is recorded whether the edit lands in the node's own sx or in
         // a component instance's root override slice — the history snapshot
         // carries `styleOverrides` like any other node field.
-        Aglyn.canvas.transact(
+        canvas.transact(
           () => {
             const current = (target.sx ?? {}) as Record<string, any>
             if (!activeState) {
@@ -1041,7 +1048,7 @@ const ElementStylesForm = observer(
           // No coalesce key: a band switch is one discrete decision, so it
           // gets its own undo step even when two are flipped in quick
           // succession (AGL-1204).
-          Aglyn.canvas.transact(() => {
+          canvas.transact(() => {
             target.setSx(
               writeHiddenBand(
                 (target.sx ?? {}) as Record<string, any>,
@@ -1063,7 +1070,7 @@ const ElementStylesForm = observer(
         // Undoable and uncoalesced (AGL-1204): clearing a chip is a discrete
         // decision, and it DISCARDS an override — the one edit in this panel
         // that most needs a way back.
-        Aglyn.canvas.transact(() => {
+        canvas.transact(() => {
           const next = { ...(target.sx ?? {}) } as Record<string, any>
           delete next[property]
           target.setSx(next)
@@ -1093,8 +1100,7 @@ const ElementStylesForm = observer(
         entry.isRoot
           ? 'Component root'
           : entry.name ||
-            (entry.componentId &&
-              Aglyn.components.getLabel(entry.componentId)) ||
+            (entry.componentId && components.getLabel(entry.componentId)) ||
             entry.componentInternalId,
       [],
     )

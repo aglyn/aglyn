@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import {
   confirmValidLinealRelationship,
   describeInvalidLinealRelationship,
@@ -86,7 +87,7 @@ function confirmTarget(
   parent: Aglyn.NodeSchema<any>,
   index: number,
 ): MoveTarget {
-  if (!Aglyn.canvas.nodeAcceptsChildren(parent)) {
+  if (!canvas.nodeAcceptsChildren(parent)) {
     return { error: `${parent.labelShort} can't hold other elements` }
   }
   const item = linealActor(node)
@@ -107,18 +108,18 @@ function confirmTarget(
  * belong beside their markdown block, not at the bottom of the section.
  */
 export function resolveMoveOut(node: Aglyn.NodeSchema<any>): MoveTarget {
-  if (!node || Aglyn.canvas.isRootNode(node)) {
+  if (!node || canvas.isRootNode(node)) {
     return { error: 'There is nothing to move' }
   }
   const parent = node.parent
   if (!parent) return { error: 'This element has no container' }
-  if (Aglyn.canvas.isRootNode(parent)) {
+  if (canvas.isRootNode(parent)) {
     return { error: 'This element is already at the top level' }
   }
   const grandparent = parent.parent
   if (!grandparent) return { error: 'This element is already at the top level' }
 
-  const at = Aglyn.canvas.getNodeIndex(parent)
+  const at = canvas.getNodeIndex(parent)
   return confirmTarget(node, grandparent, at > -1 ? at + 1 : NaN)
 }
 
@@ -128,15 +129,15 @@ export function resolveMoveOut(node: Aglyn.NodeSchema<any>): MoveTarget {
  * put something INTO a container rather than only lift it out.
  */
 export function resolveMoveIn(node: Aglyn.NodeSchema<any>): MoveTarget {
-  if (!node || Aglyn.canvas.isRootNode(node)) {
+  if (!node || canvas.isRootNode(node)) {
     return { error: 'There is nothing to move' }
   }
   const parent = node.parent
   if (!parent) return { error: 'This element has no container' }
 
-  const at = Aglyn.canvas.getNodeIndex(node)
+  const at = canvas.getNodeIndex(node)
   if (at < 1) return { error: 'There is no element above this one' }
-  const previous = Aglyn.canvas.getNode(parent.nodes?.[at - 1])
+  const previous = canvas.getNode(parent.nodes?.[at - 1])
   if (!previous) return { error: 'There is no element above this one' }
 
   // NaN appends, so the node lands at the end of its new container — where
@@ -150,7 +151,7 @@ function apply(target: MoveTarget, node: Aglyn.NodeSchema<any>): MoveResult {
   // subtree and its place in history (`deleteNode` recurses over the whole
   // subtree, so rebuilding would re-mint every id beneath it and break any
   // interaction that referenced one).
-  return { node: Aglyn.canvas.reparentNode(node, target.parent!, target.index) }
+  return { node: canvas.reparentNode(node, target.parent!, target.index) }
 }
 
 /** Lift `node` out of its container, landing it just after that container. */

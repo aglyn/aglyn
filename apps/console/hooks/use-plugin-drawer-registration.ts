@@ -16,7 +16,7 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import { components } from '@aglyn/aglyn'
 import { pluginInstallToPresets, setKnownPluginInstalls } from '@aglyn/aglyn'
 import { collection, limit, query } from 'firebase/firestore'
 import { runInAction } from 'mobx'
@@ -97,7 +97,7 @@ export function usePluginDrawerRegistration(hostId: string): void {
     // install sync, not once for the unregister and again per preset.
     runInAction(() => {
       if (registeredIds.current.length) {
-        Aglyn.components.unregisterPreset(registeredIds.current)
+        components.unregisterPreset(registeredIds.current)
         registeredIds.current = []
       }
       // One preset per install PLUS one per element the pinned version
@@ -109,13 +109,13 @@ export function usePluginDrawerRegistration(hostId: string): void {
           (preset): preset is NonNullable<typeof preset> => Boolean(preset),
         )
       if (presets.length) {
-        Aglyn.components.registerPreset(presets)
+        components.registerPreset(presets)
         registeredIds.current = presets.map((preset) => preset.$id)
       }
     })
     return () => {
       if (registeredIds.current.length) {
-        Aglyn.components.unregisterPreset(registeredIds.current)
+        components.unregisterPreset(registeredIds.current)
         registeredIds.current = []
       }
     }

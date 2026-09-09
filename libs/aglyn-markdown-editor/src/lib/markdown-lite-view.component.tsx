@@ -27,7 +27,13 @@
  * built, and every node below is an element this file chose.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  HEADING_ANCHOR_SCROLL_MARGIN,
+  markdownHeadingSlugs,
+  parseMarkdownLite,
+  resolveMediaSrc,
+} from '@aglyn/aglyn'
 import { Box, Link as MuiLink, Stack, Typography } from '@mui/material'
 import { useMemo } from 'react'
 
@@ -58,12 +64,12 @@ export interface MarkdownLiteViewProps {
 }
 
 export function MarkdownLiteView({ source }: MarkdownLiteViewProps) {
-  const blocks = useMemo(() => Aglyn.parseMarkdownLite(source), [source])
+  const blocks = useMemo(() => parseMarkdownLite(source), [source])
   // The preview stamps the same heading anchors the published page does
   // (AGL-1162), so what an author checks here is what a `#slug` link will
   // find — and so a document whose headings collide is visible before it
   // ships, not after.
-  const slugs = useMemo(() => Aglyn.markdownHeadingSlugs(blocks), [blocks])
+  const slugs = useMemo(() => markdownHeadingSlugs(blocks), [blocks])
   return (
     <Stack spacing={1.5}>
       {blocks.map((block, index) => {
@@ -76,7 +82,7 @@ export function MarkdownLiteView({ source }: MarkdownLiteViewProps) {
                 variant={block.level === 2 ? 'h6' : 'subtitle1'}
                 component={block.level === 2 ? 'h2' : 'h3'}
                 sx={{
-                  scrollMarginTop: `${Aglyn.HEADING_ANCHOR_SCROLL_MARGIN}px`,
+                  scrollMarginTop: `${HEADING_ANCHOR_SCROLL_MARGIN}px`,
                 }}
               >
                 {renderInlines(block.inlines)}
@@ -93,7 +99,7 @@ export function MarkdownLiteView({ source }: MarkdownLiteViewProps) {
                 // picker baked in is what resolves. The console serves
                 // `/api/media/cdn/…` itself, so the relative URL this
                 // produces is fetchable from here.
-                src={Aglyn.resolveMediaSrc(block.src)}
+                src={resolveMediaSrc(block.src)}
                 alt={block.alt}
                 loading="lazy"
                 sx={{

@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, components } from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
 import {
   confirmValidLinealRelationship,
@@ -181,7 +182,7 @@ export function getLabels(): string[] {
  */
 export function copyNodes(nodes: Aglyn.NodeSchema<any>[]): number {
   const copyable = withoutNestedDuplicates(
-    (nodes ?? []).filter((node) => node && !Aglyn.canvas.isRootNode(node)),
+    (nodes ?? []).filter((node) => node && !canvas.isRootNode(node)),
   )
   if (!copyable.length) return 0
 
@@ -190,7 +191,7 @@ export function copyNodes(nodes: Aglyn.NodeSchema<any>[]): number {
     labels: copyable.map(
       (node) => node.labelShort ?? node.componentId ?? 'element',
     ),
-    nodes: copyable.map((node) => detach(Aglyn.canvas.makeNested(node))),
+    nodes: copyable.map((node) => detach(canvas.makeNested(node))),
   }
   runInAction(() => {
     state.entry = entry
@@ -235,14 +236,14 @@ export function pasteInto(target?: Aglyn.NodeSchema<any>): PasteResult {
   const entry = getEntry()
   if (!entry?.nodes?.length) return { nodes: [], error: 'Nothing to paste' }
 
-  const { parent, index } = Aglyn.canvas.resolveInsertTarget(target)
+  const { parent, index } = canvas.resolveInsertTarget(target)
   if (!parent) return { nodes: [], error: 'Nowhere to paste this' }
 
   // Every component in every subtree has to exist in THIS app before
   // anything lands, so a rejected paste leaves the canvas untouched.
   const unknown = entry.nodes
     .flatMap((node) => collectComponentIds(node))
-    .find((id) => !Aglyn.components.getFactory(id as any))
+    .find((id) => !components.getFactory(id as any))
   if (unknown) {
     return {
       nodes: [],
@@ -260,7 +261,7 @@ export function pasteInto(target?: Aglyn.NodeSchema<any>): PasteResult {
     restrictParent: parent.componentSchema?.restrictParent,
   }
   for (const nested of entry.nodes) {
-    const schema = Aglyn.components.getSchema(nested.componentId as any)
+    const schema = components.getSchema(nested.componentId as any)
     const item: LinealItem = {
       componentId: nested.componentId as any,
       pluginId: nested.pluginId as any,
@@ -281,7 +282,7 @@ export function pasteInto(target?: Aglyn.NodeSchema<any>): PasteResult {
     // Sequential indices keep multi-element pastes in copy order; NaN keeps
     // the append-to-end behaviour of a container target.
     const at = isNaN(index) ? NaN : index + i
-    pasted.push(Aglyn.canvas.addNodeFromNested(nested, parent, at))
+    pasted.push(canvas.addNodeFromNested(nested, parent, at))
   })
   return { nodes: pasted }
 }

@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, components } from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
 import { isTextEntryElement, isTextEntryFocused } from '../text-entry'
 
@@ -151,11 +152,11 @@ function teardownEscape(): void {
  * by the picker callback and the dialog's target chip so both read the same.
  */
 export function nodeElementLabel(nodeId: string): string {
-  const node = Aglyn.canvas.getNode(nodeId as Aglyn.NodeId) as
+  const node = canvas.getNode(nodeId as Aglyn.NodeId) as
     { componentId?: string; props?: { children?: unknown } } | undefined
   const componentId = String(node?.componentId ?? '')
   const displayName =
-    Aglyn.components.getSchema(componentId as Aglyn.ComponentId)?.displayName ||
+    components.getSchema(componentId as Aglyn.ComponentId)?.displayName ||
     componentId ||
     'Element'
   const rawChildren = node?.props?.children
