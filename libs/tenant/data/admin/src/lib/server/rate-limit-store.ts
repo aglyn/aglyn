@@ -884,6 +884,116 @@ export function resetSignupServesForTests(): void {
 }
 
 /**
+ * Document-id prefix for org-creation ATTEMPT markers (AGL-2714).
+ *
+ * ## Why serves were the wrong denominator
+ *
+ * The drought verdict beside this one asks "did traffic arrive and no account
+ * come out", and it took its denominator from `signupServed_` — a hit on
+ * `/api/lockdown-status?feature=signups`, which the signup page fetches on
+ * every render. That counts LOOKERS. Crawlers, link previews, a person
+ * reading the plan names and closing the tab, and the diagnostic page load
+ * somebody makes while investigating the alert itself all land in it.
+ *
+ * At this platform's conversion rate an hour with a handful of arrivals and
+ * no account is the ordinary case, so the check could not tell a door that
+ * does not open from a quiet afternoon — and it paged as though the service
+ * were down. No threshold fixes that; the quantity is wrong.
+ *
+ * An ATTEMPT is somebody who authenticated, filled the form and asked for an
+ * org. If those arrive and no org appears, something is broken, and the
+ * question has an answer that does not depend on how many people were merely
+ * browsing.
+ *
+ * ## Why this is stronger than the refusal marker beside it
+ *
+ * `signupRefusal_` counts requests this route TURNED AWAY, which is a
+ * deliberate outcome the code chose. An attempt marker is written before any
+ * outcome is known, so the pair spans what refusals cannot see on their own:
+ * a request that 500s, hangs, or dies in the platform between the limiter and
+ * the write leaves an attempt and no org, and no refusal at all.
+ *
+ * **The field is `attemptedAtMs`**, deliberately none of `lastAtMs`
+ * (AGL-1679), `refusedAtMs` (AGL-1907), `erroredAtMs` (AGL-1921) or
+ * `servedAtMs` (AGL-2583) — same rule the four before it follow: each health
+ * probe range-queries its own field, and a shared field would let one
+ * signal's flood fill another's read limit and silently blind it.
+ */
+export const SIGNUP_ATTEMPT_DOC_PREFIX = 'signupAttempted_'
+
+/** Marker id granularity. Matches every sibling marker kind. */
+const SIGNUP_ATTEMPT_BUCKET_MS = 60_000
+
+/**
+ * How long an attempt marker survives the TTL sweep. Seven days, matching the
+ * serve and refusal markers it is read beside — the same incident asks all
+ * three, and a denominator that outlived its numerator would answer nothing.
+ */
+const SIGNUP_ATTEMPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Record one attempt to create an org, for `/api/health/signup-volume`.
+ *
+ * Written per attempt with no in-process coalescing, unlike the serve marker.
+ * The serve marker guards a PUBLIC page whose traffic is unbounded; this one
+ * sits behind an authenticated route the limiter already caps at 3 per uid and
+ * 10 per IP an hour, so the write rate is bounded by the limiter rather than
+ * by the internet. It is also the third write on a path that already spends
+ * two `consumeRateLimit` transactions per hit, which is the same accounting
+ * `recordSignupRefusal` sets out.
+ *
+ * `FieldValue.increment` with a merge rather than a transaction: increments
+ * are commutative server-side, so instances converging on one minute's
+ * document neither contend nor retry.
+ *
+ * Nothing identifying is stored — a count and a timestamp. This marker is read
+ * by an endpoint that is public, and the drought verdict needs a number, not
+ * an audience.
+ *
+ * Never throws, and callers must not await it: creating the org is the
+ * control, and a monitoring breadcrumb must never be the reason a signup gets
+ * slower or fails.
+ */
+export function recordSignupAttempt(options?: {
+  now?: number
+  firestore?: any
+}): void {
+  const nowMs = options?.now ?? Date.now()
+  const bucketStart =
+    Math.floor(nowMs / SIGNUP_ATTEMPT_BUCKET_MS) * SIGNUP_ATTEMPT_BUCKET_MS
+  let firestore: any
+  try {
+    firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+  } catch {
+    // No Admin app (a unit test, a misconfigured instance). The signup still
+    // proceeds; only the denominator loses a tick. Losing an attempt can only
+    // make the drought alarm quieter, never louder — the opposite bias to the
+    // one that would matter here.
+    return
+  }
+  try {
+    const ref = firestore
+      .collection(RATE_LIMIT_COLLECTION)
+      .doc(`${SIGNUP_ATTEMPT_DOC_PREFIX}${bucketStart}`)
+    void Promise.resolve(
+      ref.set(
+        {
+          attempts: FieldValue.increment(1),
+          // NOT `lastAtMs`, NOT `refusedAtMs`, NOT `erroredAtMs`, NOT
+          // `servedAtMs` — see the prefix doc above.
+          attemptedAtMs: nowMs,
+          expiresAt: new Date(nowMs + SIGNUP_ATTEMPT_RETENTION_MS),
+        },
+        { merge: true },
+      ),
+    ).catch(() => undefined)
+  } catch {
+    // A Firestore handle that throws SYNCHRONOUSLY — a half-initialized admin
+    // app, a stub in a test — must not escape onto the signup request.
+  }
+}
+
+/**
  * Wall-clock budget for one durable counter round trip (AGL-2404).
  *
  * Without a bound this function could not fail at all — it could only hang.

@@ -198,7 +198,7 @@ running. Mutating either constant alone exits 1 with the two weights named.
 
 - **Decided by:** the account owner, 2026-09-09, asked whether the weight reduction had closed the gap or whether the re-peg held over from earlier the same day was now owed. Re-peg, and set the basis above the measured page so the next correction is downward.
 - **Scope:** pricing
-- **Evidence:** `METERED_UNIT_RATES_USD.perPageView` and `ORG_COGS_UNIT_RATES_USD.perPageView` both 0.0001 → **0.00016153846**; published `$0.13 / 1,000` → **`$0.21 / 1,000`**, regenerated into `tools/marketing/pricing-copy/tables.json`; `tools/tenant-page-budget.json` `wireCalibration` now `pricedForKb` 1012.8, `measuredKb` 976.1, `acceptedWeightRatio` 0.9638 against a 0.96376 actual; `npm run check:page-view-rate`, `check:pricing-drift` and `check:pricing-tables` green; the Sept-1 pin in `tools/scripts/check-pricing-drift.mjs` moved with the decision; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2711.
+- **Evidence:** `METERED_UNIT_RATES_USD.perPageView` and `ORG_COGS_UNIT_RATES_USD.perPageView` both 0.0001 → **0.00016153846**; published `$0.13 / 1,000` → **`$0.21 / 1,000`**, regenerated into `tools/marketing/pricing-copy/tables.json`; `tools/tenant-page-budget.json` `wireCalibration` now `pricedForKb` 1012.8, `measuredKb` 976.1, `acceptedWeightRatio` 0.9638 against a 0.96376 actual (both re-measured hours later — see the amendment below); `npm run check:page-view-rate`, `check:pricing-drift` and `check:pricing-tables` green; the Sept-1 pin in `tools/scripts/check-pricing-drift.mjs` moved with the decision; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2711.
 
 **A charged price moves.** This is a customer-facing increase on one metered
 line: every 1,000 page views past a plan's included band bills $0.21 instead of
@@ -249,6 +249,22 @@ replacement, `acceptedWeightRatio`, is refused above 1: the state where the rate
 prices less page than it serves cannot be re-entered by editing a number in a
 JSON file, and a page that grows back into the headroom is red before it gets
 there.
+
+**Amended the same day: the page fell to 748.5 KB and the rate stayed.** Hours
+after this decision the deferral work in AGL-2710 shipped and a re-measure on
+the same instrument read **748.5 KB**, putting the 1012.8 KB basis 35% above the
+page rather than 3.6% above it. The owner reviewed the new figure and kept
+$0.21, on the reasoning recorded above — it is easy to charge less later and
+hard to charge more — and on the observation that repricing twice in one day is
+the churn measure-once-price-once exists to prevent. No rate moved and no band
+moved; `measuredKb` is 748.5 and `acceptedWeightRatio` 0.7391 against a 0.739040
+actual.
+
+What the surplus costs is recorded rather than left to be rediscovered: at
+748.5 KB the true cost is $0.000119378 per view, so the billed rate is 1.76x
+true cost against a published claim of 1.30x. That is the argument for lowering
+it once the page settles, and lowering is margin-neutral because
+`ESTIMATED_PAGE_TRANSFER_BYTES` is the paired half (AGL-2712).
 
 ---
 

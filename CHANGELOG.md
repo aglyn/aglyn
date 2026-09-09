@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.106 — 2026-09-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/4afe2f4b3...v1.0.0-beta.106)
+
+### Fixed
+
+- **health:** take the signup drought on attempts, not on page views ([AGL-2714](https://linear.app/aglyn/issue/AGL-2714), [AGL-2581](https://linear.app/aglyn/issue/AGL-2581))
+
+### Documentation
+
+- **pricing:** record the same-day re-measure that left $0.21 standing ([AGL-2711](https://linear.app/aglyn/issue/AGL-2711), [AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+
 ## v1.0.0-beta.105 — 2026-09-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/66512fe85...v1.0.0-beta.105)

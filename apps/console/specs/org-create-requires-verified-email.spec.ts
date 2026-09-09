@@ -46,6 +46,9 @@ const mockEnforceSanctions = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // AGL-2714: the drought denominator. A wholesale mock that omits a new
+  // barrel export makes the route throw, not the assertion fail.
+  recordSignupAttempt: () => undefined,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
