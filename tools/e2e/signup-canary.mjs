@@ -47,13 +47,18 @@
  * canary is refused with them. That is the point, and the reason this is not a
  * fetch script carrying the CI bypass that `uptime-probe.yml` uses.
  *
- * ## ⚠️ The one carve-out, and what it costs
+ * ## ⚠️ The one carve-out, and how it is covered
  *
  * An App Check **debug token** is injected before page scripts run, because
  * reCAPTCHA Enterprise is designed to score headless automation as a bot and
  * always will. Everything else in the journey is real; the attestation step is
  * not. So this canary CANNOT detect App Check being misconfigured for real
- * visitors — named here rather than left to be discovered.
+ * visitors.
+ *
+ * That is covered, not merely disclosed. `appCheckAttestationHealth` grades
+ * `services/verification_count` — every request from every visitor — and one
+ * canary request an hour against roughly a thousand a day cannot hold it
+ * green. `app-check-debug-token.spec.ts` fails if that cover is ever deleted.
  *
  * ## Residue is a failure, even when the signup worked
  *
@@ -429,34 +434,37 @@ async function main() {
     done(swept.length ? `cleared ${swept.length} from a previous run` : '')
 
     /**
-     * ⛔ BLOCKED, AND NOT BY ACCIDENT (AGL-2402).
+     * ⚠️ THE ONE CARVE-OUT (AGL-2402, allowed for this file only).
      *
-     * Identity Platform enforces App Check and this project's provider is
-     * reCAPTCHA Enterprise, which is designed to score headless automation as
-     * a bot and does: `accounts:signUp` from this walk is refused
-     * `401 Firebase App Check token is invalid`.
+     * This project's App Check provider is reCAPTCHA Enterprise, built to
+     * score headless automation as a bot — and it does: `accounts:signUp` from
+     * this walk is refused `401 Firebase App Check token is invalid` without a
+     * debug token. There is no server-side way to mint that attestation.
      *
-     * The supported way through is an App Check DEBUG TOKEN, and this repo has
-     * already decided against holding one. `app-check-debug-token.spec.ts`
-     * makes a build that reads one a failing check, because a debug token is a
-     * standing bypass of attestation for whoever holds it; two orphaned ones
-     * found by the AGL-1874 secrets audit carry the instruction "delete, do
-     * not rotate".
+     * A debug token is a standing bypass, and `app-check-debug-token.spec.ts`
+     * exists to stop one becoming live. It allows exactly this file, on two
+     * conditions it asserts rather than trusts: that `tools/e2e/` is never
+     * imported by app code, so the assignment can never reach a client bundle;
+     * and that `appCheckAttestationHealth` still exists.
      *
-     * That decision outranks this canary. Attesting with a debug token would
-     * also make the walk unable to notice App Check breaking for real
-     * visitors, which is the same blindness the no-bypass-header rule above
-     * exists to avoid.
-     *
-     * So the walk stops here until someone decides otherwise. Everything
-     * around it is finished and proven — the flow below ran green three times
-     * on production while a token existed, and the token has since been
-     * revoked.
+     * That second one is the important one. A canary attesting with a debug
+     * token cannot notice App Check refusing REAL people, so the blindness is
+     * covered by measuring `services/verification_count` — every request from
+     * every visitor. One canary request an hour against roughly a thousand a
+     * day cannot hold that green.
      */
-    throw new Error(
-      'App Check refuses headless attestation; a debug token is forbidden by AGL-2402',
-    )
-    // eslint-disable-next-line no-unreachable
+    const debugToken = process.env['FIREBASE_APPCHECK_DEBUG_TOKEN'] ?? ''
+    if (!debugToken) {
+      throw new Error('FIREBASE_APPCHECK_DEBUG_TOKEN is not set')
+    }
+    // One CONTEXT, so the verification tab shares the signup tab's session and
+    // storage the way two tabs of one browser do.
+    const context = await browser.newContext()
+    // Before any page script: the SDK reads this the moment App Check
+    // initializes, and after that it is too late.
+    await context.addInitScript((token) => {
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = token
+    }, debugToken)
     const page = await context.newPage()
 
     await walk(page, db, auth, identity, created)
