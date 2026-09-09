@@ -249,11 +249,20 @@ subscription product, Stripe records them and charges no one.
    | rate | was | now | basis |
    | -- | -- | -- | -- |
    | `storagePerGbMonth` | $0.03 | **$0.026** | GCS Standard US multi-region list — the SKU actually on our invoice |
-   | `perPageView` | $0.0001 | **$0.0001** (kept) | validated +2% against a real 627 KB cold tenant page load |
+   | `perPageView` | $0.0001 | **$0.0001** (kept then) | validated +2% against a real 627 KB cold tenant page load |
    | `perFormSubmission` | $0.0005 | **$0.00005** | ~12 Firestore reads + ~9 writes + 1 invocation; no email, no reCAPTCHA |
 
    `ORG_COGS_UNIT_RATES_USD` in `plan-entitlements.ts` carries the same three
    figures and was changed with it — they must never drift.
+
+   **`perPageView` moved again on 2026-09-09 (AGL-2711): $0.0001 →
+   $0.00016153846**, published $0.13 → $0.21 per 1,000. The cost model did not
+   change; the page weight it is applied to did. The 627 KB above was measured
+   once and never revisited while the published page grew past it, and after
+   the weight reduction shipped in v1.0.0-beta.103 a fresh measurement still
+   read 976.1 KB at settle. The rate is now pegged to a 1012.8 KB basis, set
+   deliberately above the measurement. `tools/tenant-page-budget.json` carries
+   the record and `npm run check:page-view-rate` holds it.
 
    **Re-validate this table once a real paid month exists**, i.e. once the
    Vercel team is off Hobby and GCP usage clears the free tier. Until then

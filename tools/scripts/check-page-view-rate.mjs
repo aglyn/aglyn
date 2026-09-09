@@ -63,7 +63,13 @@ const COGS_PATH = join(
 )
 
 const args = process.argv.slice(2)
-const usd = (n) => `$${n.toFixed(6)}`
+/*
+ * Eight decimals, not six. The rate is pinned so the PUBLISHED figure is round
+ * — $0.21 per 1,000 views — which makes the per-view cost a long decimal, and
+ * six places round $0.00016153846 to $0.000162, a figure that appears in no
+ * file and would send a reader looking for it.
+ */
+const usd = (n) => `$${n.toFixed(8)}`
 const pct = (n) => `${(n * 100).toFixed(1)}%`
 
 function main() {
@@ -149,11 +155,11 @@ function main() {
 
   if (verdict.rateMispriced) {
     console.error(
-      'check:page-view-rate — `perPageView` is not the rate the weight it is ' +
-        'recorded as priced for implies.\n\n' +
-        `  priced for    ${calibration.pricedForKb} KB\n` +
-        `  implies       ${usd(verdict.expectedRate)} per view\n` +
-        `  tables carry  ${usd(meteredRate)} per view\n\n` +
+      'check:page-view-rate — `perPageView` is not priced for the weight the ' +
+        'record says it is.\n\n' +
+        `  record says priced for  ${verdict.recordedBasisKb} KB\n` +
+        `  the rate is priced for  ${verdict.impliedBasisKb} KB ` +
+        `(${usd(meteredRate)} per view)\n\n` +
         'One of the two was edited without the other. The customer is billed ' +
         'this times METERED_MARKUP and the published term is "at cost + 30%", ' +
         'so a rate that disagrees with its own stated basis makes the ' +
@@ -162,19 +168,34 @@ function main() {
     return 1
   }
 
-  if (verdict.shortfallWidened) {
+  if (verdict.acceptedRatioUnderprices) {
     console.error(
-      'check:page-view-rate — a published page now weighs more, against a ' +
-        'rate that has not moved.\n\n' +
+      'check:page-view-rate — `acceptedWeightRatio` is above 1, which ' +
+        'accepts a rate priced for LESS than the page it serves.\n\n' +
+        `  accepted   ${calibration.acceptedWeightRatio}× of the priced-for weight\n\n` +
+        'That is the state the 2026-09-09 re-peg ended, and it cannot be ' +
+        're-entered by editing this file. A meter that prices under its own ' +
+        'page can only be corrected by charging MORE, which is a price rise ' +
+        'with an owner. Peg `pricedForKb` at or above `measuredKb` and move ' +
+        'both rate tables with it.',
+    )
+    return 1
+  }
+
+  if (verdict.weightRatioExceeded) {
+    console.error(
+      'check:page-view-rate — a published page has grown into the headroom ' +
+        'the rate was pegged with.\n\n' +
         `  priced for   ${calibration.pricedForKb} KB → ${usd(meteredRate)} per view\n` +
         `  measured     ${calibration.measuredKb} KB → ${usd(verdict.rateForMeasured)} per view\n` +
-        `  shortfall    ${verdict.shortfall.toFixed(2)}× ` +
-        `(reviewed and accepted: ${calibration.acknowledgedShortfall}×)\n\n` +
-        'The gap is wider than the one on record, so it has not been looked ' +
-        'at in this shape. Re-pegging the rate is a PRICING DECISION and not ' +
-        "this gate's to make: take it to whoever owns the price. If the new " +
-        'gap is accepted as it stands, `acknowledgedShortfall` is where that ' +
-        'is written down, and moving it is the argument.',
+        `  ratio        ${verdict.weightRatio.toFixed(5)} ` +
+        `(reviewed and accepted: ${calibration.acceptedWeightRatio})\n\n` +
+        'The page is heavier against its basis than the figure on record, so ' +
+        'it has not been looked at in this shape. Re-pegging the rate is a ' +
+        "PRICING DECISION and not this gate's to make: take it to whoever " +
+        'owns the price. If the new ratio is accepted as it stands, ' +
+        '`acceptedWeightRatio` is where that is written down, and moving it ' +
+        'is the argument.',
     )
     return 1
   }
@@ -193,14 +214,15 @@ function main() {
   }
 
   if (!args.includes('--json')) {
-    // The open gap is printed on a GREEN run too. A number that only appears
-    // when something breaks is a number nobody reads, and this one is a
-    // standing pricing decision rather than a transient failure.
+    // The headroom is printed on a GREEN run too. A number that only appears
+    // when something breaks is a number nobody reads, and this one is the
+    // margin a deliberate pricing decision left rather than a transient
+    // failure — it is spent by page weight, quietly, between measurements.
     console.log(
       `check:page-view-rate — ${usd(meteredRate)} per view, priced for ` +
         `${calibration.pricedForKb} KB; last measured ` +
-        `${calibration.measuredKb} KB (${verdict.shortfall.toFixed(2)}×, ` +
-        `accepted ${calibration.acknowledgedShortfall}×, would imply ` +
+        `${calibration.measuredKb} KB (${verdict.weightRatio.toFixed(5)} of ` +
+        `the basis, accepted ${calibration.acceptedWeightRatio}, would imply ` +
         `${usd(verdict.rateForMeasured)}); graph within ` +
         `${pct(Math.abs(verdict.drift))} of the review point ` +
         `(tolerance ±${pct(calibration.sourceGraphTolerance)})`,

@@ -78,17 +78,37 @@
  * tier looked cheapest at the moment it was most expensive. So this guard
  * does NOT skip an unbounded band. It FAILS on one, by name.
  *
+ * ## ⚠️ THE ANNUAL RULE NO LONGER HOLDS, AND THAT IS THE FINDING (AGL-2711)
+ *
+ * This file used to open by saying that at the page weight the platform
+ * actually serves, every paid tier would be negative at the annual price —
+ * and it pinned that as a hypothetical, mutating `perPageView` to the
+ * measured figure to show it. On 2026-09-09 the rate was re-pegged to that
+ * measurement, so the hypothetical is the live model: at 100% of every band,
+ * at the annual price net of Stripe, **every paid tier is negative**, from
+ * Starter at -3.6% to Pro at -34.1%.
+ *
+ * Nothing here resolves it, because none of the three levers is a test's to
+ * pull. The bandwidth bands were sized on 2026-09-07 against a rate that has
+ * since moved; the annual prices are locked; and the constant that converts a
+ * GB band into included page views (`ESTIMATED_PAGE_TRANSFER_BYTES`, 600 KB)
+ * is a second statement of the same physical quantity `perPageView` is now
+ * calibrated on — 1012.8 KB — so the included allowance grants roughly 1.7x
+ * the bytes its GB label implies. Moving any one of the three is a pricing or
+ * packaging decision with an owner.
+ *
+ * What this file does instead is PIN the shortfall exactly, per tier, at both
+ * prices, so the gap cannot widen without a red and cannot be closed by
+ * anything quieter than a decision. The monthly rule still holds on every
+ * tier and is still asserted as a live invariant.
+ *
  * ## What it does not claim
  *
  * The rates are operator-tuned estimates, not an invoice (`ORG_COGS_UNIT_
- * RATES_USD` says so out loud), and `perPageView` is calibrated against a
- * 627 KB page while the page the platform serves measures 1,054 KB
- * (`usage-metering.ts`). At that weight every paid tier is negative at the
- * annual price again — the pass-through block at the bottom pins the gap,
- * and closing it is a page-weight decision, not this file's. This is a
- * RELATIVE instrument: it compares the bands a tier sells against the rates
- * the platform's own cost model uses, and it fails when the product of the
- * two exceeds the price the customer pays.
+ * RATES_USD` says so out loud). This is a RELATIVE instrument: it compares
+ * the bands a tier sells against the rates the platform's own cost model
+ * uses, and it reports when the product of the two exceeds the price the
+ * customer pays.
  *
  * 100% utilization of every band at once is not a customer anyone expects.
  * It is a CEILING, and a ceiling is exactly the thing a price has to survive:
@@ -695,20 +715,31 @@ describe('every cost the platform prices has a term here', () => {
 // ---------------------------------------------------------------------------
 // The rule.
 // ---------------------------------------------------------------------------
-describe('no self-serve tier loses money at full utilization, at the ANNUAL price net of Stripe', () => {
+describe('what full utilization costs against each price, and where it stops clearing', () => {
   /**
-   * THE RULE. Not a threshold anyone chose to be comfortable — the survival
-   * condition. Every band here is INCLUDED rather than metered, so a customer
-   * spending all of it is exercising the plan exactly as sold and there is no
-   * overage to bill and no gate to refuse them.
+   * THE RULE, AND THE FACT THAT IT IS CURRENTLY BROKEN AT THE ANNUAL PRICE.
    *
-   * At the annual price, because that is the cheaper of the two prices a
+   * The rule is not a threshold anyone chose to be comfortable — it is the
+   * survival condition. Every band here is INCLUDED rather than metered, so a
+   * customer spending all of it is exercising the plan exactly as sold, and
+   * there is no overage to bill and no gate to refuse them.
+   *
+   * It is stated at the annual price because that is the cheaper of the two a
    * customer can choose and the one the page leads with. It held for none of
-   * the five upper tiers before the 2026-09-07 resize.
+   * the five upper tiers before the 2026-09-07 band resize; it held for all
+   * six after it; and it holds for none of them since the 2026-09-09 page-view
+   * re-peg, which raised the cost of the bandwidth band by 61.5% on every
+   * tier at once.
+   *
+   * So the shortfall is PINNED rather than asserted away. Every figure is
+   * exact, which is stricter than a floor: a band widened, a price cut or a
+   * rate raised moves one of these strings and has to come here and say what
+   * it did. Emptying this object is the goal, and the three ways to reach it
+   * are named in the file docblock.
    */
-  it('every paid tier holds a NON-NEGATIVE margin at 100% of every band', () => {
+  it('is NEGATIVE on every paid tier at 100% of every band, at the annual price', () => {
     const offenders = tiersUnderFloor(PAID, 1, 0, 'year')
-    // Named with the arithmetic, so a failure says which tier and by how much
+    // Named with the arithmetic, so the record says which tier and by how much
     // rather than that one exists.
     expect(
       Object.fromEntries(
@@ -719,10 +750,29 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
             `$${tierCostUsd(plan as OrgPlan, 1).toFixed(2)} cost`,
         ]),
       ),
-    ).toEqual({})
+    ).toEqual({
+      starter: '$16 annual price, $15.51 net of Stripe, vs $16.09 cost',
+      pro: '$39 annual price, $37.84 net of Stripe, vs $51.14 cost',
+      business: '$99 annual price, $96.1 net of Stripe, vs $115.73 cost',
+      scale: '$179 annual price, $173.78 net of Stripe, vs $203.52 cost',
+      advanced: '$299 annual price, $290.3 net of Stripe, vs $323.40 cost',
+      agency: '$1049 annual price, $1018.55 net of Stripe, vs $1168.76 cost',
+    })
+    // …and it is EVERY tier, not a subset that could be read as one tier's
+    // problem. A shortfall on one rung is a band to re-cut; a shortfall on all
+    // six is the rate underneath them.
+    expect(offenders.sort()).toEqual([...PAID].sort())
   })
 
-  it('and holds it at the monthly price, which is the easier of the two', () => {
+  /**
+   * THE INVARIANT THAT SURVIVES, and the reason the annual shortfall is a
+   * pricing question rather than an outage.
+   *
+   * A monthly customer at 100% of every band still pays for themselves on
+   * every tier. What the annual price buys is a 26–35% discount, and it is
+   * that discount the re-pegged bandwidth cost now overruns.
+   */
+  it('holds at the monthly price on every tier, which is the easier of the two', () => {
     expect(tiersUnderFloor(PAID, 1, 0, 'month')).toEqual([])
     // The rule is stated at the annual price so that it holds at the monthly
     // one for free — asserted rather than assumed, on every tier.
@@ -748,13 +798,23 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u, 'year'))]),
       ),
     ).toEqual({
-      starter: [84.4, 80.2, 63.4, 30],
-      pro: [81.6, 72.9, 48.7, 0.4],
-      business: [76.9, 72.9, 48.7, 0.3],
-      scale: [80.3, 73, 48.9, 0.8],
-      advanced: [80.4, 73.2, 49.2, 1.3],
-      agency: [78, 73.2, 49.3, 1.5],
+      starter: [84.4, 71.8, 46.6, -3.6],
+      pro: [81.6, 64.2, 31.5, -34.1],
+      business: [76.9, 67.8, 38.6, -19.8],
+      scale: [80.3, 68.7, 40.2, -16.6],
+      advanced: [80.4, 70.1, 43, -11.1],
+      agency: [78, 69.2, 41.4, -14.3],
     })
+    // The 3% column did not move on any tier, and that is not a rounding
+    // coincidence. At 3% of every band the per-site FLOOR governs
+    // (`INFRA_COGS_PER_SITE_USD` x hostLimit), and the floor is a flat dollar
+    // figure no unit rate touches — so the one column the re-peg leaves alone
+    // is the one where measured cost is not what is being charged against.
+    for (const plan of PAID) {
+      expect(`${plan}: ${tierCostUsd(plan, 0.03)}`).toBe(
+        `${plan}: ${INFRA_COGS_PER_SITE_USD * PLAN_ENTITLEMENTS[plan].hostLimit}`,
+      )
+    }
   })
 
   it('and these at the monthly price', () => {
@@ -763,47 +823,64 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u, 'month'))]),
       ),
     ).toEqual({
-      starter: [87.9, 85.2, 74.5, 53.1],
-      pro: [85.9, 79.7, 62.9, 29.3],
-      business: [82.5, 79.6, 62.4, 27.9],
-      scale: [84.9, 79.7, 62.4, 27.8],
-      advanced: [84.5, 79.1, 61.1, 25.3],
-      agency: [81.7, 77.8, 58.5, 19.9],
+      starter: [87.9, 79.8, 63.7, 31.5],
+      pro: [85.9, 73.7, 50.9, 5.3],
+      business: [82.5, 76.1, 55.3, 13.6],
+      scale: [84.9, 76.5, 56.1, 15.2],
+      advanced: [84.5, 76.8, 56.5, 16],
+      agency: [81.7, 74.6, 52.1, 7.1],
     })
   })
 
-  it('clears 70% at the realistic 25% band, on every tier, at the annual price', () => {
-    expect(tiersUnderFloor(PAID, 0.25, 0.7, 'year')).toEqual([])
-    // BOTH WAYS: a few points higher and the ladder starts to fail, so this
-    // is a real edge rather than a number nothing could cross.
-    expect(tiersUnderFloor(PAID, 0.25, 0.75, 'year')).not.toEqual([])
+  /**
+   * THE REALISTIC BAND, where the annual ladder still mostly stands.
+   *
+   * 25% of every band at once is the utilization the 2026-09-07 resize was
+   * argued on. The re-peg took roughly nine points off every tier there, and
+   * four of the six fell through the 70% line — Advanced and Starter did not.
+   * Pinned as the set rather than as an empty array, for the reason the
+   * headline shortfall is: an exact set moves when anything moves.
+   */
+  it('is thinner than 70% on four of six tiers at the realistic 25% band', () => {
+    expect(tiersUnderFloor(PAID, 0.25, 0.7, 'year').sort()).toEqual([
+      'agency',
+      'business',
+      'pro',
+      'scale',
+    ])
+    // The two that clear it, named, so "four of six" cannot quietly become
+    // six of six without a red.
+    expect(tiersUnderFloor(PAID, 0.25, 0.7, 'year')).not.toContain('starter')
+    expect(tiersUnderFloor(PAID, 0.25, 0.7, 'year')).not.toContain('advanced')
+    // BOTH WAYS: at the monthly price the same utilization clears 70% on
+    // every tier, which is where the annual discount is being spent.
+    expect(tiersUnderFloor(PAID, 0.25, 0.7, 'month')).toEqual([])
   })
 
   /**
-   * THE BAND THE LADDER ACTUALLY OCCUPIES, which is a stricter statement than
-   * the rule above.
+   * THE BAND THE LADDER ACTUALLY OCCUPIES.
    *
-   * Non-negative is the survival condition. This is the shape the tiers hold
-   * once every cost is counted at the annual price: each paid worst case sits
-   * between 0.25% and 1.5%, Business setting the low end at $0.27 a month of
-   * headroom and Starter — which sells no campaign email and no assist — the
-   * high end at 30%. Thin, and thin on purpose: the bands were cut to what
-   * the price carries and no further, because every gigabyte cut is capacity
-   * the customer no longer has. The runs term took the last of the room:
-   * without it Pro and Business sat at 0.7% and 1.5%.
+   * Between the 2026-09-07 resize and the 2026-09-09 re-peg the annual worst
+   * cases sat between 0.25% and 1.5% — cut to what the price carried and no
+   * further, because every gigabyte cut is capacity the customer no longer
+   * has. That headroom was 1.5 points wide and the re-peg was 61.5% on the
+   * largest term, so all of it went and then some: the ladder now runs from
+   * -3.6% on Starter down to -34.1% on Pro.
    *
-   * At the monthly price the same ladder sits between 19% and 30%, which is
-   * the room a monthly customer buys with the 26–35% they pay over annual.
+   * The monthly ladder is what the annual one used to be — 5.3% to 31.5%,
+   * still positive on every rung, still thin at the top of the ladder where
+   * the bands are largest.
    */
-  it('holds a 0.25% floor at 100% at the annual price, which is where the ladder sits', () => {
-    expect(tiersUnderFloor(PAID, 1, 0.0025, 'year')).toEqual([])
-    // BOTH WAYS. A quarter point higher and the two thinnest rungs fail, so
-    // this is a real edge rather than a number nothing on the ladder could
-    // cross.
-    expect(tiersUnderFloor(PAID, 1, 0.005, 'year')).toEqual(['business', 'pro'])
-    // …and at the monthly price the ladder sits a whole band higher.
-    expect(tiersUnderFloor(PAID, 1, 0.19, 'month')).toEqual([])
-    expect(tiersUnderFloor(PAID, 1, 0.2, 'month')).toEqual(['agency'])
+  it('runs from -3.6% to -34.1% at 100% annual, and stays positive monthly', () => {
+    // The annual ladder, as an ordered floor sweep rather than six literals:
+    // every tier is under zero, none is under -35%, and Pro is the worst rung.
+    expect(tiersUnderFloor(PAID, 1, 0, 'year').sort()).toEqual([...PAID].sort())
+    expect(tiersUnderFloor(PAID, 1, -0.35, 'year')).toEqual([])
+    expect(tiersUnderFloor(PAID, 1, -0.34, 'year')).toEqual(['pro'])
+    // …and the monthly ladder still clears, with Pro the thinnest rung there
+    // too. Same shape, one price up.
+    expect(tiersUnderFloor(PAID, 1, 0.05, 'month')).toEqual([])
+    expect(tiersUnderFloor(PAID, 1, 0.06, 'month')).toEqual(['pro'])
   })
 
   it('CONTROL: the floor is not so low that nothing could fail it', () => {
@@ -832,15 +909,17 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
       ]),
     )
     expect(was).toEqual({
-      pro: -44.4,
-      business: -37.7,
-      scale: -39.2,
-      advanced: -36.9,
-      agency: -22.9,
+      pro: -106.5,
+      business: -81.1,
+      scale: -81.3,
+      advanced: -72.9,
+      agency: -53.6,
     })
-    // …and at the MONTHLY price three of the five were negative even there —
-    // the guard that stood here read +10.0 … +6.7% on all five, because it
-    // counted neither Stripe's fee, nor the two CRM terms, nor the runs.
+    // …and at the MONTHLY price all five were negative too. Three of the five
+    // were before the 2026-09-09 re-peg; the other two joined them when the
+    // rate under the axis rose 61.5%. The guard that stood here originally
+    // read +10.0 … +6.7% on all five, because it counted neither Stripe's
+    // fee, nor the two CRM terms, nor the runs.
     expect(
       Object.fromEntries(
         Object.entries(before).map(([plan, gb]) => [
@@ -848,10 +927,12 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
           Number((marginAtBandwidth(plan as OrgPlan, gb, 'month') * 100).toFixed(1)),
         ]),
       ),
-    ).toEqual({ pro: -1.9, business: 0.9, scale: -1, advanced: -3.4, agency: 0.2 })
-    // BOTH WAYS, on the one axis that moved: the shipped band clears.
+    ).toEqual({ pro: -45.2, business: -30, scale: -31.2, advanced: -30.4, agency: -24.6 })
+    // BOTH WAYS, on the one axis that moved: the shipped band clears at the
+    // monthly price. Read there rather than at the annual one, which the
+    // re-peg took below zero on every tier — see the file docblock.
     for (const plan of Object.keys(before) as Array<keyof typeof before>) {
-      expect(`${plan} is not: ${tierMargin(plan, 1, 'year') >= 0}`).toBe(`${plan} is not: true`)
+      expect(`${plan} is not: ${tierMargin(plan, 1, 'month') >= 0}`).toBe(`${plan} is not: true`)
       expect(PLAN_ENTITLEMENTS[plan].bandwidthGb).toBeLessThan(before[plan])
     }
     // Starter is the CONTROL: its band did not move, so its margin reads the
@@ -864,13 +945,23 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
     // The single-axis version, because a mutation that changes four things at
     // once can pass for the wrong reason. Advanced's contacts band alone —
     // 1,000,000 at $0.0002 is $200 against a $299 annual price.
+    //
+    // Read at the MONTHLY price since the 2026-09-09 re-peg. Both directions
+    // is the whole value of a mutation, and the annual price no longer
+    // supplies the positive half on any tier — proving a band breaks a margin
+    // that is already negative proves nothing about the band.
     const restored =
       measuredCostUsd('advanced') -
       tierCostTerms('advanced').contacts +
       1_000_000 * ORG_COGS_UNIT_RATES_USD.perContactMonth
-    expect((netPriceUsd('advanced', 'year') - restored) / listPriceUsd('advanced', 'year')).toBeLessThan(0)
+    expect((netPriceUsd('advanced', 'month') - restored) / listPriceUsd('advanced', 'month')).toBeLessThan(0)
     // …and with the shipped band it is positive. Both directions on one axis.
-    expect(tierMargin('advanced', 1)).toBeGreaterThan(0)
+    expect(tierMargin('advanced', 1, 'month')).toBeGreaterThan(0)
+    // The annual side of the same axis, kept as the record of how much of the
+    // shortfall this one band is: restoring it roughly doubles Advanced's.
+    expect((netPriceUsd('advanced', 'year') - restored) / listPriceUsd('advanced', 'year')).toBeLessThan(
+      tierMargin('advanced', 1, 'year'),
+    )
   })
 
   /**
@@ -880,7 +971,7 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
    * Pro's bands at once cannot read as this one, which moved bandwidth and
    * nothing else.
    */
-  it('spends 58% of Pro on bandwidth, and the rest on ten small terms', () => {
+  it('spends 69% of Pro on bandwidth, and the rest on ten small terms', () => {
     const terms = tierCostTerms('pro')
     expect(
       Object.fromEntries(
@@ -892,7 +983,7 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
     ).toEqual({
       mediaStorage: 0.78,
       formSubmissions: 0.15,
-      bandwidth: 21.8453,
+      bandwidth: 35.2886,
       datasetStorage: 0.9,
       apiRequests: 0,
       contacts: 2,
@@ -902,26 +993,48 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
       crmSeats: 0.6,
       crmEmail: 4.05,
     })
-    // The ten others total $15.85 against a $37.84 net annual price, so
-    // none of them — nor all of them together — decides the tier. Bandwidth
-    // was the only lever that could.
+    // The ten others total $15.85 against a $37.84 net annual price, and not
+    // one of them moved on 2026-09-09 — bandwidth alone went from $21.85 to
+    // $35.29, which is 58% of the tier's cost becoming 69% of a larger one.
+    // Nothing but this axis can decide the tier, and nothing but the rate
+    // decided this axis.
     const total = Object.values(terms).reduce((a, b) => a + b, 0)
     expect(total - terms.bandwidth).toBeCloseTo(15.85, 2)
-    expect(terms.bandwidth / total).toBeGreaterThan(0.55)
+    expect(terms.bandwidth / total).toBeGreaterThan(0.68)
+    // The axis, read back through the rate that sets it, so the term cannot
+    // drift from the constant it is a product of.
+    expect(terms.bandwidth).toBeCloseTo(
+      PLAN_ENTITLEMENTS.pro.bandwidthGb *
+        VIEWS_PER_GB *
+        ORG_COGS_UNIT_RATES_USD.perPageView,
+      10,
+    )
   })
 
-  it('MUTATION: Pro at its OLD 7,500-credit assist band is under water at the annual price', () => {
+  it('MUTATION: Pro at its OLD 7,500-credit assist band is deeper under water', () => {
     // The assist axis on its own, on the tier with the least room. $7.50 of
-    // provider spend against the 26¢ Pro's other terms leave out of $37.84.
+    // provider spend on a tier whose annual price is already $13.30 short of
+    // its own bands.
     const terms = tierCostTerms('pro')
     const restored =
       Object.values(terms).reduce((a, b) => a + b, 0) -
       terms.assistCredits +
       7_500 * ASSIST_CREDIT_COST_USD
     expect(listPriceUsd('pro', 'year')).toBe(39)
-    expect((netPriceUsd('pro', 'year') - restored) / 39).toBeCloseTo(-0.118, 3)
-    // …and Scale and Advanced at their old bands go the same way. Same axis,
-    // same arithmetic, on the two tiers with the most to give back.
+    expect((netPriceUsd('pro', 'year') - restored) / 39).toBeCloseTo(-0.463, 3)
+    // BOTH DIRECTIONS, on the one tier and the one interval where the sign
+    // still turns: Pro's monthly price has $2.97 of room at 100% of every
+    // band, and the extra 4,750 credits are $4.75 of provider spend.
+    const proRestoredMonthly =
+      (netPriceUsd('pro', 'month') - restored) / listPriceUsd('pro', 'month')
+    expect(proRestoredMonthly).toBeLessThan(0)
+    expect(tierMargin('pro', 1, 'month')).toBeGreaterThan(0)
+    // Scale and Advanced go the same way on the same axis, but their monthly
+    // room is wider than their old bands cost, so a sign test there would
+    // assert nothing. What holds on every tier is the ARITHMETIC: restoring
+    // the band costs exactly the credit delta, and moves the margin by
+    // exactly that over the price. A model that had stopped reading the band
+    // fails this where a sign test would have passed.
     for (const [plan, oldBand] of [
       ['scale', 32_000],
       ['advanced', 52_000],
@@ -930,12 +1043,19 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
         measuredCostUsd(plan) -
         tierCostTerms(plan).assistCredits +
         oldBand * ASSIST_CREDIT_COST_USD
+      const restoredMargin =
+        (netPriceUsd(plan, 'month') - was) / listPriceUsd(plan, 'month')
+      expect(restoredMargin).toBeLessThan(tierMargin(plan, 1, 'month'))
+      expect(tierMargin(plan, 1, 'month') - restoredMargin).toBeCloseTo(
+        ((oldBand - PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth) *
+          ASSIST_CREDIT_COST_USD) /
+          listPriceUsd(plan, 'month'),
+        12,
+      )
+      // …and at the annual price both bands are under water, which is the
+      // shortfall the file docblock names rather than anything this axis did.
       expect(`${plan} was negative: ${(netPriceUsd(plan, 'year') - was) / listPriceUsd(plan, 'year') < 0}`).toBe(
         `${plan} was negative: true`,
-      )
-      // Both directions on one axis: with the shipped band it clears.
-      expect(`${plan} is not: ${tierMargin(plan, 1) > 0}`).toBe(
-        `${plan} is not: true`,
       )
     }
   })
@@ -975,25 +1095,25 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
   })
 
   /**
-   * STARTER IS NOT IN THE SAME POSITION, and the arithmetic is here rather
-   * than asserted by absence. Its bands imply $10.72 against a $16 annual
-   * price — the widest paid margin on the ladder — and bandwidth is 82% of
-   * that, $8.74. The lever the others needed exists on Starter and is not
-   * called for.
+   * STARTER IS THE SHALLOWEST RUNG, and the arithmetic is here rather than
+   * asserted by absence. Its bands imply $16.09 against a $16 annual price —
+   * the narrowest shortfall on the ladder, -3.6% — and bandwidth is 88% of
+   * that, $14.12.
    *
    * It is also THE CONTROL FOR THE BAND RESIZE. Starter sells neither assist
    * nor campaign email, so those two terms are ZERO here, and its bandwidth
-   * did not move, so the tier's cost is the same figure before and after
-   * 2026-09-07. A sweep that touched every tier would move this one too.
+   * BAND did not move on 2026-09-07 — only the rate under it moved, on
+   * 2026-09-09, which is why this tier's cost rose with every other one.
    */
-  it('leaves Starter where it is, with room the ladder does not have', () => {
+  it('leaves Starter the shallowest rung, on bandwidth alone', () => {
     expect(listPriceUsd('starter', 'month')).toBe(25)
     expect(listPriceUsd('starter', 'year')).toBe(16)
-    expect(tierCostUsd('starter', 1)).toBeCloseTo(10.72, 2)
-    // The metered axes alone are the $9.18 the guard here always read for
-    // Starter plus the 500 runs it sells, 0.6¢; the CRM decision terms are
-    // the $1.53 on top.
-    expect(Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0)).toBeCloseTo(9.19, 2)
+    expect(tierCostUsd('starter', 1)).toBeCloseTo(16.09, 2)
+    // The metered axes alone are $14.57 — $8.74 of which was bandwidth before
+    // the re-peg and $14.12 after — plus the 500 runs it sells, 0.6¢; the CRM
+    // decision terms are the $1.53 on top.
+    expect(Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0)).toBeCloseTo(14.56, 2)
+    expect(bandCostTerms('starter').bandwidth).toBeCloseTo(14.12, 2)
     expect(PLAN_ENTITLEMENTS.starter.bandwidthGb).toBe(50)
     // Untouched by the assist term, because there is no band to price: the
     // term is present and it is ZERO, which is a different statement from
@@ -1009,16 +1129,24 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
     expect(Object.keys(tierCostTerms('starter'))).toContain('emailSends')
     expect(tierCostTerms('starter').emailSends).toBe(0)
     expect(PLAN_ENTITLEMENTS.starter.emailSendsPerMonth).toBe(0)
-    // Doubling the dominant rate is the move this ladder is thin against.
-    // Starter still clears 18% at the monthly price there; Pro does not
-    // survive it on either interval — which is what makes the page-view rate
-    // the figure to calibrate next (see the pass-through block).
+    // Doubling the dominant rate is the move this ladder is thin against, and
+    // it no longer spares anybody. Starter cleared 18% monthly at a doubled
+    // $0.0001; at a doubled $0.00016153846 every tier is negative on both
+    // intervals. The 61.5% the rate actually moved on 2026-09-09 is most of
+    // the way to this, which is why it took the whole annual ladder with it.
     const atDoubleRate = (plan: OrgPlan, interval: Interval) =>
       (netPriceUsd(plan, interval) - (measuredCostUsd(plan) + tierCostTerms(plan).bandwidth)) /
       listPriceUsd(plan, interval)
-    expect(atDoubleRate('starter', 'month')).toBeGreaterThan(0.18)
-    expect(atDoubleRate('pro', 'month')).toBeLessThan(0)
-    expect(atDoubleRate('pro', 'year')).toBeLessThan(0)
+    for (const plan of PAID) {
+      for (const interval of ['month', 'year'] as const) {
+        expect(`${plan} ${interval}: ${atDoubleRate(plan, interval) < 0}`).toBe(
+          `${plan} ${interval}: true`,
+        )
+      }
+    }
+    // …and it is the doubling doing that, not the shipped rate: at the
+    // shipped rate the monthly ladder clears on every tier.
+    expect(tiersUnderFloor(PAID, 1, 0, 'month')).toEqual([])
   })
 
   /**
@@ -1074,18 +1202,25 @@ describe('no self-serve tier loses money at full utilization, at the ANNUAL pric
     expect(bands).toEqual([...bands].sort((a, b) => a - b))
   })
 
-  it('Agency clears zero on its own, at the annual price, after the resize and the price rise', () => {
+  it('Agency clears zero monthly and is $150 short annually, on the bandwidth axis', () => {
     const cost = tierCostUsd('agency', 1)
-    expect(cost).toBeCloseTo(1003.13, 2)
+    expect(cost).toBeCloseTo(1168.76, 2)
     expect(listPriceUsd('agency', 'year')).toBe(1049)
     expect(netPriceUsd('agency', 'year')).toBe(1018.55)
-    expect(netPriceUsd('agency', 'year') - cost).toBeGreaterThan(0)
-    // At the old $649 annual price ($630.15 net) the same cost was a $373
+    // It cleared zero annually between the 2026-09-07 resize and the
+    // 2026-09-09 re-peg, on $15.42 of headroom. The re-peg added $165.63 to
+    // the bandwidth term alone — 2.69M included views at $0.00016153846
+    // instead of $0.0001 — so the annual price is now $150.21 short.
+    expect(netPriceUsd('agency', 'year') - cost).toBeCloseTo(-150.21, 2)
+    // The monthly price still carries it, which is the whole of the
+    // difference between the two intervals on this tier.
+    expect(netPriceUsd('agency', 'month') - cost).toBeGreaterThan(0)
+    // At the old $649 annual price ($630.15 net) the same cost is a $538
     // loss per month — and that is with the 2026-09-07 bands; at 3,000 GB it
-    // was $628, and the real figure before the form band was bounded was
+    // is $958, and the real figure before the form band was bounded was
     // unbounded.
-    expect(netOfProcessorFee(649, true) - cost).toBeLessThan(-370)
-    expect(netOfProcessorFee(649, true) - (cost - tierCostTerms('agency').bandwidth + 3000 * VIEWS_PER_GB * ORG_COGS_UNIT_RATES_USD.perPageView)).toBeLessThan(-620)
+    expect(netOfProcessorFee(649, true) - cost).toBeLessThan(-530)
+    expect(netOfProcessorFee(649, true) - (cost - tierCostTerms('agency').bandwidth + 3000 * VIEWS_PER_GB * ORG_COGS_UNIT_RATES_USD.perPageView)).toBeLessThan(-950)
   })
 })
 
@@ -1336,9 +1471,10 @@ describe("Free's bandwidth band, and everything derived from it", () => {
   /**
    * Free is the ONE plan whose bandwidth cannot be metered — there is no
    * subscription to bill an overage onto — so its band is a pure give. At the
-   * platform's own $0.0001 per page view, 5 GB was $0.88 a month per free org
-   * against no revenue; 2 GB is $0.36 and still covers roughly 3,500 page
-   * views, which is more than enough to evaluate the product.
+   * $0.0001 per page view the platform read until 2026-09-09, 5 GB was $0.88
+   * a month per free org against no revenue and 2 GB was $0.36; at the
+   * re-pegged $0.00016153846 the same 2 GB is $0.56, and still covers roughly
+   * 3,500 page views, which is more than enough to evaluate the product.
    *
    * Nothing else about Free moves. It is asserted here rather than assumed,
    * because "we trimmed Free" and "we trimmed one band on Free" are different
@@ -1357,7 +1493,7 @@ describe("Free's bandwidth band, and everything derived from it", () => {
   it('costs what the give is worth, at the platform\'s own rate', () => {
     const monthlyCostUsd =
       PLAN_ENTITLEMENTS.free.bandwidthGb * VIEWS_PER_GB * ORG_COGS_UNIT_RATES_USD.perPageView
-    expect(monthlyCostUsd).toBeCloseTo(0.35, 2)
+    expect(monthlyCostUsd).toBeCloseTo(0.56, 2)
     // …and the band still buys a usable evaluation.
     expect(PLAN_ENTITLEMENTS.free.bandwidthGb * VIEWS_PER_GB).toBeGreaterThan(3_000)
   })
@@ -1407,13 +1543,16 @@ describe("Free's bandwidth band, and everything derived from it", () => {
 
   /**
    * THE CEILING IS A CAP, NOT A PRICE. It came down from 10x to 3x on
-   * 2026-09-07 because the page-view meter under it is priced for a 627 KB
-   * page while the platform serves 1,054 KB: past the band every 1,000 views
-   * bills $0.13 and costs about $0.17, so the tail a metered plan can run up
-   * before staff look at it is a loss that grows with the traffic. At 10x
-   * that tail was $2,374 a month on Agency at the measured page weight. No
-   * charged rate moved with it — the pass-through block below pins all
-   * three.
+   * 2026-09-07 because the page-view meter under it was priced for a 627 KB
+   * page while the platform served over a thousand: past the band every 1,000
+   * views billed $0.13 and cost about $0.17, so the tail a metered plan could
+   * run up before staff looked at it grew with the traffic. At 10x that tail
+   * was $2,374 a month on Agency at the measured page weight.
+   *
+   * The 2026-09-09 re-peg removed the loss — 1,000 views now bill $0.21
+   * against about $0.16 — and the ceiling stays at 3x anyway. It was never a
+   * margin instrument: a scraper or a hotlinked asset bills the account holder
+   * for traffic they did not ask for, and the cap is what bounds that.
    */
   it('the abuse CEILING is 3x the band, floored, from the entitlement', () => {
     expect(BANDWIDTH_ABUSE_CEILING_MULTIPLE).toBe(3)
@@ -1464,12 +1603,16 @@ describe('the infra pass-through is priced by a different rule', () => {
     expect(METERED_MARKUP).toBe(1.3)
   })
 
-  it('and the three pass-through rates are untouched by the band resize', () => {
+  it('carries the three pass-through rates as published', () => {
     expect(METERED_UNIT_RATES_USD.storagePerGbMonth).toBe(0.026)
-    expect(METERED_UNIT_RATES_USD.perPageView).toBe(0.0001)
+    // Untouched by the 2026-09-07 band resize; re-pegged on 2026-09-09 by the
+    // page-weight decision, which is the one change on this axis that is a
+    // customer-facing price and not a capacity one.
+    expect(METERED_UNIT_RATES_USD.perPageView).toBe(0.00016153846)
     expect(METERED_UNIT_RATES_USD.perFormSubmission).toBe(0.00005)
-    // …and still identical to the COGS table, which is the pairing a
-    // 2026-08-09 correction had to change in both places at once.
+    // …and still identical to the COGS table, which is the pairing both the
+    // 2026-08-09 correction and the 2026-09-09 re-peg had to change in two
+    // places at once.
     for (const key of ['storagePerGbMonth', 'perPageView', 'perFormSubmission'] as const) {
       expect(`${key}: ${METERED_UNIT_RATES_USD[key]}`).toBe(
         `${key}: ${ORG_COGS_UNIT_RATES_USD[key]}`,
@@ -1478,39 +1621,45 @@ describe('the infra pass-through is priced by a different rule', () => {
   })
 
   /**
-   * THE FIGURE THE OWNER SEES BESIDE THE MODELED ONE. `perPageView` is
-   * calibrated against a 627 KB page; the page the platform serves measures
-   * 1,054.3 KB (`usage-metering.ts`, `tools/tenant-page-budget.json`). At the
-   * same per-KB basis the view rate is $0.000168, and at THAT rate every paid
-   * tier is under water again at the annual price with the resized bands —
-   * Starter included. The bands were sized at the modeled rate by decision;
-   * this pins what the other rate says, so the gap cannot be forgotten and
-   * cannot be closed by editing the published figure alone.
+   * THE RATE THE MODEL NOW READS IS THE MEASURED ONE, and this is what the
+   * model said before it did.
+   *
+   * Until 2026-09-09 this case mutated `perPageView` to the figure the
+   * measured page implied and pinned the result as a warning: at that rate
+   * every paid tier would be under water at the annual price, Starter
+   * included. The re-peg made it the live rate, so the mutation runs the
+   * other way now — back to the $0.0001 the meter carried while it was
+   * calibrated against a 627 KB page.
+   *
+   * Kept, rather than deleted with the gap it recorded, because it is the one
+   * case that proves the ladder above responds to THIS rate and not to a
+   * constant that happens to sit beside it. It also holds the size of the
+   * move: 61.5% on the rate is 30 to 35 points of annual margin on every
+   * tier, which is the number a re-pricing conversation starts from.
    */
-  it('at the page weight the platform actually serves, the annual invariant does not hold', () => {
-    const measuredViewRate = (0.0001 * 1010.3) / 627
+  it('MUTATION: at the rate the meter carried until 2026-09-09, the annual ladder cleared', () => {
     const rates = ORG_COGS_UNIT_RATES_USD as unknown as Record<string, number>
     const original = rates.perPageView
-    let atMeasured: Record<string, [number, number]>
+    let atOldRate: Record<string, [number, number]>
     try {
-      rates.perPageView = measuredViewRate
-      atMeasured = Object.fromEntries(
+      rates.perPageView = 0.0001
+      atOldRate = Object.fromEntries(
         PAID.map((plan) => [plan, [pct(plan, 1, 'month'), pct(plan, 1, 'year')]]),
       )
     } finally {
       rates.perPageView = original
     }
-    expect(atMeasured).toEqual({
-      starter: [31.7, -3.4],
-      pro: [5.4, -33.9],
-      business: [13.7, -19.7],
-      scale: [15.3, -16.5],
-      advanced: [16, -11],
-      agency: [7.2, -14.2],
+    expect(atOldRate).toEqual({
+      starter: [53.1, 30],
+      pro: [29.3, 0.4],
+      business: [27.9, 0.3],
+      scale: [27.8, 0.8],
+      advanced: [25.3, 1.3],
+      agency: [19.9, 1.5],
     })
     // …and the rate really was restored, or every pin above this line would
     // be the next run's surprise.
-    expect(ORG_COGS_UNIT_RATES_USD.perPageView).toBe(0.0001)
+    expect(ORG_COGS_UNIT_RATES_USD.perPageView).toBe(0.00016153846)
   })
 
   it('a smaller band WIDENS what the pass-through bills, which is the point', () => {

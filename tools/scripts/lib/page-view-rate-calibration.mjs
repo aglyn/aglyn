@@ -47,15 +47,16 @@
  *
  * So the three comparisons this module makes each stay inside one unit:
  *
- *   **Priced-for** (dollars ↔ dollars). `perPageView` must equal the rate that
- *   the weight it CLAIMS to be calibrated against implies, at the per-KB cost
- *   the original calibration fixed. This is the rate agreeing with its own
- *   stated basis, so it is red the moment either is edited alone.
+ *   **Priced-for** (KB ↔ KB). The rate is divided back through the fixed
+ *   per-KB cost to recover the page weight it is priced for, and that has to
+ *   be the weight the record CLAIMS it is priced for. This is the rate
+ *   agreeing with its own stated basis, so it is red the moment either is
+ *   edited alone.
  *
- *   **Shortfall** (KB ↔ KB). What a page measures now, over what the rate is
- *   priced for. Red when a re-measurement makes that gap wider than the one on
- *   record — see `evaluateRateCalibration` for why this is deliberately not
- *   collapsed into the comparison above.
+ *   **Coverage** (KB ↔ KB). What a page measures now, over what the rate is
+ *   priced for. The rate must be priced for AT LEAST what the page weighs —
+ *   see `evaluateRateCalibration` for why that ceiling is recorded as a
+ *   reviewed number rather than hard-coded at 1.
  *
  *   **Still-current** (source bytes ↔ source bytes). The calibration records
  *   the source graph as it stood when this record was last reviewed. Measuring
@@ -71,7 +72,7 @@
  * the two, so it should be the first of the pair to ask for attention rather
  * than the second.
  *
- * The second is a STALENESS TRIPWIRE, not a weight estimate. It never claims
+ * The third is a STALENESS TRIPWIRE, not a weight estimate. It never claims
  * to know what the page now weighs on the wire — only that it has changed
  * enough that somebody has to go and measure it again. That is the whole
  * reason it can live in CI: the expensive measurement needs a browser and a
@@ -85,6 +86,11 @@
  * LIGHTER against an unchanged rate means we are charging more than cost plus
  * 30%, which is the same broken promise as charging less — it is just the
  * direction that flatters us. Both are re-measure-and-re-peg.
+ *
+ * What differs between the two directions is the URGENCY, and that asymmetry
+ * is why the coverage ceiling is a recorded number. Charging under cost is
+ * wrong and can only be fixed by charging more, which is a price rise. So the
+ * peg is deliberately set on the safe side and the record says how far.
  */
 
 /**
@@ -95,6 +101,12 @@
  * reads and the edge/ISR share of a render as well as the transfer, so it is
  * not a bandwidth price and must not be re-based on an egress rate card.
  *
+ * The 2026-09-09 re-peg (AGL-2711) did NOT move this pair. It moved the weight
+ * the pair is applied to, from 627 KB to 1012.8 KB. Keeping the anchor fixed
+ * is what makes the new rate checkable: a re-peg that also re-based the cost
+ * per KB would be two changes wearing one number, and no gate could tell which
+ * of them a later edit had undone.
+ *
  * @see PAGE_VIEW_CALIBRATION_BASIS_KB
  */
 export const CALIBRATED_USD_PER_VIEW = 0.0001
@@ -103,18 +115,56 @@ export const CALIBRATED_USD_PER_VIEW = 0.0001
 export const PAGE_VIEW_CALIBRATION_BASIS_KB = 627
 
 /**
- * Dollars the rate table should carry for a page of `measuredKb`.
+ * The grid `pricedForKb` and `measuredKb` are recorded on: a tenth of a KB.
  *
- * Rounded to the nearest millionth of a dollar so the constant a human reads
- * in the rate table is the constant this recomputes — an unrounded product
- * would be a twenty-digit float that nobody would check in, and a gate whose
- * expected value cannot be written down is a gate that gets a tolerance
- * bolted on and then quietly widened.
+ * Both are wire measurements read off a browser, and a tenth of a KB is
+ * already finer than the run-to-run spread of one. Rounding the comparison to
+ * the grid the record is written on is what lets the rate carry a price that
+ * is round in DOLLARS rather than round in kilobytes.
  */
-export function rateForWeightKb(measuredKb) {
-  const exact =
-    (CALIBRATED_USD_PER_VIEW * measuredKb) / PAGE_VIEW_CALIBRATION_BASIS_KB
-  return Math.round(exact * 1e6) / 1e6
+const RECORDED_KB_DECIMALS = 1
+
+/*
+ * Scale-then-divide rather than divide-then-scale: `Math.round(kb / 0.1) * 0.1`
+ * reintroduces the error it is rounding away, because 0.1 is not representable
+ * and the multiply back puts a tail on an otherwise exact tenth.
+ */
+const KB_GRID = 10 ** RECORDED_KB_DECIMALS
+const toRecordedKb = (kb) => Math.round(kb * KB_GRID) / KB_GRID
+
+/**
+ * Dollars the rate table would carry for a page of exactly `weightKb`.
+ *
+ * The exact per-KB implication, unrounded. It is a DIAGNOSTIC — printed so a
+ * reader can see what the measured page alone would cost — and not the value
+ * the gate compares against, for the reason `basisKbForRate` gives.
+ */
+export function rateForWeightKb(weightKb) {
+  return (CALIBRATED_USD_PER_VIEW * weightKb) / PAGE_VIEW_CALIBRATION_BASIS_KB
+}
+
+/**
+ * The page weight a rate is priced for — `rateForWeightKb` run backwards.
+ *
+ * The comparison runs in THIS direction, in kilobytes, rather than forwards in
+ * dollars, because the checked-in rate is not a round number of dollars per
+ * view and cannot be. It is pinned so the PUBLISHED figure is round: $0.21 per
+ * 1,000 views is $0.00016153846 per view once `METERED_MARKUP` is divided out,
+ * and no rounding of dollars-per-view reproduces that from a weight.
+ *
+ * Kilobytes have no such problem. The record already writes both weights to a
+ * tenth of a KB, so rounding the recovered weight to the same grid compares
+ * two numbers of the same kind at the precision they are actually known to.
+ *
+ * This is TIGHTER than the dollar comparison it replaced, not looser. A tenth
+ * of a KB out of 1012.8 is one part in ten thousand; the old comparison
+ * rounded the rate to the nearest millionth of a dollar, which at a rate of
+ * $0.00016 is one part in a hundred and sixty.
+ */
+export function basisKbForRate(rate) {
+  return toRecordedKb(
+    (rate * PAGE_VIEW_CALIBRATION_BASIS_KB) / CALIBRATED_USD_PER_VIEW,
+  )
 }
 
 /**
@@ -123,19 +173,36 @@ export function rateForWeightKb(measuredKb) {
  * ## Why `pricedForKb` and `measuredKb` are two fields and not one
  *
  * They are the same quantity at two different moments, and collapsing them
- * would destroy the only honest record of the gap between them.
+ * would destroy the only honest record of the distance between them.
  *
- * `pricedForKb` is the weight `perPageView` was actually calibrated against.
- * `measuredKb` is what a published page weighs now. When they agree, the
- * published "at cost + 30%" is literally true. When they do not, the size of
- * the disagreement IS the finding, and it belongs in the file where anyone can
+ * `pricedForKb` is the weight `perPageView` is calibrated against.
+ * `measuredKb` is what a published page weighs now. Where they sit relative to
+ * each other is the whole finding, and it belongs in the file where anyone can
  * read it rather than in a rate that quietly absorbed it.
  *
- * `acknowledgedShortfall` is the ratio between them that has been reviewed and
- * signed off. It is a CEILING, not a license: the gate stays green while the
- * gap is the one somebody looked at, and goes red the moment a re-measurement
- * makes it wider. That is what turns "we know the rate is stale" from a fact
- * that decays into one that has to be re-argued every time the page grows.
+ * ## The ceiling, and why it is 0.9638 rather than 1
+ *
+ * `acceptedWeightRatio` is `measuredKb / pricedForKb` as reviewed and signed
+ * off. It is a CEILING: the gate stays green while the page is the size
+ * somebody looked at, and goes red the moment a re-measurement pushes it up.
+ *
+ * Until 2026-09-09 that ratio was 1.62 — the rate priced a 627 KB page while
+ * the published one measured over a thousand, so the meter billed under its
+ * own cost and the ceiling recorded how far under. The re-peg inverted it. The
+ * basis is now set ABOVE the measurement on purpose, so the ratio is 0.9638
+ * and the meter prices slightly more than the page weighs.
+ *
+ * Two things follow, and both are checked:
+ *
+ *   1. A recorded ceiling ABOVE 1 is refused outright. That is the state the
+ *      re-peg ended — a rate priced for less than the page it serves — and it
+ *      must not be re-entered by editing a number in a JSON file. Re-entering
+ *      it deliberately means moving `acceptedWeightRatio` past 1 AND arguing
+ *      for it, which is a pricing decision with an owner.
+ *   2. Below that, the reviewed figure is what holds. A page creeping from
+ *      0.96 to 0.99 of its basis has not broken the promise yet, but it has
+ *      spent the margin somebody deliberately left, and the gate says so
+ *      before the page eats through it.
  *
  * A rate correction is a pricing decision and this gate does not make it — it
  * refuses to let it be made silently, in either direction.
@@ -143,7 +210,7 @@ export function rateForWeightKb(measuredKb) {
  * @param {object} input
  * @param {number} input.meteredRate `METERED_UNIT_RATES_USD.perPageView`
  * @param {number} input.cogsRate `ORG_COGS_UNIT_RATES_USD.perPageView`
- * @param {{pricedForKb: number, measuredKb: number, acknowledgedShortfall: number, sourceGraphBytes: number, sourceGraphTolerance: number}} input.calibration
+ * @param {{pricedForKb: number, measuredKb: number, acceptedWeightRatio: number, sourceGraphBytes: number, sourceGraphTolerance: number}} input.calibration
  * @param {number} input.sourceGraphBytes the graph as measured on this checkout
  */
 export function evaluateRateCalibration({
@@ -152,7 +219,6 @@ export function evaluateRateCalibration({
   calibration,
   sourceGraphBytes,
 }) {
-  const expectedRate = rateForWeightKb(calibration.pricedForKb)
   // The two tables are read from two different files by one shared parser. A
   // parse that silently returned undefined for either would make every other
   // comparison here vacuously true, so an unreadable rate is its own verdict
@@ -164,11 +230,17 @@ export function evaluateRateCalibration({
     .filter(([, value]) => !Number.isFinite(value))
     .map(([name]) => name)
 
-  const tablesDisagree = unreadable.length === 0 && meteredRate !== cogsRate
-  const rateMispriced = unreadable.length === 0 && meteredRate !== expectedRate
+  const recordedBasisKb = toRecordedKb(calibration.pricedForKb)
+  const impliedBasisKb =
+    unreadable.length === 0 ? basisKbForRate(meteredRate) : Number.NaN
 
-  const shortfall = calibration.measuredKb / calibration.pricedForKb
-  const shortfallWidened = shortfall > calibration.acknowledgedShortfall
+  const tablesDisagree = unreadable.length === 0 && meteredRate !== cogsRate
+  const rateMispriced =
+    unreadable.length === 0 && impliedBasisKb !== recordedBasisKb
+
+  const weightRatio = calibration.measuredKb / calibration.pricedForKb
+  const weightRatioExceeded = weightRatio > calibration.acceptedWeightRatio
+  const acceptedRatioUnderprices = calibration.acceptedWeightRatio > 1
 
   const drift =
     (sourceGraphBytes - calibration.sourceGraphBytes) /
@@ -192,16 +264,20 @@ export function evaluateRateCalibration({
       unreadable.length === 0 &&
       !tablesDisagree &&
       !rateMispriced &&
-      !shortfallWidened &&
+      !weightRatioExceeded &&
+      !acceptedRatioUnderprices &&
       !calibrationStale,
     unreadable,
     tablesDisagree,
     rateMispriced,
-    shortfallWidened,
+    weightRatioExceeded,
+    acceptedRatioUnderprices,
     calibrationStale,
-    expectedRate,
-    shortfall,
-    /** What the rate would have to become for the gap to close. */
+    /** The weight the rate is priced for, recovered from the rate itself. */
+    impliedBasisKb,
+    recordedBasisKb,
+    weightRatio,
+    /** What the rate would be if it were pegged to the measured page exactly. */
     rateForMeasured: rateForWeightKb(calibration.measuredKb),
     drift,
     driftDirection: drift >= 0 ? 'heavier' : 'lighter',
@@ -216,11 +292,17 @@ export const WHY_RECALIBRATE =
   'This is not a number to nudge until the gate goes quiet. Re-measure a ' +
   'real cold load of a published page — HTTP cache disabled, ' +
   "`document.visibilityState === 'visible'` so lazy images actually load, " +
-  'counting FIRST-PARTY encoded bytes only, since third-party tags are ' +
-  "served from somebody else's egress and cost us nothing. Then record the " +
-  'new figure and the graph it was measured against in ' +
-  '`tools/tenant-page-budget.json`, and re-peg the rate in BOTH rate ' +
-  'tables.\n\n' +
+  'settling until the network goes quiet rather than stopping at first ' +
+  'paint, counting FIRST-PARTY encoded bytes only, since third-party tags ' +
+  "are served from somebody else's egress and cost us nothing. Then record " +
+  'the new figure and the graph it was measured against in ' +
+  '`tools/tenant-page-budget.json`.\n\n' +
   'A page that got lighter is red for the same reason a page that got ' +
   'heavier is: the published term is "at cost + 30%", and an unchanged rate ' +
-  'against a changed page breaks that claim in whichever direction it moved.'
+  'against a changed page breaks that claim in whichever direction it moved. ' +
+  'What the two directions do NOT share is the remedy. A page that grew past ' +
+  'its basis can only be fixed by charging more, so the basis is pegged ' +
+  'above the page on purpose and a re-measurement that eats that headroom is ' +
+  'the warning. A page that shrank is fixed by charging less, which is not ' +
+  'an emergency — re-peg it at the next deliberate pass, and re-peg BOTH ' +
+  'rate tables when you do.'

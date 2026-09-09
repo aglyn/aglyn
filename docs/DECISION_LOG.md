@@ -92,6 +92,64 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-09 — The page-view rate is re-pegged to a 1012.8 KB page: $0.13 → $0.21 per 1,000
+
+- **Decided by:** the account owner, 2026-09-09, asked whether the weight reduction had closed the gap or whether the re-peg held over from earlier the same day was now owed. Re-peg, and set the basis above the measured page so the next correction is downward.
+- **Scope:** pricing
+- **Evidence:** `METERED_UNIT_RATES_USD.perPageView` and `ORG_COGS_UNIT_RATES_USD.perPageView` both 0.0001 → **0.00016153846**; published `$0.13 / 1,000` → **`$0.21 / 1,000`**, regenerated into `tools/marketing/pricing-copy/tables.json`; `tools/tenant-page-budget.json` `wireCalibration` now `pricedForKb` 1012.8, `measuredKb` 976.1, `acceptedWeightRatio` 0.9638 against a 0.96376 actual; `npm run check:page-view-rate`, `check:pricing-drift` and `check:pricing-tables` green; the Sept-1 pin in `tools/scripts/check-pricing-drift.mjs` moved with the decision; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2711.
+
+**A charged price moves.** This is a customer-facing increase on one metered
+line: every 1,000 page views past a plan's included band bills $0.21 instead of
+$0.13, a 61.5% rise on that line. It touches no plan price, no other meter and
+no included band.
+
+**Why now.** The standing 2026-08-30 rule was to reduce the page weight rather
+than reprice the promise, and the entry above this one held the re-peg for
+exactly that reason. The reduction has since landed and shipped in
+v1.0.0-beta.103 — the route's eager first-paint JavaScript fell 410.4 → 255.3 KB
+gzip — and a fresh measurement says the page is still far above the 627 KB the
+rate was calibrated for. The condition that decision set is met, so the hold
+expires with it.
+
+**The measurement.** Taken 2026-09-09 against production, playwright-core
+driving Chrome Beta 154 headless, a fresh browser context per run, no scroll,
+settling until the network went quiet, counting first-party `encodedBodySize` as
+served:
+
+- **976.1 KB** on the recorded basis — document, script and images — stable to
+  0.0 KB across three runs at 2560x1209 and two at 1280x720.
+- A control run on the PREVIOUS build with the same instrument read
+  979.7–1001.8 KB against the 1010.3 KB recorded from that build by a different
+  instrument, so the instrument reproduces the recorded basis within ~3% and the
+  drop is the page rather than the tooling.
+- Split at first contentful paint, the same load is **122.6–158.2 KB up to FCP**
+  and **1012.9 KB at settle** across 80 requests. The basis previously recorded
+  as "first paint" is in fact the settle figure, and it is settle that the rate
+  must price: every visitor pays it.
+- The eager route chunks fell 410.4 → 255.3 KB gzip while the settle total
+  barely moved, because much of the reduction was `next/dynamic` **deferral**
+  rather than deletion. The bytes still arrive. That is the reason the peg is
+  taken against settle and not against the route's own chunk total.
+
+**Why the basis is 1012.8 KB and not 976.1.** The basis is set deliberately
+ABOVE the measured page, so the meter prices 1012.8 KB against a page weighing
+976.1 — a ratio of 0.9638. Charging under cost can only be corrected by charging
+more, which is a price rise; charging slightly over can be corrected by charging
+less, which is not. The headroom buys the room to move in the easy direction.
+1012.8 KB is also the weight at which the published figure lands on a round
+$0.21 per 1,000 at the unchanged per-KB cost the 2026-08-09 calibration fixed —
+the cost model did not move, only the weight it is applied to.
+
+**The gap is closed, and the guard now says so.** `check:page-view-rate` was
+built to hold an under-priced rate at the size it was last reviewed at, and its
+`acknowledgedShortfall` recorded a ratio of 1.62. That field is gone. Its
+replacement, `acceptedWeightRatio`, is refused above 1: the state where the rate
+prices less page than it serves cannot be re-entered by editing a number in a
+JSON file, and a page that grows back into the headroom is red before it gets
+there.
+
+---
+
 ## 2026-09-09 — The page-view rate is re-measured at 1010.3 KB and deliberately not re-pegged
 
 - **Decided by:** the account owner, 2026-09-09, asked whether to correct `perPageView` now that the measured page is 1.61x the weight it is priced for. Hold the price and reduce the weight instead, per the standing 2026-08-30 rule.

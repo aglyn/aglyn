@@ -463,17 +463,21 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     }
   })
 
-  it('reproduces the metered part of Agency’s pinned $1,003.13 at full utilization', () => {
-    // `tier-margin-floor.spec.ts` pins Agency at $1,003.13 a month with every
-    // band at 100%. $867.13 of that is the eight metered axes this module
+  it('reproduces the metered part of Agency’s pinned $1,168.76 at full utilization', () => {
+    // `tier-margin-floor.spec.ts` pins Agency at $1,168.76 a month with every
+    // band at 100%. $1,068.76 of that is the eight metered axes this module
     // prices; the $100 between them is the two CRM decision terms — a seat a
     // month per collaborator and the one-to-one email cap — that the rollup
     // has no meter for. Reaching the metered part through this module's band
     // table and `orgMonthlyCogsUsd` is what says the two files agree about
     // the most expensive self-serve tier — the one whose uncapped band once
     // made it read as the cheapest.
+    //
+    // It rose $165.63 on 2026-09-09 (AGL-2711), all of it on the bandwidth
+    // axis: Agency's 1.54 TB band converts to 2.69M included page views, and
+    // a view now costs $0.00016153846 instead of $0.0001.
     const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    expect(cogs.cogsUsd).toBeCloseTo(903.13, 2)
+    expect(cogs.cogsUsd).toBeCloseTo(1068.76, 2)
     expect(cogs.basis).toBe('measured')
   })
 
