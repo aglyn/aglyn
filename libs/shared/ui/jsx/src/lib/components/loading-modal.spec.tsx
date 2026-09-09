@@ -33,8 +33,25 @@
  */
 
 import { createTheme, ThemeProvider } from '@mui/material/styles'
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 import LoadingModal from './loading-modal'
+
+/**
+ * The overlay arrives in its own chunk (AGL-2706), so the modal root appears
+ * a microtask after render rather than during it. Waited for rather than
+ * asserted away: the rule text these tests read is emitted when emotion
+ * styles the mounted overlay, which is the same moment either way.
+ */
+async function renderedOverlay(theme: Parameters<typeof ThemeProvider>[0]['theme']) {
+  render(
+    <ThemeProvider theme={theme}>
+      <LoadingModal open />
+    </ThemeProvider>,
+  )
+  await waitFor(() =>
+    expect(document.querySelector('.MuiModal-root')).toBeTruthy(),
+  )
+}
 
 /**
  * A color CSS accepts: the literal `rgb(a)(N, N, N[, A])` a plain theme
@@ -70,12 +87,8 @@ function emittedBackground(selector: string): string {
 const SURFACES = ['.MuiBackdrop-root', '.progress-bar-top'] as const
 
 describe('LoadingModal backdrop tint', () => {
-  it('composes a literal rgba under a theme without CSS variables', () => {
-    render(
-      <ThemeProvider theme={createTheme()}>
-        <LoadingModal open />
-      </ThemeProvider>,
-    )
+  it('composes a literal rgba under a theme without CSS variables', async () => {
+    await renderedOverlay(createTheme())
     for (const selector of SURFACES) {
       const value = emittedBackground(selector)
       expect(value).not.toContain('undefined')
@@ -86,12 +99,8 @@ describe('LoadingModal backdrop tint', () => {
     )
   })
 
-  it('keeps the channel variable under a theme with CSS variables', () => {
-    render(
-      <ThemeProvider theme={createTheme({ cssVariables: true })}>
-        <LoadingModal open />
-      </ThemeProvider>,
-    )
+  it('keeps the channel variable under a theme with CSS variables', async () => {
+    await renderedOverlay(createTheme({ cssVariables: true }))
     for (const selector of SURFACES) {
       const value = emittedBackground(selector)
       expect(value).not.toContain('undefined')
