@@ -76,8 +76,9 @@ content on the marketing site and is written separately.
 - **build:** what the sideEffects sweep bought, and four levers that did not ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
 
 <details>
-<summary>Also in this release: 3 test, 7 chore, 2 ci</summary>
+<summary>Also in this release: 3 test, 8 chore, 2 ci</summary>
 
+- **tools:** move the colour ratchet row with the code it counts ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
 - **perf:** re-baseline the tenant page budget, and say the wire figure is stale ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-2708](https://linear.app/aglyn/issue/AGL-2708))
 - **tools:** raise the Linear ceiling to the newest issue that exists ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
 - **aglyn:** record the front-door canaries in the self-host ratchet ([AGL-2709](https://linear.app/aglyn/issue/AGL-2709))
