@@ -143,7 +143,9 @@ describe('runCli — help and version', () => {
   it('prints the version it was given', async () => {
     const h = harness(() => ({}))
     expect(await runCli(['--version'], h.context, '1.2.3')).toBe(EXIT_OK)
-    expect(h.out()).toBe('1.2.3')
+    // The newline matters: without it the version runs into the next line of
+    // output, which a locally installed binary showed immediately.
+    expect(h.out()).toBe('1.2.3\n')
   })
 
   it('refuses an unknown command with a usage code, and shows help', async () => {

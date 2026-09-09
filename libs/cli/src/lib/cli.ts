@@ -258,7 +258,10 @@ export async function runCli(
   const args = parseArgs(argv)
 
   if (args.version) {
-    context.out(version)
+    // WITH the newline. Without it the version runs into whatever the shell
+    // prints next, and `aglyn --version >> file` produces a line that swallows
+    // the following one. `$(aglyn --version)` strips it either way.
+    context.out(`${version}\n`)
     return EXIT_OK
   }
   if (args.help || args.command === '' || args.command === 'help') {
