@@ -797,6 +797,15 @@ jobs:
       - run: npm run test:core-namespace-pin
       - run: npm run check:core-namespace-pin
 
+      # The two `browser` resolve aliases, and the vendored code they rest on
+      # (AGL-2706). Replacing `re2js` and Next's compiled `buffer` with a name
+      # and no implementation is 48.7 KB gzipped off every console route, and
+      # is correct only while every `RE2JS` call in `@firebase/firestore`'s
+      # browser bundle is inside a try/catch and `Buffer` is only ever
+      # compared against. Its forced reds doctor the real bundle in memory.
+      - run: npm run test:browser-shim-aliases
+      - run: npm run check:browser-shim-aliases
+
       # The byte budget the two allowlists above cannot express (AGL-2486
       # follow-on). A published page's first-party first-load graph, summed as
       # source bytes and pinned with 25% headroom. Static edges only: an
