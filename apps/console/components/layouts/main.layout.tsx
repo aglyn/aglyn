@@ -134,7 +134,6 @@ export interface TopAppBarProps {
   customCenter?: JSX.Node
   enableAppBarElevation?: boolean
   quickActions?: QuickActionsMenuItem[]
-  besigner?: boolean
   /**
    * The product wordmark worn by the app bar, defaulting to the console's.
    *
@@ -160,7 +159,6 @@ const TopAppBar = (props: TopAppBarProps) => {
     customCenter,
     enableAppBarElevation,
     quickActions,
-    besigner,
     wordmark,
     backButton,
   } = props
@@ -456,6 +454,14 @@ export interface MainLayoutProps
   extends Omit<StackProps, 'title'>,
     TopAppBarProps {
   children?: JSX.Children
+  /**
+   * Lay the shell out as the besigner's fixed editor: exactly the window
+   * height, never page-scrollable.
+   *
+   * A layout flag, not a branding one — the app bar takes its mark through
+   * `wordmark` and reads this nowhere.
+   */
+  besigner?: boolean
 }
 
 export function MainLayout(props: MainLayoutProps) {
@@ -500,7 +506,6 @@ export function MainLayout(props: MainLayoutProps) {
       }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
       <TopAppBar
         enableAppBarElevation={enableAppBarElevation}
-        besigner={besigner}
         wordmark={wordmark}
         backButton={backButton}
         centerPrefix={centerPrefix}
