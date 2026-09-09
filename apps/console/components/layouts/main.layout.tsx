@@ -16,8 +16,12 @@
  */
 
 import { ICON_VARIANT_LEFT } from '@aglyn/shared-data-enums'
-import { AglynBesignerLogoFull, AglynConsoleLogoFull, AppLink, type AppLinkProps, MdiIcon, type MdiIconProps, Menu, type MenuItemProps, type MenuProps, SrOnly } from '@aglyn/shared-ui-jsx'
+import { AppLink, type AppLinkProps, MdiIcon, type MdiIconProps, Menu, type MenuItemProps, type MenuProps, SrOnly } from '@aglyn/shared-ui-jsx'
 import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
+// Subpaths, not the barrel: the barrel reaches `svg-icons.tsx`, which draws
+// four more wordmarks the console never renders.
+import { AglynBesignerLogoFull } from '@aglyn/shared-ui-jsx/const/aglyn-besigner-logo-full'
+import { AglynConsoleLogoFull } from '@aglyn/shared-ui-jsx/const/aglyn-console-logo-full'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArrEmpty } from '@aglyn/shared-util-tools'
 import {

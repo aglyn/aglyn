@@ -32,19 +32,19 @@ import type * as Aglyn from '@aglyn/aglyn'
 import { canvas, emitter } from '@aglyn/aglyn/aglyn'
 import { ATTRIBUTION_ATTRIBUTE } from '@aglyn/aglyn/app-utils/attribution-guard'
 import { formatCollectionEntryDate } from '@aglyn/aglyn/app-utils/collection-entry-date'
-import { ELEMENT_HIDDEN_STYLE_TEXT } from '@aglyn/aglyn/app-utils/element-ui'
+import { ELEMENT_HIDDEN_STYLE_TEXT } from '@aglyn/aglyn/app-utils/element-hidden-style'
 import {
   HEADING_ANCHOR_SCROLL_MARGIN,
   markdownHeadingSlugs,
   parseMarkdownLite,
 } from '@aglyn/aglyn/app-utils/markdown-lite'
-import { renderedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
+import { renderedMediaAlt } from '@aglyn/aglyn/app-utils/media-alt'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 // `PLATFORM_BRANDING_PROFILE` is re-exported by `app-utils/plan-entitlements`,
 // which is the largest first-party module a published page can reach. The
 // badge needs the brand, not the plan table.
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand'
-import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context'
+import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
 import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
 import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
