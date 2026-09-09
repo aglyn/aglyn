@@ -561,6 +561,139 @@ export function resetServerErrorsForTests(): void {
 }
 
 /**
+ * Document-id prefix for the beacon's last-landed marker (AGL-2713).
+ *
+ * ## Why this one is not bucketed, and not queried
+ *
+ * Its four siblings above count OCCURRENCES over a window, so each one wants
+ * a stream of minute-bucketed documents and a range query over its own
+ * timestamp field. This answers a single question — *when did a heartbeat
+ * last reach Cloud Logging from this deployment* — so it is one document per
+ * service, read by id:
+ *
+ * ```
+ * rateLimits/beaconHeartbeat_console-web
+ * rateLimits/beaconHeartbeat_tenant-web
+ * ```
+ *
+ * A point read needs no index at all, which matters more than the cost: an
+ * index this repository cannot deploy without a token is an index that is not
+ * there when the failure is. Same collection as the siblings, for the reason
+ * they each gave — it inherits the deny-all rule and the `expiresAt` TTL
+ * policy that already exist, instead of needing a rules deploy nobody can
+ * make from code.
+ *
+ * **The timestamp field is `heartbeatAtMs`**, deliberately none of `lastAtMs`
+ * (AGL-1679), `refusedAtMs` (AGL-1907), `erroredAtMs` (AGL-1921) or
+ * `servedAtMs` (AGL-2583). This one is not range-queried, so the isolation
+ * argument the others make is not what earns it a field of its own — but a
+ * document carrying a sibling's field would enter that sibling's window and be
+ * counted as an episode it is not.
+ *
+ * ⚠️ **Evidence of a LANDING, never of a failure.** Nothing writes here when
+ * a heartbeat misses. So the worst a corrupt, stale or unreadable marker can
+ * do is make `/api/health/error-beacon` red sooner, and a deployment whose
+ * credential has never once worked has no marker at all and reds on its first
+ * probe. That asymmetry is what lets the door tolerate a miss without becoming
+ * a door that cannot go red.
+ */
+export const BEACON_HEARTBEAT_DOC_PREFIX = 'beaconHeartbeat_'
+
+/**
+ * How long a last-landed marker survives the TTL sweep.
+ *
+ * Seven days, matching the refusal and server-error markers. It is refreshed
+ * on every successful probe, so the only way it ages out is a deployment that
+ * stopped answering entirely — by which time the door has been red for days
+ * and the marker's disappearance changes nothing.
+ */
+const BEACON_HEARTBEAT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+/** How long the failure path waits for the marker before giving up on it. */
+const BEACON_HEARTBEAT_READ_BUDGET_MS = 2_000
+
+/**
+ * Record that a heartbeat reached Cloud Logging (AGL-2713).
+ *
+ * Fire-and-forget and never throws, like `flushServerErrors`: this runs
+ * inside a monitoring probe, and a breadcrumb must never be the reason the
+ * probe it is attached to fails. A write that does not land simply means the
+ * next miss is graded without it, which is the safe direction.
+ *
+ * The caller is memoized per instance on a five-minute TTL, so the write rate
+ * is one per instance per five minutes however hard the public endpoint is
+ * hit — orders of magnitude under the per-document ceiling that produced
+ * AGL-2404's contention storm.
+ */
+export function recordBeaconHeartbeat(
+  service: string,
+  options?: { now?: number; firestore?: any },
+): void {
+  const nowMs = options?.now ?? Date.now()
+  let firestore: any
+  try {
+    firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+  } catch {
+    // No Admin app. The heartbeat still landed and the probe still reports
+    // green off the write itself; only the evidence for forgiving a FUTURE
+    // miss is lost, and a miss with no evidence reds.
+    return
+  }
+  void Promise.resolve(
+    firestore
+      .collection(RATE_LIMIT_COLLECTION)
+      .doc(`${BEACON_HEARTBEAT_DOC_PREFIX}${service}`)
+      .set(
+        {
+          // NOT `lastAtMs`, NOT `refusedAtMs`, NOT `erroredAtMs`, NOT
+          // `servedAtMs` — see the prefix doc above.
+          heartbeatAtMs: nowMs,
+          service,
+          expiresAt: new Date(nowMs + BEACON_HEARTBEAT_RETENTION_MS),
+        },
+        { merge: true },
+      ),
+  ).catch(() => undefined)
+}
+
+/**
+ * When a heartbeat last landed for this deployment, or null (AGL-2713).
+ *
+ * Null covers three cases that must all grade the same way: no marker has
+ * ever been written, the document holds nothing usable, and the store could
+ * not be read inside its budget. Every one of them means *there is no proof a
+ * heartbeat landed recently*, and the caller forgives a miss only on proof.
+ * Folding them is therefore not a shortcut — distinguishing them could only
+ * ever be used to forgive something unproven.
+ *
+ * The budget is the reason this is not a bare `get()`. It runs on the failure
+ * path, where the credential is already misbehaving, and a Firestore client
+ * whose own token will not mint retries with backoff for far longer than a
+ * health endpoint may take to answer.
+ */
+export async function readBeaconHeartbeat(
+  service: string,
+  options?: { firestore?: any; budgetMs?: number },
+): Promise<number | null> {
+  try {
+    const firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+    const snapshot = await withBudget<any>(
+      firestore
+        .collection(RATE_LIMIT_COLLECTION)
+        .doc(`${BEACON_HEARTBEAT_DOC_PREFIX}${service}`)
+        .get(),
+      options?.budgetMs ?? BEACON_HEARTBEAT_READ_BUDGET_MS,
+    )
+    const landedAtMs = snapshot.get('heartbeatAtMs')
+    return typeof landedAtMs === 'number' && Number.isFinite(landedAtMs)
+      ? landedAtMs
+      : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Document-id prefix for signup-page serve markers (AGL-2583).
  *
  * ## Why traffic is worth storing at all
