@@ -10,5 +10,9 @@
   "dependencies": {
     "@swc/helpers": "~0.3.3"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "sideEffects": [
+    "./src/lib/clipboard-manager/clipboard-manager.ts",
+    "./src/lib/clipboard-manager/style-clipboard.ts"
+  ]
 }

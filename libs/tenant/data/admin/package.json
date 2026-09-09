@@ -10,5 +10,10 @@
   "dependencies": {
     "@swc/helpers": "~0.3.3"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "sideEffects": [
+    "./src/lib/server/client-error-report.ts",
+    "./src/lib/server/email-marketing-gate.ts",
+    "./src/lib/server/email-send-rate.ts"
+  ]
 }
