@@ -780,12 +780,16 @@ jobs:
       - run: npm run test:jsx-barrel
       - run: npm run check:jsx-barrel
 
-      # The same rule for the OTHER barrel a published page imports statically
-      # (AGL-2486). `catch-all-client.tsx` opens with `import * as Aglyn from
-      # '@aglyn/aglyn'`, and nothing watched that entry — which is how
+      # The same rule for the OTHER barrel the app shells import statically
+      # (AGL-2486). `catch-all-client.tsx` used to open with `import * as Aglyn
+      # from '@aglyn/aglyn'`, and nothing watched that entry — which is how
       # `firebase/auth` and `acorn` each came to ship to anonymous visitors of
       # every customer site, for -48,643 B and -39,035 B gzipped respectively.
-      # Its forced reds live in the same test file and replay exactly those two
+      # AGL-2706 moved that page onto subpaths and a type-only namespace, so it
+      # reaches the barrel no more; the console shell and the seven besigner
+      # editors still do, and the tenant instance hooks open it by name, so a
+      # package walking into this graph is still a bill somebody pays. Its
+      # forced reds live in the same test file and replay exactly those two
       # regressions, so the gate is known to catch the thing it was built for.
       - run: npm run check:aglyn-barrel
 

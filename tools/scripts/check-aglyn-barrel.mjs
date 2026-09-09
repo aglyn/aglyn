@@ -21,11 +21,18 @@
  *
  * `check-jsx-barrel.mjs` guards the OTHER barrel a published customer page
  * imports statically. This one guards `@aglyn/aglyn`, which
- * `apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx` opens with — and
- * which had no guard at all, which is how `firebase/auth` and `acorn` each
- * came to ship to anonymous visitors of every customer site. Same detector,
- * same two pins, same `--write` discipline; only the allowlist and the
- * failure text differ.
+ * `apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx` used to open with
+ * a VALUE namespace — and which had no guard at all, which is how
+ * `firebase/auth` and `acorn` each came to ship to anonymous visitors of
+ * every customer site. Same detector, same two pins, same `--write`
+ * discipline; only the allowlist and the failure text differ.
+ *
+ * AGL-2706 moved that page onto subpaths and a type-only namespace, so it
+ * reaches this barrel no more. The allowlist is not thereby obsolete: the
+ * console shell and the seven besigner editors do reach it, the tenant's own
+ * instance hooks open it by name, and both packages above walked in through
+ * a module some page did name. What the list stopped being is a literal
+ * inventory of one route's download.
  *
  * ```
  * npm run check:aglyn-barrel             # the gate
