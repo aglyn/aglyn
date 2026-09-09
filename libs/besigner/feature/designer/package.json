@@ -10,5 +10,6 @@
   "dependencies": {
     "@swc/helpers": "~0.3.3"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "sideEffects": false
 }

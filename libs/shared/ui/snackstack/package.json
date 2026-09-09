@@ -9,5 +9,6 @@
     "@aglyn/shared-util-tools": "*",
     "@aglyn/shared-util-vendor": "*"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "sideEffects": false
 }

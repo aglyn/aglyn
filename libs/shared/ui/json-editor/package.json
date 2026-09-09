@@ -1,4 +1,7 @@
 {
   "name": "@aglyn/shared-ui-json-editor",
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "sideEffects": [
+    "./src/lib/components/monaco-editor.tsx"
+  ]
 }
