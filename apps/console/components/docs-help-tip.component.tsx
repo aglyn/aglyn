@@ -27,12 +27,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import type { ReactNode } from 'react'
 import {
   buildDocsUrl,
   type DocsHelpAnchor,
   DOCS_HELP_TOPICS,
   type DocsHelpTopicKey,
 } from '../constants/docs-links'
+import DocsHelpExcerpt from './docs-help-excerpt.component'
 
 export interface DocsHelpTipProps<
   K extends DocsHelpTopicKey = DocsHelpTopicKey,
@@ -56,7 +58,7 @@ export interface DocsHelpTipProps<
   /** Override the tooltip title (defaults to the topic's docs page title). */
   title?: string
   /** Override the tooltip excerpt (defaults to the topic's docs excerpt). */
-  excerpt?: string
+  excerpt?: ReactNode
   sx?: SxProps
 }
 
@@ -71,7 +73,12 @@ export function DocsHelpTip<K extends DocsHelpTopicKey>(
   const topicEntry = DOCS_HELP_TOPICS[topic]
   const { path } = topicEntry
   const title = props.title ?? topicEntry.title
-  const excerpt = props.excerpt ?? topicEntry.excerpt
+  // The excerpt arrives with the tooltip rather than with this button: it is
+  // read only once the tooltip opens, and the registry's prose is ~20 KB the
+  // console shell would otherwise carry on every page (AGL-2706). The title
+  // and path stay synchronous below — they are this control's accessible name
+  // and its href.
+  const excerpt = props.excerpt ?? <DocsHelpExcerpt topic={topic} />
   const href = `${buildDocsUrl(path)}${anchor ?? ''}`
 
   return (

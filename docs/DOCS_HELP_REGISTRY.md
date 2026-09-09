@@ -10,8 +10,10 @@ deep links from drifting away from the docs themselves (AGL-599..602).
 
 | File | Role |
 | --- | --- |
-| `tools/scripts/generate-docs-help.mjs` | Generator. Scans docs frontmatter + headings, emits the two generated files below. Source of truth for keys/aliases. |
-| `apps/console/constants/docs-help.generated.ts` | **Generated.** `DOCS_HELP_TOPICS` (every feature page) + `DOCS_HELP_ANCHORS` (per-topic heading slugs) + `DocsHelpAnchor<K>` type. |
+| `tools/scripts/generate-docs-help.mjs` | Generator. Scans docs frontmatter + headings, emits the generated files below. Source of truth for keys/aliases. |
+| `apps/console/constants/docs-help.generated.ts` | **Generated.** `DOCS_HELP_TOPICS` (path + title for every feature page) + `DOCS_HELP_ANCHORS` (per-topic heading slugs) + `DocsHelpAnchor<K>` type. |
+| `apps/console/constants/docs-help-excerpts.generated.ts` | **Generated.** `DOCS_HELP_EXCERPTS` — the same topics' tooltip prose, in a file of its own (see "When each half loads"). |
+| `apps/console/components/docs-help-excerpt.component.tsx` | Hand-written. The `next/dynamic` boundary that fetches the excerpts when a tooltip mounts. |
 | `apps/console/constants/docs-links.ts` | Hand-written. `DOCS_BASE_URL`, `buildDocsUrl`, and the `docsHelp(topic, { anchor })` resolver. Re-exports the generated types. |
 | `libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts` | **Generated.** The besigner subset (`BESIGNER_DOCS` + anchors) — the designer lib can't import console constants. |
 | `libs/besigner/feature/designer/src/lib/utils/docs-help.ts` | Hand-written. The `besignerDocsUrl(page, anchor)` builder. |
@@ -20,6 +22,25 @@ deep links from drifting away from the docs themselves (AGL-599..602).
 `HelpTip` (the shared UI affordance) and the `help` slots on `CardDisplay`,
 the jsx-forms field mapper, and `withColumnHelp` live in `libs/shared/ui/*` and
 are content-agnostic — they render whatever `HelpTipContent` you hand them.
+
+## When each half loads
+
+`docsHelp()` returns `{ title, href, excerpt }`, and the three are not fetched
+alike (AGL-2706):
+
+- **`title` and `href` are strings, resolved on the spot.** The title is the
+  help button's accessible name and the href is where a middle-click goes, so
+  both are read before anyone hovers. `DOCS_HELP_TOPICS` stays synchronous for
+  them.
+- **`excerpt` is a `ReactNode`.** The 147 excerpts are ~20 KB of English, read
+  only inside an open tooltip, and `DocsHelpTip` lives in the console shell —
+  so every page was carrying them to paint a `?`. `DocsHelpExcerpt` fetches
+  `docs-help-excerpts.generated.ts` when the tooltip's content mounts.
+
+`HelpTipContent.excerpt` has always been a `ReactNode`, so a call site that
+passes `docsHelp(...)` straight into a `help` prop needs nothing. A call site
+that wants the string itself should read `DOCS_HELP_EXCERPTS[topic]`, and one
+that passes `{ excerpt: '…' }` short-circuits the fetch entirely.
 
 ## How content stays in sync
 
@@ -92,7 +113,7 @@ coverage inside a file that already uses help elsewhere.
 ## Before the commit
 
 `.husky/pre-commit` runs `tools/scripts/check-staged-docs-registries.mjs`,
-which fails the commit when a staged `apps/docs` change leaves any of the four
+which fails the commit when a staged `apps/docs` change leaves any of the five
 generated registries stale (AGL-2486). The gates below still run — this one
 only moves the same verdict off the promotion gate, and off an unrelated
 agent's `nx test console` run where it reads as their bug, and onto the commit
