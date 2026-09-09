@@ -17,12 +17,32 @@
 'use client'
 
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
+import dynamic from 'next/dynamic'
 import { Suspense, useEffect, useState } from 'react'
 import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
 import type { Props } from '../app/[host]/[[...slug]]/types'
 import { useHostBrand } from '../app/[host]/host-brand.context'
 import { resolveNotFoundTitle } from '../utils/not-found-title'
-import SiteStatusScreen from './site-status-screen.component'
+
+/**
+ * The last-resort screen, in a chunk of its own.
+ *
+ * Point (2) below is what makes this worth doing: a `not-found` boundary is a
+ * client reference in EVERY successful response, so its static imports are
+ * first-paint weight on the metered page. The screen underneath reaches
+ * `AppLink`'s five MUI variants and — through the search box only this
+ * surface renders — the whole `TextField`/`Select`/`Menu`/`Popover` cluster.
+ *
+ * `ssr: false` costs nothing here because this component renders nothing at
+ * all until its fetch settles, and the 404's served body is empty regardless
+ * (point (1) below). It also gives the lazy component its own `Suspense`
+ * rather than leaning on an ancestor, which is the distinction AGL-1541 turns
+ * on.
+ */
+const SiteStatusScreen = dynamic(
+  () => import('./site-status-screen.component'),
+  { ssr: false },
+)
 
 /**
  * The body of a tenant 404 (AGL-2342).
