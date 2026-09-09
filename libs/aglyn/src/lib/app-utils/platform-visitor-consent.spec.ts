@@ -456,6 +456,36 @@ describe('resolving the region signal', () => {
       })
   })
 
+  it('two callers who arrive together share ONE request (AGL-2710)', async () => {
+    // The session cache is written when the response ARRIVES, so it dedupes a
+    // later pageview and nothing sooner. Two surfaces that both want the
+    // region during the same hydration both miss it and both ask — measured on
+    // the tenant as a second request going out 864 ms before the first
+    // answered. The endpoint here stays PENDING for exactly that reason: a
+    // fetch that resolves on the spot settles before the second caller runs
+    // and hides the race.
+    let release: (() => void) | undefined
+    ;(global as unknown as { fetch: unknown }).fetch = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({ ok: true, json: async () => ({ country: 'FR' }) })
+        }),
+    )
+
+    const both = Promise.all([
+      resolvePlatformConsentRegion(),
+      resolvePlatformConsentRegion(),
+    ])
+    await Promise.resolve()
+    expect(fetchMock()).toHaveBeenCalledTimes(1)
+
+    release?.()
+    // Both callers get the real answer; sharing a request must not cost one of
+    // them its region.
+    expect((await both).map((r) => r.country)).toEqual(['FR', 'FR'])
+  })
+
   it('asks once for a country it DID resolve — the control', () => {
     // Without this, "do not cache" could be satisfied by not caching at all,
     // which is a fetch per pageview for every visitor forever.

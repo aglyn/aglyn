@@ -424,6 +424,19 @@ export interface ResolvedConsentRegion {
   posture: VisitorConsentPosture | null
 }
 
+/**
+ * The lookup that is CURRENTLY IN FLIGHT, shared by every caller that arrives
+ * while it is (AGL-2710).
+ *
+ * The session cache is written when the response lands, so on its own it
+ * dedupes a later pageview and nothing sooner: two components that both want
+ * the region during the same hydration both miss it and both ask. Released
+ * once the promise settles, so the "only a resolved country is cached, a
+ * failure is re-asked" rule below is untouched — this shares one request, it
+ * does not remember an answer.
+ */
+let platformRegionInFlight: Promise<ResolvedConsentRegion> | null = null
+
 export async function resolvePlatformConsentRegion(): Promise<ResolvedConsentRegion> {
   if (typeof window === 'undefined') return { country: null, posture: null }
   try {
@@ -444,6 +457,15 @@ export async function resolvePlatformConsentRegion(): Promise<ResolvedConsentReg
   } catch {
     // No storage — ask every pageview; correct, just less frugal.
   }
+  if (platformRegionInFlight) return platformRegionInFlight
+  const pending = askPlatformConsentRegion().finally(() => {
+    if (platformRegionInFlight === pending) platformRegionInFlight = null
+  })
+  platformRegionInFlight = pending
+  return pending
+}
+
+async function askPlatformConsentRegion(): Promise<ResolvedConsentRegion> {
   let country: string | null = null
   try {
     const response = await fetch(PLATFORM_CONSENT_REGION_ENDPOINT)
