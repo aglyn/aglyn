@@ -51,6 +51,7 @@ const RENDERER = readFileSync(
     '..',
     'app',
     '[host]',
+    '[scheme]',
     '[[...slug]]',
     'catch-all-client.tsx',
   ),
