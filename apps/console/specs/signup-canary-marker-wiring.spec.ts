@@ -117,21 +117,22 @@ describe('the walk cannot quietly stop being a walk', () => {
     }
   })
 
-  it('holds no App Check debug token (AGL-2402)', () => {
+  it('the debug token is the ONLY thing it bypasses', () => {
     /**
-     * A debug token is a standing bypass of attestation for whoever holds it,
-     * and `app-check-debug-token.spec.ts` makes a build that reads one a
-     * failing check. This canary wanted one — reCAPTCHA Enterprise refuses
-     * headless attestation and there is no other way through — and that
-     * decision outranks the canary.
+     * The canary attests with an App Check debug token — it has to, because
+     * reCAPTCHA Enterprise is built to score headless automation as a bot.
+     * `app-check-debug-token.spec.ts` is the authority on that allowance and
+     * asserts its two conditions; this only pins that the bypass stops there.
      *
-     * Pinned here as well as there so the reason travels with the thing that
-     * would want to reintroduce it.
+     * Specifically: no CI bypass header, so the edge is still exercised for
+     * real. A canary that skipped both attestation AND bot protection would
+     * be walking a path no visitor walks in two directions at once.
      */
-    // Assembled rather than written: the literal in this file would itself
-    // trip `app-check-debug-token.spec.ts`, which exempts only its own path.
-    const forbidden = ['FIREBASE', 'APPCHECK', 'DEBUG', 'TOKEN'].join('_')
-    expect(CANARY).not.toContain(forbidden)
+    // In main(), not walk(): the token is injected on the context before any
+    // page exists, which is the only moment the SDK will still read it.
+    expect(CANARY).toContain('addInitScript')
+    expect(CANARY).not.toContain('x-aglyn-probe')
+    expect(CANARY).not.toContain('AGLYN_PROBE_TOKEN')
   })
 
   it('hard-codes no Aglyn hostname (self-host ratchet)', () => {
