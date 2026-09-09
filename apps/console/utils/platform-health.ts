@@ -89,7 +89,7 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
     meaning:
       'The client-error beacon can still reach Cloud Logging. Degraded means browser errors are being collected by nothing — and a dead beacon reads as ZERO errors everywhere else, which is indistinguishable from a clean day.',
     remedy:
-      'no-credential is the deployment FIREBASE_* env, http-401/403 is a lost logging.logEntries.create grant, http-429 is quota. Clears on the next heartbeat that lands. The tenant runtime has its own credential and its own copy of this probe.',
+      'no-credential is the deployment FIREBASE_* env, http-401/403 is a lost logging.logEntries.create grant, http-429 is quota — all three red on the first sample, because all three stay broken until somebody fixes them. credential-unavailable and transport-* mean the attempt decided nothing, and one of those is forgiven while a heartbeat is proven to have landed inside the grace window: a green row reading heartbeat-missed is that forgiveness being spent, and the next probe reds if nothing lands. Clears on the next heartbeat that lands. The tenant runtime has its own credential and its own copy of this probe.',
   },
   {
     id: 'backups',
@@ -233,6 +233,28 @@ function checkFacts(name: string, check: Record<string, unknown>): string[] {
   }
   const sinceLast = num(check['minutesSinceLast'])
   if (sinceLast !== null) facts.push(`last fallback ${sinceLast} min ago`)
+  /*==========================================
+   * WHAT THE BEACON'S GREEN COST, WORDED (AGL-2713).
+   *
+   * This door now forgives one undecided heartbeat. A forgiveness nobody can
+   * see is the same shape as a door quietly widened until it stopped
+   * reporting, so both halves of the trade are on the board: how many
+   * attempts this probe needed, and how old the landing being forgiven
+   * against is. `attempts: 2` on a row that is green every time is a
+   * credential on its way out.
+   *=========================================*/
+  const attempts = num(check['attempts'])
+  if (attempts !== null && attempts > 1) {
+    facts.push(`heartbeat needed ${attempts} attempts`)
+  }
+  if ('minutesSinceHeartbeat' in check) {
+    const sinceHeartbeat = num(check['minutesSinceHeartbeat'])
+    facts.push(
+      sinceHeartbeat === null
+        ? 'no heartbeat landing on record — nothing to forgive a miss with'
+        : `last heartbeat landed ${sinceHeartbeat} min ago`,
+    )
+  }
   const creations = num(check['recentOrgCreations'])
   if (creations !== null) facts.push(`${creations} orgs created in window`)
   /*==========================================

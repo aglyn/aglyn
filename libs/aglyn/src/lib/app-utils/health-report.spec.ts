@@ -27,6 +27,7 @@ import {
   healthHeaders,
   healthHttpStatus,
   healthStatus,
+  isTransientBeaconCode,
   MAX_ORG_CREATIONS_PER_WINDOW,
   ORG_CREATION_WINDOW_MINUTES,
   memoizeWithTtl,
@@ -737,6 +738,146 @@ describe('beaconHealth (AGL-1923)', () => {
     const green = beaconHealth({ ok: true }, LOG, 'console-web', 40)
     expect(red.ok).toBe(false)
     expect(green.ok).toBe(true)
+  })
+})
+
+describe('beaconHealth tolerates ONE miss and not two (AGL-2713)', () => {
+  const LOG = 'client-error-beacon-heartbeat'
+  const NOW = 1_757_400_000_000
+  const GRACE = 15 * 60_000
+  /** A heartbeat that landed a minute ago — well inside the grace. */
+  const RECENT = { landedAtMs: NOW - 60_000, graceMs: GRACE, now: NOW }
+
+  it('classifies a refusal as permanent and a silence as undecided', () => {
+    // The whole tolerance turns on this line, so it is asserted directly
+    // rather than only through the branches that consume it.
+    expect(isTransientBeaconCode('credential-unavailable')).toBe(true)
+    expect(isTransientBeaconCode('transport-TimeoutError')).toBe(true)
+    expect(isTransientBeaconCode('transport-unknown')).toBe(true)
+    expect(isTransientBeaconCode('no-credential')).toBe(false)
+    expect(isTransientBeaconCode('http-401')).toBe(false)
+    expect(isTransientBeaconCode('http-403')).toBe(false)
+    expect(isTransientBeaconCode('http-429')).toBe(false)
+    expect(isTransientBeaconCode('heartbeat-unavailable')).toBe(false)
+    expect(isTransientBeaconCode('heartbeat-failed')).toBe(false)
+    expect(isTransientBeaconCode(undefined)).toBe(false)
+  })
+
+  it('stays green on one undecided attempt when a heartbeat landed recently', () => {
+    // The measured 2026-09-09 shape: a cold instance whose credential did not
+    // mint on the first outbound connection of its life.
+    const check = beaconHealth(
+      { ok: false, code: 'credential-unavailable' },
+      LOG,
+      'console-web',
+      40,
+      { ...RECENT, attempts: 2 },
+    )
+    expect(check.ok).toBe(true)
+    expect(healthHttpStatus(healthStatus({ beacon: check }))).toBe(200)
+    // Green, and saying what it cost. A tolerance the board cannot see is
+    // indistinguishable from a door that was widened until it stopped
+    // reporting.
+    expect(check.code).toBe('heartbeat-missed')
+    expect(check.attempts).toBe(2)
+    expect(check.minutesSinceHeartbeat).toBe(1)
+    expect(check.graceMinutes).toBe(15)
+  })
+
+  it('reds once the silence outlasts the grace, which is what SUSTAINED means', () => {
+    const check = beaconHealth(
+      { ok: false, code: 'credential-unavailable' },
+      LOG,
+      'console-web',
+      40,
+      { landedAtMs: NOW - GRACE - 1, graceMs: GRACE, now: NOW, attempts: 2 },
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('credential-unavailable')
+    expect(healthHttpStatus(healthStatus({ beacon: check }))).toBe(503)
+  })
+
+  it('reds a transport timeout the same way once it is sustained', () => {
+    expect(
+      beaconHealth({ ok: false, code: 'transport-TimeoutError' }, LOG, 'x', 4000, {
+        ...RECENT,
+      }).ok,
+    ).toBe(true)
+    expect(
+      beaconHealth({ ok: false, code: 'transport-TimeoutError' }, LOG, 'x', 4000, {
+        landedAtMs: NOW - GRACE - 1,
+        graceMs: GRACE,
+        now: NOW,
+      }).ok,
+    ).toBe(false)
+  })
+
+  it('NEVER forgives a refusal, however recently a heartbeat landed', () => {
+    // A lost grant, a rotated key and an exhausted quota are permanent until a
+    // person acts, and browser errors are being dropped the whole time. These
+    // must page exactly as fast as they did before the tolerance existed.
+    for (const code of ['http-401', 'http-403', 'http-429', 'no-credential']) {
+      const check = beaconHealth({ ok: false, code }, LOG, 'console-web', 40, {
+        ...RECENT,
+      })
+      expect(check.ok).toBe(false)
+      expect(check.code).toBe(code)
+    }
+    // Nor a writer documented never to throw, throwing.
+    expect(beaconHealth(null, LOG, 'console-web', 40, { ...RECENT }).ok).toBe(false)
+  })
+
+  it('forgives NOTHING without proof, so a credential that never worked reds at once', () => {
+    // The failure this tolerance could most easily have become: a door that
+    // excuses every cold start and therefore never reds on a deployment whose
+    // FIREBASE_* env has never once produced a token.
+    const check = beaconHealth(
+      { ok: false, code: 'credential-unavailable' },
+      LOG,
+      'console-web',
+      40,
+      { landedAtMs: null, graceMs: GRACE, now: NOW, attempts: 2 },
+    )
+    expect(check.ok).toBe(false)
+    expect(check.minutesSinceHeartbeat).toBeNull()
+  })
+
+  it('will not forgive against a landing from the future', () => {
+    // A backwards clock must not mint an unbounded grace — the same hazard
+    // `memoizeWithTtl` guards, where a stale entry means reporting healthy
+    // through an outage.
+    const check = beaconHealth(
+      { ok: false, code: 'credential-unavailable' },
+      LOG,
+      'console-web',
+      40,
+      { landedAtMs: NOW + 60_000, graceMs: GRACE, now: NOW },
+    )
+    expect(check.ok).toBe(false)
+  })
+
+  it('defaults to the pre-AGL-2713 verdict when no tolerance is supplied', () => {
+    // Every other caller of this grader passes four arguments. Forgiveness has
+    // to be asked for, or a future call site inherits a grace nobody chose.
+    const check = beaconHealth(
+      { ok: false, code: 'credential-unavailable' },
+      LOG,
+      'console-web',
+      40,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.attempts).toBe(1)
+    expect(check.graceMinutes).toBe(0)
+  })
+
+  it('carries the attempt count on a clean probe too', () => {
+    const check = beaconHealth({ ok: true }, LOG, 'console-web', 40, {
+      ...RECENT,
+      attempts: 1,
+    })
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.attempts).toBe(1)
   })
 })
 

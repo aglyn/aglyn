@@ -9,6 +9,24 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.105 — 2026-09-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/66512fe85...v1.0.0-beta.105)
+
+### Fixed
+
+- **health:** grade the beacon door on a heartbeat, not on one sample ([AGL-2713](https://linear.app/aglyn/issue/AGL-2713))
+
+- **pricing:** assert the reviewed headroom, not a 5% rounding ([AGL-2711](https://linear.app/aglyn/issue/AGL-2711))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **pricing:** record the post-deploy page and the headroom kept over it ([AGL-2711](https://linear.app/aglyn/issue/AGL-2711))
+- **tools:** raise the Linear ceiling to the newest issue that exists ([AGL-2713](https://linear.app/aglyn/issue/AGL-2713), [AGL-2712](https://linear.app/aglyn/issue/AGL-2712), [AGL-2711](https://linear.app/aglyn/issue/AGL-2711))
+
+</details>
+
 ## v1.0.0-beta.104 — 2026-09-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/d6d79443c...v1.0.0-beta.104)

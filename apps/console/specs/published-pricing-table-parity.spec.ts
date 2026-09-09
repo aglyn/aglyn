@@ -959,19 +959,43 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * past its basis fails here, and that failure is the whole point of the
      * row.
      *
+     * ⚠️ THE HEADROOM IS NOW A MARGIN, AND THAT IS A DECISION (2026-09-09).
+     * This case used to hold the surplus under 5% — "a rounding of the price,
+     * not a margin" — and hours after the re-peg the deferral work in AGL-2710
+     * shipped and took the page to 748.5 KB, putting the basis 35% above it.
+     * The owner reviewed that and kept the $0.21, on the standing reasoning
+     * that it is easy to charge less later and hard to charge more, and that
+     * pricing twice in one day is the churn measure-once-price-once exists to
+     * prevent.
+     *
+     * So the 5% bound is gone, and what replaces it is not nothing: the
+     * divergence has to equal the ratio that was signed off, which is recorded
+     * as `acceptedWeightRatio`. Drift is still caught; only a REVIEWED gap is
+     * allowed through, and moving that number is the argument.
+     *
+     * What the surplus costs is written beside it in the budget file rather
+     * than left to be rediscovered: at 748.5 KB the true cost is $0.000119378
+     * per view, so the billed rate is 1.76x true cost against a published
+     * claim of 1.30x. That is the argument for lowering it once the page
+     * settles, and lowering is margin-neutral because
+     * `ESTIMATED_PAGE_TRANSFER_BYTES` is the paired half (AGL-2712).
+     *
      * `tools/tenant-page-budget.json` holds the measurement and
      * `npm run check:page-view-rate` holds the peg; this asserts the two
      * agree, so the record cannot drift from the rate it describes.
      */
-    it('the $0.21 is priced for a 1012.8 KB page that measures 976.1 KB', () => {
+    it('the $0.21 basis covers the page, by the margin that was signed off', () => {
       const { wireCalibration } = JSON.parse(
         readFileSync(
           join(__dirname, '..', '..', '..', 'tools', 'tenant-page-budget.json'),
           'utf8',
         ),
       )
+      // The basis is pinned, because moving it IS the re-peg and must be
+      // argued. The measurement is not: a re-measure is an ordinary event, and
+      // pinning it turned this red for recording the truth.
       expect(wireCalibration.pricedForKb).toBe(1012.8)
-      expect(wireCalibration.measuredKb).toBe(976.1)
+      expect(wireCalibration.measuredKb).toBeGreaterThan(0)
       // The rate on the page is the one the recorded basis implies, at the
       // per-KB cost the 2026-08-09 calibration fixed and this re-peg did not
       // move. Six places, because the rate is pinned to a round PRICE rather
@@ -987,10 +1011,16 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(impliedByMeasured).toBeLessThan(
         METERED_UNIT_RATES_USD.perPageView,
       )
-      // …and not by so much that we are quietly charging well over cost. The
-      // headroom is a rounding of the price, not a margin.
-      expect(impliedByMeasured).toBeGreaterThan(
-        METERED_UNIT_RATES_USD.perPageView * 0.95,
+      // …and the size of that gap is the one that was reviewed, not whatever
+      // the page happens to weigh today. `acceptedWeightRatio` is where the
+      // decision is written down, so a page that drifts without anyone looking
+      // fails here even though the basis still covers it.
+      expect(
+        wireCalibration.measuredKb / wireCalibration.pricedForKb,
+      ).toBeLessThanOrEqual(wireCalibration.acceptedWeightRatio)
+      expect(impliedByMeasured).toBeCloseTo(
+        METERED_UNIT_RATES_USD.perPageView * wireCalibration.acceptedWeightRatio,
+        6,
       )
       // Rounded the way a published figure is: the basis lands on $0.21 per
       // 1,000, which is what the page states.

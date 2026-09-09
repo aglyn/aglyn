@@ -17,12 +17,15 @@
 
 import { FieldValue } from 'firebase-admin/firestore'
 import {
+  BEACON_HEARTBEAT_DOC_PREFIX,
   consumeRateLimit,
   currentRateLimitDegradation,
   DEGRADATION_DOC_PREFIX,
   pendingServerErrors,
   pendingSignupServes,
   RATE_LIMIT_COLLECTION,
+  readBeaconHeartbeat,
+  recordBeaconHeartbeat,
   recordServerError,
   recordSignupRefusal,
   recordSignupServed,
@@ -1236,5 +1239,127 @@ describe('recordSignupServed (AGL-2583)', () => {
       recordSignupServed({ firestore: rejecting, now: 1_755_100_800_000 }),
     ).not.toThrow()
     await settle()
+  })
+})
+
+/**
+ * The evidence that lets `/api/health/error-beacon` forgive one miss
+ * (AGL-2713).
+ *
+ * The door reds unless it can PROVE a heartbeat landed recently, so this
+ * marker is the entire difference between "tolerate a transient blip" and
+ * "widen the door until it stops reporting". Every test here is really an
+ * assertion about which of those two it is.
+ */
+describe('the beacon last-landed marker (AGL-2713)', () => {
+  const settle = async () => {
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+  }
+  const NOW = 1_755_100_830_000
+  const path = `${RATE_LIMIT_COLLECTION}/${BEACON_HEARTBEAT_DOC_PREFIX}console-web`
+
+  it('records the landing under its own field, in the collection with a TTL', async () => {
+    const firestore = fakeFirestore()
+    recordBeaconHeartbeat('console-web', { firestore, now: NOW })
+    await settle()
+
+    const doc = firestore.docs.get(path)
+    expect(doc?.['heartbeatAtMs']).toBe(NOW)
+    expect(doc?.['service']).toBe('console-web')
+    // The TTL policy that already exists on this collection is what keeps a
+    // dead deployment's marker from outliving the deployment.
+    expect(doc?.['expiresAt']).toBeInstanceOf(Date)
+    // Not a sibling's timestamp: `erroredAtMs`, `refusedAtMs`, `servedAtMs`
+    // and `lastAtMs` are each range-queried by their own probe, and a
+    // document carrying one would join a window it does not belong to.
+    for (const field of [
+      'erroredAtMs',
+      'refusedAtMs',
+      'servedAtMs',
+      'lastAtMs',
+    ]) {
+      expect(doc).not.toHaveProperty(field)
+    }
+  })
+
+  it('keeps one document per deployment — the two credentials are not the same credential', async () => {
+    const firestore = fakeFirestore()
+    recordBeaconHeartbeat('console-web', { firestore, now: NOW })
+    recordBeaconHeartbeat('tenant-web', { firestore, now: NOW + 1 })
+    await settle()
+
+    expect(await readBeaconHeartbeat('console-web', { firestore })).toBe(NOW)
+    expect(await readBeaconHeartbeat('tenant-web', { firestore })).toBe(NOW + 1)
+  })
+
+  it('reads the landing back by id — no index, because an undeployable index is not there when it matters', async () => {
+    const firestore = fakeFirestore()
+    recordBeaconHeartbeat('console-web', { firestore, now: NOW })
+    await settle()
+    const before = firestore.counts.reads
+    expect(await readBeaconHeartbeat('console-web', { firestore })).toBe(NOW)
+    expect(firestore.counts.reads - before).toBe(1)
+  })
+
+  it('answers null when nothing has ever landed', async () => {
+    expect(
+      await readBeaconHeartbeat('console-web', { firestore: fakeFirestore() }),
+    ).toBeNull()
+  })
+
+  it('answers null when the store refuses — an unreadable marker forgives nothing', async () => {
+    // Fail-closed, and not an edge case: this store is reached through the
+    // credential that is already misbehaving when the door consults it.
+    const firestore = fakeFirestore()
+    recordBeaconHeartbeat('console-web', { firestore, now: NOW })
+    await settle()
+    firestore.failFrom()
+    expect(await readBeaconHeartbeat('console-web', { firestore })).toBeNull()
+    firestore.recover()
+    expect(await readBeaconHeartbeat('console-web', { firestore })).toBe(NOW)
+  })
+
+  it('answers null rather than NaN when the field is corrupt', async () => {
+    const firestore = fakeFirestore()
+    recordBeaconHeartbeat('console-web', { firestore, now: NOW })
+    await settle()
+    firestore.docs.set(path, { heartbeatAtMs: 'yesterday' })
+    expect(await readBeaconHeartbeat('console-web', { firestore })).toBeNull()
+  })
+
+  it('gives up on a store that hangs, so a health endpoint cannot be held open', async () => {
+    const hanging = {
+      collection: () => ({
+        doc: () => ({ get: () => new Promise(() => undefined) }),
+      }),
+    }
+    expect(
+      await readBeaconHeartbeat('console-web', {
+        firestore: hanging,
+        budgetMs: 5,
+      }),
+    ).toBeNull()
+  })
+
+  it('never throws when the store is unreachable on the WRITE side either', async () => {
+    const rejecting = {
+      collection: () => ({
+        doc: () => ({ set: () => Promise.reject(new Error('unavailable')) }),
+      }),
+    }
+    expect(() =>
+      recordBeaconHeartbeat('console-web', { firestore: rejecting, now: NOW }),
+    ).not.toThrow()
+    await settle()
+  })
+
+  it('never throws when there is no admin app to reach a store through', () => {
+    // No `firestore` injected and no initialized app in this suite: the
+    // heartbeat still landed and the probe still reports off the write
+    // itself; only the evidence for forgiving a future miss is lost.
+    expect(() => recordBeaconHeartbeat('console-web', { now: NOW })).not.toThrow()
   })
 })

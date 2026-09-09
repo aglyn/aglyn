@@ -668,8 +668,14 @@ test('the CLI passes on the real tree and states the headroom', () => {
   // A green run that did not state the basis and the measurement beside it
   // would let the headroom be spent without anyone watching, which is how the
   // rate went stale the first time.
-  assert.match(out, /priced for 1012\.8 KB/)
-  assert.match(out, /last measured 976\.1 KB/)
+  //
+  // Read from the calibration rather than frozen as literals: what this
+  // asserts is that the CLI SAYS the two numbers, and a re-measure is an
+  // ordinary event — pinning them meant a legitimate one turned this red for
+  // naming the truth, which teaches the next reader to edit the assertion.
+  const escape = (value) => String(value).replace(/\./g, '\\.')
+  assert.match(out, new RegExp(`priced for ${escape(CALIBRATION.pricedForKb)} KB`))
+  assert.match(out, new RegExp(`last measured ${escape(CALIBRATION.measuredKb)} KB`))
   // The pair, and the quantity it implies. A green run that printed the rate
   // without the bytes beside it would let the two part again in silence.
   assert.match(out, /paired with 1037107\.2 bytes per view/)

@@ -226,6 +226,273 @@ describe('writeBeaconHeartbeat (AGL-1923)', () => {
       ok: true,
     })
   })
+
+  it('separates a missing credential from one that did not mint (AGL-2713)', async () => {
+    // One of these is a deployment whose FIREBASE_* env is absent and stays
+    // absent; the other is a cold lambda's first outbound TLS handshake. They
+    // shared a code until AGL-2713, and the collapse is what let a warming
+    // instance page an on-call human.
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    getAccessToken.mockRejectedValue(new Error('getaddrinfo EAI_AGAIN'))
+    const mod = await load(HEALTHY_APP)
+    expect(await mod.writeBeaconHeartbeat({ service: 'console-web' })).toEqual({
+      ok: false,
+      code: 'credential-unavailable',
+    })
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+  })
+
+  it('reports credential-unavailable when the mint answers with no token', async () => {
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    getAccessToken.mockResolvedValue({})
+    const mod = await load(HEALTHY_APP)
+    expect(await mod.writeBeaconHeartbeat({ service: 'console-web' })).toEqual({
+      ok: false,
+      code: 'credential-unavailable',
+    })
+  })
+
+  it('keeps `beaconLoggingTarget` answering null, for the two callers that only ask that', async () => {
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    const mod = await load(new Error('no app'))
+    expect(await mod.beaconLoggingTarget()).toBeNull()
+  })
+})
+
+/**
+ * ONE MISS IS NOT AN OUTAGE, TWO IS (AGL-2713).
+ *
+ * `/api/health/error-beacon` on the console answered `503 no-credential`
+ * twice on 2026-09-09 — 15:12 and 17:22 UTC, each minutes after new capacity
+ * from that day's 15:08 deploy, each self-clearing — and between them took the
+ * 15-minute uptime workflow red and opened four GCP alert events. The beacon
+ * was working; the beacon code path had changed by one comment line since the
+ * previous release.
+ *
+ * These drive the shared probe both ways. The tolerating half is worth
+ * nothing on its own: what makes it safe is that every permanent shape still
+ * reds on the first sample, and that forgiveness needs durable proof it can
+ * be spent against.
+ */
+describe('beaconHeartbeatProbe (AGL-2713)', () => {
+  const realFetch = globalThis.fetch
+  const NOW = 1_757_400_000_000
+  let getAccessToken: jest.Mock
+
+  beforeEach(() => {
+    jest.resetModules()
+    getAccessToken = jest.fn().mockResolvedValue({ access_token: 'tok' })
+  })
+
+  afterEach(() => {
+    globalThis.fetch = realFetch
+    jest.restoreAllMocks()
+  })
+
+  const HEALTHY_APP = {
+    options: {
+      projectId: 'aglyn-main',
+      credential: { getAccessToken: () => getAccessToken() },
+    },
+  }
+
+  async function load(app: unknown = HEALTHY_APP) {
+    jest.doMock('firebase-admin/app', () => ({
+      getApp: () => {
+        if (app instanceof Error) throw app
+        return app
+      },
+    }))
+    jest.doMock('@aglyn/shared-util-fbserver', () => ({}))
+    return await import('./client-error-report')
+  }
+
+  /** A store that answers with one landing, nothing, or a failure. */
+  function fakeStore(landed: number | null | Error) {
+    const set = jest.fn().mockResolvedValue(undefined)
+    const get = jest.fn().mockImplementation(async () => {
+      if (landed instanceof Error) throw landed
+      return {
+        exists: landed !== null,
+        get: (field: string) =>
+          landed === null || field !== 'heartbeatAtMs' ? undefined : landed,
+      }
+    })
+    const doc = jest.fn().mockReturnValue({ set, get })
+    return { set, get, doc, collection: jest.fn().mockReturnValue({ doc }) }
+  }
+
+  /** Never a real timer: the retry delay must not cost the suite 250ms. */
+  const sleep = jest.fn().mockResolvedValue(undefined)
+
+  async function probe(
+    mod: Awaited<ReturnType<typeof load>>,
+    store: ReturnType<typeof fakeStore>,
+    graceMs = 15 * 60_000,
+  ) {
+    return await mod.beaconHeartbeatProbe({
+      service: 'console-web',
+      now: () => NOW,
+      sleep,
+      firestore: store,
+      graceMs,
+    })
+  }
+
+  it('records the landing when the heartbeat lands first time', async () => {
+    globalThis.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch
+    const store = fakeStore(null)
+    const check = await probe(await load(), store)
+
+    expect(check.ok).toBe(true)
+    expect(check.attempts).toBe(1)
+    expect(check.code).toBeUndefined()
+    // The evidence a LATER miss is forgiven against. Without this write the
+    // tolerance below has nothing to spend and the door reds as it does today.
+    expect(store.doc).toHaveBeenCalledWith('beaconHeartbeat_console-web')
+    expect(store.set.mock.calls[0][0]).toMatchObject({
+      heartbeatAtMs: NOW,
+      service: 'console-web',
+    })
+    // Not a sibling marker's field: this document must not enter another
+    // probe's window and be counted as an episode it is not.
+    expect(store.set.mock.calls[0][0]).not.toHaveProperty('erroredAtMs')
+    expect(store.set.mock.calls[0][0].expiresAt).toBeInstanceOf(Date)
+  })
+
+  it('THE MEASURED SHAPE: a cold mint that fails once is retried and lands', async () => {
+    // 15:12 and 17:22 UTC, 2026-09-09. Nothing else about the deployment was
+    // wrong, and the door read 200 in 140ms minutes later.
+    getAccessToken
+      .mockRejectedValueOnce(new Error('getaddrinfo EAI_AGAIN'))
+      .mockResolvedValue({ access_token: 'tok' })
+    globalThis.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch
+    const store = fakeStore(null)
+    const check = await probe(await load(), store)
+
+    expect(check.ok).toBe(true)
+    expect(check.attempts).toBe(2)
+    // Green, but the retry is on the board: a credential that needs two
+    // attempts every time is one on its way out.
+    expect(store.set).toHaveBeenCalled()
+    expect(sleep).toHaveBeenCalled()
+  })
+
+  it('stays green when BOTH attempts miss and a heartbeat landed inside the grace', async () => {
+    getAccessToken.mockRejectedValue(new Error('EAI_AGAIN'))
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    const store = fakeStore(NOW - 60_000)
+    const check = await probe(await load(), store)
+
+    expect(check.ok).toBe(true)
+    expect(check.code).toBe('heartbeat-missed')
+    expect(check.attempts).toBe(2)
+    expect(check.minutesSinceHeartbeat).toBe(1)
+  })
+
+  it('REDS when the silence outlasts the grace — a sustained failure still pages', async () => {
+    getAccessToken.mockRejectedValue(new Error('EAI_AGAIN'))
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    const store = fakeStore(NOW - 16 * 60_000)
+    const check = await probe(await load(), store)
+
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('credential-unavailable')
+  })
+
+  it('REDS when the marker store cannot answer — no proof is not forgiveness', async () => {
+    // The store shares the credential that is already misbehaving, so this is
+    // the likely case rather than an exotic one. It must fail closed.
+    getAccessToken.mockRejectedValue(new Error('EAI_AGAIN'))
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    const store = fakeStore(new Error('UNAVAILABLE'))
+    const check = await probe(await load(), store)
+
+    expect(check.ok).toBe(false)
+    expect(check.minutesSinceHeartbeat).toBeNull()
+  })
+
+  it('REDS on a deployment whose credential has never once worked', async () => {
+    // The failure this whole change could most easily have become: excusing
+    // every cold start, on a monitor that then never reds at all.
+    getAccessToken.mockRejectedValue(new Error('EAI_AGAIN'))
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    const check = await probe(await load(), fakeStore(null))
+    expect(check.ok).toBe(false)
+  })
+
+  it('REDS a lost grant, a quota and a missing env on the FIRST sample, with no retry', async () => {
+    for (const [status, code] of [
+      [401, 'http-401'],
+      [403, 'http-403'],
+      [429, 'http-429'],
+    ] as const) {
+      jest.resetModules()
+      getAccessToken = jest.fn().mockResolvedValue({ access_token: 'tok' })
+      const fetchMock = jest.fn().mockResolvedValue({ ok: false, status })
+      globalThis.fetch = fetchMock as unknown as typeof fetch
+      const store = fakeStore(NOW - 1_000)
+      const check = await probe(await load(), store)
+
+      expect(check.ok).toBe(false)
+      expect(check.code).toBe(code)
+      expect(check.attempts).toBe(1)
+      // Not retried, and not forgiven against a landing one second old: these
+      // stay broken until a person acts, and browser errors are being dropped
+      // the entire time.
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(store.get).not.toHaveBeenCalled()
+    }
+  })
+
+  it('REDS a deployment with no admin app at all, whatever the marker says', async () => {
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    const store = fakeStore(NOW - 1_000)
+    const check = await probe(await load(new Error('no app')), store)
+
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('no-credential')
+    expect(check.attempts).toBe(1)
+    expect(store.get).not.toHaveBeenCalled()
+  })
+
+  it('REDS, and never throws, when the writer breaks its never-throws contract', async () => {
+    // `writeBeaconHeartbeat` catches everything itself, so this branch is
+    // unreachable through it — which is precisely why it needs a seam. A belt
+    // nobody has watched hold is not a belt.
+    const store = fakeStore(NOW - 1_000)
+    const mod = await load()
+    const check = await mod.beaconHeartbeatProbe({
+      service: 'console-web',
+      now: () => NOW,
+      sleep,
+      firestore: store,
+      write: async () => {
+        throw new Error('contract broken')
+      },
+    })
+
+    expect(check.ok).toBe(false)
+    // Never tolerated: a writer documented never to throw, throwing, is a bug
+    // rather than a quiet network, and it is retried against nothing.
+    expect(check.code).toBe('heartbeat-unavailable')
+    expect(check.attempts).toBe(1)
+    expect(store.get).not.toHaveBeenCalled()
+  })
+
+  it('names the log and the deployment on every outcome', async () => {
+    getAccessToken.mockRejectedValue(new Error('EAI_AGAIN'))
+    globalThis.fetch = jest.fn() as unknown as typeof fetch
+    const mod = await load()
+    const check = await probe(mod, fakeStore(NOW - 60_000))
+    expect(check.logId).toBe(mod.BEACON_HEARTBEAT_LOG_ID)
+    expect(check.service).toBe('console-web')
+    expect(check.graceMinutes).toBe(15)
+  })
 })
 
 /**
