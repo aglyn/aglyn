@@ -24,6 +24,12 @@ module.exports = {
         'estree-util-is-identifier-name', 'hast-util-.*', 'html-url-attributes',
         'is-alphabetical', 'is-alphanumerical', 'is-decimal', 'is-hexadecimal',
         'is-plain-obj', 'longest-streak', 'mdast-util-.*',
+        // `mobx-utils/lib/*` is ESM inside a package that declares no
+        // `"type": "module"`, so Node reads it as CJS and the `import` at the
+        // top of `computedFn.js` is a syntax error until this transforms it.
+        // The package ENTRY is a UMD bundle and needed no transform, which is
+        // why this line arrived with the deep import (AGL-2706).
+        'mobx-utils',
         'micromark.*', 'parse-entities', 'property-information',
         'remark-.*', 'space-separated-tokens', 'stringify-entities',
         'trim-lines', 'trough', 'unified', 'unist-util-.*', 'vfile.*', 'zwitch',

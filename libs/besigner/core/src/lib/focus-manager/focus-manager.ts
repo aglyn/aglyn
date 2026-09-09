@@ -17,7 +17,8 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
-import { computedFn } from 'mobx-utils'
+// The leaf module, not the 68 KB package bundle — see the note there.
+import { computedFn } from '@aglyn/shared-util-vendor/mobx-computed-fn'
 
 export type HoveredNode = Aglyn.NodeSchema<any> | null
 export type SelectedNodes = Aglyn.NodeSchema<any>[]

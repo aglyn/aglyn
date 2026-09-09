@@ -17,7 +17,8 @@
 
 import type { MdiIconProps } from '../types/nodes'
 import { makeAutoObservable, toJS } from 'mobx'
-import { computedFn } from 'mobx-utils'
+// The leaf module, not the 68 KB package bundle — see the note there.
+import { computedFn } from '@aglyn/shared-util-vendor/mobx-computed-fn'
 import type { Aglyn } from '../aglyn'
 import { lifecycleEvent } from '../lifecycle'
 import { createIdUrlSafe } from '../foundation/constants/app'
