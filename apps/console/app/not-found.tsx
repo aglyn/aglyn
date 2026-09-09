@@ -16,9 +16,27 @@
  */
 'use client'
 
-import AuthenticatedLayout from '../components/layouts/authenticated.layout'
-import MainLayout from '../components/layouts/main.layout'
-import NotFoundContent from '../components/not-found-content.component'
+import { Suspense, lazy } from 'react'
+
+/**
+ * The chrome is behind a lazy boundary, and nothing here may import it
+ * statically (AGL-2706).
+ *
+ * This file is a client entry of its own, so Turbopack gives it a chunk group
+ * separate from the `(app)` layout's. Composing the chrome here put
+ * `AuthenticatedLayout` and `MainLayout` in both, as private copies of what
+ * the page group already carries — and a not-found boundary is mounted into
+ * every successful response, so the copy was fetched on ordinary console
+ * pages rather than on 404s.
+ *
+ * `(app)/not-found.tsx` is what a `notFound()` from inside the group renders,
+ * so this boundary is reached only by URLs that match no route at all. Paying
+ * a chunk fetch on that arrival, and nothing on every other page, is the right
+ * way round.
+ */
+const NotFoundChrome = lazy(
+  () => import('../components/not-found-chrome.component'),
+)
 
 /**
  * Global not-found boundary (AGL-625). This root `not-found.tsx` catches both
@@ -29,11 +47,12 @@ import NotFoundContent from '../components/not-found-content.component'
  * itself when there is no current workspace.
  */
 export default function NotFound() {
+  // `null` rather than a spinner: `AuthenticatedLayout` opens on its own
+  // splash while auth resolves, so a fallback here would be a second loading
+  // state in front of that one.
   return (
-    <AuthenticatedLayout>
-      <MainLayout>
-        <NotFoundContent />
-      </MainLayout>
-    </AuthenticatedLayout>
+    <Suspense fallback={null}>
+      <NotFoundChrome />
+    </Suspense>
   )
 }
