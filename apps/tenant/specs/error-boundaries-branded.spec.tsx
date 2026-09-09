@@ -49,13 +49,17 @@ const APP = join(__dirname, '..', 'app')
 
 /**
  * Every rung, and the reason it cannot be folded into the one above it.
- * `[host]/*` renders under `[host]/layout`, so it gets the site's theme and
- * mark; `app/*` renders when that layout is what failed, so it cannot.
+ * `[host]/[scheme]/*` renders under `[host]/[scheme]/layout`, so it gets the
+ * site's theme and mark; `app/*` renders when that layout is what failed, so
+ * it cannot.
  */
 const BOUNDARIES = [
-  ['[host]/not-found.tsx', 'the 404, under the host theme'],
-  ['[host]/error.tsx', 'a throw in the page, loader or metadata'],
-  ['error.tsx', 'a throw in [host]/layout, which [host]/error cannot catch'],
+  ['[host]/[scheme]/not-found.tsx', 'the 404, under the host theme'],
+  ['[host]/[scheme]/error.tsx', 'a throw in the page, loader or metadata'],
+  [
+    'error.tsx',
+    'a throw in [host]/[scheme]/layout, which its own error.tsx cannot catch',
+  ],
   ['global-error.tsx', 'a throw in the root layout'],
   ['not-found.tsx', 'a path that never resolves a host'],
 ] as const

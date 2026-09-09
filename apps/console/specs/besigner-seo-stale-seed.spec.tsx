@@ -285,6 +285,11 @@ jest.mock('@aglyn/shared-ui-theme', () => ({
   mergeSxProps: jest.requireActual(
     '../../../libs/shared/ui/theme/src/lib/util/merge-sx-props',
   ).mergeSxProps,
+  // The wordmark modules build their MUI class keys at import time, so a stub
+  // here is a module-load failure rather than a missing style.
+  generateComponentClassKeys: jest.requireActual(
+    '../../../libs/shared/ui/theme/src/lib/util/generate-component-class-keys',
+  ).generateComponentClassKeys,
   HostThemeDocumentContext: {
     Provider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   },

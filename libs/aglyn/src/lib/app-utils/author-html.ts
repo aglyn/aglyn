@@ -352,6 +352,17 @@ function escapeText(text: string): string {
  * escapes only `&`, U+00A0 and `"` in an attribute value, and inside a
  * quoted value a raw `<` is literal to the parser, so escaping it would be
  * safe but would not round-trip.
+ *
+ * That is also why this is NOT `@aglyn/shared-util-tools/escape-html`, which
+ * every other string-built HTML surface in the repo now shares. That one
+ * escapes the five characters a SAFE escaper needs; this one has to emit
+ * exactly the characters a browser's serializer emits and no others. Pointing
+ * it at the shared escaper was measured (AGL-2706): the `<` inside a quoted
+ * href comes back `&lt;`, and `author-html-round-trip.spec.tsx` fails on the
+ * fixed point — the string no longer re-serializes to itself, which is the
+ * hydration mismatch this pair exists to prevent. U+00A0 is the same argument
+ * in the other direction: the shared escaper leaves it alone, the serializer
+ * writes `&nbsp;`.
  */
 function escapeAttribute(value: string): string {
   return value

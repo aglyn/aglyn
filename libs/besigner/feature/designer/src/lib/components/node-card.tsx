@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { components } from '@aglyn/aglyn'
 import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -49,7 +50,7 @@ export const NodeCard = observer(
     const label =
       node?.['label'] ||
       node?.displayName ||
-      Aglyn.components.getLabel(node?.$id) ||
+      components.getLabel(node?.$id) ||
       node?.$id
 
     return (

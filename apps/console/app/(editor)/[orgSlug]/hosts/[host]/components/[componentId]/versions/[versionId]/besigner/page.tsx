@@ -17,7 +17,15 @@
 'use client'
 
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  CANVAS_ROOT_ELEMENT_ID,
+  canvasTreeToDefinition,
+  definitionToCanvasTree,
+  encodeStoredNodes,
+  ScreenLinkContext,
+} from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
@@ -81,6 +89,7 @@ import BesignerVersionsComponent from '../../../../../../../../../../components/
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
+import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import {
@@ -250,7 +259,7 @@ function ComponentBesignerPage(props) {
   // keeps (and could save) this document's nodes.
   useEffect(() => {
     return () => {
-      Aglyn.canvas.reset()
+      canvas.reset()
       Besigner.focus.clearFocusStatus()
     }
   }, [hostId, componentId, versionId])
@@ -287,7 +296,7 @@ function ComponentBesignerPage(props) {
   const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
   const { elements: canvasElements } = useRenderedCanvasElements()
   const getCanvasRoot = useCallback(
-    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    () => canvasElements.current?.[CANVAS_ROOT_ELEMENT_ID]?.node,
     [canvasElements],
   )
   const presence = usePresence({
@@ -370,7 +379,7 @@ function ComponentBesignerPage(props) {
     // has to be wrapped or the canvas has no root and renders nothing
     // (AGL-680).
     toCanvasNodes: (storedNodes) =>
-      Aglyn.definitionToCanvasTree({
+      definitionToCanvasTree({
         rootId: data?.rootId,
         nodes: storedNodes as Record<string, unknown>,
       }) as Aglyn.ProcessableNodes,
@@ -425,7 +434,7 @@ function ComponentBesignerPage(props) {
     docId: componentId,
     versionId,
     storedStamp: (data as { updatedAt?: unknown } | undefined)?.updatedAt,
-    loaded: Aglyn.canvas.didSetInitial,
+    loaded: canvas.didSetInitial,
   })
   clearMirrorRef.current = coediting.clearMirror
 
@@ -478,8 +487,8 @@ function ComponentBesignerPage(props) {
       // Unwrap the synthetic canvas root: the tenant runtime grafts from
       // `rootId`, so publishing the wrapper would put an always-empty
       // container inside every instance of this component (AGL-680).
-      const definition = Aglyn.canvasTreeToDefinition(
-        Aglyn.canvas.toJSON().nodes as Record<string, unknown>,
+      const definition = canvasTreeToDefinition(
+        canvas.toJSON().nodes as Record<string, unknown>,
       )
       if (definition.ambiguousRoot) {
         return enqueueSnackbar(
@@ -504,7 +513,7 @@ function ComponentBesignerPage(props) {
           // it is copied far more often than it is written — and it was the
           // one document in the family still stored as a plain map, at about
           // 1.4x the bytes against the same 1 MiB ceiling.
-          nodes: Bytes.fromUint8Array(Aglyn.encodeStoredNodes(publishedNodes)!),
+          nodes: Bytes.fromUint8Array(encodeStoredNodes(publishedNodes)!),
           ...(rootId ? { rootId } : {}),
           props: declaredProps ?? [],
           versionId,
@@ -759,7 +768,7 @@ function ComponentBesignerPage(props) {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
-      <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+      <ScreenLinkContext.Provider value={screenLinks}>
         <EntityPickerProvider hostId={hostId}>
           <ReusableComponentsProvider hostId={hostId}>
             <BindingPickerProvider hostId={hostId}>
@@ -783,6 +792,7 @@ function ComponentBesignerPage(props) {
                   <MainLayout
                     enableAppBarElevation
                     besigner
+                    wordmark={<BesignerWordmark />}
                     centerPrefix={
                       <BesignerDocumentSwitcherComponent
                         hostId={hostId}
@@ -872,15 +882,15 @@ function ComponentBesignerPage(props) {
                           {
                             id: 'center-nav-edit-undo',
                             children: 'Undo',
-                            onClick: () => Aglyn.canvas.undo(),
-                            disabled: !Aglyn.canvas.canUndo,
+                            onClick: () => canvas.undo(),
+                            disabled: !canvas.canUndo,
                             ListItemTextProps: { inset: true },
                           },
                           {
                             id: 'center-nav-edit-redo',
                             children: 'Redo',
-                            onClick: () => Aglyn.canvas.redo(),
-                            disabled: !Aglyn.canvas.canRedo,
+                            onClick: () => canvas.redo(),
+                            disabled: !canvas.canRedo,
                             ListItemTextProps: { inset: true },
                           },
                           {
@@ -985,12 +995,12 @@ function ComponentBesignerPage(props) {
                       </>
                     )}
                   </MainLayout>
-                  {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
+                  {Boolean(canvas.rootNode && jsonOpen) && (
                     <JsonEditor
-                      open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
+                      open={Boolean(canvas.rootNode && jsonOpen)}
                       onClose={closeJsonEditor}
                       onSave={handleJsonSave}
-                      defaultValue={Aglyn.canvas.nestedNodes as any}
+                      defaultValue={canvas.nestedNodes as any}
                     />
                   )}
                   <ComponentPropsDialog
@@ -1004,7 +1014,7 @@ function ComponentBesignerPage(props) {
             </BindingPickerProvider>
           </ReusableComponentsProvider>
         </EntityPickerProvider>
-      </Aglyn.ScreenLinkContext.Provider>
+      </ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   )
 }

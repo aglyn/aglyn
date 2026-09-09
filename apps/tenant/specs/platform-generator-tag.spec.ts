@@ -49,12 +49,12 @@
  * test's own opinion.
  */
 
-jest.mock('../app/[host]/[[...slug]]/load-page-data', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/load-page-data', () => ({
   __esModule: true,
   loadPageData: jest.fn(),
 }))
 // A large browser-side graph that `generateMetadata` never touches.
-jest.mock('../app/[host]/[[...slug]]/catch-all-client', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/catch-all-client', () => ({
   __esModule: true,
   default: () => null,
 }))
@@ -69,8 +69,8 @@ jest.mock('../utils/get-org-billing', () => ({
   getOrgBilling: jest.fn(),
 }))
 
-import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'
-import { generateMetadata } from '../app/[host]/[[...slug]]/page'
+import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
+import { generateMetadata } from '../app/[host]/[scheme]/[[...slug]]/page'
 import getHost from '../utils/get-host'
 import getOrgBilling from '../utils/get-org-billing'
 

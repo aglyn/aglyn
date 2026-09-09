@@ -72,6 +72,15 @@ export function shouldReport(results) {
  * this list gets no claim made about it beyond the code the probe reported.
  */
 export const JOURNEY_MEANING = {
+  // The two front doors (AGL-2709). Not a journey in the sense the rest of
+  // this list means it — this is the plainest failure there is, a visitor
+  // asking for a page and not getting one — but it belongs on the list for
+  // the same reason: it must not read as one more component row. Every other
+  // check on the board was green through ten minutes of exactly this.
+  'front-door/site':
+    'a visitor asking for a published site is NOT getting a page',
+  'front-door/marketing':
+    'a visitor asking for the marketing home is NOT getting a page',
   'console/auth-doors':
     'a way IN may be shut — password recovery, the verification link, Google, SSO or passkeys',
   'console/journeys': 'creating or publishing may be refused for every customer',
@@ -88,7 +97,16 @@ export const JOURNEY_MEANING = {
 export function slackPayload({ results, runUrl }) {
   const down = downTargets(results)
   const names = down.map((row) => row.name)
-  const journeys = names.filter((name) => JOURNEY_MEANING[name])
+  /**
+   * A CHALLENGED row is red and makes no claim about the site (AGL-2709).
+   * Bot protection answered instead of the app, so the probe learned nothing —
+   * and `JOURNEY_MEANING` for a front door reads "a visitor is NOT getting a
+   * page", which would be a fabricated outage in the one place a reader is
+   * least able to check it. The row still appears, with the verdict the probe
+   * actually produced; only the claim is withheld.
+   */
+  const claim = (row) => (row.challenged ? null : JOURNEY_MEANING[row.name])
+  const journeys = down.filter((row) => claim(row))
   const headline = journeys.length
     ? `Uptime probe: a USER JOURNEY is failing (${names.join(', ')})`
     : `Uptime probe: ${names.join(', ')} DOWN`
@@ -97,7 +115,7 @@ export function slackPayload({ results, runUrl }) {
     ...down.map(
       (row) =>
         `• \`${row.name}\` — ${row.detail || 'failed'}${
-          JOURNEY_MEANING[row.name] ? ` — ${JOURNEY_MEANING[row.name]}` : ''
+          claim(row) ? ` — ${claim(row)}` : ''
         }\n  ${row.url}`,
     ),
     journeys.length

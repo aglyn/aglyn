@@ -16,91 +16,80 @@
  */
 'use client'
 
-import {
-  Box,
-  CircularProgress,
-  LinearProgress,
-  Modal,
-  type ModalProps,
-  Stack,
-  styled,
-  Typography,
-} from '@mui/material'
-import { alpha } from '@mui/material/styles'
-import { forwardRef, Fragment } from 'react'
-import { AglynLogoFull } from '../const/aglyn-logo-full'
+import dynamic from 'next/dynamic'
+import { forwardRef, Fragment, useEffect, useState } from 'react'
 import { LoadingContext } from '../contexts/loading.context'
-import LoadingTextComponent from './loading-text.component'
+import type { LoadingModalOverlayProps } from './loading-modal-overlay'
 
-const LoadingOverlayModal = styled(Modal)(({ theme }) => {
-  // The overlay has two homes. The console's theme is built with
-  // `cssVariables`, so `theme.vars` carries a `*Channel` triplet for every
-  // palette color and `rgba(var(--…Channel) / a)` stays bound to the
-  // variable: it follows a scheme switch without a re-render. A published
-  // site renders under a plain `createTheme()` — no `vars`, no channel
-  // triplets — where that template would spell `rgba(undefined / a)`, an
-  // invalid declaration the browser drops. There the tint is composed from
-  // the literal palette value instead.
-  const backdropTint = theme.vars
-    ? `rgba(${theme.vars.palette.background.paperChannel} / 0.48)`
-    : alpha(theme.palette.background.paper, 0.48)
-  const progressTint = theme.vars
-    ? `rgba(${theme.vars.palette.primary.mainChannel} / 0.86)`
-    : alpha(theme.palette.primary.main, 0.86)
+/**
+ * The overlay's own loader, kept beside the `dynamic()` that wraps it so the
+ * warm-up below and the render path fetch the same module.
+ */
+const importOverlay = () => import('./loading-modal-overlay')
 
-  return {
-    zIndex: theme.zIndex.max,
-    color: (theme.vars || theme).palette.text.primary,
+const LoadingOverlay = dynamic(importOverlay, { ssr: false })
 
-    ['& .MuiBackdrop-root']: {
-      backdropFilter: 'blur(5px)',
-      backgroundColor: backdropTint,
-    },
-    ['& .wrapper']: {
-      position: 'absolute',
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
-      height: '100%',
-      width: '100%',
-      flexDirection: 'column',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    ['& .progress-bar-top']: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      backgroundColor: progressTint,
-      width: '100%',
-    },
-    ['& .status-text']: {
-      fontWeight: theme.typography.fontWeightBold,
-    },
-  }
-})
+export type LoadingModalProps = LoadingModalOverlayProps
 
-export interface LoadingModalProps extends Partial<ModalProps> {
-  /**
-   * Brand the overlay for a tenant site (AGL-594): a site logo image
-   * replaces the Aglyn logo in the bottom slot; with only a name, the
-   * site name renders as text. Without either, the Aglyn logo shows —
-   * the console's own look.
-   */
-  brandLogoUrl?: string
-  brandName?: string
+/**
+ * Warms the overlay chunk once the page it sits under has painted.
+ *
+ * The overlay covers a slow navigation, so fetching it only at the click that
+ * starts one would put a request in front of the very thing it exists to
+ * cover. Idle time after first paint is the right moment instead: off the
+ * billed first-paint bundle, and settled long before anyone clicks. The
+ * `timeout` matters — an idle callback in a background tab can wait
+ * indefinitely without one — and every path here is best-effort, because the
+ * render below fetches the module on demand regardless.
+ */
+function useOverlayWarmUp(): void {
+  useEffect(() => {
+    const warm = () => {
+      void importOverlay().catch(() => undefined)
+    }
+    const idle = (
+      globalThis as typeof globalThis & {
+        requestIdleCallback?: (
+          callback: () => void,
+          options?: { timeout: number },
+        ) => number
+        cancelIdleCallback?: (handle: number) => void
+      }
+    ).requestIdleCallback
+    if (!idle) {
+      const timer = setTimeout(warm, 2000)
+      return () => clearTimeout(timer)
+    }
+    const handle = idle(warm, { timeout: 4000 })
+    return () => {
+      ;(
+        globalThis as typeof globalThis & {
+          cancelIdleCallback?: (handle: number) => void
+        }
+      ).cancelIdleCallback?.(handle)
+    }
+  }, [])
 }
 
+/**
+ * The navigation overlay's mount point (AGL-594), wrapping the app's content.
+ *
+ * `children` render unconditionally and OUTSIDE the overlay, so what a
+ * visitor reads never waits on it. The overlay itself lives in its own module
+ * and arrives through `next/dynamic` (AGL-2706): MUI's `Modal` — with
+ * `ModalManager`, `FocusTrap`, `Backdrop` and `Fade` behind it — plus
+ * `LinearProgress`, `CircularProgress` and the 6 KB inline `AglynLogoFull`
+ * were first-paint weight in both apps for a scrim that draws only while a
+ * navigation is in flight, and never at all on a visit with no navigation.
+ *
+ * Once it has been shown it STAYS mounted, so `closeAfterTransition` still
+ * has a component to run its exit against; unmounting on close would cut the
+ * fade-out instead of playing it.
+ */
 export const LoadingModal = forwardRef<any, LoadingModalProps>((props, ref) => {
-  const { open, children, brandLogoUrl, brandName, ...rest } = props
-
-  const brandSlotSx = {
-    m: '0 auto',
-    position: 'absolute',
-    bottom: (theme: any) => theme.spacing(2),
-  } as const
+  const { open, children, ...rest } = props
+  const [everShown, setEverShown] = useState(false)
+  useOverlayWarmUp()
 
   return (
     <LoadingContext.Consumer>
@@ -110,66 +99,44 @@ export const LoadingModal = forwardRef<any, LoadingModalProps>((props, ref) => {
         return (
           <Fragment>
             {children}
-            <LoadingOverlayModal
-              ref={ref}
-              open={isOpen}
-              closeAfterTransition
-              {...rest}
+            <OverlaySlot
+              isOpen={isOpen}
+              everShown={everShown}
+              onShown={setEverShown}
             >
-              <div className="wrapper">
-                <LinearProgress
-                  color="primary"
-                  className="progress-bar-top"
-                />
-                <Stack
-                  direction="column"
-                  spacing={2}
-                  sx={{
-                    justifyContent: "center",
-                    alignItems: "center",
-                    flexGrow: 1
-                  }}>
-                  <div>
-                    <CircularProgress color="primary" />
-                    <LoadingTextComponent
-                      variant="overline"
-                      className="status-text"
-                      sx={{ ml: -0.5 }}
-                    >
-                      Loading
-                    </LoadingTextComponent>
-                  </div>
-                </Stack>
-                {brandLogoUrl ? (
-                  <Box
-                    component="img"
-                    src={brandLogoUrl}
-                    alt={brandName || 'Site logo'}
-                    sx={{
-                      ...brandSlotSx,
-                      maxHeight: 48,
-                      maxWidth: 200,
-                      objectFit: 'contain',
-                    }}
-                  />
-                ) : brandName ? (
-                  <Typography
-                    variant="h6"
-                    sx={{ ...brandSlotSx, fontWeight: 600 }}
-                  >
-                    {brandName}
-                  </Typography>
-                ) : (
-                  <AglynLogoFull sx={{ ...brandSlotSx, fontSize: 100 }} />
-                )}
-              </div>
-            </LoadingOverlayModal>
+              <LoadingOverlay ref={ref} open={isOpen} {...rest} />
+            </OverlaySlot>
           </Fragment>
-        );
+        )
       }}
     </LoadingContext.Consumer>
-  );
+  )
 })
 LoadingModal.displayName = 'LoadingModal'
+
+/**
+ * Holds the overlay off the tree until it is first asked for.
+ *
+ * A component rather than a branch in the render prop above: the "has it ever
+ * opened" latch has to be a hook, and the render prop of a context consumer
+ * is not a place hooks may be called.
+ */
+function OverlaySlot({
+  isOpen,
+  everShown,
+  onShown,
+  children,
+}: {
+  isOpen: boolean
+  everShown: boolean
+  onShown: (shown: true) => void
+  children: React.ReactNode
+}) {
+  useEffect(() => {
+    if (isOpen && !everShown) onShown(true)
+  }, [isOpen, everShown, onShown])
+  if (!isOpen && !everShown) return null
+  return <>{children}</>
+}
 
 export default LoadingModal

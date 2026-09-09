@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, isFeatureEnabled, NODE_ROOT_ID } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
   ICON_VARIANT_COLLAPSIBLE_CLOSE,
@@ -328,13 +329,13 @@ const NodeTreeItem = observer(
       onItemFocus,
     } = useContext(TreeViewContext)
     // console.log('NodeTreeItem', [...expanded])
-    const node = Aglyn.canvas.getNode(nodeId)
+    const node = canvas.getNode(nodeId)
     const schema = node?.componentSchema
     const nodeLabel = node?.labelShort
     const breadcrumbPath = node?.breadcrumbPath || []
     const depth = breadcrumbPath?.length - 1
-    const isRootNode = Aglyn.canvas.isRootNode(node)
-    const dragAllowed = Aglyn.isFeatureEnabled(schema?.flags?.dragging)
+    const isRootNode = canvas.isRootNode(node)
+    const dragAllowed = isFeatureEnabled(schema?.flags?.dragging)
     const collapseIn = expanded?.some((i) => i === nodeId)
     const isSelected = Besigner.focus.isNodeSelected(node)
     const isHovered = Besigner.focus.isNodeHovered(node)
@@ -379,7 +380,7 @@ const NodeTreeItem = observer(
         if (isRootNode) return
         // Through the canvas so it records an undo step and reaches the node
         // the MAP holds — see `updateNodeFields`.
-        Aglyn.canvas.updateNodeFields(node, { hidden: !authorHidden })
+        canvas.updateNodeFields(node, { hidden: !authorHidden })
       },
       [node, isRootNode, authorHidden],
     )
@@ -899,7 +900,7 @@ export const NodeTreeView = observer(
     const handleTreeItemToggle = useCallback((e, $id: Aglyn.NodeId) => {
       e.stopPropagation()
       e.preventDefault()
-      const node = Aglyn.canvas.getNode($id)
+      const node = canvas.getNode($id)
       if (!node) return
       Besigner.focus.toggleNodeExpansion(node)
     }, [])
@@ -907,7 +908,7 @@ export const NodeTreeView = observer(
     const handleTreeItemSelect = useCallback((e, $id: Aglyn.NodeId) => {
       e.stopPropagation()
       e.preventDefault()
-      const node = Aglyn.canvas.getNode($id)
+      const node = canvas.getNode($id)
       if (!node) return
       // Multi-selection modifiers (AGL-8): Shift ranges from the anchor,
       // Cmd/Ctrl toggles membership, plain click single-selects.
@@ -919,14 +920,14 @@ export const NodeTreeView = observer(
     }, [])
 
     const handleTreeItemHover = useCallback((e, $id: Aglyn.NodeId) => {
-      const node = Aglyn.canvas.getNode($id)
+      const node = canvas.getNode($id)
       if (!node) return
       Besigner.focus.setHoveredNode(node)
     }, [])
 
     const handleTreeItemFocus = useCallback((e, $id: Aglyn.NodeId) => {
       e.stopPropagation()
-      const node = Aglyn.canvas.getNode($id)
+      const node = canvas.getNode($id)
       if (!node) return
       Besigner.focus.setHoveredNode(node)
     }, [])
@@ -951,7 +952,7 @@ export const NodeTreeView = observer(
           {...rest}
         >
           <TreeView className={classKey.root} {...TreeViewProps}>
-            <NodeTreeItem nodeId={Aglyn.NODE_ROOT_ID} />
+            <NodeTreeItem nodeId={NODE_ROOT_ID} />
           </TreeView>
         </Box>
       </TreeViewContext.Provider>

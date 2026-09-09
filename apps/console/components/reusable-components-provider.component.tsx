@@ -16,7 +16,18 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  components,
+  createResourceUid,
+  decodeStoredNodes,
+  detachInstanceSubtree,
+  NodeType,
+  replaceSubtreeWithInstance,
+  REUSABLE_COMPONENT_CATEGORY,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+} from '@aglyn/aglyn'
 import { ComponentPromotionContext } from '@aglyn/besigner-ui'
 import { mdiPackageVariant } from '@aglyn/shared-data-mdi'
 import { useLoading } from '@aglyn/shared-ui-jsx'
@@ -133,17 +144,17 @@ export function ReusableComponentsProvider(
     const presets: Aglyn.PresetSchema[] = definitions.map(
       (definition: any) => ({
         $id: `hostcmp:${definition.$id}`,
-        type: Aglyn.NodeType.PRESET,
+        type: NodeType.PRESET,
         displayName: definition.displayName ?? definition.$id,
         // The component's own icon when it has one (AGL-1193); the purple
         // package glyph is what "no icon chosen" looks like, not a brand.
         icon: definition.icon?.iconPath
           ? { path: definition.icon.iconPath }
           : { path: mdiPackageVariant.path, sx: { color: '#9c27b0' } },
-        category: Aglyn.REUSABLE_COMPONENT_CATEGORY,
+        category: REUSABLE_COMPONENT_CATEGORY,
         data: {
           $id: null,
-          componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
           pluginId: 'mui',
           props: {
             refId: definition.$id,
@@ -154,9 +165,9 @@ export function ReusableComponentsProvider(
         },
       }),
     )
-    Aglyn.components.registerPreset(presets)
+    components.registerPreset(presets)
     return () => {
-      Aglyn.components.unregisterPreset(presets.map((preset) => preset.$id))
+      components.unregisterPreset(presets.map((preset) => preset.$id))
     }
   }, [componentDocs])
 
@@ -190,7 +201,7 @@ export function ReusableComponentsProvider(
     if (!node) return
     const dequeue = queueLoading()
     try {
-      const all = Aglyn.canvas.toJSON().nodes as Record<string, any>
+      const all = canvas.toJSON().nodes as Record<string, any>
       const subtreeIds = collectSubtreeIds(node.$id, all)
       const definitionNodes: Record<string, any> = {}
       for (const id of subtreeIds) {
@@ -219,9 +230,9 @@ export function ReusableComponentsProvider(
       // the definition's content (definitions graft at render, not in the
       // editor), which is the same thing inserting one from "Your
       // components" has always looked like.
-      Aglyn.canvas.applyNodes(
-        Aglyn.replaceSubtreeWithInstance(
-          Aglyn.canvas.toJSON().nodes as any,
+      canvas.applyNodes(
+        replaceSubtreeWithInstance(
+          canvas.toJSON().nodes as any,
           node.$id,
           created.id,
           name || 'Component',
@@ -269,7 +280,7 @@ export function ReusableComponentsProvider(
         // undecoded one writes a byte array into the author's canvas.
         const definition = stored && {
           ...stored,
-          nodes: Aglyn.decodeStoredNodes(stored.nodes),
+          nodes: decodeStoredNodes(stored.nodes),
         }
         if (!definition?.nodes || !definition?.rootId) {
           throw new Error('Definition missing')
@@ -282,18 +293,18 @@ export function ReusableComponentsProvider(
         // detached heroes rendering literal `{{prop.headline}}` markers.
         // Fresh ids, except the root, which keeps the instance node's id so
         // the parent's child list and the current selection stay valid.
-        const all = Aglyn.canvas.toJSON().nodes as Record<string, any>
-        const next = Aglyn.detachInstanceSubtree(
+        const all = canvas.toJSON().nodes as Record<string, any>
+        const next = detachInstanceSubtree(
           all,
           node.$id,
           definition,
-          () => Aglyn.createResourceUid(),
+          () => createResourceUid(),
         )
         // A no-op means the selected node is not an instance the canvas
         // knows about — say so rather than claiming a detach that never
         // happened.
         if (next === all) throw new Error('Instance not found on this screen')
-        Aglyn.canvas.applyNodes(next as any)
+        canvas.applyNodes(next as any)
         enqueueSnackbar('Detached — this copy no longer follows the component', {
           variant: 'success',
           persist: false,

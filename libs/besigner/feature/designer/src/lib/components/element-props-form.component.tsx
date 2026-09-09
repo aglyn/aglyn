@@ -18,7 +18,50 @@
 import PluginSettingsField, {
   PLUGIN_SETTINGS_FIELD_COMPONENT,
 } from './plugin-settings-field.component'
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  ANIMATION_DEFAULT_DELAY_MS,
+  ANIMATION_DEFAULT_DURATION_MS,
+  ANIMATION_DEFAULT_EASE,
+  ANIMATION_DEFAULT_STAGGER_STEP_MS,
+  ANIMATION_DEFAULT_TRIGGER,
+  ANIMATION_MAX_DURATION_MS,
+  ANIMATION_MAX_STAGGER_STEP_MS,
+  ANIMATION_NONE,
+  ANIMATION_PRESETS,
+  canvas,
+  COMPONENT_PROP_NAME_PATTERN,
+  components,
+  displayBindingTokens,
+  ENTITY_PICKER_BROWSE_LIMIT,
+  entityListState,
+  EntityPickerContext,
+  entityValueNeedsResolution,
+  FEATURE_FLAG,
+  FieldComponentType,
+  getKnownPluginInstalls,
+  getKnownPluginInstallsVersion,
+  hasBindings,
+  inheritedMediaAlt,
+  intrinsicMediaSize,
+  MISSING_BINDING_LABEL,
+  NODE_ANIMATION_DELAY_PROP,
+  NODE_ANIMATION_DURATION_PROP,
+  NODE_ANIMATION_EASE_PROP,
+  NODE_ANIMATION_PROP,
+  NODE_ANIMATION_REPEAT_PROP,
+  NODE_ANIMATION_STAGGER_PROP,
+  NODE_ANIMATION_STAGGER_STEP_PROP,
+  NODE_ANIMATION_TRIGGER_PROP,
+  NODE_HIDE_IF_PROP,
+  NODE_HIDE_UNLESS_PROP,
+  normalizeBindingTokens,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  REUSABLE_INSTANCE_PROP_VALUES_KEY,
+  ScreenLinkContext,
+  subscribeKnownPluginInstalls,
+  unresolvedScreenOption,
+} from '@aglyn/aglyn'
 import {
   FormRenderer,
   type FormRendererProps,
@@ -142,7 +185,7 @@ export function isFormattedText(
   node: Aglyn.NodeSchema<any> | undefined | null,
 ): boolean {
   if (!node) return false
-  if (node.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID) return false
+  if (node.componentId === REUSABLE_INSTANCE_COMPONENT_ID) return false
   const html = (node.props as { html?: unknown } | undefined)?.html
   return typeof html === 'string' && html.length > 0
 }
@@ -244,21 +287,21 @@ export interface ElementPropsFormProps
 // which blanked the email designer's whole attributes panel).
 export const elementPropsComponentMapper = {
   ...simpleComponentMapper,
-  [Aglyn.FieldComponentType.ICON_PICKER]: FIELD_MAP_ICON_PICKER,
-  [Aglyn.FieldComponentType.CHECKBOX]: FIELD_MAP_CHECKBOX,
-  [Aglyn.FieldComponentType.COLOR_PICKER]: FIELD_MAP_COLOR_PICKER,
+  [FieldComponentType.ICON_PICKER]: FIELD_MAP_ICON_PICKER,
+  [FieldComponentType.CHECKBOX]: FIELD_MAP_CHECKBOX,
+  [FieldComponentType.COLOR_PICKER]: FIELD_MAP_COLOR_PICKER,
   // Number + unit editor for CSS length attributes (AGL-1219): width,
   // height and friends were free text, so the author had to type the unit
   // and a bare `320` silently did nothing.
-  [Aglyn.FieldComponentType.CSS_DIMENSION]: FIELD_MAP_CSS_DIMENSION,
+  [FieldComponentType.CSS_DIMENSION]: FIELD_MAP_CSS_DIMENSION,
   // Background fill editor for gradient-capable attributes (AGL-1331);
   // the Styles panel reaches it through the shared componentMapper.
-  [Aglyn.FieldComponentType.CSS_GRADIENT]: FIELD_MAP_CSS_GRADIENT,
-  [Aglyn.FieldComponentType.DATA_TABLE]: FIELD_MAP_DATA_TABLE,
+  [FieldComponentType.CSS_GRADIENT]: FIELD_MAP_CSS_GRADIENT,
+  [FieldComponentType.DATA_TABLE]: FIELD_MAP_DATA_TABLE,
   // Per-breakpoint span/offset row for Grid cells (AGL-2486). Registered
   // here or the attributes memo's unknown-editor filter drops Span and
   // Offset from the panel entirely rather than throwing (AGL-584).
-  [Aglyn.FieldComponentType.BREAKPOINT_SPAN]: FIELD_MAP_BREAKPOINT_SPAN,
+  [FieldComponentType.BREAKPOINT_SPAN]: FIELD_MAP_BREAKPOINT_SPAN,
   // Pill-rendering editor for token-capable free-text attributes
   // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
   [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,
@@ -268,7 +311,7 @@ export const elementPropsComponentMapper = {
   // The markdown-lite WYSIWYG for document-valued attributes (AGL-1616),
   // registered under BOTH the schema-declared type and the internal key so a
   // schema can ask for it directly and the memo below can rewrite to it.
-  [Aglyn.FieldComponentType.MARKDOWN]: MarkdownAttributeField,
+  [FieldComponentType.MARKDOWN]: MarkdownAttributeField,
   [MARKDOWN_ATTRIBUTE_FIELD_COMPONENT]: MarkdownAttributeField,
   // A placed plugin's declared settings as real fields (AGL-1049); the
   // attributes memo rewrites the plugin's JSON attribute to it.
@@ -327,10 +370,10 @@ export function buildInstancePropFields(
 ): Array<Record<string, unknown>> {
   if (!declared?.length) return []
   return declared
-    .filter((prop) => Aglyn.COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? ''))
+    .filter((prop) => COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? ''))
     .map((prop) => {
       const base = {
-        name: `${Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY}.${prop.name}`,
+        name: `${REUSABLE_INSTANCE_PROP_VALUES_KEY}.${prop.name}`,
         label: prop.label || prop.name,
         // The definition's default shows as the field's placeholder, which
         // is literally true: leave the field empty and that is what the
@@ -342,11 +385,11 @@ export function buildInstancePropFields(
       }
       switch (prop.type) {
         case 'boolean':
-          return { ...base, component: Aglyn.FieldComponentType.CHECKBOX }
+          return { ...base, component: FieldComponentType.CHECKBOX }
         case 'number':
           return {
             ...base,
-            component: Aglyn.FieldComponentType.TEXT_FIELD,
+            component: FieldComponentType.TEXT_FIELD,
             type: 'number',
           }
         case 'href':
@@ -425,7 +468,7 @@ export function inheritedAltPatch(options: {
 }): { alt?: string } {
   const { propName, declaresAlt, props, assetAlt } = options ?? ({} as never)
   if (!declaresAlt || propName !== 'src') return {}
-  const alt = Aglyn.inheritedMediaAlt({
+  const alt = inheritedMediaAlt({
     placementAlt: props?.['alt'],
     // The author's explicit "screen readers should skip this" (AGL-1305).
     // `image.tsx` forces `alt=""` over any alt text when it is on, so
@@ -469,14 +512,14 @@ export function buildVisibilityFields(
   })
   return [
     field(
-      Aglyn.NODE_HIDE_IF_PROP,
+      NODE_HIDE_IF_PROP,
       'Hide when',
       'Remove this element (and everything inside it) from pages where ' +
         'this value is on. Usually a property of this component, e.g. ' +
         '{{prop.hideMedia}}.',
     ),
     field(
-      Aglyn.NODE_HIDE_UNLESS_PROP,
+      NODE_HIDE_UNLESS_PROP,
       'Hide unless',
       'The reverse: remove this element from pages that leave this value ' +
         'empty. Point it at the property that fills the element — a button ' +
@@ -524,16 +567,16 @@ export function buildVisibilityFields(
  */
 export function buildAnimationFields(): Array<Record<string, unknown>> {
   const animated = {
-    when: Aglyn.NODE_ANIMATION_PROP,
-    is: Aglyn.ANIMATION_PRESETS.filter(
-      (preset) => preset !== Aglyn.ANIMATION_NONE,
+    when: NODE_ANIMATION_PROP,
+    is: ANIMATION_PRESETS.filter(
+      (preset) => preset !== ANIMATION_NONE,
     ),
   }
   // Stagger is an entrance idea. Named rather than inlined twice so the
   // switch and its step field can never drift apart and leave a step control
   // visible for a trigger that ignores it.
   const staggerable = {
-    when: Aglyn.NODE_ANIMATION_TRIGGER_PROP,
+    when: NODE_ANIMATION_TRIGGER_PROP,
     is: ['scroll', 'load'],
   }
   const help = (label: string, description: string) => ({
@@ -545,15 +588,15 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
   })
   return [
     {
-      name: Aglyn.NODE_ANIMATION_PROP,
+      name: NODE_ANIMATION_PROP,
       ...help(
         'Animation',
         'Adds movement to this element. Motion is skipped automatically for ' +
           'visitors who have asked their device to reduce it.',
       ),
-      component: Aglyn.FieldComponentType.SELECT,
+      component: FieldComponentType.SELECT,
       options: [
-        { value: Aglyn.ANIMATION_NONE, label: 'None' },
+        { value: ANIMATION_NONE, label: 'None' },
         { value: 'fade', label: 'Fade in' },
         { value: 'slide-up', label: 'Slide up' },
         { value: 'slide-down', label: 'Slide down' },
@@ -564,15 +607,15 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
       ],
     },
     {
-      name: Aglyn.NODE_ANIMATION_TRIGGER_PROP,
+      name: NODE_ANIMATION_TRIGGER_PROP,
       ...help(
         'Plays',
         'When the animation runs. "On scroll into view" is the usual choice ' +
           'for anything below the top of the page.',
       ),
-      component: Aglyn.FieldComponentType.SELECT,
+      component: FieldComponentType.SELECT,
       condition: animated,
-      initialValue: Aglyn.ANIMATION_DEFAULT_TRIGGER,
+      initialValue: ANIMATION_DEFAULT_TRIGGER,
       options: [
         { value: 'scroll', label: 'On scroll into view' },
         { value: 'load', label: 'On page load' },
@@ -580,40 +623,40 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
       ],
     },
     {
-      name: Aglyn.NODE_ANIMATION_DURATION_PROP,
+      name: NODE_ANIMATION_DURATION_PROP,
       ...help(
         'Duration (ms)',
-        `How long the animation takes, in milliseconds. ${Aglyn.ANIMATION_DEFAULT_DURATION_MS} is a ` +
-          `natural default; anything over ${Aglyn.ANIMATION_MAX_DURATION_MS} is capped.`,
+        `How long the animation takes, in milliseconds. ${ANIMATION_DEFAULT_DURATION_MS} is a ` +
+          `natural default; anything over ${ANIMATION_MAX_DURATION_MS} is capped.`,
       ),
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      component: FieldComponentType.TEXT_FIELD,
       type: 'number',
       condition: animated,
-      initialValue: Aglyn.ANIMATION_DEFAULT_DURATION_MS,
+      initialValue: ANIMATION_DEFAULT_DURATION_MS,
     },
     {
-      name: Aglyn.NODE_ANIMATION_DELAY_PROP,
+      name: NODE_ANIMATION_DELAY_PROP,
       ...help(
         'Delay (ms)',
         'How long to wait before starting. Stagger a row of cards by giving ' +
           'each one a slightly larger delay.',
       ),
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      component: FieldComponentType.TEXT_FIELD,
       type: 'number',
       condition: animated,
-      initialValue: Aglyn.ANIMATION_DEFAULT_DELAY_MS,
+      initialValue: ANIMATION_DEFAULT_DELAY_MS,
     },
     {
-      name: Aglyn.NODE_ANIMATION_EASE_PROP,
+      name: NODE_ANIMATION_EASE_PROP,
       ...help(
         'Easing',
         'The shape of the motion — whether it eases off as it arrives, moves ' +
           'at one steady speed, or travels a little past its mark and comes ' +
           'back to it.',
       ),
-      component: Aglyn.FieldComponentType.SELECT,
+      component: FieldComponentType.SELECT,
       condition: animated,
-      initialValue: Aglyn.ANIMATION_DEFAULT_EASE,
+      initialValue: ANIMATION_DEFAULT_EASE,
       options: [
         { value: 'smooth', label: 'Smooth' },
         { value: 'steady', label: 'Steady' },
@@ -630,49 +673,49 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
       ],
     },
     {
-      name: Aglyn.NODE_ANIMATION_STAGGER_PROP,
+      name: NODE_ANIMATION_STAGGER_PROP,
       ...help(
         'Stagger children',
         'Animate the things inside this element one after another, instead ' +
           'of animating the element as a whole. Turn this on for a row of ' +
           'cards or a list.',
       ),
-      component: Aglyn.FieldComponentType.SWITCH,
+      component: FieldComponentType.SWITCH,
       // Not offered for hover: a hover effect has to reverse the moment the
       // pointer leaves, and a staggered one would strand half a row.
       condition: [animated, staggerable],
     },
     {
-      name: Aglyn.NODE_ANIMATION_STAGGER_STEP_PROP,
+      name: NODE_ANIMATION_STAGGER_STEP_PROP,
       ...help(
         'Stagger step (ms)',
         `How much later each one starts than the one before it. ` +
-          `${Aglyn.ANIMATION_DEFAULT_STAGGER_STEP_MS} is a natural default; ` +
-          `anything over ${Aglyn.ANIMATION_MAX_STAGGER_STEP_MS} is capped, ` +
+          `${ANIMATION_DEFAULT_STAGGER_STEP_MS} is a natural default; ` +
+          `anything over ${ANIMATION_MAX_STAGGER_STEP_MS} is capped, ` +
           `because this gap multiplies down the row.`,
       ),
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      component: FieldComponentType.TEXT_FIELD,
       type: 'number',
       // `is` accepts the string form too: a switch that has been round-tripped
       // through a text-shaped store comes back as `'true'`, and a step field
       // that silently stopped appearing would be blamed on the switch.
-      condition: [animated, staggerable, { when: Aglyn.NODE_ANIMATION_STAGGER_PROP, is: [true, 'true'] }],
-      initialValue: Aglyn.ANIMATION_DEFAULT_STAGGER_STEP_MS,
+      condition: [animated, staggerable, { when: NODE_ANIMATION_STAGGER_PROP, is: [true, 'true'] }],
+      initialValue: ANIMATION_DEFAULT_STAGGER_STEP_MS,
     },
     {
-      name: Aglyn.NODE_ANIMATION_REPEAT_PROP,
+      name: NODE_ANIMATION_REPEAT_PROP,
       ...help(
         'Replay each time',
         'Play the animation again every time the element scrolls back into ' +
           'view, instead of only the first time.',
       ),
-      component: Aglyn.FieldComponentType.SWITCH,
+      component: FieldComponentType.SWITCH,
       // Both conditions must hold: DDF ANDs an array of conditions. Replay is
       // meaningless for the other two triggers — a page loads once, and hover
       // is a transition that already reverses.
       condition: [
         animated,
-        { when: Aglyn.NODE_ANIMATION_TRIGGER_PROP, is: 'scroll' },
+        { when: NODE_ANIMATION_TRIGGER_PROP, is: 'scroll' },
       ],
     },
   ]
@@ -696,11 +739,11 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
 export const ENTITY_PICKER_KINDS: Readonly<
   Partial<Record<Aglyn.FieldComponentType, Aglyn.EntityPickerKind>>
 > = {
-  [Aglyn.FieldComponentType.PRODUCT_SELECT]: 'products',
-  [Aglyn.FieldComponentType.COLLECTION_SELECT]: 'collections',
-  [Aglyn.FieldComponentType.CATEGORY_SELECT]: 'categories',
-  [Aglyn.FieldComponentType.DATASET_SELECT]: 'datasets',
-  [Aglyn.FieldComponentType.FORM_SELECT]: 'forms',
+  [FieldComponentType.PRODUCT_SELECT]: 'products',
+  [FieldComponentType.COLLECTION_SELECT]: 'collections',
+  [FieldComponentType.CATEGORY_SELECT]: 'categories',
+  [FieldComponentType.DATASET_SELECT]: 'datasets',
+  [FieldComponentType.FORM_SELECT]: 'forms',
 }
 
 /** Where an author makes more of each kind, named in the empty picker. */
@@ -780,10 +823,10 @@ export function entityPickerBrowseNotice(
 ): string | undefined {
   if (!context?.truncated?.[kind]) return undefined
   const { plural } = ENTITY_PICKER_ORIGIN[kind]
-  const first = `Showing the first ${Aglyn.ENTITY_PICKER_BROWSE_LIMIT} ${plural} — this site has more. `
+  const first = `Showing the first ${ENTITY_PICKER_BROWSE_LIMIT} ${plural} — this site has more. `
   return context.searchable?.[kind]
     ? `${first}Type to search all of them.`
-    : `${first}Typing narrows these ${Aglyn.ENTITY_PICKER_BROWSE_LIMIT} only.`
+    : `${first}Typing narrows these ${ENTITY_PICKER_BROWSE_LIMIT} only.`
 }
 
 /**
@@ -800,7 +843,7 @@ export function entityPickerNoMatchText(
 ): string {
   const { plural } = ENTITY_PICKER_ORIGIN[kind]
   if (context?.truncated?.[kind] && !context?.searchable?.[kind]) {
-    return `No match in the first ${Aglyn.ENTITY_PICKER_BROWSE_LIMIT} ${plural} — this site has more.`
+    return `No match in the first ${ENTITY_PICKER_BROWSE_LIMIT} ${plural} — this site has more.`
   }
   return `No ${plural} match.`
 }
@@ -844,7 +887,7 @@ export function entitySelectionOption(
     return { value: id, label: `⚠ Unavailable ${singular} (${id}) — deleted` }
   }
   const settledWithNoLookup =
-    Aglyn.entityListState(context, kind) === 'ready' && !context?.resolve
+    entityListState(context, kind) === 'ready' && !context?.resolve
   return {
     value: id,
     label: settledWithNoLookup ? `⚠ Unrecognized ${singular} (${id})` : id,
@@ -891,7 +934,7 @@ export function buildEntityPickerField<
   const search = context?.search
   return {
     ...field,
-    component: Aglyn.FieldComponentType.SELECT,
+    component: FieldComponentType.SELECT,
     // The dropdown's input is read-only without this, so a list of any size
     // could only be scrolled. Narrowing 25 rows by typing is the cheapest
     // half of reaching past them.
@@ -921,7 +964,7 @@ export function buildEntityPickerField<
         value: '',
         label: entityPickerPlaceholder(
           kind,
-          Aglyn.entityListState(context, kind),
+          entityListState(context, kind),
           entities.length,
         ),
       },
@@ -956,7 +999,7 @@ export function entityKindsForAttributes(
 ): Aglyn.EntityPickerKind[] {
   const kinds = new Set<Aglyn.EntityPickerKind>()
   for (const field of attributes ?? []) {
-    if (field.component === Aglyn.FieldComponentType.DATASET_FIELD_SELECT) {
+    if (field.component === FieldComponentType.DATASET_FIELD_SELECT) {
       kinds.add('datasets')
       continue
     }
@@ -977,8 +1020,8 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // are only known at edit time), so resolve them here from the routing
     // map + labels the console provides via ScreenLinkContext. Entity
     // pickers (AGL-343/344) resolve the same way from EntityPickerContext.
-    const { screens, labels } = useContext(Aglyn.ScreenLinkContext)
-    const entityOptions = useContext(Aglyn.EntityPickerContext)
+    const { screens, labels } = useContext(ScreenLinkContext)
+    const entityOptions = useContext(EntityPickerContext)
     /**
      * Ask for the entity lists this node's pickers will actually show
      * (AGL-703).
@@ -1016,7 +1059,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       for (const field of rawAttributes ?? []) {
         const kind = ENTITY_PICKER_KINDS[field.component]
         if (!kind) continue
-        const id = Aglyn.entityValueNeedsResolution(
+        const id = entityValueNeedsResolution(
           entityOptions,
           kind,
           nodeProps?.[field.name],
@@ -1032,10 +1075,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const nodeOptions = useMemo(() => {
       const wantsNodes = (rawAttributes ?? []).some(
         (field) =>
-          field.component === Aglyn.FieldComponentType.NODE_SELECT,
+          field.component === FieldComponentType.NODE_SELECT,
       )
       if (!wantsNodes) return []
-      const canvasNodes = (Aglyn.canvas.toJSON().nodes ?? {}) as Record<
+      const canvasNodes = (canvas.toJSON().nodes ?? {}) as Record<
         string,
         any
       >
@@ -1043,7 +1086,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         .filter(([id]) => id && id !== node?.$id)
         .map(([id, candidate]) => {
           const displayName =
-            Aglyn.components.getSchema(candidate?.componentId)
+            components.getSchema(candidate?.componentId)
               ?.displayName ??
             candidate?.componentId ??
             'Element'
@@ -1067,11 +1110,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // resolve it by matching the current display labels.
     const hasDatasetFieldSelect = (rawAttributes ?? []).some(
       (field) =>
-        field.component === Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
+        field.component === FieldComponentType.DATASET_FIELD_SELECT,
     )
     const ancestorDatasetId = useMemo(() => {
       if (!hasDatasetFieldSelect || !node?.$id) return undefined
-      const nodes = Aglyn.canvas.toJSON().nodes as Record<string, any>
+      const nodes = canvas.toJSON().nodes as Record<string, any>
       let current = nodes[node.$id]
       for (let hops = 0; current && hops < 100; hops += 1) {
         const props = current.props ?? {}
@@ -1096,9 +1139,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       useInsertTokenOptions(node)
     // Re-render when the installed-plugin set changes (AGL-1030).
     const knownPluginInstallsVersion = useSyncExternalStore(
-      Aglyn.subscribeKnownPluginInstalls,
-      Aglyn.getKnownPluginInstallsVersion,
-      Aglyn.getKnownPluginInstallsVersion,
+      subscribeKnownPluginInstalls,
+      getKnownPluginInstallsVersion,
+      getKnownPluginInstallsVersion,
     )
 
     /**
@@ -1139,7 +1182,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           : field
 
       return (rawAttributes ?? []).map(withAttributeHelp).map((field) => {
-        if (field.component === Aglyn.FieldComponentType.SCREEN_SELECT) {
+        if (field.component === FieldComponentType.SCREEN_SELECT) {
           const options = [
             { value: '', label: 'None (use external URL)' },
             ...Object.entries(screens ?? {})
@@ -1155,7 +1198,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           // picker, which reads as "no link set" while the element still
           // behaves as linked (AGL-1893). Naming it is the only way the
           // author finds out before publishing rather than after.
-          const stranded = Aglyn.unresolvedScreenOption(
+          const stranded = unresolvedScreenOption(
             nodeProps?.[field.name],
             screens,
           )
@@ -1164,11 +1207,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           }
           return {
             ...field,
-            component: Aglyn.FieldComponentType.SELECT,
+            component: FieldComponentType.SELECT,
             options,
           }
         }
-        if (field.component === Aglyn.FieldComponentType.PLUGIN_SETTINGS) {
+        if (field.component === FieldComponentType.PLUGIN_SETTINGS) {
           // Rendered by a bespoke editor rather than expanded into N fields
           // here: the settings live in ONE stored JSON attribute, and the
           // editor reads the sibling `listingId` to know which manifest's
@@ -1180,14 +1223,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             component: PLUGIN_SETTINGS_FIELD_COMPONENT,
           }
         }
-        if (field.component === Aglyn.FieldComponentType.PLUGIN_SELECT) {
+        if (field.component === FieldComponentType.PLUGIN_SELECT) {
           // Installed plugins (AGL-1030), from the set the console publishes
           // for the drawer — host and org pins both, host winning where it
           // shadows. No extra read: the pins already carry the display name.
-          const installs = Aglyn.getKnownPluginInstalls()
+          const installs = getKnownPluginInstalls()
           return {
             ...field,
-            component: Aglyn.FieldComponentType.SELECT,
+            component: FieldComponentType.SELECT,
             options: [
               {
                 value: '',
@@ -1206,16 +1249,16 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             ],
           }
         }
-        if (field.component === Aglyn.FieldComponentType.NODE_SELECT) {
+        if (field.component === FieldComponentType.NODE_SELECT) {
           // Canvas-element picker (AGL-557), resolved above.
           return {
             ...field,
-            component: Aglyn.FieldComponentType.SELECT,
+            component: FieldComponentType.SELECT,
             options: [{ value: '', label: 'None' }, ...nodeOptions],
           }
         }
         if (
-          field.component === Aglyn.FieldComponentType.DATASET_FIELD_SELECT
+          field.component === FieldComponentType.DATASET_FIELD_SELECT
         ) {
           // Model order, never alphabetized — it mirrors the schema dialog.
           const modelFields = ancestorDatasetId
@@ -1223,7 +1266,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             : []
           return {
             ...field,
-            component: Aglyn.FieldComponentType.SELECT,
+            component: FieldComponentType.SELECT,
             options: [
               {
                 value: '',
@@ -1271,8 +1314,8 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           }
         }
         if (
-          (field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
-            field.component === Aglyn.FieldComponentType.TEXTAREA) &&
+          (field.component === FieldComponentType.TEXT_FIELD ||
+            field.component === FieldComponentType.TEXTAREA) &&
           !(field as any).isReadOnly
         ) {
           // Token-capable free-text fields (children, href, src, …)
@@ -1284,7 +1327,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             ...field,
             component: TOKEN_TEXT_FIELD_COMPONENT,
             multiline:
-              field.component === Aglyn.FieldComponentType.TEXTAREA,
+              field.component === FieldComponentType.TEXTAREA,
             tokenOptions: insertOptions,
             tokenLabelContext,
           }
@@ -1332,7 +1375,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       ComponentPromotionContext,
     )
     const isInstance =
-      node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
+      node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
     const unlocked = Besigner.dnd.canDragNode(node)
 
     const instancePropFields = useMemo(() => {
@@ -1389,7 +1432,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         .filter(
           (prop) =>
             prop?.type === 'image' &&
-            Aglyn.COMPONENT_PROP_NAME_PATTERN.test(prop.name ?? ''),
+            COMPONENT_PROP_NAME_PATTERN.test(prop.name ?? ''),
         )
         .map((prop) => ({
           name: prop.name,
@@ -1402,13 +1445,13 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // provides the rewrite callback.
     const { onRewrite } = useContext(AiAssistContext)
     const textEditable =
-      ((schema?.flags?.textEditable ?? Aglyn.FEATURE_FLAG.DISABLED) &
-        Aglyn.FEATURE_FLAG.ENABLED) !==
+      ((schema?.flags?.textEditable ?? FEATURE_FLAG.DISABLED) &
+        FEATURE_FLAG.ENABLED) !==
       0
     const hasTextAttributes = (schema?.attributes ?? []).some(
       (field) =>
-        field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
-        field.component === Aglyn.FieldComponentType.TEXTAREA,
+        field.component === FieldComponentType.TEXT_FIELD ||
+        field.component === FieldComponentType.TEXTAREA,
     )
 
     // Insert binding (AGL-100): appends a {{token}} to the element text.
@@ -1428,8 +1471,8 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         missing: boolean
       }> = []
       for (const [key, value] of Object.entries(nodeProps ?? {})) {
-        if (typeof value !== 'string' || !Aglyn.hasBindings(value)) continue
-        const display = Aglyn.displayBindingTokens(
+        if (typeof value !== 'string' || !hasBindings(value)) continue
+        const display = displayBindingTokens(
           value,
           (bindingVariables ?? {}) as any,
           (bindingFunctions ?? {}) as any,
@@ -1437,7 +1480,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         summaries.push({
           prop: key,
           display,
-          missing: display.includes(Aglyn.MISSING_BINDING_LABEL),
+          missing: display.includes(MISSING_BINDING_LABEL),
         })
       }
       return summaries
@@ -1447,14 +1490,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const handleInsertBinding = useCallback(
       (token: string) => {
         setBindingAnchor(null)
-        const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
+        const current = (canvas.toJSON().nodes as Record<string, any>)[
           node?.$id
         ]
         const text =
           typeof current?.props?.children === 'string'
             ? (current.props.children as string)
             : ''
-        Aglyn.canvas.updateNodeProps(node, {
+        canvas.updateNodeProps(node, {
           ...current?.props,
           children: text ? `${text} ${token}` : token,
         })
@@ -1482,7 +1525,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       () =>
         (rawAttributes ?? []).filter(
           (field: any) =>
-            field?.component === Aglyn.FieldComponentType.TEXT_FIELD &&
+            field?.component === FieldComponentType.TEXT_FIELD &&
             typeof field?.name === 'string' &&
             /^(src|poster)$|(image|logo|avatar|media|thumbnail|photo|background)(Url)?$/i.test(
               field.name,
@@ -1512,10 +1555,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
      */
     const handleRemoveFormatting = useCallback(() => {
       if (!node?.$id) return
-      const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
+      const current = (canvas.toJSON().nodes as Record<string, any>)[
         node.$id
       ]
-      Aglyn.canvas.updateNodeProps(node, withoutFormatting(current?.props))
+      canvas.updateNodeProps(node, withoutFormatting(current?.props))
     }, [node])
 
     const handleBrowseMedia = useCallback(
@@ -1524,9 +1567,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         // (today a media reference — AGL-1215), the renderer resolves it.
         onPickMedia?.((value, asset) => {
           const current = (
-            Aglyn.canvas.toJSON().nodes as Record<string, any>
+            canvas.toJSON().nodes as Record<string, any>
           )[node?.$id]
-          Aglyn.canvas.updateNodeProps(node, {
+          canvas.updateNodeProps(node, {
             ...current?.props,
             [propName]: value,
             ...inheritedAltPatch({
@@ -1539,7 +1582,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             // reserve its box before the bytes arrive (AGL-2486). Gated on
             // the component id inside the helper: an element whose renderer
             // does not read these would spread them onto the DOM.
-            ...Aglyn.intrinsicMediaSize({
+            ...intrinsicMediaSize({
               componentId: node?.componentId,
               propName,
               assetWidth: asset?.width,
@@ -1560,12 +1603,12 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         if (!node?.$id) return
         onPickMedia?.((value) => {
           const current = (
-            Aglyn.canvas.toJSON().nodes as Record<string, any>
+            canvas.toJSON().nodes as Record<string, any>
           )[node.$id]
-          Aglyn.canvas.updateNodeProps(node, {
+          canvas.updateNodeProps(node, {
             ...current?.props,
-            [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
-              ...current?.props?.[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY],
+            [REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
+              ...current?.props?.[REUSABLE_INSTANCE_PROP_VALUES_KEY],
               [propName]: value,
             },
           })
@@ -1597,7 +1640,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       }
       for (const field of instanceMediaProps) {
         browse.set(
-          `${Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY}.${field.name}`,
+          `${REUSABLE_INSTANCE_PROP_VALUES_KEY}.${field.name}`,
           handleBrowseInstanceMedia(field.name),
         )
       }
@@ -1635,8 +1678,8 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         // Hand-typed {{name}} tokens normalize to their rename-safe
         // {{var:id}} form at save (AGL-186); unknown names pass through.
         const normalizeToken = (value: unknown) =>
-          typeof value === 'string' && Aglyn.hasBindings(value)
-            ? Aglyn.normalizeBindingTokens(
+          typeof value === 'string' && hasBindings(value)
+            ? normalizeBindingTokens(
                 value,
                 (bindingVariables ?? {}) as any,
                 (bindingFunctions ?? {}) as any,
@@ -1656,16 +1699,16 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         // A component instance's overrides sit one level down (AGL-1247),
         // so the walk above skips them — normalize inside, or a hand-typed
         // {{name}} in an override would persist in its rename-unsafe form.
-        const overrides = values[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]
+        const overrides = values[REUSABLE_INSTANCE_PROP_VALUES_KEY]
         if (overrides && typeof overrides === 'object') {
           const nextOverrides: Record<string, unknown> = {}
           for (const [key, value] of Object.entries(overrides)) {
             nextOverrides[key] = normalizeNumeric(
-              `${Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY}.${key}`,
+              `${REUSABLE_INSTANCE_PROP_VALUES_KEY}.${key}`,
               normalizeToken(value),
             )
           }
-          normalized[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY] = nextOverrides
+          normalized[REUSABLE_INSTANCE_PROP_VALUES_KEY] = nextOverrides
         }
         // Denormalize each picked icon's SVG path next to its id (AGL-1212).
         // The catalog is ~2.9 MB and only picker surfaces load it, so a render
@@ -1675,7 +1718,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         // document. This runs where the picker already loaded the catalog; a
         // miss writes `undefined` and leaves the renderer's own fallback.
         for (const attribute of node?.componentSchema?.attributes ?? []) {
-          if (attribute.component !== Aglyn.FieldComponentType.ICON_PICKER) {
+          if (attribute.component !== FieldComponentType.ICON_PICKER) {
             continue
           }
           const pathProp = iconPathPropName(attribute.name)
@@ -1684,7 +1727,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           normalized[pathProp] =
             typeof pickedId === 'string' ? getMdiIconPath(pickedId) : undefined
         }
-        Aglyn.canvas.updateNodeProps(node, normalized)
+        canvas.updateNodeProps(node, normalized)
       },
       [node, bindingVariables, bindingFunctions, numericFieldNames],
     )

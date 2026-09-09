@@ -16,7 +16,7 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_MENU_DOWN,
@@ -426,7 +426,7 @@ export const BesignerVersionsComponent = observer(
       }
       // Snapshot the SAVED doc, so unsaved canvas edits are never silently
       // captured (or lost) — require a save first.
-      if (!Aglyn.canvas.isInitialSame) {
+      if (!canvas.isInitialSame) {
         return enqueueSnackbar('Save the canvas before creating a version', {
           variant: 'warning',
           persist: false,

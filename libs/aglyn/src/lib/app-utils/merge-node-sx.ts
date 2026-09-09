@@ -21,7 +21,7 @@
 // dragged the Firebase auth graph into the client bundle of every published
 // customer page. This module and `palette-sx` were the only two edges from
 // `@aglyn/aglyn` to that barrel; pointing both at the file they actually want
-// measured -48,643 B GZIPPED off the `/[host]/[[...slug]]` route's client
+// measured -48,643 B GZIPPED off the `/[host]/[scheme]/[[...slug]]` route's client
 // chunks (694,808 -> 646,165 B gz, Turbopack production build).
 import { expandSxAliases } from '@aglyn/shared-data-enums/sx-property-aliases'
 import {

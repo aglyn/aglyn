@@ -16,7 +16,8 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, HostViewType } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
   BesignerConflictAlertComponent,
@@ -58,6 +59,7 @@ import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../../components/besigner-app-bar.component'
+import BesignerWordmark from '../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
@@ -289,7 +291,7 @@ function SystemEmailBesignerPage() {
     // Same restriction as a `kind: 'email'` screen (AGL-395): the drawer
     // offers email-safe blocks only, because this output goes through a mail
     // client, not a browser.
-    viewType: Aglyn.HostViewType.EMAIL,
+    viewType: HostViewType.EMAIL,
     documentKey: `platform:${templateKey}:${versionId}`,
     draft: {
       scope: 'platform',
@@ -418,6 +420,7 @@ function SystemEmailBesignerPage() {
       <MainLayout
         enableAppBarElevation
         besigner
+        wordmark={<BesignerWordmark />}
         backButton={
           {
             component: AppLink,
@@ -455,15 +458,15 @@ function SystemEmailBesignerPage() {
               {
                 id: 'center-nav-edit-undo',
                 children: 'Undo',
-                onClick: () => Aglyn.canvas.undo(),
-                disabled: !Aglyn.canvas.canUndo,
+                onClick: () => canvas.undo(),
+                disabled: !canvas.canUndo,
                 ListItemTextProps: { inset: true },
               },
               {
                 id: 'center-nav-edit-redo',
                 children: 'Redo',
-                onClick: () => Aglyn.canvas.redo(),
-                disabled: !Aglyn.canvas.canRedo,
+                onClick: () => canvas.redo(),
+                disabled: !canvas.canRedo,
                 ListItemTextProps: { inset: true },
               },
               { type: 'divider' },
@@ -624,12 +627,12 @@ function SystemEmailBesignerPage() {
         </Stack>
       </CloseableDrawerComponent>
 
-      {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
+      {Boolean(canvas.rootNode && jsonOpen) && (
         <JsonEditor
-          open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
+          open={Boolean(canvas.rootNode && jsonOpen)}
           onClose={closeJsonEditor}
           onSave={handleJsonSave}
-          defaultValue={Aglyn.canvas.nestedNodes as any}
+          defaultValue={canvas.nestedNodes as any}
         />
       )}
     </>

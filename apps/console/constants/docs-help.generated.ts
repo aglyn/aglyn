@@ -23,745 +23,599 @@ export interface DocsHelpTopic {
   path: string
   /** Docs page title. */
   title: string
-  /** Verbatim docs frontmatter description — the tooltip excerpt. */
-  excerpt: string
 }
 
+// A topic's tooltip prose lives in `docs-help-excerpts.generated.ts` — the
+// path and title are wanted the moment a help button renders, the excerpt only
+// once a tooltip opens.
 export const DOCS_HELP_TOPICS = {
   abuseReports: {
     path: '/staff-console/abuse-reports',
     title: 'Abuse reports',
-    excerpt: 'The public abuse-report queue — where outside reports land, how to triage by severity, which lever answers which report, and the CSAM and DMCA paths that are not takedown buttons.',
   },
   account: {
     path: '/workspace-and-billing/signing-in-and-sessions',
     title: 'Signing In & Sessions',
-    excerpt: 'How console sign-in works — Google sign-in on desktop and mobile, one session across all your workspaces, and automatic sign-out after inactivity.',
   },
   actionsBuilder: {
     path: '/marketing-and-automation/workflows-and-actions/actions-builder',
     title: 'Actions builder',
-    excerpt: 'Map a single event to a single action without building a full workflow.',
   },
   activities: {
     path: '/content-and-data/crm/activities',
     title: 'Activities & the timeline',
-    excerpt: 'Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, email one person from their record, and read it all in one timeline beside everything captured and every campaign sent.',
   },
   addALocale: {
     path: '/building-sites/multilingual/add-a-locale',
     title: 'Add a locale',
-    excerpt: 'Create a language variant of your site and translate its screens.',
   },
   addOns: {
     path: '/workspace-and-billing/billing-and-plans/add-ons',
     title: 'Add-ons',
-    excerpt: 'Buy extra seats, sites, datasets, POS registers, and the Event Calendar from the Billing page — prorated, self-serve, no support ticket.',
   },
   addSearch: {
     path: '/building-sites/site-search/add-search',
     title: 'Add search to your site',
-    excerpt: 'Drop the Search Box element onto a screen and publish — the built-in search page does the rest.',
   },
   aglynAssist: {
     path: '/getting-started/aglyn-assist',
     title: 'Aglyn Assist',
-    excerpt: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
   },
   aiAssist: {
     path: '/marketing-and-automation/ai-assist/overview',
     title: 'AI Assist',
-    excerpt: 'Generate and rewrite copy, and build whole sections, with AI inside the Besigner.',
   },
   analytics: {
     path: '/marketing-and-automation/analytics/overview',
     title: 'Analytics',
-    excerpt: 'Built-in pageview analytics, the Traffic card and its growth figure, per-screen metrics, and average time on a screen.',
   },
   animations: {
     path: '/building-sites/besigner/animations',
     title: 'Element animations',
-    excerpt: 'Add fade, slide and zoom motion to any element, stagger a row of cards, choose when it plays, and keep the page fast and accessible.',
   },
   architectureMultiTenancy: {
     path: '/staff-console/architecture-multi-tenancy',
     title: 'Architecture: Multi-Tenant Organizations',
-    excerpt: 'How Aglyn organizes tenants — org workspaces, membership with per-site access, security rules, subdomains, and billing attribution.',
   },
   assistSignals: {
     path: '/staff-console/assist-signals',
     title: 'Assist Signal',
-    excerpt: 'The docs-gap and cost board behind Assist — how the ranking is ordered, why ungrounded questions are counted separately, and what the cache-read rate says about margin.',
   },
   automations: {
     path: '/content-and-data/crm/automations',
     title: 'Automations for the CRM',
-    excerpt: 'The CRM events an automation can start on — a contact created or changing stage, a deal moved, won or lost, a task completed — the steps that tag, stage, assign, create a task or log an activity, and one-click recipes.',
   },
   bandwidth: {
     path: '/workspace-and-billing/billing-and-plans/bandwidth',
     title: 'Bandwidth',
-    excerpt: 'How much traffic each plan includes, what happens when a site goes past it, and why a Free site can be paused until the start of next month.',
   },
   besigner: {
     path: '/building-sites/besigner/overview',
     title: 'The Besigner',
-    excerpt: 'Aglyn\'s visual editor — canvas, hierarchy, inline text, multi-select, and placement rules.',
   },
   billing: {
     path: '/workspace-and-billing/billing-and-plans/overview',
     title: 'Billing & Plans',
-    excerpt: 'How Aglyn\'s tiers, entitlements, quotas, usage meters, and seat add-ons work.',
   },
   bindings: {
     path: '/building-sites/bindings/overview',
     title: 'Bindings, Variables & Functions',
-    excerpt: 'Live values in your content — typed variables, no-code functions, and rename-safe id tokens.',
   },
   bookings: {
     path: '/commerce-and-bookings/bookings/overview',
     title: 'Bookings & Scheduling',
-    excerpt: 'Offer services with availability, let visitors book, take payment, and send reminders.',
   },
   buildABlog: {
     path: '/building-sites/site-templates/build-a-blog',
     title: 'Build a blog',
-    excerpt: 'Create a collection, publish rich entries, and design the list and entry pages with template screens.',
   },
   buildAndPublishASurvey: {
     path: '/guides/build-and-publish-a-survey',
     title: 'Build & publish a survey',
-    excerpt: 'Create a dataset with a typed schema, design a survey form with dropdowns, radios, checkboxes, and a star rating, publish it, and watch responses arrive.',
   },
   buildAWorkflow: {
     path: '/marketing-and-automation/workflows-and-actions/build-a-workflow',
     title: 'Build a workflow',
-    excerpt: 'Create a multi-step workflow that runs when a site event fires.',
   },
   buildingFeaturePlugins: {
     path: '/developers/plugins/building-feature-plugins',
     title: 'Building feature plugins',
-    excerpt: 'The console-extension + frontend-UI plugin pair pattern for shipping features as plugins.',
   },
   bulkActions: {
     path: '/content-and-data/crm/bulk-actions',
     title: 'Bulk actions',
-    excerpt: 'Select rows in any CRM table — contacts, companies, deals, tasks or leads — and act on all of them at once, or export them as a CSV.',
   },
   catalog: {
     path: '/commerce-and-bookings/commerce/catalog',
     title: 'Product catalog',
-    excerpt: 'Products with options and variants, categories, tags, and manual or smart collections.',
   },
   comingSoonLaunch: {
     path: '/guides/coming-soon-launch',
     title: 'Launch a coming-soon page',
-    excerpt: 'Put a coming-soon page on your domain, keep the rest of the site out of search while you finish it, collect signups, and reverse all of it on launch day.',
   },
   commerce: {
     path: '/commerce-and-bookings/commerce/overview',
     title: 'Commerce',
-    excerpt: 'Sell physical, digital, and service products with a full catalog, orders pipeline, shipping, taxes, and your own Stripe account.',
   },
   commerceEndToEnd: {
     path: '/guides/commerce-end-to-end',
     title: 'Commerce end to end',
-    excerpt: 'Create products with billing modes, design the storefront with Commerce blocks, take Stripe checkout for one-time and subscription sales, and run orders from the console.',
   },
   companies: {
     path: '/content-and-data/crm/companies',
     title: 'Companies',
-    excerpt: 'Group your contacts under the businesses they belong to — one record per company, with its domain, owner, address and the people who work there.',
   },
   components: {
     path: '/building-sites/besigner/reusable-components',
     title: 'Reusable components',
-    excerpt: 'Promote a subtree into a reusable component, give it properties, and insert instances across screens.',
   },
   connectADomain: {
     path: '/building-sites/custom-domains/connect-a-domain',
     title: 'Connect a domain',
-    excerpt: 'Point your own domain at your Aglyn site — a CNAME for a subdomain, an ALIAS for a bare apex — and verify with one click.',
   },
   consoleAndSite: {
     path: '/developers/plugins/guides/console-and-site',
     title: 'Guide: console extensions & site surfaces',
-    excerpt: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',
   },
   consoleSearch: {
     path: '/getting-started/console-search',
     title: 'Search the console',
-    excerpt: 'What the console search palette can find, how it matches what you type, and the two things it deliberately does not search.',
   },
   consoleTour: {
     path: '/getting-started/console-tour',
     title: 'The console tour',
-    excerpt: 'Where things live in the Aglyn console app bar and navigation.',
   },
   contactRecord: {
     path: '/content-and-data/crm/contact-record',
     title: 'The contact record',
-    excerpt: 'Add a contact by hand, keep a profile on them — phone, company, title, address, owner and lifecycle stage — open their own page in the CRM, and merge two records that turn out to be one person.',
   },
   content: {
     path: '/building-sites/site-templates/overview',
     title: 'Templates, Blocks & Content',
-    excerpt: 'Start from templates, drop in pre-built sections and blocks, and publish a blog with collections.',
   },
   cookieConsent: {
     path: '/marketing-and-automation/analytics/cookie-consent',
     title: 'Cookie consent',
-    excerpt: 'Ask visitors before analytics runs — or track immediately where the law allows, with an always-available opt-out. Google Analytics and Tag Manager tags never load for a visitor whose recorded state does not grant them.',
   },
   copyAssist: {
     path: '/marketing-and-automation/ai-assist/copy-assist',
     title: 'Copy assist',
-    excerpt: 'Generate and rewrite text for any canvas text prop with AI.',
   },
   copyPaste: {
     path: '/building-sites/besigner/copy-paste',
     title: 'Copy & paste elements',
-    excerpt: 'Copy any element — with its children — and paste it elsewhere, including into a different screen, layout or component.',
   },
   createARedirect: {
     path: '/building-sites/redirects/create-a-redirect',
     title: 'Create a redirect',
-    excerpt: 'Add a redirect rule and read its hit metrics.',
   },
   crm: {
     path: '/content-and-data/crm/overview',
     title: 'CRM',
-    excerpt: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
   },
   customDomains: {
     path: '/building-sites/custom-domains/overview',
     title: 'Custom Domains',
-    excerpt: 'Connect your own domain — subdomain or bare apex — with one-click DNS verification.',
   },
   customFields: {
     path: '/content-and-data/crm/custom-fields',
     title: 'Custom fields',
-    excerpt: 'Define your own properties on contacts, companies and deals — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact\'s.',
   },
   customRoles: {
     path: '/workspace-and-billing/teams-and-roles/custom-roles',
     title: 'Custom roles & permissions',
-    excerpt: 'Define roles with unique permission sets and fine-tune access per member.',
   },
   datasets: {
     path: '/content-and-data/datasets/overview',
     title: 'Datasets & Dynamic Content',
-    excerpt: 'Model structured content with typed fields and relations, then bind it into repeatable components.',
   },
   datasetsAndSchema: {
     path: '/guides/datasets-and-schema',
     title: 'Datasets & schema deep-dive',
-    excerpt: 'Field ids vs display names, the typed model, per-plan record quotas, import/export, repeatables with item bindings, and every writer that can append records.',
   },
   deals: {
     path: '/content-and-data/crm/deals',
     title: 'Deals pipeline',
-    excerpt: 'Every open deal by stage — with an amount, an owner and an expected close — as a board you drag across or a table you page through, and the won and lost history behind it.',
   },
   designedEmails: {
     path: '/marketing-and-automation/email-campaigns/designed-emails',
     title: 'Designed emails',
-    excerpt: 'Build campaign emails in the besigner with email-safe blocks and merge tokens — no separate editor.',
   },
   domainProviders: {
     path: '/developers/domain-providers',
     title: 'Domain providers',
-    excerpt: 'Make hostnames actually resolve on a self-hosted install — choose a domain driver, run the wildcard path end to end, or implement the webhook contract against your own proxy.',
   },
   downgradingAndCanceling: {
     path: '/workspace-and-billing/billing-and-plans/downgrading-and-canceling',
     title: 'Downgrading, canceling & your data',
-    excerpt: 'What happens when you downgrade, cancel, or delete — when each takes effect, what the cancel dialog offers you, and how to export first.',
   },
   dragDropHierarchy: {
     path: '/building-sites/besigner/drag-drop-hierarchy',
     title: 'Drag-and-drop hierarchy',
-    excerpt: 'Everything drag-and-drop in the Besigner — where you can drag, how drop zones and placement markers work, containers vs. leaf elements, placement rules, and multi-drag.',
   },
   editFromTheLiveSite: {
     path: '/building-sites/besigner/edit-from-the-live-site',
     title: 'Edit from the live site',
-    excerpt: 'The admin bar on published sites — jump from any live page straight into the besigner for the screen serving it.',
   },
   editYourTheme: {
     path: '/building-sites/theme-builder/edit-your-theme',
     title: 'Edit your theme',
-    excerpt: 'Set colors, fonts, and light/dark schemes with a live preview.',
   },
   elementCatalog: {
     path: '/building-sites/besigner/element-catalog',
     title: 'Element catalog',
-    excerpt: 'Every built-in element you can drop on the canvas, grouped by the categories in the ELEMENTS drawer.',
   },
   emailCampaigns: {
     path: '/marketing-and-automation/email-campaigns/overview',
     title: 'Email Campaigns',
-    excerpt: 'Campaigns to audiences built from your contacts. Campaign email starts at Pro and needs a sending domain of the site\'s own; receipts and account email send on every plan.',
   },
   emailTemplates: {
     path: '/content-and-data/crm/email-templates',
     title: 'Email templates',
-    excerpt: 'Keep the letters your team sends from a record — templates that fill in the subject and the message, snippets that drop in a paragraph, and merge fields that fill in the person\'s name, their company, the deal and you.',
   },
   enterprise: {
     path: '/enterprise/overview',
     title: 'Enterprise overview',
-    excerpt: 'What the Enterprise plan adds — single sign-on, a dedicated support commitment, and the security material a procurement review asks for.',
   },
   errorScreens: {
     path: '/building-sites/site-protection/error-screens',
     title: 'Design custom error screens',
-    excerpt: 'Replace generic 404/401/403/503 pages with branded screens you design.',
   },
   events: {
     path: '/content-and-data/events/overview',
     title: 'Events Calendar',
-    excerpt: 'Keep a schedule of events in the console and publish the ones you choose to any screen, with search-engine event markup.',
   },
   examples: {
     path: '/developers/plugins/guides/examples',
     title: 'Worked examples',
-    excerpt: 'Where to look for a working example of each plugin pattern.',
   },
   extensionPoints: {
     path: '/developers/plugins/reference/extension-points',
     title: 'Extension-point catalog',
-    excerpt: 'Every surface a plugin can extend, when it runs, and which part of Aglyn it reaches.',
   },
   featureFlags: {
     path: '/staff-console/feature-flags',
     title: 'Feature Flags',
-    excerpt: 'Release-gate console features with Firebase Remote Config — staff always see everything, customers see what\'s launched.',
   },
   firstPlugin: {
     path: '/developers/plugins/guides/first-plugin',
     title: 'Build your first plugin',
-    excerpt: 'The full loop — scaffold, develop against a live workspace, verify, publish, install, uninstall.',
   },
   forms: {
     path: '/content-and-data/forms/overview',
     title: 'Forms & Lead Capture',
-    excerpt: 'Add forms to your site, collect submissions in an inbox, and write them into datasets.',
   },
   generateSection: {
     path: '/marketing-and-automation/ai-assist/generate-section',
     title: 'AI Generate Section',
-    excerpt: 'Produce a whole section of components on the canvas from a prompt.',
   },
   gettingStarted: {
     path: '/getting-started/create-a-site',
     title: 'Create a site',
-    excerpt: 'Sign in, create your first site, and understand what a site contains.',
   },
   glossary: {
     path: '/concepts/glossary',
     title: 'Glossary & naming conventions',
-    excerpt: 'What organization, workspace, tenant, host, and site each mean — and which word to use where.',
   },
   googleAnalytics: {
     path: '/marketing-and-automation/analytics/google-analytics',
     title: 'Google Analytics events',
-    excerpt: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',
   },
   import: {
     path: '/content-and-data/crm/import',
     title: 'Import contacts from CSV',
-    excerpt: 'Bring a spreadsheet of people into the CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.',
   },
   importExport: {
     path: '/content-and-data/datasets/import-export',
     title: 'Import & export',
-    excerpt: 'Round-trip dataset records through CSV and JSON with validation on import.',
   },
   injectionZones: {
     path: '/developers/plugins/reference/injection-zones',
     title: 'Injection zones',
-    excerpt: 'Every named console zone a plugin widget can render into, and what each receives.',
   },
   installYourFirstPlugin: {
     path: '/guides/install-your-first-plugin',
     title: 'Install your first marketplace item',
-    excerpt: 'A click-by-click walkthrough of the Marketplace — find something, choose which sites get it, install it, and turn it off again.',
   },
   interactions: {
     path: '/building-sites/besigner/interactions-and-custom-html',
     title: 'Interactions & custom HTML',
-    excerpt: 'Build element interactions in one dialog and drop sanitized custom markup anywhere.',
   },
   inviteTeammates: {
     path: '/workspace-and-billing/teams-and-roles/invite-teammates',
     title: 'Invite teammates',
-    excerpt: 'Add people to your site and understand how team members act within your organization.',
   },
   languageSwitcher: {
     path: '/building-sites/multilingual/language-switcher',
     title: 'Add a language switcher',
-    excerpt: 'Let visitors move between your site\'s locales.',
   },
   layouts: {
     path: '/building-sites/screens-and-layouts/layouts',
     title: 'Layouts',
-    excerpt: 'A layout is the shared frame your screens render inside — header, nav and footer in one place, nested up to five deep.',
   },
   leads: {
     path: '/content-and-data/crm/leads',
     title: 'Leads',
-    excerpt: 'Work the people your site has captured — a status, an owner and notes on every lead — and convert one into a contact, a company and a deal.',
   },
   liveCoEditing: {
     path: '/building-sites/besigner/live-co-editing',
     title: 'Live co-editing & unsaved work',
-    excerpt: 'See who else is editing, work on the same document together, survive save conflicts, and recover unsaved changes after a crash.',
   },
   lockdown: {
     path: '/staff-console/lockdown',
     title: 'Lockdown',
-    excerpt: 'The staff panic button — disable access platform-wide or for one workspace, site, or account, with a real logout and a visitor notice.',
   },
   longFormMarkdown: {
     path: '/building-sites/besigner/long-form-markdown',
     title: 'Long documents in markdown',
-    excerpt: 'Put a whole policy, terms or handbook page on the canvas as one Markdown element, and let a Table of contents element build the "On this page" list from its headings.',
   },
   maintenance: {
     path: '/staff-console/maintenance',
     title: 'Maintenance',
-    excerpt: 'The staff maintenance jobs — whether each scheduled job is still running, what a run would do, and how to run one by hand without firing an irreversible sweep by accident.',
   },
   maintenanceMode: {
     path: '/building-sites/site-protection/maintenance-mode',
     title: 'Maintenance mode',
-    excerpt: 'Temporarily take your site offline behind a designed 503 screen.',
   },
   manageAccount: {
     path: '/workspace-and-billing/manage-account',
     title: 'Manage Account',
-    excerpt: 'Your personal account — email, sign-in methods, avatar, name, and password.',
   },
   manifestAndEnvs: {
     path: '/developers/plugins/reference/manifest-and-envs',
     title: 'Manifests, trust lifecycle & environment',
-    excerpt: 'The plugin manifest schema, the marketplace listing/version documents, the trust state machine, and every PLUGIN_* environment variable.',
   },
   marketingOverlays: {
     path: '/marketing-and-automation/marketing-overlays/overview',
     title: 'Marketing Overlays',
-    excerpt: 'Site-wide announcement bars and promotional popups with triggers, scheduling, and email capture.',
   },
   media: {
     path: '/content-and-data/media/overview',
     title: 'Media Library & CDN',
-    excerpt: 'Organize images, video, and files in folders, transform them, and serve them fast over a CDN.',
   },
   megaMenuWithInteractions: {
     path: '/guides/mega-menu-with-interactions',
     title: 'Build a mega menu with hover interactions',
-    excerpt: 'Add a SaaS-style mega menu to your nav bar, fill it with columns of links, and make it open on hover — entirely in the Besigner, on any plan.',
   },
   members: {
     path: '/guides/member-accounts',
     title: 'Member accounts',
-    excerpt: 'Let visitors sign up on your site, design an account page with the Customer account block, gate screens to members, and manage members from the console Users page.',
   },
   membersOnly: {
     path: '/workspace-and-billing/teams-and-roles/members-only',
     title: 'Members-only areas',
-    excerpt: 'Let visitors sign up as members and gate screens so only members can view them.',
   },
   menusAndNavigation: {
     path: '/building-sites/menus-and-navigation/overview',
     title: 'Menus & navigation',
-    excerpt: 'Dropdown menus, hover mega menus, and slide-in drawers — authorable entirely in the besigner.',
   },
   migrationPatterns: {
     path: '/building-sites/redirects/migration-patterns',
     title: 'Migration patterns',
-    excerpt: 'Common redirect setups when you rename screens or move a site into Aglyn.',
   },
   modelBuilder: {
     path: '/content-and-data/datasets/model-builder',
     title: 'Build a data model',
-    excerpt: 'Define a dataset model with typed fields and edit records in the typed editor.',
   },
   multilingual: {
     path: '/building-sites/multilingual/overview',
     title: 'Multilingual',
-    excerpt: 'Offer your site in multiple languages with locale variants, hreflang, and a language switcher.',
   },
   multiSelect: {
     path: '/building-sites/besigner/multi-select',
     title: 'Multi-select & multi-drag',
-    excerpt: 'Select several elements at once and move the whole selection together.',
   },
   onboardingDeepLinks: {
     path: '/staff-console/onboarding-deep-links',
     title: 'Onboarding deep links (marketing → console)',
-    excerpt: 'The plan-aware signup contract the marketing pricing page links into, and what the console does with it.',
   },
   passwordAScreen: {
     path: '/building-sites/site-protection/password-a-screen',
     title: 'Password-protect a screen',
-    excerpt: 'Require a password to view a specific screen.',
   },
   platformHealth: {
     path: '/staff-console/platform-health',
     title: 'Platform health',
-    excerpt: 'The staff health board — serving, backups, rate limiters, signup volume, email delivery and CSP violations, with what each red light means and what to do.',
   },
   pluginConfig: {
     path: '/developers/plugins/reference/plugin-config',
     title: 'Plugin configuration',
-    excerpt: 'Declare a settings schema and get a console form for free — plus the three layers a setting is answered at, workspace defaults with per-site overrides, and the one write that clears one.',
   },
   pluginManagerApi: {
     path: '/developers/plugins/reference/plugin-manager-api',
     title: 'Plugin-manager API reference',
-    excerpt: 'Every public registration and loading API a plugin can use, from `@aglyn/aglyn` and `@aglyn/aglyn/server`.',
   },
   plugins: {
     path: '/developers/plugins/overview',
     title: 'Plugins & Marketplace',
-    excerpt: 'Extend Aglyn with sandboxed plugins — install from the marketplace, configure them, and publish your own.',
   },
   pos: {
     path: '/commerce-and-bookings/commerce/pos-and-reservations',
     title: 'POS & reservations',
-    excerpt: 'Sell in person from the console register and take date-range reservations with deposits.',
   },
   publishAPlugin: {
     path: '/developers/plugins/publish-a-plugin',
     title: 'Publish a plugin',
-    excerpt: 'Ship your own plugin to the marketplace with version pinning.',
   },
   publisherHandbook: {
     path: '/developers/plugins/publishing/publisher-handbook',
     title: 'Publisher handbook',
-    excerpt: 'Publishing to the Aglyn marketplace — from profile setup through listing authoring, review, updates, and getting paid.',
   },
   publishYourFirstScreen: {
     path: '/getting-started/publish-your-first-screen',
     title: 'Publish your first screen',
-    excerpt: 'Create a screen, design it in the Besigner, and publish it live.',
   },
   realmBundles: {
     path: '/developers/plugins/guides/realm-bundles',
     title: 'Guide: trusted realm bundles',
-    excerpt: 'The end-to-end path from a standalone bundle to first-party-grade code running in the app realm.',
   },
   redirects: {
     path: '/building-sites/redirects/overview',
     title: 'Redirects',
-    excerpt: 'Manage URL redirects with validation, loop detection, and hit metrics.',
   },
   refunds: {
     path: '/staff-console/refunds',
     title: 'Refunds',
-    excerpt: 'Refunding an organization\'s subscription charge from its org page — how much each staff role may refund before it escalates, why a refund is a loss rather than a reversal, and the audit row it writes.',
   },
   relations: {
     path: '/content-and-data/datasets/relations',
     title: 'Relations',
-    excerpt: 'Link records together with reference fields, including many-to-many.',
   },
   reportAnIssue: {
     path: '/workspace-and-billing/report-an-issue',
     title: 'Report an issue',
-    excerpt: 'File a bug, an idea, or a question from any page in the console — on every plan, including Free.',
   },
   reports: {
     path: '/content-and-data/crm/reports',
     title: 'Reports',
-    excerpt: 'New contacts, where they came from and which sources convert, the lead funnel, the open pipeline and its forecast, won and lost, who logged what, and the task load — counted on the server, every table exportable as CSV.',
   },
   responsiveStyling: {
     path: '/building-sites/besigner/responsive-styling',
     title: 'Responsive styling & custom CSS',
-    excerpt: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
   },
   revenue: {
     path: '/staff-console/revenue',
     title: 'Revenue',
-    excerpt: 'What Aglyn earned — contracted plan value and settled Stripe cash side by side, the gap between them broken into named causes, and every deduction between gross and net.',
   },
   runAnAgencyWorkspace: {
     path: '/guides/run-an-agency-workspace',
     title: 'Run an agency workspace',
-    excerpt: 'Set up one Aglyn workspace to build and hand off many client sites — templates, collaborator seats, per-site access, domains, backups and billing.',
   },
   salesTaxReturn: {
     path: '/staff-console/sales-tax-return',
     title: 'Sales tax return (Texas)',
-    excerpt: 'The quarterly Texas return — pick a period, read the Form 01-114 figures, check the rows that need attention, and export the working papers.',
   },
   sandboxSecurity: {
     path: '/developers/plugins/reference/sandbox-security',
     title: 'Sandbox security model',
-    excerpt: 'How sandboxed marketplace plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.',
   },
   saveATemplate: {
     path: '/building-sites/site-templates/save-a-template',
     title: 'Save & share a template',
-    excerpt: 'Turn a site into a reusable template and install marketplace templates.',
   },
   screens: {
     path: '/building-sites/screens-and-layouts/screens',
     title: 'Screens',
-    excerpt: 'Screens are your pages — how each one gets a slug, how the hierarchy builds your URLs, and which screens count against your plan.',
   },
   screensAndLayouts: {
     path: '/building-sites/screens-and-layouts/overview',
     title: 'Screens & Layouts',
-    excerpt: 'The four building blocks of a site\'s structure — screens, layouts, reusable components and templates — and which one you want.',
   },
   securityAndCompliance: {
     path: '/enterprise/security-and-compliance',
     title: 'Security & compliance',
-    excerpt: 'Where the security material for a procurement review lives, and what we do not have.',
   },
   selfHosting: {
     path: '/developers/self-hosting',
     title: 'Self-hosting',
-    excerpt: 'Run the whole Aglyn platform on your own infrastructure with Docker — your own Firebase project, your own domains, your own keys.',
   },
   selfHostingEnvironment: {
     path: '/developers/self-hosting-environment',
     title: 'Environment variables',
-    excerpt: 'Every environment variable a self-hosted Aglyn deployment reads — what it drives, where to get its value, what shape it takes, and whether changing it needs a rebuild.',
   },
   seo: {
     path: '/building-sites/seo/overview',
     title: 'SEO Toolkit',
-    excerpt: 'Per-screen SEO, sitemap and robots, Open Graph/Twitter cards, and structured data.',
   },
   serverApis: {
     path: '/developers/plugins/guides/server-apis',
     title: 'Guide: server APIs, webhooks & jobs',
-    excerpt: 'Plugin API routes behind the dispatchers, Stripe/Svix signature verification, billing hooks, and scheduled jobs.',
   },
   settings: {
     path: '/content-and-data/crm/settings',
     title: 'CRM settings',
-    excerpt: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to, the address that files replies on a record, and each site\'s recipes.',
   },
   siteProtection: {
     path: '/building-sites/site-protection/overview',
     title: 'Site Protection & Error Pages',
-    excerpt: 'Password-protect screens, design custom error pages, and put your site in maintenance mode.',
   },
   siteSearch: {
     path: '/building-sites/site-search/overview',
     title: 'Site Search',
-    excerpt: 'Let visitors search your site\'s pages, blog entries, and dataset records with a built-in search page.',
   },
   sso: {
     path: '/enterprise/sso',
     title: 'Single sign-on (SAML)',
-    excerpt: 'How to set up SAML SSO yourself, how domain verification works, what enforcement does, and the consequences of SSO accounts living in their own identity pool.',
   },
   staffConsole: {
     path: '/staff-console/overview',
     title: 'Staff Console (internal)',
-    excerpt: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
   },
   supportAndCommunity: {
     path: '/workspace-and-billing/support-and-community',
     title: 'Support & community',
-    excerpt: 'Open a support ticket with the Aglyn team, and ask other builders in the community forum.',
   },
   supportQueue: {
     path: '/staff-console/support-queue',
     title: 'Support queue (internal)',
-    excerpt: 'Triage customer support tickets from the staff console — filter, reply as Aglyn, and close or reopen.',
   },
   supportTiers: {
     path: '/enterprise/support-tiers',
     title: 'Support commitments',
-    excerpt: 'The first-response commitment attached to each plan, why Enterprise is quoted in clock hours, and where ticket support starts.',
   },
   supportTriage: {
     path: '/staff-console/support-triage',
     title: 'Support triage runbook (internal)',
-    excerpt: 'How Aglyn staff triage an incoming support ticket — priority, the billing answers, and every escalation route out of the queue.',
   },
   tasks: {
     path: '/content-and-data/crm/tasks',
     title: 'Tasks & follow-ups',
-    excerpt: 'Calls, emails, meetings and to-dos with a due date, an assignee and a link to the record they are for — overdue and today read off the clock, a snooze, a reminder at its own time, and a morning digest.',
   },
   team: {
     path: '/workspace-and-billing/teams-and-roles/overview',
     title: 'Teams, Roles & Membership',
-    excerpt: 'Invite teammates with custom roles, and offer members-only areas to your site\'s visitors.',
   },
   templatesLibrary: {
     path: '/building-sites/site-templates/templates-library',
     title: 'Your templates library',
-    excerpt: 'Save pages, components and layouts as reusable templates — and the safe landing place for anything you install from the marketplace.',
   },
   termReference: {
     path: '/concepts/term-reference',
     title: 'Term reference',
-    excerpt: 'Every term Aglyn uses, in one place — brief definitions with links to the full documentation for each.',
   },
   textEditing: {
     path: '/building-sites/besigner/text-editing',
     title: 'Inline & rich text editing',
-    excerpt: 'Edit text directly on the canvas, on the element itself, with basic rich text on opt-in elements.',
   },
   themeBuilder: {
     path: '/building-sites/theme-builder/overview',
     title: 'Theme Builder',
-    excerpt: 'Set your site\'s colors, fonts, and light/dark schemes with a live preview.',
   },
   themeStyles: {
     path: '/building-sites/besigner/theme-styles',
     title: 'Text styles & theme tokens',
-    excerpt: 'Style from your site\'s theme instead of typing pixels, so a brand change moves every page at once.',
   },
   troubleshooting: {
     path: '/building-sites/custom-domains/troubleshooting',
     title: 'Troubleshoot verification',
-    excerpt: 'Fix the common reasons a custom domain won\'t verify or attach.',
   },
   uptimeAndStatus: {
     path: '/enterprise/uptime-and-status',
     title: 'Availability & status',
-    excerpt: 'The live status page, what it does and does not show, and why there is no committed uptime percentage yet.',
   },
   versionsAndPublishing: {
     path: '/building-sites/screens-and-layouts/versions-and-publishing',
     title: 'Versions & scheduled publishing',
-    excerpt: 'Every screen, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
   },
   views: {
     path: '/content-and-data/crm/views',
     title: 'Saved views',
-    excerpt: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
   },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
     title: 'Webhooks',
-    excerpt: 'Connect Aglyn to other systems with outbound and inbound webhooks.',
   },
   whiteLabel: {
     path: '/workspace-and-billing/white-label',
     title: 'White-label',
-    excerpt: 'Replace the Aglyn brand across the console, your published sites, and transactional email — product name, logo, colors, support URL, and email from-name.',
   },
   workflows: {
     path: '/marketing-and-automation/workflows-and-actions/overview',
     title: 'Automation',
-    excerpt: 'Automate your site — run multi-step workflows on site events, and connect to other systems with webhooks.',
   },
   yourFirstApiCall: {
     path: '/guides/your-first-api-call',
     title: 'Your first API call',
-    excerpt: 'Create an API key in the console, make your first request, read the response, handle the four errors you will actually hit, and page through a whole dataset.',
   },
 } as const satisfies Record<string, DocsHelpTopic>
 

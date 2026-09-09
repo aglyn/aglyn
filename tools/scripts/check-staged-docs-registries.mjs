@@ -77,6 +77,7 @@ const GENERATORS = [
 
 const OUTPUTS = [
   'apps/console/constants/docs-help.generated.ts',
+  'apps/console/constants/docs-help-excerpts.generated.ts',
   'apps/console/constants/assist-docs-index.generated.ts',
   'libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts',
   'libs/aglyn/src/lib/app-utils/docs-help.generated.ts',

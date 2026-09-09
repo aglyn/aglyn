@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  bindingTokenNeedsDeep,
+  compress,
+  decodeStoredNodes,
+  rewriteBindingTokensDeep,
+} from '@aglyn/aglyn'
 import { Bytes } from 'firebase/firestore'
 
 /**
@@ -49,9 +55,9 @@ export function rewriteStoredBindingTokens(
   variables: Record<string, Aglyn.BindingDocRef>,
   functions: Record<string, Aglyn.BindingDocRef>,
 ): { value: unknown; changed: boolean } | null {
-  const nodes = Aglyn.decodeStoredNodes(raw)
+  const nodes = decodeStoredNodes(raw)
   if (!nodes) return null
-  const { value, changed } = Aglyn.rewriteBindingTokensDeep(
+  const { value, changed } = rewriteBindingTokensDeep(
     nodes,
     variables,
     functions,
@@ -59,7 +65,7 @@ export function rewriteStoredBindingTokens(
   if (!changed) return { value: raw, changed: false }
   return {
     value:
-      nodes === raw ? value : Bytes.fromUint8Array(Aglyn.compress(value)),
+      nodes === raw ? value : Bytes.fromUint8Array(compress(value)),
     changed: true,
   }
 }
@@ -88,9 +94,9 @@ export function rewriteStoredBindingTokens(
 export function storedBindingTokenNeeds(
   raw: unknown,
 ): Aglyn.BindingTokenNeeds {
-  const nodes = Aglyn.decodeStoredNodes(raw)
+  const nodes = decodeStoredNodes(raw)
   if (!nodes) return { variables: false, functions: false }
-  return Aglyn.bindingTokenNeedsDeep(nodes)
+  return bindingTokenNeedsDeep(nodes)
 }
 
 export default rewriteStoredBindingTokens

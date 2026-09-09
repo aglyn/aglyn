@@ -1,20 +1,20 @@
 {
-  "entry": "apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx",
-  "baselineBytes": 1038929,
-  "budgetBytes": 1299456,
-  "baselineModules": 215,
+  "entry": "apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx",
+  "baselineBytes": 885376,
+  "budgetBytes": 1106944,
+  "baselineModules": 207,
   "wireCalibration": {
     "pricedForKb": 627,
     "measuredKb": 1010.3,
     "acknowledgedShortfall": 1.62,
-    "sourceGraphBytes": 1038929,
+    "sourceGraphBytes": 885376,
     "sourceGraphTolerance": 0.15,
     "measuredPage": "https://aglyn.com/ at 2560x1209, corroborated at 1280x720",
     "measuredBasis": "First paint, no scroll. Cold load, first-party encoded bytes (Resource Timing encodedBodySize), brotli as served by Vercel. Third-party tags are excluded: they are served from someone else's egress and cost us nothing. Two independent contexts agreed within 0.4% — 1010.3 KB in a visible signed-in tab at 2560x1209, and 1006.1 KB in an anonymous browser pane at 1280x720. The HIGHER reading is recorded so the rate cannot undercharge; it carries about 5 KB of staff-toolbar script a signed-out visitor never receives. The page is now almost entirely JavaScript: about 958 KB of the 1010.3, against 44.9 KB of document and under 1 KB of images. That is a change of COMPOSITION, not just of size — the previous basis was 1054.3 KB of which 792.4 KB was JavaScript, so script grew roughly 21% while images fell to nothing.",
-    "measuredAgainst": "the production deployment of v1.0.0-beta.101, which is what a visitor is served TODAY and therefore the right basis for the rate charged today. ⚠️ A first-paint JavaScript reduction has since landed in code but is NOT yet deployed: it takes the local static graph from 1304783 to 1038929 bytes (-20.4%) and the route's gzipped weight from 410.4 to 389.8 KB. The wire figure above therefore describes the build BEFORE that reduction, and a re-take is owed once it reaches production — not before, because production still serves the older build. Expect the measured page to come in under 1010.3 KB when it does.",
+    "measuredAgainst": "the production deployment of v1.0.0-beta.101, which is what a visitor is served TODAY and therefore the right basis for the rate charged today. ⚠️ THE WIRE FIGURE IS STALE AND A RE-TAKE IS OWED. Since it was recorded, the route's first-paint JavaScript has gone from 410.4 to 255.3 KB gzipped (-37.8%) and the static source graph from 1304783 to 885376 bytes (-32.1%), across AGL-2710. Production still serves the older build — beta.102 carried part of the reduction but was ROLLED BACK when a dynamic API under the catch-all's ISR 500'd every tenant page (AGL-2708) — so 1010.3 KB remains the honest basis for the rate charged today, and will remain so until the next promotion reaches production. Re-measure THEN, not before: a figure taken against a build nobody is being served would price a page no one receives.",
     "notMeasured": "/press is not a second reference. It is a brand-asset download page: forcing its 45 images plus its asset fetches pulled 17.7 MB, which is a download and not a page render, and no page-view rate should be calibrated against it.",
     "scrollBasis": "This figure is FIRST PAINT. Lazy chunks below the fold are not in it, and neither is cross-route prefetch (see crossRoutePrefetch). First paint is the basis the rate is priced on: it is the load every visitor pays, where a scroll is not.",
     "crossRoutePrefetch": "EXCLUDED, deliberately. A scrolled measurement of the same page read 1928.7 KB, of which about 919 KB was Next.js prefetching OTHER routes — /pricing at 54.9 KB, /legal/terms at 36.8 KB and so on — because the footer's links entered the viewport. Those routes bill as their own page views, so counting them here would charge for the same bytes twice. The 1338.9 KB 'scrolled' figure recorded previously most likely carries the same inflation, which is why it is not carried forward as an alternative basis.",
-    "whyTheRateDidNotMove": "The measured page is 1.61x the 627 KB the rate is priced for, so the meter runs under its intended margin. The rate was NOT re-pegged. The standing decision of 2026-08-30 is that reducing the weight is preferred over repricing the promise, and a weight reduction is in progress; a re-peg now would be a customer-facing price change that a successful reduction would immediately have to walk back. Re-peg only if the reduction lands and the page is still over 627 KB, and then measure once and price once."
+    "whyTheRateDidNotMove": "The measured page is 1.61x the 627 KB the rate is priced for, so the meter runs under its intended margin. The rate was NOT re-pegged. The standing decision of 2026-08-30 is that reducing the weight is preferred over repricing the promise — and the reduction has now landed in code: the route's JavaScript is 37.8% lighter than the build the 1010.3 KB was measured on, and JavaScript was about 958 KB of that 1010.3. Whether the page now lands under 627 KB on the wire is a MEASUREMENT, not an inference from the route total: the wire figure counts the document, every first-party asset and the cross-route prefetch exclusions described above, none of which move with the route's own chunks. Take it once, after the next promotion deploys, and price once — re-peg only if the page is still over 627 KB then."
   }
 }

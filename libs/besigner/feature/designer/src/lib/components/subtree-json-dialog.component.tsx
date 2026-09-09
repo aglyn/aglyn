@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, components } from '@aglyn/aglyn'
 import { JsonEditor } from '@aglyn/shared-ui-json-editor'
 import { toJS } from 'mobx'
 import { useCallback, useMemo } from 'react'
@@ -47,7 +48,7 @@ export function validateSubtree(root: NestedNode): string | null {
     if (!item.componentId || typeof item.componentId !== 'string') {
       return `${path}: missing componentId`
     }
-    if (!Aglyn.components.getFactory(item.componentId as any)) {
+    if (!components.getFactory(item.componentId as any)) {
       return `${path}: unknown component "${item.componentId}"`
     }
     if (item.$id) {
@@ -65,7 +66,7 @@ export function validateSubtree(root: NestedNode): string | null {
 }
 
 const mintMissingIds = (item: NestedNode): void => {
-  if (!item.$id) item.$id = Aglyn.canvas.createNodeId()
+  if (!item.$id) item.$id = canvas.createNodeId()
   for (const child of Array.isArray(item.nodes) ? item.nodes : []) {
     mintMissingIds(child as NestedNode)
   }
@@ -110,7 +111,7 @@ export function SubtreeJsonDialog(props: SubtreeJsonDialogProps) {
   const { node, open, onClose } = props
 
   const nested = useMemo(
-    () => (open && node ? Aglyn.canvas.makeNested(node as any) : undefined),
+    () => (open && node ? canvas.makeNested(node as any) : undefined),
     [open, node],
   )
 
@@ -131,7 +132,7 @@ export function SubtreeJsonDialog(props: SubtreeJsonDialogProps) {
       // Full-map rebuild: drop the old subtree's descendants, splice in the
       // new flat nodes, and apply as one undoable replacement.
       const map = {
-        ...(toJS(Aglyn.canvas.toJSON().nodes) as Record<
+        ...(toJS(canvas.toJSON().nodes) as Record<
           string,
           Aglyn.NodeSchema<any>
         >),
@@ -139,13 +140,13 @@ export function SubtreeJsonDialog(props: SubtreeJsonDialogProps) {
       for (const staleId of collectSubtreeIds(map, node.$id)) {
         delete map[staleId]
       }
-      const flat = (Aglyn.canvas.constructor as any).denormalizeNodes(
+      const flat = (canvas.constructor as any).denormalizeNodes(
         [parsed],
         node.parentId!,
         {},
       )
       Object.assign(map, flat)
-      Aglyn.canvas.applyNodes(map as any)
+      canvas.applyNodes(map as any)
     },
     [node],
   )

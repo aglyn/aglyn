@@ -110,7 +110,7 @@ jest.mock('next/headers', () => ({
   headers: async () => new Headers(),
 }))
 
-import HostLayout from '../app/[host]/layout'
+import HostLayout from '../app/[host]/[scheme]/layout'
 
 const HOST_ID = 'DXnRbPH4CQ'
 

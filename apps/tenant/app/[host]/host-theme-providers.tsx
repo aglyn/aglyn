@@ -71,19 +71,27 @@ export function HostThemeProviders({
 }: {
   hostTheme?: HostTheme
   /**
-   * The visitor's stored light/dark choice, read from the request by the
-   * server layout. It reaches the provider as the mode the first render is
-   * built from, which is the only way a chosen scheme survives into the HTML:
-   * the browser-side reader has no `document.cookie` on the server, so without
-   * it every visitor's first paint is light.
+   * The visitor's stated light/dark choice as a seed for the first render.
+   *
+   * ⚠️ NOT SUPPLIED BY THE TENANT LAYOUT, and that is the AGL-2708 fix rather
+   * than an omission. Reading the cookie in the render is what made the route
+   * dynamic and took every tenant page to a 500; the scheme now arrives
+   * already resolved, in `initialDeviceMode` below. The stated-choice half is
+   * restored at hydration, where the browser reads its own cookie — which is
+   * soon enough, because it changes no color, only which switcher radio is
+   * checked inside a menu the visitor has to open.
    */
   initialThemeMode?: ThemeMode
   /**
-   * The device's light/dark preference, read from the request's color-scheme
-   * client hint by the server layout. It is what "Device default" resolves to
-   * on the first render, where the browser sends the hint: the media query the
-   * provider otherwise waits for has no answer until the page has hydrated, so
-   * without it a visitor on a dark device is served a light document.
+   * The scheme the document is built in: the resolved light/dark the
+   * middleware spent as a path segment and the layout read back off its route
+   * params (AGL-2708).
+   *
+   * The device seat rather than the choice seat because that is where a value
+   * with no cookie beside it belongs — `useThemeModeState` takes
+   * `mode = cookieMode ?? systemMode`, and `cookieMode` is unreadable on the
+   * server. Without it the media query has no answer until the page has
+   * hydrated and a visitor on a dark device is served a light document.
    */
   initialDeviceMode?: ThemeMode
   brandLogoUrl?: string

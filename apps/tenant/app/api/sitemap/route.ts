@@ -120,7 +120,7 @@ export async function GET(request: Request): Promise<Response> {
   // The `<loc>` base is the site's PUBLIC origin, not the domain this request
   // happened to arrive on (AGL-1160). Deriving it from the `Host` header meant
   // the sitemap contradicted the page's own `<link rel="canonical">`, which
-  // `[host]/[[...slug]]/page.tsx` already builds from `hostPublicOrigin` — so a
+  // `[host]/[scheme]/[[...slug]]/page.tsx` already builds from `hostPublicOrigin` — so a
   // site reachable on both its custom domain and `.aglyn.app` published two
   // different answers about where it lives. A preview deployment was worse
   // still: it emitted a sitemap full of `*.vercel.app` URLs.

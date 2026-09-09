@@ -53,9 +53,9 @@ import {
   normalizeMarketingCadence,
   type MarketingCadence,
 } from '@aglyn/shared-util-email'
+import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
-  escapeAttribute,
   heading,
   isCampaignPathId,
   page,
@@ -258,14 +258,14 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
       page(
         heading('Unsubscribe?') +
           paragraph(
-            `Confirm that <strong style="color:${PAL.ink}">${escapeAttribute(
+            `Confirm that <strong style="color:${PAL.ink}">${escapeHtml(
               email,
             )}</strong> should stop receiving emails from ` +
-            `<strong style="color:${PAL.ink}">${escapeAttribute(
+            `<strong style="color:${PAL.ink}">${escapeHtml(
               brand.name,
             )}</strong>.`,
           ) +
-          `<form method="post" action="/api/email/unsubscribe?${escapeAttribute(
+          `<form method="post" action="/api/email/unsubscribe?${escapeHtml(
             query,
           )}">` +
           submitButton('Unsubscribe', { pal: brand.pal }) +
@@ -275,7 +275,7 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
           // unsubscribe from a mail client's own link has never been shown
           // that leaving one stream is possible.
           `<p style="margin:16px 0 0;font-size:13px;line-height:1.5;text-align:center">` +
-          `<a href="/api/email/preferences?${escapeAttribute(query)}" ` +
+          `<a href="/api/email/preferences?${escapeHtml(query)}" ` +
           `style="color:${brand.pal.link};text-decoration:none">` +
           'Choose which emails to stop instead</a></p>',
         420,
@@ -326,7 +326,7 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
         successBadge(brand.pal) +
           heading("You're unsubscribed") +
           paragraph(
-            `You won't receive further emails from ${escapeAttribute(
+            `You won't receive further emails from ${escapeHtml(
               brand.name,
             )}.`,
             20,
@@ -334,7 +334,7 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
           // Same signed params, so the click that just proved this is really
           // this recipient's link doubles as the resubscribe link — no new
           // token, no second email round-trip (AGL-2499).
-          `<a href="/api/email/resubscribe?${escapeAttribute(query)}" ` +
+          `<a href="/api/email/resubscribe?${escapeHtml(query)}" ` +
           `style="font-size:13px;color:${brand.pal.link};text-decoration:none">` +
           'Changed your mind? Resubscribe</a>',
         420,
@@ -461,12 +461,12 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
         heading('Resubscribe?') +
           paragraph(
             `Start receiving emails from <strong style="color:${PAL.ink}">` +
-              `${escapeAttribute(brand.name)}</strong> again at ` +
-              `<strong style="color:${PAL.ink}">${escapeAttribute(
+              `${escapeHtml(brand.name)}</strong> again at ` +
+              `<strong style="color:${PAL.ink}">${escapeHtml(
                 email,
               )}</strong>.`,
           ) +
-          `<form method="post" action="/api/email/resubscribe?${escapeAttribute(
+          `<form method="post" action="/api/email/resubscribe?${escapeHtml(
             query,
           )}">` +
           submitButton('Resubscribe', { accent: 'link', pal: brand.pal }) +
@@ -492,7 +492,7 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
         successBadge(brand.pal) +
           heading("You're resubscribed") +
           paragraph(
-            `You'll receive emails from ${escapeAttribute(
+            `You'll receive emails from ${escapeHtml(
               brand.name,
             )} again.`,
             0,
@@ -647,17 +647,17 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
           successBadge(brand.pal) +
             heading('Sorry to see you go') +
             paragraph(
-              `<strong style="color:${PAL.ink}">${escapeAttribute(email)}</strong> ` +
+              `<strong style="color:${PAL.ink}">${escapeHtml(email)}</strong> ` +
                 'has been unsubscribed from every email ' +
-                `${escapeAttribute(brand.name)} sends.`,
+                `${escapeHtml(brand.name)} sends.`,
               20,
             ) +
             paragraph(
               'Changed your mind? ' +
-                `<a href="/api/email/resubscribe?${escapeAttribute(query)}" ` +
+                `<a href="/api/email/resubscribe?${escapeHtml(query)}" ` +
                 `style="color:${brand.pal.link};text-decoration:none">` +
                 'Resubscribe</a>, or ' +
-                `<a href="/api/email/preferences?${escapeAttribute(query)}" ` +
+                `<a href="/api/email/preferences?${escapeHtml(query)}" ` +
                 `style="color:${brand.pal.link};text-decoration:none">` +
                 'pick just the emails you want</a>.',
               0,
@@ -757,7 +757,7 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
             : '') +
           paragraph(
             'Changed your mind? ' +
-              `<a href="/api/email/preferences?${escapeAttribute(query)}" ` +
+              `<a href="/api/email/preferences?${escapeHtml(query)}" ` +
               `style="color:${brand.pal.link};text-decoration:none">` +
               'Come back to this page</a> and tick the boxes again — this ' +
               'link keeps working.',
@@ -1021,12 +1021,12 @@ function topicRow(
   return (
     `<label style="display:flex;gap:12px;align-items:flex-start;padding:14px 0;` +
     `border-top:1px solid ${PAL.divider};cursor:pointer">` +
-    `<input type="checkbox" name="topic:${escapeAttribute(topic.id)}" value="on"` +
+    `<input type="checkbox" name="topic:${escapeHtml(topic.id)}" value="on"` +
     (checked ? ' checked' : '') +
     ' style="margin:2px 0 0;width:18px;height:18px;flex:none">' +
     '<span style="flex:1">' +
     `<span style="display:block;font-size:14px;font-weight:600;color:${PAL.ink}">` +
-    escapeAttribute(topic.name) +
+    escapeHtml(topic.name) +
     (highlighted
       ? `<span style="margin-left:8px;font-size:11px;font-weight:600;` +
         `text-transform:uppercase;letter-spacing:.04em;color:${pal.link}">` +
@@ -1040,7 +1040,7 @@ function topicRow(
       : '') +
     (topic.description
       ? `<span style="display:block;margin-top:2px;font-size:13px;line-height:1.45;` +
-        `color:${PAL.muted}">${escapeAttribute(topic.description)}</span>`
+        `color:${PAL.muted}">${escapeHtml(topic.description)}</span>`
       : '') +
     '</span></label>'
   )
@@ -1066,7 +1066,7 @@ function topicRow(
 function cadenceFieldset(current: MarketingCadence): string {
   const option = (value: MarketingCadence, label: string): string =>
     `<label style="display:flex;gap:12px;align-items:center;padding:10px 0;cursor:pointer">` +
-    `<input type="radio" name="cadence" value="${escapeAttribute(value)}"` +
+    `<input type="radio" name="cadence" value="${escapeHtml(value)}"` +
     (value === current ? ' checked' : '') +
     ' style="margin:0;width:18px;height:18px;flex:none">' +
     `<span style="font-size:14px;color:${PAL.ink}">${label}</span></label>`
@@ -1104,14 +1104,14 @@ function preferencesFormBody(args: {
   // than no form.
   if (state.protectedRecord) return protectedAddressBody()
   const current = resolveCampaignTopic(topicId, topics)
-  const action = `/api/email/preferences?${escapeAttribute(query)}`
+  const action = `/api/email/preferences?${escapeHtml(query)}`
   return (
     heading('Email preferences') +
     paragraph(
-      `Choose what <strong style="color:${PAL.ink}">${escapeAttribute(
+      `Choose what <strong style="color:${PAL.ink}">${escapeHtml(
         email,
       )}</strong> should keep receiving from ` +
-        `<strong style="color:${PAL.ink}">${escapeAttribute(
+        `<strong style="color:${PAL.ink}">${escapeHtml(
           brand.name,
         )}</strong>. Unticked emails stop; everything else carries on.`,
       8,
@@ -1177,14 +1177,14 @@ function changeSummary(args: {
   drop: EmailTopic[]
   topics: EmailTopic[]
 }): string {
-  const address = `<strong style="color:${PAL.ink}">${escapeAttribute(
+  const address = `<strong style="color:${PAL.ink}">${escapeHtml(
     args.email,
   )}</strong>`
   if (!args.drop.length) {
     return `${address} keeps receiving everything this site sends.`
   }
   const names = args.drop
-    .map((topic) => escapeAttribute(topic.name))
+    .map((topic) => escapeHtml(topic.name))
     .join(', ')
   if (!args.keep.length) {
     return (
@@ -1247,17 +1247,17 @@ const confirmHandler: PluginApiHandler = async (req, res) => {
         page(
           heading('Confirm your subscription') +
             paragraph(
-              `Confirm that <strong style="color:${PAL.ink}">${escapeAttribute(
+              `Confirm that <strong style="color:${PAL.ink}">${escapeHtml(
                 email,
               )}</strong> should receive ` +
-                `<strong style="color:${PAL.ink}">${escapeAttribute(
+                `<strong style="color:${PAL.ink}">${escapeHtml(
                   topic.name,
                 )}</strong> from ` +
-                `<strong style="color:${PAL.ink}">${escapeAttribute(
+                `<strong style="color:${PAL.ink}">${escapeHtml(
                   brand.name,
                 )}</strong>.`,
             ) +
-            `<form method="post" action="/api/email/confirm?${escapeAttribute(
+            `<form method="post" action="/api/email/confirm?${escapeHtml(
               query,
             )}">` +
             submitButton('Yes, subscribe me', { pal: brand.pal }) +
@@ -1293,7 +1293,7 @@ function confirmationBody(
   topicName: string,
   pal: EmailPalette = PAL,
 ): string {
-  const stream = `<strong style="color:${PAL.ink}">${escapeAttribute(
+  const stream = `<strong style="color:${PAL.ink}">${escapeHtml(
     topicName,
   )}</strong>`
   switch (outcome) {

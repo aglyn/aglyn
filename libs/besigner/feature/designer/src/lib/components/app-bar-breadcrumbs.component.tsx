@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
   generateComponentClassKeys,
@@ -155,7 +156,7 @@ const BreadcrumbItem = observer((props: BreadcrumbItemProps) => {
     onFocusVisible,
     ...rest
   } = props
-  const node = Aglyn.canvas.getNode($id)
+  const node = canvas.getNode($id)
   const isHovered = Besigner.focus.isNodeHovered(node)
   const { setNodeRef: setDroppableNodeRef } = useLeafDrop(
     node,

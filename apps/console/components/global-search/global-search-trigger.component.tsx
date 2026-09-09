@@ -19,12 +19,32 @@
 import { ICON_VARIANT_SEARCH } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { IconButton, Tooltip } from '@mui/material'
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHostId, useHostReady } from '../host-id-provider'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import useCurrentOrg from '../../hooks/use-current-org'
-import GlobalSearchDialogComponent from './global-search-dialog.component'
 import { resolveGlobalSearchScope } from './global-search-scope'
+
+/**
+ * The palette, in a chunk the browser fetches when it is first opened
+ * (AGL-2706).
+ *
+ * This trigger renders in the top bar of EVERY console page, so a static
+ * import of the dialog put its whole graph in the first paint of all of them
+ * — the palette's own components and, through `resolveOrgEntitlements`, the
+ * entitlement matrix in `plan-entitlements.ts`, which is 29.4 KB of table
+ * emitted for one function.
+ *
+ * `ssr: false` states what the render below already decided: the dialog is
+ * mounted only while `open`, and `open` cannot be true on a first paint. The
+ * chunk is therefore fetched on the click or the ⌘K, both of which already
+ * wait for two Firestore reads.
+ */
+const GlobalSearchDialogComponent = dynamic(
+  () => import('./global-search-dialog.component'),
+  { ssr: false },
+)
 
 /**
  * The top bar's search affordance (AGL-2179).

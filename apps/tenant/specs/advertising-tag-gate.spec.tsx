@@ -50,7 +50,7 @@ import {
   visitorConsentStorageKey,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
 import { act, render } from '@testing-library/react'
-import AdvertisingTags from '../app/[host]/[[...slug]]/advertising-tags'
+import AdvertisingTags from '../app/[host]/[scheme]/[[...slug]]/advertising-tags'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -977,7 +977,7 @@ describe('the advertising-tag gate', () => {
         .filter(Boolean)
       // Non-emptiness first: a grep that found nothing would "prove" scope by
       // proving the feature does not exist.
-      expect(mounts).toEqual(['apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx'])
+      expect(mounts).toEqual(['apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx'])
     })
 
     it('and the shared mount is used by exactly the surfaces that have a resolver', () => {
@@ -1006,7 +1006,7 @@ describe('the advertising-tag gate', () => {
       // which is what the shared mount exists to make unnecessary.
       expect(mounts.sort()).toEqual([
         'apps/console/components/advertising-tags.component.tsx',
-        'apps/tenant/app/[host]/[[...slug]]/advertising-tags.tsx',
+        'apps/tenant/app/[host]/[scheme]/[[...slug]]/advertising-tags.tsx',
       ])
     })
   })

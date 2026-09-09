@@ -160,7 +160,7 @@ describe('AGL-1470 · every folder picker shows a path', () => {
    * Folder field — now render the same computed choices.
    */
   it('builds the choices from the shared helper', () => {
-    expect(CODE).toContain('Aglyn.mediaFolderChoices')
+    expect(CODE).toMatch(/(?:Aglyn\.)?\bmediaFolderChoices\(/)
   })
 
   /**

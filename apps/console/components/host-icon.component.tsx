@@ -16,7 +16,10 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+// The module that defines the resolver, not the `@aglyn/aglyn` barrel: this
+// component is eager on the console shell, and a namespace held as a VALUE is
+// opaque to the bundler, so it keeps every module the barrel reaches.
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { ICON_VARIANT_HOST } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Avatar from '@mui/material/Avatar'
@@ -75,7 +78,7 @@ export function HostIcon(props: HostIconProps) {
    * still resolves the org-wide form, which is what a favicon almost always
    * is.
    */
-  const favicon = Aglyn.resolveMediaSrc(stored, { hostId: source?.$id })
+  const favicon = resolveMediaSrc(stored, { hostId: source?.$id })
   if (favicon) {
     return (
       <Avatar

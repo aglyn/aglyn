@@ -37,7 +37,7 @@
 
 import { act, render } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import CatchAllPage from '../app/[host]/[[...slug]]/catch-all-client'
+import CatchAllPage from '../app/[host]/[scheme]/[[...slug]]/catch-all-client'
 
 /**
  * The plugin gate loads nothing. The cover `<img>` is plain JSX in

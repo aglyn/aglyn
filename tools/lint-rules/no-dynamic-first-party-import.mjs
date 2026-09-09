@@ -28,7 +28,7 @@
  * `findFilesWithDynamicImports` only searches the project being linted and the
  * offending line is not in it.
  *
- * This has now happened four times, each costing hours of diagnosis:
+ * This has now happened six times, each costing hours of diagnosis:
  *
  * - **AGL-949** — `await import('@aglyn/aglyn/server')` in a plugins-commerce
  *   spec put 100 errors on nearly every console page and route.
@@ -47,6 +47,17 @@
  *   `instrumentation.ts` and put **222 errors** on the gate: 181 in console,
  *   41 in tenant. This one was not a spec, which is why the rule as first
  *   written (AGL-2347) did not see it — see the scope note below.
+ * - **AGL-2706** — the first in ordinary PRODUCT code, and so the first this
+ *   rule cannot see at all. Two deliberate code splits in the tenant app,
+ *   `dynamic(() => import('@aglyn/aglyn/app-utils/consent-banner-ui'))` and
+ *   `import('@aglyn/aglyn/app-utils/attribution-guard')`, put **100 errors**
+ *   on `tenant:lint` and blocked a promotion. Both splits were RIGHT and were
+ *   kept; only the specifiers moved, to the relative re-export modules
+ *   `[[...slug]]/consent-banner-chunk.ts` and
+ *   `components/attribution-guard-chunk.ts` that hold the static core import.
+ *   The payload does not care which form is written — Turbopack splits on the
+ *   `import()` either way, and the built route measured byte-identical across
+ *   both arms, 23 chunks and 255.3 KB gzip.
  *
  * Each was repaired by hand and then explained in a long comment in the file
  * that caused it — which is exactly the readership that no longer needs
@@ -81,6 +92,20 @@
  * `@aglyn/shared-ui-json-editor`. Those are real code-split boundaries with a
  * real payoff, and the rule leaves them alone. That carve-out is why the rule
  * cannot simply cover everything.
+ *
+ * What makes those safe is narrower than "product code is exempt", and the
+ * difference is worth naming because AGL-2706 fell straight through it. A
+ * lazy edge only costs anything when the same project ALSO reaches that
+ * library statically, because a lazy edge forbids exactly those imports. The
+ * seven `import('@aglyn/shared-ui-json-editor')` call sites are free because
+ * every one of that lib's static imports in console is an `import type`,
+ * which is erased and is no edge at all. `@aglyn/aglyn` is the opposite case:
+ * both shells reach core statically in hundreds of files, so deferring it by
+ * package specifier from anywhere reddens all of them. Split it by deferring
+ * a RELATIVE module that holds the static import — see
+ * `apps/tenant/components/attribution-guard-chunk.ts`, whose sibling docblock
+ * carries the reasoning, and `apps/tenant/utils/report-server-error.ts` for
+ * the server-side form.
  *
  * It covers the two places where a deferral can never buy a smaller bundle,
  * so the nx edge is charged for nothing:

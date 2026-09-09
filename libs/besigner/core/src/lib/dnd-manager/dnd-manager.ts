@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, components, isFeatureEnabled, NodeType } from '@aglyn/aglyn'
 import {
   confirmValidLinealRelationship,
   type ConfirmValidLinealRelationshipResponse,
@@ -67,7 +68,7 @@ export class DndManager {
 
   public get computedDrop() {
     if (!this.drop) return this.drop
-    if (Aglyn.canvas.isRootNode(this.drop)) return this.drop
+    if (canvas.isRootNode(this.drop)) return this.drop
     if (!this.dropRegion) return this.drop
     if (this.dropRegion === DropRegion.CHILDREN) {
       // A leaf (self-closing / text-editable) has no slot for node children,
@@ -75,11 +76,11 @@ export class DndManager {
       // sibling — mirroring the Insert menu's leaf handling (AGL-575). This
       // also makes the lineal check validate against the real parent instead
       // of the leaf, which (declaring no restrictChildren) would wrongly pass.
-      const node = Aglyn.canvas.getNode(this.drop.$id)
-      if (node && !Aglyn.canvas.nodeAcceptsChildren(node)) return node.parent
+      const node = canvas.getNode(this.drop.$id)
+      if (node && !canvas.nodeAcceptsChildren(node)) return node.parent
       return this.drop
     }
-    return Aglyn.canvas.getNode(this.drop.$id).parent
+    return canvas.getNode(this.drop.$id).parent
   }
 
   public get hasDragTarget(): boolean {
@@ -109,7 +110,7 @@ export class DndManager {
   public get dragNodes(): DraggableNode[] {
     if (
       this.drag &&
-      this.drag.type === Aglyn.NodeType.NODE &&
+      this.drag.type === NodeType.NODE &&
       isNodeSelected(this.drag as Aglyn.NodeSchema<any>)
     ) {
       const selected = getSelected().filter((node) => this.canDragNode(node))
@@ -119,7 +120,7 @@ export class DndManager {
         const orderKey = (node: Aglyn.NodeSchema<any>): number[] =>
           (node.breadcrumbPath ?? []).map((id) => {
             try {
-              return Aglyn.canvas.getNodeIndex(Aglyn.canvas.getNode(id))
+              return canvas.getNodeIndex(canvas.getNode(id))
             } catch {
               return 0
             }
@@ -151,10 +152,10 @@ export class DndManager {
       restrictParent: this.computedDrop?.componentSchema?.restrictParent,
     }
 
-    if (this.drag?.type === Aglyn.NodeType.PRESET) {
+    if (this.drag?.type === NodeType.PRESET) {
       const preset = this.drag as Aglyn.PresetSchema<any>
       const itemNode = preset.data
-      const itemSchema = Aglyn.components.getSchema(itemNode?.componentId)
+      const itemSchema = components.getSchema(itemNode?.componentId)
       return {
         item: {
           pluginId: preset.data?.pluginId,
@@ -200,7 +201,7 @@ export class DndManager {
     // Says out loud what `onDragEnd` refuses silently: the resolved parent
     // has no slot a child could render into (AGL-1405).
     const into = this.computedDrop as Aglyn.NodeSchema<any>
-    if (into && !Aglyn.canvas.nodeAcceptsChildren(into)) {
+    if (into && !canvas.nodeAcceptsChildren(into)) {
       return `${into.labelShort || 'That element'} can't hold other elements`
     }
     const [valid, reason] = confirmValidLinealRelationship(
@@ -231,12 +232,12 @@ export class DndManager {
   canDragNode(node: DraggableNode): boolean {
     if (!node) throw new Error('Invalid node')
     switch (true) {
-      case Aglyn.canvas.isRootNode(node):
+      case canvas.isRootNode(node):
         return false
-      case node?.type === Aglyn.NodeType.PRESET:
+      case node?.type === NodeType.PRESET:
         return true
-      case node?.type === Aglyn.NodeType.NODE:
-        return Aglyn.isFeatureEnabled(
+      case node?.type === NodeType.NODE:
+        return isFeatureEnabled(
           (node as Aglyn.NodeSchema<any>)?.componentSchema?.flags?.dragging,
         )
       default:
@@ -277,21 +278,21 @@ export class DndManager {
     let parent
 
     if (before || after) {
-      parent = Aglyn.canvas.getNode(dropNode.parentId)
-      position = Aglyn.canvas.getNodeIndex(dropNode)
+      parent = canvas.getNode(dropNode.parentId)
+      position = canvas.getNodeIndex(dropNode)
       if (after) position = position + 1
     } else {
-      const dropTarget = Aglyn.canvas.getNode(dropNode.$id)
+      const dropTarget = canvas.getNode(dropNode.$id)
       // Leaf redirect (AGL-575 parallel): a self-closing / text-editable
       // target has no children slot, so a center drop becomes a sibling right
       // after it rather than a nested child. Non-leaf containers still nest.
       if (
         dropTarget &&
         dropNode.parentId &&
-        !Aglyn.canvas.nodeAcceptsChildren(dropTarget)
+        !canvas.nodeAcceptsChildren(dropTarget)
       ) {
-        const leafIndex = Aglyn.canvas.getNodeIndex(dropTarget)
-        parent = Aglyn.canvas.getNode(dropNode.parentId)
+        const leafIndex = canvas.getNodeIndex(dropTarget)
+        parent = canvas.getNode(dropNode.parentId)
         if (leafIndex > -1) position = leafIndex + 1
       } else {
         parent = dropTarget
@@ -305,13 +306,13 @@ export class DndManager {
     // it would deepen the same hole. `reparentNode` refuses this outright
     // now (AGL-1405); catch it here so a drag ends quietly instead of
     // throwing out of the pointer handler.
-    if (!parent || !Aglyn.canvas.nodeAcceptsChildren(parent)) {
+    if (!parent || !canvas.nodeAcceptsChildren(parent)) {
       this.clearDndStatus()
       return
     }
 
-    if (dragNode.type === Aglyn.NodeType.PRESET) {
-      Aglyn.canvas.addNodeFromPreset(dragNode as Aglyn.PresetSchema<any>, parent, position)
+    if (dragNode.type === NodeType.PRESET) {
+      canvas.addNodeFromPreset(dragNode as Aglyn.PresetSchema<any>, parent, position)
       // Besigner.focus.setSelectedNode(newNode)
     } else {
       // Multi-drag (AGL-13): move the whole selection when the dragged
@@ -320,9 +321,9 @@ export class DndManager {
       // skipped rather than failing the whole move. Sequential inserts
       // with an advancing position preserve document order (CANVAS and
       // TREE drags both land here).
-      const parentSchema = Aglyn.components.getSchema(parent?.componentId)
+      const parentSchema = components.getSchema(parent?.componentId)
       for (const node of this.dragNodes) {
-        if (node.type !== Aglyn.NodeType.NODE) continue
+        if (node.type !== NodeType.NODE) continue
         const containsDrop = Boolean(
           this.computedDrop?.breadcrumbPath?.some((id) => id === node.$id),
         )
@@ -355,10 +356,10 @@ export class DndManager {
         // hierarchy drag look inert (AGL-1405).
         let at = position
         if (!Number.isNaN(at) && node.parentId === parent?.$id) {
-          const from = Aglyn.canvas.getNodeIndex(node)
+          const from = canvas.getNodeIndex(node)
           if (from > -1 && from < at) at -= 1
         }
-        Aglyn.canvas.reparentNode(node, parent, at)
+        canvas.reparentNode(node, parent, at)
         if (!Number.isNaN(position)) position += 1
       }
     }

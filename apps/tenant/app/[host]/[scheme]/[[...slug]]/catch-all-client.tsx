@@ -1,0 +1,744 @@
+/**
+ * @license
+ * Copyright 2022 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+'use client'
+
+// Every VALUE this file reads comes from the module that defines it, never
+// from the `@aglyn/aglyn` barrel. A named import off a barrel reads like it
+// costs only what it names, and it does not: `libs/aglyn/src/index.ts`
+// re-exports `./lib/aglyn`, whose singleton is constructed at import time, so
+// nothing downstream of it can be dropped as unused. Everything the barrel
+// reaches then lands in this page's first load — the console route table, the
+// plan and billing tables, the DMCA, webhook, dataset and marketplace helpers
+// — downloaded by every anonymous visitor to every customer site.
+import { canvas, emitter } from '@aglyn/aglyn/aglyn'
+// The leaf, NOT `attribution-guard` — naming the attribute must not pull
+// the guard onto every page's first load. See the note in either module.
+import { ATTRIBUTION_ATTRIBUTE } from '@aglyn/aglyn/app-utils/attribution-attribute'
+import { ELEMENT_HIDDEN_STYLE_TEXT } from '@aglyn/aglyn/app-utils/element-hidden-style'
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+// `PLATFORM_BRANDING_PROFILE` is re-exported by `app-utils/plan-entitlements`,
+// which is the largest first-party module a published page can reach. The
+// badge needs the brand, not the plan table.
+import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/app-utils/platform-brand'
+import { ScreenLinkContext } from '@aglyn/aglyn/app-utils/screen-link-context-value'
+import { SiteContext } from '@aglyn/aglyn/app-utils/site-context'
+import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
+import { AglynEvent } from '@aglyn/aglyn/emit-manager/emit-manager'
+import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
+// The plugin-manager barrel is reachable from `@aglyn/aglyn/server`, and a
+// client-only React hook on that path 500s every server route. See
+// `plugin-styles-ui.tsx`.
+import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
+import { listSiteRuntimes } from '@aglyn/aglyn/plugin-manager/site-runtime'
+import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
+import { observer } from 'mobx-react-lite'
+import dynamic from 'next/dynamic'
+import {
+  type CSSProperties,
+  use,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import AttributionGuard from '../../../../components/attribution-guard.component'
+import { loadSiteRealmPlugins } from '../../../../utils/realm-plugins.client'
+import { sitePluginLoader } from '../../../../utils/site-plugin-loader'
+import type { Props } from './types'
+
+/**
+ * The built-in auth forms, in a chunk of their own.
+ *
+ * These render on `/signin`, `/signup` and `/recover`, and only for a host
+ * that designated no auth screens — never on the content pages the page view
+ * is metered on. Statically imported they were far from free: MUI's
+ * `TextField` reaches `Select`, and `Select` reaches `SelectInput`,
+ * `NativeSelectInput`, `Menu`, `MenuList`, `Popover`, `Modal`, `FocusTrap`
+ * and `Backdrop`, so a form that renders on three paths priced every visit to
+ * every published screen.
+ *
+ * `ssr: true` keeps the forms in the served HTML where they DO render, and an
+ * explicit `loading` is what earns the lazy component its own `Suspense`
+ * boundary (`ssr: true` alone leaves it a `Fragment` leaning on an ancestor,
+ * which is the shape AGL-1541 removed from this page).
+ */
+const MembershipPage = dynamic(() => import('./membership-page'), {
+  ssr: true,
+  loading: () => null,
+})
+
+/**
+ * The legacy collection surface, in a chunk of its own.
+ *
+ * It renders only where AGL-551 could compose neither a template screen nor
+ * the themed built-in, and it is the only reader of the markdown-lite parser
+ * on this route. Statically imported, that parser put its block scanner,
+ * table splitter and inline serializer into the first load of every published
+ * page, including the composed ones that reach this renderer never.
+ *
+ * `ssr: true` keeps an entry body in the served HTML, which a blog post
+ * cannot do without; the explicit `loading` is what earns the lazy component
+ * its own Suspense boundary, as it does for the forms above.
+ */
+const CollectionFallback = dynamic(() => import('./collection-fallback'), {
+  ssr: true,
+  loading: () => null,
+})
+
+/**
+ * In-flight and settled requests for a page's full node document (AGL-1285),
+ * keyed by the exact page asked for.
+ *
+ * Module scope, not a ref or effect-local, because neither survives what
+ * actually happens here: the swap re-renders the canvas, and a remount of
+ * `CatchAllPage` past that point resets any per-instance guard — so the next
+ * tab press refetches a document that can run to a megabyte. Measured: a
+ * `pointerdown` followed by its own `click` produced two identical requests.
+ *
+ * Keyed rather than a bare flag so a client-side navigation to a different
+ * page still fetches its own document, and returns the promise (not a boolean)
+ * so a second caller arriving mid-flight waits on the first rather than
+ * starting a second.
+ */
+const deferredNodeRequests = new Map<
+  string,
+  Promise<Record<string, any> | null>
+>()
+
+function fetchDeferredNodes(
+  host: string,
+  slug: string,
+): Promise<Record<string, any> | null> {
+  const key = `${host}\x00${slug}`
+  const pending = deferredNodeRequests.get(key)
+  if (pending) return pending
+  const request = (async () => {
+    const query = new URLSearchParams({ host, slug })
+    const response = await fetch(`/api/screen/nodes?${query}`).catch(() => null)
+    if (!response?.ok) {
+      // Drop the entry so a later press can retry — a transient failure must
+      // not leave those panels empty for the rest of the visit.
+      deferredNodeRequests.delete(key)
+      return null
+    }
+    const payload = await response.json().catch(() => null)
+    const nodes = payload?.nodes ?? null
+    if (!nodes) deferredNodeRequests.delete(key)
+    return nodes
+  })()
+  deferredNodeRequests.set(key, request)
+  return request
+}
+
+const CatchAllPage = observer(function CatchAllPage(props: Props) {
+  // Dynamic site-plugin activation (AGL-417): suspend — SSR included — until
+  // the org-enabled plugins register their canvas components. Rendering the
+  // canvas before registration is exactly the blank-site failure (AGL-52),
+  // so the gate sits above everything.
+  //
+  // `blockingPlugins` is the narrowed set when the server could prove nothing
+  // else has work to do on this page (AGL-1289); without it this is the org's
+  // whole enabled list, which is what it always was.
+  const enabledPlugins = props.enabledPlugins ?? [
+    ...DEFAULT_ENABLED_PLUGINS,
+  ]
+  use(sitePluginLoader.ensure(props.blockingPlugins ?? enabledPlugins, ['site']))
+
+  // The plugins that did NOT have to block: load them straight after
+  // hydration, so they are registered for anything that needs them later
+  // without having sat in front of first render. Same shape as the realm
+  // plugins below — load, then tick so a runtime that registers late still
+  // mounts. Nothing is dropped here; only the waiting moved.
+  const [, setLatePluginTick] = useState(0)
+  const blockingKey = props.blockingPlugins?.join(',')
+  const enabledKey = enabledPlugins.join(',')
+  useEffect(() => {
+    if (blockingKey == null || blockingKey === enabledKey) return
+    let active = true
+    void sitePluginLoader
+      .ensure(enabledKey.split(','), ['site'])
+      .then(() => active && setLatePluginTick((tick) => tick + 1))
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [blockingKey, enabledKey])
+
+  // Trusted-realm marketplace plugins (AGL-420): additive runtimes loaded
+  // AFTER hydration (never blocking first paint); the tick re-renders so a
+  // runtime registered by a remote bundle mounts without a navigation.
+  const [, setRealmTick] = useState(0)
+  const realmKey = (props.realmPlugins ?? [])
+    .map((install) => `${install.listingId}@${install.version}`)
+    .join(',')
+  useEffect(() => {
+    // Dev bundles (AGL-427) load even with no realm installs; the env is
+    // inlined and the whole dev path is dead code in production builds.
+    if (!realmKey && !process.env.NEXT_PUBLIC_PLUGIN_DEV_BUNDLES) return
+    void loadSiteRealmPlugins(props.realmPlugins).then(() =>
+      setRealmTick((tick) => tick + 1),
+    )
+    // realmKey captures the install list's identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realmKey])
+
+  // Withheld lazy-panel subtrees, once fetched back (AGL-1285/1287). A PATCH —
+  // the dropped descendants plus the original panel nodes — not the whole
+  // document, so merging it over `props.nodes` is what reconstitutes the page.
+  //
+  // Read THROUGH `nodes` rather than pushed straight at the canvas: the canvas
+  // fill below and the `NODE_SET_ITEMS` effect both key off `nodes`, so a
+  // component remount after the swap would otherwise re-announce the pruned
+  // document and empty every panel again.
+  const [deferredPatch, setDeferredPatch] = useState<Record<
+    string,
+    any
+  > | null>(null)
+  // const props = { data: exampleData }
+  const nodes = useMemo(
+    () =>
+      deferredPatch && props.nodes
+        ? { ...props.nodes, ...deferredPatch }
+        : props.nodes,
+    [props.nodes, deferredPatch],
+  )
+  // Unlocked content for password-protected screens (AGL-87).
+  const [unlockedNodes, setUnlockedNodes] = useState<Record<
+    string,
+    any
+  > | null>(null)
+  const [unlockError, setUnlockError] = useState(false)
+  /**
+   * The enricher slice that arrives WITH a gated page's nodes (AGL-2510).
+   *
+   * A protected or members-only page ships `nodes: null`, so its automations,
+   * overlays and experiments cannot ride in the page props the way every
+   * other page's do — they come back from the same endpoint that opens the
+   * gate. Held here and merged into what the site runtimes read, so the nav
+   * the visitor just unlocked behaves like the nav on every other page.
+   */
+  const [gatedPageProps, setGatedPageProps] = useState<Record<
+    string,
+    any
+  > | null>(null)
+  // Members-only content (AGL-109): fetched with the session cookie.
+  const [memberNodes, setMemberNodes] = useState<Record<string, any> | null>(
+    null,
+  )
+  const [memberDenied, setMemberDenied] = useState(false)
+  const memberHostId = props.data?.host?.$id
+  const memberScreenId = props.data?.screen?.data?.$id
+  useEffect(() => {
+    if (!props.memberScreen || !memberHostId || !memberScreenId) return
+    let active = true
+    void (async () => {
+      const response = await fetch('/api/membership/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostId: memberHostId,
+          screenId: memberScreenId,
+        }),
+      })
+      if (!active) return
+      if (!response.ok) return setMemberDenied(true)
+      const payload = await response.json()
+      if (payload?.nodes) {
+        const { nodes: memberTree, ...enriched } = payload
+        canvas.setNodes(memberTree)
+        setMemberNodes(memberTree)
+        setGatedPageProps(enriched)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [props.memberScreen, memberHostId, memberScreenId])
+
+  // Withheld lazy-panel subtrees (AGL-1285). The server pruned the panels that
+  // will not mount out of `nodes`; this fetches the whole document back and
+  // swaps it in, the same wholesale replacement `unlockedNodes` and
+  // `memberNodes` above already do.
+  //
+  // The trigger is a capture-phase listener on the document rather than
+  // anything inside `muiTabs`, deliberately: the tabs component knows nothing
+  // about deferral and should not start to. `pointerdown` gets the request
+  // moving before the click that opens the panel resolves, and `click` and
+  // `keydown` cover keyboard activation and anything synthetic — all three
+  // funnel into one fetch that runs at most once.
+  const deferralHost = props.deferral?.host
+  const deferralSlug = props.deferral ? JSON.stringify(props.deferral.slug) : null
+  useEffect(() => {
+    if (!deferralHost || deferralSlug == null) return
+    let active = true
+    const load = () => {
+      void (async () => {
+        const payload = await fetchDeferredNodes(deferralHost, deferralSlug)
+        if (!active || !payload) return
+        setDeferredPatch(payload)
+      })()
+    }
+    const onInteract = (event: Event) => {
+      const target = event.target as Element | null
+      if (typeof target?.closest === 'function' && target.closest('[role="tab"]')) {
+        load()
+      }
+    }
+    // `pointerover` is the head start: a cold fetch is a full server compose
+    // and was measured at 3.8s, which is a long time to sit looking at an empty
+    // panel. Hovering a tab is the earliest honest signal that someone is about
+    // to open one, and it costs nothing on touch, where the pointer only
+    // arrives with the press. The other three are the actual commitment —
+    // keyboard activation and anything synthetic included.
+    document.addEventListener('pointerover', onInteract, true)
+    document.addEventListener('pointerdown', onInteract, true)
+    document.addEventListener('click', onInteract, true)
+    document.addEventListener('keydown', onInteract, true)
+    return () => {
+      active = false
+      document.removeEventListener('pointerover', onInteract, true)
+      document.removeEventListener('pointerdown', onInteract, true)
+      document.removeEventListener('click', onInteract, true)
+      document.removeEventListener('keydown', onInteract, true)
+    }
+  }, [deferralHost, deferralSlug])
+
+  // Fill the canvas DURING render, not only in an effect: the server
+  // otherwise emits an empty page (crawlers see nothing) and hydration
+  // mismatches. Safe on the shared server singleton because each render
+  // pass runs synchronously — the server always refills so a previous
+  // request's tree can't leak into this page. On the client only the very
+  // first render fills synchronously (matching the server HTML); later prop
+  // changes (client-side navigations) go through the effect below so
+  // mounted observers aren't invalidated mid-render.
+  if (nodes && (typeof window === 'undefined' || !canvas.rootNode)) {
+    canvas.setNodes(nodes)
+  }
+
+  useEffect(() => {
+    if (!nodes) return
+    emitter.emit(AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
+  }, [nodes])
+
+  // The pageview beacon, the GA mounts and the consent machinery used to live
+  // here. They now mount from `page.tsx` as a SIBLING of this component
+  // (`site-analytics.tsx`, AGL-1550): none of them needs a plugin, a canvas
+  // node or an observable, and sitting below the `use(sitePluginLoader
+  // .ensure(...))` gate above meant any stall in plugin loading silenced both
+  // analytics systems and the consent surface at once — which is exactly what
+  // AGL-1541 did, invisibly, to every rAF-starved visitor.
+
+  // Id-based screen links resolve against this routing map at render time;
+  // ISR keeps it current (slug renames show up on the next revalidate).
+  //
+  // `screenRoutes` is the same map corrected to what the router actually
+  // serves (AGL-1998) — see `page.tsx`. The raw `host.screens` stays as the
+  // fallback for props composed before that field existed: HTML already in an
+  // ISR cache, and a `/api/screen/nodes` payload fetched by a client holding
+  // it. Both then behave exactly as they did before, rather than losing every
+  // link at once.
+  const screens = (props.screenRoutes ??
+    props.data?.host?.screens) as Record<string, string> | undefined
+  // Locale plumbing (AGL-164): the switcher component reads variants of
+  // the CURRENT screen from this context.
+  const screenLocale = (props.data?.screen?.data as any)?.locale
+  const screenLocaleVariants = (props.data?.screen?.data as any)
+    ?.localeVariants
+  const screenLinks = useMemo(
+    () => ({
+      screens,
+      currentLocale: screenLocale,
+      localeVariants: screenLocaleVariants,
+    }),
+    [screens, screenLocale, screenLocaleVariants],
+  )
+
+  // The SEO head — title, description, social image, canonical, noindex — is
+  // derived server-side in `buildMetadata`/`generateMetadata` (page.tsx). The
+  // client twin that used to recompute all of it here fed only inert
+  // `next/head` blocks and was deleted with them (AGL-1274).
+  const host = props.data?.host
+  const screen = props.data?.screen?.data
+
+  // `pageData` carries whatever the site-page resolver already loaded on the
+  // server for this path (AGL-659), so blocks can render their primary
+  // content during SSR instead of fetching it in an effect.
+  const site = useMemo(
+    () => ({
+      hostId: host?.$id,
+      pageData: props.pageData as Record<string, unknown> | undefined,
+    }),
+    [host?.$id, props.pageData],
+  )
+
+  // Password-protected screens render an unlock form; the composed nodes
+  // arrive from /api/protection/unlock after verification (AGL-87).
+  // Membership sign-in/up/recovery (AGL-109/552): the theme-wrapped
+  // built-in forms (AGL-553). A designated auth screen (host `authScreens`)
+  // arrives WITH composed nodes and falls through to the normal canvas
+  // render below instead.
+  if (props.membershipPage && !nodes) {
+    return (
+      <MembershipPage
+        page={props.membershipPage}
+        hostId={props.data?.host?.$id}
+      />
+    )
+  }
+
+  // Maintenance mode without an assigned 503 screen (AGL-131), and the
+  // lockdown notice (AGL-1501) when the loader says the outage is a staff
+  // lockdown — per-reason title/copy, optional support contact and window.
+  if (props.maintenanceFallback && !nodes) {
+    const lockdown = props.lockdown
+    return (
+      <div style={{ maxWidth: 420, margin: '15vh auto', padding: 24 }}>
+        <h1 style={{ fontSize: 22 }}>{lockdown?.title ?? 'Back soon'}</h1>
+        <p style={{ opacity: 0.8 }}>
+          {lockdown?.message ??
+            'This site is undergoing maintenance. Please check back shortly.'}
+        </p>
+        {lockdown?.contact ? (
+          <p style={{ opacity: 0.8 }}>
+            {'Questions? '}
+            <a href={`mailto:${lockdown.contact}`}>{lockdown.contact}</a>
+          </p>
+        ) : null}
+      </div>
+    )
+  }
+
+  // Members-only denial with an assigned 401 screen (AGL-131): render the
+  // designed page instead of the built-in prompt. Client-only transition
+  // (the server renders the checking state), so the mid-render canvas fill
+  // mirrors the first-fill pattern above.
+  if (props.memberScreen && memberDenied && props.unauthorizedNodes) {
+    canvas.setNodes(props.unauthorizedNodes)
+    return <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+  }
+
+  // Members-only screens (AGL-109): prompt for sign-in until the session
+  // cookie verifies and the nodes arrive.
+  if (props.memberScreen && !memberNodes) {
+    return (
+      <div style={{ maxWidth: 420, margin: '15vh auto', padding: 24 }}>
+        {memberDenied ? (
+          <>
+            <h1 style={{ fontSize: 22 }}>{'This page is for members'}</h1>
+            {/*
+              Only offer the member pages when this site actually serves them
+              (AGL-2486). With User Accounts off, `/signin` and `/signup` are
+              404s, so linking them would send a visitor who already hit one
+              dead end straight to another — and it would advertise a
+              sign-in page the site does not have.
+            */}
+            {props.memberAuthRoutes ? (
+              <p style={{ opacity: 0.8 }}>
+                <a href="/signin">{'Sign in'}</a>
+                {' or '}
+                <a href="/signup">{'create an account'}</a>
+                {' to view it.'}
+              </p>
+            ) : (
+              <p style={{ opacity: 0.8 }}>
+                {'You need an account on this site to view it.'}
+              </p>
+            )}
+          </>
+        ) : (
+          <p style={{ opacity: 0.7 }}>{'Checking your membership…'}</p>
+        )}
+      </div>
+    )
+  }
+
+  if (props.protectedScreen && !unlockedNodes) {
+    return (
+      <div style={{ maxWidth: 420, margin: '15vh auto', padding: 24 }}>
+        <h1 style={{ fontSize: 22 }}>{'This page is protected'}</h1>
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault()
+            setUnlockError(false)
+            const form = new FormData(event.currentTarget)
+            const response = await fetch('/api/protection/unlock', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                hostId: host?.$id,
+                screenId: screen?.$id,
+                password: String(form.get('password') ?? ''),
+              }),
+            })
+            if (!response.ok) return setUnlockError(true)
+            const payload = await response.json()
+            if (payload?.nodes) {
+              const { nodes: unlockedTree, ...enriched } = payload
+              canvas.setNodes(unlockedTree)
+              setUnlockedNodes(unlockedTree)
+              setGatedPageProps(enriched)
+            } else {
+              setUnlockError(true)
+            }
+          }}
+        >
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            autoFocus
+            style={{ padding: 8, width: '100%', boxSizing: 'border-box' }}
+          />
+          <button type="submit" style={{ marginTop: 12, padding: '8px 16px' }}>
+            {'Unlock'}
+          </button>
+          {unlockError ? (
+            <p style={{ color: '#c62828' }}>{'Wrong password — try again.'}</p>
+          ) : null}
+        </form>
+      </div>
+    )
+  }
+
+  // Legacy collection surface (AGL-81): only when AGL-551 could compose
+  // neither a template screen nor the themed built-in (`nodes` present means
+  // the collection page renders through the normal canvas path below).
+  if (props.content?.collection && !nodes) {
+    return <CollectionFallback content={props.content} hostId={host?.$id} />
+  }
+
+  return (
+    <SiteContext.Provider value={site}>
+    <ScreenLinkContext.Provider value={screenLinks}>
+      {/* The `next/head` <Head> blocks that used to render the title,
+          canonical, og:/twitter: meta and the noindex rule here were inert
+          under the App Router — `next/head` is a no-op inside `app/`, so none
+          of it ever shipped a byte (AGL-1274). The real head comes from the
+          route's `generateMetadata` (page.tsx), which derives the same
+          canonical (`hostPublicOrigin` + `screenRoutePathToUrl`) and asks the
+          same `isPageIndexable` for robots/noindex (AGL-1263), for the screen,
+          content, membership, maintenance, member-gate and protected branches
+          alike. JSON-LD renders server-side via `buildJsonLd` (AGL-143). */}
+      {/* Google Analytics and the consent surfaces are NOT here (AGL-1550) —
+          they mount from `page.tsx` as a sibling of this component, above the
+          plugin gate. See `site-analytics.tsx`. */}
+      {/* Shared hidden class (AGL-562): ships in the SSR HTML so
+          elements authors start hidden (interaction show/hide targets)
+          paint hidden from the first frame — no flash before the
+          automations engine hydrates. The besigner canvas deliberately
+          omits this rule so hidden elements stay editable. */}
+      <style>{ELEMENT_HIDDEN_STYLE_TEXT}</style>
+      {/* Plugin stylesheets (AGL-2486). The published page is the SOURCE of
+          truth for where plugin CSS sits in the cascade — unlayered, so it
+          beats every `@layer mui` rule regardless of specificity — and the
+          besigner canvas renders the same component in the same position
+          inside its shadow root so the editor agrees. `scope="document"`
+          skips MIRRORED sheets: those are still live in this document's own
+          head, where the bundle put them. */}
+      <PluginStyles scope="document" />
+      {/* Plugin site runtimes (AGL-419): experiment runners, automation
+          engines, overlays — each registered from its plugin's site
+          surface and reading back the page-props slices its own server
+          enricher wrote. */}
+      {listSiteRuntimes().map(({ runtimeId, Component }) => (
+        <Component
+          key={runtimeId}
+          hostId={props.data?.host?.$id}
+          screens={props.data?.host?.screens}
+          // A gated page's slice arrives with its nodes, after this render
+          // (AGL-2510); every other page has it in `props` and merges nothing.
+          page={
+            gatedPageProps
+              ? { ...(props as Record<string, any>), ...gatedPageProps }
+              : (props as Record<string, any>)
+          }
+        />
+      ))}
+      <AglynNodeRenderer node={canvas.getNode(NODE_ROOT_ID)} />
+      {props.showBranding ? (
+        // White-label badge (White-Label Phase 2): the "Made with …" credit
+        // reads the org's resolved brand — product name, support URL, logo,
+        // primary color — instead of the hard-coded Aglyn brand. `branding`
+        // rides in from load-page-data via `resolveBrandingProfile`, the one
+        // shared resolver, and falls back to the Aglyn defaults when absent
+        // (non-white-label orgs, or surfaces that don't carry it), so this
+        // can never drift or partly-render as Aglyn. `showBranding` still
+        // decides whether the badge shows at all.
+        (() => {
+          const brand = props.branding ?? PLATFORM_BRANDING_PROFILE
+          // Same resolver as every other surface (AGL-1407). The org branding
+          // card writes a typed URL today, which passes straight through; this
+          // is what stops a picked `media:` reference reaching the badge as a
+          // literal string once `logoUrl` is converted.
+          const brandLogo = resolveMediaSrc(brand.logoUrl, {
+            hostId: host?.$id,
+          })
+          // `homeUrl`, NOT `supportUrl`.
+          //
+          // This badge is the platform's only organic acquisition surface —
+          // one link on every free customer's site — and it pointed at the
+          // brand's SUPPORT url, which on the Aglyn deployment resolves to
+          // `mailto:` + the support address. Clicking "Made with Aglyn"
+          // opened the visitor's mail client with a blank message to our
+          // help desk. A visitor asking "what built this" wants the product's
+          // front door; a help-desk address is an answer to a different
+          // question, and a `mailto:` is not a destination at all.
+          //
+          // A LINK ONLY IF THERE IS SOMEWHERE TO SEND THEM (AGL-2428).
+          //
+          // `homeUrl` is null for a white-label org that left its URL blank,
+          // and for a renamed self-host deployment that has not published one.
+          // The badge must then be a plain label rather than an anchor: an
+          // `<a>` with no href is still announced as a link by a screen reader
+          // and still takes focus, which promises a destination that does not
+          // exist.
+          const badgeStyle = {
+                position: 'fixed',
+                bottom: 12,
+                right: 12,
+                zIndex: 2147483000,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontFamily: 'system-ui, sans-serif',
+                color: '#fff',
+                backgroundColor: brand.primaryColor ?? 'rgba(0, 0, 0, 0.72)',
+                textDecoration: 'none',
+          } as const
+          const badgeContent = (
+            <>
+              {brandLogo ? (
+                <img
+                  src={brandLogo}
+                  alt=""
+                  aria-hidden
+                  // Explicit intrinsic size (AGL-2486). Lighthouse named THIS
+                  // image as the page's only unsized one, and it is unsized in
+                  // the way that actually costs: the mark is an SVG declaring
+                  // `width="100%" height="100%"`, so it carries no intrinsic
+                  // size of its own and the browser reserves nothing for it
+                  // until the file has been fetched and parsed — then reflows
+                  // the badge. The viewBox is `0 0 24 24`, i.e. exactly 1:1,
+                  // so 14x14 is the true ratio at the rendered height rather
+                  // than a guess. The CSS below still governs final layout;
+                  // these attributes only supply the aspect ratio to reserve.
+                  width={14}
+                  height={14}
+                  style={{ height: 14, width: 'auto', display: 'block' }}
+                />
+              ) : null}
+              {`Made with ${brand.productName}`}
+            </>
+          )
+          // Marked for the attribution guard, which checks after
+          // load that the page still presents this and repairs it into a
+          // closed shadow root if it does not.
+          return brand.homeUrl ? (
+            <a
+              href={brand.homeUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={badgeStyle}
+              {...{ [ATTRIBUTION_ATTRIBUTE]: 'badge' }}
+            >
+              {badgeContent}
+            </a>
+          ) : (
+            <span
+              style={badgeStyle}
+              {...{ [ATTRIBUTION_ATTRIBUTE]: 'badge' }}
+            >
+              {badgeContent}
+            </span>
+          )
+        })()
+      ) : null}
+      {props.showBranding ? (
+        // "Report abuse" (AGL-1964), beside the credit badge and deliberately
+        // quieter than it.
+        //
+        // WHY HERE. A bank's fraud team or a browser vendor looking at a
+        // phishing page needs one thing first: who hosts this, and how do I
+        // tell them. The credit badge already answers the first half on every
+        // site that carries it, and until now the second half had no answer at
+        // all — which is how a report ends up at a registrar or Safe Browsing
+        // instead of at us, and how `*.aglyn.app` gets blocked wholesale.
+        //
+        // WHY GATED ON `showBranding` rather than shown on every site. The two
+        // populations line up almost exactly: the badge shows on free plans,
+        // and free open signup is the abuse surface AGL-1907 inventories —
+        // minutes from signup to arbitrary content on `{sub}.aglyn.app`. A
+        // customer who paid to remove branding bought a clean page, and
+        // putting a permanent "report this site" control on it would be both a
+        // broken promise and an insinuation. They are not left uncovered: the
+        // route answers on EVERY origin we serve, so a reporter who knows the
+        // path reaches it from any site, and the marketing site publishes it.
+        //
+        // WHY SAME-ORIGIN. The href is a bare path, never an aglyn.com URL. On
+        // a white-labelled brand an absolute link would announce who really
+        // hosts the site — the one thing white-label is sold to hide — and a
+        // relative path leaks nothing while going to exactly the same place.
+        //
+        // WHY NO `?url=` ON THE HREF. Reading `window.location.href` here
+        // would render '' on the server and the real URL on the client, which
+        // is a hydration mismatch on every page that shows the badge. The
+        // route reads the same-origin `Referer` instead — which is exactly the
+        // page being reported — so the prefill costs no client state and
+        // cannot desync. `rel` keeps `nofollow` and drops `noreferrer` for
+        // that reason; the header goes to our own origin and nowhere else.
+        <a
+          href="/api/report-abuse"
+          rel="nofollow"
+          {...{ [ATTRIBUTION_ATTRIBUTE]: 'report' }}
+          style={{
+            position: 'fixed',
+            bottom: 12,
+            left: 12,
+            zIndex: 2147483000,
+            padding: '4px 8px',
+            borderRadius: 6,
+            fontSize: 11,
+            fontFamily: 'system-ui, sans-serif',
+            color: '#fff',
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            textDecoration: 'none',
+          }}
+        >
+          Report abuse
+        </a>
+      ) : null}
+      {/* Keeps the two above ON the page. Both are ordinary
+          elements in a document the site's own author controls, so three
+          lines of theme CSS or one tag-manager container takes them off it —
+          and the report control is precisely what a phishing site's author
+          wants gone. The guard checks after load, repairs into a closed
+          shadow root that no author selector can reach, and reports the
+          attempt once so the site becomes reviewable. Mounted only where
+          there is something to guard. */}
+      {props.showBranding ? (
+        <AttributionGuard hostId={host?.$id} />
+      ) : null}
+    </ScreenLinkContext.Provider>
+    </SiteContext.Provider>
+  )
+})
+
+export default CatchAllPage

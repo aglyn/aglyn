@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { ELEMENT_HIDDEN_CLASS, NODE_ROOT_ID } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 
 /**
@@ -90,7 +91,7 @@ function nodeClassNames(node: RevealNode): string[] {
  * affordance in the hierarchy reports and the canvas reveal overrides.
  */
 export function isNodeHiddenOnSite(node: RevealNode): boolean {
-  return nodeClassNames(node).includes(Aglyn.ELEMENT_HIDDEN_CLASS)
+  return nodeClassNames(node).includes(ELEMENT_HIDDEN_CLASS)
 }
 
 /**
@@ -117,7 +118,7 @@ export function isNodeRevealedOnCanvas(
   if (!node) return false
   if (revealedNodeIds?.some((id) => id === node.$id)) return true
   const parent = node.parent
-  const scope = parent && parent.$id !== Aglyn.NODE_ROOT_ID ? parent : node
+  const scope = parent && parent.$id !== NODE_ROOT_ID ? parent : node
   return Besigner.focus.isNodeOrDescendantSelected(scope as never)
 }
 
@@ -155,11 +156,11 @@ export function nodePropsWithHiddenOnSite(
   const current = String(node.props?.['className'] ?? '')
     .split(/\s+/)
     .filter(Boolean)
-  const has = current.includes(Aglyn.ELEMENT_HIDDEN_CLASS)
+  const has = current.includes(ELEMENT_HIDDEN_CLASS)
   if (has === hidden) return null
   const next = hidden
-    ? [...current, Aglyn.ELEMENT_HIDDEN_CLASS]
-    : current.filter((name) => name !== Aglyn.ELEMENT_HIDDEN_CLASS)
+    ? [...current, ELEMENT_HIDDEN_CLASS]
+    : current.filter((name) => name !== ELEMENT_HIDDEN_CLASS)
   const props: Record<string, unknown> = { ...(node.props ?? {}) }
   if (next.length) props['className'] = next.join(' ')
   else delete props['className']

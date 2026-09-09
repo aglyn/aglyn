@@ -103,6 +103,12 @@ const ALLOWED = new Map<string, string>([
     'Generated from the docs; the entry is the support/community forum page.',
   ],
   [
+    'apps/console/constants/docs-help-excerpts.generated.ts',
+    'The same forum page’s description. Its own file since AGL-2706 moved ' +
+      'the excerpts out of the registry beside it, so the console shell ' +
+      'stops carrying 20 KB of tooltip prose to paint a `?`.',
+  ],
+  [
     'apps/console/constants/assist-docs-index.generated.ts',
     'The second generated docs artifact (AGL-1860) — Aglyn Assist’s ' +
       'retrieval index, which carries docs PROSE rather than just anchors, ' +

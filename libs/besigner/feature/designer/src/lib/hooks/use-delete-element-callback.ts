@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useCallback } from 'react'
@@ -33,7 +34,7 @@ export function useDeleteElementCallback(): (
         // (AGL-2553). Hover still goes — the pointer was over what just left.
         const candidates = Besigner.focus.resolveSelectionAfterDeletion([node])
         Besigner.focus.clearHover()
-        Aglyn.canvas.deleteNode(node)
+        canvas.deleteNode(node)
         Besigner.focus.selectFirstSurviving(candidates)
       }
 
@@ -64,9 +65,7 @@ export function useDeleteElementsCallback(): (
 
   return useCallback(
     (nodes: Aglyn.NodeSchema[]) => {
-      const deletable = nodes.filter(
-        (node) => node && !Aglyn.canvas.isRootNode(node),
-      )
+      const deletable = nodes.filter((node) => node && !canvas.isRootNode(node))
       if (!deletable.length) return Promise.resolve()
 
       function handleDelete() {
@@ -80,7 +79,7 @@ export function useDeleteElementsCallback(): (
         Besigner.focus.clearHover()
         for (const node of deletable) {
           // A node may have been removed already as part of an ancestor.
-          if (Aglyn.canvas.getNode(node.$id)) Aglyn.canvas.deleteNode(node)
+          if (canvas.getNode(node.$id)) canvas.deleteNode(node)
         }
         Besigner.focus.selectFirstSurviving(candidates)
       }

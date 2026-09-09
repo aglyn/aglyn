@@ -64,7 +64,7 @@ export interface SiteStatusScreenProps {
  *
  * So the bar here is not "as good as a designed screen" — it is "never a
  * framework default again". It carries the site's mark, sits under the site's
- * own theme (it renders inside `[host]/layout`, so `HostThemeProvider` has
+ * own theme (it renders inside `[host]/[scheme]/layout`, so `HostThemeProvider` has
  * already applied the host's colors and fonts), and gives the visitor real
  * places to go.
  *
@@ -98,11 +98,11 @@ export interface SiteStatusScreenProps {
  *    was not found. There is no host-level menu document to read. A "nav" that
  *    rendered an empty bar would be worse than none.
  *  - **The site's public top-level pages CAN be.** They come from the host's
- *    routing map, resolved in `[host]/layout` and published through
+ *    routing map, resolved in `[host]/[scheme]/layout` and published through
  *    `HostBrandProvider` — filtered to PUBLIC screens, because that map also
  *    holds unlisted, members-only and password-protected pages. See
  *    `utils/site-nav.ts`; that filter is a security boundary, not a nicety.
- *  - **`/search` always exists** (`app/[host]/search/page.tsx` is a real route
+ *  - **`/search` always exists** (`app/[host]/[scheme]/search/page.tsx` is a real route
  *    on every tenant host), so the 404 can offer to find the page rather than
  *    only to leave.
  *

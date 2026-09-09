@@ -17,7 +17,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import AssistPanelComponent from '../../components/assist-panel.component'
+import AssistPanelComponent from '../../components/assist-panel-mount.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 
 /**

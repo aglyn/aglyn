@@ -37,7 +37,7 @@
  */
 import { HEALTH_NO_STORE, renderHealth } from '@aglyn/aglyn/server'
 
-const LOADER = '../app/[host]/[[...slug]]/load-page-data'
+const LOADER = '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 
 /** A composed page: host resolved, non-empty node tree. */
 const RENDERED = {

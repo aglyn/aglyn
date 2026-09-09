@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, hasConcurrentWrite } from '@aglyn/aglyn'
 import type { Firestore } from 'firebase/firestore'
 import { autorun } from 'mobx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -266,7 +267,7 @@ export function useBesignerDraft(
     // Serialising here rather than in the autorun is the whole point of the
     // debounce: the tracking read is cheap to repeat, `JSON.stringify` of a
     // 200-node map plus a synchronous `setItem` is not (AGL-567).
-    const nodes = Aglyn.canvas.toJSON().nodes as Aglyn.ProcessableNodes
+    const nodes = canvas.toJSON().nodes as Aglyn.ProcessableNodes
     writeBesignerDraft(currentIds, {
       nodes,
       baseStamp: storedStampRef.current,
@@ -323,8 +324,8 @@ export function useBesignerDraft(
   useEffect(() => {
     if (!key || !loaded) return undefined
     return autorun(() => {
-      Aglyn.canvas.toJSON()
-      if (Aglyn.canvas.isInitialSame) return
+      canvas.toJSON()
+      if (canvas.isInitialSame) return
       schedule()
     })
   }, [key, loaded, schedule])
@@ -356,7 +357,7 @@ export function useBesignerDraft(
   useEffect(() => {
     if (!key || !loaded) return undefined
     const flushNow = () => {
-      if (!Aglyn.canvas.isInitialSame) flush()
+      if (!canvas.isInitialSame) flush()
     }
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') flushNow()
@@ -375,9 +376,9 @@ export function useBesignerDraft(
    * change lands — a mobx read inside a `useMemo` whose deps never mention
    * it would keep serving the verdict from mount.
    */
-  const canvasHasRemoteEdits = Aglyn.canvas.hasRemoteEdits
+  const canvasHasRemoteEdits = canvas.hasRemoteEdits
   const staleAgainstDocument = Boolean(
-    offer && Aglyn.hasConcurrentWrite(offer.baseStamp, storedStamp),
+    offer && hasConcurrentWrite(offer.baseStamp, storedStamp),
   )
   /**
    * Restoring is a WHOLE-MAP replace, and in a shared session that is not a
@@ -443,7 +444,7 @@ export function useBesignerDraft(
     // leaves the canvas dirty. Dirty matters beyond the save button: it is
     // what keeps "Save the canvas before creating a version" firing, so a
     // restored draft can never be swept into a version snapshot.
-    Aglyn.canvas.applyNodes(draft.nodes)
+    canvas.applyNodes(draft.nodes)
     setOffer(null)
   }, [offer, restoreBlockedBy, roomIsShared])
 

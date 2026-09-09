@@ -17,12 +17,14 @@
 
 // Subpath, NOT the `@aglyn/shared-data-enums` barrel — see the note on the
 // same import in `merge-node-sx.ts` (AGL-2486). The barrel reaches
-// `firebase/auth`; this file wants one string helper out of `lib/styles`.
+// `firebase/auth`; this file wants the palette-token readers, and takes them
+// from the module that holds only those rather than from `lib/styles`, which
+// re-exports them alongside the unit enum and the gradient model.
 import {
   channelCssVarNameToPaletteToken,
   cssColorToChannel,
   cssVarNameToPaletteToken,
-} from '@aglyn/shared-data-enums/styles'
+} from '@aglyn/shared-data-enums/palette-token-css-var'
 
 /**
  * Palette-token references inside sx STRING values (AGL-1331).

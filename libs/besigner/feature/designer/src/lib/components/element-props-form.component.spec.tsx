@@ -465,7 +465,7 @@ describe('the Screen picker and a target the host has lost (AGL-1893)', () => {
   })
 
   it('consults the shared rule instead of dropping the value', () => {
-    expect(screenSelectBranch).toContain('Aglyn.unresolvedScreenOption')
+    expect(screenSelectBranch).toMatch(/(?:Aglyn\.)?\bunresolvedScreenOption\(/)
     // Fed the field's own stored value — a call passing anything else could
     // not tell a dead reference from a healthy one.
     expect(screenSelectBranch).toMatch(/nodeProps\?\.\[field\.name\]/)

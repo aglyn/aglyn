@@ -29,7 +29,7 @@
  *
  * So the assertion that matters is not "the page is unlinked" but "the
  * address does not exist": `notFound: true`, which `page.tsx` turns into a
- * real `notFound()` and the `[host]/not-found` boundary answers with a 404
+ * real `notFound()` and the `[host]/[scheme]/not-found` boundary answers with a 404
  * STATUS. A `props` result carrying `noindex` would be a soft 404 — the
  * exact trade AGL-2342 refused — so these tests check the shape, not the
  * robots directive.
@@ -131,7 +131,7 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
 }))
 
 import { ACCOUNTS_PLUGIN_ID } from '@aglyn/aglyn'
-import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'
+import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 import getHost from '../utils/get-host'
 
 const mockGetHost = getHost as jest.Mock

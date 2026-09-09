@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { ELEMENT_HIDDEN_CLASS } from '@aglyn/aglyn'
 
 /**
  * Switching a CLASS off while designing (AGL-2486).
@@ -55,7 +56,7 @@ export interface MutedClassTarget {
  * the element's own visibility toggle owns that decision.
  */
 export function isClassSwitchable(className: string): boolean {
-  return className !== Aglyn.ELEMENT_HIDDEN_CLASS
+  return className !== ELEMENT_HIDDEN_CLASS
 }
 
 /** The flag entry for a target. */

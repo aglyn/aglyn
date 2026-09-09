@@ -33,22 +33,10 @@
  * authored and lower severity, but they are the same construction and are
  * escaped the same way rather than reasoned about one at a time.
  *
- * `'` becomes `&#39;` rather than `&apos;`, which HTML 4 does not define.
- * Non-string input coerces rather than throwing: these call sites read
- * optional fields off documents, and a `null` slipping through must produce
- * empty text, never a crash in the middle of a merchant's print dialog.
+ * The escaping itself is `@aglyn/shared-util-tools/escape-html`, which this
+ * module's implementation became when the same function turned up in four
+ * other places (AGL-2706) — two of them missing `'`. What stays here is the
+ * paragraph above, which is about commerce's call sites and belongs with
+ * them.
  */
-export function escapeHtml(value: unknown): string {
-  if (value == null) return ''
-  return String(value).replace(
-    /[&<>"']/g,
-    (character) =>
-      ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
-      })[character] as string,
-  )
-}
+export { escapeHtml } from '@aglyn/shared-util-tools/escape-html'

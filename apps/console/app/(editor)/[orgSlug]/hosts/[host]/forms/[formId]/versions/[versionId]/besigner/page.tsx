@@ -17,7 +17,19 @@
 'use client'
 
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  CANVAS_ROOT_ELEMENT_ID,
+  canvasTreeToDefinition,
+  carryContactFieldMappings,
+  checkFormContract,
+  definitionToCanvasTree,
+  encodeStoredNodes,
+  formContractIsSatisfied,
+  formFieldDeclsFromNodes,
+  ScreenLinkContext,
+} from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
   BesignerConflictAlertComponent,
@@ -72,6 +84,7 @@ import BesignerMediaPickerProvider from '../../../../../../../../../../component
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
+import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import {
@@ -255,7 +268,7 @@ function FormBesignerPage() {
   // could save) this form's nodes.
   useEffect(() => {
     return () => {
-      Aglyn.canvas.reset()
+      canvas.reset()
       Besigner.focus.clearFocusStatus()
     }
   }, [hostId, formId, versionId])
@@ -289,7 +302,7 @@ function FormBesignerPage() {
   const selectedNodeId = Besigner.focus.getLastSelected()?.$id
   const { elements: canvasElements } = useRenderedCanvasElements()
   const getCanvasRoot = useCallback(
-    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    () => canvasElements.current?.[CANVAS_ROOT_ELEMENT_ID]?.node,
     [canvasElements],
   )
   const presence = usePresence({
@@ -353,7 +366,7 @@ function FormBesignerPage() {
     // has to be wrapped or the canvas has no root and renders nothing
     // (AGL-680).
     toCanvasNodes: (storedNodes) =>
-      Aglyn.definitionToCanvasTree({
+      definitionToCanvasTree({
         rootId: data?.rootId,
         nodes: storedNodes as Record<string, unknown>,
       }) as Aglyn.ProcessableNodes,
@@ -403,8 +416,8 @@ function FormBesignerPage() {
       // Unwrap the synthetic canvas root: a placed form grafts from `rootId`,
       // so publishing the wrapper would put an always-empty container around
       // every instance (AGL-680).
-      const definition = Aglyn.canvasTreeToDefinition(
-        Aglyn.canvas.toJSON().nodes as Record<string, unknown>,
+      const definition = canvasTreeToDefinition(
+        canvas.toJSON().nodes as Record<string, unknown>,
       )
       if (definition.ambiguousRoot) {
         return enqueueSnackbar(
@@ -417,13 +430,13 @@ function FormBesignerPage() {
         (nodeId) =>
           definition.nodes[nodeId]?.componentId === FORM_COMPONENT_ID,
       )
-      const violations = Aglyn.checkFormContract({
+      const violations = checkFormContract({
         form: formDoc,
         formId,
         nodes: definition.nodes,
         formNodeId,
       })
-      if (!Aglyn.formContractIsSatisfied(violations)) {
+      if (!formContractIsSatisfied(violations)) {
         // `persist` because this is a refusal an author has to act on: an
         // auto-dismissed warning is how someone walks away believing the
         // form shipped.
@@ -451,9 +464,9 @@ function FormBesignerPage() {
        * here, so it is carried from the stored declaration by field name —
        * the same carry the server promote route applies (AGL-2601).
        */
-      const fields = Aglyn.carryContactFieldMappings(
+      const fields = carryContactFieldMappings(
         formDoc?.fields,
-        Aglyn.formFieldDeclsFromNodes(
+        formFieldDeclsFromNodes(
           definition.nodes,
           formNodeId as Aglyn.NodeId,
         ),
@@ -461,7 +474,7 @@ function FormBesignerPage() {
       await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
         // Compressed at rest (AGL-1151), like the version this promotes from
         // and like the server promote route that writes the same document.
-        nodes: Bytes.fromUint8Array(Aglyn.encodeStoredNodes(publishedNodes)!),
+        nodes: Bytes.fromUint8Array(encodeStoredNodes(publishedNodes)!),
         ...(rootId ? { rootId } : {}),
         fields,
         versionId,
@@ -649,7 +662,7 @@ function FormBesignerPage() {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
-      <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+      <ScreenLinkContext.Provider value={screenLinks}>
         <EntityPickerProvider hostId={hostId}>
           {/* This canvas IS the form, and a form design names itself, so its
               published copy is withheld from the placed-form graft. */}
@@ -678,6 +691,7 @@ function FormBesignerPage() {
                   <MainLayout
                     enableAppBarElevation
                     besigner
+                    wordmark={<BesignerWordmark />}
                     actionsPrefix={<BesignerFunctionsButton hostId={hostId} />}
                     backButton={
                       {
@@ -733,15 +747,15 @@ function FormBesignerPage() {
                           {
                             id: 'center-nav-edit-undo',
                             children: 'Undo',
-                            onClick: () => Aglyn.canvas.undo(),
-                            disabled: !Aglyn.canvas.canUndo,
+                            onClick: () => canvas.undo(),
+                            disabled: !canvas.canUndo,
                             ListItemTextProps: { inset: true },
                           },
                           {
                             id: 'center-nav-edit-redo',
                             children: 'Redo',
-                            onClick: () => Aglyn.canvas.redo(),
-                            disabled: !Aglyn.canvas.canRedo,
+                            onClick: () => canvas.redo(),
+                            disabled: !canvas.canRedo,
                             ListItemTextProps: { inset: true },
                           },
                         ],
@@ -826,7 +840,7 @@ function FormBesignerPage() {
             </BindingPickerProvider>
           </ReusableComponentsProvider>
         </EntityPickerProvider>
-      </Aglyn.ScreenLinkContext.Provider>
+      </ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   )
 }

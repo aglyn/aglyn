@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
 import { localStore, parseMirrored, watchMirror } from './clipboard-mirror'
 
@@ -140,7 +141,7 @@ export function copyStyles(node: Aglyn.NodeSchema<any> | undefined): boolean {
   // The ELEMENT's own label. `labelShort` answers the document root with the
   // document's name, which is a true answer to a different question and reads
   // as "paste styles from this whole screen" on the menu below.
-  const label = Aglyn.canvas.isRootNode(node)
+  const label = canvas.isRootNode(node)
     ? (node.componentSchema?.displayName ?? 'element')
     : (node.labelShort ?? 'element')
   const entry: StyleClipboardEntry = {
@@ -184,7 +185,7 @@ export function pasteStyles(node: Aglyn.NodeSchema<any> | undefined): boolean {
   // instance the map replaced (an undo, a draft restore), and writing to that
   // one loses the edit silently. Cloned per target as well: pasting onto
   // three elements must give three independent objects.
-  Aglyn.canvas.updateNodeFields(node, { sx: (sx ?? undefined) as never })
+  canvas.updateNodeFields(node, { sx: (sx ?? undefined) as never })
   return true
 }
 

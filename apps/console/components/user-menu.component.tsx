@@ -55,9 +55,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useColorScheme } from '@mui/material/styles'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, Suspense, lazy, useState } from 'react'
 import MemberAvatar from './member-avatar.component'
-import ReportIssueDialog from './report-issue-dialog.component'
 import { openVisitorConsentPanel } from './visitor-consent.component'
 import { buildDocsUrl } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
@@ -66,6 +65,21 @@ import { useIsStaff } from '../hooks/use-is-staff'
 import { useOrgReach } from '../hooks/use-org-reach'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
+
+/**
+ * The report form arrives with the first person who asks for it (AGL-2706).
+ *
+ * This menu is mounted by the app layout, so a static import put the dialog —
+ * 20 KB of source, its own form state, validation and upload handling — into
+ * the eager graph of every console page. It is also imported by
+ * `manage/report-issue/page.tsx`, which is a separate client entry, so the
+ * chunker emitted the whole component TWICE.
+ *
+ * A `lazy()` boundary is honest here only because nothing else in this module
+ * touches the dialog: a static and a dynamic import of one module resolve to
+ * one module, and the static one wins.
+ */
+const ReportIssueDialog = lazy(() => import('./report-issue-dialog.component'))
 
 /**
  * Plans with nothing above them to sell (org-billing.types): `agency` tops the
@@ -119,6 +133,9 @@ export function UserMenu() {
   // The dialog is rendered OUTSIDE the Popover (below), so closing the menu on
   // click does not unmount the form the person is typing into (AGL-2185).
   const [reporting, setReporting] = useState(false)
+  // Latches on the first open and never clears, so the dialog stays mounted
+  // through its own closing transition rather than being cut at `open=false`.
+  const [reportMounted, setReportMounted] = useState(false)
 
   const close = () => setAnchorEl(null)
   const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
@@ -333,6 +350,7 @@ export function UserMenu() {
         {actionRow(
           () => {
             close()
+            setReportMounted(true)
             setReporting(true)
           },
           'Report an issue',
@@ -445,11 +463,20 @@ export function UserMenu() {
 
       {/* Outside the Popover on purpose (AGL-2185): the menu closes the moment
           the row is clicked, and a dialog mounted inside it would be torn down
-          with it — taking a half-written report along. */}
-      <ReportIssueDialog
-        open={reporting}
-        onClose={() => setReporting(false)}
-      />
+          with it — taking a half-written report along.
+
+          Nothing renders until the row is clicked, which is what keeps the
+          lazy chunk off every other console page. `null` while it loads: the
+          person clicked a menu row and the menu has already closed, so the
+          only frames without a dialog are the ones the fetch takes. */}
+      {reportMounted ? (
+        <Suspense fallback={null}>
+          <ReportIssueDialog
+            open={reporting}
+            onClose={() => setReporting(false)}
+          />
+        </Suspense>
+      ) : null}
     </>
   )
 }

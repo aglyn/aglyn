@@ -109,7 +109,7 @@ import {
   type SitePageContext,
 } from '@aglyn/aglyn/server'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
-import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'
+import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 import getHost from '../utils/get-host'
 
 const mockGetHost = getHost as jest.Mock

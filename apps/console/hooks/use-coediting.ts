@@ -16,7 +16,7 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import { canvas, NODE_ROOT_ID, versionStamp } from '@aglyn/aglyn'
 import {
   get,
   onChildAdded,
@@ -184,7 +184,7 @@ export interface CoEditingState {
 }
 
 function serializeNodes(): Record<string, unknown> {
-  return Aglyn.canvas.toJSON().nodes as Record<string, unknown>
+  return canvas.toJSON().nodes as Record<string, unknown>
 }
 
 /**
@@ -212,9 +212,9 @@ let flushScheduled = false
 function recordPrior(nodeId: string): void {
   // First touch wins: that is the state the whole batch is judged against.
   if (batch.has(nodeId)) return
-  const node = Aglyn.canvas.nodes.get(nodeId)
+  const node = canvas.nodes.get(nodeId)
   const parent = node?.parentId
-    ? Aglyn.canvas.nodes.get(node.parentId)
+    ? canvas.nodes.get(node.parentId)
     : undefined
   batch.set(nodeId, {
     existed: Boolean(node),
@@ -267,7 +267,6 @@ export function flushRemoteReconcile(): string[] {
   const prior = new Map(batch)
   batch.clear()
 
-  const canvas = Aglyn.canvas
   // Children of a node whose list this batch replaced are candidates too —
   // they are how "the parent's update landed, the child's did not" strands a
   // node. Untouched by the batch themselves, so their state now is their
@@ -295,7 +294,7 @@ export function flushRemoteReconcile(): string[] {
       if (live) return live
       cursor = prior.get(cursor)?.parentId
     }
-    return canvas.nodes.get(Aglyn.NODE_ROOT_ID)
+    return canvas.nodes.get(NODE_ROOT_ID)
   }
 
   const repaired: string[] = []
@@ -304,7 +303,7 @@ export function flushRemoteReconcile(): string[] {
 
   runInAction(() => {
     for (const [id, was] of prior) {
-      if (id === Aglyn.NODE_ROOT_ID) continue
+      if (id === NODE_ROOT_ID) continue
       const node = canvas.nodes.get(id)
 
       // Deleted by this batch: drop the reference its parent still holds, or
@@ -397,12 +396,12 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
     // whole subtree and saves history. The peer already told us about every
     // node it removed, individually.
     return runInAction(() => {
-      if (!Aglyn.canvas.nodes.has(nodeId)) return false
+      if (!canvas.nodes.has(nodeId)) return false
       recordPrior(nodeId)
-      Aglyn.canvas.nodes.delete(nodeId)
+      canvas.nodes.delete(nodeId)
       // A remote DELETE is a remote state too: without the mark, an undo
       // restoring an older snapshot would put the node back (AGL-1958).
-      Aglyn.canvas.markRemoteNode(nodeId)
+      canvas.markRemoteNode(nodeId)
       scheduleRemoteReconcile()
       return true
     })
@@ -416,14 +415,14 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
     // Every session republishes what it holds, so your own edit comes back
     // from your other tab, and marking that echo made your own undo a no-op
     // (AGL-2486).
-    const previousJson = Aglyn.canvas.serializeNode(nodeId)
-    Aglyn.canvas.setNodes({ [nodeId]: node } as never, true)
+    const previousJson = canvas.serializeNode(nodeId)
+    canvas.setNodes({ [nodeId]: node } as never, true)
     // Keeping this out of local undo (above) stops a remote edit being
     // rewound by an undo it is not part of. The mark is the other half:
     // it stops the snapshots ALREADY on the stack — every one of which
     // predates this change — from rolling it back and republishing the
     // rollback to its author (AGL-1958).
-    Aglyn.canvas.markRemoteNode(nodeId, previousJson)
+    canvas.markRemoteNode(nodeId, previousJson)
     scheduleRemoteReconcile()
     return true
   } catch {
@@ -453,7 +452,7 @@ function scheduleRemoteReconcile(): void {
  * and silently disable the filter rather than fail.
  */
 export function mirrorFloorMillis(storedStamp: unknown): number {
-  const stamp = Aglyn.versionStamp(storedStamp)
+  const stamp = versionStamp(storedStamp)
   return stamp?.startsWith('ms:') ? Number(stamp.slice(3)) : 0
 }
 
@@ -673,7 +672,7 @@ export function useCoEditing(options: {
         if (applyRemoteNode(nodeId, value)) {
           // Keep the shadow in step, or the next local diff would publish
           // their change back to them as if it were ours.
-          const node = Aglyn.canvas.nodes.get(nodeId)
+          const node = canvas.nodes.get(nodeId)
           if (value.deleted) shadowRef.current.delete(nodeId)
           else if (node) {
             shadowRef.current.set(nodeId, JSON.stringify(node.toJSON()))
@@ -717,7 +716,7 @@ export function useCoEditing(options: {
   useEffect(() => {
     if (!roomPath || !loaded || !canWrite) return undefined
     return autorun(() => {
-      Aglyn.canvas.toJSON()
+      canvas.toJSON()
       if (applyingRef.current) return
       schedulePublish()
     })

@@ -30,7 +30,8 @@ import {
   runInAction,
   toJS,
 } from 'mobx'
-import { computedFn } from 'mobx-utils'
+// The leaf module, not the 68 KB package bundle — see the note there.
+import { computedFn } from '@aglyn/shared-util-vendor/mobx-computed-fn'
 import type { Aglyn } from '../aglyn'
 import type { NodeInteraction } from '../app-utils/node-interactions'
 import { schemaAcceptsChildren } from '../app-utils/child-contract'

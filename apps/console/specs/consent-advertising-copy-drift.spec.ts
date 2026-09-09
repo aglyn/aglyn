@@ -174,7 +174,7 @@ const SURFACES: readonly string[] = [
   'libs/aglyn/src/lib/app-utils/visitor-consent.ts',
   'libs/aglyn/src/lib/app-utils/advertising-tags.ts',
   'libs/aglyn/src/lib/app-utils/visitor-consent-advertising.spec.ts',
-  'apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx',
+  'apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx',
   // The two this list MISSED on its first pass, both found by grepping
   // AGL-2402 rather than by the list itself — which is the argument for
   // keeping the grep in the loop when the rule next moves.

@@ -29,7 +29,7 @@
  * 1. **The screen renders what it is given.** Nav in the header, the same
  *    destinations plus search in the footer — and NOTHING when a site has no
  *    other public page, because an empty `<nav>` is worse than none.
- * 2. **Something gives it.** The links come from `[host]/layout.tsx` through
+ * 2. **Something gives it.** The links come from `[host]/[scheme]/layout.tsx` through
  *    `HostBrandProvider`. Every render test below injects that context
  *    directly, so all of them stay green if the layout stops passing it and
  *    the live 404 goes back to one button. The wiring assertions at the bottom
@@ -139,9 +139,12 @@ describe('the links actually reach the screen (AGL-2187)', () => {
   const read = (...parts: string[]) =>
     readFileSync(join(__dirname, '..', ...parts), 'utf8')
 
-  it('[host]/layout.tsx resolves the nav and passes it down', () => {
-    const layout = read('app', '[host]', 'layout.tsx')
-    expect(layout).toMatch(/from '\.\.\/\.\.\/utils\/get-site-nav'/)
+  it('[host]/[scheme]/layout.tsx resolves the nav and passes it down', () => {
+    const layout = read('app', '[host]', '[scheme]', 'layout.tsx')
+    // The number of `../` hops is the segment's depth, which the scheme
+    // segment moved once already (AGL-2708) and nothing here depends on —
+    // what matters is that it is the app's own `utils/get-site-nav`.
+    expect(layout).toMatch(/from '(?:\.\.\/)+utils\/get-site-nav'/)
     expect(layout).toMatch(/await getSiteNav\(/)
     expect(layout).toMatch(/siteLinks=\{siteLinks\}/)
   })
@@ -161,7 +164,7 @@ describe('the links actually reach the screen (AGL-2187)', () => {
     // something — `error.tsx` must still never offer a page served by the
     // runtime that just failed.
     const notFound = read('components', 'site-not-found.component.tsx')
-    const error = read('app', '[host]', 'error.tsx')
+    const error = read('app', '[host]', '[scheme]', 'error.tsx')
     const strip = (source: string) =>
       source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
     expect(strip(notFound)).toMatch(/^\s*search$/m)

@@ -18,16 +18,20 @@
 
 /**
  * Generates the contextual-help topic registry from the docs site frontmatter
- * (AGL-602). Source of truth: apps/docs/docs. Emits two GENERATED files:
+ * (AGL-602). Source of truth: apps/docs/docs. Emits four GENERATED files:
  *
  *   apps/console/constants/docs-help.generated.ts      (all feature pages)
+ *   apps/console/constants/docs-help-excerpts.generated.ts
+ *                                                       (their tooltip prose)
  *   libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts
  *                                                       (the besigner subset)
+ *   libs/aglyn/src/lib/app-utils/docs-help.generated.ts (the plugin subset)
  *
- * Each topic carries the page's title + frontmatter description (the tooltip
- * excerpt) and the exact set of heading anchor slugs found on that page, so
- * docsHelp()/besignerDocsUrl() can type-check the anchor a caller deep-links
- * to. Re-run after editing apps/docs:
+ * Each topic carries the page's title and the exact set of heading anchor
+ * slugs found on that page, so docsHelp()/besignerDocsUrl() can type-check the
+ * anchor a caller deep-links to. The console's excerpts sit in a file of their
+ * own because they are read on hover and nowhere else: see the note at the top
+ * of the emitted file. Re-run after editing apps/docs:
  *
  *   node tools/scripts/generate-docs-help.mjs          (write the files)
  *   node tools/scripts/generate-docs-help.mjs --check  (fail if stale; CI)
@@ -41,6 +45,10 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const DOCS_ROOT = join(ROOT, 'apps/docs/docs')
 const CONSOLE_OUT = join(ROOT, 'apps/console/constants/docs-help.generated.ts')
+const CONSOLE_EXCERPTS_OUT = join(
+  ROOT,
+  'apps/console/constants/docs-help-excerpts.generated.ts',
+)
 const BESIGNER_OUT = join(
   ROOT,
   'libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts',
@@ -291,7 +299,7 @@ function emitConsole(pages, pathToKey) {
   const topics = entries
     .map(
       ([key, path, page]) =>
-        `  ${key}: {\n    path: ${tsString(path)},\n    title: ${tsString(page.title)},\n    excerpt: ${tsString(page.excerpt)},\n  },`,
+        `  ${key}: {\n    path: ${tsString(path)},\n    title: ${tsString(page.title)},\n  },`,
     )
     .join('\n')
 
@@ -311,10 +319,11 @@ export interface DocsHelpTopic {
   path: string
   /** Docs page title. */
   title: string
-  /** Verbatim docs frontmatter description — the tooltip excerpt. */
-  excerpt: string
 }
 
+// A topic's tooltip prose lives in \`docs-help-excerpts.generated.ts\` — the
+// path and title are wanted the moment a help button renders, the excerpt only
+// once a tooltip opens.
 export const DOCS_HELP_TOPICS = {
 ${topics}
 } as const satisfies Record<string, DocsHelpTopic>
@@ -334,6 +343,39 @@ type AnchorMap = typeof DOCS_HELP_ANCHORS
 /** Valid heading anchors for a topic (\`never\` when the page has none). */
 export type DocsHelpAnchor<K extends DocsHelpTopicKey> =
   K extends keyof AnchorMap ? AnchorMap[K][number] : never
+`
+}
+
+function emitConsoleExcerpts(pages, pathToKey) {
+  const entries = [...pages.entries()]
+    .map(([path, page]) => [pathToKey.get(path), page])
+    .sort((a, b) => a[0].localeCompare(b[0]))
+
+  const excerpts = entries
+    .map(([key, page]) => `  ${key}: ${tsString(page.excerpt)},`)
+    .join('\n')
+
+  return `${LICENSE}
+${GENERATED_NOTE}
+
+import type { DocsHelpTopicKey } from './docs-help.generated'
+
+/**
+ * The tooltip prose for every help topic — each docs page's frontmatter
+ * description, verbatim.
+ *
+ * Apart from the registry beside it because of when it is read: a help
+ * button's \`path\` is its own \`href\` and its \`title\` its accessible name,
+ * both wanted the moment the button renders, while the excerpt is wanted only
+ * once someone opens the tooltip. Kept together they were ~20 KB of prose
+ * parsed by every console page for a hover most visits never make;
+ * \`DocsHelpExcerpt\` fetches this module when a tooltip mounts.
+ *
+ * A missing key is a compile error, so no topic can lose its excerpt quietly.
+ */
+export const DOCS_HELP_EXCERPTS = {
+${excerpts}
+} as const satisfies Record<DocsHelpTopicKey, string>
 `
 }
 
@@ -452,6 +494,7 @@ const pages = collectDocs()
 const pathToKey = assignKeys(pages)
 const outputs = [
   [CONSOLE_OUT, emitConsole(pages, pathToKey)],
+  [CONSOLE_EXCERPTS_OUT, emitConsoleExcerpts(pages, pathToKey)],
   [BESIGNER_OUT, emitBesigner(pages)],
   [PLUGIN_OUT, emitPlugins(pages)],
 ]

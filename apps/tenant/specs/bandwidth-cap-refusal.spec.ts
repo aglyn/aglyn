@@ -123,7 +123,7 @@ import {
   bandwidthCapMonthKey,
   bandwidthCapNotice,
 } from '@aglyn/aglyn/server'
-import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'
+import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 import { GET as lockdownVerdict } from '../app/api/lockdown-verdict/route'
 import { GET as lockedNotice } from '../app/api/locked/route'
 import getHost, { getHost as getHostNamed } from '../utils/get-host'

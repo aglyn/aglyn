@@ -34,11 +34,28 @@
  * continuously by something outside the deploy, and (b) there is a signal to
  * point a real monitor at when one is chosen. AGL-1148 tracks that.
  *
+ * TWO KINDS OF ROW, and the second one is the whole of AGL-2709. A `health`
+ * row reads one of our JSON health contracts. A `page` row fetches the URL a
+ * visitor types and grades the response they would get. Every monitor on this
+ * board was a health row until 2026-09-09, when every tenant page answered 500
+ * for ten minutes and the two page-shaped monitors reported no downtime at
+ * all: a health route answers from inside a route handler and never enters the
+ * ISR path that was throwing. See `lib/front-door.mjs`.
+ *
  *   node tools/scripts/probe-uptime.mjs
  *   node tools/scripts/probe-uptime.mjs console=https://app.aglyn.com
  *   node tools/scripts/probe-uptime.mjs http://localhost:4200
+ *   node tools/scripts/probe-uptime.mjs front-door/site=http://localhost:4500 \
+ *     --only front-door
  */
 
+import {
+  FRONT_DOOR_PREFIX,
+  cacheNote,
+  frontDoorPlan,
+  gradeFrontDoor,
+  readCacheState,
+} from './lib/front-door.mjs'
 import { withProbeHeaders } from './lib/probe-headers.mjs'
 // WHAT is probed lives in a module of its own so a test can assert it without
 // importing this file, which probes at load and exits (AGL-1617).
@@ -56,10 +73,44 @@ const TIMEOUT_MS = 15_000
  * Names matter more than they look: the workflow log is the incident record,
  * and "target-2 is DOWN" makes whoever reads it at 3am go and work out which
  * service that was. `tenant=https://…` does not.
+ *
+ * Two argument shapes are not targets. `front-door/<name>=<base>` repoints one
+ * front door, and `--only <substring>` narrows the plan to the rows whose name
+ * matches. Both exist so this script can be aimed at a local production server
+ * and watched to go red against real broken code — a monitor nobody has seen
+ * fail is a monitor nobody has tested (AGL-2709).
  */
-const args = process.argv.slice(2)
-const targets = args.length
-  ? args.map((arg, index) => {
+const argv = process.argv.slice(2)
+const onlyAt = argv.findIndex((arg) => arg === '--only' || arg.startsWith('--only='))
+const only =
+  onlyAt === -1
+    ? null
+    : argv[onlyAt].includes('=')
+      ? argv[onlyAt].slice('--only='.length)
+      : argv[onlyAt + 1]
+if (onlyAt !== -1 && !only) {
+  console.error('--only needs a value: --only front-door')
+  process.exit(2)
+}
+const args = argv.filter(
+  (arg, index) =>
+    !arg.startsWith('--') && !(onlyAt !== -1 && index === onlyAt + 1 && !argv[onlyAt].includes('=')),
+)
+
+const frontDoorOverrides = {}
+const targetArgs = []
+for (const arg of args) {
+  const at = arg.indexOf('=')
+  const name = at > 0 ? arg.slice(0, at) : ''
+  if (name.startsWith(`${FRONT_DOOR_PREFIX}/`)) {
+    frontDoorOverrides[name.slice(FRONT_DOOR_PREFIX.length + 1)] = arg.slice(at + 1)
+  } else {
+    targetArgs.push(arg)
+  }
+}
+
+const targets = targetArgs.length
+  ? targetArgs.map((arg, index) => {
       const at = arg.indexOf('=')
       return at > 0
         ? [arg.slice(0, at), arg.slice(at + 1)]
@@ -140,11 +191,103 @@ async function probe(name, base, path = '/api/health') {
   }
 }
 
-// Root first, then each subsystem — see `lib/uptime-targets.mjs` for what is
-// on the list and why.
-const plan = buildPlan(targets)
+/**
+ * Probe one PAGE the way a visitor does (AGL-2709).
+ *
+ * Separate from `probe()` because the two ask different questions and grade
+ * different things. `probe()` reads our own JSON contract — `status: "ok"`,
+ * `no-store`, a per-subsystem `checks` map. A page has none of that: what
+ * matters is the status a browser would get, that the bytes are a complete
+ * document our app rendered, and that a bot-protection challenge is called by
+ * its own name rather than reported as an outage.
+ *
+ * No `accept: application/json`, no JSON parse, and the browser-shaped
+ * `accept` header on purpose — the point is to travel the visitor's path
+ * through the ISR cache, which is the path every `/api/health*` route skips.
+ */
+async function probePage(name, base, path) {
+  const url = `${base.replace(/\/$/, '')}${path}`
+  const startedAt = Date.now()
+  try {
+    const response = await fetch(url, {
+      redirect: 'manual',
+      headers: withProbeHeaders({
+        'user-agent': 'aglyn-uptime-probe',
+        accept: 'text/html,application/xhtml+xml',
+      }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    const body = await response.text()
+    const verdict = gradeFrontDoor({
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+      body,
+      location: response.headers.get('location'),
+    })
+    // Recorded, never graded. Next serves a stale ISR document while a fresh
+    // render fails, so a HIT is the one state a green row here cannot rule an
+    // outage out from — the log line has to say which state it saw.
+    //
+    // ⛔ It read `x-nextjs-cache`, and Vercel does not send that header
+    // (AGL-2709). Measured 2026-09-09 against both front doors: the edge
+    // answers `x-vercel-cache` and `age`, so the one note on this board that
+    // acknowledged the ISR cache was absent from every production row. The
+    // note `cacheNote` writes is the closure of the REPORTING half — a green
+    // row that says nothing implies it verified the render, and it did not.
+    const cache = readCacheState({
+      vercelCache: response.headers.get('x-vercel-cache'),
+      nextCache: response.headers.get('x-nextjs-cache'),
+      age: response.headers.get('age'),
+    })
+    const note = cacheNote(cache)
+    return {
+      name,
+      url,
+      ms: Date.now() - startedAt,
+      kind: 'page',
+      ok: verdict.ok,
+      challenged: verdict.challenged,
+      status: response.status,
+      cache: cache.state,
+      rendered: cache.rendered,
+      ageSeconds: cache.ageSeconds,
+      detail: note ? `${verdict.detail} · ${note}` : verdict.detail,
+    }
+  } catch (error) {
+    const aborted = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    return {
+      name,
+      url,
+      ms: Date.now() - startedAt,
+      kind: 'page',
+      ok: false,
+      detail: aborted
+        ? `no response in ${TIMEOUT_MS}ms`
+        : `unreachable (${error?.cause?.code ?? error?.name ?? 'error'})`,
+    }
+  }
+}
 
-const results = await Promise.all(plan.map(([name, base, path]) => probe(name, base, path)))
+// Root first, then each subsystem — see `lib/uptime-targets.mjs` for what is
+// on the list and why. The front doors come last: they are the only rows that
+// answer "does a visitor get a page", and reading them at the bottom of the
+// log puts the visitor's verdict beside the summary line.
+const plan = [
+  ...buildPlan(targets).map((row) => [...row, 'health']),
+  ...frontDoorPlan(frontDoorOverrides).map((row) => [...row, 'page']),
+].filter(([name]) => !only || name.includes(only))
+
+// A filter that matches nothing must never read as a clean sweep.
+if (!plan.length) {
+  console.error(`--only ${only} matched no row; nothing was probed`)
+  process.exit(2)
+}
+
+const results = await Promise.all(
+  plan.map(([name, base, path, kind]) =>
+    kind === 'page' ? probePage(name, base, path) : probe(name, base, path),
+  ),
+)
 
 // A subsystem path that 404s while its target's root is UP is a fact about the
 // deploy queue, not an outage — `main` names endpoints before production is
@@ -156,7 +299,11 @@ console.log(`uptime probe · ${new Date().toISOString()}`)
 for (const r of results) {
   const build = r.commit ? ` build=${r.commit}` : ''
   const region = r.region ? ` region=${r.region}` : ''
-  const state = r.pending ? 'PEND' : r.ok ? 'UP  ' : 'DOWN'
+  // CHAL is neither UP nor DOWN: bot protection answered instead of the app,
+  // so the row is red because the check could not see the site, not because
+  // the site is broken. It reads as its own word so that distinction survives
+  // into the log a reader lands on at 3am.
+  const state = r.pending ? 'PEND' : r.challenged ? 'CHAL' : r.ok ? 'UP  ' : 'DOWN'
   console.log(
     `  ${state} ${r.name.padEnd(22)} ${String(r.ms).padStart(5)}ms  ${r.detail}${build}${region}`,
   )

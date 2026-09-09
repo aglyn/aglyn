@@ -40,6 +40,14 @@ import { absoluteMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { personKey, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { BRAND } from '@aglyn/shared-data-enums'
 import type { HostTheme } from '@aglyn/shared-data-types'
+// Subpath, not the library index — see the note there.
+import { prefersDarkInk } from '@aglyn/shared-util-tools/contrast'
+// The one escaper (AGL-2706). This module had its own, which escaped four
+// characters where the serialization needs five: a brand name, a topic label
+// and a signed query all reach these pages, and they are interpolated into
+// double-quoted attributes AND into element text, so the set has to be the
+// one that covers both.
+import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 // The leaf module, not the barrel: it imports `node:crypto` and nothing else,
 // which is what keeps this file free of Firestore. See `signedConfirmSubject`.
 import { confirmSignatureSubject } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
@@ -69,15 +77,6 @@ import { createHmac, timingSafeEqual } from 'crypto'
  */
 export function suppressionKeyFor(email: string): string | null {
   return personKey(email)
-}
-
-/** Minimal HTML-attribute escaping for the values echoed into a page. */
-export function escapeAttribute(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }
 
 /**
@@ -172,34 +171,21 @@ function safeColor(value: unknown, fallback: string): string {
   return HEX_COLOR.test(text) ? text : fallback
 }
 
-/** `#abc` / `#abcd` → `#aabbcc`, so one luminance path handles every form. */
-function expandHex(color: string): string {
-  const body = color.slice(1)
-  if (body.length > 4) return body.slice(0, 6)
-  return body
-    .slice(0, 3)
-    .split('')
-    .map((char) => char + char)
-    .join('')
-}
-
 /**
  * Black or white text for a filled button, whichever the eye can actually read.
  *
  * Without this, a host whose primary is a pale yellow gets white-on-white and
  * the recipient cannot find the button that unsubscribes them — a legibility
- * failure on this page is a compliance failure, not a cosmetic one. sRGB
- * relative luminance (WCAG 2.x) with the standard 0.179 split.
+ * failure on this page is a compliance failure, not a cosmetic one.
+ *
+ * The luminance and the split come from `shared-util-tools/contrast`, which
+ * is the same math this file used to carry and the console carried a wrong
+ * copy of. `safeColor` has already refused anything but a hex literal by the
+ * time a color reaches here, so an unmeasurable one is impossible rather than
+ * merely unlikely — and it still falls back to the on-brand ink if one does.
  */
 function readableInkOn(background: string): string {
-  const hex = expandHex(background)
-  const channel = (offset: number): number => {
-    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-  }
-  const luminance =
-    0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
-  return luminance > 0.179 ? PAL.ink : PAL.onBrand
+  return prefersDarkInk(background) === true ? PAL.ink : PAL.onBrand
 }
 
 /**
@@ -317,11 +303,11 @@ export function page(
   brand: EmailPageBrand = PLATFORM_EMAIL_BRAND,
 ): string {
   const pal = brand.pal
-  const brandName = escapeAttribute(brand.name)
+  const brandName = escapeHtml(brand.name)
   // `alt` is the business name, so a logo that 404s or is blocked degrades to
   // the wordmark with no script and no second request.
   const mark = brand.logoUrl
-    ? `<img src="${escapeAttribute(brand.logoUrl)}" alt="${brandName}" ` +
+    ? `<img src="${escapeHtml(brand.logoUrl)}" alt="${brandName}" ` +
       'referrerpolicy="no-referrer" style="display:block;max-height:40px;' +
       'max-width:200px;width:auto;height:auto;object-fit:contain;' +
       'margin-bottom:4px">'
@@ -390,8 +376,8 @@ export function submitButton(
   const background = options?.accent === 'link' ? pal.link : pal.brand
   return (
     '<button type="submit"' +
-    (options?.name ? ` name="${escapeAttribute(options.name)}"` : '') +
-    (options?.value ? ` value="${escapeAttribute(options.value)}"` : '') +
+    (options?.name ? ` name="${escapeHtml(options.name)}"` : '') +
+    (options?.value ? ` value="${escapeHtml(options.value)}"` : '') +
     ' style="font:inherit;font-size:14px;font-weight:600;' +
     `padding:11px 20px;border:0;border-radius:8px;background:${background};` +
     `color:${readableInkOn(background)};cursor:pointer;width:100%">${label}</button>`

@@ -33,7 +33,7 @@
 
 import { storeVisitorConsent } from '@aglyn/aglyn'
 import { act, render, screen } from '@testing-library/react'
-import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
+import SiteAnalytics from '../app/[host]/[scheme]/[[...slug]]/site-analytics'
 
 // `next/script` is inert in jsdom; the ga-consent-gate mock made the script's
 // EXISTENCE observable, this one also preserves its inline TEXT — the config

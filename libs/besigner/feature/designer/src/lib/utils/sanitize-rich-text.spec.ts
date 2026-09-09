@@ -52,6 +52,21 @@ describe('sanitizeRichText', () => {
     expect(sanitizeRichText('<a href="javascript:alert(1)">x</a>')).toBe('x')
   })
 
+  it('escapes every character that can end an attribute value', () => {
+    // The five of `escapeHtml`, not the four this file used to escape
+    // (AGL-2706). `'` was the one missing, and it is a delimiter: a value
+    // written into `href='…'` breaks the attribute on it exactly as `"`
+    // breaks a double-quoted one. Nothing here writes single quotes today,
+    // which is why the omission never showed — a guard that depends on where
+    // its callers put the value is one refactor from not holding.
+    expect(sanitizeRichText(`<a href="https://a.com/?q=it's">x</a>`)).toBe(
+      '<a href="https://a.com/?q=it&#39;s" rel="noopener noreferrer">x</a>',
+    )
+    expect(sanitizeRichText('<a href=\'https://a.com/?q="x"\'>y</a>')).toBe(
+      '<a href="https://a.com/?q=&quot;x&quot;" rel="noopener noreferrer">y</a>',
+    )
+  })
+
   it('escapes text content', () => {
     expect(sanitizeRichText('a < b & c')).toBe('a &lt; b &amp; c')
   })

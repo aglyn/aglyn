@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { components, LinealDirectiveFlag } from '@aglyn/aglyn'
 import { _isArr, _isArrEmpty } from '@aglyn/shared-util-tools'
 
 export enum InvalidLinealRelationFlag {
@@ -67,7 +68,7 @@ function validateLinealOrder(
   }
 
   // Throw is disallowed
-  if (directiveType === Aglyn.LinealDirectiveFlag.DISALLOW) {
+  if (directiveType === LinealDirectiveFlag.DISALLOW) {
     if (definition?.components?.some((cid) => cid === componentId)) {
       throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
     }
@@ -77,7 +78,7 @@ function validateLinealOrder(
   }
 
   // Throw if limited to range and missing
-  if (directiveType === Aglyn.LinealDirectiveFlag.LIMIT_TO) {
+  if (directiveType === LinealDirectiveFlag.LIMIT_TO) {
     if (
       _isArr(definition?.components) &&
       (_isArrEmpty(definition?.components) ||
@@ -104,7 +105,7 @@ export type LinealItem = {
 
 function componentLabel(componentId?: Aglyn.ComponentId): string | undefined {
   if (!componentId) return undefined
-  return Aglyn.components.getLabel(componentId) ?? componentId
+  return components.getLabel(componentId) ?? componentId
 }
 
 function allowedComponentLabels(
@@ -112,7 +113,7 @@ function allowedComponentLabels(
 ): string[] {
   if (!linealOrder) return []
   const [directiveType, directiveDefinition] = linealOrder
-  if (directiveType !== Aglyn.LinealDirectiveFlag.LIMIT_TO) return []
+  if (directiveType !== LinealDirectiveFlag.LIMIT_TO) return []
   const components = _isArr(directiveDefinition)
     ? directiveDefinition
     : directiveDefinition?.components

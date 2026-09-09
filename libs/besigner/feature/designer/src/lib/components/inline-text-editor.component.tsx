@@ -15,9 +15,17 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  canvas,
+  FEATURE_FLAG,
+  REUSABLE_INSTANCE_PROP_VALUES_KEY,
+  RICH_TEXT_COMMANDS,
+} from '@aglyn/aglyn'
 import { mdiCodeBraces } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
+// Subpath, not the library index — see the note there.
+import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 import { Box, Button, IconButton, Paper } from '@mui/material'
 import type { Theme } from '@mui/material/styles'
 import type { SystemStyleObject } from '@mui/system'
@@ -82,31 +90,31 @@ const RICH_COMMANDS: Array<{
     command: 'bold',
     label: 'B',
     title: 'Bold',
-    group: Aglyn.RICH_TEXT_COMMANDS.EMPHASIS,
+    group: RICH_TEXT_COMMANDS.EMPHASIS,
   },
   {
     command: 'italic',
     label: 'I',
     title: 'Italic',
-    group: Aglyn.RICH_TEXT_COMMANDS.EMPHASIS,
+    group: RICH_TEXT_COMMANDS.EMPHASIS,
   },
   {
     command: 'underline',
     label: 'U',
     title: 'Underline',
-    group: Aglyn.RICH_TEXT_COMMANDS.EMPHASIS,
+    group: RICH_TEXT_COMMANDS.EMPHASIS,
   },
   {
     command: 'insertUnorderedList',
     label: '•',
     title: 'Bulleted list',
-    group: Aglyn.RICH_TEXT_COMMANDS.LIST,
+    group: RICH_TEXT_COMMANDS.LIST,
   },
   {
     command: 'insertOrderedList',
     label: '1.',
     title: 'Numbered list',
-    group: Aglyn.RICH_TEXT_COMMANDS.LIST,
+    group: RICH_TEXT_COMMANDS.LIST,
   },
 ]
 
@@ -133,12 +141,16 @@ const BOXED_SURFACE_SX = {
   boxShadow: 4,
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
+/**
+ * Plain text as the markup that renders it, newlines included.
+ *
+ * Named for what it does rather than `escapeHtml`, which it is not: the
+ * `<br>` is a CONVERSION, and a reader who takes this for the escaper will
+ * eventually reach for it somewhere a line break must stay literal. The
+ * escaping half is the shared one.
+ */
+function textToHtml(text: string): string {
+  return escapeHtml(text).replace(/\n/g, '<br>')
 }
 
 /**
@@ -254,8 +266,8 @@ export const InlineTextEditorComponent = observer(
     const rich =
       !propTarget &&
       ((node?.componentSchema?.flags?.richTextEditable ??
-        Aglyn.FEATURE_FLAG.DISABLED) &
-        Aglyn.FEATURE_FLAG.ENABLED) !==
+        FEATURE_FLAG.DISABLED) &
+        FEATURE_FLAG.ENABLED) !==
         0
 
     // What THIS component's schema allows (AGL-2557); a schema that names
@@ -272,8 +284,8 @@ export const InlineTextEditorComponent = observer(
      */
     const phrasingOnly =
       rich &&
-      !commandGroups.has(Aglyn.RICH_TEXT_COMMANDS.LIST) &&
-      !commandGroups.has(Aglyn.RICH_TEXT_COMMANDS.LINK)
+      !commandGroups.has(RICH_TEXT_COMMANDS.LIST) &&
+      !commandGroups.has(RICH_TEXT_COMMANDS.LINK)
 
     const activeEditable = useCallback(
       () =>
@@ -310,7 +322,7 @@ export const InlineTextEditorComponent = observer(
           const initial =
             typeof props?.html === 'string' && props.html
               ? (props.html as string)
-              : escapeHtml(text)
+              : textToHtml(text)
           target.innerHTML = initial
           // Raw {{tokens}} in the stored markup become pills (AGL-586).
           materializeTokenPillsInElement(target, resolve)
@@ -395,7 +407,7 @@ export const InlineTextEditorComponent = observer(
     const commitProps = useCallback(
       (node: Aglyn.NodeSchema<any>, next: Record<string, unknown>) => {
         if (isEqual(toJS(node.props), next)) return
-        Aglyn.canvas.updateNodeProps(node, next as never)
+        canvas.updateNodeProps(node, next as never)
       },
       [],
     )
@@ -476,19 +488,19 @@ export const InlineTextEditorComponent = observer(
             // must read as clean, exactly like the style-override layer.
             const values = {
               ...(current.props?.[
-                Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY
+                REUSABLE_INSTANCE_PROP_VALUES_KEY
               ] as Record<string, unknown> | undefined),
             }
             if (value === '') delete values[target.propName]
             else values[target.propName] = value
             const nextProps = {
               ...current.props,
-              [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: values,
+              [REUSABLE_INSTANCE_PROP_VALUES_KEY]: values,
             }
             // The LAST override cleared: drop the container too, so the
             // stored instance is byte-identical to one never overridden.
             if (!Object.keys(values).length) {
-              delete nextProps[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]
+              delete nextProps[REUSABLE_INSTANCE_PROP_VALUES_KEY]
             }
             nextWrite = toJS(nextProps) as Record<string, unknown>
           } else {
@@ -961,7 +973,7 @@ export const InlineTextEditorComponent = observer(
                 </IconButton>
               ))
             : null}
-          {rich && commandGroups.has(Aglyn.RICH_TEXT_COMMANDS.LINK) ? (
+          {rich && commandGroups.has(RICH_TEXT_COMMANDS.LINK) ? (
             <IconButton
               size="small"
               title="Insert link"

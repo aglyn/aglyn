@@ -18,7 +18,8 @@
 import { noop } from '@aglyn/shared-util-tools'
 import { createUid } from '@aglyn/shared-util-vendor'
 import { makeAutoObservable } from 'mobx'
-import { computedFn } from 'mobx-utils'
+// The leaf module, not the 68 KB package bundle — see the note there.
+import { computedFn } from '@aglyn/shared-util-vendor/mobx-computed-fn'
 import { ContextType, createContext, useContext, useRef, useState } from 'react'
 import {
   createHocWithContextConsumer,

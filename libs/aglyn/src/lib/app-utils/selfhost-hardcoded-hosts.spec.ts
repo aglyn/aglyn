@@ -271,7 +271,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of DOCS_URL; the literal is its default (a docs build, not runtime).',
   },
   {
-    file: 'apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx',
+    file: 'apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx',
     count: 1,
     reason:
       'AGL-1731. CONSOLE_ORIGIN — reader of NEXT_PUBLIC_CONSOLE_URL, the same ' +
@@ -515,6 +515,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 2,
     reason:
       "The uptime probe's two default targets, moved out of probe-uptime.mjs so a test can read them without firing a production sweep (AGL-1617). Overridable on the command line and by CONSOLE_BASE_URL / TENANT_BASE_URL. Internal tool.",
+  },
+  {
+    file: 'tools/scripts/lib/front-door.mjs',
+    count: 2,
+    reason:
+      "The front-door probe's two canary origins — the published-site canary on the tenant apex, and Aglyn's own marketing home on the custom-domain path (AGL-2709). Same shape and same reasoning as lib/uptime-targets.mjs beside it: the defaults of `frontDoorPlan`, overridable per canary on probe-uptime.mjs's command line, which is how the test drives them at localhost. Internal ops tool — it asks whether AGLYN's own front doors answer, so a self-hoster has nothing here for their deployment to resolve and never runs it.",
   },
   {
     file: 'tools/scripts/reap-plugin-artifacts.mjs',

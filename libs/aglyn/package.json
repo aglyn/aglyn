@@ -1,5 +1,9 @@
 {
   "name": "@aglyn/aglyn",
   "version": "0.0.1",
-  "type": "module"
+  "type": "module",
+  "sideEffects": [
+    "./src/lib/foundation/constants/_internal.ts",
+    "./src/lib/foundation/constants/symbol.ts"
+  ]
 }

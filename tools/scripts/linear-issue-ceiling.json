@@ -1,9 +1,9 @@
 {
   "team": "AGL",
-  "highest": 2705,
-  "verifiedAt": "2026-09-08",
-  "verifiedBy": "Read from Linear on 2026-09-08: AGL-2705 (theme mode resolved only in the browser) is the newest issue that exists; AGL-2704 was created in the same session and both were fetched back before this was raised. AGL-2703 was the previous highest.",
-  "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
+  "highest": 2710,
+  "verifiedAt": "2026-09-09",
+  "verifiedBy": "Read from Linear on 2026-09-09, AGL team newest-first with includeArchived: true. AGL-2710 (the tenant/console JavaScript reduction) is the newest issue that exists and was created in this session; AGL-2709, AGL-2708 and AGL-2707 were returned above the previous ceiling in the same page. Raised to what the workspace HOLDS, not to the citation that failed: the highest existing issue was read first and is above every id in the tree, which is the direction that keeps the guard armed.",
+  "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace \u2014 never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",
     "commits": [

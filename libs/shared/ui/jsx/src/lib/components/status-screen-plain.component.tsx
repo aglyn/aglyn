@@ -29,7 +29,7 @@ import type { ReactNode } from 'react'
  *
  * ## Why it uses no MUI and no theme
  *
- * These three boundaries sit outside `[host]/layout`, so there is no
+ * These three boundaries sit outside `[host]/[scheme]/layout`, so there is no
  * `HostThemeProvider`, no resolved host, and — for `global-error`, which
  * REPLACES the root layout — no emotion cache either. A component that
  * reaches for `theme.palette` renders MUI's factory blue-and-white on a

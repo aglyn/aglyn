@@ -16,7 +16,13 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  aglyn,
+  CanvasManager,
+  composeReusableComponentNodes,
+  NODE_ROOT_ID,
+} from '@aglyn/aglyn'
 import { createContext, useContext, useMemo } from 'react'
 
 export type LayoutChromeContextValue = {
@@ -58,22 +64,22 @@ export function useLayoutChromeCanvas(
     // Separate store instance so edits, history, and persistence stay on the
     // global screen canvas — but backed by the real app: node getters reach
     // through store.aglyn.components to resolve component schemas.
-    const canvas = new Aglyn.CanvasManager(Aglyn.aglyn)
+    const canvas = new CanvasManager(aglyn)
     // Cast as the tenant pipeline and Preview do: the canvas's `NodeSchema`
     // makes `componentId` optional, the graft's `AglynNodeSchema` requires
     // it, and neither side is wrong about its own half of the trip.
     const nodes = {
-      ...(Aglyn.composeReusableComponentNodes(
+      ...(composeReusableComponentNodes(
         layoutNodes as any,
         reusableDefinitions as any,
       ) as Record<string, Aglyn.NodeSchema>),
     }
     // Early seeds stored roots without $id, letting the canvas assign a
     // random one — pin the root to its canonical id before loading.
-    if (nodes[Aglyn.NODE_ROOT_ID]) {
-      nodes[Aglyn.NODE_ROOT_ID] = {
-        ...nodes[Aglyn.NODE_ROOT_ID],
-        $id: Aglyn.NODE_ROOT_ID,
+    if (nodes[NODE_ROOT_ID]) {
+      nodes[NODE_ROOT_ID] = {
+        ...nodes[NODE_ROOT_ID],
+        $id: NODE_ROOT_ID,
       }
     }
     canvas.setNodes(canvas.processNodesToDenormalized(nodes))

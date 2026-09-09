@@ -18,7 +18,8 @@
 
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas, CANVAS_ROOT_ELEMENT_ID, HostViewType } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
   BesignerConflictAlertComponent,
@@ -68,6 +69,7 @@ import PresenceAvatars from '../../../../../../../../../../components/presence-a
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
+import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../../../constants/console-plugin-loader'
@@ -271,7 +273,7 @@ function HostEmailBesignerPage() {
   const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
   const { elements: canvasElements } = useRenderedCanvasElements()
   const getCanvasRoot = useCallback(
-    () => canvasElements.current?.[Aglyn.CANVAS_ROOT_ELEMENT_ID]?.node,
+    () => canvasElements.current?.[CANVAS_ROOT_ELEMENT_ID]?.node,
     [canvasElements],
   )
   const presence = usePresence({
@@ -309,7 +311,7 @@ function HostEmailBesignerPage() {
     error,
     save: saveVersion,
     noun: 'email',
-    viewType: Aglyn.HostViewType.EMAIL,
+    viewType: HostViewType.EMAIL,
     documentKey: `${hostId}:${templateKey}:${versionId}`,
     draft: {
       scope: hostId,
@@ -377,7 +379,7 @@ function HostEmailBesignerPage() {
     docId: templateKey,
     versionId,
     storedStamp: version?.updatedAt,
-    loaded: Aglyn.canvas.didSetInitial,
+    loaded: canvas.didSetInitial,
   })
   clearMirrorRef.current = coediting.clearMirror
 
@@ -502,6 +504,7 @@ function HostEmailBesignerPage() {
       <MainLayout
         enableAppBarElevation
         besigner
+        wordmark={<BesignerWordmark />}
         backButton={
           {
             component: AppLink,
@@ -539,15 +542,15 @@ function HostEmailBesignerPage() {
               {
                 id: 'center-nav-edit-undo',
                 children: 'Undo',
-                onClick: () => Aglyn.canvas.undo(),
-                disabled: !Aglyn.canvas.canUndo,
+                onClick: () => canvas.undo(),
+                disabled: !canvas.canUndo,
                 ListItemTextProps: { inset: true },
               },
               {
                 id: 'center-nav-edit-redo',
                 children: 'Redo',
-                onClick: () => Aglyn.canvas.redo(),
-                disabled: !Aglyn.canvas.canRedo,
+                onClick: () => canvas.redo(),
+                disabled: !canvas.canRedo,
                 ListItemTextProps: { inset: true },
               },
               { type: 'divider' },
@@ -689,12 +692,12 @@ function HostEmailBesignerPage() {
         </Stack>
       </CloseableDrawerComponent>
 
-      {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
+      {Boolean(canvas.rootNode && jsonOpen) && (
         <JsonEditor
-          open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
+          open={Boolean(canvas.rootNode && jsonOpen)}
           onClose={closeJsonEditor}
           onSave={handleJsonSave}
-          defaultValue={Aglyn.canvas.nestedNodes as any}
+          defaultValue={canvas.nestedNodes as any}
         />
       )}
     </BindingPickerProvider>

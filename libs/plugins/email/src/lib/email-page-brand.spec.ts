@@ -87,6 +87,26 @@ describe('resolveEmailPageBrand — the name', () => {
     expect(html).not.toContain('<script>')
     expect(html).toContain('&lt;script&gt;')
   })
+
+  it('escapes an apostrophe, which a real business name carries', () => {
+    // Now `&#39;`, where the local four-character escaper this module used
+    // before AGL-2706 wrote the apostrophe through untouched. It was not a
+    // break — every slot here is double-quoted, and in element text an
+    // apostrophe is only an apostrophe — but the name lands in an attribute
+    // and the shared escaper is the one that covers both slots.
+    const html = page(
+      'body',
+      420,
+      resolveEmailPageBrand({
+        $id: 'h',
+        displayName: "Bob's Bakery",
+        cname: 'bobs.example',
+        logoUrl: 'media:host/abc',
+      }),
+    )
+    expect(html).toContain('alt="Bob&#39;s Bakery"')
+    expect(html).not.toContain("alt=\"Bob's Bakery\"")
+  })
 })
 
 describe('resolveEmailPageBrand — colors cannot escape the style attribute', () => {

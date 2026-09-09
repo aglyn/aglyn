@@ -17,6 +17,18 @@
 
 import type { NextMiddleware } from 'next/server'
 import { NextResponse } from 'next/server'
+// Deep imports (not the barrel) so the edge bundle takes three pure functions
+// rather than the theme library's React context providers — the same reason
+// the `[host]` layout deep-imports them (AGL-405).
+import {
+  COLOR_SCHEME_HINT_HEADER,
+  parseColorSchemeHint,
+} from '@aglyn/shared-ui-theme/util/color-scheme-hint'
+import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
+import {
+  parseThemeModeCookie,
+  THEME_MODE_COOKIE,
+} from '@aglyn/shared-ui-theme/util/theme-mode-cookie'
 // Shared with `with-aglyn.nextjs.config.js` so the frame-ancestors allowlist
 // has one definition (AGL-523). Root-level because the config is plain
 // CommonJS outside the nx graph and must `require` the same file — see the
@@ -185,15 +197,15 @@ const PLATFORM_GENERATOR_NAME =
  * reason `PLATFORM_GENERATOR_NAME` above is one.
  *
  * The canonical definition is `COLOR_SCHEME_HINT_HEADER` in the theme library,
- * where the `[host]` layout reads the request header by the same name. Naming
- * it again here rather than importing it keeps this edge bundle's import list
- * to app-local files and the root `security-origins` — a rule this file holds
+ * which is what the scheme resolution below reads the request header by.
+ * Naming it again here for the header this origin EMITS keeps that half of the
+ * negotiation free of a library import — an edge-bundle rule this file holds
  * so no future edit can drag a server-only graph into the edge at one remove.
  *
  * The copy is kept honest by assertion rather than by hope:
  * `color-scheme-client-hint.spec.ts` imports the library constant and asserts
  * the header this middleware actually emits equals it, so a rename in one
- * place fails a test instead of quietly advertising a token the layout no
+ * place fails a test instead of quietly advertising a token the resolver no
  * longer reads — a mismatch that would leave every browser negotiating a hint
  * nothing consumes.
  */
@@ -749,13 +761,34 @@ export const middleware: NextMiddleware = async (req, event) => {
     return NextResponse.rewrite(seoUrl, { request: { headers: seoHeaders } })
   }
 
-  // Rewrite to the resolved tenant host as the first path segment; the
-  // catch-all render lives at app `[host]/[[...slug]]` (search at
-  // `app/[host]/search`). No `_sites` namespace is needed: the matcher above
-  // already keeps `/api`, `/_next`, etc. off this rewrite, and API routes are
-  // in `pages/api` (which win over the `[host]` catch-all). Preserve the
-  // query string (search pages, tenantHost overrides).
-  const rewrite = `/${tenantHost}${req.nextUrl.pathname}${req.nextUrl.search}`
+  /**
+   * THE VISITOR'S SCHEME, SPENT AS A PATH SEGMENT (AGL-2708).
+   *
+   * The scheme has to be decided before the first render, and this is the
+   * layer that can decide it: middleware runs ahead of the cache on every
+   * request, so reading the cookie and the client hint here costs nothing that
+   * a cached page could have saved. Reading them in the render instead is what
+   * took production down — a dynamic API under the catch-all's `revalidate`
+   * throws `DYNAMIC_SERVER_USAGE` the moment the route regenerates.
+   *
+   * Putting the answer in the PATH is what makes the page cacheable again:
+   * Next's route cache keys on the pathname, so `light` and `dark` are two
+   * entries of one page rather than one entry that can serve neither honestly.
+   * That is the trade `Vary` below was already written for — it splits the CDN
+   * cache by the same axis, and the two headers only make sense together.
+   */
+  const scheme = resolveSchemeRouteSegment(
+    parseThemeModeCookie(req.cookies.get(THEME_MODE_COOKIE)?.value),
+    parseColorSchemeHint(req.headers.get(COLOR_SCHEME_HINT_HEADER)),
+  )
+
+  // Rewrite to the resolved tenant host as the first path segment and the
+  // scheme as the second; the catch-all render lives at app
+  // `[host]/[scheme]/[[...slug]]`. No `_sites` namespace is needed: the
+  // matcher above already keeps `/api`, `/_next`, etc. off this rewrite, and
+  // API routes are in `pages/api` (which win over the `[host]` catch-all).
+  // Preserve the query string (search pages, tenantHost overrides).
+  const rewrite = `/${tenantHost}/${scheme}${req.nextUrl.pathname}${req.nextUrl.search}`
   console.debug(
     'Tenant Host Switch=',
     'Rewriting',
@@ -1009,11 +1042,11 @@ export const middleware: NextMiddleware = async (req, event) => {
    * single-mode and swapped between schemes, and every node's `@scheme dark`
    * slice is merged against `palette.mode` as the tree renders — so the scheme
    * has to be decided before the first render, not by a stylesheet. An
-   * explicit Light/Dark choice arrives in a cookie and the `[host]` layout
-   * reads it. "Device default", which is what most visitors are on, lives in
-   * `prefers-color-scheme`: a media feature, unanswerable anywhere but a
-   * browser. Left there, the server render falls back to light and the page
-   * turns over a component at a time as it hydrates.
+   * explicit Light/Dark choice arrives in a cookie, which the scheme
+   * resolution above reads. "Device default", which is what most visitors are
+   * on, lives in `prefers-color-scheme`: a media feature, unanswerable
+   * anywhere but a browser. Left there, the server render falls back to light
+   * and the page turns over a component at a time as it hydrates.
    *
    * These three headers are how the request comes to carry that answer:
    *
@@ -1028,12 +1061,14 @@ export const middleware: NextMiddleware = async (req, event) => {
    *    by the hint, so a cache that served one visitor's document to another
    *    would serve dark markup into a light browser.
    *
-   * ⚠️ `Vary` SPLITS THE HTML CACHE BY SCHEME, and that is the point. This
-   * route is fully dynamic today because the layout reads `cookies()`, so
-   * there is no shared document to split; the header is what makes a shared
-   * one legal later. Per-visitor theming and one cached document are
-   * irreconcilable, but per-SCHEME theming and two cached documents are not —
-   * this is the route back toward cacheability rather than a cost against it.
+   * ⚠️ `Vary` SPLITS THE HTML CACHE BY SCHEME, and that is the point. It is
+   * the CDN-side half of the split the scheme path segment makes above
+   * (AGL-2708): the origin serves two documents per page, and this is what
+   * stops a shared cache handing one of them to a browser in the other scheme.
+   * Per-visitor theming and one cached document are irreconcilable, but
+   * per-SCHEME theming and two cached documents are not — so the two headers
+   * only make sense together, and dropping either one re-opens the outage from
+   * the other end.
    *
    * Appended rather than set: Next appends its own `RSC`,
    * `Next-Router-State-Tree` and friends to this same header for app-router

@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-// lockdown-423: via apps/tenant/app/[host]/[[...slug]]/load-page-data.ts
+// lockdown-423: via apps/tenant/app/[host]/[scheme]/[[...slug]]/load-page-data.ts
 // `loadNotFoundScreen` sits in the same loader and behind the same lockdown
 // branch; a locked host has no designed 404 body to hand out.
 
-import { loadNotFoundScreen } from '../../../[host]/[[...slug]]/load-page-data'
+import { loadNotFoundScreen } from '../../../[host]/[scheme]/[[...slug]]/load-page-data'
 
 /**
  * The host's designed 404 body (AGL-2342).

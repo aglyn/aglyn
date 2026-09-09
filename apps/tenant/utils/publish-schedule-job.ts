@@ -19,6 +19,7 @@ import { registerPluginJob, screenRoutePathToUrl } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getSiteLockdown } from '@aglyn/tenant-data-admin'
 import { tenantDataTag } from '@aglyn/tenant-data-admin/render-cache'
 import applyDuePublishSchedule from '@aglyn/tenant-runtime/apply-publish-schedule'
+import { SCHEME_ROUTE_SEGMENTS } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { readDueSchedules } from './publish-schedule-next-due'
 
@@ -201,10 +202,14 @@ registerPluginJob({
         const target = routePath ?? previousPath
         if (!target) continue
 
-        // Same cache key the middleware rewrites to: `/{host}{path}`, NOT the
-        // public URL.
+        // Same cache key the middleware rewrites to:
+        // `/{host}/{scheme}{path}`, NOT the public URL. One call per scheme,
+        // because the scheme is a path segment and each is its own entry
+        // (AGL-2708).
         const url = screenRoutePathToUrl(target)
-        revalidatePath(`/${hostId}${url === '/' ? '' : url}`)
+        for (const scheme of SCHEME_ROUTE_SEGMENTS) {
+          revalidatePath(`/${hostId}/${scheme}${url === '/' ? '' : url}`)
+        }
       } catch (error) {
         // One bad screen must not stop the batch — the rest are still due.
         console.error(

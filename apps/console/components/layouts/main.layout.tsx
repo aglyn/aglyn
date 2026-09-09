@@ -16,8 +16,13 @@
  */
 
 import { ICON_VARIANT_LEFT } from '@aglyn/shared-data-enums'
-import { AglynBesignerLogoFull, AglynConsoleLogoFull, AppLink, type AppLinkProps, MdiIcon, type MdiIconProps, Menu, type MenuItemProps, type MenuProps, SrOnly } from '@aglyn/shared-ui-jsx'
+import { AppLink, type AppLinkProps, MdiIcon, type MdiIconProps, Menu, type MenuItemProps, type MenuProps, SrOnly } from '@aglyn/shared-ui-jsx'
 import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
+// Subpath, not the barrel: the barrel reaches `svg-icons.tsx`, which draws
+// five more wordmarks the console never renders. The besigner's wordmark is
+// not here either — it arrives as `wordmark` from the editor shells that draw
+// it, so a page carries only the mark it renders.
+import { AglynConsoleLogoFull } from '@aglyn/shared-ui-jsx/const/aglyn-console-logo-full'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArrEmpty } from '@aglyn/shared-util-tools'
 import {
@@ -129,7 +134,19 @@ export interface TopAppBarProps {
   customCenter?: JSX.Node
   enableAppBarElevation?: boolean
   quickActions?: QuickActionsMenuItem[]
-  besigner?: boolean
+  /**
+   * The product wordmark worn by the app bar, defaulting to the console's.
+   *
+   * A slot rather than a second branch of the `besigner` flag because each
+   * wordmark is ~13 KB of outlined path data: branching here put both marks
+   * in the shell every route loads, so every console page carried the
+   * besigner logotype it never draws. The shell that knows which product it
+   * is supplies the mark, and a route ships one.
+   *
+   * White-label chrome still wins over it: an entitled org's own logo or
+   * product name replaces whatever wordmark the shell passed.
+   */
+  wordmark?: JSX.Node
   backButton?: Partial<ButtonProps>
 }
 
@@ -142,7 +159,7 @@ const TopAppBar = (props: TopAppBarProps) => {
     customCenter,
     enableAppBarElevation,
     quickActions,
-    besigner,
+    wordmark,
     backButton,
   } = props
   // The logo returns to the active org's home (AGL-631); the jump page when no
@@ -266,7 +283,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                       Aglyn wordmark, resolved through the one shared
                       `resolveBrandingProfile` (via useBranding). Non-white-label
                       orgs — and every surface until the org doc is confirmed —
-                      keep the Aglyn console/besigner logos exactly as before. */}
+                      keep the wordmark the shell passed. */}
                   {whiteLabel && branding.logoUrl ? (
                     <Box
                       component="img"
@@ -288,10 +305,10 @@ const TopAppBar = (props: TopAppBarProps) => {
                     >
                       {branding.productName}
                     </Typography>
-                  ) : besigner ? (
-                    <AglynBesignerLogoFull sx={{ height: 24, width: 'auto' }} />
                   ) : (
-                    <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />
+                    (wordmark ?? (
+                      <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />
+                    ))
                   )}
                   {appBarSuffix && (
                     <Typography
@@ -437,6 +454,14 @@ export interface MainLayoutProps
   extends Omit<StackProps, 'title'>,
     TopAppBarProps {
   children?: JSX.Children
+  /**
+   * Lay the shell out as the besigner's fixed editor: exactly the window
+   * height, never page-scrollable.
+   *
+   * A layout flag, not a branding one — the app bar takes its mark through
+   * `wordmark` and reads this nowhere.
+   */
+  besigner?: boolean
 }
 
 export function MainLayout(props: MainLayoutProps) {
@@ -450,6 +475,7 @@ export function MainLayout(props: MainLayoutProps) {
     enableAppBarElevation,
     quickActions,
     besigner,
+    wordmark,
     backButton,
     ...rest
   } = props
@@ -480,7 +506,7 @@ export function MainLayout(props: MainLayoutProps) {
       }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
       <TopAppBar
         enableAppBarElevation={enableAppBarElevation}
-        besigner={besigner}
+        wordmark={wordmark}
         backButton={backButton}
         centerPrefix={centerPrefix}
         centerNavigationItems={centerNavigationItems || []}

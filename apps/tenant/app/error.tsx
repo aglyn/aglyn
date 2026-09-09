@@ -16,14 +16,15 @@
  */
 'use client'
 
+import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
 import { useEffect } from 'react'
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
 
 /**
  * Root error boundary (AGL-2074).
  *
- * The rung above `[host]/error.tsx`: it catches what that one structurally
- * cannot, which is a throw in `[host]/layout.tsx` itself — the host lookup,
+ * The rung above `[host]/[scheme]/error.tsx`: it catches what that one structurally
+ * cannot, which is a throw in `[host]/[scheme]/layout.tsx` itself — the host lookup,
  * the theme resolve, the font/favicon/manifest resolution. That is also
  * exactly the case in which no host data exists, so the plain screen is not a
  * shortcut here, it is the only honest option.
@@ -39,16 +40,7 @@ export default function RootError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      ;(
-        window as Window & { reportError?: (error: unknown) => void }
-      ).reportError?.(error)
-    } catch {
-      // Reporting never breaks the page.
-    }
-  }, [error])
+  useEffect(() => redispatchCaughtError(error), [error])
 
   return (
     <StatusScreenPlain

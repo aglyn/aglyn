@@ -16,7 +16,7 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+import { mediaNodeSrc, resolveMediaSrc } from '@aglyn/aglyn'
 import {
   MEDIA_ALT_MAX_LENGTH,
   inheritedMediaAlt,
@@ -92,7 +92,7 @@ export function ScreenSocialImageField(props: ScreenSocialImageFieldProps) {
   // Stored as a `media:` reference; the preview needs the CDN path. Relative
   // is right here — the console is same-origin. Only the tenant head has to
   // absolutise it.
-  const preview = Aglyn.resolveMediaSrc(current, { hostId })
+  const preview = resolveMediaSrc(current, { hostId })
 
   return (
     <>
@@ -179,7 +179,7 @@ export function ScreenSocialImageField(props: ScreenSocialImageFieldProps) {
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onPick={(media) => {
-          const src = Aglyn.mediaNodeSrc(media)
+          const src = mediaNodeSrc(media)
           if (!src) return
           // Dimensions read off the media record (captured at upload,
           // AGL-173) and staged WITH the reference, never separately.

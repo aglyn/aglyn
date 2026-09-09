@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { resolveInstanceIconPath } from '@aglyn/aglyn'
 import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { observer } from 'mobx-react-lite'
@@ -43,7 +44,7 @@ export const ComponentIconComponent = observer((props: ComponentIconProps) => {
   // off the definition rather than denormalized onto the node, so changing a
   // component's icon reaches the instances already placed.
   const { definitions } = useContext(ComponentPromotionContext)
-  const definitionIconPath = Aglyn.resolveInstanceIconPath(node, definitions)
+  const definitionIconPath = resolveInstanceIconPath(node, definitions)
   if (definitionIconPath) return <MdiIcon path={definitionIconPath} {...rest} />
 
   if (isElement(Icon)) return Icon

@@ -401,3 +401,61 @@ prices one request at ~200 KB of raw code and is right to. `maxMergeChunkSize: 5
 produced byte-identical output. **Leave it alone** — the duplication a Lighthouse report
 charges to this route is the price of not making those requests, and it is the cheaper
 half of the trade.
+
+#### `sideEffects` is the build-config lever that pays (measured 2026-09-08)
+
+A library whose `package.json` says nothing about `sideEffects` forces the bundler to
+assume every module in it might do work on import, so it keeps modules whose exports the
+page never names. Only `@aglyn/shared-ui-jsx` declared one; declaring the rest, on
+AGL-2706, moved the two routes further than any other build-configuration change swept
+that night:
+
+| Route | before | after | delta |
+| --- | --- | --- | --- |
+| tenant `[host]/[[...slug]]` | 399,135 B gz | 373,642 B gz | **−24.9 KiB** |
+| console `(app)/[orgSlug]` | 1,096,177 B gz | 1,077,499 B gz | **−18.2 KiB** |
+
+Most of the tenant half is `mobx-state-tree` (103 KB raw) leaving the published page. The
+canvas model reaches it only through `libs/aglyn/src/lib/aglyn.ts`, which builds the
+runtime singleton — and that module is *not* effect-ful: everything it touches is its own
+export and nothing registers into it at import time, so a page that names no part of the
+runtime can drop it. **Listing a barrel in `sideEffects` is how you lose this**, which is
+the trap to avoid when the array is written by hand.
+
+Two mechanics worth not rediscovering:
+
+- **The nearest `package.json` wins, not the library's.** A stray
+  `libs/aglyn/src/lib/canvas-manager/package.json` (a jest stub from an unfinished commit)
+  shadowed the declaration for the whole canvas-manager subtree. Deleting it is worth
+  20.8 KiB gz of the 24.9 — with it still on disk the same declaration measured −4.1 KiB.
+- **Turbopack honors the field**, including the array form as globs; the native binary
+  parses and validates it (`sideEffects must be a boolean or an array`).
+
+Justify the declaration per file rather than per library. The shapes that make a module
+effect-ful here are prototype patching (`array-overrides.ts`), storage subscriptions (the
+besigner clipboard managers), registry calls (`registerPluginJob` in each plugin's
+`server.ts`), loader configuration (`monaco-editor.tsx`), admin-app initialization
+(`fbserver.ts`), and console output (`_internal.ts`). What is *not* effect-ful, and does
+not belong in the array: `X.displayName = …` or `X.aglyn = true` on a binding the same
+module declares, and module-scope value factories — `createContext`, `forwardRef`,
+`styled`, `observer`, `types.model`.
+
+#### Build-configuration levers that measured nothing (2026-09-08)
+
+Swept on AGL-2706 against both routes, each rebuilt and diffed with `analyze:chunks`:
+
+| Lever | tenant | console | why |
+| --- | --- | --- | --- |
+| `experimental.optimizePackageImports` + 11 barrel packages | +0 B | −28 B | `@mui/*` already ships `sideEffects: false` and an `exports` map, so the barrel is already shakeable; Next's default list already carries `@mui/material`, `@mui/icons-material`, `lodash-es` and `react-use` |
+| Emptying `transpilePackages` (the `@mui/*` + `@emotion/*` list) | +50 B | +59 B | that list is for the webpack path's `esmExternals: false` interop; Turbopack does not need it and does not benefit |
+| `experimental.fallbackNodePolyfills: false` | +0 B | +0 B | byte-identical output — Turbopack does not act on it |
+| A `browserslist` entry | not run | not run | Next 16's default target is already `chrome 111 / edge 111 / firefox 111 / safari 16.4` ("baseline widely available"), so there is no downleveling left to switch off |
+| `compiler.removeConsole` | not run | not run | the built tenant client carries 166 `console.error` and 53 `console.warn` calls and 6 of everything else; the error beacon wants the first two, and the operator greeting in `_internal.ts` is the third — the removable half is worth nothing |
+
+The console's eager route carries Next's 22.5 KB `Buffer` polyfill, and it is **not**
+first-party this time: `@firebase/firestore`'s *browser* ESM build evaluates
+`t instanceof Buffer || t instanceof Uint8Array` in `ByteString.fromUint8Array`, and a free
+`Buffer` identifier is what makes Turbopack inject it. The `globalThis.Buffer` fix that
+worked for our own three files is not available in a vendored build, and the polyfill is
+load-bearing where it lands: without a `Buffer` binding that expression throws rather than
+falling through. `fallbackNodePolyfills` does not move it.

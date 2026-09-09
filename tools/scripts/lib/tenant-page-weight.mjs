@@ -55,7 +55,7 @@ import { collectBarrelGraph } from './jsx-barrel.mjs'
  * folding them in would blur the one number this gate is about.
  */
 export const TENANT_PAGE_ENTRY =
-  'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx'
+  'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx'
 
 /**
  * Headroom over the measured baseline before the gate goes red.

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { useIsomorphicLayoutEffect } from '@aglyn/shared-ui-jsx'
 import {
@@ -134,7 +134,7 @@ const NodeOverlay = observer(
         ? Besigner.focus.getLastSelected()
         : Besigner.focus.getHovered()
     const $id = state?.$id
-    const node = Aglyn.canvas.getNode($id)
+    const node = canvas.getNode($id)
 
     const elementRef = Besigner.refs.get($id)
     // Node.index throws for parentless nodes (the root, or a node whose

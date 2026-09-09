@@ -121,12 +121,12 @@ describe('white-label branding coverage (Phase 2/3)', () => {
     {
       // Published-site "Made with …" badge reads props.branding, falling back
       // to the shared Aglyn default rather than a hard-coded brand.
-      file: 'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx',
+      file: 'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx',
       mustContain: ['props.branding', 'PLATFORM_BRANDING_PROFILE'],
     },
     {
       // Tenant <title>/OG fallback reads props.branding.productName.
-      file: 'apps/tenant/app/[host]/[[...slug]]/page.tsx',
+      file: 'apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx',
       mustContain: ['props.branding'],
     },
     {

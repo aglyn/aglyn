@@ -43,7 +43,7 @@ export * from './lib/app-utils/person-key'
 // untrusted plugin bundle, so it rides the same rule as the two above:
 // exposed ONLY through this `/server` entry, never re-exported by the full
 // `@aglyn/aglyn` barrel that client code bundles. Measured on a Turbopack
-// production build: -39,035 B GZIPPED off the `/[host]/[[...slug]]` route's
+// production build: -39,035 B GZIPPED off the `/[host]/[scheme]/[[...slug]]` route's
 // client chunks. It runs in two console admin routes and nowhere else, and
 // it was putting a JavaScript parser into every published customer page.
 export * from './lib/app-utils/plugin-bundle-checks'

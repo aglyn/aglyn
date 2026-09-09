@@ -92,7 +92,8 @@ describe('AGL-1466 · a folder create carries its scope', () => {
     const creates = CODE.match(/batch\.set\(\s*ref,/g) ?? []
     expect(creates.length).toBeGreaterThanOrEqual(2)
 
-    const shaped = CODE.match(/batch\.set\(\s*ref,\s*Aglyn\.newMediaFolderDoc\(/g) ?? []
+    const shaped =
+      CODE.match(/batch\.set\(\s*ref,\s*(?:Aglyn\.)?newMediaFolderDoc\(/g) ?? []
     expect(shaped).toHaveLength(creates.length)
   })
 
@@ -134,7 +135,7 @@ describe('AGL-1466 · the sharing editor shows what is stored', () => {
    */
   it('does not seed an absent folder scope with the org token', () => {
     expect(openFolderScope()).not.toMatch(
-      /visibleTo:\s*stored\?\.length\s*\?\s*stored\s*:\s*\[Aglyn\.ORG_SCOPE_TOKEN\]/,
+      /visibleTo:\s*stored\?\.length\s*\?\s*stored\s*:\s*\[(?:Aglyn\.)?ORG_SCOPE_TOKEN\]/,
     )
   })
 
@@ -150,7 +151,9 @@ describe('AGL-1466 · the sharing editor shows what is stored', () => {
    * other is a dialog that will lie again.
    */
   it('does not seed an absent file scope with the org token', () => {
-    expect(callbackBody('scopeOfMedia')).not.toMatch(/\[Aglyn\.ORG_SCOPE_TOKEN\]/)
+    expect(callbackBody('scopeOfMedia')).not.toMatch(
+      /\[(?:Aglyn\.)?ORG_SCOPE_TOKEN\]/,
+    )
   })
 
   /**
@@ -172,7 +175,8 @@ describe('AGL-1466 · the sharing editor shows what is stored', () => {
    */
   it('never seeds an absent scope with the org token, anywhere', () => {
     const seeds =
-      CODE.match(/visibleTo:[\s\S]{0,140}?\[Aglyn\.ORG_SCOPE_TOKEN\]/g) ?? []
+      CODE.match(/visibleTo:[\s\S]{0,140}?\[(?:Aglyn\.)?ORG_SCOPE_TOKEN\]/g) ??
+      []
     // The legitimate ones: a NEW resource's default, the normalizer's floor,
     // the preview call that needs a usable scope to get a count, and the
     // radio whose 'org' option IS the org token. What may not appear is a
@@ -188,11 +192,11 @@ describe('AGL-1466 · the sharing editor shows what is stored', () => {
    * the same lesson AGL-1466 drew when two independent creates each forgot
    * the field: the answer is one function, not four correct copies. Every
    * place this component reads a STORED scope goes through
-   * `Aglyn.storedScope`, so "absent means nothing is stored" is decided once.
+   * `storedScope`, so "absent means nothing is stored" is decided once.
    */
   it('reads every stored scope through the one helper', () => {
     // The three readers: the selection dialog, the drawer seed, the save gate.
-    expect(CODE.match(/Aglyn\.storedScope\(/g) ?? []).toHaveLength(3)
+    expect(CODE.match(/(?:Aglyn\.)?\bstoredScope\(/g) ?? []).toHaveLength(3)
   })
 
   /**
@@ -257,8 +261,8 @@ describe('AGL-1480 · the detail drawer shows what is stored', () => {
 
   /** The literal that shipped the bug, in the place it shipped from. */
   it('does not seed an absent file scope with the org token', () => {
-    expect(onDetails()).not.toMatch(/\[Aglyn\.ORG_SCOPE_TOKEN\]/)
-    expect(onDetails()).toMatch(/Aglyn\.storedScope\(/)
+    expect(onDetails()).not.toMatch(/\[(?:Aglyn\.)?ORG_SCOPE_TOKEN\]/)
+    expect(onDetails()).toMatch(/(?:Aglyn\.)?\bstoredScope\(/)
   })
 
   /** And it carries the same `unset` signal the folder dialog renders. */
@@ -281,20 +285,24 @@ describe('AGL-1480 · the detail drawer shows what is stored', () => {
    * If they agree, `scopeChanged` is false however it is spelled.
    */
   it('opens the drawer without making the save gate think anything changed', () => {
-    const seed = /const storedScope = ([^\n]+)/.exec(onDetails())?.[1]
+    const seed = /const storedVisibleTo = ([^\n]+)/.exec(onDetails())?.[1]
     expect(seed).toBeTruthy()
     const previous = /const previousScope: string\[\] = ([^\n]+)/.exec(
       previousScope(),
     )?.[1]
     expect(previous).toBeTruthy()
 
+    // Both helpers are in scope under either spelling, so the comparison
+    // survives the component importing `storedScope` by name rather than
+    // reaching it off the namespace.
     const evaluate = (expression: string, doc: unknown) =>
       new Function(
         'Aglyn',
+        'storedScope',
         'media',
         'editor',
         `return (${expression.replace(/,\s*$/, '')})`,
-      )(Aglyn, doc, { media: doc })
+      )(Aglyn, Aglyn.storedScope, doc, { media: doc })
 
     for (const doc of [
       {},

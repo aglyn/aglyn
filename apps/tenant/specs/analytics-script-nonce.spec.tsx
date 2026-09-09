@@ -34,7 +34,7 @@
 import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import { storeVisitorConsent } from '@aglyn/aglyn/app-utils/visitor-consent'
 import { act, render, waitFor } from '@testing-library/react'
-import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
+import SiteAnalytics from '../app/[host]/[scheme]/[[...slug]]/site-analytics'
 
 /**
  * `next/script` is inert in jsdom, so it is replaced with a double that

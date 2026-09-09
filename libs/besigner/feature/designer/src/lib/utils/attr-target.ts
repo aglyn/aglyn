@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import {
+  components,
+  FieldComponentType,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  STYLE_OVERRIDES_ROOT_KEY,
+} from '@aglyn/aglyn'
 import { action, toJS } from 'mobx'
 
 /**
@@ -176,13 +182,13 @@ export function getNodeAttrTarget(
   node: Aglyn.NodeSchema<any> | null | undefined,
   overrideKey?: string | null,
 ): NodeAttrTarget {
-  const isInstance = node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
+  const isInstance = node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
   if (!node || !isInstance) return plainNodeTarget()
-  const key = overrideKey || Aglyn.STYLE_OVERRIDES_ROOT_KEY
+  const key = overrideKey || STYLE_OVERRIDES_ROOT_KEY
   return {
     isInstanceOverride: true,
     overrideKey: key,
-    isLeafOverride: key !== Aglyn.STYLE_OVERRIDES_ROOT_KEY,
+    isLeafOverride: key !== STYLE_OVERRIDES_ROOT_KEY,
     get attrs() {
       return (node.attrOverrides as Record<string, any> | undefined)?.[key]
     },
@@ -244,13 +250,13 @@ export function getNodeAttrTarget(
  *   is a design question, not a plumbing one.
  */
 export const ATTR_OVERRIDE_SUPPORTED_EDITORS = new Set<string>([
-  Aglyn.FieldComponentType.TEXT_FIELD,
-  Aglyn.FieldComponentType.TEXTAREA,
-  Aglyn.FieldComponentType.SELECT,
-  Aglyn.FieldComponentType.SWITCH,
-  Aglyn.FieldComponentType.CHECKBOX,
-  Aglyn.FieldComponentType.COLOR_PICKER,
-  Aglyn.FieldComponentType.CSS_DIMENSION,
+  FieldComponentType.TEXT_FIELD,
+  FieldComponentType.TEXTAREA,
+  FieldComponentType.SELECT,
+  FieldComponentType.SWITCH,
+  FieldComponentType.CHECKBOX,
+  FieldComponentType.COLOR_PICKER,
+  FieldComponentType.CSS_DIMENSION,
 ])
 
 /** One overridable attribute of a node inside a component definition. */
@@ -283,7 +289,7 @@ export function listInstanceAttrFields(
     | undefined,
 ): InstanceAttrField[] {
   const attributes = defNode?.componentId
-    ? (Aglyn.components.getSchema(defNode.componentId)?.attributes ?? [])
+    ? (components.getSchema(defNode.componentId)?.attributes ?? [])
     : []
   const fields: InstanceAttrField[] = []
   const seen = new Set<string>()

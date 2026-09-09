@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_MODIFY_REDO,
   ICON_VARIANT_MODIFY_UNDO,
@@ -42,8 +42,8 @@ function HistoryControls(
         <span>
           <MuiIconButton
             aria-label="undo action"
-            onClick={() => Aglyn.canvas.undo()}
-            disabled={!Aglyn.canvas.canUndo}
+            onClick={() => canvas.undo()}
+            disabled={!canvas.canUndo}
           >
             <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_UNDO.path} />
           </MuiIconButton>
@@ -53,8 +53,8 @@ function HistoryControls(
         <span>
           <MuiIconButton
             aria-label="redo action"
-            onClick={() => Aglyn.canvas.redo()}
-            disabled={!Aglyn.canvas.canRedo}
+            onClick={() => canvas.redo()}
+            disabled={!canvas.canRedo}
           >
             <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_REDO.path} />
           </MuiIconButton>

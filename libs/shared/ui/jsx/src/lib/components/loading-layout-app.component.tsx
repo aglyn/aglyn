@@ -18,13 +18,17 @@
 
 import { forwardRef, type ReactNode } from 'react'
 import { LoadingProviderComponent } from '../contexts/loading.context'
-import { LoadingModal } from './loading-modal'
-import type { LoadingLayoutComponentProps } from './loading-layout.component'
+import { LoadingModal, type LoadingModalProps } from './loading-modal'
 
 /**
- * App Router variant of {@link LoadingLayoutComponent}. The Pages Router
- * version wires `RouterLoading` on `router.events`, which does not exist in
- * the App Router (and `useRouter()` from `next/router` throws there).
+ * The loading overlay host, for the App Router.
+ *
+ * A Pages Router sibling stood beside this one until AGL-2706, wiring
+ * `RouterLoading` on `router.events` — an API the App Router does not have,
+ * from a `next/router` module that throws when it is imported there. Nothing
+ * had rendered it since the app moved, and a `next/router` import inside a
+ * shared library is reachable by anything that ever names the file, so it is
+ * gone rather than kept for a router this repo no longer serves.
  *
  * Navigation intent no longer comes from a link-click heuristic. Every
  * `<Link>` (through {@link NextLink}) renders a `LinkNavigationReporter` that
@@ -40,7 +44,7 @@ import type { LoadingLayoutComponentProps } from './loading-layout.component'
  * calls still render the modal.
  */
 export interface LoadingLayoutAppComponentProps
-  extends Omit<LoadingLayoutComponentProps, 'children'> {
+  extends Omit<Partial<LoadingModalProps>, 'children'> {
   /** Per-site branding for the overlay (AGL-594) — see LoadingModal. */
   brandLogoUrl?: string
   brandName?: string

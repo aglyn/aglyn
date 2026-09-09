@@ -86,7 +86,7 @@ export const tenantDataTag = (hostId: string): string => `tenant-data:${hostId}`
  * stale in a way anyone could observe, because the publish path had already
  * busted the tag the moment the content changed.
  *
- * Measured on `/[host]/[[...slug]]`: 0.78 GB-hr across 635 invocations, a P75
+ * Measured on `/[host]/[scheme]/[[...slug]]`: 0.78 GB-hr across 635 invocations, a P75
  * of 3.65s, and ~4.4 GB-s per render — the most expensive route per hit in
  * the account, on a site with no real traffic yet.
  *
@@ -135,7 +135,7 @@ export const PUBLISHED_SITE_DATA_TTL_SECONDS = 3600
  *
  * The principle rather than a tuned figure: **the pointer must never be staler
  * than the HTML that reads it** — `<=` the tenant catch-all's ISR window
- * (`apps/tenant/app/[host]/[[...slug]]/page.tsx`), which
+ * (`apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx`), which
  * `publish-pointer-tracks-page-window.spec.ts` enforces. Above the window, the
  * page regenerates and faithfully rebuilds itself from a stale pointer, which
  * is the failure being closed.

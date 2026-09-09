@@ -19,53 +19,14 @@
 // package, and a client boundary here (or importing the shared-ui-jsx
 // barrel from the tenant page) makes the bundler duplicate parts of the
 // module graph — a second canvas/emitter instance renders the site blank.
-import { createContext, useContext, useMemo } from 'react'
+import { useContext, useMemo } from 'react'
+import {
+  ScreenLinkContext,
+  type ScreenRouteMap,
+} from './screen-link-context-value'
 import { parseScreenLinkValue } from './screen-link-value'
 
-/**
- * Host routing map: screen id → routed path in the tenant matcher format
- * (root is `'/'`, nested paths are slash-joined segments WITHOUT a leading
- * slash, e.g. `company/about`). This is the `screens` field of the host
- * document — the single source of truth kept current by the publish and
- * hierarchy flows.
- */
-export type ScreenRouteMap = Record<string, string>
-
-export interface ScreenLinkContextValue {
-  /** Routing map hrefs are resolved against. Absent → nothing resolves. */
-  screens?: ScreenRouteMap
-  /** Optional display names by screen id, for editor-facing pickers. */
-  labels?: Record<string, string>
-  /**
-   * True inside editing surfaces (besigner canvas, preview): screen links
-   * render their content but must not navigate.
-   */
-  suppressNavigation?: boolean
-  /**
-   * True ONLY on the static besigner canvas (AGL-830): interactions are
-   * inert and command-bus-driven elements (nav menus, drawers) render their
-   * editor affordance instead of the live popup. The Preview surface leaves
-   * this falsy — it suppresses navigation but runs interactions for real, so
-   * a hover-to-open mega menu behaves exactly like the live site. Split out
-   * of {@link suppressNavigation}, which now means only "links don't navigate".
-   */
-  editorInert?: boolean
-  /** Current screen's translations: locale → screen id (AGL-164). */
-  localeVariants?: Record<string, string>
-  /** Locale of the screen being rendered (AGL-164). */
-  currentLocale?: string
-}
-
-/**
- * Render-time resolution context for id-based screen links: canvas nodes
- * persist a screen id, never a path, so slug renames and re-parenting can't
- * break links. Provided by the tenant page (map from static props, refreshed
- * by ISR) and by the console's besigner/preview surfaces (map from the live
- * host doc subscription, navigation suppressed). Context crosses the canvas
- * shadow DOM because the shadow root renders through a React portal.
- */
-export const ScreenLinkContext = createContext<ScreenLinkContextValue>({})
-ScreenLinkContext.displayName = 'ScreenLinkContext'
+export * from './screen-link-context-value'
 
 export interface ResolvedScreenLink {
   /** Site-relative href (`/`, `/company/about`), undefined when unresolvable. */
@@ -252,10 +213,10 @@ export function resolveScreenHref(
 
 /**
  * Link VALUE parsing lives in `./screen-link-value` — server-safe, because
- * the where-used scan runs on the server and this module's `createContext`
- * keeps it out of the `@aglyn/aglyn/server` barrel (AGL-703). Re-exported
- * here so every existing importer, and the spec beside this file, keeps
- * reaching them at the address they have always used.
+ * the where-used scan runs on the server and the `createContext` this module
+ * reaches keeps it out of the `@aglyn/aglyn/server` barrel (AGL-703).
+ * Re-exported here so every existing importer, and the spec beside this file,
+ * keeps reaching them at the address they have always used.
  */
 export {
   SCREEN_LINK_VALUE_PREFIX,

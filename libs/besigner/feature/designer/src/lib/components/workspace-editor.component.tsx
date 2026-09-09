@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useMergeRefs } from '@aglyn/shared-ui-jsx'
@@ -130,7 +130,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             // Leaves (self-closing / text-editable) never offer a CHILDREN
             // region — the center reads as a sibling insert, matching where
             // the drop actually lands (see dnd-manager onDragEnd).
-            overNode ? Aglyn.canvas.nodeAcceptsChildren(overNode) : true,
+            overNode ? canvas.nodeAcceptsChildren(overNode) : true,
           )
           event.over.data.current.region = region
         }

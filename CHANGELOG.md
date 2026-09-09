@@ -9,6 +9,91 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.103 — 2026-09-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/8c834a02c...v1.0.0-beta.103)
+
+> The JavaScript-reduction commits below cite **AGL-2706** in their messages, which is a
+> closed billing issue — a mis-citation inherited from a session handoff. The work is
+> [AGL-2710](https://linear.app/aglyn/issue/AGL-2710) and the links here point there. The
+> commits were not rewritten: four of them already shipped in v1.0.0-beta.102, and this
+> repository does not rewrite history.
+
+### Added
+
+- **tools:** gate the seven besigner editors against the namespace too ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **tools:** gate the shells against holding the core namespace ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+
+### Fixed
+
+- **theme:** measure the ink a surface filled with the accent-text shade carries ([AGL-2704](https://linear.app/aglyn/issue/AGL-2704))
+- **tenant:** defer the core splits by relative path, not by package ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-1500](https://linear.app/aglyn/issue/AGL-1500), [AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **tenant:** point the attribution-guard laziness spec at the moved renderer ([AGL-2708](https://linear.app/aglyn/issue/AGL-2708))
+- **tenant:** follow the scheme segment in the attribution-guard spec ([AGL-2708](https://linear.app/aglyn/issue/AGL-2708))
+- **theme:** re-point the guards the scheme segment moved ([AGL-2708](https://linear.app/aglyn/issue/AGL-2708), [AGL-1161](https://linear.app/aglyn/issue/AGL-1161))
+- **shared:** escape the apostrophe, and split ink at the luminance that ties ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **theme:** resolve the visitor's scheme in the middleware, not the render ([AGL-2708](https://linear.app/aglyn/issue/AGL-2708))
+
+### Performance
+
+- **console:** fetch the help excerpts when a tooltip opens ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **console:** let each shell carry the wordmark it draws ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **besigner:** name what the editor reads instead of pinning the barrel ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **console:** fetch the command palette when it opens ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **console:** stop building two Firebase products nothing reads ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **tenant:** split the legacy collection renderer off the page ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-81](https://linear.app/aglyn/issue/AGL-81), [AGL-551](https://linear.app/aglyn/issue/AGL-551), [AGL-1725](https://linear.app/aglyn/issue/AGL-1725))
+- **build:** ship a name, not a library, for two browser-only dead ends ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **tenant:** fetch the attribution guard only where there is attribution ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **console:** defer the core namespace so app-utils leaves the shell ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **shared:** take `computedFn` from its own module, not the mobx-utils bundle ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **tenant:** the 404 boundary defers the renderer it may never use ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **console:** the assist panel loads when its gate says yes ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **aglyn:** the screen-link context leaves the resolver that reads it ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-703](https://linear.app/aglyn/issue/AGL-703))
+- **console:** the root not-found boundary reaches its chrome lazily ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **console:** the global 404 stops shipping a second copy of the chrome ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **ui:** the console and besigner wordmarks leave the six-logo module ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **enums:** the palette-token readers get their own module ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **jsx:** the navigation overlay loads when a navigation starts ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **aglyn:** the page's hidden-class rule and rendered alt get their own modules ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **libs:** declare which library modules do work at import time ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **console:** the report-issue dialog arrives with the first reporter ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-2185](https://linear.app/aglyn/issue/AGL-2185))
+- **tenant:** the consent surfaces load when they are drawn ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-1498](https://linear.app/aglyn/issue/AGL-1498))
+- **tenant:** the built-in auth forms leave the first-paint bundle ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-1541](https://linear.app/aglyn/issue/AGL-1541))
+- **tenant:** the 404 boundary reaches the renderer lazily ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **tenant:** the error and not-found boundaries stop shipping their screens ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+
+### Changed
+
+- **console:** keep the besigner flag where it is read ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **besigner:** take the one escaper for a link's href ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **email:** take the one escaper instead of a four-character copy ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **aglyn:** one re-dispatch for every error boundary ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-1538](https://linear.app/aglyn/issue/AGL-1538))
+
+### Documentation
+
+- **tools:** the published page no longer opens the core barrel ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **aglyn:** say why the author-HTML serializer is not the shared escaper ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **build:** what the sideEffects sweep bought, and four levers that did not ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+
+<details>
+<summary>Also in this release: 3 test, 8 chore, 2 ci</summary>
+
+- **tools:** move the colour ratchet row with the code it counts ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **perf:** re-baseline the tenant page budget, and say the wire figure is stale ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-2708](https://linear.app/aglyn/issue/AGL-2708))
+- **tools:** raise the Linear ceiling to the newest issue that exists ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **aglyn:** record the front-door canaries in the self-host ratchet ([AGL-2709](https://linear.app/aglyn/issue/AGL-2709))
+- **deps:** drop resize-observer-polyfill, which nothing imports ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **aglyn:** follow the tenant markdown renderer to its own module ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-1162](https://linear.app/aglyn/issue/AGL-1162))
+- **tools:** raise the Linear ceiling to the issue Linear actually holds ([AGL-2709](https://linear.app/aglyn/issue/AGL-2709), [AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-2707](https://linear.app/aglyn/issue/AGL-2707), [AGL-2705](https://linear.app/aglyn/issue/AGL-2705), [AGL-2708](https://linear.app/aglyn/issue/AGL-2708))
+- **shared-ui-jsx:** delete the Pages Router loading layout ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **uptime:** grade the 5xx rate by route, so a cached 200 stops standing in for a render ([AGL-2709](https://linear.app/aglyn/issue/AGL-2709), [AGL-2708](https://linear.app/aglyn/issue/AGL-2708))
+- **shared-ui-jsx:** delete nineteen hooks nothing has ever called ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **gate:** gate a promotion on the tenant production smoke, and probe the front door ([AGL-2709](https://linear.app/aglyn/issue/AGL-2709), [AGL-594](https://linear.app/aglyn/issue/AGL-594))
+- **tenant:** the 404 boundary's fallback may be lazy too ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **enums:** drop the FontWeight enum nothing reads ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+
+</details>
+
 ## v1.0.0-beta.102 — 2026-09-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/3a72e4870...v1.0.0-beta.102)

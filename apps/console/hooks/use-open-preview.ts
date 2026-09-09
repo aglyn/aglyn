@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn'
+import { canvas } from '@aglyn/aglyn'
 import { useCallback } from 'react'
 import {
   type PreviewStateIds,
@@ -59,7 +60,7 @@ export function useOpenPreview(options: UseOpenPreviewOptions) {
     const resolved: PreviewStateIds = { hostId, kind, docId, versionId }
     const nodes = compose
       ? await compose()
-      : (Aglyn.canvas.toJSON().nodes as Aglyn.NodesMap)
+      : (canvas.toJSON().nodes as Aglyn.NodesMap)
     writePreviewState(resolved, nodes, hostTheme)
     window.open(href, previewWindowName(resolved))
   }, [hostId, kind, docId, versionId, href, hostTheme, compose])
