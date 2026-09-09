@@ -51,9 +51,12 @@
 // what took it off the wire. The claim was audited file by file: the only
 // module-scope work here is local `.displayName` / `.aglyn` assignment and
 // `createContext`, none of which another module can observe. `shadow-dom` and
-// `mui-shadow-dom` build a Proxy over a module-local Map, and
-// `use-observer-resize` takes `resize-observer-polyfill` as a DEFAULT import —
-// a ponyfill that patches no global — so neither is an exception.
+// `mui-shadow-dom` build a Proxy over a module-local Map, which is not an
+// exception either. A second clause stood here for `use-observer-resize`,
+// whose default import of `resize-observer-polyfill` was the one bare-looking
+// import in the tree; the hook went with the nineteen nothing called and the
+// dependency followed it out of `package.json` (AGL-2706), so the audit is
+// shorter by a module rather than by an argument.
 // A module added here that DOES do observable
 // work at import time — a global write, a registration, a bare polyfill
 // import — must be listed in `sideEffects` in the same commit, or it will be
