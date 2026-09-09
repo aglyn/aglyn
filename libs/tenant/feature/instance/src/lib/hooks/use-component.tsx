@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+// A TYPE-only namespace: every `Aglyn.` reference below is a type, and held
+// as a VALUE the namespace pins every module the barrel reaches into the
+// console shell that renders these hooks. `import type` erases instead.
+import type * as Aglyn from '@aglyn/aglyn'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { DocumentReference } from '@firebase/firestore'
 import { doc } from 'firebase/firestore'

@@ -16,24 +16,20 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
+// Named imports, and a TYPE-only namespace. A namespace held as a VALUE is
+// opaque to a bundler — it cannot know which exports are read, so it keeps
+// everything the barrel reaches. The one place this app genuinely needs the
+// namespace as a value is the host ABI, which lives behind the relative
+// `import()` below; see `realm-plugin-host.client.ts`.
+import type * as Aglyn from '@aglyn/aglyn'
+import { capturePluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles'
+import { loadRealmPlugins } from '@aglyn/aglyn/plugin-manager/realm-plugins'
 import {
   authorizedFetch,
   type MaybeTokenSource,
 } from '@aglyn/shared-util-http/authorized-token'
 import * as React from 'react'
 import * as jsxRuntime from 'react/jsx-runtime'
-
-/**
- * Console side of the realm-plugin host ABI (AGL-420). The app — not core —
- * composes `__AGLYN_PLUGIN_HOST__` because React/jsxRuntime must be THIS
- * bundle's singletons: a realm bundle rendering with a second React copy is
- * the blank-canvas failure all over again. Remote bundles import nothing;
- * they reach React and every core registry through the host object.
- */
-function ensureRealmPluginHost(): void {
-  Aglyn.setRealmPluginHost({ React, jsxRuntime, aglyn: Aglyn })
-}
 
 /**
  * DEV-ONLY realm loop (AGL-427, Strapi watch:link parity): load bundles
@@ -51,7 +47,8 @@ async function loadDevRealmBundles(): Promise<void> {
   if (process.env.NEXT_PUBLIC_PLUGIN_DEV !== 'enabled') return
   const configured = process.env.NEXT_PUBLIC_PLUGIN_DEV_BUNDLES ?? ''
   if (!configured) return
-  Aglyn.setRealmPluginHost({ React, jsxRuntime, aglyn: Aglyn })
+  const { composeRealmPluginHost } = await import('./realm-plugin-host.client')
+  composeRealmPluginHost({ React, jsxRuntime })
   const host = (globalThis as Record<string, unknown>).__AGLYN_PLUGIN_HOST__
   for (const entry of configured.split(',')) {
     const [pluginId, url] = entry.split('=').map((part) => part.trim())
@@ -71,7 +68,7 @@ async function loadDevRealmBundles(): Promise<void> {
         // AGL-2486: same style capture the verified path uses, so the dev
         // loop shows a plugin author the cascade their published users will
         // get rather than a canvas their CSS silently misses.
-        await Aglyn.capturePluginStyles(pluginId, async () => {
+        await capturePluginStyles(pluginId, async () => {
           const mod = (await import(/* webpackIgnore: true */ blobUrl)) as {
             register?: (host: unknown) => void
             default?: { register?: (host: unknown) => void }
@@ -152,8 +149,9 @@ export async function loadOrgRealmPlugins(
       installs?: Aglyn.RealmPluginInstall[]
     }
     if (!payload.installs?.length) return
-    ensureRealmPluginHost()
-    await Aglyn.loadRealmPlugins(payload.installs, {
+    const { composeRealmPluginHost } = await import('./realm-plugin-host.client')
+    composeRealmPluginHost({ React, jsxRuntime })
+    await loadRealmPlugins(payload.installs, {
       artifactsBase,
       publicKeyBase64: process.env.NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY,
     })
