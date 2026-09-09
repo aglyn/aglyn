@@ -16,6 +16,11 @@
  */
 
 import { sanitizeEventParams } from './analytics-events'
+// The reader the consent sweep already uses to find which GA properties this
+// page has resident, reused rather than a second scan of the same document —
+// it is format-checked and it sees a tag that arrived through GTM as well as
+// one we mounted ourselves.
+import { residentGaMeasurementIds } from './visitor-consent'
 
 /**
  * Real-user Core Web Vitals → GA4 events (AGL-1642).
@@ -161,15 +166,52 @@ function residentGtag(): ((...args: unknown[]) => void) | null {
     : null
 }
 
+/**
+ * Send one metric event to the MEASUREMENT properties only (AGL-2710).
+ *
+ * A gtag event with no `send_to` goes to every destination the loader has
+ * configured, and on a surface that also runs Google Ads that includes the
+ * ads account. This module's whole subject is "Core Web Vitals → GA4", and an
+ * ads destination has nothing to do with a layout shift: measured on
+ * `aglyn.com`, one such event attempted seven requests to
+ * `googleads.g.doubleclick.net` and `google.com/{pagead,rmkt,ccm}` — per
+ * metric, per pageview, four metrics deep — and Google Ads has no report that
+ * reads any of them. Naming the GA4 ids drops all seven and leaves the GA hit
+ * exactly as it was.
+ *
+ * The ids are read at DELIVERY time, from the page, through the reader the
+ * consent sweep already uses: the tag routinely arrives after the first
+ * metric, and what has to be addressed is whatever gtag is configured for now
+ * — which on a customer site is their own property and not ours.
+ *
+ * No ids found means no `send_to` and the event goes wherever it went before.
+ * That is the fail-open side on purpose: a tag that arrived through GTM with
+ * an id this reader never saw would otherwise be handed an empty destination
+ * list, and losing the measurement is a worse outcome than an ads account
+ * receiving a metric it ignores.
+ */
+function sendMetricEvent(
+  gtag: (...args: unknown[]) => void,
+  name: string,
+  params: Record<string, unknown>,
+): void {
+  try {
+    const destinations = residentGaMeasurementIds()
+    gtag(
+      'event',
+      name,
+      destinations.length ? { ...params, send_to: destinations } : params,
+    )
+  } catch {
+    // Analytics never breaks the page.
+  }
+}
+
 function flushPending(gtag: (...args: unknown[]) => void): void {
   const held = pending
   pending = []
   for (const event of held) {
-    try {
-      gtag('event', event.name, event.params)
-    } catch {
-      // Analytics never breaks the page.
-    }
+    sendMetricEvent(gtag, event.name, event.params)
   }
 }
 
@@ -203,11 +245,7 @@ function deliverMetricEvent(
     // Anything held arrived before this one; keep GA's receive order honest.
     if (pending.length) flushPending(gtag)
     stopWatcher()
-    try {
-      gtag('event', name, params)
-    } catch {
-      // Analytics never breaks the page.
-    }
+    sendMetricEvent(gtag, name, params)
     return
   }
   pending.push({ name, params })
