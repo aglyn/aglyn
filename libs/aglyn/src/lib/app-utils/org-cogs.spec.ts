@@ -76,6 +76,15 @@ describe('orgMonthlyCogsUsd', () => {
      * could rot without anything going red. This is that claim, asserted:
      * the busiest real org sits inside a single order of magnitude of its
      * floor, and the floor still wins.
+     *
+     * The table above is the measurement AS TAKEN, priced at the $0.0001 per
+     * view the meter carried on 2026-08-24. The 2026-09-09 re-peg (AGL-2711)
+     * moved that rate, not the usage: the busiest org's 2,169 views cost
+     * $0.1335 more, so its measured total is $0.35280 and its floor is 5.7x
+     * rather than 9.1x. The other rows move the same way and their view
+     * counts were not recorded, so they are left at the figures the
+     * measurement produced rather than restated at a rate they were not read
+     * under.
      */
     const busiestRealOrg = orgMonthlyCogsUsd(
       // orgs/jWmGooWE3L/usage/2026-08, read from production 2026-08-24.
@@ -88,7 +97,7 @@ describe('orgMonthlyCogsUsd', () => {
       1,
     )
     expect(busiestRealOrg.basis).toBe('floor')
-    expect(busiestRealOrg.measuredUsd).toBeCloseTo(0.2193, 3)
+    expect(busiestRealOrg.measuredUsd).toBeCloseTo(0.3528, 4)
     const gap = INFRA_COGS_PER_SITE_USD / busiestRealOrg.measuredUsd
     expect(gap).toBeGreaterThan(1)
     expect(gap).toBeLessThan(100)
@@ -101,12 +110,19 @@ describe('orgMonthlyCogsUsd', () => {
     // rollups — so the thresholds cannot be calibrated against measurement
     // until at least one org crosses this line.
     //
-    // One site, page views alone: $2.00 / $0.0001 = 20,000 views/month. The
-    // busiest real org is at 2,169 — 11% of the way.
-    const breakEvenViews = INFRA_COGS_PER_SITE_USD / 0.0001
-    expect(breakEvenViews).toBe(20_000)
-    expect(orgMonthlyCogsUsd({ pageViews: 19_999 }, 1).basis).toBe('floor')
-    expect(orgMonthlyCogsUsd({ pageViews: 20_001 }, 1).basis).toBe('measured')
+    // One site, page views alone: $2.00 / $0.00016153846 = 12,381 views/month.
+    // The busiest real org is at 2,169 — 18% of the way. It was 20,000 views
+    // until the 2026-09-09 re-peg raised what a view costs; the line moved
+    // toward the traffic rather than the traffic toward the line, which is
+    // the one direction that makes this threshold reachable sooner.
+    //
+    // Derived from the rate rather than restated, so the boundary probes
+    // below cannot drift from the constant that sets them.
+    const breakEvenViews =
+      INFRA_COGS_PER_SITE_USD / ORG_COGS_UNIT_RATES_USD.perPageView
+    expect(Math.round(breakEvenViews)).toBe(12_381)
+    expect(orgMonthlyCogsUsd({ pageViews: Math.floor(breakEvenViews) }, 1).basis).toBe('floor')
+    expect(orgMonthlyCogsUsd({ pageViews: Math.ceil(breakEvenViews) }, 1).basis).toBe('measured')
     // Assist is the one input that can clear the floor without any traffic at
     // all — it enters in dollars, so $2.01 of tokens on a single-site org
     // flips the basis by itself (AGL-2280).
@@ -144,11 +160,12 @@ describe('orgMonthlyCogsUsd', () => {
       { pageViews: 5_000_000, storageGb: 50, apiRequests: 2_000_000 },
       1,
     )
-    // 5M views × $0.0001 = $500, plus 50 GB × $0.026 = $1.30 storage
-    // (AGL-1280 corrected the rate from $0.03), plus $4 API.
-    expect(result.measuredUsd).toBeCloseTo(500 + 1.3 + 4, 6)
+    // 5M views × $0.00016153846 = $807.69 (AGL-2711 re-pegged the rate from
+    // $0.0001), plus 50 GB × $0.026 = $1.30 storage (AGL-1280 corrected that
+    // one from $0.03), plus $4 API.
+    expect(result.measuredUsd).toBeCloseTo(807.6923 + 1.3 + 4, 4)
     expect(result.basis).toBe('measured')
-    expect(result.cogsUsd).toBeCloseTo(505.3, 6)
+    expect(result.cogsUsd).toBeCloseTo(812.9923, 4)
   })
 
   it('prices the three meters the old costUsd ignored', () => {

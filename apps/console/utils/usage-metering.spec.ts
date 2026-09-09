@@ -333,16 +333,21 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
   })
 
   /**
-   * The Sept-1 locked rate set: $0.0338/GB-mo, $0.13/1k page views, $0.065/1k
-   * form submissions. Those are the CUSTOMER-facing figures, so they are
-   * asserted post-markup — the form the published page states and the form a
-   * customer can check. `published-pricing-table-parity.spec.ts`
-   * pins the same three figures from the other direction, as transcribed off
-   * the live page on 2026-08-19; this one pins them against the COGS table, so
-   * neither a code-side drift nor a half-applied rate correction can move what
-   * a customer is billed without a red.
+   * The published rate set: $0.0338/GB-mo, $0.21/1k page views, $0.065/1k form
+   * submissions. Those are the CUSTOMER-facing figures, so they are asserted
+   * post-markup — the form the published page states and the form a customer
+   * can check. `published-pricing-table-parity.spec.ts` pins the same three
+   * figures from the other direction, as transcribed off the live page; this
+   * one pins them against the COGS table, so neither a code-side drift nor a
+   * half-applied rate correction can move what a customer is billed without a
+   * red.
+   *
+   * Two of the three are where the Sept-1 lock put them. The page-view rate
+   * was re-pegged on 2026-09-09 (AGL-2711) when the weight reduction the
+   * standing decision preferred landed and the page still measured far above
+   * the 627 KB the rate was calibrated for.
    */
-  it('prices the locked Sept-1 rate set after markup', () => {
+  it('prices the published rate set after markup', () => {
     const per1k = (rate: number) =>
       Math.round(rate * METERED_MARKUP * 1000 * 10_000) / 10_000
     expect(
@@ -350,7 +355,7 @@ describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
         METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP * 10_000,
       ) / 10_000,
     ).toBe(0.0338)
-    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.13)
+    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.21)
     expect(per1k(METERED_UNIT_RATES_USD.perFormSubmission)).toBe(0.065)
   })
 

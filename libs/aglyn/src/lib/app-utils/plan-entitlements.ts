@@ -1914,19 +1914,26 @@ export const METERED_MARKUP = 1.3
  * "at cost + 30%" claim, which is true of exactly three meters.
  *
  * The first three were corrected 2026-08-09 (AGL-1280) — storage $0.03 →
- * $0.026 and form submissions $0.0005 → $0.00005 — and MUST be changed here
- * and in `METERED_UNIT_RATES_USD` together. See that table for each figure's
- * basis; it is the one a customer is billed against, so it is the one that
- * carries the working — including the open one, which is that `perPageView`
- * is calibrated against a 627 KB page and the real one now measures 1054.3 KB.
- * `npm run check:page-view-rate` holds that gap at the size it was last
- * reviewed at. Lowering the two here lowers measured COGS, which
- * changes no guardrail verdict: `INFRA_COGS_PER_SITE_USD × sites` is the
- * floor, and it already outran measured cost by five orders of magnitude.
+ * $0.026 and form submissions $0.0005 → $0.00005 — and `perPageView` was
+ * re-pegged 2026-09-09 (AGL-2711), from $0.0001 to $0.00016153846. All three
+ * MUST be changed here and in `METERED_UNIT_RATES_USD` together. See that
+ * table for each figure's basis; it is the one a customer is billed against,
+ * so it is the one that carries the working.
+ *
+ * The page-view basis is no longer an open gap. The rate priced a 627 KB page
+ * against one that measured far more for weeks; the weight reduction that was
+ * preferred over a re-peg has now shipped, the page was re-measured at
+ * 976.1 KB, and the rate is pegged to a 1012.8 KB basis that sits ABOVE it.
+ * `npm run check:page-view-rate` holds that peg, and now fails if the basis
+ * ever drops back below what a published page measures.
+ *
+ * Raising the two here raises measured COGS, which changes no guardrail
+ * verdict: `INFRA_COGS_PER_SITE_USD × sites` is the floor, and it still
+ * outruns measured cost by orders of magnitude at real traffic.
  */
 export const ORG_COGS_UNIT_RATES_USD = {
   storagePerGbMonth: 0.026,
-  perPageView: 0.0001,
+  perPageView: 0.00016153846,
   perFormSubmission: 0.00005,
   /** Firestore-backed dataset bytes — an order pricier than object storage. */
   dataStoragePerGbMonth: 0.18,
@@ -4343,11 +4350,12 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
  * is an upgrade conversation, or it is not the customer's traffic at all.
  *
  * It is a CAP, not a price, and it is lower than {@link
- * FORM_ABUSE_CEILING_MULTIPLE} because the meter under it is priced for a
- * 627 KB page while the page the platform serves measures 1,054 KB
- * (`usage-metering.ts` records the gap). Past the band, every 1,000 views
- * bills $0.13 and costs about $0.17, so the tail a metered plan can run up
- * before staff look at it is a loss that grows with the traffic. At 10× the
+ * FORM_ABUSE_CEILING_MULTIPLE} because bandwidth is the largest cost line the
+ * platform carries and the one a stranger can spend on the customer's behalf.
+ * Past the band every 1,000 views bills $0.21 against about $0.16 of real
+ * cost, so the tail is no longer a loss — but a scraper, a hotlinked asset or
+ * a botnet still bills the account holder for traffic they did not ask for,
+ * and the ceiling is what bounds that before staff look at it. At 10× the
  * band that tail was open-ended on Agency; at 3× it is bounded.
  */
 export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 3
@@ -4360,9 +4368,9 @@ export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 3
  * Free includes 2 GB ≈ 3,495 views; 3× would be ~10,486, which a genuinely
  * successful hobby site (a post that lands on Hacker News) reaches in an
  * afternoon and would be a miserable first experience of the platform.
- * 100,000 views/month ≈ 57.2 GB ≈ **$10 of real COGS** at
+ * 100,000 views/month ≈ 57.2 GB ≈ **$16 of real COGS** at
  * `METERED_UNIT_RATES_USD.perPageView` — well above the free band, and an
- * order of magnitude below the $100 a million views costs. It is the number
+ * order of magnitude below the $162 a million views costs. It is the number
  * that makes "free stays free" true without making it stingy.
  */
 export const BANDWIDTH_ABUSE_CEILING_FLOOR = 100_000

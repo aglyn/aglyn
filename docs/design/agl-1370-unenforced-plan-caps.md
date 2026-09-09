@@ -72,7 +72,7 @@ views**, `hostLimit × formSubmissionsPerMonth`".
 The published `/pricing` copy is already honest about this. The metered rate
 table's first row is literally:
 
-> **Page views (bandwidth + reads)** — $0.13 / 1,000
+> **Page views (bandwidth + reads)** — $0.21 / 1,000
 
 and the section lead-in reads:
 

@@ -851,7 +851,9 @@ jobs:
       # view billed at cost + 30%, and the budget above cannot see that the
       # rate was calibrated against a page the code no longer builds. This
       # pins the rate to the recorded wire measurement, and the measurement to
-      # the module graph it was taken against.
+      # the module graph it was taken against. Since the 2026-09-09 re-peg the
+      # rate is set ABOVE what the page measures, so it also fails if a
+      # published page grows back into that headroom.
       - run: npm run test:page-view-rate
       - run: npm run check:page-view-rate
 

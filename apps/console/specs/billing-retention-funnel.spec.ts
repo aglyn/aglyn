@@ -524,7 +524,7 @@ describe('/api/billing/retention — winback (AGL-1863 / AGL-1620)', () => {
   describe('the margin guardrail (AGL-2118)', () => {
     /**
      * Pro lists at $56; 50% off nets ~$26.89 of processor-fee-adjusted
-     * revenue. 300,000 page views price at $30.00 through
+     * revenue. 300,000 page views price at $48.46 through
      * `ORG_COGS_UNIT_RATES_USD.perPageView`, so the discounted subscription
      * does not cover the month — `underwater`/`cogs`, rating `block`.
      */

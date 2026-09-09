@@ -600,23 +600,38 @@ const rate = (v: number): string => {
   return `$${exact.toFixed(6)}`
 }
 
-const per1k = (v: number): number => Math.round(v * 1000 * 1e6) / 1e6
-const withMarkup = (v: number): number => Math.round(v * METERED_MARKUP * 1e6) / 1e6
-
-const METERED_ROWS: Array<{ label: string; costUsd: number; unit: string }> = [
+/**
+ * The units a row is quoted in — 1 for a per-unit rate, 1000 for a per-1k one.
+ *
+ * Carried as a multiplier rather than folded into `costUsd` so that BOTH
+ * columns are computed from the unrounded rate. Rounding the cost to six
+ * decimals and then applying the markup to the rounded figure loses the
+ * published price when the cost is not a clean decimal: `perPageView` is
+ * pinned so that cost × 1.3 is $0.21 per 1,000 views, and $0.161538 × 1.3
+ * rounds to $0.209999, which is the right number rendered as the wrong one.
+ */
+const METERED_ROWS: Array<{
+  label: string
+  costUsd: number
+  quotedPer: number
+  unit: string
+}> = [
   {
     label: 'Media & file storage',
     costUsd: ORG_COGS_UNIT_RATES_USD.storagePerGbMonth,
+    quotedPer: 1,
     unit: '/ GB-mo',
   },
   {
     label: 'Page views (bandwidth + reads)',
-    costUsd: per1k(ORG_COGS_UNIT_RATES_USD.perPageView),
+    costUsd: ORG_COGS_UNIT_RATES_USD.perPageView,
+    quotedPer: 1000,
     unit: '/ 1k views',
   },
   {
     label: 'Form submissions',
-    costUsd: per1k(ORG_COGS_UNIT_RATES_USD.perFormSubmission),
+    costUsd: ORG_COGS_UNIT_RATES_USD.perFormSubmission,
+    quotedPer: 1000,
     unit: '/ 1k',
   },
 ]
@@ -628,8 +643,8 @@ const metered = {
   rows: METERED_ROWS.map((r) => ({
     label: r.label,
     unit: r.unit,
-    ourCost: `${rate(r.costUsd)} ${r.unit}`,
-    youPay: `${rate(withMarkup(r.costUsd))} ${r.unit}`,
+    ourCost: `${rate(r.costUsd * r.quotedPer)} ${r.unit}`,
+    youPay: `${rate(r.costUsd * r.quotedPer * METERED_MARKUP)} ${r.unit}`,
   })),
   note:
     'Applies only to plans with `meteredInfraPassThrough`. Dataset storage ' +
@@ -1166,27 +1181,34 @@ const frameMetered = frame.sections
  *
  * This is a divergence between the code and the DESIGN RECORD, not a live
  * defect. `copy-*.json` is an extraction of the Figma frame — the file says so
- * itself: "a record of the design, not of the truth" — and both cells here
- * still carry the pre-AGL-1280 rates the frame was drawn with. AGL-1280
- * measured the real costs on 2026-08-09 (GCS Standard US multi-region list for
- * storage; the actual ~12 reads / ~9 writes / one ~0.4s invocation of
- * `/api/forms/submit` for submissions) and the corrected set was locked for
- * the public beta. The published page was corrected too — the 2026-08-19
- * transcription in `apps/console/specs/published-pricing-table-parity.spec.ts`
- * records `aglyn.com/pricing` serving $0.0338 / GB-mo and $0.065 / 1k. The
- * frame is the one artifact left behind.
+ * itself: "a record of the design, not of the truth" — so a cell here is one
+ * the frame has not been re-drawn for yet.
  *
  * Declared rather than left to red, because re-exporting the frame is a Figma
- * round-trip nobody should be forced into mid-freeze. Declared, NOT excused:
- * the recorded value is compared exactly, so the frame drifting to a THIRD
- * number fails, and the frame being re-exported correctly fails too and forces
- * the entry out. An entry that matches nothing is the one thing this cannot
- * become.
+ * round-trip and hand-patching the extraction is worse than either: AGL-2679
+ * found `copy-*.json` carrying a mix of values no single run of the extractor
+ * could have produced, which made the reconciler compare the code against a
+ * partly hand-maintained copy of itself.
+ *
+ * Declared, NOT excused: the recorded value is compared exactly, so the frame
+ * drifting to a THIRD number fails, and the frame being re-exported correctly
+ * fails too and forces the entry out. An entry that matches nothing is the one
+ * thing this cannot become.
  */
 const FRAME_STALE_METERED: Record<
   string,
   { ourCost: string; youPay: string; why: string }
-> = {}
+> = {
+  'Page views (bandwidth + reads)': {
+    ourCost: '$0.10 / 1k views',
+    youPay: '$0.13 / 1k views',
+    why:
+      'the 2026-09-09 re-peg (AGL-2711) moved `perPageView` from $0.0001 to ' +
+      '$0.00016153846, so the published figure is $0.21 / 1k views. The four ' +
+      'Figma frames still draw the rate the meter carried while it was ' +
+      'calibrated against a 627 KB page. Redraw them and this entry comes out.',
+  },
+}
 
 for (const [label, [ourCost, youPay]] of injected('--declare-stale-metered', 3)) {
   FRAME_STALE_METERED[label] = { ourCost, youPay, why: INJECTED_WHY }
@@ -2047,6 +2069,14 @@ console.log()
 console.log(`declared divergences from the frame: ` +
   `${Object.keys(EXPECTED_MISSING).length} ours-only, ` +
   `${Object.keys(EXPECTED_EXTRA).length} frame-only`)
+// The pass-through exemptions by name. A live exemption that appears nowhere
+// in a clean run is an exemption nobody remembers to retire, and this table is
+// the one whose cells are a published price.
+for (const [label, d] of Object.entries(FRAME_STALE_METERED)) {
+  console.log(
+    `  pass-through exempt: ${label} — frame draws ${d.ourCost} / ${d.youPay}`,
+  )
+}
 // Printed because a reconciler that silently matched NOTHING would report
 // exactly as clean as one that matched everything. A zero here is a failure
 // (`reconciled ZERO cells`), and a number that collapses is visible in a diff.

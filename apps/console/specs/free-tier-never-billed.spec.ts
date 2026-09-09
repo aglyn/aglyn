@@ -244,7 +244,10 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
       freeOrg(),
     )
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
-    expect(estimate.costUsd).toBeCloseTo(100, 0) // $0.0001 × 1M — real COGS
+    // $0.00016153846 × 1M — real COGS, and the figure the 2026-09-09 re-peg
+    // moved. What free costs the platform is the reason the cap exists; what
+    // it bills is zero either way, which is the line below.
+    expect(estimate.costUsd).toBeCloseTo(161.54, 2)
     expect(estimate.billedCents).toBe(0)
   })
 

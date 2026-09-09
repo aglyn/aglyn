@@ -69,7 +69,9 @@ const USAGE_METERING_TS = 'apps/console/utils/usage-metering.ts'
  * re-pin. A price change moves this pin and the Decision Log together.
  *
  * Agency moved once since the lock — 799 → 1299 monthly, 649 → 1049 annual,
- * recorded in "2026-08-31 — Agency is $1,299/mo and $1,049 annual". It is
+ * recorded in "2026-08-31 — Agency is $1,299/mo and $1,049 annual". The page
+ * view rate moved once too — $0.13 → $0.21 per 1,000, recorded in
+ * "2026-09-09 — The page-view rate is re-pegged to a 1012.8 KB page". Both are
  * pinned here because the decision is written down, not because the check was
  * red: a pin moved to silence a failure records nothing and can catch nothing
  * afterwards. Every other column is where Sept 1 put it.
@@ -89,7 +91,7 @@ const LOCKED = {
   // What `/pricing` publishes: unit cost × 1.30, in the units the page quotes.
   publishedMetered: {
     storagePerGbMonth: 0.0338,
-    perThousandPageViews: 0.13,
+    perThousandPageViews: 0.21,
     perThousandFormSubmissions: 0.065,
   },
 }

@@ -929,64 +929,77 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       expect(METERED_MARKUP).toBe(1.3)
     })
 
-    it('Page views (bandwidth + reads) — $0.13 / 1,000', () => {
+    it('Page views (bandwidth + reads) — $0.21 / 1,000', () => {
       expect(
         METERED_UNIT_RATES_USD.perPageView * METERED_MARKUP * 1000,
-      ).toBeCloseTo(0.13, 6)
+      ).toBeCloseTo(0.21, 6)
     })
 
     /**
-     * ⚠️ THE PAGE AND THE CODE AGREE; NEITHER MATCHES THE MEASUREMENT.
+     * THE PAGE, THE CODE AND THE MEASUREMENT NOW AGREE (AGL-2711).
      *
-     * Every other divergence in this file is between what `/pricing` states
-     * and what the code charges. This one is different and worse: the page and
-     * the code both say $0.13 per 1,000, and the thing they disagree with is
-     * the physical page a customer's visitor actually downloads.
+     * This row spent weeks as the one divergence in this file that was not
+     * between `/pricing` and the code. Both said $0.13 per 1,000, and the
+     * thing they disagreed with was the physical page a customer's visitor
+     * downloads: `perPageView` is a COST, calibrated once against a 627 KB
+     * cold load, while the published page measured over a thousand. The meter
+     * ran at roughly -19% margin against its own published claim.
      *
-     * `perPageView` is a COST, calibrated once against a 627 KB cold load. A
-     * cold load of `aglyn.com/` now measures 1010.3 KB of first-party encoded
-     * bytes at first paint, so the same per-KB basis gives $0.000161 and a
-     * billed $0.21 per 1,000. At the published $0.13 the meter runs at roughly
-     * -19% margin, and about 958 KB of that page is JavaScript — every visitor
-     * to every published site pays whatever the page contains.
+     * The standing decision was to reduce the weight rather than reprice the
+     * promise. That reduction landed and shipped, the page was re-measured at
+     * 976.1 KB on 2026-09-09, and it is still far above 627 KB — so the
+     * re-peg the reduction was meant to avoid became the honest move, and the
+     * rate went to $0.00016153846, a published $0.21 per 1,000.
      *
-     * The gap is REVIEWED and deliberately still open. Correcting the cost
-     * moves `METERED_BILLED_RATES_USD` and therefore a customer's invoice, so
-     * it is a pricing decision, and the standing one is that reducing the page
-     * weight is preferred over repricing the promise: a re-peg made now is a
-     * price change a successful reduction would immediately have to walk back.
-     * What the test can do is refuse to let the gap be forgotten, and refuse
-     * to let it be closed by editing the published figure alone.
+     * What this case asserts is the INVERSION, not the arithmetic. The rate is
+     * now priced for MORE page than the page weighs, deliberately: charging
+     * under cost can only be corrected by charging more, and the headroom is
+     * what keeps the next correction pointed downward. A page that grows back
+     * past its basis fails here, and that failure is the whole point of the
+     * row.
      *
      * `tools/tenant-page-budget.json` holds the measurement and
-     * `npm run check:page-view-rate` holds the gap; this asserts the two
+     * `npm run check:page-view-rate` holds the peg; this asserts the two
      * agree, so the record cannot drift from the rate it describes.
      */
-    it('the $0.13 is priced for a 627 KB page that now measures 1010.3 KB', () => {
+    it('the $0.21 is priced for a 1012.8 KB page that measures 976.1 KB', () => {
       const { wireCalibration } = JSON.parse(
         readFileSync(
           join(__dirname, '..', '..', '..', 'tools', 'tenant-page-budget.json'),
           'utf8',
         ),
       )
-      expect(wireCalibration.pricedForKb).toBe(627)
-      expect(wireCalibration.measuredKb).toBe(1010.3)
-      // The rate on the page is the one the 627 KB basis implies…
+      expect(wireCalibration.pricedForKb).toBe(1012.8)
+      expect(wireCalibration.measuredKb).toBe(976.1)
+      // The rate on the page is the one the recorded basis implies, at the
+      // per-KB cost the 2026-08-09 calibration fixed and this re-peg did not
+      // move. Six places, because the rate is pinned to a round PRICE rather
+      // than to a round cost and the two part company below that.
       expect(METERED_UNIT_RATES_USD.perPageView).toBeCloseTo(
         (0.0001 * wireCalibration.pricedForKb) / 627,
-        10,
+        6,
       )
-      // …and the measured page implies a materially different one, which is
-      // the whole finding. A weight that drifted back under the calibration
-      // would make this fail, and that failure is the good news.
+      // The basis covers the page rather than falling short of it. This is the
+      // assertion that inverted: it read `toBeGreaterThan(rate * 1.5)` while
+      // the meter was under-priced.
       const impliedByMeasured = (0.0001 * wireCalibration.measuredKb) / 627
-      expect(impliedByMeasured).toBeGreaterThan(
-        METERED_UNIT_RATES_USD.perPageView * 1.5,
+      expect(impliedByMeasured).toBeLessThan(
+        METERED_UNIT_RATES_USD.perPageView,
       )
-      // Rounded the way a published figure would be: $0.21 per 1,000 against
-      // the $0.13 the page states.
+      // …and not by so much that we are quietly charging well over cost. The
+      // headroom is a rounding of the price, not a margin.
+      expect(impliedByMeasured).toBeGreaterThan(
+        METERED_UNIT_RATES_USD.perPageView * 0.95,
+      )
+      // Rounded the way a published figure is: the basis lands on $0.21 per
+      // 1,000, which is what the page states.
       expect(
-        Math.round(impliedByMeasured * METERED_MARKUP * 1000 * 100) / 100,
+        Math.round(
+          ((0.0001 * wireCalibration.pricedForKb) / 627) *
+            METERED_MARKUP *
+            1000 *
+            100,
+        ) / 100,
       ).toBe(0.21)
     })
 

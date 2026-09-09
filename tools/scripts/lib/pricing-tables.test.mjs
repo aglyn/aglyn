@@ -272,28 +272,28 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
    * compare table had every case above and the metered infrastructure table
    * beside it had none, which is how `/pricing` came to advertise $0.65 / 1k
    * form submissions against a charged $0.065 / 1k for weeks. Two of the six
-   * cells are DECLARED stale in `FRAME_STALE_METERED` because the page is
-   * besigner-published content this repo cannot edit; the cases below are what
-   * stop that declaration from becoming a blanket exemption.
+   * cells are DECLARED stale in `FRAME_STALE_METERED` because the frames they
+   * come from are a Figma export this repo cannot regenerate; the cases below
+   * are what stop that declaration from becoming a blanket exemption.
    *========================================*/
 
   it('fails when a pass-through cell disagrees and nothing declares it', () => {
     resetFixtures()
     const data = readFrame()
     const row = passThrough(data).records.find(
-      (r) => r.cells[0] === 'Page views (bandwidth + reads)',
+      (r) => r.cells[0] === 'Form submissions',
     )
     assert.ok(row, 'fixture no longer carries the row this case perturbs')
-    // The one pass-through row that currently AGREES with the code, chosen on
-    // purpose: perturbing a declared-stale row would test the declaration
-    // rather than the comparison.
-    row.cells[2] = '$9.99 / 1k views'
+    // A pass-through row that AGREES with the code, chosen on purpose:
+    // perturbing a declared-stale row would test the declaration rather than
+    // the comparison.
+    row.cells[2] = '$9.99 / 1k'
     writeFrame(data)
 
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /PASS-THROUGH disagreements not declared/)
-    assert.match(run.stderr, /\$9\.99 \/ 1k views/)
+    assert.match(run.stderr, /\$9\.99 \/ 1k/)
   })
 
   it('fails when a DECLARED-stale row drifts to a third value', () => {
@@ -355,12 +355,19 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /pass-through rows the frame does not carry/)
   })
 
-  it('publishes the LOCKED metered rates, to four decimals where needed', () => {
-    // locked $0.0338/GB-mo · $0.13/1k page views · $0.065/1k form
-    // submissions on 2026-08-18. Asserted on the generator's OUTPUT rather
-    // than on the constants, because two-decimal formatting would round the
-    // cost and the +30% columns into agreement and publish a table that looks
-    // internally consistent while stating neither figure.
+  it('publishes the metered rates, to six decimals where needed', () => {
+    // $0.0338/GB-mo and $0.065/1k form submissions locked 2026-08-18; page
+    // views re-pegged to $0.21/1k on 2026-09-09 (AGL-2711). Asserted on the
+    // generator's OUTPUT rather than on the constants, because two-decimal
+    // formatting would round the cost and the +30% columns into agreement and
+    // publish a table that looks internally consistent while stating neither
+    // figure.
+    //
+    // The page-view row is where that formatting earns its keep, and where
+    // the ORDER of the rounding does too. Its cost is $0.161538 / 1k — the
+    // rate is pinned so the PRICE is round, which leaves the cost a long
+    // decimal — and the price beside it must still read $0.21. Rounding the
+    // cost first and marking up the rounded figure publishes $0.209999.
     resetFixtures()
     const run = check()
     assert.equal(run.status, 0)
@@ -371,8 +378,8 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
         ['Media & file storage', '$0.026 / GB-mo', '$0.0338 / GB-mo'],
         [
           'Page views (bandwidth + reads)',
-          '$0.10 / 1k views',
-          '$0.13 / 1k views',
+          '$0.161538 / 1k views',
+          '$0.21 / 1k views',
         ],
         ['Form submissions', '$0.05 / 1k', '$0.065 / 1k'],
       ],

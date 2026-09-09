@@ -163,11 +163,19 @@ test('compareUnitRateTables catches the two tables diverging', () => {
 
 test('publishedMeteredRates reproduces the figures on /pricing', () => {
   const p = publishedMeteredRates(
-    { storagePerGbMonth: 0.026, perPageView: 0.0001, perFormSubmission: 0.00005 },
+    {
+      storagePerGbMonth: 0.026,
+      perPageView: 0.00016153846,
+      perFormSubmission: 0.00005,
+    },
     1.3,
   )
   assert.equal(p.storagePerGbMonth, 0.0338)
-  assert.equal(p.perThousandPageViews, 0.13)
+  // The page-view rate is pinned so this product is round: $0.00016153846 ×
+  // 1.3 × 1,000 is $0.209999998, and the cent it rounds to is the figure the
+  // page states. A conversion that carried the tail through would publish a
+  // price no invoice ever shows.
+  assert.equal(p.perThousandPageViews, 0.21)
   assert.equal(p.perThousandFormSubmissions, 0.065)
 })
 
