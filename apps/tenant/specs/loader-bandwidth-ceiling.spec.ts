@@ -202,7 +202,7 @@ describe('the ceiling arithmetic the loader is driven by', () => {
     expect(free.ceiling).toBe(100_000)
     expect(free.exceeded).toBe(true)
     expect(free.degraded).toBe(true)
-    expect(starter.ceiling).toBe(262_144)
+    expect(starter.ceiling).toBe(155_299)
     expect(starter.exceeded).toBe(false)
     // The metered plan never degrades even past its OWN ceiling.
     expect(tripFor('starter', 1_000_000).exceeded).toBe(true)
@@ -228,7 +228,7 @@ describe('the ceiling arithmetic the loader is driven by', () => {
     for (let i = 1; i < ladder.length; i++) {
       expect(ladder[i]).toBeGreaterThanOrEqual(ladder[i - 1])
     }
-    expect(ladder[ladder.length - 1]).toBe(16_148_070)
+    expect(ladder[ladder.length - 1]).toBe(9_566_392)
     expect(Number.isFinite(ladder[ladder.length - 1])).toBe(true)
     const contracted = Aglyn.checkBandwidthAbuseCeiling(
       { plan: 'enterprise', entitlements: { bandwidthGb: Aglyn.UNLIMITED } } as never,
@@ -268,7 +268,7 @@ describe('the tenant loader refuses a contained FREE site (AGL-2155)', () => {
     })
     const result: any = await loadPageData('acme', [])
     // Refused: no composed canvas reaches the visitor, so none of the ~40
-    // Firestore reads and ~600 KB of egress a real render costs are paid.
+    // Firestore reads and ~1,013 KB of egress a real render costs are paid.
     expect(result.props.maintenanceFallback).toBe(true)
     expect(result.props.nodes).toBeNull()
     expect(result.props.lockdown.reason).toBe('bandwidth_ceiling')
