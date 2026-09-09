@@ -84,6 +84,7 @@ import BesignerMediaPickerProvider from '../../../../../../../../../../component
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
+import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import {
@@ -690,6 +691,7 @@ function FormBesignerPage() {
                   <MainLayout
                     enableAppBarElevation
                     besigner
+                    wordmark={<BesignerWordmark />}
                     actionsPrefix={<BesignerFunctionsButton hostId={hostId} />}
                     backButton={
                       {

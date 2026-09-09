@@ -18,6 +18,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { DOCS_HELP_EXCERPTS } from './docs-help-excerpts.generated'
 import {
   buildDocsUrl,
   DOCS_BASE_URL,
@@ -52,10 +53,26 @@ describe('docs help registry', () => {
       expect(topic.path.startsWith('/')).toBe(true)
       expect(topic.path.endsWith('/')).toBe(false)
       expect(topic.title.length).toBeGreaterThan(0)
-      // Excerpts are tooltip copy (verbatim docs descriptions) — keep short.
-      expect(topic.excerpt.length).toBeGreaterThan(0)
-      expect(topic.excerpt.length).toBeLessThanOrEqual(220)
     }
+  })
+
+  it('gives every topic exactly one excerpt', () => {
+    // The excerpts are a module of their own so a console page does not carry
+    // 20 KB of prose to paint a `?` (AGL-2706), which makes "every topic still
+    // has one" a thing to assert rather than a thing to read. The `satisfies`
+    // on the generated map says the same at compile time; this says it about
+    // the objects that ship, and catches the reverse — an excerpt whose topic
+    // has been deleted, which no type would complain about.
+    expect(Object.keys(DOCS_HELP_EXCERPTS).sort()).toEqual(
+      Object.keys(DOCS_HELP_TOPICS).sort(),
+    )
+    // Excerpts are tooltip copy (verbatim docs descriptions) — keep short.
+    const tooLong = Object.entries(DOCS_HELP_EXCERPTS).filter(
+      ([, excerpt]) => excerpt.length < 1 || excerpt.length > 220,
+    )
+    expect(tooLong.map(([key, excerpt]) => `${key} (${excerpt.length})`)).toEqual(
+      [],
+    )
   })
 
   it('every topic points at an existing apps/docs page', () => {

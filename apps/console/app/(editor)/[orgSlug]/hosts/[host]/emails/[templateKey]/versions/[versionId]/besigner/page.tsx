@@ -69,6 +69,7 @@ import PresenceAvatars from '../../../../../../../../../../components/presence-a
 import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
+import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../../../constants/console-plugin-loader'
@@ -503,6 +504,7 @@ function HostEmailBesignerPage() {
       <MainLayout
         enableAppBarElevation
         besigner
+        wordmark={<BesignerWordmark />}
         backButton={
           {
             component: AppLink,

@@ -16,9 +16,12 @@
  */
 
 // The contextual-help topic registry is GENERATED from the docs site — see
-// docs/DOCS_HELP_REGISTRY.md. Titles, excerpts, and heading anchors mirror
-// apps/docs/docs; this module adds the URL builder and the docsHelp() resolver
-// on top. Regenerate with: node tools/scripts/generate-docs-help.mjs
+// docs/DOCS_HELP_REGISTRY.md. Titles and heading anchors mirror apps/docs/docs,
+// as do the excerpts in the file beside it; this module adds the URL builder
+// and the docsHelp() resolver on top.
+// Regenerate with: node tools/scripts/generate-docs-help.mjs
+import { createElement, type ReactNode } from 'react'
+import DocsHelpExcerpt from '../components/docs-help-excerpt.component'
 import {
   type DocsHelpAnchor,
   DOCS_HELP_TOPICS,
@@ -129,15 +132,25 @@ export interface DocsHelpOverrides<
  * into the `HelpTipContent` shape the shared UI help affordances accept
  * (AGL-600/601). The `anchor` is constrained to the topic page's real
  * headings, so a docs restructure surfaces as a type error here.
+ *
+ * The title and href are strings, resolved here and now: they are what a help
+ * button renders BEFORE anyone hovers it — its accessible name and its
+ * destination. The excerpt is a node instead, because it is read only inside
+ * an open tooltip and the registry's 147 excerpts are ~20 KB of prose that
+ * every console page was otherwise carrying (AGL-2706). `DocsHelpExcerpt`
+ * fetches them when a tooltip mounts; `HelpTipContent.excerpt` has always
+ * been a `ReactNode`, so a caller passing this straight through is unchanged.
+ * An `overrides.excerpt` still short-circuits it — a card that writes its own
+ * sentence never reaches the registry at all.
  */
 export function docsHelp<K extends DocsHelpTopicKey>(
   topic: K,
   overrides: DocsHelpOverrides<K> = {},
-): { title: string; excerpt: string; href: string } {
-  const { path, title, excerpt }: DocsHelpTopic = DOCS_HELP_TOPICS[topic]
+): { title: string; excerpt: ReactNode; href: string } {
+  const { path, title }: DocsHelpTopic = DOCS_HELP_TOPICS[topic]
   return {
     title: overrides.title ?? title,
-    excerpt: overrides.excerpt ?? excerpt,
+    excerpt: overrides.excerpt ?? createElement(DocsHelpExcerpt, { topic }),
     href: `${buildDocsUrl(path)}${overrides.anchor ?? ''}`,
   }
 }

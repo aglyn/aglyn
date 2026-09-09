@@ -84,6 +84,7 @@ import BesignerVersionsComponent from '../../../../../../../../../../components/
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
+import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import {
@@ -579,6 +580,7 @@ function LayoutBesignerPage(props) {
                   <MainLayout
                     enableAppBarElevation
                     besigner
+                    wordmark={<BesignerWordmark />}
                     centerPrefix={
                       <BesignerDocumentSwitcherComponent
                         hostId={hostId}

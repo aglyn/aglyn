@@ -37,6 +37,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import type { ReactElement } from 'react'
+
+import { DOCS_HELP_EXCERPTS } from '../constants/docs-help-excerpts.generated'
 import {
   docsHelp,
   type DocsHelpTopicKey,
@@ -106,9 +109,22 @@ describe('site-structure help tips are distinct (AGL-2486)', () => {
     // The excerpt is the docs page's frontmatter `description`, verbatim. Four
     // pages with four near-identical descriptions would leave the reported bug
     // half-fixed, so this reads the resolved strings rather than the wiring.
-    const excerpts = SURFACES.map(({ topic }) => docsHelp(topic).excerpt)
+    //
+    // The strings live in the excerpt registry since they left the console's
+    // first paint (AGL-2706), and `docsHelp` hands the tooltip a node that
+    // reads them. Both halves are checked: the four texts differ, AND each
+    // surface's node asks for its own topic — a surface wired to the wrong
+    // one would otherwise pass the first half on someone else's excerpt.
+    const excerpts = SURFACES.map(({ topic }) => DOCS_HELP_EXCERPTS[topic])
     expect(excerpts.every((excerpt) => excerpt.trim().length > 0)).toBe(true)
     expect(new Set(excerpts).size).toBe(SURFACES.length)
+
+    const asked = SURFACES.map(
+      ({ topic }) =>
+        (docsHelp(topic).excerpt as ReactElement<{ topic: DocsHelpTopicKey }>)
+          .props.topic,
+    )
+    expect(asked).toEqual(SURFACES.map(({ topic }) => topic))
   })
 
   it('keeps the pre-split docs URL resolvable', () => {
