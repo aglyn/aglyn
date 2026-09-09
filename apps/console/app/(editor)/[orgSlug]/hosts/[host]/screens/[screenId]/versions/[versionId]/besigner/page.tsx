@@ -115,6 +115,7 @@ import revalidateLivePages, {
 } from '../../../../../../../../../../utils/revalidate-live-pages'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
+import BesignerWordmark from '../../../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../../../constants/app-setup'
 import {
@@ -1592,6 +1593,7 @@ function BesignerPage(props) {
                   <MainLayout
                     enableAppBarElevation
                     besigner
+                    wordmark={<BesignerWordmark />}
                     centerPrefix={
                       <BesignerDocumentSwitcherComponent
                         hostId={hostId}

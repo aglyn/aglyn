@@ -18,9 +18,10 @@
 import { ICON_VARIANT_LEFT } from '@aglyn/shared-data-enums'
 import { AppLink, type AppLinkProps, MdiIcon, type MdiIconProps, Menu, type MenuItemProps, type MenuProps, SrOnly } from '@aglyn/shared-ui-jsx'
 import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
-// Subpaths, not the barrel: the barrel reaches `svg-icons.tsx`, which draws
-// four more wordmarks the console never renders.
-import { AglynBesignerLogoFull } from '@aglyn/shared-ui-jsx/const/aglyn-besigner-logo-full'
+// Subpath, not the barrel: the barrel reaches `svg-icons.tsx`, which draws
+// five more wordmarks the console never renders. The besigner's wordmark is
+// not here either — it arrives as `wordmark` from the editor shells that draw
+// it, so a page carries only the mark it renders.
 import { AglynConsoleLogoFull } from '@aglyn/shared-ui-jsx/const/aglyn-console-logo-full'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArrEmpty } from '@aglyn/shared-util-tools'
@@ -134,6 +135,19 @@ export interface TopAppBarProps {
   enableAppBarElevation?: boolean
   quickActions?: QuickActionsMenuItem[]
   besigner?: boolean
+  /**
+   * The product wordmark worn by the app bar, defaulting to the console's.
+   *
+   * A slot rather than a second branch of the `besigner` flag because each
+   * wordmark is ~13 KB of outlined path data: branching here put both marks
+   * in the shell every route loads, so every console page carried the
+   * besigner logotype it never draws. The shell that knows which product it
+   * is supplies the mark, and a route ships one.
+   *
+   * White-label chrome still wins over it: an entitled org's own logo or
+   * product name replaces whatever wordmark the shell passed.
+   */
+  wordmark?: JSX.Node
   backButton?: Partial<ButtonProps>
 }
 
@@ -147,6 +161,7 @@ const TopAppBar = (props: TopAppBarProps) => {
     enableAppBarElevation,
     quickActions,
     besigner,
+    wordmark,
     backButton,
   } = props
   // The logo returns to the active org's home (AGL-631); the jump page when no
@@ -270,7 +285,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                       Aglyn wordmark, resolved through the one shared
                       `resolveBrandingProfile` (via useBranding). Non-white-label
                       orgs — and every surface until the org doc is confirmed —
-                      keep the Aglyn console/besigner logos exactly as before. */}
+                      keep the wordmark the shell passed. */}
                   {whiteLabel && branding.logoUrl ? (
                     <Box
                       component="img"
@@ -292,10 +307,10 @@ const TopAppBar = (props: TopAppBarProps) => {
                     >
                       {branding.productName}
                     </Typography>
-                  ) : besigner ? (
-                    <AglynBesignerLogoFull sx={{ height: 24, width: 'auto' }} />
                   ) : (
-                    <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />
+                    (wordmark ?? (
+                      <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />
+                    ))
                   )}
                   {appBarSuffix && (
                     <Typography
@@ -454,6 +469,7 @@ export function MainLayout(props: MainLayoutProps) {
     enableAppBarElevation,
     quickActions,
     besigner,
+    wordmark,
     backButton,
     ...rest
   } = props
@@ -485,6 +501,7 @@ export function MainLayout(props: MainLayoutProps) {
       <TopAppBar
         enableAppBarElevation={enableAppBarElevation}
         besigner={besigner}
+        wordmark={wordmark}
         backButton={backButton}
         centerPrefix={centerPrefix}
         centerNavigationItems={centerNavigationItems || []}

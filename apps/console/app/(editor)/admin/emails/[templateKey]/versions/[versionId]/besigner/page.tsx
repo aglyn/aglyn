@@ -58,6 +58,7 @@ import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../../components/besigner-app-bar.component'
+import BesignerWordmark from '../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
@@ -418,6 +419,7 @@ function SystemEmailBesignerPage() {
       <MainLayout
         enableAppBarElevation
         besigner
+        wordmark={<BesignerWordmark />}
         backButton={
           {
             component: AppLink,
