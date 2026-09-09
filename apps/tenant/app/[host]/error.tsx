@@ -17,6 +17,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
 import { useEffect } from 'react'
 
 /**
@@ -72,16 +73,7 @@ export default function HostError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      ;(
-        window as Window & { reportError?: (error: unknown) => void }
-      ).reportError?.(error)
-    } catch {
-      // Reporting never breaks the page.
-    }
-  }, [error])
+  useEffect(() => redispatchCaughtError(error), [error])
 
   return <SiteErrorScreen onReset={() => reset()} />
 }

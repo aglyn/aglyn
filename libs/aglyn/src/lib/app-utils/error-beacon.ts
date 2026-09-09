@@ -184,6 +184,14 @@ let installed = false
 let publishEvent: ((event: ErrorBeaconEvent) => void) | null = null
 
 /**
+ * Re-export so `error-beacon` stays the one name a caller has to know for
+ * browser error reporting. The definition lives in its own module because a
+ * boundary that imports it must not pull the installer below into a chunk
+ * every visitor downloads.
+ */
+export { redispatchCaughtError } from './redispatch-caught-error'
+
+/**
  * Report an error the code ALREADY CAUGHT.
  *
  * The two window handlers below see only what nothing caught. A `catch` that
