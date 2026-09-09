@@ -85,12 +85,15 @@ import { getApp } from 'firebase-admin/app'
 import {
   firebaseAdmin,
   getPlatformLockdown,
+  readAppCheckAttestation,
   readSignupCanaryWalk,
 } from '@aglyn/tenant-data-admin'
 import {
   isLockdownActive,
   lockdownBlocks,
+  appCheckAttestationHealth,
   signupCanaryHealth,
+  type AppCheckAttestationCheck,
   type SignupCanaryCheck,
 } from '@aglyn/aglyn/server'
 
@@ -140,6 +143,12 @@ export interface JourneysProbeResult {
    * `signupCanaryEnabled` for why this is omitted rather than reported green.
    */
   signupCanary?: SignupCanaryCheck
+  /**
+   * Absent until something is sampling the metric. Independent of the canary
+   * on purpose: this is what covers the canary's debug-token blindness, so it
+   * must not be able to go dark just because the canary did.
+   */
+  appCheckAttestation?: AppCheckAttestationCheck
 }
 
 
@@ -296,8 +305,11 @@ export async function probePublishAnnounce(): Promise<PublishAnnounceCheck> {
  * endpoint is public and unauthenticated and a probe that created an account
  * would be an org factory for anyone with `curl`.
  */
-import { signupCanaryEnabled } from './journeys-verdict'
-export { signupCanaryEnabled }
+import {
+  appCheckAttestationEnabled,
+  signupCanaryEnabled,
+} from './journeys-verdict'
+export { appCheckAttestationEnabled, signupCanaryEnabled }
 
 export async function probeSignupCanary(): Promise<SignupCanaryCheck> {
   const startedAt = Date.now()
@@ -305,20 +317,37 @@ export async function probeSignupCanary(): Promise<SignupCanaryCheck> {
   return signupCanaryHealth(marker, Date.now() - startedAt)
 }
 
-/** All four, in parallel. Each is independent and each memoises separately. */
+/**
+ * Is attestation working for real visitors? (AGL-2715)
+ *
+ * A read of one document that a scheduled job fills from Cloud Monitoring.
+ * The rate itself is Google's; this endpoint has no business calling
+ * Monitoring — a second credential, a slow call, and a quota anyone with
+ * `curl` could spend.
+ */
+export async function probeAppCheckAttestation(): Promise<AppCheckAttestationCheck> {
+  const startedAt = Date.now()
+  const samples = await readAppCheckAttestation()
+  return appCheckAttestationHealth(samples, Date.now() - startedAt)
+}
+
+/** All of them, in parallel. Each is independent and each memoises separately. */
 export async function probeJourneys(): Promise<JourneysProbeResult> {
   const canaryOn = signupCanaryEnabled()
-  const [create, publishRules, publishAnnounce, signupCanary] =
+  const attestationOn = appCheckAttestationEnabled()
+  const [create, publishRules, publishAnnounce, signupCanary, appCheckAttestation] =
     await Promise.all([
       probeCreate(),
       probePublishRules(),
       probePublishAnnounce(),
       canaryOn ? probeSignupCanary() : Promise.resolve(undefined),
+      attestationOn ? probeAppCheckAttestation() : Promise.resolve(undefined),
     ])
   return {
     create,
     publishRules,
     publishAnnounce,
     ...(signupCanary ? { signupCanary } : {}),
+    ...(appCheckAttestation ? { appCheckAttestation } : {}),
   }
 }

@@ -1418,3 +1418,98 @@ export async function readSignupCanaryWalk(options?: {
     return null
   }
 }
+
+/**
+ * Document id for the App Check attestation sample (AGL-2715).
+ *
+ * The rate is published by Google to Cloud Monitoring, which a public health
+ * endpoint has no business calling: it needs a second credential, it is slow,
+ * and its quota is not something a route anyone can curl should be able to
+ * spend. So a scheduled job samples it and this holds the answer, exactly as
+ * the signup canary's own verdict is held.
+ *
+ * One document, overwritten each run — the last reading is the only one that
+ * answers "is attestation working now".
+ */
+export const APP_CHECK_ATTESTATION_DOC_ID = 'appCheckAttestation_production'
+
+/** How long a sample survives the sweep. */
+const APP_CHECK_ATTESTATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Budget for the single-document read on the health path. */
+const APP_CHECK_ATTESTATION_READ_BUDGET_MS = 2_000
+
+/**
+ * Record one sampling of the App Check verification counts.
+ *
+ * Awaited by its caller, like the canary's verdict and unlike the breadcrumbs
+ * in this file: the sample IS the work, and a door would rather report a
+ * missing reading than believe one nobody wrote down.
+ */
+export async function recordAppCheckAttestation(
+  samples: Array<{
+    result?: string
+    security?: string
+    service?: string
+    count?: number
+  }>,
+  options?: { now?: number; firestore?: any },
+): Promise<void> {
+  const nowMs = options?.now ?? Date.now()
+  const firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+  await firestore
+    .collection(RATE_LIMIT_COLLECTION)
+    .doc(APP_CHECK_ATTESTATION_DOC_ID)
+    .set({
+      sampledAtMs: nowMs,
+      samples,
+      expiresAt: new Date(nowMs + APP_CHECK_ATTESTATION_RETENTION_MS),
+    })
+}
+
+/**
+ * The last attestation sample, or null (AGL-2715).
+ *
+ * Null folds the three cases its siblings fold — never written, unusable, and
+ * the store would not answer — because each means *nothing here has shown that
+ * attestation is working*, and the verdict grades all three as
+ * `attestation-unavailable`.
+ *
+ * A sample older than the window it describes is also null. A stale reading is
+ * not a reading: reporting a six-hour-old rate as current is how a check comes
+ * to say attestation is fine long after it stopped being.
+ */
+export async function readAppCheckAttestation(options?: {
+  firestore?: any
+  budgetMs?: number
+  now?: number
+  maxAgeMs?: number
+}): Promise<Array<{
+  result?: string
+  security?: string
+  service?: string
+  count?: number
+}> | null> {
+  try {
+    const firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+    const snapshot = await withBudget<any>(
+      firestore
+        .collection(RATE_LIMIT_COLLECTION)
+        .doc(APP_CHECK_ATTESTATION_DOC_ID)
+        .get(),
+      options?.budgetMs ?? APP_CHECK_ATTESTATION_READ_BUDGET_MS,
+    )
+    if (!snapshot?.exists) return null
+    const sampledAtMs = snapshot.get('sampledAtMs')
+    if (typeof sampledAtMs !== 'number') return null
+    const nowMs = options?.now ?? Date.now()
+    // Twice the window it covers: one missed sampling is tolerated, two are
+    // not, and the reading still describes a period that overlaps now.
+    const maxAgeMs = options?.maxAgeMs ?? 12 * 60 * 60 * 1000
+    if (nowMs - sampledAtMs > maxAgeMs) return null
+    const samples = snapshot.get('samples')
+    return Array.isArray(samples) ? samples : null
+  } catch {
+    return null
+  }
+}

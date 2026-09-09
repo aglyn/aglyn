@@ -57,8 +57,11 @@ name: Signup canary
 # Restore the cron after the promotion carrying the exclusion is live and one
 # manual run has been shown not to move `signupAttempts`.
 on:
-  # schedule:
-  #   - cron: '25 * * * *'   # hourly, off the top where Actions queues cluster
+  schedule:
+    # Hourly, off the top of the hour where every other scheduled job in this
+    # repo clusters and Actions queues are deepest. Only the attestation job
+    # runs on this — see the `walk` job's own guard.
+    - cron: '25 * * * *'
   workflow_dispatch: {}
 
 # One walk at a time. Two concurrent runs would race for the same orphan sweep
@@ -71,7 +74,29 @@ permissions:
   contents: read
 
 jobs:
+  # Is App Check admitting real people? Reads only, and independent of the walk
+  # on purpose: this is the cover for the walk's debug-token blindness, so it
+  # must not go dark just because the walk did.
+  attestation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Install firebase-admin
+        run: npm install --no-save --no-audit --no-fund firebase-admin@13
+      - name: Sample the verification counts
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: node tools/e2e/appcheck-attestation.mjs
+
+  # ⛔ Manual only until the App Check exemption lands. See the walk's docblock.
   walk:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

@@ -72,7 +72,7 @@ const journeysProbe = memoizeWithTtl<JourneysProbeResult>(PROBE_TTL_MS, () =>
 )
 
 export async function GET(): Promise<Response> {
-  const { create, publishRules, publishAnnounce, signupCanary } =
+  const { create, publishRules, publishAnnounce, signupCanary, appCheckAttestation } =
     await journeysProbe()
   // Spread rather than assigned: an absent canary must leave no key at all,
   // because `signupCanary: undefined` would serialize into the body as a
@@ -82,6 +82,7 @@ export async function GET(): Promise<Response> {
     publishRules,
     publishAnnounce,
     ...(signupCanary ? { signupCanary } : {}),
+    ...(appCheckAttestation ? { appCheckAttestation } : {}),
   }
   const status = healthStatus(checks)
   return Response.json(

@@ -260,3 +260,19 @@ export function publishAnnounceHealth(
 export function signupCanaryEnabled(): boolean {
   return process.env['SIGNUP_CANARY_ENABLED'] === '1'
 }
+
+/**
+ * Is the App Check attestation sample being taken for this deployment?
+ *
+ * Same shape and same reasoning as `signupCanaryEnabled`: with nothing
+ * sampling the metric, a missing reading is graded red — correctly, once a
+ * sampler is expected — and would page forever on a deployment that has none.
+ * Reporting it green instead would claim a measurement nobody took.
+ *
+ * A SEPARATE flag from the canary's, deliberately. This check is what covers
+ * the canary's debug-token blindness, so tying the two together would let the
+ * cover disappear with the thing it covers.
+ */
+export function appCheckAttestationEnabled(): boolean {
+  return process.env['APP_CHECK_ATTESTATION_ENABLED'] === '1'
+}
