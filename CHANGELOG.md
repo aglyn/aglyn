@@ -9,6 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.107 — 2026-09-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.106...v1.0.0-beta.107)
+
+### Added
+
+- **tenant:** every site answers an agent — markdown, /llms.txt, /openapi.json ([AGL-2716](https://linear.app/aglyn/issue/AGL-2716))
+- **e2e:** the signup canary walker and its hourly schedule ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715))
+- **health:** a door that reports whether a stranger actually signed up ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715), [AGL-2714](https://linear.app/aglyn/issue/AGL-2714), [AGL-2581](https://linear.app/aglyn/issue/AGL-2581), [AGL-2713](https://linear.app/aglyn/issue/AGL-2713))
+
+<details>
+<summary>Also in this release: 1 ci</summary>
+
+- **canary:** hold the hourly schedule until the walk can pass ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715), [AGL-2714](https://linear.app/aglyn/issue/AGL-2714))
+
+</details>
+
 ## v1.0.0-beta.106 — 2026-09-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/4afe2f4b3...v1.0.0-beta.106)
