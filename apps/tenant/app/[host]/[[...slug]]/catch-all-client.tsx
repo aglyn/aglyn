@@ -56,6 +56,7 @@ import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { listSiteRuntimes } from '@aglyn/aglyn/plugin-manager/site-runtime'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { observer } from 'mobx-react-lite'
+import dynamic from 'next/dynamic'
 import {
   type CSSProperties,
   use,
@@ -67,8 +68,28 @@ import {
 import AttributionGuard from '../../../components/attribution-guard.component'
 import { loadSiteRealmPlugins } from '../../../utils/realm-plugins.client'
 import { sitePluginLoader } from '../../../utils/site-plugin-loader'
-import MembershipPage from './membership-page'
 import type { Props } from './types'
+
+/**
+ * The built-in auth forms, in a chunk of their own.
+ *
+ * These render on `/signin`, `/signup` and `/recover`, and only for a host
+ * that designated no auth screens — never on the content pages the page view
+ * is metered on. Statically imported they were far from free: MUI's
+ * `TextField` reaches `Select`, and `Select` reaches `SelectInput`,
+ * `NativeSelectInput`, `Menu`, `MenuList`, `Popover`, `Modal`, `FocusTrap`
+ * and `Backdrop`, so a form that renders on three paths priced every visit to
+ * every published screen.
+ *
+ * `ssr: true` keeps the forms in the served HTML where they DO render, and an
+ * explicit `loading` is what earns the lazy component its own `Suspense`
+ * boundary (`ssr: true` alone leaves it a `Fragment` leaning on an ancestor,
+ * which is the shape AGL-1541 removed from this page).
+ */
+const MembershipPage = dynamic(() => import('./membership-page'), {
+  ssr: true,
+  loading: () => null,
+})
 
 /**
  * In-flight and settled requests for a page's full node document (AGL-1285),

@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
 
 /**
@@ -40,15 +41,7 @@ export default function GlobalError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  if (typeof window !== 'undefined') {
-    try {
-      ;(
-        window as Window & { reportError?: (error: unknown) => void }
-      ).reportError?.(error)
-    } catch {
-      // Reporting never breaks the page.
-    }
-  }
+  redispatchCaughtError(error)
   return (
     <html lang="en">
       <body style={{ margin: 0 }}>

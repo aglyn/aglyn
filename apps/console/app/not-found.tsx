@@ -16,9 +16,24 @@
  */
 'use client'
 
-import AuthenticatedLayout from '../components/layouts/authenticated.layout'
-import MainLayout from '../components/layouts/main.layout'
-import NotFoundContent from '../components/not-found-content.component'
+import dynamic from 'next/dynamic'
+
+/**
+ * The screen itself, in a chunk of its own (AGL-2706).
+ *
+ * This boundary is a client reference in every successful response and gets
+ * its own chunk group, so the console chrome it composes was emitted twice on
+ * every route — a second app bar, avatar, org switcher, report-issue dialog
+ * and create-org dialog, plus the MUI `Tabs`, `Chip`, `Badge`, `AppBar` and
+ * `Avatar` behind them — to draw a page that appears only on an unmatched
+ * URL. `ssr: true` keeps the screen in the served markup where it does
+ * render; the explicit `loading` is what gives the lazy component its own
+ * `Suspense` boundary rather than an ancestor's.
+ */
+const RootNotFoundScreen = dynamic(
+  () => import('../components/root-not-found.component'),
+  { ssr: true, loading: () => null },
+)
 
 /**
  * Global not-found boundary (AGL-625). This root `not-found.tsx` catches both
@@ -29,11 +44,5 @@ import NotFoundContent from '../components/not-found-content.component'
  * itself when there is no current workspace.
  */
 export default function NotFound() {
-  return (
-    <AuthenticatedLayout>
-      <MainLayout>
-        <NotFoundContent />
-      </MainLayout>
-    </AuthenticatedLayout>
-  )
+  return <RootNotFoundScreen />
 }

@@ -17,6 +17,7 @@
 'use client'
 
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
+import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
 import { useEffect } from 'react'
 
 /**
@@ -54,16 +55,7 @@ export default function ConsoleError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      ;(
-        window as Window & { reportError?: (error: unknown) => void }
-      ).reportError?.(error)
-    } catch {
-      // Reporting never breaks the page.
-    }
-  }, [error])
+  useEffect(() => redispatchCaughtError(error), [error])
 
   return (
     <StatusScreenPlain

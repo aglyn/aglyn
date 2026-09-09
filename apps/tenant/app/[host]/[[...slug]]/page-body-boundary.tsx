@@ -17,30 +17,9 @@
 
 'use client'
 
+import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import type { ReactNode } from 'react'
-
-/**
- * Re-report a caught failure so it still reaches the error beacon (AGL-1538).
- *
- * React 19 routes errors that an error boundary CATCHES to `console.error`,
- * and only uncaught ones to `reportError` — so a boundary that stays quiet
- * converts a reported crash into an invisible one. `reportError` dispatches an
- * `error` event on `window`, which is the listener `installErrorBeacon`
- * registers, so the failure lands in Cloud Error Reporting exactly as it would
- * have. Optional because jsdom (and older Safari) has no `reportError`; a
- * missing one costs the report, never the page.
- */
-function reportToErrorBeacon(error: Error): void {
-  if (typeof window === 'undefined') return
-  try {
-    ;(window as Window & { reportError?: (error: unknown) => void }).reportError?.(
-      error,
-    )
-  } catch {
-    // Reporting never breaks the page.
-  }
-}
 
 /**
  * Isolates the tenant page BODY from the measurement/consent surface that
@@ -97,7 +76,7 @@ export default function PageBodyBoundary({
   children: ReactNode
 }) {
   return (
-    <ErrorBoundaryComponent fallback={<></>} onCatch={reportToErrorBeacon}>
+    <ErrorBoundaryComponent fallback={<></>} onCatch={redispatchCaughtError}>
       {children}
     </ErrorBoundaryComponent>
   )

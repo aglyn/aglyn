@@ -17,8 +17,8 @@
 
 'use client'
 
-import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
+import dynamic from 'next/dynamic'
 import {
   installCampaignForwarding,
   setCampaignForwardingConsent,
@@ -51,6 +51,25 @@ import {
 } from '@aglyn/aglyn/app-utils/visitor-consent'
 import { GOOGLE_ADS_VENDOR } from '@aglyn/aglyn/app-utils/advertising-tags'
 import AdvertisingTags from './advertising-tags'
+
+/**
+ * The consent surfaces, in a chunk of their own.
+ *
+ * `ssr: false` is what this component already does by hand: `consent.ready`
+ * starts false so the server and the first client render agree that nothing
+ * is drawn, which is what keeps the ISR-cached HTML from varying by region
+ * (AGL-1498). Deferring the module to match costs the page nothing it was
+ * rendering and takes MUI's `Dialog`, `Switch`, `FormControlLabel` and
+ * `SwitchBase` — the preferences dialog, which opens on a click that most
+ * visits never make — out of first paint on every published screen.
+ *
+ * The console mounts the same component directly, under its region simulator
+ * and its document preview, and is untouched by this.
+ */
+const ConsentBannerUi = dynamic(
+  () => import('@aglyn/aglyn/app-utils/consent-banner-ui'),
+  { ssr: false },
+)
 
 /**
  * The library the GA pair below brings to the page, named the way the Google

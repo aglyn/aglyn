@@ -16,9 +16,28 @@
  */
 'use client'
 
-import { Button } from '@mui/material'
+import dynamic from 'next/dynamic'
+import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
 import { useEffect } from 'react'
-import SiteStatusScreen from '../../components/site-status-screen.component'
+
+/**
+ * The branded body, in a chunk of its own.
+ *
+ * A Next error boundary is a client reference in every successful response's
+ * flight payload, so whatever it imports statically is downloaded by every
+ * visitor to every published site — and the status screen underneath reaches
+ * `AppLink`'s five MUI variants plus the `TextField`/`Select` cluster behind
+ * the 404 search box. `ssr: false` is exact rather than a concession: React
+ * 19.2 runs no error boundary during streaming SSR (the note in
+ * `page-body-boundary.tsx` records the measurement), so this markup was never
+ * in served HTML to begin with. It also carries its own `Suspense` — see
+ * `loadable.js`, where `ssr: false` is one of the two conditions for one — so
+ * this does not lean on an ancestor boundary the way AGL-1541 did.
+ */
+const SiteErrorScreen = dynamic(
+  () => import('../../components/site-error-screen.component'),
+  { ssr: false },
+)
 
 /**
  * The tenant's branded crash page (AGL-2074).
@@ -54,30 +73,7 @@ export default function HostError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      ;(
-        window as Window & { reportError?: (error: unknown) => void }
-      ).reportError?.(error)
-    } catch {
-      // Reporting never breaks the page.
-    }
-  }, [error])
+  useEffect(() => redispatchCaughtError(error), [error])
 
-  return (
-    <SiteStatusScreen
-      code="500"
-      title={'Something went wrong'}
-      message={
-        'This page didn’t load properly. Trying again often fixes it — if it ' +
-        'doesn’t, the rest of the site is still available.'
-      }
-      action={
-        <Button variant="outlined" onClick={() => reset()}>
-          {'Try again'}
-        </Button>
-      }
-    />
-  )
+  return <SiteErrorScreen onReset={() => reset()} />
 }
