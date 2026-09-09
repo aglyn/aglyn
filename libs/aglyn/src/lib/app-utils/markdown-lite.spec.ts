@@ -940,12 +940,16 @@ describe('heading-anchor coverage across the markdown renderers (AGL-1162)', () 
     expect(renderers.length).toBeGreaterThanOrEqual(6)
     // And the sweep must actually reach the two surfaces a published post is
     // rendered by, or the coverage assertion is checking the wrong files.
+    // The tenant's is `collection-fallback.tsx` since AGL-2706 — the same
+    // renderer, lifted out of `catch-all-client` so the parser stops riding
+    // on every page's first load. Named by file rather than by app so a move
+    // like that one fails here instead of quietly emptying the sweep.
     const files = renderers.map((entry) => entry.file)
     expect(files).toContain(
       'libs/plugins/mui/src/lib/components/collection.tsx',
     )
     expect(files).toContain(
-      'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx',
+      'apps/tenant/app/[host]/[scheme]/[[...slug]]/collection-fallback.tsx',
     )
   })
 
