@@ -20,20 +20,6 @@ import { splitTopLevelArgs } from './palette-token-css-var'
 
 export * from './palette-token-css-var'
 
-export enum FontWeight {
-  THIN = 100,
-  EXTRA_LIGHT = 200,
-  LIGHT = 300,
-  NORMAL = 400,
-  MEDIUM = 500,
-  SEMI_BOLD = 600,
-  BOLD = 700,
-  EXTRA_BOLD = 800,
-  BLACK = 900,
-  LIGHTER = 'lighter',
-  BOLDER = 'bolder',
-}
-
 export enum CssUnit {
   INITIAL = 'initial',
   UNSET = 'unset',
