@@ -72,7 +72,7 @@ views**, `hostLimit × formSubmissionsPerMonth`".
 The published `/pricing` copy is already honest about this. The metered rate
 table's first row is literally:
 
-> **Page views (bandwidth + reads)** — $0.13 / 1,000
+> **Page views (bandwidth + reads)** — $0.21 / 1,000
 
 and the section lead-in reads:
 
@@ -89,8 +89,10 @@ page-view meter prices. That is one coherent story already.
 are the same resource, but it is not a double charge and not a second cap.
 Page views are the *unit*; `bandwidthGb` is the *band* expressed in the unit
 customers understand. One is derived from the other by a single constant
-(`ESTIMATED_PAGE_TRANSFER_BYTES`, 600 KB), used in both directions — forward
-in `usage-metering.ts:136`, backward in `usage-alerts/route.ts:119-120`.
+(`ESTIMATED_PAGE_TRANSFER_BYTES`, 1012.8 KB — the same page weight
+`perPageView` is calibrated against, and half of a pair neither of which may
+move alone), used in both directions — forward in `usage-metering.ts:136`,
+backward in `usage-alerts/route.ts:119-120`.
 
 The only place it reads as an unbacked cap is the **console plan card**
 (`billing-plan-cards.component.tsx:284-286`), which renders a bare

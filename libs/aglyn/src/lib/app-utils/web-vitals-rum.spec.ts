@@ -306,3 +306,122 @@ describe('web-vitals → GA4 reporting (AGL-1642)', () => {
     ).not.toThrow()
   })
 })
+
+/**
+ * Which DESTINATION a metric is sent to (AGL-2710).
+ *
+ * A gtag event with no `send_to` reaches every destination the loader is
+ * configured for. On `aglyn.com` that is the GA4 property AND the Google Ads
+ * account, and one such event was measured attempting seven requests to
+ * `googleads.g.doubleclick.net` and `google.com/{pagead,rmkt,ccm}` — four
+ * metrics deep, every pageview, for an account with no report that reads a
+ * layout shift. The same event with `send_to` naming the GA4 id attempted
+ * zero of them and still landed its GA hit.
+ *
+ * PLANTED REDS (both run, counts observed):
+ *  1. Send `send_to` unconditionally, empty list included → 2 fail: the
+ *     no-ids case here, and the exact-shape case above, which pins the whole
+ *     param object and so also says the key is absent when nothing named it.
+ *     That is a page whose tag came through GTM losing its measurement
+ *     entirely, which is worse than the waste being fixed.
+ *  2. Read the ids at INSTALL time instead of at delivery → 1 fails, the held
+ *     metric. Both surfaces load their tag after the first metric, so an
+ *     install-time read finds nothing on every pageview and the targeting
+ *     never applies at all.
+ */
+describe('the metric destination (AGL-2710)', () => {
+  const mountGtagScript = (id: string) => {
+    const script = document.createElement('script')
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${id}`
+    document.head.appendChild(script)
+    return script
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    resetWebVitalsReporting()
+    gtagCalls.length = 0
+    registerCalls = 0
+    for (const key of Object.keys(registered)) delete registered[key]
+    unmountGtag()
+    document.head.querySelectorAll('script').forEach((s) => s.remove())
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+    unmountGtag()
+    document.head.querySelectorAll('script').forEach((s) => s.remove())
+  })
+
+  it('names the resident GA4 property, so no ads destination is asked', async () => {
+    mountGtagScript('G-YW5PG16YTM')
+    mountGtag()
+    await install({ surface: 'site' })
+    registered['LCP'](LCP_METRIC)
+
+    const [, , params] = gtagCalls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ]
+    expect(params.send_to).toEqual(['G-YW5PG16YTM'])
+    // Everything the metric already carried is untouched: this narrows where
+    // the event goes, never what it says.
+    expect(params.metric_rating).toBe('needs-improvement')
+    expect(params.value).toBe(2412.5)
+  })
+
+  it('does NOT name an ads account that is loaded beside it', async () => {
+    // The whole point. A page running Google Ads has an `AW-` loader in the
+    // document too, and naming it would send the metric exactly where it is
+    // being kept out of.
+    mountGtagScript('G-YW5PG16YTM')
+    mountGtagScript('AW-18401436785')
+    mountGtag()
+    await install({ surface: 'site' })
+    registered['CLS']({ name: 'CLS', id: 'v4-1', value: 0.09, delta: 0.04 })
+
+    const [, , params] = gtagCalls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ]
+    expect(params.send_to).toEqual(['G-YW5PG16YTM'])
+  })
+
+  it('sends with NO send_to when no property can be named', async () => {
+    // A tag that arrived through GTM under an id this reader never saw. An
+    // empty destination list would be a worse answer than none — the event
+    // would go nowhere — so the absent key is the deliberate fail-open.
+    mountGtag()
+    await install({ surface: 'site' })
+    registered['LCP'](LCP_METRIC)
+
+    const [, , params] = gtagCalls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ]
+    expect(params).not.toHaveProperty('send_to')
+  })
+
+  it('targets a HELD metric by the tag that eventually arrived', async () => {
+    // The ordinary case on both surfaces: TTFB reports before the tag exists,
+    // so the ids cannot be read when the metric is taken — only when it is
+    // finally delivered.
+    await install({ surface: 'site' })
+    registered['TTFB']({ name: 'TTFB', id: 'v4-2', value: 120, delta: 120 })
+    expect(gtagCalls).toHaveLength(0)
+
+    mountGtagScript('G-LATE1234')
+    mountGtag()
+    jest.advanceTimersByTime(5_000)
+
+    const [, , params] = gtagCalls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ]
+    expect(params.send_to).toEqual(['G-LATE1234'])
+  })
+})

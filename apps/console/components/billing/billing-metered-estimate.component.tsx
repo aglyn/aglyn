@@ -56,7 +56,7 @@ type UsageConfig = { orgLibraryBilledFrom: string | null } | 'unknown'
  * `$0.0338/GB-month` and `$0.065 per 1,000` both round to `$0.00` at two
  * decimal places, so the currency default would print every metered rate on
  * the platform as free. Four decimals covers all three, and the trailing
- * zeros are stripped so `$0.1300` does not read as spurious precision.
+ * zeros are stripped so `$0.2100` does not read as spurious precision.
  */
 function rateText(usd: number): string {
   return `$${usd.toFixed(4).replace(/\.?0+$/, '')}`
@@ -362,7 +362,7 @@ export function BillingMeteredEstimateComponent(
             band(included.pageViews),
             billedEstimate.billablePageViews,
             Math.ceil(billedEstimate.billablePageViews).toLocaleString(),
-            // Per 1,000, not per view: the per-view price is $0.00013, which
+            // Per 1,000, not per view: the per-view price is $0.00021, which
             // reads as zero at any precision a customer would trust.
             `${rateText(METERED_BILLED_RATES_USD.perPageView * 1000)} per 1,000`,
             billedEstimate.billableUsdByMeter.pageViews,

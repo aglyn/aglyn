@@ -92,6 +92,166 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-09 — The bandwidth conversion is re-paired with the re-pegged rate: a GB is 1,035 page views, not 1,748
+
+- **Decided by:** the account owner, 2026-09-09, on the standing instruction that neither a monthly nor an annual plan may put the platform under water at any utilization. Re-pair the two constants; do not touch a price or a band.
+- **Scope:** pricing
+- **Evidence:** `ESTIMATED_PAGE_TRANSFER_BYTES` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts` `600 * 1024` → **`1012.8 * 1024`**, the same basis `METERED_UNIT_RATES_USD.perPageView` and `ORG_COGS_UNIT_RATES_USD.perPageView` are calibrated against and the same `pricedForKb` recorded in `tools/tenant-page-budget.json`; a new pairing comparison in `tools/scripts/lib/page-view-rate-calibration.mjs` (`conversionMispriced`) reported by `npm run check:page-view-rate`, with forced reds in both directions and a positive control in `page-view-rate-calibration.test.mjs`; margins re-pinned in `apps/console/specs/tier-margin-floor.spec.ts` (53/53) and the unpaired ladder pinned there as a mutation; `check:page-view-rate`, `check:pricing-drift` and `check:pricing-tables` green; no `PLAN_PRICING` and no `PLAN_ENTITLEMENTS` value moved; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2712.
+
+**No charged price moves and no band moves.** What moves is the number of page
+views a gigabyte of included bandwidth converts to, and the customer-facing
+consequence is stated plainly below.
+
+**The defect.** `perPageView` is what a page view costs and
+`ESTIMATED_PAGE_TRANSFER_BYTES` is what the same page view weighs. They are one
+physical measurement in two units, and a `bandwidthGb` band is priced by
+neither alone but by their quotient — `(1 GB ÷ bytes) × dollars`, the cost of a
+gigabyte. A heavier page costs more per view and buys fewer views per gigabyte;
+the two are supposed to cancel. The re-peg earlier the same day moved only the
+first, so the page's weight was counted twice:
+
+| | cost of 1 GB of included bandwidth |
+|---|---|
+| 600 KB at $0.0001 — what the 2026-09-07 bands were sized against | $0.17476 |
+| 600 KB at $0.00016153846 — the unpaired state | **$0.28231** (×1.615) |
+| 1012.8 KB at $0.00016153846 — paired | **$0.16724** (×0.957) |
+
+At $0.28231 every paid tier read negative at 100% of every band, at the annual
+price net of Stripe: Starter -3.6%, Pro -34.1%, Business -19.8%, Scale -16.6%,
+Advanced -11.1%, Agency -14.3%. That was a modeling error and not an economic
+one — no page, price or band had changed — and it is why **no band was cut a
+second time**. Cutting one would have taken allowance away from customers to
+pay for a bug.
+
+**The ladder, at 100% of every band, net of Stripe.** Annual and monthly, after
+the pairing:
+
+| Plan | Annual, before | Annual, after | Monthly, after |
+|---|---|---|---|
+| Starter | -3.6% | **+32.3%** | +54.6% |
+| Pro | -34.1% | **+2.8%** | +30.9% |
+| Business | -19.8% | **+1.7%** | +28.9% |
+| Scale | -16.6% | **+2.0%** | +28.6% |
+| Advanced | -11.1% | **+2.2%** | +25.9% |
+| Agency | -14.3% | **+2.6%** | +20.7% |
+
+At the 25% utilization the 2026-09-07 resize was argued on, the annual ladder
+reads 73.2–80.8% and clears the 75% contribution floor at the per-site COGS
+figure every production org actually carries. The floor is not a claim about
+100% of every band at once: that is a ceiling, and the rule there is zero.
+
+**100% is the worst case, and that was checked rather than assumed.** Past a
+band every axis either bills above cost or refuses: page views, storage and
+form submissions meter at cost × 1.3 on every paid plan; contacts, campaign
+email, dataset storage, API requests and assist credits carry retail overage
+rates above their modeled cost; workflow and action runs have no rate and are
+walled before the run; seats and the one-to-one email cap are hard bands. The
+bandwidth abuse ceiling does not open a hole — on a metered plan it flags and
+escalates without degrading the render, and the traffic keeps billing. No
+self-serve tier carries an `UNLIMITED` cost band; Enterprise's every band has
+been a finite fallback since 2026-09-07.
+
+**The customer-facing consequence, stated plainly.** The gigabyte bands are the
+promise and none of them moved. What moved is the page-view allowance behind
+them, which falls **40.75%** because each view is now accounted at 1012.8 KB
+instead of 600 KB:
+
+| | included page views, before | after |
+|---|---|---|
+| Free 2 GB | 3,495 | 2,071 |
+| Starter 50 GB | 87,381 | 51,766 |
+| Pro 125 GB | 218,453 | 129,415 |
+| Business 185 GB | 323,311 | 191,535 |
+| Scale 290 GB | 506,812 | 300,244 |
+| Advanced 345 GB | 602,931 | 357,187 |
+| Agency 1,540 GB | 2,691,345 | 1,594,399 |
+
+**Yes, a customer can see less than before, and it is the correction rather
+than a take-back.** A Pro site between 129,415 and 218,453 views a month now
+begins paying the $0.21/1,000 pass-through where it previously did not. Before
+this change the meter granted 1.69× the bandwidth the GB label sold: those
+218,453 views of a 1012.8 KB page are about **211 GB** of real traffic against
+a 125 GB label, because the band was divided by a page weight the platform
+stopped serving months ago. The label was the promise, and the label
+is now true. The same conversion runs the other way on the console meter and
+the usage-alerts cron, so the same traffic renders as more gigabytes than it
+did yesterday: the traffic did not change, the accounting figure did.
+`apps/docs/.../billing-and-plans/bandwidth.md` carried the old figure as a
+published billing convention and says all of this now.
+
+The derived protections move with it, in views, and are unchanged in
+gigabytes. Free's cap still engages at 1× its 2 GB band, which is 2,071 views
+rather than 3,495. The abuse ceiling is still 3× the band — Starter 155,299
+views, Agency 4,783,196 — and still floors at 100,000 views, which is now 96.6
+GB rather than 57.2 GB and therefore a slightly larger give on Free.
+
+**What stops it recurring.** `check:page-view-rate` now recovers a page weight
+from each of the two constants and refuses them if they differ by more than a
+tenth of a KB, printing the cost of a gigabyte both ways. It lives in that gate
+rather than in a new one deliberately: that is the gate a re-peg has to turn
+green, and a separate script is one more thing a rate change can ship without
+running. Mutating either constant alone exits 1 with the two weights named.
+
+---
+
+## 2026-09-09 — The page-view rate is re-pegged to a 1012.8 KB page: $0.13 → $0.21 per 1,000
+
+- **Decided by:** the account owner, 2026-09-09, asked whether the weight reduction had closed the gap or whether the re-peg held over from earlier the same day was now owed. Re-peg, and set the basis above the measured page so the next correction is downward.
+- **Scope:** pricing
+- **Evidence:** `METERED_UNIT_RATES_USD.perPageView` and `ORG_COGS_UNIT_RATES_USD.perPageView` both 0.0001 → **0.00016153846**; published `$0.13 / 1,000` → **`$0.21 / 1,000`**, regenerated into `tools/marketing/pricing-copy/tables.json`; `tools/tenant-page-budget.json` `wireCalibration` now `pricedForKb` 1012.8, `measuredKb` 976.1, `acceptedWeightRatio` 0.9638 against a 0.96376 actual; `npm run check:page-view-rate`, `check:pricing-drift` and `check:pricing-tables` green; the Sept-1 pin in `tools/scripts/check-pricing-drift.mjs` moved with the decision; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2711.
+
+**A charged price moves.** This is a customer-facing increase on one metered
+line: every 1,000 page views past a plan's included band bills $0.21 instead of
+$0.13, a 61.5% rise on that line. It touches no plan price, no other meter and
+no included band.
+
+**Why now.** The standing 2026-08-30 rule was to reduce the page weight rather
+than reprice the promise, and the entry above this one held the re-peg for
+exactly that reason. The reduction has since landed and shipped in
+v1.0.0-beta.103 — the route's eager first-paint JavaScript fell 410.4 → 255.3 KB
+gzip — and a fresh measurement says the page is still far above the 627 KB the
+rate was calibrated for. The condition that decision set is met, so the hold
+expires with it.
+
+**The measurement.** Taken 2026-09-09 against production, playwright-core
+driving Chrome Beta 154 headless, a fresh browser context per run, no scroll,
+settling until the network went quiet, counting first-party `encodedBodySize` as
+served:
+
+- **976.1 KB** on the recorded basis — document, script and images — stable to
+  0.0 KB across three runs at 2560x1209 and two at 1280x720.
+- A control run on the PREVIOUS build with the same instrument read
+  979.7–1001.8 KB against the 1010.3 KB recorded from that build by a different
+  instrument, so the instrument reproduces the recorded basis within ~3% and the
+  drop is the page rather than the tooling.
+- Split at first contentful paint, the same load is **122.6–158.2 KB up to FCP**
+  and **1012.9 KB at settle** across 80 requests. The basis previously recorded
+  as "first paint" is in fact the settle figure, and it is settle that the rate
+  must price: every visitor pays it.
+- The eager route chunks fell 410.4 → 255.3 KB gzip while the settle total
+  barely moved, because much of the reduction was `next/dynamic` **deferral**
+  rather than deletion. The bytes still arrive. That is the reason the peg is
+  taken against settle and not against the route's own chunk total.
+
+**Why the basis is 1012.8 KB and not 976.1.** The basis is set deliberately
+ABOVE the measured page, so the meter prices 1012.8 KB against a page weighing
+976.1 — a ratio of 0.9638. Charging under cost can only be corrected by charging
+more, which is a price rise; charging slightly over can be corrected by charging
+less, which is not. The headroom buys the room to move in the easy direction.
+1012.8 KB is also the weight at which the published figure lands on a round
+$0.21 per 1,000 at the unchanged per-KB cost the 2026-08-09 calibration fixed —
+the cost model did not move, only the weight it is applied to.
+
+**The gap is closed, and the guard now says so.** `check:page-view-rate` was
+built to hold an under-priced rate at the size it was last reviewed at, and its
+`acknowledgedShortfall` recorded a ratio of 1.62. That field is gone. Its
+replacement, `acceptedWeightRatio`, is refused above 1: the state where the rate
+prices less page than it serves cannot be re-entered by editing a number in a
+JSON file, and a page that grows back into the headroom is red before it gets
+there.
+
+---
+
 ## 2026-09-09 — The page-view rate is re-measured at 1010.3 KB and deliberately not re-pegged
 
 - **Decided by:** the account owner, 2026-09-09, asked whether to correct `perPageView` now that the measured page is 1.61x the weight it is priced for. Hold the price and reduce the weight instead, per the standing 2026-08-30 rule.

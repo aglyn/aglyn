@@ -45,7 +45,11 @@ import { createResolver } from '../../lint-rules/lib/app-router-graph.mjs'
 import {
   CALIBRATED_USD_PER_VIEW,
   PAGE_VIEW_CALIBRATION_BASIS_KB,
+  basisKbForRate,
+  basisKbForTransferBytes,
+  costPerGbUsd,
   evaluateRateCalibration,
+  parseTransferBytes,
   rateForWeightKb,
 } from './page-view-rate-calibration.mjs'
 import { parseUnitRates } from './pricing-drift.mjs'
@@ -63,8 +67,12 @@ const BUDGET = JSON.parse(
 )
 const CALIBRATION = BUDGET.wireCalibration
 
+/** The markup the published figure is the product of. */
+const METERED_MARKUP = 1.3
+
 /**
- * The rate tables read through the CLI's own parser.
+ * The rate tables and the conversion constant, read through the CLI's own
+ * parsers.
  *
  * Deliberately not a second regex written for the test: a fixture that parsed
  * the files its own way could agree with the checked-in numbers while the
@@ -73,15 +81,21 @@ const CALIBRATION = BUDGET.wireCalibration
  */
 function realRates() {
   const read = (...parts) => readFileSync(join(REPO_ROOT, ...parts), 'utf8')
+  const cogsSource = read(
+    'libs',
+    'aglyn',
+    'src',
+    'lib',
+    'app-utils',
+    'plan-entitlements.ts',
+  )
   return {
     meteredRate: parseUnitRates(
       read('apps', 'console', 'utils', 'usage-metering.ts'),
       'METERED_UNIT_RATES_USD',
     )?.perPageView,
-    cogsRate: parseUnitRates(
-      read('libs', 'aglyn', 'src', 'lib', 'app-utils', 'plan-entitlements.ts'),
-      'ORG_COGS_UNIT_RATES_USD',
-    )?.perPageView,
+    cogsRate: parseUnitRates(cogsSource, 'ORG_COGS_UNIT_RATES_USD')?.perPageView,
+    transferBytes: parseTransferBytes(cogsSource),
   }
 }
 
@@ -94,13 +108,26 @@ function measureRealGraph() {
   }).bytes
 }
 
-/** A record that agrees with itself, built from the real checked-in one. */
+/**
+ * A record that agrees with itself, built from the real checked-in one.
+ *
+ * The default rate is the EXACT per-KB implication of the basis, which is not
+ * digit-for-digit the rate in the tables — see "the checked-in rate is priced
+ * in dollars" below. Both recover the same basis, which is the property the
+ * gate actually asserts, and building the fixture the other way would hide
+ * that the comparison has a grid at all.
+ */
 function consistentInput(overrides = {}) {
   const calibration = { ...CALIBRATION, ...(overrides.calibration ?? {}) }
   const rate = overrides.rate ?? rateForWeightKb(calibration.pricedForKb)
   return {
     meteredRate: rate,
     cogsRate: overrides.cogsRate ?? rate,
+    // Derived from the RATE rather than from the record, because the pairing
+    // is a claim about the two constants and not about the JSON: a fixture
+    // that took its bytes from `pricedForKb` would go on agreeing with itself
+    // in exactly the cases where the rate had walked away from both.
+    transferBytes: overrides.transferBytes ?? basisKbForRate(rate) * 1024,
     calibration,
     sourceGraphBytes:
       overrides.sourceGraphBytes ?? calibration.sourceGraphBytes,
@@ -111,10 +138,16 @@ function consistentInput(overrides = {}) {
 
 test('the formula reproduces the calibration it was derived from', () => {
   // The one fixed point: $0.0001 was measured at 627 KB. If this ever fails,
-  // the rate for every other weight is being derived from a moved anchor.
+  // the rate for every other weight is being derived from a moved anchor. The
+  // 2026-09-09 re-peg moved the WEIGHT the anchor is applied to and left the
+  // anchor itself alone, which is the only reason the new rate is checkable.
   assert.equal(
     rateForWeightKb(PAGE_VIEW_CALIBRATION_BASIS_KB),
     CALIBRATED_USD_PER_VIEW,
+  )
+  assert.equal(
+    basisKbForRate(CALIBRATED_USD_PER_VIEW),
+    PAGE_VIEW_CALIBRATION_BASIS_KB,
   )
 })
 
@@ -131,12 +164,19 @@ test('the formula is linear in page weight', () => {
   )
 })
 
-test('the rate is a number a human can check in', () => {
-  // Six decimal places, because the gate recomputes the expected value and
-  // compares it EXACTLY. An unrounded product would force a tolerance, and a
-  // tolerance on a pricing gate is a dial someone widens instead of measuring.
-  const rate = rateForWeightKb(1000)
-  assert.equal(rate, Number(rate.toFixed(6)))
+test('the two directions round-trip on the recorded grid', () => {
+  // `basisKbForRate` is the comparison the gate makes, so it has to invert the
+  // formula rather than merely correlate with it.
+  for (const kb of [100, 627, 976.1, 1012.8, 2500]) {
+    assert.equal(basisKbForRate(rateForWeightKb(kb)), kb)
+  }
+})
+
+test('a tenth of a KB is the finest difference the gate can see', () => {
+  // The grid is stated as a property rather than left implicit: one grid step
+  // apart must read as two different bases, and half a step must not.
+  assert.notEqual(basisKbForRate(rateForWeightKb(1012.8)), 1012.9)
+  assert.equal(basisKbForRate(rateForWeightKb(1012.84)), 1012.8)
 })
 
 // ── the checked-in record ──────────────────────────────────────────────────
@@ -147,40 +187,74 @@ test('POSITIVE CONTROL — the checked-in record is self-consistent', () => {
 })
 
 test('POSITIVE CONTROL — the real tree passes the real gate', () => {
-  const { meteredRate, cogsRate } = realRates()
+  const { meteredRate, cogsRate, transferBytes } = realRates()
   const verdict = evaluateRateCalibration({
     meteredRate,
     cogsRate,
+    transferBytes,
     calibration: CALIBRATION,
     sourceGraphBytes: measureRealGraph(),
   })
-  // Spelled out rather than a bare `ok`, so a failure names which of the four
+  // Spelled out rather than a bare `ok`, so a failure names which of the six
   // went red instead of printing `false !== true`.
   assert.equal(
-    `mispriced=${verdict.rateMispriced} widened=${verdict.shortfallWidened} ` +
+    `mispriced=${verdict.rateMispriced} paired=${!verdict.conversionMispriced} ` +
+      `exceeded=${verdict.weightRatioExceeded} ` +
+      `underprices=${verdict.acceptedRatioUnderprices} ` +
       `stale=${verdict.calibrationStale} disagree=${verdict.tablesDisagree} ` +
       `unreadable=${verdict.unreadable}`,
-    'mispriced=false widened=false stale=false disagree=false unreadable=',
+    'mispriced=false paired=true exceeded=false underprices=false stale=false ' +
+      'disagree=false unreadable=',
   )
   assert.equal(verdict.ok, true)
 })
 
 test('the rate matches the weight it CLAIMS to be priced for', () => {
   const { meteredRate, cogsRate } = realRates()
-  assert.equal(meteredRate, rateForWeightKb(CALIBRATION.pricedForKb))
+  assert.equal(basisKbForRate(meteredRate), CALIBRATION.pricedForKb)
   assert.equal(cogsRate, meteredRate)
 })
 
-test('the recorded shortfall is the arithmetic, not a rounder number', () => {
-  // The gap is a reviewed CEILING, so it must actually cover the measurement
+test('the checked-in rate is priced in dollars, not in kilobytes', () => {
+  // Why the gate compares kilobytes and not dollars. The rate is pinned so the
+  // PUBLISHED figure is round — $0.21 per 1,000 views — which leaves the cost
+  // per view a long decimal that no rounding of a weight reproduces. It sits
+  // within a grid step of the exact implication, and that is the whole of the
+  // slack the comparison allows.
+  const { meteredRate } = realRates()
+  assert.equal(
+    Math.round(meteredRate * METERED_MARKUP * 1000 * 100) / 100,
+    0.21,
+  )
+  const exact = rateForWeightKb(CALIBRATION.pricedForKb)
+  assert.notEqual(meteredRate, exact)
+  const apartInKb =
+    (Math.abs(meteredRate - exact) * PAGE_VIEW_CALIBRATION_BASIS_KB) /
+    CALIBRATED_USD_PER_VIEW
+  assert.ok(apartInKb < 0.05, `${apartInKb} KB apart is past the grid`)
+})
+
+test('the recorded ratio is the arithmetic, not a rounder number', () => {
+  // The ratio is a reviewed CEILING, so it must actually cover the measurement
   // it was recorded for — and not by so much that a real regression fits
   // underneath it unnoticed.
   const actual = CALIBRATION.measuredKb / CALIBRATION.pricedForKb
   assert.ok(
-    CALIBRATION.acknowledgedShortfall >= actual,
-    `${CALIBRATION.acknowledgedShortfall} must cover ${actual}`,
+    CALIBRATION.acceptedWeightRatio >= actual,
+    `${CALIBRATION.acceptedWeightRatio} must cover ${actual}`,
   )
-  assert.ok(CALIBRATION.acknowledgedShortfall - actual < 0.05)
+  assert.ok(CALIBRATION.acceptedWeightRatio - actual < 0.05)
+})
+
+test('the rate is pegged at or above the page it prices', () => {
+  // The 2026-09-09 decision, as an assertion rather than as prose in a JSON
+  // field. Before it, this ratio was 1.62 and the meter billed under its own
+  // cost; the basis is now deliberately the heavier of the two numbers.
+  assert.ok(
+    CALIBRATION.pricedForKb >= CALIBRATION.measuredKb,
+    `priced for ${CALIBRATION.pricedForKb} KB against a ${CALIBRATION.measuredKb} KB page`,
+  )
+  assert.ok(CALIBRATION.acceptedWeightRatio <= 1)
 })
 
 // ── forced reds: the rate parted from its own stated basis ─────────────────
@@ -209,7 +283,19 @@ test('FORCED RED — the calibration edited without the rate', () => {
     }),
   )
   assert.equal(verdict.rateMispriced, true)
-  assert.equal(verdict.expectedRate, rateForWeightKb(1200))
+  assert.equal(verdict.recordedBasisKb, 1200)
+  assert.equal(verdict.impliedBasisKb, CALIBRATION.pricedForKb)
+  assert.equal(verdict.ok, false)
+})
+
+test('FORCED RED — one grid step of rate drift', () => {
+  // The smallest edit the comparison must still catch: a rate priced for a
+  // page a tenth of a KB heavier. In dollars that is 1.6e-8 per view, which
+  // the millionth-of-a-dollar comparison this replaced could not have seen.
+  const verdict = evaluateRateCalibration(
+    consistentInput({ rate: rateForWeightKb(CALIBRATION.pricedForKb + 0.1) }),
+  )
+  assert.equal(verdict.rateMispriced, true)
   assert.equal(verdict.ok, false)
 })
 
@@ -238,69 +324,240 @@ test('FORCED RED — an unreadable rate is not a silent pass', () => {
   assert.equal(verdict.rateMispriced, false)
 })
 
-// ── forced reds: the page moved past what the rate is priced for ───────────
+// ── the pair: dollars per view and bytes per view ──────────────────────────
 
-test('FORCED RED — a re-measurement widens the gap past the reviewed one', () => {
-  // THE DEFECT THIS GATE EXISTS FOR. The page grew, somebody recorded the new
-  // weight honestly, and the rate underneath it did not move. The MEASUREMENT
-  // is mutated, not the gate.
-  const heavier = CALIBRATION.acknowledgedShortfall * CALIBRATION.pricedForKb + 1
+test('the checked-in constants describe the same page', () => {
+  // The claim in one line: `perPageView` and `ESTIMATED_PAGE_TRANSFER_BYTES`
+  // are one measurement in two units, so the weight recovered from each has to
+  // be the same weight.
+  const { meteredRate, transferBytes } = realRates()
+  assert.equal(basisKbForTransferBytes(transferBytes), basisKbForRate(meteredRate))
+  assert.equal(basisKbForTransferBytes(transferBytes), CALIBRATION.pricedForKb)
+})
+
+test('the constant is READ from the source, not assumed', () => {
+  // The parser is the half of this gate that can fail silently. A regex that
+  // stopped matching would return null, and null must reach the `unreadable`
+  // verdict rather than pass for a number — proved from the real file and
+  // from a shape the parser must refuse.
+  const { transferBytes } = realRates()
+  assert.equal(transferBytes, 1012.8 * 1024)
+  assert.equal(parseTransferBytes('export const SOMETHING_ELSE = 1 * 1024'), null)
+  assert.equal(
+    parseTransferBytes('export const ESTIMATED_PAGE_TRANSFER_BYTES = kb * 1024'),
+    null,
+  )
+  assert.equal(
+    parseTransferBytes('export const ESTIMATED_PAGE_TRANSFER_BYTES = 600 * 1024'),
+    614400,
+  )
+})
+
+test('the pair states the cost of a gigabyte, which neither half does alone', () => {
+  // The quantity every `bandwidthGb` band was sized against. Asserted as a
+  // number so the band arithmetic in the decision log can be checked against
+  // this file rather than believed.
+  const { meteredRate, transferBytes } = realRates()
+  assert.ok(
+    Math.abs(costPerGbUsd(meteredRate, transferBytes) - 0.16724) < 0.00001,
+    `a GB costs ${costPerGbUsd(meteredRate, transferBytes)}`,
+  )
+  // …and the unpaired figure the 2026-09-09 re-peg left behind, which is what
+  // took every paid tier under water at the annual price: the same rate over
+  // an unmoved 600 KB is 1.69x as much per gigabyte.
+  assert.ok(
+    Math.abs(costPerGbUsd(meteredRate, 600 * 1024) - 0.28231) < 0.00001,
+  )
+})
+
+test('FORCED RED — the rate re-pegged and the byte constant left behind', () => {
+  // THE DEFECT, exactly as it landed. `perPageView` moved to a 1012.8 KB page
+  // and `ESTIMATED_PAGE_TRANSFER_BYTES` stayed at 600 KB, so the two disagreed
+  // about the page by 69% and every GB band silently re-priced.
+  const verdict = evaluateRateCalibration(
+    consistentInput({ transferBytes: 600 * 1024 }),
+  )
+  assert.equal(verdict.conversionMispriced, true)
+  assert.equal(verdict.ok, false)
+  // It is the PAIR that is faulted, not the rate against the record — the
+  // rate still agrees with the JSON, which is why nothing else caught this.
+  assert.equal(verdict.rateMispriced, false)
+  assert.equal(verdict.convertedBasisKb, 600)
+  assert.equal(verdict.impliedBasisKb, CALIBRATION.pricedForKb)
+})
+
+test('FORCED RED — the byte constant moved and the rate left behind', () => {
+  // The same break from the other side: somebody re-measures the page, updates
+  // the conversion, and does not touch the price. Both halves, because a gate
+  // that only caught one direction would be satisfied by whichever edit
+  // happened to come second.
+  const verdict = evaluateRateCalibration(
+    consistentInput({ transferBytes: 1500 * 1024 }),
+  )
+  assert.equal(verdict.conversionMispriced, true)
+  assert.equal(verdict.convertedBasisKb, 1500)
+  assert.equal(verdict.ok, false)
+})
+
+test('FORCED RED — one grid step of pairing drift', () => {
+  // The smallest divergence the comparison must still see: a tenth of a KB,
+  // which is 103 bytes out of a million and a fifth of a percent on the cost
+  // of a gigabyte.
+  const verdict = evaluateRateCalibration(
+    consistentInput({
+      transferBytes: (CALIBRATION.pricedForKb + 0.1) * 1024,
+    }),
+  )
+  assert.equal(verdict.conversionMispriced, true)
+  assert.equal(verdict.ok, false)
+})
+
+test('POSITIVE CONTROL — a re-peg that moves BOTH halves is green', () => {
+  // The pairing must not block a legitimate re-peg, only an unpaired one. A
+  // page that doubled, priced and converted together, passes.
+  const doubled = CALIBRATION.pricedForKb * 2
+  const verdict = evaluateRateCalibration(
+    consistentInput({
+      rate: rateForWeightKb(doubled),
+      transferBytes: doubled * 1024,
+      calibration: { pricedForKb: doubled, measuredKb: CALIBRATION.measuredKb },
+    }),
+  )
+  assert.equal(verdict.conversionMispriced, false)
+  assert.equal(verdict.rateMispriced, false)
+  assert.equal(verdict.ok, true)
+  // …and the cost of a gigabyte did not move, which is the property that makes
+  // a paired re-peg safe for the bands.
+  assert.ok(
+    Math.abs(verdict.costPerGbUsd - costPerGbUsd(rateForWeightKb(CALIBRATION.pricedForKb), CALIBRATION.pricedForKb * 1024)) <
+      1e-9,
+  )
+})
+
+test('FORCED RED — an unreadable byte constant is not a silent pass', () => {
+  const verdict = evaluateRateCalibration({
+    ...consistentInput(),
+    transferBytes: null,
+  })
+  assert.deepEqual(verdict.unreadable, ['ESTIMATED_PAGE_TRANSFER_BYTES'])
+  assert.equal(verdict.ok, false)
+  // …and it must not masquerade as a pairing fault, which would send the
+  // reader to change a constant that is fine.
+  assert.equal(verdict.conversionMispriced, false)
+})
+
+// ── forced reds: the page moved against what the rate is priced for ────────
+
+test('FORCED RED — a re-measurement eats the headroom the peg left', () => {
+  // THE DEFECT THIS GATE EXISTS FOR, in the shape it now takes. The page grew,
+  // somebody recorded the new weight honestly, and the rate underneath it did
+  // not move. The MEASUREMENT is mutated, not the gate.
+  const heavier = CALIBRATION.acceptedWeightRatio * CALIBRATION.pricedForKb + 1
   const verdict = evaluateRateCalibration(
     consistentInput({ calibration: { measuredKb: heavier } }),
   )
-  assert.equal(verdict.shortfallWidened, true)
+  assert.equal(verdict.weightRatioExceeded, true)
   assert.equal(verdict.ok, false)
   // …and it says what the rate would have to become, so the reader is not
   // left to re-derive it from a ratio.
   assert.equal(verdict.rateForMeasured, rateForWeightKb(heavier))
 })
 
-test('POSITIVE CONTROL — exactly the reviewed gap is not a red', () => {
-  // Deliberately synthetic, and deliberately powers of ten. Deriving the
-  // boundary from the real record — `acknowledgedShortfall * pricedForKb`,
-  // divided by `pricedForKb` again inside the gate — lands a hair BELOW the
-  // threshold in floating point, so the case never reached the comparison and
-  // an off-by-one there survived. These divide exactly.
-  const boundary = {
-    pricedForKb: 100,
-    measuredKb: 200,
-    acknowledgedShortfall: 2,
-    sourceGraphBytes: CALIBRATION.sourceGraphBytes,
-    sourceGraphTolerance: CALIBRATION.sourceGraphTolerance,
-  }
+test('FORCED RED — a page that grew to exactly its own basis', () => {
+  // The line the re-peg drew. A page that weighs what the rate prices for has
+  // spent every cent of the margin the peg deliberately left, and "at cost +
+  // 30%" is true only at that instant. It was a PASS before 2026-09-09, when
+  // the rate was priced for far less than the page and any narrowing was
+  // progress; it is a red now.
   const verdict = evaluateRateCalibration(
-    consistentInput({ rate: rateForWeightKb(100), calibration: boundary }),
+    consistentInput({ calibration: { measuredKb: CALIBRATION.pricedForKb } }),
   )
-  assert.equal(verdict.shortfall, 2)
-  assert.equal(verdict.shortfallWidened, false)
-  assert.equal(verdict.ok, true)
-})
-
-test('FORCED RED — one part in a thousand past the reviewed gap', () => {
-  // The other side of the same boundary, so the comparison cannot be widened
-  // to `>=` or narrowed to a range without one of the pair failing.
-  const boundary = {
-    pricedForKb: 100,
-    measuredKb: 200.1,
-    acknowledgedShortfall: 2,
-    sourceGraphBytes: CALIBRATION.sourceGraphBytes,
-    sourceGraphTolerance: CALIBRATION.sourceGraphTolerance,
-  }
-  const verdict = evaluateRateCalibration(
-    consistentInput({ rate: rateForWeightKb(100), calibration: boundary }),
-  )
-  assert.equal(verdict.shortfallWidened, true)
+  assert.equal(verdict.weightRatio, 1)
+  assert.equal(verdict.weightRatioExceeded, true)
   assert.equal(verdict.ok, false)
 })
 
 test('POSITIVE CONTROL — a page that got lighter is not a red here', () => {
-  // Narrowing the gap is the direction that fixes the claim. It still needs a
-  // rate decision, which the shortfall record carries; it is not a build
-  // failure, or every page-weight win would land red.
+  // Charging above cost is still a broken claim, but it is the direction that
+  // is fixed by charging LESS, which needs nobody's consent and is nobody's
+  // emergency. Failing the build on it would red every page-weight win.
   const verdict = evaluateRateCalibration(
-    consistentInput({ calibration: { measuredKb: CALIBRATION.pricedForKb } }),
+    consistentInput({
+      calibration: { measuredKb: CALIBRATION.pricedForKb / 2 },
+    }),
   )
-  assert.equal(verdict.shortfallWidened, false)
+  assert.equal(verdict.weightRatioExceeded, false)
+  assert.equal(verdict.ok, true)
+})
+
+test('POSITIVE CONTROL — exactly the reviewed ratio is not a red', () => {
+  // Deliberately synthetic, and deliberately powers of ten. Deriving the
+  // boundary from the real record — `acceptedWeightRatio * pricedForKb`,
+  // divided by `pricedForKb` again inside the gate — lands a hair BELOW the
+  // threshold in floating point, so the case never reached the comparison and
+  // an off-by-one there survived. These divide exactly.
+  const boundary = {
+    pricedForKb: 200,
+    measuredKb: 100,
+    acceptedWeightRatio: 0.5,
+    sourceGraphBytes: CALIBRATION.sourceGraphBytes,
+    sourceGraphTolerance: CALIBRATION.sourceGraphTolerance,
+  }
+  const verdict = evaluateRateCalibration(
+    consistentInput({ rate: rateForWeightKb(200), calibration: boundary }),
+  )
+  assert.equal(verdict.weightRatio, 0.5)
+  assert.equal(verdict.weightRatioExceeded, false)
+  assert.equal(verdict.ok, true)
+})
+
+test('FORCED RED — one part in a thousand past the reviewed ratio', () => {
+  // The other side of the same boundary, so the comparison cannot be widened
+  // to `>=` or narrowed to a range without one of the pair failing.
+  const boundary = {
+    pricedForKb: 200,
+    measuredKb: 100.1,
+    acceptedWeightRatio: 0.5,
+    sourceGraphBytes: CALIBRATION.sourceGraphBytes,
+    sourceGraphTolerance: CALIBRATION.sourceGraphTolerance,
+  }
+  const verdict = evaluateRateCalibration(
+    consistentInput({ rate: rateForWeightKb(200), calibration: boundary }),
+  )
+  assert.equal(verdict.weightRatioExceeded, true)
+  assert.equal(verdict.ok, false)
+})
+
+// ── forced reds: the record itself re-opens the under-priced state ─────────
+
+test('FORCED RED — a reviewed ratio above 1 is refused', () => {
+  // The escape hatch this gate must not have. Every other red here is fixed by
+  // raising `acceptedWeightRatio` until it covers the measurement, and before
+  // 2026-09-09 that was the whole mechanism — the ratio on record was 1.62.
+  // A ratio past 1 says the rate is priced for less page than it serves, which
+  // can only be corrected by charging MORE, so it is refused rather than
+  // recorded.
+  const verdict = evaluateRateCalibration(
+    consistentInput({
+      calibration: {
+        measuredKb: CALIBRATION.pricedForKb * 1.62,
+        acceptedWeightRatio: 1.62,
+      },
+    }),
+  )
+  assert.equal(verdict.acceptedRatioUnderprices, true)
+  // …and NOT because the live ratio also moved. The record alone is the fault.
+  assert.equal(verdict.weightRatioExceeded, false)
+  assert.equal(verdict.ok, false)
+})
+
+test('POSITIVE CONTROL — a reviewed ratio of exactly 1 is allowed', () => {
+  // Pegged exactly at the measured page: the promise is true to the cent and
+  // there is no headroom. Legal, and the boundary the refusal above sits on.
+  const verdict = evaluateRateCalibration(
+    consistentInput({ calibration: { acceptedWeightRatio: 1 } }),
+  )
+  assert.equal(verdict.acceptedRatioUnderprices, false)
   assert.equal(verdict.ok, true)
 })
 
@@ -403,12 +660,18 @@ test('the calibration was reviewed against the recorded baseline', () => {
 
 // ── the CLI ────────────────────────────────────────────────────────────────
 
-test('the CLI passes on the real tree and states the gap', () => {
+test('the CLI passes on the real tree and states the headroom', () => {
   const out = String(
     execFileSync('node', [CLI], { cwd: REPO_ROOT, stdio: 'pipe' }),
   )
   assert.match(out, /check:page-view-rate/)
-  // A green run that did not mention the shortfall would let the open pricing
-  // decision fall out of view, which is how it went unnoticed the first time.
-  assert.match(out, /priced for 627 KB/)
+  // A green run that did not state the basis and the measurement beside it
+  // would let the headroom be spent without anyone watching, which is how the
+  // rate went stale the first time.
+  assert.match(out, /priced for 1012\.8 KB/)
+  assert.match(out, /last measured 976\.1 KB/)
+  // The pair, and the quantity it implies. A green run that printed the rate
+  // without the bytes beside it would let the two part again in silence.
+  assert.match(out, /paired with 1037107\.2 bytes per view/)
+  assert.match(out, /one GB of included bandwidth costs \$0\.16724/)
 })

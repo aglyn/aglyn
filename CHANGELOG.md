@@ -9,6 +9,33 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.104 — 2026-09-09
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/d6d79443c...v1.0.0-beta.104)
+
+### Added
+
+- **pricing:** re-peg the page-view rate to a 1012.8 KB page ([AGL-2711](https://linear.app/aglyn/issue/AGL-2711))
+
+### Fixed
+
+- **pricing:** pair the bandwidth conversion with the re-pegged page-view rate ([AGL-2712](https://linear.app/aglyn/issue/AGL-2712))
+
+### Performance
+
+- **aglyn:** keep Core Web Vitals off the Google Ads destination ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **tenant:** load the non-blocking site plugins on link intent ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-1289](https://linear.app/aglyn/issue/AGL-1289))
+- **tenant:** share the in-flight consent region lookup ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710), [AGL-1550](https://linear.app/aglyn/issue/AGL-1550))
+- **jsx:** prefetch a route when the visitor reaches for the link ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+- **jsx:** warm the navigation overlay on link intent, not on every view ([AGL-2710](https://linear.app/aglyn/issue/AGL-2710))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** raise the Linear ceiling to the pricing issues ([AGL-2712](https://linear.app/aglyn/issue/AGL-2712), [AGL-2711](https://linear.app/aglyn/issue/AGL-2711))
+
+</details>
+
 ## v1.0.0-beta.103 — 2026-09-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/8c834a02c...v1.0.0-beta.103)

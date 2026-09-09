@@ -515,7 +515,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     maxManagersPerOrg: 20,
     maxMembersPerHost: 25,
     // Page views are the largest term of this tier's modeled COGS — one GB
-    // is 1,748 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.175 of
+    // is 1,035 views at `ESTIMATED_PAGE_TRANSFER_BYTES`, or $0.167 of
     // measured cost — so the bandwidth band is what decides whether the tier
     // survives a customer spending the whole allowance it was sold.
     //
@@ -1914,19 +1914,33 @@ export const METERED_MARKUP = 1.3
  * "at cost + 30%" claim, which is true of exactly three meters.
  *
  * The first three were corrected 2026-08-09 (AGL-1280) — storage $0.03 →
- * $0.026 and form submissions $0.0005 → $0.00005 — and MUST be changed here
- * and in `METERED_UNIT_RATES_USD` together. See that table for each figure's
- * basis; it is the one a customer is billed against, so it is the one that
- * carries the working — including the open one, which is that `perPageView`
- * is calibrated against a 627 KB page and the real one now measures 1054.3 KB.
- * `npm run check:page-view-rate` holds that gap at the size it was last
- * reviewed at. Lowering the two here lowers measured COGS, which
- * changes no guardrail verdict: `INFRA_COGS_PER_SITE_USD × sites` is the
- * floor, and it already outran measured cost by five orders of magnitude.
+ * $0.026 and form submissions $0.0005 → $0.00005 — and `perPageView` was
+ * re-pegged 2026-09-09 (AGL-2711), from $0.0001 to $0.00016153846. All three
+ * MUST be changed here and in `METERED_UNIT_RATES_USD` together. See that
+ * table for each figure's basis; it is the one a customer is billed against,
+ * so it is the one that carries the working.
+ *
+ * The page-view basis is no longer an open gap. The rate priced a 627 KB page
+ * against one that measured far more for weeks; the weight reduction that was
+ * preferred over a re-peg has now shipped, the page was re-measured at
+ * 976.1 KB, and the rate is pegged to a 1012.8 KB basis that sits ABOVE it.
+ * `npm run check:page-view-rate` holds that peg, and now fails if the basis
+ * ever drops back below what a published page measures.
+ *
+ * Raising the two here raises measured COGS, which changes no guardrail
+ * verdict: `INFRA_COGS_PER_SITE_USD × sites` is the floor, and it still
+ * outruns measured cost by orders of magnitude at real traffic.
  */
 export const ORG_COGS_UNIT_RATES_USD = {
   storagePerGbMonth: 0.026,
-  perPageView: 0.0001,
+  /**
+   * ⛔ HALF OF A PAIR — see ESTIMATED_PAGE_TRANSFER_BYTES, which states the
+   * same page in bytes as this states it in dollars. Both are calibrated
+   * against a 1012.8 KB page and neither may move alone: their quotient is
+   * the cost of a gigabyte, and that is what every bandwidthGb band on the
+   * ladder was sized against.
+   */
+  perPageView: 0.00016153846,
   perFormSubmission: 0.00005,
   /** Firestore-backed dataset bytes — an order pricier than object storage. */
   dataStoragePerGbMonth: 0.18,
@@ -4303,16 +4317,39 @@ export function checkFormSubmissionAbuseCeiling(
  * Average transfer per page view (HTML + JS + a few images), the constant
  * that turns the analytics view counter into a bandwidth number and back.
  *
+ * ## ⛔ HALF OF A PAIR. It moves with `perPageView`, or neither moves.
+ *
+ * This is the BYTES one page view weighs;
+ * {@link ORG_COGS_UNIT_RATES_USD}`.perPageView` is the DOLLARS the same page
+ * view costs. They are one physical measurement written in two units, and
+ * what every `bandwidthGb` band is actually sized against is neither of them
+ * alone but their quotient — `(1 GB ÷ this) × perPageView`, the cost of a
+ * gigabyte. That quotient is stable even while the page's weight is not,
+ * which is precisely why moving one half re-prices every band on the ladder
+ * without touching a band: a heavier page costs more per view and buys fewer
+ * views per gigabyte, and the two cancel.
+ *
+ * Both are therefore stated against the SAME weight — **1012.8 KB**, the
+ * basis recorded in `tools/tenant-page-budget.json` and recoverable from the
+ * rate itself — and `npm run check:page-view-rate` compares the two and
+ * refuses a mismatch. There is no version of this constant that is correct
+ * against a `perPageView` calibrated for a different page.
+ *
+ * The basis is FIRST-PARTY encoded bytes at settle, because that is what an
+ * egress bill is denominated in: third-party tags leave someone else's
+ * network and cost the platform nothing, so counting them here would inflate
+ * a customer's measured bandwidth with bytes nobody pays us for.
+ *
  * Lives HERE rather than beside the metering rates (AGL-2155). It used to sit
  * in `apps/console/utils/usage-metering.ts`, which the console imports and the
  * tenant app cannot — and the bandwidth ceiling below has to be evaluated in
  * the tenant app, at the beacon that writes the counter. Re-deriving the
  * conversion there would have been a fourth hand-rolled copy of
- * `× 1024³ / 600KB`, which is the exact drift AGL-1371 collapsed into one
- * function. `usage-metering` now re-exports these three, so every existing
+ * `× 1024³ / page weight`, which is the exact drift AGL-1371 collapsed into
+ * one function. `usage-metering` now re-exports these three, so every existing
  * importer is unchanged and there is still one definition.
  */
-export const ESTIMATED_PAGE_TRANSFER_BYTES = 600 * 1024
+export const ESTIMATED_PAGE_TRANSFER_BYTES = 1012.8 * 1024
 
 /**
  * Bandwidth ⇄ page views: the one conversion three surfaces used to each
@@ -4343,11 +4380,12 @@ export function bandwidthGbFromPageViews(pageViews: number): number {
  * is an upgrade conversation, or it is not the customer's traffic at all.
  *
  * It is a CAP, not a price, and it is lower than {@link
- * FORM_ABUSE_CEILING_MULTIPLE} because the meter under it is priced for a
- * 627 KB page while the page the platform serves measures 1,054 KB
- * (`usage-metering.ts` records the gap). Past the band, every 1,000 views
- * bills $0.13 and costs about $0.17, so the tail a metered plan can run up
- * before staff look at it is a loss that grows with the traffic. At 10× the
+ * FORM_ABUSE_CEILING_MULTIPLE} because bandwidth is the largest cost line the
+ * platform carries and the one a stranger can spend on the customer's behalf.
+ * Past the band every 1,000 views bills $0.21 against about $0.16 of real
+ * cost, so the tail is no longer a loss — but a scraper, a hotlinked asset or
+ * a botnet still bills the account holder for traffic they did not ask for,
+ * and the ceiling is what bounds that before staff look at it. At 10× the
  * band that tail was open-ended on Agency; at 3× it is bounded.
  */
 export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 3
@@ -4357,12 +4395,12 @@ export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 3
  * small plans get real headroom instead of a second, tighter plan limit
  * wearing a different name.
  *
- * Free includes 2 GB ≈ 3,495 views; 3× would be ~10,486, which a genuinely
+ * Free includes 2 GB ≈ 2,071 views; 3× would be ~6,212, which a genuinely
  * successful hobby site (a post that lands on Hacker News) reaches in an
  * afternoon and would be a miserable first experience of the platform.
- * 100,000 views/month ≈ 57.2 GB ≈ **$10 of real COGS** at
+ * 100,000 views/month ≈ 96.6 GB ≈ **$16 of real COGS** at
  * `METERED_UNIT_RATES_USD.perPageView` — well above the free band, and an
- * order of magnitude below the $100 a million views costs. It is the number
+ * order of magnitude below the $162 a million views costs. It is the number
  * that makes "free stays free" true without making it stingy.
  */
 export const BANDWIDTH_ABUSE_CEILING_FLOOR = 100_000
@@ -4402,7 +4440,7 @@ export interface BandwidthAbuseCeilingResult {
  * `checkFormSubmissionQuota`, a zero band for dataset storage and API, a
  * hard band for contacts. Bandwidth had **none**: nothing anywhere refused a
  * page view, so a free site that went viral served a million views — roughly
- * **$100 of real COGS** — with no wall, no throttle and no alert. It was
+ * **$162 of real COGS** — with no wall, no throttle and no alert. It was
  * protected only by the structural zero on the billing side (free carries no
  * rate, so the invoice stays $0), which protects the *bill* and not the
  * *bleeding*. `free-tier-never-billed.spec.ts` said so in its own table.
@@ -4415,7 +4453,7 @@ export interface BandwidthAbuseCeilingResult {
  * answers "is this still a customer's traffic at all?", and crossing it is an
  * INCIDENT rather than a quota: the site is flagged, staff are told, and the
  * render path degrades to a static notice instead of paying ~40 Firestore
- * reads and ~600 KB of egress per view.
+ * reads and ~1,013 KB of egress per view.
  *
  * ## Where it is evaluated
  *

@@ -46,6 +46,7 @@ import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn/plugin-manager/enabled-plu
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { listSiteRuntimes } from '@aglyn/aglyn/plugin-manager/site-runtime'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
+import { onFirstNavigationIntent } from '@aglyn/shared-ui-jsx/components/navigation-intent'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import {
@@ -159,23 +160,38 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   ]
   use(sitePluginLoader.ensure(props.blockingPlugins ?? enabledPlugins, ['site']))
 
-  // The plugins that did NOT have to block: load them straight after
-  // hydration, so they are registered for anything that needs them later
-  // without having sat in front of first render. Same shape as the realm
-  // plugins below — load, then tick so a runtime that registers late still
-  // mounts. Nothing is dropped here; only the waiting moved.
+  // The plugins that did NOT have to block, loaded when the visitor first
+  // reaches for a link (AGL-2710).
+  //
+  // Loading them straight after hydration moved the wait off first render
+  // without taking anything off the wire: the bundles the server just proved
+  // have no work on this page were fetched and evaluated on every page view
+  // anyway, measured at 208.9 KB across 23 requests — more than a quarter of
+  // everything the page transfers. On a surface metered per view, a bundle
+  // fetched at idle costs exactly what one fetched eagerly costs.
+  //
+  // `blockingPlugins` is computed from the FULL composed document, withheld
+  // lazy-panel subtrees included, and narrows only when the server could prove
+  // the rest have nothing to contribute here — so what is deferred is needed
+  // by a LATER page, and link intent is when a later page stops being
+  // hypothetical. It still precedes the click, so the registration lands
+  // before the navigation that wants it; a navigation that outruns it
+  // suspends on `ensure` above exactly as it would have.
   const [, setLatePluginTick] = useState(0)
   const blockingKey = props.blockingPlugins?.join(',')
   const enabledKey = enabledPlugins.join(',')
   useEffect(() => {
     if (blockingKey == null || blockingKey === enabledKey) return
     let active = true
-    void sitePluginLoader
-      .ensure(enabledKey.split(','), ['site'])
-      .then(() => active && setLatePluginTick((tick) => tick + 1))
-      .catch(() => undefined)
+    const detach = onFirstNavigationIntent(() => {
+      void sitePluginLoader
+        .ensure(enabledKey.split(','), ['site'])
+        .then(() => active && setLatePluginTick((tick) => tick + 1))
+        .catch(() => undefined)
+    })
     return () => {
       active = false
+      detach()
     }
   }, [blockingKey, enabledKey])
 

@@ -397,14 +397,18 @@ describe('each metered dimension names its overage rate', () => {
   })
 
   it('quotes page views and form submissions PER 1,000', async () => {
-    // Per unit these are $0.00013 and $0.000065, which read as zero at any
+    // Per unit these are $0.00021 and $0.000065, which read as zero at any
     // precision a customer would trust — the reason the unit is 1,000 here
     // and a GB-month for storage.
+    //
+    // The page-view figure is also where `rateText` earns its trailing-zero
+    // strip: cost x 1.3 is $0.209999998 per 1,000, which four decimals round
+    // to $0.2100 and the strip renders as the $0.21 the published page states.
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed({ hostMonthViews: 10, hostFormSubmissions: 3 })
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
     await waitFor(() => {
-      expect(screen.getByText(/\$0\.13 per 1,000/)).toBeTruthy()
+      expect(screen.getByText(/\$0\.21 per 1,000/)).toBeTruthy()
     })
     expect(screen.getByText(/\$0\.065 per 1,000/)).toBeTruthy()
   })

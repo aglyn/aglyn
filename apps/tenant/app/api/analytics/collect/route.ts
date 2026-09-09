@@ -349,7 +349,7 @@ function utmFragment(
  *
  * The hole (`free-tier-never-billed.spec.ts` names it in its own table):
  * every other free dimension had a runtime brace and bandwidth had none, so a
- * viral free site served a million views — ~$100 of real COGS at
+ * viral free site served a million views — ~$162 of real COGS at
  * `METERED_UNIT_RATES_USD.perPageView` — with no wall, no throttle and no
  * alert. Free never got *billed* for it, which was the point of the
  * structural zero; it also never got *stopped*, which was the hole.
@@ -509,7 +509,7 @@ async function engageFreePlanBandwidthCap(options: {
 /**
  * Sum the month once, then ask BOTH bandwidth questions of it (AGL-2413).
  *
- * 1. the free plan's **band** — `bandwidthCapShouldEngage`, ~3,500 views; and
+ * 1. the free plan's **band** — `bandwidthCapShouldEngage`, ~2,070 views; and
  * 2. the **abuse ceiling** — 3x the band, floor 100,000 views.
  *
  * ## Why the plan cap moved here (AGL-2413)

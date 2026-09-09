@@ -44,8 +44,9 @@ export interface Props {
   enabledPlugins?: string[]
   /**
    * The subset of `enabledPlugins` this page must have registered *before it
-   * renders*, when that subset is smaller (AGL-1289). The rest still load,
-   * immediately after hydration, off the critical path.
+   * renders*, when that subset is smaller (AGL-1289). The rest load when the
+   * visitor first reaches for a link (AGL-2710) — what they are needed for is
+   * a later page, and a visit that never navigates never fetches them.
    *
    * Absent means "no narrowing was safe" — `requiredSitePlugins` refuses
    * whenever any plugin contributed something to the page — and the client

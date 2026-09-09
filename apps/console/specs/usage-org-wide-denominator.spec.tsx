@@ -77,9 +77,9 @@ const TOTAL_PAGE_VIEWS = 240_000
 const ROLLUP_SITE_SIZE_MB = 4_300
 const ROLLUP_DATA_STORAGE_MB = 12.5
 
-/** 240,000 × 600 KB ÷ 1 GB = 137.33 GB — vs 57.22 for the largest site. */
-const EXPECTED_ORG_GB = '137.33'
-const LARGEST_HOST_GB = '57.22'
+/** 240,000 × 1012.8 KB ÷ 1 GB = 231.81 GB — vs 96.59 for the largest site. */
+const EXPECTED_ORG_GB = '231.81'
+const LARGEST_HOST_GB = '96.59'
 
 const mockFetchSeatCounts = jest.fn(async () => ({
   managerSeats: 2,
@@ -171,10 +171,10 @@ describe('the console meter measures the org, like the invoice does', () => {
     // The old reading, explicitly excluded: the largest single site's share.
     expect(row.textContent).not.toContain(LARGEST_HOST_GB)
 
-    // 137.33 / 125 = 109.9% — past the 80% mark, so the meter warns and offers
-    // the upgrade. At the per-host reading it is 45.8% and says nothing, while
+    // 231.81 / 125 = 185.4% — past the 80% mark, so the meter warns and offers
+    // the upgrade. At the per-host reading it is 77.3% and says nothing, while
     // the cron emails the 100% warning off the org-wide figure. The customer
-    // gets the email and sees a meter under half.
+    // gets the email and sees a meter that has not warned.
     expect(row.textContent).toContain('Upgrade')
   })
 
@@ -240,7 +240,7 @@ describe('the meter, the cron and the invoice compute one figure', () => {
     const invoiceFraction = estimate.pageViews / estimate.included.pageViews
     expect(meterFraction).toBeCloseTo(cronFraction, 12)
     expect(meterFraction).toBeCloseTo(invoiceFraction, 12)
-    expect(meterFraction).toBeCloseTo(1.0986, 4)
+    expect(meterFraction).toBeCloseTo(1.8545, 4)
 
     // Non-vacuous: the per-host reading the meter used to show is a
     // different number, and lands on the other side of the 80% threshold the

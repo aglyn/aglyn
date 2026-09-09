@@ -19,6 +19,7 @@
 import dynamic from 'next/dynamic'
 import { forwardRef, Fragment, useEffect, useState } from 'react'
 import { LoadingContext } from '../contexts/loading.context'
+import { onFirstNavigationIntent } from './navigation-intent'
 import type { LoadingModalOverlayProps } from './loading-modal-overlay'
 
 /**
@@ -32,43 +33,28 @@ const LoadingOverlay = dynamic(importOverlay, { ssr: false })
 export type LoadingModalProps = LoadingModalOverlayProps
 
 /**
- * Warms the overlay chunk once the page it sits under has painted.
+ * Warms the overlay chunk the first time a visitor reaches for a link.
  *
  * The overlay covers a slow navigation, so fetching it only at the click that
  * starts one would put a request in front of the very thing it exists to
- * cover. Idle time after first paint is the right moment instead: off the
- * billed first-paint bundle, and settled long before anyone clicks. The
- * `timeout` matters — an idle callback in a background tab can wait
- * indefinitely without one — and every path here is best-effort, because the
- * render below fetches the module on demand regardless.
+ * cover. It must therefore arrive early — but "early" is not "always". An
+ * unconditional warm-up fetches the chunk, and every chunk behind it, on every
+ * page view, including the majority that navigate nowhere; deferring a module
+ * and then fetching it anyway moves bytes off first paint without taking them
+ * off the wire, and adds a round trip doing it. Metered per page view, that
+ * costs the same as never having deferred it.
+ *
+ * Best-effort, because the render below fetches the module on demand
+ * regardless.
  */
 function useOverlayWarmUp(): void {
-  useEffect(() => {
-    const warm = () => {
-      void importOverlay().catch(() => undefined)
-    }
-    const idle = (
-      globalThis as typeof globalThis & {
-        requestIdleCallback?: (
-          callback: () => void,
-          options?: { timeout: number },
-        ) => number
-        cancelIdleCallback?: (handle: number) => void
-      }
-    ).requestIdleCallback
-    if (!idle) {
-      const timer = setTimeout(warm, 2000)
-      return () => clearTimeout(timer)
-    }
-    const handle = idle(warm, { timeout: 4000 })
-    return () => {
-      ;(
-        globalThis as typeof globalThis & {
-          cancelIdleCallback?: (handle: number) => void
-        }
-      ).cancelIdleCallback?.(handle)
-    }
-  }, [])
+  useEffect(
+    () =>
+      onFirstNavigationIntent(() => {
+        void importOverlay().catch(() => undefined)
+      }),
+    [],
+  )
 }
 
 /**
