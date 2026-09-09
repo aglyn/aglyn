@@ -456,6 +456,12 @@ jobs:
       # entry point: `catch-all-client.tsx` imports it statically, so a heavy
       # package reaching it lands on every published customer page. ~1s.
       - run: npm run check:aglyn-barrel
+      # How the SHELLS import that barrel, which no allowlist can express
+      # (AGL-2706). `import * as Aglyn from '@aglyn/aglyn'` is opaque to a
+      # bundler, so it ships every module the barrel reaches while moving
+      # nothing in the barrel's own graph. One of them, in the console's realm
+      # plugin loader, cost 214.3 KB gzipped on every console route. ~1s.
+      - run: npm run check:core-namespace-pin
       # First-load WEIGHT of a published page (AGL-2486 follow-on). The two
       # allowlists above pin WHICH third-party packages the page can reach;
       # neither can see first-party code growing without adding a dependency,

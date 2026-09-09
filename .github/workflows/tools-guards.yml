@@ -789,6 +789,14 @@ jobs:
       # regressions, so the gate is known to catch the thing it was built for.
       - run: npm run check:aglyn-barrel
 
+      # The same barrel, the other half of the bill (AGL-2706). The allowlists
+      # above pin what the barrel REACHES; a VALUE namespace import pins all
+      # of it into a shell's first load while reaching nothing new, so both
+      # gates stay green while three quarters of a megabyte ships. Its forced
+      # red replays the exact import that did it.
+      - run: npm run test:core-namespace-pin
+      - run: npm run check:core-namespace-pin
+
       # The byte budget the two allowlists above cannot express (AGL-2486
       # follow-on). A published page's first-party first-load graph, summed as
       # source bytes and pinned with 25% headroom. Static edges only: an
