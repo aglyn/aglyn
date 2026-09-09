@@ -44,9 +44,11 @@
  *
  * The static closure of an app shell's client root. Static edges only: an
  * `import()` is a chunk a visitor pays for when a branch asks for it, which
- * is exactly the shape the fix uses — the one place the console genuinely
- * needs the namespace as a value is the realm-plugin host ABI, and it lives
- * behind a relative `import()` in `realm-plugin-host.client.ts`.
+ * is exactly the shape the fix uses — the two places the console genuinely
+ * needs the namespace as a value are the realm-plugin host ABI and the
+ * devtools handle the editor hangs off `window`, and both live behind a
+ * relative `import()`: `realm-plugin-host.client.ts` and
+ * `core-module-handle.client.ts`.
  *
  * A type-only namespace is free: TypeScript erases it, so it is not a runtime
  * edge. That is `readImports`' existing rule (AGL-1349) and the right one
@@ -78,10 +80,24 @@ const NAMESPACE_CLAUSE = /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\b/
  * the site switcher and the org hooks that also held the namespace hang off
  * it. The tenant entry is the published customer page, which reached zero
  * before this gate existed and is here so it cannot quietly stop.
+ *
+ * The seven besigner pages are seven roots, not one: `(editor)` has no client
+ * layout to hang them off, so each page's own closure is what a visitor to
+ * that editor downloads. They shared 83 namespace pins across `apps/console`,
+ * `libs/besigner/core` and `libs/besigner/feature/designer`, and the six
+ * outside the screens editor reach files no other entry does — a pin
+ * returning to the emails editor is invisible from any of the others.
  */
 export const SHELL_ENTRIES = [
   'apps/console/app/(app)/layout.tsx',
   'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx',
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner/page.tsx',
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner/page.tsx',
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/forms/[formId]/versions/[versionId]/besigner/page.tsx',
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/emails/[templateKey]/versions/[versionId]/besigner/page.tsx',
+  'apps/console/app/(editor)/[orgSlug]/hosts/[host]/templates/[templateId]/besigner/page.tsx',
+  'apps/console/app/(editor)/admin/emails/[templateKey]/versions/[versionId]/besigner/page.tsx',
 ]
 
 /**
@@ -135,15 +151,23 @@ export function measureNamespacePins({ entry, read, resolve }) {
   return { moduleCount: graph.modules.size, pins }
 }
 
-/** Convenience wrapper over `measureNamespacePins` for the real repo. */
-export function measureShell(root, read, entry) {
+/**
+ * Convenience wrapper over `measureNamespacePins` for the real repo.
+ *
+ * `resolve` is a parameter rather than a fresh resolver per call because the
+ * nine shells overlap almost entirely — the seven besigner pages differ by a
+ * handful of modules out of 7,500 — and a resolver built per entry throws
+ * away the specifier cache between them.
+ */
+export function measureShell(
+  root,
+  read,
+  entry,
+  resolve = createResolver(root),
+) {
   return {
     entry,
-    ...measureNamespacePins({
-      entry: `${root}/${entry}`,
-      read,
-      resolve: createResolver(root),
-    }),
+    ...measureNamespacePins({ entry: `${root}/${entry}`, read, resolve }),
   }
 }
 

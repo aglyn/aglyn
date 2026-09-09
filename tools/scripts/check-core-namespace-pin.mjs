@@ -40,6 +40,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { createResolver } from '../lint-rules/lib/app-router-graph.mjs'
 import {
   SHELL_ENTRIES,
   WHY_NAMESPACE_PIN,
@@ -49,9 +50,19 @@ import {
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const asJson = process.argv.includes('--json')
 
-const read = (file) => readFileSync(file, 'utf8')
+// One resolver and one source cache for all nine walks: the shells overlap so
+// heavily that re-reading and re-parsing each module per entry is most of the
+// run. The measurement is unchanged — every walk still sees the same bytes.
+const sources = new Map()
+const read = (file) => {
+  let source = sources.get(file)
+  if (source === undefined)
+    sources.set(file, (source = readFileSync(file, 'utf8')))
+  return source
+}
+const resolve = createResolver(REPO_ROOT)
 const shells = SHELL_ENTRIES.map((entry) =>
-  measureShell(REPO_ROOT, read, entry),
+  measureShell(REPO_ROOT, read, entry, resolve),
 )
 const pinned = shells.filter((shell) => shell.pins.length)
 
