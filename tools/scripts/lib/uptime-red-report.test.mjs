@@ -103,6 +103,48 @@ describe('the message', () => {
     assert.doesNotMatch(payload.text, /USER JOURNEY/)
   })
 
+  /**
+   * A front door reports whether a visitor gets a page, so it carries the
+   * loudest sentence on the list — but only when the probe actually saw the
+   * app. Bot protection answering 429 tells us nothing, and the same row would
+   * otherwise announce an outage that may not exist, in the one message a
+   * reader at 3am is least able to check (AGL-2709).
+   */
+  it('claims a visitor is not getting a page when the front door is really down', () => {
+    const payload = slackPayload({
+      results: [
+        {
+          name: 'front-door/site',
+          url: 'https://demo.aglyn.app/',
+          ok: false,
+          detail: 'HTTP 500',
+        },
+      ],
+      runUrl: '',
+    })
+    assert.match(payload.text, /USER JOURNEY/)
+    assert.match(payload.blocks[0].text.text, /NOT getting a page/)
+  })
+
+  it('makes no such claim when the probe was only challenged', () => {
+    const payload = slackPayload({
+      results: [
+        {
+          name: 'front-door/site',
+          url: 'https://demo.aglyn.app/',
+          ok: false,
+          challenged: true,
+          detail: 'CHALLENGED (HTTP 429) — bot protection answered',
+        },
+      ],
+      runUrl: '',
+    })
+    assert.doesNotMatch(payload.text, /USER JOURNEY/)
+    assert.doesNotMatch(payload.blocks[0].text.text, /NOT getting a page/)
+    // The row is still reported, and still red.
+    assert.match(payload.blocks[0].text.text, /CHALLENGED/)
+  })
+
   it('every journey endpoint on the watch list has a sentence', async () => {
     // Derived from the watch list rather than listed here, so a journey check
     // added later without a meaning is caught rather than reported bare.

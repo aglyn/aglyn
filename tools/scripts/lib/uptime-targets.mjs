@@ -84,10 +84,21 @@ export const DEFAULT_TARGETS = [
  * read. Re-confirm the page renders targets before quoting it as monitoring;
  * `docs/UPTIME_AND_SLA.md` says how.
  *
- * A page render reached through `/api/*` is also the only way to observe "a
- * site still renders" from outside, since page routes are challenged for
- * non-JS clients — which is what killed the GCP checks. So the probe now
- * measures a render rather than mere liveness.
+ * ⛔ THIS PARAGRAPH USED TO SAY a page render reached through `/api/*` was the
+ * ONLY way to observe "a site still renders" from outside, because page routes
+ * are challenged for non-JS clients. Both halves were wrong by 2026-09-09
+ * (AGL-2709). The challenge is answerable — `x-aglyn-probe` bypasses it, and
+ * every check has carried that header since 2026-08-24 — and a canary is not
+ * the same observation as a page. `/api/health/render/*` runs the loader
+ * inside a `force-dynamic` route handler; the ISR path that turns that
+ * loader's output into a document at request time is a different code path,
+ * and it is the one that answered 500 on every tenant page for ten minutes
+ * while both canaries reported 100.000% with no downtime recorded.
+ *
+ * The canaries stay: they isolate a broken SITE from a broken platform, which
+ * a page fetch cannot do. What they never were is the front door. That is
+ * `lib/front-door.mjs`, and `front-door.test.mjs` holds the two lists in
+ * lockstep so the substitution cannot be made again by accident.
  *
  * ⚠️ It does NOT thereby validate the hostname it was reached through, and
  * assuming otherwise is the trap this whole issue is about. The canary
@@ -202,6 +213,10 @@ export function evaluateCanaryReaders(
  *
  *  - a SUBSYSTEM row only (the root is never pending — a base URL that 404s is
  *    a wrong base URL, which is the AGL-786 defect);
+ *  - a HEALTH row only. A front-door page row (`kind: 'page'`) carries a slash
+ *    in its name for readability and must never be eligible: a 404 on the page
+ *    a visitor asks for is the AGL-786 defect wearing a different hostname, not
+ *    a fact about the deploy queue (AGL-2709);
  *  - a 404 only (a 500 or a 503 from a route that DOES exist stays DOWN);
  *  - only while that target's own ROOT is UP. A deployment that is actually
  *    down does not 404 selectively, it fails everything — so this can never
@@ -221,6 +236,7 @@ export function markPendingDeployments(results) {
   for (const result of results) {
     const target = result.name.split('/')[0]
     if (
+      result.kind !== 'page' &&
       result.name.includes('/') &&
       result.status === 404 &&
       rootUp.get(target) === true

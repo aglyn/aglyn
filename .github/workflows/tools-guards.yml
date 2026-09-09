@@ -332,6 +332,19 @@ jobs:
       # place a deleted route could hide.
       - run: npm run test:uptime-targets
 
+      # test:front-door  Does a VISITOR get a page (AGL-2709)? Every monitor on
+      # the board asked a health route, and a health route answers from inside
+      # a route handler that never enters the ISR path. On 2026-09-09 every
+      # tenant page answered 500 for ten minutes while `Published sites` and
+      # `Marketing site` — both pointed at render canaries — reported
+      # 100.000% with no downtime recorded. This guards the grader that reads
+      # a real page fetch, in both directions: the 500, the 429 checkpoint, the
+      # redirect and the valid-HTML-that-is-not-ours all have to be red, and a
+      # real render has to be green. It also pairs the canary list with the
+      # front-door list from the filesystem, so a third canary cannot ship with
+      # only the proxy measurement pointed at it. Pure node.
+      - run: npm run test:front-door
+
       # test:week-one-preflight  The launch pre-flight's OWN self-test
       # (AGL-1617). The script implements every mechanically-checkable item of
       # runbook precondition P4, including the per-host brand-content

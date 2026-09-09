@@ -657,6 +657,11 @@ node tools/scripts/probe-uptime.mjs                        # production defaults
 node tools/scripts/probe-uptime.mjs http://localhost:4200  # anything else
 ```
 
+It probes two kinds of row. A **health** row reads one of the JSON contracts
+listed at the top of this file. A **page** row — see
+[The front door](#the-front-door) — fetches the URL a visitor types and grades
+what a visitor would get.
+
 Exits non-zero if any target is down. `.github/workflows/uptime-probe.yml`
 runs it every 15 minutes on GitHub's runners — not our infrastructure, which is
 the only part that makes it a real probe. A monitor hosted on the thing it
@@ -680,6 +685,95 @@ load, and stop entirely if the repository goes quiet for 60 days.
 history is not evidence of 100% uptime.** Do not quote it as one. It exists so
 the endpoints are exercised continuously from outside the deploy, and so there
 is something concrete to point a paid external monitor at when one is chosen.
+
+## The front door {#the-front-door}
+
+**Every monitor on this page asked a health route until 2026-09-09, and a
+health route is not the path a visitor takes** (AGL-2709).
+
+On 2026-09-09 every tenant page answered **HTTP 500** with a
+`DYNAMIC_SERVER_USAGE` digest for about ten minutes. Both page-shaped monitors —
+`Published sites` on `/api/health/render/site` and `Marketing site` on
+`/api/health/render/marketing` — reported **100.000%, no downtime recorded**.
+Neither was broken. They run the page loader inside a route handler declared
+`dynamic = 'force-dynamic'`, and the failure was in the ISR path that assembles
+that loader's output into a document at request time. No `/api/*` route enters
+it, so no health door on this page could have seen the outage. GCP's log-based
+`server-errors` alert named the route in about 90 seconds; the page monitors
+never noticed at all.
+
+So the canaries answer a real question and the wrong one. `probe-uptime.mjs`
+now also fetches the pages themselves:
+
+| Row | URL | Asserts |
+| --- | --- | --- |
+| `front-door/site` | `https://demo.aglyn.app/` | a visitor gets a page |
+| `front-door/marketing` | `https://aglyn.com/` | the same, through the `cname--` custom-domain path |
+
+A row is green only on **HTTP 200**, `content-type: text/html`, a document that
+reaches `</html>`, and asset references under `/_next/static/` proving our app
+rendered it. A parked domain, a CDN error page and a half-streamed render are
+all valid HTML and all fail. The assertion is deliberately structural: site copy
+belongs to whoever owns the site, and `<meta name="generator" content="Aglyn">`
+is not on the list either, because it is suppressed on white-labeled sites by
+design (AGL-2088).
+
+:::caution A challenge is neither a pass nor an outage
+Vercel Bot Protection answers a plain client with a **429 Vercel Security
+Checkpoint**, which is exactly why `marketing-home` and `customer-site` were
+repointed off real pages in the first place — they read 0% for a week while both
+sites were healthy. The probe sends `x-aglyn-probe` (see
+`tools/scripts/lib/probe-headers.mjs`), matching the **"CI and uptime probe
+bypass"** Vercel rule, so it reaches the app.
+
+When a challenge comes back anyway the row reads **`CHAL`**, not `DOWN`, and
+says so in words: bot protection answered instead of the app, check
+`AGLYN_PROBE_TOKEN` and the bypass rule. It is still red — a check that cannot
+see the site has not verified it — but it points at the firewall rather than at
+the app. Reporting a challenge as an outage is the false alarm that got this
+coverage traded away once already.
+
+The Slack alert makes the same distinction. A front door that is genuinely down
+gets the loudest sentence on the list — *a visitor is NOT getting a page* — and
+a CHALLENGED row gets no claim at all, only the verdict the probe actually
+produced. The probe has no dedupe by design, so an inaccurate claim here would
+repeat every fifteen minutes.
+
+Verified 2026-09-09 against the live hosts, from a client with no token: both
+`https://demo.aglyn.app/` and `https://aglyn.com/` answer **429** and the probe
+reports `CHAL` on each, exit 1.
+:::
+
+**What a green front-door row still cannot rule out.** Next serves a stale ISR
+document while a fresh render fails, so a `HIT` can outlive the render that
+would produce it. The row records `x-nextjs-cache` in its detail line and does
+not grade on it; nothing here watches for a deployment whose cache is healthy
+and whose renders are not. That gap is real and is not closed.
+
+Every render canary must have a front door of the same name, checked from the
+filesystem by `npm run test:front-door` in both directions — a third canary
+fails that suite until a real page fetch is pointed at the same runtime, and a
+front-door key that names no canary fails it from the other side. A proxy
+measurement is only trustworthy while the thing it stands for is also measured,
+which is the whole lesson of the outage.
+
+```bash
+# Point it at a local production server to watch it go red on real code.
+# Only an override may carry a path: the e2e fixture seeds /home and /survey
+# and no root screen, so a local run pinned to `/` would report a 404.
+node tools/scripts/probe-uptime.mjs \
+  'front-door/site=http://localhost:4500/home' --only front-door
+```
+
+**The external half is not done.** The GCP checks `marketing-home` and
+`customer-site` still point at the render canaries, which is what this section
+says cannot see an outage. Now that all thirteen carry the bypass header, one of
+them can go back to fetching a real page — see
+[Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks)
+for the `gcloud monitoring uptime update` shape, and keep a canary check
+alongside rather than replacing it: `sites` red with `delivery` green is still
+how a reader tells our sample workspace from a platform event. **Nothing in this
+repository has applied that change.**
 
 ## Production monitoring and alerting (AGL-1502, 2026-08-13)
 
@@ -710,7 +804,14 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
 
-:::danger Read this table with two corrections
+:::danger Read this table with three corrections
+**Not one check in it fetches a page.** `marketing-home` and `customer-site`
+did, and the repoint above traded that for the render canaries — which cannot
+see an ISR failure and did not see the one on 2026-09-09. The bypass header
+that makes a real page fetch answerable arrived after the repoint was written;
+see [The front door](#the-front-door) for what now covers it, and for why one
+of these two should go back to a page URL rather than the repoint being undone.
+
 **Four of these checks have been at 0% since 2026-08-21** — every one of them
 on a host our own bot protection challenges. See
 [Four of these checks have been red](#four-checks-red).
@@ -1558,6 +1659,20 @@ is the platform demonstration site the middleware falls back to for
 - **Email delivery** (Resend outages) and **DNS**: no synthetic coverage. Each
   has failed loudly rather than silently so far; revisit if that stops being
   true.
+- **A page served from a STALE ISR cache while every fresh render fails**
+  (AGL-2709). [The front door](#the-front-door) closed the "no monitor fetches
+  a page" gap, and this is the one it does not close: Next serves the cached
+  document while background revalidation throws, so a `HIT` can outlive the
+  render that produced it. The probe records `x-nextjs-cache` and does not
+  grade on it, because grading on it would red every legitimately cached hit.
+  What would actually close this is the server-error rate above, split by
+  route — a spike of `DYNAMIC_SERVER_USAGE` while pages read 200 is precisely
+  that state, and it is the signal that caught the 2026-09-09 outage in about
+  90 seconds when nothing else did.
+- **Any customer's own site.** Both front doors are hosts Aglyn owns, on
+  purpose: a monitor that reds because a customer unpublished a page is a
+  monitor people learn to ignore. A per-customer availability signal is not the
+  same product as this page and is not attempted here.
 
 ### The server-error runbook (AGL-1921)
 
