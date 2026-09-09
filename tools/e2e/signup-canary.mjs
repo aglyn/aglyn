@@ -97,17 +97,25 @@ const { initializeApp, cert } = require('firebase-admin/app')
 const { getFirestore } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
 
-const CONSOLE = process.env['SIGNUP_CANARY_ORIGIN'] ?? 'https://app.aglyn.com'
 /**
- * Where the canary's welcome mail goes.
- *
- * A REAL, deliverable address on purpose. Org creation welcomes the owner of
- * a first workspace, so an address that hard-bounces would hand the sending
- * domain a bounce every hour — a reputation cost paid to avoid an inbox rule.
- * Plus-addressed and unique per run, because each walk creates a new account.
+ * The console to walk. No default, deliberately: a hard-coded Aglyn hostname
+ * would put this on the self-host ratchet, and a self-hoster's canary should
+ * walk THEIR console. Set `SIGNUP_CANARY_ORIGIN`.
  */
-const EMAIL_BASE =
-  process.env['SIGNUP_CANARY_EMAIL'] ?? 'zach+signup-canary@aglyn.com'
+const CONSOLE = process.env['SIGNUP_CANARY_ORIGIN'] ?? ''
+/**
+ * Where the canary's welcome mail goes. Required — no default.
+ *
+ * It must be a REAL, deliverable address. Org creation welcomes the owner of a
+ * first workspace, so an address that hard-bounces would hand the sending
+ * domain a bounce every hour: a reputation cost paid to avoid an inbox rule.
+ * The run plus-addresses it per walk, because each walk creates a new account.
+ *
+ * No default, for the same reason `SIGNUP_CANARY_ORIGIN` has none — a literal
+ * here is an Aglyn address in a file a self-hoster runs, and it puts this on
+ * the self-host ratchet.
+ */
+const EMAIL_BASE = process.env['SIGNUP_CANARY_EMAIL'] ?? ''
 
 /**
  * Every slug this canary creates starts here, and the orphan sweep is bounded
@@ -279,7 +287,7 @@ async function walk(page, db, auth, identity, created) {
 
   begin('verify-mint')
   /**
-   * No `url` in the settings. `app.aglyn.com` is not an authorized continue
+   * No `url` in the settings. The console origin is not an authorized continue
    * domain and passing it fails the generate call itself with
    * `auth/internal-error`; the product discards Firebase's handler URL anyway
    * and keeps only the code.
@@ -373,6 +381,8 @@ async function walk(page, db, auth, identity, created) {
 }
 
 async function main() {
+  if (!CONSOLE) throw new Error('SIGNUP_CANARY_ORIGIN is not set')
+  if (!EMAIL_BASE) throw new Error('SIGNUP_CANARY_EMAIL is not set')
   if (process.env['SIGNUP_CANARY_ENABLE'] !== '1') {
     console.error(
       'refusing to run: set SIGNUP_CANARY_ENABLE=1 to walk production signup',
@@ -418,17 +428,35 @@ async function main() {
     const swept = await sweepOrphans(db, auth)
     done(swept.length ? `cleared ${swept.length} from a previous run` : '')
 
-    const debugToken = process.env['FIREBASE_APPCHECK_DEBUG_TOKEN'] ?? ''
-    if (!debugToken) throw new Error('FIREBASE_APPCHECK_DEBUG_TOKEN is not set')
-    // One CONTEXT, so the verification tab shares the signup tab's session and
-    // storage the way two tabs of one browser do. `browser.newPage()` would
-    // give each its own context and the second tab would arrive signed out.
-    const context = await browser.newContext()
-    // Before any page script: the SDK reads this the moment App Check
-    // initializes, and after that it is too late.
-    await context.addInitScript((token) => {
-      self.FIREBASE_APPCHECK_DEBUG_TOKEN = token
-    }, debugToken)
+    /**
+     * ⛔ BLOCKED, AND NOT BY ACCIDENT (AGL-2402).
+     *
+     * Identity Platform enforces App Check and this project's provider is
+     * reCAPTCHA Enterprise, which is designed to score headless automation as
+     * a bot and does: `accounts:signUp` from this walk is refused
+     * `401 Firebase App Check token is invalid`.
+     *
+     * The supported way through is an App Check DEBUG TOKEN, and this repo has
+     * already decided against holding one. `app-check-debug-token.spec.ts`
+     * makes a build that reads one a failing check, because a debug token is a
+     * standing bypass of attestation for whoever holds it; two orphaned ones
+     * found by the AGL-1874 secrets audit carry the instruction "delete, do
+     * not rotate".
+     *
+     * That decision outranks this canary. Attesting with a debug token would
+     * also make the walk unable to notice App Check breaking for real
+     * visitors, which is the same blindness the no-bypass-header rule above
+     * exists to avoid.
+     *
+     * So the walk stops here until someone decides otherwise. Everything
+     * around it is finished and proven — the flow below ran green three times
+     * on production while a token existed, and the token has since been
+     * revoked.
+     */
+    throw new Error(
+      'App Check refuses headless attestation; a debug token is forbidden by AGL-2402',
+    )
+    // eslint-disable-next-line no-unreachable
     const page = await context.newPage()
 
     await walk(page, db, auth, identity, created)

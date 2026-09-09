@@ -94,17 +94,11 @@ jobs:
       - name: Walk the signup
         env:
           SIGNUP_CANARY_ENABLE: '1'
+          SIGNUP_CANARY_ORIGIN: ${{ vars.SIGNUP_CANARY_ORIGIN }}
           # The repo convention: an optional var with the project as the default.
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
-          # ⚠️ An App Check bypass. reCAPTCHA Enterprise is designed to score
-          # headless automation as a bot and always will, so this is the only
-          # way the walk can attest at all — and it is the one part of the
-          # journey that is therefore NOT real. Single purpose, named in the
-          # Firebase console as `signup-canary (AGL-2715) — CI only`, and
-          # revocable there in one click.
-          FIREBASE_APPCHECK_DEBUG_TOKEN: ${{ secrets.FIREBASE_APPCHECK_DEBUG_TOKEN }}
           # Where the welcome mail lands. Org creation welcomes the owner of a
           # first workspace, so this must be a REAL deliverable address — an
           # address that hard-bounces would cost the sending domain a bounce
