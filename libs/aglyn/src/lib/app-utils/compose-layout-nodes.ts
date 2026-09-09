@@ -17,7 +17,7 @@
 
 import type { AglynNodeSchema, NodeId } from '../foundation'
 import { NODE_ROOT_ID } from '../canvas-manager/canvas-manager'
-import { COMPONENT_NODE_ID_PREFIX } from './compose-reusable-components'
+import { COMPONENT_NODE_ID_PREFIX } from './reusable-component-keys'
 import { mergeNodeSx } from './merge-node-sx'
 
 /** Persisted component id of the layout content outlet (plugins-mui). */

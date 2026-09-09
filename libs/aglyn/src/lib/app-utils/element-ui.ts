@@ -25,7 +25,7 @@
  */
 
 import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
-import { COMPONENT_NODE_ID_PREFIX } from './compose-reusable-components'
+import { COMPONENT_NODE_ID_PREFIX } from './reusable-component-keys'
 
 /**
  * Class the show/hide steps toggle. The tenant page ships
