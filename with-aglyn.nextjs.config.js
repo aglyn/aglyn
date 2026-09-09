@@ -444,6 +444,48 @@ const AGLYN_CONFIG = {
     '@popperjs/core',
   ],
   turbopack: {
+    /**
+     * Packages a browser bundle resolves somewhere other than where Node does
+     * (AGL-2706).
+     *
+     * The `browser` condition is the whole point: the server bundles, the
+     * cloud functions and every test keep the real package, and only the code
+     * a visitor downloads is redirected.
+     *
+     * ⚠️ The target is RELATIVE TO THE APP, not to this file. Turbopack
+     * resolves an alias against the Next project directory and rejects an
+     * absolute path outright — it reads a leading `/` as server-relative and
+     * fails with "server relative imports are not implemented yet". Every
+     * consumer of this config is an `apps/<app>` directory two levels below
+     * the repo root, so `../../` is the repo root from all of them. A wrong
+     * path is a hard build failure naming the specifier, not a silent
+     * fallthrough.
+     *
+     * `re2js` — 143 KB of regular-expression engine that `@firebase/firestore`
+     * imports at the top of its browser ESM for the Pipelines expression API
+     * alone. It was the largest single module in the console's first load;
+     * `tools/build/re2js-unavailable.browser.js` records why refusing is
+     * correct here and why a `RegExp` shim would not be.
+     *
+     * `next/dist/compiled/buffer` — Node's byte type, which Turbopack ships
+     * whenever any module in the client graph so much as names `Buffer` as a
+     * free variable. The last mention is one `instanceof` inside the same
+     * Firestore bundle, and an `instanceof` needs a constructor, not an
+     * implementation. See `tools/build/buffer-unavailable.browser.js`.
+     *
+     * ⚠️ The key is Next's COMPILED copy, not `buffer`. Turbopack resolves a
+     * free `Buffer` straight to `next/dist/compiled/buffer` without ever
+     * asking for the bare specifier, so an alias on `buffer` — the obvious
+     * one, and the one webpack uses — is inert: measured byte-identical,
+     * polyfill still present. Aliasing the compiled path took 22.0 KB raw off
+     * the console route.
+     */
+    resolveAlias: {
+      re2js: { browser: '../../tools/build/re2js-unavailable.browser.js' },
+      'next/dist/compiled/buffer': {
+        browser: '../../tools/build/buffer-unavailable.browser.js',
+      },
+    },
     rules: {
       '*.svg': {
         loaders: [

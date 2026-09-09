@@ -462,6 +462,13 @@ jobs:
       # nothing in the barrel's own graph. One of them, in the console's realm
       # plugin loader, cost 214.3 KB gzipped on every console route. ~1s.
       - run: npm run check:core-namespace-pin
+      # The vendored assumption under the two `browser` resolve aliases
+      # (AGL-2706). `re2js` and Next's compiled `buffer` are replaced in
+      # browser bundles by modules that carry a name and no implementation,
+      # for 48.7 KB gzipped off every console route. Both are safe only
+      # because of how `@firebase/firestore` uses each binding, which a
+      # dependency bump can change with nothing else going red. ~1s.
+      - run: npm run check:browser-shim-aliases
       # First-load WEIGHT of a published page (AGL-2486 follow-on). The two
       # allowlists above pin WHICH third-party packages the page can reach;
       # neither can see first-party code growing without adding a dependency,
