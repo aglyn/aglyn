@@ -15,6 +15,14 @@
  * limitations under the License.
  */
 
+// The one escaper (AGL-2706). The local `escapeAttribute` this replaces
+// omitted `'`, which single-quoted attributes delimit just as double quotes
+// do — the omission was survivable only because every value here lands in a
+// double-quoted slot, and a rule that holds by where its callers happen to
+// put it is the kind that stops holding quietly. `escapeText` below stays
+// local: it is the TEXT half, and a text node has no quote to break.
+import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
+
 /** Tags the inline rich-text editor may persist (AGL-54). */
 const ALLOWED_TAGS = new Set([
   'b',
@@ -98,7 +106,7 @@ export function sanitizeRichText(
     if (tag === 'a') {
       const href = element.getAttribute('href') ?? ''
       if (!SAFE_HREF.test(href)) return inner
-      return `<a href="${escapeAttribute(href)}" rel="noopener noreferrer">${inner}</a>`
+      return `<a href="${escapeHtml(href)}" rel="noopener noreferrer">${inner}</a>`
     }
     return `<${tag}>${inner}</${tag}>`
   }
@@ -111,10 +119,6 @@ function escapeText(text: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-}
-
-function escapeAttribute(value: string): string {
-  return escapeText(value).replace(/"/g, '&quot;')
 }
 
 /**
