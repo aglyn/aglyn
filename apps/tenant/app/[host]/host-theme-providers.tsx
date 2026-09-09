@@ -60,6 +60,7 @@ import { HostBrandProvider } from './host-brand.context'
 export function HostThemeProviders({
   hostTheme,
   initialThemeMode,
+  initialDeviceMode,
   brandLogoUrl,
   brandName,
   siteLinks,
@@ -77,6 +78,14 @@ export function HostThemeProviders({
    * it every visitor's first paint is light.
    */
   initialThemeMode?: ThemeMode
+  /**
+   * The device's light/dark preference, read from the request's color-scheme
+   * client hint by the server layout. It is what "Device default" resolves to
+   * on the first render, where the browser sends the hint: the media query the
+   * provider otherwise waits for has no answer until the page has hydrated, so
+   * without it a visitor on a dark device is served a light document.
+   */
+  initialDeviceMode?: ThemeMode
   brandLogoUrl?: string
   brandName?: string
   siteLinks?: SiteNavLink[]
@@ -119,6 +128,7 @@ export function HostThemeProviders({
       fallback={fallback}
       baseOptions={baseOptions}
       initialMode={initialThemeMode}
+      initialDeviceMode={initialDeviceMode}
     >
       <HostBrandProvider
         brandLogoUrl={brandLogoUrl}

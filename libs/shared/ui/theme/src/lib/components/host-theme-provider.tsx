@@ -72,6 +72,15 @@ export type HostThemeProviderProps = {
    * `document.cookie`, which no server render can see.
    */
   initialMode?: ThemeMode
+  /**
+   * The DEVICE's light/dark preference, read from the request's
+   * `Sec-CH-Prefers-Color-Scheme` client hint by the server component above
+   * this one; `null` on a browser that sends no hint. It decides the scheme
+   * only for a visitor who has chosen nothing — `initialMode` outranks it —
+   * and it is what keeps "Device default" from meaning "light until the page
+   * has hydrated" on a dark device.
+   */
+  initialDeviceMode?: ThemeMode
   disableCssBaseline?: boolean
   children?: JSX.Children
 }
@@ -82,13 +91,15 @@ export type HostThemeProviderProps = {
  * prefers-color-scheme mode state (same machinery as
  * `createWithThemeProvider`, so `useThemeMode` toggles keep working).
  *
- * An explicit choice is decided before paint, from `initialMode`. Device
- * default is not: `prefers-color-scheme` is answerable only in a browser, so a
- * visitor who follows their device gets the light scheme in the server's HTML
- * and the dark one once the page has hydrated. A site resolves its dark scheme
- * in JS — a single-mode theme swapped between schemes, and node styles whose
- * `@scheme dark` slices are merged against `palette.mode` — so there is no CSS
- * form of that decision for a media query to make instead.
+ * Both layers are decided before paint where the request can answer them: the
+ * explicit choice from `initialMode`, the device's own preference from
+ * `initialDeviceMode`. Neither has a CSS form to fall back on, because a site
+ * resolves its dark scheme in JS — a single-mode theme swapped between
+ * schemes, and node styles whose `@scheme dark` slices are merged against
+ * `palette.mode` — so a media query in a stylesheet could not make the
+ * decision instead. On a browser that sends no color-scheme client hint the
+ * device layer is unanswerable on the server and settles at hydration, which
+ * is why `useMediaQuery` remains the authority once there is one.
  */
 export function HostThemeProvider(props: HostThemeProviderProps) {
   const {
@@ -97,12 +108,13 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
     baseOptions,
     themeOptions,
     initialMode,
+    initialDeviceMode,
     disableCssBaseline,
     children,
   } = props
   const contextTheme = useHostThemeDocument()
   const hostTheme = theme ?? contextTheme
-  const themeModeState = useThemeModeState(initialMode)
+  const themeModeState = useThemeModeState(initialMode, initialDeviceMode)
   const [[, themeMode], toggleThemeMode, cookieMode] = themeModeState
   const requested = themeMode === 'dark' ? 'dark' : 'light'
 

@@ -181,6 +181,25 @@ const PLATFORM_GENERATOR_NAME =
   process.env.NEXT_PUBLIC_PLATFORM_BRAND_NAME?.trim() || 'Aglyn'
 
 /**
+ * The color-scheme client hint this origin negotiates. A local READ, for the
+ * reason `PLATFORM_GENERATOR_NAME` above is one.
+ *
+ * The canonical definition is `COLOR_SCHEME_HINT_HEADER` in the theme library,
+ * where the `[host]` layout reads the request header by the same name. Naming
+ * it again here rather than importing it keeps this edge bundle's import list
+ * to app-local files and the root `security-origins` — a rule this file holds
+ * so no future edit can drag a server-only graph into the edge at one remove.
+ *
+ * The copy is kept honest by assertion rather than by hope:
+ * `color-scheme-client-hint.spec.ts` imports the library constant and asserts
+ * the header this middleware actually emits equals it, so a rename in one
+ * place fails a test instead of quietly advertising a token the layout no
+ * longer reads — a mismatch that would leave every browser negotiating a hint
+ * nothing consumes.
+ */
+const COLOR_SCHEME_HINT = 'Sec-CH-Prefers-Color-Scheme'
+
+/**
  * Lockdown verdict at the REQUEST level (AGL-1501). The edge runtime cannot
  * query Firestore (see the `cname--` sentinel above), so the verdict comes
  * from this deployment's own Node route — the same fetch-a-verdict pattern
@@ -983,6 +1002,52 @@ export const middleware: NextMiddleware = async (req, event) => {
    * carries the reporting tail instead, which is where a post-flip violation
    * belongs anyway.
    */
+  /**
+   * THE VISITOR'S DEVICE SCHEME, ASKED FOR ON THE REQUEST.
+   *
+   * A published page resolves its dark scheme in JS — the MUI theme is
+   * single-mode and swapped between schemes, and every node's `@scheme dark`
+   * slice is merged against `palette.mode` as the tree renders — so the scheme
+   * has to be decided before the first render, not by a stylesheet. An
+   * explicit Light/Dark choice arrives in a cookie and the `[host]` layout
+   * reads it. "Device default", which is what most visitors are on, lives in
+   * `prefers-color-scheme`: a media feature, unanswerable anywhere but a
+   * browser. Left there, the server render falls back to light and the page
+   * turns over a component at a time as it hydrates.
+   *
+   * These three headers are how the request comes to carry that answer:
+   *
+   *  - `Accept-CH` advertises the hint, which is what makes a browser attach
+   *    it to later requests to this origin at all.
+   *  - `Critical-CH` names it as one the response could not be built correctly
+   *    without, so a browser that has not sent it retries the navigation
+   *    immediately with it. Without this line the FIRST page load of a session
+   *    is always hint-less — the load where a wrong scheme is most visible —
+   *    and only the second is right.
+   *  - `Vary` is the correctness half of the pair: the HTML genuinely differs
+   *    by the hint, so a cache that served one visitor's document to another
+   *    would serve dark markup into a light browser.
+   *
+   * ⚠️ `Vary` SPLITS THE HTML CACHE BY SCHEME, and that is the point. This
+   * route is fully dynamic today because the layout reads `cookies()`, so
+   * there is no shared document to split; the header is what makes a shared
+   * one legal later. Per-visitor theming and one cached document are
+   * irreconcilable, but per-SCHEME theming and two cached documents are not —
+   * this is the route back toward cacheability rather than a cost against it.
+   *
+   * Appended rather than set: Next appends its own `RSC`,
+   * `Next-Router-State-Tree` and friends to this same header for app-router
+   * responses, and `Vary` is a list — overwriting it would cost the router's
+   * own cache correctness to buy the scheme's.
+   *
+   * ⚠️ CHROMIUM ONLY. Firefox and Safari implement neither the hint nor this
+   * negotiation and simply ignore all three headers, so their visitors keep
+   * settling the scheme at hydration. The render path stays correct without
+   * the hint for exactly that reason.
+   */
+  response.headers.set('Accept-CH', COLOR_SCHEME_HINT)
+  response.headers.set('Critical-CH', COLOR_SCHEME_HINT)
+  response.headers.append('Vary', COLOR_SCHEME_HINT)
   // The deliberate, versionless platform fingerprint (AGL-2088), replacing the
   // accidental `x-aglyn-package-version` / `x-aglyn-process-version` pair that
   // shipped from `next.config` on every response of every site regardless of

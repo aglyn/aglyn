@@ -87,11 +87,80 @@ describe('HostThemeProvider rendering on the server', () => {
     expect(markup).toContain('dark|false|light')
   })
 
-  it('falls back to light when the request names no scheme', () => {
-    // Device default cannot be resolved without a browser, so light is the
-    // only answer available — and the contrast is what shows the case above
-    // is the seed's doing rather than an ambient default.
+  it('falls back to light when the request names no scheme at all', () => {
+    // Neither layer can be resolved without a browser or a hint, so light is
+    // the only answer available — and the contrast is what shows the cases
+    // around it are the seeds' doing rather than an ambient default.
     expect(serverRender({})).toContain('light|true|light')
     expect(serverRender({ initialMode: null })).toContain('light|true|light')
+  })
+})
+
+/**
+ * DEVICE DEFAULT, RESOLVED FROM THE REQUEST TOO.
+ *
+ * `prefers-color-scheme` is a media feature and `useMediaQuery` reports light
+ * for anything that is not a browser, so "Device default" — the mode nearly
+ * every visitor is on — would otherwise mean "light until the whole tree has
+ * hydrated". The `Sec-CH-Prefers-Color-Scheme` client hint carries the same
+ * preference on the request, and `initialDeviceMode` is that answer reaching
+ * the provider.
+ *
+ * This suite renders on the server precisely because that is where the media
+ * query has nothing to say: a passing case here cannot be one the media query
+ * answered.
+ */
+describe('the device preference the request carried', () => {
+  it('resolves dark for a visitor who chose nothing on a dark device', () => {
+    expect(serverRender({ initialDeviceMode: 'dark' })).toContain(
+      'dark|true|dark',
+    )
+  })
+
+  it('resolves dark when the stored choice is the device default', () => {
+    // "Device default" is stored as `system`, which the cookie parser reports
+    // as the absence of a choice — the same input the case above covers, and
+    // the one nearly every visitor arrives with.
+    expect(
+      serverRender({ initialMode: null, initialDeviceMode: 'dark' }),
+    ).toContain('dark|true|dark')
+  })
+
+  it('resolves light on a light device, which is not the fallback', () => {
+    // Light is also what an unanswerable request produces, so this case only
+    // means something beside the dark one above; together they show the hint
+    // is being read rather than ignored.
+    expect(serverRender({ initialDeviceMode: 'light' })).toContain(
+      'light|true|light',
+    )
+  })
+
+  describe('a stated preference outranks the device', () => {
+    it('keeps a visitor who chose light on light, on a dark device', () => {
+      expect(
+        serverRender({ initialMode: 'light', initialDeviceMode: 'dark' }),
+      ).toContain('light|true|light')
+    })
+
+    it('keeps a visitor who chose dark on dark, on a light device', () => {
+      expect(
+        serverRender({ initialMode: 'dark', initialDeviceMode: 'light' }),
+      ).toContain('dark|true|dark')
+    })
+  })
+
+  it('keeps a site that switched dark off on light, whatever the device is', () => {
+    // The per-site opt-out is a property of the site, so it outranks both
+    // layers — the switcher stays hidden on a site that will never go dark,
+    // and a dark device does not sneak past it.
+    expect(
+      serverRender({
+        initialDeviceMode: 'dark',
+        theme: {
+          darkScheme: 'off',
+          colorSchemes: { dark: { primary: { main: '#6f4e37' } } },
+        },
+      }),
+    ).toContain('dark|false|light')
   })
 })

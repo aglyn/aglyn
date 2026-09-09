@@ -133,17 +133,32 @@ export function useCookieThemeMode(
  *
  * An EXPLICIT choice comes from the cookie, which a server render can read
  * from the request — pass it as `initialMode` and the surface paints that
- * scheme in its first byte.
+ * scheme in its first byte. It outranks the device: a visitor who asked for
+ * light gets light on a dark laptop, and the ordering below is the only thing
+ * that decides it, so the two layers are kept as separate inputs rather than
+ * collapsed into one seed by the caller.
  *
- * DEVICE DEFAULT is the other layer, and it cannot be resolved anywhere but a
- * browser: it lives in `prefers-color-scheme`, which a server has no way to
- * evaluate. `useMediaQuery` reports light for every server render, so it is
- * consulted only where no explicit choice exists — a visitor who asked for
- * dark is never rendered light while waiting for the media query to become
- * answerable.
+ * DEVICE DEFAULT is the other layer. `prefers-color-scheme` is a media
+ * feature, so a server has nothing to evaluate it against and `useMediaQuery`
+ * answers light for every server render. `initialDeviceMode` supplies that
+ * answer from the request instead — the `Sec-CH-Prefers-Color-Scheme` client
+ * hint, where the browser sends one.
+ *
+ * It is fed in as `defaultMatches` rather than substituted for the media query
+ * because that is the value React reads for BOTH the server render and the
+ * hydration render: `useMediaQuery` publishes `defaultMatches` as its server
+ * snapshot and only switches to the live `matchMedia` result once hydration is
+ * complete. Seeding any earlier layer instead leaves the media query answering
+ * light for the hydration commit, and the tree repaints light before the real
+ * snapshot arrives — the flash this exists to remove, moved one frame later.
  */
-export function useThemeModeState(initialMode?: ThemeMode): UseThemeMode {
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)')
+export function useThemeModeState(
+  initialMode?: ThemeMode,
+  initialDeviceMode?: ThemeMode,
+): UseThemeMode {
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)', {
+    defaultMatches: initialDeviceMode === 'dark',
+  })
   const [cookieMode, setCookieMode] = useCookieThemeMode(initialMode)
 
   const systemMode = useMemo<ThemeMode>(() => {
