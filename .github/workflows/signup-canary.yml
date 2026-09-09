@@ -1,0 +1,89 @@
+# Can a stranger sign up right now? (AGL-2715)
+#
+# Every other signup check on this platform is an inference. The auth doors
+# assert Identity Platform is reachable, `probeCreate` reads that the platform
+# is unlocked and a name is free, and the volume/refusal/drought checks count
+# what happened afterwards. On the day AGL-2714 paged, the strongest thing any
+# of them could say was "somebody got an account recently", and recently was 24
+# hours ago. AGL-2581 is what that costs: signup refused every visitor for
+# three days while the monitor named for signups stayed green.
+#
+# This job walks it. It creates a real account and a real org on PRODUCTION,
+# then deletes them and stamps the verdict into one marker that
+# `/api/health/journeys` reports as `signupCanary` — graded by the existing
+# First-run journeys monitor, so no new row on the uptime board.
+#
+# ## Why hourly
+#
+# `SIGNUP_CANARY_STALE_AFTER_MS` is two hours, so one missed run is tolerated
+# and two are not. Running more often would page on ordinary GitHub Actions
+# queue delay; running less often would let the staleness window expire on a
+# healthy platform.
+#
+# ## Two halves, and the second one is why Chrome is here
+#
+# The mechanism half carries `x-aglyn-probe` — the existing CI/uptime bypass —
+# and so sails past the edge. That makes it structurally blind to bot
+# protection refusing real visitors, which is not hypothetical: an ordinary
+# desktop Chrome User-Agent measured `429 x-vercel-mitigated: challenge` on
+# 2026-09-09. The front-door half loads `/signup` in a real browser with NO
+# bypass header, which is the only way to see that.
+#
+# ## Failure is reported by the marker, not by this job's exit code
+#
+# The script always writes its verdict and then exits non-zero on a bad walk.
+# The red that matters is the health door going red, because that is what
+# pages; a red run here is the same signal arriving by a second road.
+
+name: Signup canary
+
+on:
+  schedule:
+    # Hourly, on the 25th minute — off the top of the hour where every other
+    # scheduled job in this repo clusters and Actions queues are deepest.
+    - cron: '25 * * * *'
+  workflow_dispatch: {}
+
+# One walk at a time. Two concurrent runs would race for the same orphan sweep
+# and each would try to reap the other's org mid-flight.
+concurrency:
+  group: signup-canary
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  walk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # firebase-admin and playwright-core only. The full workspace install is
+      # not needed and would cost minutes per hour.
+      - name: Install the two runtime dependencies
+        run: npm install --no-save --no-audit --no-fund firebase-admin@13 playwright-core@1
+
+      # ubuntu-latest ships Chrome. The front-door half needs a real browser:
+      # a fetch tool cannot solve the edge challenge, which is the whole point.
+      - name: Locate Chrome
+        run: echo "CHROME_PATH=$(which google-chrome || which chromium-browser || which chromium)" >> "$GITHUB_ENV"
+
+      - name: Walk the signup
+        env:
+          SIGNUP_CANARY_ENABLE: '1'
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # Public by design — it ships in the client bundle — so a repo
+          # variable rather than a secret, which keeps it readable in logs
+          # where a masked value would only make failures harder to read.
+          NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY }}
+          SIGNUP_CANARY_EMAIL: ${{ vars.SIGNUP_CANARY_EMAIL }}
+        run: node tools/e2e/signup-canary.mjs
