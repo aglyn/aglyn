@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { join, resolve } from 'node:path'
+
 /**
  * AN APP'S OWN `headers()` REACHES THE SHIPPED CONFIG (AGL-2716).
  *
@@ -37,7 +39,16 @@
  * a rule that no longer exists would have gone green by deletion.
  */
 
-const withAglyn = require('../../../with-aglyn.nextjs.config')
+/*
+  Resolved at RUNTIME, not by a relative specifier.
+
+  `require('../../../with-aglyn.nextjs.config')` reaches outside the project,
+  which `@nx/enforce-module-boundaries` refuses — "External resources cannot be
+  imported using a relative or absolute path". `production-never-reads-the-root-env.spec.ts`
+  reaches the same file the same way for the same reason.
+*/
+const REPO_ROOT = resolve(__dirname, '../../..')
+const withAglyn = require(join(REPO_ROOT, 'with-aglyn.nextjs.config.js'))
 
 type HeaderRule = { source: string; headers: { key: string; value: string }[] }
 
