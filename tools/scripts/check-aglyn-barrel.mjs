@@ -21,7 +21,7 @@
  *
  * `check-jsx-barrel.mjs` guards the OTHER barrel a published customer page
  * imports statically. This one guards `@aglyn/aglyn`, which
- * `apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx` opens with — and
+ * `apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx` opens with — and
  * which had no guard at all, which is how `firebase/auth` and `acorn` each
  * came to ship to anonymous visitors of every customer site. Same detector,
  * same two pins, same `--write` discipline; only the allowlist and the

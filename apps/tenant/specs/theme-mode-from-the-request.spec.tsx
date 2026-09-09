@@ -106,7 +106,7 @@ jest.mock('next/headers', () => ({
 }))
 
 import { renderToStaticMarkup } from 'react-dom/server'
-import HostLayout from '../app/[host]/layout'
+import HostLayout from '../app/[host]/[scheme]/layout'
 
 /**
  * Renders the layout for a request carrying the given cookie and hint, and

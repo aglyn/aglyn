@@ -6,7 +6,7 @@
   "apps/console/components/staff-email-message-dialog.component.tsx": 1,
   "apps/console/components/user-menu.component.tsx": 1,
   "apps/console/constants/sanctions-geo.ts": 2,
-  "apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx": 10,
+  "apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx": 10,
   "apps/tenant/app/[host]/admin-bar/admin-bar.tsx": 32,
   "apps/tenant/app/api/_legal-intake/chrome.ts": 34,
   "apps/tenant/app/api/locked/route.ts": 3,

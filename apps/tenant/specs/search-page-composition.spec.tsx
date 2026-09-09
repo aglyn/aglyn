@@ -60,7 +60,7 @@ jest.mock('../utils/search-content', () => {
 })
 // The presentational component is a `'use client'` MUI tree; the page's
 // contract with it is the props, so it is stubbed to a marker.
-jest.mock('../app/[host]/search/search-results.component', () => ({
+jest.mock('../app/[host]/[scheme]/search/search-results.component', () => ({
   __esModule: true,
   default: 'SearchResults',
 }))
@@ -68,7 +68,7 @@ jest.mock('../app/[host]/search/search-results.component', () => ({
 import type { SearchResult } from '../utils/search-content'
 import searchContent from '../utils/search-content'
 import { getHostCached } from '../app/[host]/host-data'
-import SearchPage from '../app/[host]/search/page'
+import SearchPage from '../app/[host]/[scheme]/search/page'
 
 const mockSearch = searchContent as jest.MockedFunction<typeof searchContent>
 const mockHost = getHostCached as jest.MockedFunction<typeof getHostCached>

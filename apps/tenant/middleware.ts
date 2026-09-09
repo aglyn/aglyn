@@ -17,6 +17,18 @@
 
 import type { NextMiddleware } from 'next/server'
 import { NextResponse } from 'next/server'
+// Deep imports (not the barrel) so the edge bundle takes three pure functions
+// rather than the theme library's React context providers — the same reason
+// the `[host]` layout deep-imports them (AGL-405).
+import {
+  COLOR_SCHEME_HINT_HEADER,
+  parseColorSchemeHint,
+} from '@aglyn/shared-ui-theme/util/color-scheme-hint'
+import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
+import {
+  parseThemeModeCookie,
+  THEME_MODE_COOKIE,
+} from '@aglyn/shared-ui-theme/util/theme-mode-cookie'
 // Shared with `with-aglyn.nextjs.config.js` so the frame-ancestors allowlist
 // has one definition (AGL-523). Root-level because the config is plain
 // CommonJS outside the nx graph and must `require` the same file — see the
@@ -749,13 +761,34 @@ export const middleware: NextMiddleware = async (req, event) => {
     return NextResponse.rewrite(seoUrl, { request: { headers: seoHeaders } })
   }
 
-  // Rewrite to the resolved tenant host as the first path segment; the
-  // catch-all render lives at app `[host]/[[...slug]]` (search at
-  // `app/[host]/search`). No `_sites` namespace is needed: the matcher above
-  // already keeps `/api`, `/_next`, etc. off this rewrite, and API routes are
-  // in `pages/api` (which win over the `[host]` catch-all). Preserve the
-  // query string (search pages, tenantHost overrides).
-  const rewrite = `/${tenantHost}${req.nextUrl.pathname}${req.nextUrl.search}`
+  /**
+   * THE VISITOR'S SCHEME, SPENT AS A PATH SEGMENT (AGL-2708).
+   *
+   * The scheme has to be decided before the first render, and this is the
+   * layer that can decide it: middleware runs ahead of the cache on every
+   * request, so reading the cookie and the client hint here costs nothing that
+   * a cached page could have saved. Reading them in the render instead is what
+   * took production down — a dynamic API under the catch-all's `revalidate`
+   * throws `DYNAMIC_SERVER_USAGE` the moment the route regenerates.
+   *
+   * Putting the answer in the PATH is what makes the page cacheable again:
+   * Next's route cache keys on the pathname, so `light` and `dark` are two
+   * entries of one page rather than one entry that can serve neither honestly.
+   * That is the trade `Vary` below was already written for — it splits the CDN
+   * cache by the same axis, and the two headers only make sense together.
+   */
+  const scheme = resolveSchemeRouteSegment(
+    parseThemeModeCookie(req.cookies.get(THEME_MODE_COOKIE)?.value),
+    parseColorSchemeHint(req.headers.get(COLOR_SCHEME_HINT_HEADER)),
+  )
+
+  // Rewrite to the resolved tenant host as the first path segment and the
+  // scheme as the second; the catch-all render lives at app
+  // `[host]/[scheme]/[[...slug]]`. No `_sites` namespace is needed: the
+  // matcher above already keeps `/api`, `/_next`, etc. off this rewrite, and
+  // API routes are in `pages/api` (which win over the `[host]` catch-all).
+  // Preserve the query string (search pages, tenantHost overrides).
+  const rewrite = `/${tenantHost}/${scheme}${req.nextUrl.pathname}${req.nextUrl.search}`
   console.debug(
     'Tenant Host Switch=',
     'Rewriting',

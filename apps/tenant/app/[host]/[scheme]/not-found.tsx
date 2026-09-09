@@ -18,13 +18,13 @@
 import type { HostUid, ScreenUid } from '@aglyn/aglyn/server'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import type { Metadata } from 'next'
-import SiteNotFound from '../../components/site-not-found.component'
-import { resolveNotFoundScreenId } from '../../utils/not-found-screen-id'
+import SiteNotFound from '../../../components/site-not-found.component'
+import { resolveNotFoundScreenId } from '../../../utils/not-found-screen-id'
 import {
   hostSeoTitleParts,
   resolveNotFoundTitle,
-} from '../../utils/not-found-title'
-import { getHostCached } from './host-data'
+} from '../../../utils/not-found-title'
+import { getHostCached } from '../host-data'
 
 /**
  * The tenant's branded 404 (AGL-2074).

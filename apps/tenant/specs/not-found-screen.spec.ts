@@ -176,7 +176,7 @@ import {
   loadNotFoundScreen,
   loadPageData,
   resolveNotFoundScreenId,
-} from '../app/[host]/[[...slug]]/load-page-data'
+} from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 import getHost from '../utils/get-host'
 
 const mockGetHost = getHost as jest.Mock

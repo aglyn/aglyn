@@ -21,7 +21,7 @@
 // maintenance, org suspension) answers `nodes: null` and this returns 404.
 
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
-import { loadPageData } from '../../../[host]/[[...slug]]/load-page-data'
+import { loadPageData } from '../../../[host]/[scheme]/[[...slug]]/load-page-data'
 
 /**
  * The node definitions a page withheld from its payload (AGL-1285/1287).

@@ -18,8 +18,8 @@
 
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import { Suspense, useEffect, useState } from 'react'
-import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
-import type { Props } from '../app/[host]/[[...slug]]/types'
+import CatchAllClient from '../app/[host]/[scheme]/[[...slug]]/catch-all-client'
+import type { Props } from '../app/[host]/[scheme]/[[...slug]]/types'
 import { useHostBrand } from '../app/[host]/host-brand.context'
 import { resolveNotFoundTitle } from '../utils/not-found-title'
 import SiteStatusScreen from './site-status-screen.component'

@@ -35,7 +35,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
-const ROUTE_DIR = resolve(__dirname, '../app/[host]/[[...slug]]')
+const ROUTE_DIR = resolve(__dirname, '../app/[host]/[scheme]/[[...slug]]')
 const SITE_ANALYTICS = join(ROUTE_DIR, 'site-analytics.tsx')
 const PAGE = join(ROUTE_DIR, 'page.tsx')
 const CATCH_ALL_CLIENT = join(ROUTE_DIR, 'catch-all-client.tsx')

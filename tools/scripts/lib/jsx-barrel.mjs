@@ -83,7 +83,7 @@ export const BARREL = 'libs/shared/ui/jsx/src/index.ts'
 /**
  * The OTHER barrel a published customer page imports statically (AGL-2486).
  *
- * `apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx` opens with
+ * `apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx` opens with
  * `import * as Aglyn from '@aglyn/aglyn'`, so this entry bills the same way
  * `BARREL` does — and until AGL-2486 nothing watched it. Two heavy packages
  * had walked in through it and nothing went red:

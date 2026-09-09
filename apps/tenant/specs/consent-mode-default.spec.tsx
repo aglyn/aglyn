@@ -68,7 +68,7 @@ import {
 import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import { GA_CLICK_ID_PASSTHROUGH_SNIPPET } from '@aglyn/aglyn/app-utils/visitor-consent'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
+import SiteAnalytics from '../app/[host]/[scheme]/[[...slug]]/site-analytics'
 
 // Unlike the gate spec's mock, this one renders the CHILDREN: the whole
 // question here is what the inline block SAYS, not merely that it exists.

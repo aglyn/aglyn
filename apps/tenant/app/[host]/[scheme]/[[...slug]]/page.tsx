@@ -25,7 +25,7 @@ import {
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
-import { hostShowsPlatformAttribution } from '../../../utils/platform-attribution'
+import { hostShowsPlatformAttribution } from '../../../../utils/platform-attribution'
 import CatchAllClient from './catch-all-client'
 import { loadPageData } from './load-page-data'
 import PageBodyBoundary from './page-body-boundary'

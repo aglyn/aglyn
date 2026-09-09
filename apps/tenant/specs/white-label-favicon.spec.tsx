@@ -107,7 +107,7 @@ describe('a white-label site never falls back to Aglyn’s mark', () => {
     // behaviour instead of about a copy. If the layout stops calling it, these
     // pass while the site serves whatever the layout decided instead.
     const layout = readFileSync(
-      resolve(__dirname, '../app/[host]/layout.tsx'),
+      resolve(__dirname, '../app/[host]/[scheme]/layout.tsx'),
       'utf8',
     )
     expect(layout).toContain('resolveSiteFaviconHref(')

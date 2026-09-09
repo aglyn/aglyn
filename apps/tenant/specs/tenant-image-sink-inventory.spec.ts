@@ -222,12 +222,12 @@ interface DeclaredSinkFile {
  * set — JSON-LD, the merchant feed, the page tokens — not the storefront.
  */
 const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
-  'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx': {
+  'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx': {
     markers: 4,
     guard: 'media-ref',
     why: 'The fallback renderer: entry cover, markdown body images and the white-label brand logo, each through resolveMediaSrc. Its <style> carries ELEMENT_HIDDEN_STYLE_TEXT, a build-time constant.',
   },
-  'apps/tenant/app/[host]/[[...slug]]/page.tsx': {
+  'apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx': {
     markers: 13,
     guard: 'raw',
     why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The author page adds three more of the same (AGL-2518/AGL-2689): the ProfilePage.mainEntity portrait through absoluteMediaSrc, and the head\'s own two sources — an author-supplied share card and the portrait it falls back to — through resolveSocialImage, all from an author record the customer wrote. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it.',
@@ -237,7 +237,7 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'media-ref',
     why: "The bar mounts only for an authenticated editor of this site, and its favicon is resolved by the edit-context route with the same resolver the layout's <link rel=icon> uses. Its <style> is BAR_CSS, ours.",
   },
-  'apps/tenant/app/[host]/layout.tsx': {
+  'apps/tenant/app/[host]/[scheme]/layout.tsx': {
     markers: 1,
     guard: 'media-ref',
     why: 'The site favicon, the org brand favicon and the navigation loader logo, all three through resolveMediaSrc since AGL-1407. Site-relative is correct here: a page is present to resolve against.',
@@ -449,7 +449,7 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
  * sinks that dominated earlier readings of this issue are no longer here.
  */
 const RAW_SINK_FILES = [
-  'apps/tenant/app/[host]/[[...slug]]/page.tsx',
+  'apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx',
   'libs/aglyn/src/lib/app-utils/content-authors.ts',
   'libs/plugins/commerce/src/lib/components/product-detail.tsx',
   'libs/plugins/commerce/src/lib/server/feed.ts',

@@ -18,7 +18,7 @@
 
 import { Button } from '@mui/material'
 import { useEffect } from 'react'
-import SiteStatusScreen from '../../components/site-status-screen.component'
+import SiteStatusScreen from '../../../components/site-status-screen.component'
 
 /**
  * The tenant's branded crash page (AGL-2074).

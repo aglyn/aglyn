@@ -168,7 +168,7 @@ describe('reservedScreenRouteSegment', () => {
   it.each([
     ['404', 'Vercel serves its own static 404.html at this path'],
     ['500', 'Vercel serves its own static 500.html at this path'],
-    ['search', 'app/[host]/search wins over the catch-all'],
+    ['search', 'app/[host]/[scheme]/search wins over the catch-all'],
     ['api', 'excluded from the middleware matcher — API routes live there'],
     ['_next', "excluded from the middleware matcher — Next's internals"],
     ['_static', 'excluded from the middleware matcher — the public directory'],

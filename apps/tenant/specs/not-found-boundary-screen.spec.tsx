@@ -38,7 +38,7 @@
  * the fallback.
  */
 
-jest.mock('../app/[host]/[[...slug]]/catch-all-client', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/catch-all-client', () => ({
   __esModule: true,
   default: ({ nodes }: { nodes: Record<string, unknown> | null }) => (
     <div data-testid="designed-screen" data-node-ids={Object.keys(nodes ?? {}).join(',')}>

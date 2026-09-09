@@ -66,7 +66,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import HostNotFound, {
   generateMetadata as hostNotFoundMetadata,
-} from '../app/[host]/not-found'
+} from '../app/[host]/[scheme]/not-found'
 import RootNotFound, { metadata as rootNotFoundMetadata } from '../app/not-found'
 import getHost from '../utils/get-host'
 import {

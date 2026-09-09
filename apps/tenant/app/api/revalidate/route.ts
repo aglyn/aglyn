@@ -44,6 +44,7 @@
  * it is rate-limited by being uninteresting.
  */
 
+import { SCHEME_ROUTE_SEGMENTS } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import {
   tenantDataTag,
   tenantHostAliasTag,
@@ -63,8 +64,9 @@ export const dynamic = 'force-dynamic'
  * revalidate window. A cap should not be reachable by ordinary use.
  *
  * 250 is chosen the same way a cap should be: from what it costs. Each accepted
- * path is one `revalidatePath` — a cache-key delete, no render, no network — so
- * the work here is linear and small. The expensive half of a publish drop is the
+ * path is one `revalidatePath` PER SCHEME — two cache-key deletes since
+ * AGL-2708, still no render and no network — so the work here is linear and
+ * small. The expensive half of a publish drop is the
  * console-side dependent scan, and that is bounded separately by its own
  * `SCAN_LIMIT` of 2000. This number therefore only has to be larger than any
  * plausible site and smaller than a payload worth refusing.
@@ -199,11 +201,22 @@ export async function POST(request: Request): Promise<Response> {
     // in the filesystem sense, but it is a way to name a page on a DIFFERENT
     // host's tree, and one tenant must never be able to bust another's cache.
     if (!path.startsWith('/') || path.includes('..')) continue
-    // The middleware rewrites `https://{host}{path}` to `/{host}{path}`, so
-    // that — not the public URL — is the cache key Next stores under.
-    const target = `/${host}${path === '/' ? '' : path}`
-    revalidatePath(target)
-    revalidated.push(target)
+    // The middleware rewrites `https://{host}{path}` to
+    // `/{host}/{scheme}{path}`, so that — not the public URL — is the cache
+    // key Next stores under.
+    //
+    // ONE ENTRY PER SCHEME, so one publish busts them all (AGL-2708). The
+    // scheme is a path segment precisely so the page can be cached per
+    // scheme; the cost of that is that a publish now names each of them.
+    // Missing one would leave half the visitors reading the previous version
+    // until the revalidate window expired — and it would be the half whose
+    // scheme the publisher was not using, which is the hardest kind of stale
+    // to notice.
+    for (const scheme of SCHEME_ROUTE_SEGMENTS) {
+      const target = `/${host}/${scheme}${path === '/' ? '' : path}`
+      revalidatePath(target)
+      revalidated.push(target)
+    }
   }
 
   if (truncated > 0) {

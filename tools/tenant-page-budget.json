@@ -1,5 +1,5 @@
 {
-  "entry": "apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx",
+  "entry": "apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx",
   "baselineBytes": 1038929,
   "budgetBytes": 1299456,
   "baselineModules": 215,
