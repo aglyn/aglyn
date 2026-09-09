@@ -15,7 +15,12 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **theme:** resolve the visitor's scheme on the server, not after hydration ([AGL-2705](https://linear.app/aglyn/issue/AGL-2705))
 - **theme:** the marketing hosts are matched in the form the route carries ([AGL-2703](https://linear.app/aglyn/issue/AGL-2703))
+
+### Documentation
+
+- **tenant:** name what the dynamic render costs and what it does not ([AGL-2705](https://linear.app/aglyn/issue/AGL-2705))
 
 ## v1.0.0-beta.100 — 2026-09-08
 
