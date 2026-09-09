@@ -19,7 +19,7 @@
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import dynamic from 'next/dynamic'
 import { Suspense, useEffect, useState } from 'react'
-import type { Props } from '../app/[host]/[[...slug]]/types'
+import type { Props } from '../app/[host]/[scheme]/[[...slug]]/types'
 import { useHostBrand } from '../app/[host]/host-brand.context'
 import { resolveNotFoundTitle } from '../utils/not-found-title'
 
@@ -54,7 +54,7 @@ const SiteStatusScreen = dynamic(
  * renderer directly and keeps it in first paint, where it belongs.
  */
 const CatchAllClient = dynamic(
-  () => import('../app/[host]/[[...slug]]/catch-all-client'),
+  () => import('../app/[host]/[scheme]/[[...slug]]/catch-all-client'),
   { ssr: false },
 )
 

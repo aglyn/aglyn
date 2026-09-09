@@ -168,7 +168,7 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   })),
 }))
 
-import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'
+import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 import getHost from '../utils/get-host'
 
 const mockGetHost = getHost as jest.Mock

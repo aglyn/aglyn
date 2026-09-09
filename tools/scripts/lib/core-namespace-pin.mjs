@@ -81,7 +81,7 @@ const NAMESPACE_CLAUSE = /^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\b/
  */
 export const SHELL_ENTRIES = [
   'apps/console/app/(app)/layout.tsx',
-  'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx',
+  'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx',
 ]
 
 /**

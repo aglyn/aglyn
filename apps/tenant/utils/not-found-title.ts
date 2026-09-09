@@ -26,7 +26,7 @@ import { resolveSeoTitle } from '@aglyn/aglyn/app-utils/seo-title'
  * The head of a 404 is written twice, by two different halves of the same
  * boundary:
  *
- *  - on a full document load, by the SERVER — `[host]/not-found.tsx` exports
+ *  - on a full document load, by the SERVER — `[host]/[scheme]/not-found.tsx` exports
  *    `generateMetadata`, which Next resolves through the `not-found`
  *    convention when a page throws `notFound()`, so the served `<head>`
  *    carries the title before any script runs;

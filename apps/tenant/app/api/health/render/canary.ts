@@ -87,7 +87,7 @@ import {
   type RenderOutcome,
 } from '@aglyn/aglyn/server'
 
-import { loadPageData } from '../../../[host]/[[...slug]]/load-page-data'
+import { loadPageData } from '../../../[host]/[scheme]/[[...slug]]/load-page-data'
 
 /**
  * Which tenant host the marketing canary renders — CONFIGURED, never a

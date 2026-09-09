@@ -94,11 +94,12 @@ async function pageResponse(host: string): Promise<Response> {
 const HINT = 'Sec-CH-Prefers-Color-Scheme'
 
 describe('the tenant page response negotiates the color-scheme hint', () => {
-  it('advertises the SAME token the layout reads the request by', () => {
-    // The middleware names the hint locally so the edge bundle imports no
-    // library, which leaves two definitions free to drift apart — and a drift
+  it('advertises the SAME token the middleware reads the request by', () => {
+    // The middleware names the hint locally for the `Accept-CH` it emits, so
+    // the edge bundle's import list stays app-local, and reads the request by
+    // the library constant — two definitions, free to drift apart. A drift
     // here breaks nothing loudly: browsers would keep sending a hint the
-    // layout no longer looks for, and every device default would quietly go
+    // resolver no longer looks for, and every device default would quietly go
     // back to resolving light.
     expect(COLOR_SCHEME_HINT_HEADER).toBe(HINT)
   })
@@ -108,9 +109,13 @@ describe('the tenant page response negotiates the color-scheme hint', () => {
     // returned. A locked or redirected response carries none of them, so
     // without this the suite could report a clean pass on a middleware that
     // never reached the page path at all.
+    //
+    // `light` is the scheme segment (AGL-2708), named rather than wildcarded:
+    // this request carries neither a cookie nor a hint, and light is what the
+    // pair of nulls has to resolve to.
     const response = await pageResponse('hint-control')
     expect(response.headers.get('x-middleware-rewrite')).toContain(
-      '/hint-control/some/page',
+      '/hint-control/light/some/page',
     )
   })
 

@@ -524,7 +524,7 @@ function tenantMediaSrcDirective(isProduction, approvedMediaHosts, siteOrigins) 
  *
  * `fonts.gstatic.com` is PINNED, and this is measurement rather than
  * generosity: `host-theme.ts` builds a `fonts.googleapis.com/css2` link for
- * any theme that names Google families, and `app/[host]/layout.tsx`
+ * any theme that names Google families, and `app/[host]/[scheme]/layout.tsx`
  * preconnects to `fonts.gstatic.com` — which is where the font FILES come
  * from, and so the origin this directive decides on. Enforcing without it
  * would strip the typeface from every themed site on the platform, for a

@@ -34,7 +34,7 @@ import ErrorBeacon from '../components/error-beacon.component'
  * document shell and the emotion/MUI SSR cache — `AppRouterCacheProvider`
  * replaces the Pages Router `_EmotionDocumentComponent` extraction, injecting
  * the streamed emotion styles during App Router SSR. Per-host theming and
- * fonts live one level down in `[host]/layout` (they depend on the
+ * fonts live one level down in `[host]/[scheme]/layout` (they depend on the
  * resolved tenant host), so this layout stays host-agnostic.
  *
  * The cache options are named rather than defaulted (AGL-1266). Emotion's

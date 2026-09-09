@@ -23,8 +23,8 @@ import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-pla
 /**
  * Root error boundary (AGL-2074).
  *
- * The rung above `[host]/error.tsx`: it catches what that one structurally
- * cannot, which is a throw in `[host]/layout.tsx` itself — the host lookup,
+ * The rung above `[host]/[scheme]/error.tsx`: it catches what that one structurally
+ * cannot, which is a throw in `[host]/[scheme]/layout.tsx` itself — the host lookup,
  * the theme resolve, the font/favicon/manifest resolution. That is also
  * exactly the case in which no host data exists, so the plain screen is not a
  * shortcut here, it is the only honest option.

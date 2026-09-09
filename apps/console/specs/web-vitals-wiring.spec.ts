@@ -62,7 +62,7 @@ describe('console web-vitals wiring (AGL-1642)', () => {
     // reads console files: the two surfaces must stay on the same module so
     // the event shape cannot fork.
     const siteAnalytics = read(
-      '../../tenant/app/[host]/[[...slug]]/site-analytics.tsx',
+      '../../tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx',
     )
     expect(siteAnalytics).toMatch(
       /from '@aglyn\/aglyn\/app-utils\/web-vitals-rum'/,

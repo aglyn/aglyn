@@ -47,7 +47,7 @@ const SOURCE = readFileSync(
   'utf8',
 )
 
-const RENDERER = '../app/[host]/[[...slug]]/catch-all-client'
+const RENDERER = '../app/[host]/[scheme]/[[...slug]]/catch-all-client'
 
 /**
  * Static VALUE imports, and deliberately not `import type { … } from '…'`.
@@ -74,7 +74,7 @@ describe('the page renderer stays out of the 404 boundary chunk group', () => {
     // It still has to reach it, or this passes by the designed-screen feature
     // having been deleted rather than by the boundary being honest.
     expect(SOURCE).toMatch(
-      /dynamic\(\s*\(\)\s*=>\s*import\(\s*'\.\.\/app\/\[host\]\/\[\[\.\.\.slug\]\]\/catch-all-client'\s*\)/,
+      /dynamic\(\s*\(\)\s*=>\s*import\(\s*'\.\.\/app\/\[host\]\/\[scheme\]\/\[\[\.\.\.slug\]\]\/catch-all-client'\s*\)/,
     )
     expect(staticValueImportSpecifiers(SOURCE)).not.toContain(RENDERER)
   })

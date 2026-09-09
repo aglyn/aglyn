@@ -16,7 +16,7 @@
  */
 
 import { render } from '@testing-library/react'
-import Page from '../app/[host]/[[...slug]]/catch-all-client'
+import Page from '../app/[host]/[scheme]/[[...slug]]/catch-all-client'
 
 /**
  * The plugin gate loads nothing. This is a smoke test for the module and its

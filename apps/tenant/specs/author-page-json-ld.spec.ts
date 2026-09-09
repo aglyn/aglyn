@@ -40,17 +40,17 @@
  * wiring.
  */
 
-jest.mock('../app/[host]/[[...slug]]/load-page-data', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/load-page-data', () => ({
   __esModule: true,
   loadPageData: jest.fn(),
 }))
-jest.mock('../app/[host]/[[...slug]]/catch-all-client', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/catch-all-client', () => ({
   __esModule: true,
   default: () => null,
 }))
 
-import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'
-import CatchAllPage from '../app/[host]/[[...slug]]/page'
+import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
+import CatchAllPage from '../app/[host]/[scheme]/[[...slug]]/page'
 /*
   `HostEntityType` inlined rather than imported.
 

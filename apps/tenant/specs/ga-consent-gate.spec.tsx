@@ -43,7 +43,7 @@ import {
   visitorConsentStorageKey,
 } from '@aglyn/aglyn'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
+import SiteAnalytics from '../app/[host]/[scheme]/[[...slug]]/site-analytics'
 
 // `next/script` is inert in jsdom; a marker element makes "did the GA
 // script render at all" directly observable. The gate under test decides

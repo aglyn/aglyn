@@ -19,24 +19,16 @@
 // theme lib's createContext HOCs into the RSC graph (AGL-405).
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
-import {
-  COLOR_SCHEME_HINT_HEADER,
-  parseColorSchemeHint,
-} from '@aglyn/shared-ui-theme/util/color-scheme-hint'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
-import {
-  parseThemeModeCookie,
-  THEME_MODE_COOKIE,
-} from '@aglyn/shared-ui-theme/util/theme-mode-cookie'
-import { cookies, headers } from 'next/headers'
+import { parseSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import type { ReactNode } from 'react'
-import getSiteNav from '../../utils/get-site-nav'
-import { hostSeoTitleParts } from '../../utils/not-found-title'
-import AdminBarSlot from './admin-bar/admin-bar-slot'
-import getOrgBilling from '../../utils/get-org-billing'
-import { getHostCached } from './host-data'
-import { orgBrandFavicon, resolveSiteFaviconHref } from './site-favicon'
-import { HostThemeProviders } from './host-theme-providers'
+import getSiteNav from '../../../utils/get-site-nav'
+import { hostSeoTitleParts } from '../../../utils/not-found-title'
+import AdminBarSlot from '../admin-bar/admin-bar-slot'
+import getOrgBilling from '../../../utils/get-org-billing'
+import { getHostCached } from '../host-data'
+import { orgBrandFavicon, resolveSiteFaviconHref } from '../site-favicon'
+import { HostThemeProviders } from '../host-theme-providers'
 
 /**
  * Per-host layout (App Router): resolves the tenant host to apply its MUI
@@ -45,15 +37,20 @@ import { HostThemeProviders } from './host-theme-providers'
  * it depends on the resolved host, so it lives under `[host]` rather than
  * the host-agnostic root layout. Wraps both the catch-all render route and
  * the search route.
+ *
+ * It sits under `[scheme]` as well because the scheme is the other thing the
+ * theme depends on and the other thing every route beneath shares (AGL-2708):
+ * one layout builds the document in the scheme its path names, and the two
+ * schemes cache separately.
  */
 export default async function HostLayout({
   children,
   params,
 }: {
   children: ReactNode
-  params: Promise<{ host: string }>
+  params: Promise<{ host: string; scheme: string }>
 }) {
-  const { host } = await params
+  const { host, scheme } = await params
   const hostRes = await getHostCached(host)
   // default ⊕ marketplace theme ⊕ site overrides (AGL-1021). The default is
   // applied below by HostThemeProvider; these are the upper two layers.
@@ -129,66 +126,41 @@ export default async function HostLayout({
    * the palette would leave those author overrides on their light values —
    * half a dark page.
    *
-   * ⚠️ COST, and what it is NOT. `cookies()` is a dynamic API, so this renders
-   * the route per request instead of serving it from the ISR window the
-   * catch-all page declares. That much is inherent rather than incidental: one
-   * cached document is shared by every visitor, so it cannot carry a
-   * per-visitor scheme at all. Per-visitor theming and a shared HTML cache are
-   * the same choice made two ways, and this line is where it is made.
+   * ⚠️ WHY THIS IS A PARAM AND NOT A COOKIE READ (AGL-2708).
    *
-   * What it does NOT give up is the database. Every read underneath — the host
-   * document and its id resolution, the screen, its version, the components,
-   * the layout version, collections, forms, variables — goes through
-   * `withRenderCache`, an `unstable_cache` keyed per host and held for
-   * `PUBLISHED_SITE_DATA_TTL_SECONDS`, busted by the publish path's
-   * `revalidateTag`. Those are shared ACROSS requests, not per render. So the
-   * cost that scales with traffic here is render CPU, not Firestore reads,
-   * which is the axis that carries a per-operation price.
+   * `cookies()` and `headers()` are dynamic APIs. Reading either one here
+   * throws `DYNAMIC_SERVER_USAGE` the moment Next renders this segment in a
+   * static context — which the catch-all page beneath asks for by declaring
+   * `revalidate` and `generateStaticParams`. That is not a theoretical
+   * hazard: it took every tenant page to a 500 in production, on a build
+   * whose tests, typecheck and production builds were all green, because the
+   * failure only appears when an ISR route regenerates at request time.
    *
-   * If render CPU ever becomes the constraint, the way to keep both is to fold
-   * the resolved scheme into the cache key — one entry per scheme rather than
-   * one per visitor — not to take the scheme back off the server.
+   * So the request is read where reading it is free — the middleware, which
+   * runs ahead of the cache on every request — and the answer is spent as a
+   * path segment. Next's route cache keys on the pathname, so `light` and
+   * `dark` are two cached documents of one page rather than one document that
+   * can serve neither honestly. Per-visitor theming and a shared cache are
+   * irreconcilable; per-SCHEME theming and two cached documents are not.
+   *
+   * The scheme arrives already resolved — `resolveSchemeRouteSegment` applies
+   * the same precedence `useThemeModeState` does, so the server render and
+   * the hydration after it cannot disagree. It is handed to the provider as
+   * the DEVICE mode because that is the seat the resolved value occupies:
+   * `useThemeModeState` takes `mode = cookieMode ?? systemMode`, and with no
+   * cookie readable on the server, `systemMode` is what decides the markup.
+   * The browser then reads the cookie itself at hydration, which is what
+   * restores the "user chose this" half — a switcher radio inside a menu the
+   * visitor has to open, never a colour that changes under them.
+   *
+   * What none of this gives up is the database. Every read underneath — the
+   * host document and its id resolution, the screen, its version, the
+   * components, the layout version, collections, forms, variables — goes
+   * through `withRenderCache`, an `unstable_cache` keyed per host and held
+   * for `PUBLISHED_SITE_DATA_TTL_SECONDS`, busted by the publish path's
+   * `revalidateTag`.
    */
-  const initialThemeMode = parseThemeModeCookie(
-    (await cookies()).get(THEME_MODE_COOKIE)?.value,
-  )
-
-  /**
-   * The visitor's DEVICE preference, for the visitor who has chosen nothing.
-   *
-   * "Device default" is the mode almost everyone is on, and it is the half the
-   * cookie cannot answer: the preference lives in `prefers-color-scheme`, a
-   * media feature with no meaning outside a browser. Read from the cookie
-   * alone, such a visitor is served a light document on a dark laptop and the
-   * page turns over piecemeal as the tree hydrates — the navbar before its own
-   * items, because every leaf has to re-render before it can pick up the new
-   * scheme.
-   *
-   * `Sec-CH-Prefers-Color-Scheme` is that media feature as a request header,
-   * which is a form this layout CAN read. The middleware advertises it in
-   * `Accept-CH` and `Critical-CH`, so it is present from the first navigation
-   * on the browsers that implement it.
-   *
-   * ⚠️ It is a SEPARATE value from the cookie rather than a fallback folded
-   * into it, and that separation is the precedence rule: the provider consults
-   * the device only where the cookie named no scheme, so a visitor who chose
-   * Light keeps light on a dark device, and the switcher still shows "Device
-   * default" checked rather than the scheme the device happens to be in.
-   *
-   * ⚠️ CHROMIUM ONLY. Firefox and Safari send no such header, so there the
-   * value is `null` and the scheme settles at hydration instead. That absence
-   * is not an edge case to guard against: it is also what a request from any
-   * browser looks like before `Accept-CH` has been seen, so the render path
-   * below has to be correct without an answer either way.
-   *
-   * It costs no extra dynamism. `cookies()` above already takes this route out
-   * of the ISR window the catch-all page declares, and `headers()` is the same
-   * class of dynamic API — reading a second field of the same request changes
-   * nothing about how often the route renders.
-   */
-  const initialDeviceMode = parseColorSchemeHint(
-    (await headers()).get(COLOR_SCHEME_HINT_HEADER),
-  )
+  const initialDeviceMode = parseSchemeRouteSegment(scheme)
 
   /**
    * The white-label half AGL-1421 left open (AGL-2183).
@@ -232,7 +204,6 @@ export default async function HostLayout({
   return (
     <HostThemeProviders
       hostTheme={hostTheme}
-      initialThemeMode={initialThemeMode}
       initialDeviceMode={initialDeviceMode}
       brandLogoUrl={brandLogoUrl}
       brandName={hostRes.host?.displayName}

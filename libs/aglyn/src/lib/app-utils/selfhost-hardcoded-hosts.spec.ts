@@ -271,7 +271,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of DOCS_URL; the literal is its default (a docs build, not runtime).',
   },
   {
-    file: 'apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx',
+    file: 'apps/tenant/app/[host]/[scheme]/[[...slug]]/site-analytics.tsx',
     count: 1,
     reason:
       'AGL-1731. CONSOLE_ORIGIN — reader of NEXT_PUBLIC_CONSOLE_URL, the same ' +

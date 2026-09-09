@@ -492,7 +492,7 @@ test('FORCED RED: --write refuses to re-baseline from another entry', () => {
   const before = readFileSync(path, 'utf8')
   const result = runCli([
     '--entry',
-    'apps/tenant/app/[host]/search/search-results.component.tsx',
+    'apps/tenant/app/[host]/[scheme]/search/search-results.component.tsx',
     '--write',
   ])
   const after = readFileSync(path, 'utf8')

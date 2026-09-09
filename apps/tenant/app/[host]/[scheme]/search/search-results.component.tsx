@@ -23,8 +23,8 @@
 import AppLink from '@aglyn/shared-ui-jsx/components/app-link'
 import { Container } from '@aglyn/shared-ui-jsx/components/container'
 import { Box, Chip, Stack, Typography } from '@mui/material'
-import type { SearchFacet, SearchResult } from '../../../utils/search-facets'
-import { SEARCH_FACET_ALL } from '../../../utils/search-facets'
+import type { SearchFacet, SearchResult } from '../../../../utils/search-facets'
+import { SEARCH_FACET_ALL } from '../../../../utils/search-facets'
 
 export interface SearchResultsProps {
   query: string

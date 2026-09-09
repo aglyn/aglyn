@@ -36,19 +36,19 @@
  * sentinel nothing outside the middleware can spell.
  */
 
-jest.mock('../app/[host]/[[...slug]]/load-page-data', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/load-page-data', () => ({
   __esModule: true,
   loadPageData: jest.fn(),
 }))
 // The client renderer is a large browser-side graph and nothing here renders
 // it; `generateMetadata` never touches it.
-jest.mock('../app/[host]/[[...slug]]/catch-all-client', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/catch-all-client', () => ({
   __esModule: true,
   default: () => null,
 }))
 
-import { generateMetadata } from '../app/[host]/[[...slug]]/page'
-import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'
+import { generateMetadata } from '../app/[host]/[scheme]/[[...slug]]/page'
+import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 
 const mockLoad = loadPageData as jest.Mock
 

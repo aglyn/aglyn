@@ -45,7 +45,7 @@ import {
   VISITOR_ID_STORAGE_KEY,
 } from '@aglyn/aglyn'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
+import SiteAnalytics from '../app/[host]/[scheme]/[[...slug]]/site-analytics'
 
 jest.mock('next/script', () => ({
   __esModule: true,

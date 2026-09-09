@@ -28,7 +28,7 @@
  * 60s" really meant "until the next two visits", which for a revoked plugin —
  * i.e. code we have decided must stop executing — is not a bound at all.
  *
- * Raising the window to 600s (`apps/tenant/app/[host]/[[...slug]]/page.tsx`)
+ * Raising the window to 600s (`apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx`)
  * makes the gap visible rather than creating it, and these are the busts that
  * pay for the raise. They are BEST EFFORT by design: the tenant still refuses a
  * revoked plugin at render time and still enforces suspension in middleware, so

@@ -47,9 +47,9 @@
  *
  * ## The real shape changed again (AGL-2074), and the invariant got sharper
  *
- * `apps/tenant/app` now HAS segment boundaries — `[host]/not-found.tsx`,
- * `[host]/error.tsx`, `app/error.tsx`, `app/global-error.tsx` — because their
- * absence meant every customer site on the platform served Next's unstyled
+ * `apps/tenant/app` now HAS segment boundaries — `[host]/[scheme]/not-found.tsx`,
+ * `[host]/[scheme]/error.tsx`, `app/error.tsx`, `app/global-error.tsx` — because
+ * their absence meant every customer site on the platform served Next's unstyled
  * `404 | This page could not be found`. This file used to forbid those
  * filenames outright, and that ban has to be reconsidered rather than
  * deleted, because the reasoning behind it was correct.
@@ -83,10 +83,10 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
-import PageBodyBoundary from '../app/[host]/[[...slug]]/page-body-boundary'
-import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
-import HostError from '../app/[host]/error'
+import CatchAllClient from '../app/[host]/[scheme]/[[...slug]]/catch-all-client'
+import PageBodyBoundary from '../app/[host]/[scheme]/[[...slug]]/page-body-boundary'
+import SiteAnalytics from '../app/[host]/[scheme]/[[...slug]]/site-analytics'
+import HostError from '../app/[host]/[scheme]/error'
 import { HostBrandProvider } from '../app/[host]/host-brand.context'
 import { sitePluginLoader } from '../utils/site-plugin-loader'
 
@@ -327,7 +327,7 @@ describe('analytics survive a broken plugin gate (AGL-1550)', () => {
   })
 
   it('analytics survive a segment error boundary above the page (AGL-2074)', async () => {
-    // The measurement AGL-2074 owed this file. `[host]/error.tsx` now exists,
+    // The measurement AGL-2074 owed this file. `[host]/[scheme]/error.tsx` now exists,
     // and it sits ABOVE `page.tsx` — which renders `SiteAnalytics`. If a
     // rejecting plugin gate unwound into it, the branded error screen would
     // replace the measurement surface along with the page, and AGL-1541 would
@@ -444,9 +444,9 @@ describe('the tenant route keeps the shape that protects measurement (AGL-1541/A
     // certainly be reaching for the isolation `PageBodyBoundary` already
     // provides, and would get it one level too high — measurement inside the
     // blast radius instead of beside it. The boundaries that legitimately
-    // exist live at `[host]/` and `app/`, above this segment, where
+    // exist live at `[host]/[scheme]/` and `app/`, above this segment, where
     // `PageBodyBoundary` still catches the plugin gate first.
-    const segment = join(APP, '[host]', '[[...slug]]')
+    const segment = join(APP, '[host]', '[scheme]', '[[...slug]]')
     const found = walk(segment)
       .map((file) => file.split('/').pop() as string)
       .filter((name) => name === 'error.tsx')
@@ -459,7 +459,10 @@ describe('the tenant route keeps the shape that protects measurement (AGL-1541/A
     // because re-nesting the sibling under the boundary is a two-line edit
     // that no behavioural test in a file nobody re-reads would catch until
     // traffic stopped.
-    const page = readFileSync(join(APP, '[host]', '[[...slug]]', 'page.tsx'), 'utf8')
+    const page = readFileSync(
+      join(APP, '[host]', '[scheme]', '[[...slug]]', 'page.tsx'),
+      'utf8',
+    )
     const analyticsAt = page.indexOf('<SiteAnalytics')
     const boundaryAt = page.indexOf('<PageBodyBoundary>')
     expect(analyticsAt).toBeGreaterThan(-1)
@@ -472,8 +475,8 @@ describe('the tenant route keeps the shape that protects measurement (AGL-1541/A
     // reader cannot satisfy one rule by deleting the other and leave every
     // customer site back on the framework's raw page.
     for (const relative of [
-      '[host]/not-found.tsx',
-      '[host]/error.tsx',
+      '[host]/[scheme]/not-found.tsx',
+      '[host]/[scheme]/error.tsx',
       'error.tsx',
       'global-error.tsx',
       'not-found.tsx',

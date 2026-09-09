@@ -39,7 +39,7 @@ import {
  * ## The rule, and the one line of it that is a security boundary
  *
  * Links come from the host's routing map (`host.screens`: screen id → path),
- * which is already in memory in `[host]/layout.tsx`. That map is every
+ * which is already in memory in `[host]/[scheme]/layout.tsx`. That map is every
  * PUBLISHED screen, which is NOT the same as every public one — it includes
  * unlisted, members-only and password-protected pages. `/api/sitemap` learned
  * this the hard way (AGL-1263) and excludes them with `isScreenIndexable`;

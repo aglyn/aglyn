@@ -22,7 +22,7 @@
  * `404` with `<meta name="robots" content="noindex">` and NO `<title>`. The
  * body of that document is Next's own recovery seed (`<html id="__next_error__">`,
  * an empty `<body>`) and no userland code can put markup in it — that is a
- * framework fact recorded on `[host]/not-found.tsx` and `SiteNotFound`. The
+ * framework fact recorded on `[host]/[scheme]/not-found.tsx` and `SiteNotFound`. The
  * head is the exception: Next resolves the metadata of the recovery shell
  * through the `not-found` convention, calling the deepest `not-found` module's
  * `generateMetadata` with the segment's `params`. So the `<title>` of a 404 is
@@ -66,7 +66,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import HostNotFound, {
   generateMetadata as hostNotFoundMetadata,
-} from '../app/[host]/not-found'
+} from '../app/[host]/[scheme]/not-found'
 import RootNotFound, { metadata as rootNotFoundMetadata } from '../app/not-found'
 import getHost from '../utils/get-host'
 import {

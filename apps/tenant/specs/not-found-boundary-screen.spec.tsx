@@ -38,7 +38,7 @@
  * the fallback.
  */
 
-jest.mock('../app/[host]/[[...slug]]/catch-all-client', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/catch-all-client', () => ({
   __esModule: true,
   default: ({ nodes }: { nodes: Record<string, unknown> | null }) => (
     <div data-testid="designed-screen" data-node-ids={Object.keys(nodes ?? {}).join(',')}>
@@ -223,8 +223,10 @@ describe('the host key actually reaches the boundary (AGL-2342)', () => {
   const read = (...parts: string[]) =>
     readFileSync(join(__dirname, '..', ...parts), 'utf8')
 
-  it('[host]/layout.tsx passes the route param down', () => {
-    expect(read('app', '[host]', 'layout.tsx')).toMatch(/hostKey=\{host\}/)
+  it('[host]/[scheme]/layout.tsx passes the route param down', () => {
+    expect(read('app', '[host]', '[scheme]', 'layout.tsx')).toMatch(
+      /hostKey=\{host\}/,
+    )
   })
 
   it('the theme providers forward it to HostBrandProvider', () => {
@@ -248,7 +250,7 @@ describe('the host key actually reaches the boundary (AGL-2342)', () => {
   })
 
   it('the 404 boundary renders SiteNotFound, not the fallback directly', () => {
-    const boundary = read('app', '[host]', 'not-found.tsx')
+    const boundary = read('app', '[host]', '[scheme]', 'not-found.tsx')
     const code = boundary
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '')

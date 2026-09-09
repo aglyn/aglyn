@@ -35,7 +35,7 @@ import { useEffect } from 'react'
  * this does not lean on an ancestor boundary the way AGL-1541 did.
  */
 const SiteErrorScreen = dynamic(
-  () => import('../../components/site-error-screen.component'),
+  () => import('../../../components/site-error-screen.component'),
   { ssr: false },
 )
 

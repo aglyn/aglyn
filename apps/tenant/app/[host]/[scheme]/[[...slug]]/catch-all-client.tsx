@@ -65,9 +65,9 @@ import {
   useRef,
   useState,
 } from 'react'
-import AttributionGuard from '../../../components/attribution-guard.component'
-import { loadSiteRealmPlugins } from '../../../utils/realm-plugins.client'
-import { sitePluginLoader } from '../../../utils/site-plugin-loader'
+import AttributionGuard from '../../../../components/attribution-guard.component'
+import { loadSiteRealmPlugins } from '../../../../utils/realm-plugins.client'
+import { sitePluginLoader } from '../../../../utils/site-plugin-loader'
 import type { Props } from './types'
 
 /**

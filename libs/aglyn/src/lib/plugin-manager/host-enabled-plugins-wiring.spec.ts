@@ -74,7 +74,7 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
       // Published sites: every enabled-plugin set the page loader emits
       // (screens, auth screens, collections) must be the HOST set.
       name: 'tenant page loader',
-      file: 'apps/tenant/app/[host]/[[...slug]]/load-page-data.ts',
+      file: 'apps/tenant/app/[host]/[scheme]/[[...slug]]/load-page-data.ts',
       mustContain: ['resolveHostEnabledPlugins'],
       mustNotContain: ['resolveEnabledPlugins('],
     },

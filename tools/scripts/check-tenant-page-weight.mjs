@@ -74,7 +74,7 @@ const BUDGET_PATH = flag('--budget', DEFAULT_BUDGET_PATH)
  * The client root to weigh, repo-relative.
  *
  * `TENANT_PAGE_ENTRY` unless asked otherwise. The tenant app has other
- * published client roots that nothing budgets — `[host]/search/
+ * published client roots that nothing budgets — `[host]/[scheme]/search/
  * search-results.component.tsx` is 305.4 KB across 135 modules — so being able
  * to point this at one is worth having. It is also what lets the self-test
  * drive the unmeasurable-entry red, which is otherwise unreachable without

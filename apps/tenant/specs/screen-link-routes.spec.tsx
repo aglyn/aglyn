@@ -36,13 +36,13 @@
  * routing decision and never reached the props the renderer reads.
  */
 
-jest.mock('../app/[host]/[[...slug]]/load-page-data', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/load-page-data', () => ({
   __esModule: true,
   loadPageData: jest.fn(),
 }))
 // A marker rather than the real client graph: what is under test is the props
 // it is HANDED, and rendering it would drag in the whole canvas.
-jest.mock('../app/[host]/[[...slug]]/catch-all-client', () => ({
+jest.mock('../app/[host]/[scheme]/[[...slug]]/catch-all-client', () => ({
   __esModule: true,
   default: function CatchAllClientMarker() {
     return null
@@ -57,9 +57,9 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
 
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import type { ReactElement } from 'react'
-import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
-import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'
-import CatchAllPage from '../app/[host]/[[...slug]]/page'
+import CatchAllClient from '../app/[host]/[scheme]/[[...slug]]/catch-all-client'
+import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
+import CatchAllPage from '../app/[host]/[scheme]/[[...slug]]/page'
 
 const mockLoad = loadPageData as jest.Mock
 const mockRouting = getTemplateScreenRouting as jest.Mock

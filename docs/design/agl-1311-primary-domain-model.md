@@ -83,7 +83,7 @@ requests forced to `216.198.79.65` **and** to the legacy `76.76.21.21` both retu
 - **Canonical origin** — `libs/aglyn/src/lib/app-utils/host-naming.ts`.
   `hostPublicOrigin` prefers `cname`, falls back to `{subdomain}.aglyn.app`.
 - **Canonical redirect (AGL-1272, Done)** —
-  `apps/tenant/app/[host]/[[...slug]]/load-page-data.ts` emits a **307** from
+  `apps/tenant/app/[host]/[scheme]/[[...slug]]/load-page-data.ts` emits a **307** from
   `{sub}.aglyn.app` to the live custom domain, guarded by `liveCustomDomain`.
   Verified live: `https://aglyn-marketing.aglyn.app/pricing` → `307
   → https://aglyn.com/pricing`.
@@ -108,7 +108,7 @@ two drift-tested. The count is **eleven**:
 `apps/console/app/(app)/admin/orgs/[orgId]/host/[hostId]/page.tsx:100` ·
 `apps/console/components/media/media-library.component.tsx:367` ·
 `libs/plugins/workflows/src/lib/components/host-webhooks-card.component.tsx:108` ·
-`apps/tenant/app/[host]/[[...slug]]/page.tsx:365`
+`apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx:365`
 
 Drift tests: `apps/tenant/specs/seo-origin.spec.ts`,
 `apps/tenant/specs/canonical-domain-redirect.spec.ts`,

@@ -80,6 +80,15 @@ const CAP = 250
  */
 const SITE_FANOUT = 48
 
+/**
+ * The cache entries one path costs since AGL-2708, spelled out rather than
+ * imported from the route's own `SCHEME_ROUTE_SEGMENTS`. A count compared
+ * against the list that produced it agrees with whatever is in that list,
+ * including a list that lost `dark` — which is the failure worth catching,
+ * since it leaves every dark visitor on the previous publish.
+ */
+const SCHEMES = ['light', 'dark'] as const
+
 describe('tenant revalidate path cap (AGL-1161, AGL-1239)', () => {
   beforeEach(() => {
     mockRevalidatePath.mockClear()
@@ -107,7 +116,9 @@ describe('tenant revalidate path cap (AGL-1161, AGL-1239)', () => {
     // paths dropped — the doc cache then expires by TTL instead of by tag.
     const response = await call({ host: 'demo', paths: ['/'] })
     expect(response.status).toBe(200)
-    expect(mockRevalidatePath).toHaveBeenCalledWith('/demo')
+    for (const scheme of SCHEMES) {
+      expect(mockRevalidatePath).toHaveBeenCalledWith(`/demo/${scheme}`)
+    }
     expect(mockRevalidateTag).not.toHaveBeenCalledWith(
       expect.stringMatching(/^tenant-data:/),
       'max',
@@ -124,7 +135,10 @@ describe('tenant revalidate path cap (AGL-1161, AGL-1239)', () => {
     expect(body.requested).toBe(CAP + 30)
     expect(body.truncated).toBe(30)
     expect(body.cap).toBe(CAP)
-    expect(mockRevalidatePath).toHaveBeenCalledTimes(CAP)
+    // The cap counts PATHS, and each accepted path costs one cache-key drop
+    // per scheme (AGL-2708). Both halves matter: a cap that started counting
+    // cache keys would silently halve what a publisher may send.
+    expect(mockRevalidatePath).toHaveBeenCalledTimes(CAP * SCHEMES.length)
   })
 
   it('CONTROL — says nothing was dropped when nothing was', async () => {
@@ -163,12 +177,27 @@ describe('tenant revalidate path cap (AGL-1161, AGL-1239)', () => {
   })
 
   it('keys the cache on the rewritten host path, not the public URL', async () => {
-    await call({ host: 'demo', paths: ['/', '/about'] })
-    // The middleware rewrites `https://{host}{path}` to `/{host}{path}`, so
-    // that is the key Next stored under. Revalidating `/about` would drop
-    // nothing and look like it worked.
-    expect(mockRevalidatePath).toHaveBeenCalledWith('/demo')
-    expect(mockRevalidatePath).toHaveBeenCalledWith('/demo/about')
+    const body = await (
+      await call({ host: 'demo', paths: ['/', '/about'] })
+    ).json()
+    // The middleware rewrites `https://{host}{path}` to `/{host}/{scheme}
+    // {path}`, so that is the key Next stored under. Revalidating `/about`
+    // would drop nothing and look like it worked.
+    //
+    // BOTH SCHEMES, every time (AGL-2708). Naming one is the failure that
+    // hides: the publisher reloads in their own scheme, sees the new page,
+    // and everyone in the other one reads the previous version until the
+    // window expires.
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/demo/light')
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/demo/dark')
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/demo/light/about')
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/demo/dark/about')
+    expect(mockRevalidatePath).toHaveBeenCalledTimes(2 * SCHEMES.length)
+    // And the response still counts in the caller's units: two paths sent,
+    // two paths taken, however many cache keys that cost.
+    expect(body.count).toBe(2)
+    expect(body.requested).toBe(2)
+    expect(body.revalidated).toHaveLength(2 * SCHEMES.length)
   })
 
   it('refuses to bust another host cache through a traversal', async () => {

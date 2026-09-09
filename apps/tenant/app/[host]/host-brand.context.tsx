@@ -24,7 +24,7 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import type { SiteNavLink } from '../../utils/site-nav'
 
 /**
- * The site's own mark, readable by anything under `[host]/layout` (AGL-2074).
+ * The site's own mark, readable by anything under `[host]/[scheme]/layout` (AGL-2074).
  *
  * The layout already resolves the host's logo and display name to brand the
  * navigation loader; this publishes the same two values so the error
@@ -132,7 +132,7 @@ HostBrandProvider.displayName = 'HostBrandProvider'
 /**
  * The current site's brand. Returns an EMPTY object outside the provider
  * rather than throwing — the root-level boundaries in `app/` render above
- * `[host]/layout` by definition, and a boundary that throws while reporting
+ * `[host]/[scheme]/layout` by definition, and a boundary that throws while reporting
  * an error is the one failure mode none of this may have.
  */
 export function useHostBrand(): HostBrand {

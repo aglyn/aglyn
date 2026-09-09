@@ -21,7 +21,7 @@
  * ever persisted is the day string — the privacy posture is an assertion
  * here, not a comment.
  */
-import { claimDailyVisit } from '../app/[host]/[[...slug]]/visit-claim'
+import { claimDailyVisit } from '../app/[host]/[scheme]/[[...slug]]/visit-claim'
 
 beforeEach(() => {
   window.sessionStorage.clear()

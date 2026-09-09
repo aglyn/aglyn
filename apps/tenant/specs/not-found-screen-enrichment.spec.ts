@@ -110,7 +110,7 @@ import {
   setRegisteringPluginId,
   type SitePageContext,
 } from '@aglyn/aglyn/server'
-import { loadNotFoundScreen } from '../app/[host]/[[...slug]]/load-page-data'
+import { loadNotFoundScreen } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 import getHost from '../utils/get-host'
 import { serverPluginLoader } from '../utils/server-plugin-loader'
 
