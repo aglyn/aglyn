@@ -38,11 +38,6 @@ import {
   type User,
 } from 'firebase/auth'
 import {
-  type Database,
-  connectDatabaseEmulator,
-  getDatabase as getDatabaseInstance,
-} from 'firebase/database'
-import {
   type Firestore,
   connectFirestoreEmulator,
   getFirestore,
@@ -52,7 +47,6 @@ import {
   type RemoteConfig,
   getRemoteConfig as getRemoteConfigInstance,
 } from 'firebase/remote-config'
-import { type FirebaseStorage, getStorage as getStorageInstance } from 'firebase/storage'
 import {
   createContext,
   useContext,
@@ -64,7 +58,6 @@ import {
 } from 'react'
 import {
   FIREBASE_AUTH_EMULATOR_ENABLED,
-  FIREBASE_DATABASE_EMULATOR_ENABLED,
   FIREBASE_FIRESTORE_EMULATOR_ENABLED,
 } from '@aglyn/shared-data-enums'
 import {
@@ -145,12 +138,27 @@ export interface FirestoreDocOptions<T> {
   initialData?: T
 }
 
+/**
+ * The Firebase products this provider builds, and therefore the ones every
+ * page that renders it downloads.
+ *
+ * ⛔ NO Realtime Database and NO Cloud Storage (AGL-2706). Both were built
+ * here and published as `useDatabase()` / `useStorage()`, and neither hook had
+ * a single caller anywhere in the repo — so `@firebase/database` (125.9 KB
+ * raw) and `@firebase/storage` (13.9 KB) were in the first load of every
+ * console route to satisfy a context field nothing read.
+ *
+ * Realtime Database IS used, by `apps/console/hooks/use-presence.ts` and
+ * `use-coediting.ts` — on their own Firebase app, with their own
+ * `getDatabase`, behind the editor routes that need presence. That is the
+ * shape to copy if a surface needs one of these: reach for the product where
+ * the feature is, not in the provider every page mounts. A field here is paid
+ * for by every route, used or not.
+ */
 interface FirebaseServices {
   app: FirebaseApp
   firestore: Firestore
   auth: Auth
-  database: Database
-  storage: FirebaseStorage
   analytics: Analytics
   remoteConfig: RemoteConfig
   /**
@@ -178,7 +186,6 @@ const FirebaseServicesContext = createContext<FirebaseServices | undefined>(unde
 // `initializeFirestore` and take SDK defaults. That mattered the moment the
 // cache stopped being the same on every host.
 const firestoreInitialized = new Set<string>()
-let connectedDatabase = false
 let connectedAuth = false
 
 /**
@@ -382,7 +389,6 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
       initializeApp(firebaseConfig, appName)
     // `durable` resolves to the same `getAuth(app)` this always called.
     const auth = createAuthInstance(app, authPersistence)
-    const database = getDatabaseInstance(app)
 
     if (!firestoreInitialized.has(appName)) {
       try {
@@ -444,16 +450,6 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     }
     const firestore = getFirestore(app)
 
-    if (!connectedDatabase) {
-      try {
-        if (FIREBASE_DATABASE_EMULATOR_ENABLED) {
-          connectDatabaseEmulator(database, 'localhost', 9000)
-        }
-        connectedDatabase = true
-      } catch (error) {
-        console.error(error)
-      }
-    }
     if (!connectedAuth) {
       try {
         if (FIREBASE_AUTH_EMULATOR_ENABLED) {
@@ -598,8 +594,6 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
       app,
       firestore,
       auth,
-      database,
-      storage: getStorageInstance(app),
       analytics: initialAnalytics,
       remoteConfig,
       authPersistence,
@@ -686,12 +680,6 @@ export function useAuth(): Auth {
  */
 export function useAuthPersistence(): AuthPersistenceClass {
   return useFirebaseServices().authPersistence
-}
-export function useDatabase(): Database {
-  return useFirebaseServices().database
-}
-export function useStorage(): FirebaseStorage {
-  return useFirebaseServices().storage
 }
 export function useAnalytics(): Analytics {
   return useFirebaseServices().analytics
