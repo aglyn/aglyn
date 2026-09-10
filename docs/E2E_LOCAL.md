@@ -27,9 +27,9 @@ flow, and the notifications feed with category mutes.
 Three terminals (or background the first two):
 
 ```bash
-# 1. Emulators (dedicated config: auth 9099, firestore 8082, UI disabled)
+# 1. Emulators (dedicated config: auth 9099, firestore 8082, storage 9199, UI disabled)
 cd cloud && npx -y firebase-tools@13 emulators:start \
-  --config firebase.e2e.json --project aglyn-main --only auth,firestore
+  --config firebase.e2e.json --project aglyn-main --only auth,firestore,storage
 
 # 2. Seed + console dev server with the emulator flags
 npm run seed:e2e
@@ -38,6 +38,14 @@ npm run serve:console:emulated     # port 4200
 # 3. The tests
 npm run e2e:console                # E2E_BASE_URL overrides the target
 ```
+
+Storage is emulated too, and has to be. Both `serve:*:emulated` scripts set
+`FIREBASE_STORAGE_EMULATOR_HOST=localhost:9199`, which is the only variable
+firebase-admin reads to find a Storage emulator; without it every media upload,
+replace, delete and CDN read from an "emulated" server goes to the real bucket
+named in `.env.development.local`, with the real service account beside it.
+Start the emulators with `storage` in `--only`, as above, or media calls fail
+with a refused connection, which is the failure you want.
 
 ## The CRM specs (AGL-2610)
 
