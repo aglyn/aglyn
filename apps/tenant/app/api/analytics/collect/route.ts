@@ -81,6 +81,15 @@ const HOST_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 const RESERVED_ID_PATTERN = /^__.*__$/
 
 /**
+ * A media id, as a Firestore MAP KEY (AGL-2746). Deliberately a copy of the
+ * CDN's own `SEGMENT` grammar rather than an import — `serveMediaCdn` is the
+ * authority because it must distrust the network, and this exists so the
+ * beacon never MINTS a key naming an asset that route would refuse. The
+ * charset also excludes every character Firestore reads as a field path.
+ */
+const MEDIA_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
  * Per-instance host-existence cache. AGL-510 noted that a spoofed hostId
  * still wrote counters and fired host automations — the host-existence
  * guard existed only on the forms honeypot path. The beacon now pays ONE
@@ -756,6 +765,91 @@ export async function POST(request: Request): Promise<Response> {
             .update({ [`stats.${statKey}`]: FieldValue.increment(1) })
             .catch(() => undefined)
         }
+      }
+      return noContent()
+    }
+
+    /*
+     * VIDEO PLAYBACK (AGL-2746) — what `serveMediaCdn` cannot count.
+     *
+     * That handler already increments `media.{mediaId}.serves` and `.bytes`
+     * on this very document, and its own comment is careful about what those
+     * are: only cache MISSES reach it, so they are ORIGIN serves. On an image
+     * that understates by the edge hit rate. On a video it measures something
+     * else entirely — a seek is a `Range` request, so one viewer scrubbing a
+     * film produces a dozen `serves` and says nothing about whether anyone
+     * watched it. Delivery and engagement are different questions and only
+     * the player can answer the second.
+     *
+     * ## The same map, on purpose
+     *
+     * Written under `media.{mediaId}` beside the CDN's own counters rather
+     * than a parallel `videos` map, so a console surface reads ONE path per
+     * asset. The two writers never touch the same leaf key.
+     *
+     * ## A deliberate scope split
+     *
+     * `serves`/`bytes` land on the ASSET's scope doc — `orgs/{orgId}` for an
+     * org-library asset. These land on the HOST's, because they are a fact
+     * about the site the video played on. One org-wide film embedded on five
+     * tenant sites should show plays per site; the bytes belong to whoever
+     * owns them.
+     *
+     * ## Not a pageview
+     *
+     * Returns early like the overlay and form branches. Folding it in would
+     * double-count traffic on every page that places a video — and `total` is
+     * the ONLY field `/api/billing/report-usage` reads out of a day doc, so
+     * returning here is also what makes these counters structurally incapable
+     * of touching an invoice, the metered page-view band or the bandwidth
+     * cap.
+     *
+     * ## The key is attacker-supplied, and bounded the way this document
+     * already bounds one
+     *
+     * `mediaId` becomes a Firestore map key on an unauthenticated endpoint.
+     * That is not a new exposure: `paths` above is keyed by
+     * `analyticsPathKey(body.path)` — 200 characters of visitor-supplied
+     * text — under the same per-IP rate limit. This key is strictly narrower:
+     * the CDN's own segment grammar, so 64 characters of `[A-Za-z0-9_-]` and
+     * nothing that could be read as a field path. Verifying that the asset
+     * EXISTS was considered and refused: it is a Firestore read per beacon on
+     * the route whose every comment is about cost discipline, and the asset
+     * lives under a scope this handler does not know.
+     */
+    const videoEvent = String(body.video ?? '')
+    if (videoEvent) {
+      // Quartiles rather than a raw position: a percentage would be a
+      // continuous attacker-supplied value on a map key, and four buckets
+      // answer the only question anyone asks of a watch curve — where people
+      // stop.
+      const VIDEO_EVENTS: Record<string, string> = {
+        play: 'plays',
+        progress25: 'progress25',
+        progress50: 'progress50',
+        progress75: 'progress75',
+        complete: 'completes',
+      }
+      const statKey = VIDEO_EVENTS[videoEvent]
+      const mediaId = String(body.mediaId ?? '')
+      if (statKey && MEDIA_ID_PATTERN.test(mediaId)) {
+        const day = new Date().toISOString().slice(0, 10)
+        await firebaseAdmin
+          .app()
+          .firestore()
+          .collection('hosts')
+          .doc(hostId)
+          .collection('analytics')
+          .doc(day)
+          .set(
+            {
+              media: { [mediaId]: { [statKey]: FieldValue.increment(1) } },
+              // Retention (AGL-1844): a day doc created by playback alone
+              // must still carry its expiry stamp.
+              expiresAt: analyticsDayExpiresAt(day),
+            },
+            { merge: true },
+          )
       }
       return noContent()
     }
