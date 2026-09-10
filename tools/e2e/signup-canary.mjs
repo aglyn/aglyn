@@ -308,7 +308,11 @@ async function walk(page, db, auth, identity, created) {
       link = await auth.generateEmailVerificationLink(email)
     } catch (error) {
       lastCode = String(error?.code ?? error)
-      if (attempt === 8) throw new Error(`link never minted (${lastCode})`)
+      if (attempt === 8) {
+        // `cause` kept: the code is what the body reports, but the original
+        // error is the only thing that says WHY Identity Platform refused.
+        throw new Error(`link never minted (${lastCode})`, { cause: error })
+      }
       await new Promise((r) => setTimeout(r, 6_000 + attempt * 4_000))
     }
   }
@@ -369,20 +373,29 @@ async function walk(page, db, auth, identity, created) {
 
   begin('assert')
   if (orgs.size !== 1) throw new Error(`expected 1 org, found ${orgs.size}`)
-  created.orgId = orgs.docs[0].id
-  created.slug = orgs.docs[0].get('slug')
+  /**
+   * Read into locals first, then assign together.
+   *
+   * `created` is the reaper's worklist and it is read on every path including
+   * the failure one, so assigning into it field-by-field around awaits is a
+   * genuine race: a throw between the two lines would leave the reaper an org
+   * id with no slug, and the slug reservation would survive the cleanup.
+   */
+  const foundOrgId = orgs.docs[0].id
+  const foundSlug = orgs.docs[0].get('slug')
+  Object.assign(created, { orgId: foundOrgId, slug: foundSlug })
   // Prefix rather than equality: the product owns how a typed name becomes a
   // workspace address, and this asserts the two things that matter — the org
   // came from THIS walk's name, and it is inside the namespace the orphan
   // sweep is bounded to. An exact match would break on any future slug rule
   // without anything actually being wrong.
-  if (!created.slug || !created.slug.startsWith(CANARY_SLUG_PREFIX)) {
-    throw new Error(`org slug ${created.slug} is outside the canary namespace`)
+  if (!foundSlug || !foundSlug.startsWith(CANARY_SLUG_PREFIX)) {
+    throw new Error(`org slug ${foundSlug} is outside the canary namespace`)
   }
-  if (!slug.startsWith(created.slug.slice(0, 20))) {
-    throw new Error(`org slug is ${created.slug}, expected ${slug}`)
+  if (!slug.startsWith(foundSlug.slice(0, 20))) {
+    throw new Error(`org slug is ${foundSlug}, expected ${slug}`)
   }
-  done(`org ${created.orgId}`)
+  done(`org ${foundOrgId}`)
 }
 
 async function main() {
