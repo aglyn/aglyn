@@ -73,6 +73,54 @@ frame the docs and the press kit use — with the emulator banner, the dev
 indicator and the staff-only release-flag chrome stripped. Run them one at a
 time: they share one fixture and each resets it.
 
+## The DAM spec (AGL-2782)
+
+`tools/e2e/dam-replace-and-video.e2e.mjs` drives the media library and a
+published page together, so it needs BOTH dev servers and the Storage
+emulator:
+
+```bash
+# emulators with storage (step 1), seed (step 2), then:
+npm run serve:console:emulated                      # console on 4200
+REVALIDATE_SECRET=local npm run serve:tenant:emulated   # tenant on 4500
+E2E_STORAGE_BUCKET=<NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET of those servers> \
+  E2E_REVALIDATE_SECRET=local npm run e2e:dam
+```
+
+The tenant caches a host's routing map for an hour and a publish busts it
+through `/api/revalidate`, so the spec publishes its screens the way the
+console does: documents first, then that call. Without a matching
+`REVALIDATE_SECRET` a freshly published screen is a 404 for the hour, and the
+spec refuses to start rather than report the page as broken.
+
+It uploads an image, a PDF, a film and a CSV through the library's own input
+(so the browser video probe runs as it does for a person), publishes a page
+placing each one, and asserts the published HTML, the VideoObject, every media
+CDN representation (poster, missing poster, `?r=`, `?r=auto`, ranges), the
+lightbox as a visitor uses it (no dialog code or film bytes before it is
+approached; Enter, Space and click to open; a named dialog that holds focus;
+Escape and the close button; focus returned), a replace of every family
+through the card menu followed to every reference on the page, the old
+content-hashed URL's redirect, and the storage band at signed-replace mint.
+
+⛔ It refuses to upload anything until both servers have served an object that
+exists ONLY in the Storage emulator. A server started without
+`FIREBASE_STORAGE_EMULATOR_HOST` fails that preflight instead of writing test
+files into a real bucket. The two films it uploads are committed under
+`tools/e2e/fixtures/`; every other fixture is generated per run, and every
+name carries the run id, so it is re-runnable without a re-seed.
+
+One step is expected to fail until AGL-2802 is decided: Escape from inside
+Chrome's native player controls. From those focus stops no Escape event
+reaches the page in any phase, so the dialog cannot hear it; the step closes
+the dialog with its button so the rest of the run is unaffected.
+
+What it cannot see: Vercel's edge. A replaced image can stay edge-cached under
+its stable URL for up to `s-maxage`, and under a content-pinned URL for a year
+(AGL-2798). Locally there is no edge, so the spec proves the origin half only.
+The player's play beacon is gated to production surfaces and sends nothing
+from a loopback page; `video-playback-beacon.spec.tsx` covers it.
+
 ## Tenant production-mode smoke (AGL-595) — REQUIRED before deploying tenant changes
 
 ```bash
