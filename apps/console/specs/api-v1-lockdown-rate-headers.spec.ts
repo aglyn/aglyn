@@ -190,6 +190,57 @@ beforeEach(() => {
   mockLockdownRefusal.mockResolvedValue(null)
 })
 
+describe('AGL-2733 · the description is served without a key', () => {
+  it('answers /v1/openapi.json with NO Authorization header at all', async () => {
+    /*
+      The whole point. A description of how to authenticate that itself
+      requires authentication is useless at the only moment anyone wants it —
+      before they have a key.
+    */
+    const response = await GET(
+      new Request('https://app.aglyn.com/api/v1/openapi.json'),
+      { params: Promise.resolve({ route: ['openapi.json'] }) },
+    )
+
+    expect(response.status).toBe(200)
+    const document = await response.json()
+    expect(document.openapi).toBe('3.1.0')
+    expect(Object.keys(document.paths).length).toBeGreaterThan(20)
+    // Cacheable, and reachable from a browser-based client.
+    expect(response.headers.get('Cache-Control')).toContain('s-maxage')
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+  })
+
+  it('spends no pre-auth budget, because it looks nothing up', async () => {
+    /*
+      The request has to happen INSIDE this test. `beforeEach` clears the
+      mocks, so asserting `not.toHaveBeenCalled()` without making a call is a
+      guard that passes no matter what the route does.
+    */
+    await GET(new Request('https://app.aglyn.com/api/v1/openapi.json'), {
+      params: Promise.resolve({ route: ['openapi.json'] }),
+    })
+
+    // It reads no key, so charging it would make the lookup budget a second,
+    // undocumented request cap on an unauthenticated path.
+    expect(mockVerifyApiKey).not.toHaveBeenCalled()
+
+    // …and the same harness DOES reach the key check on any other path, so
+    // the assertion above is about this route and not about the harness.
+    await call('k')
+    expect(mockVerifyApiKey).toHaveBeenCalled()
+  })
+
+  it('answers a non-GET with 405 and an Allow header', async () => {
+    const response = await GET(
+      new Request('https://app.aglyn.com/api/v1/openapi.json', { method: 'POST' }),
+      { params: Promise.resolve({ route: ['openapi.json'] }) },
+    )
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('GET')
+  })
+})
+
 /** A syntactically valid key that no lookup will resolve. */
 const WELL_FORMED_UNKNOWN = 'aglyn_sk_' + 'a'.repeat(32)
 

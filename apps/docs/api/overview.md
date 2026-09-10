@@ -97,6 +97,36 @@ do {
 Read [ordering](conventions.md#ordering) before you assume page 1 holds the newest
 records — it doesn't.
 
+## Machine-readable description {#openapi}
+
+The whole API is described as [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) at:
+
+```
+GET https://app.aglyn.com/api/v1/openapi.json
+```
+
+**It needs no key.** A description of how to authenticate that itself required
+authentication would be useless at the only moment you want it, and it contains nothing
+this documentation does not already publish.
+
+Point a generator at it and you get a typed client — every resource, every filter, the
+pagination envelope and the error shape, without hand-writing types this API already
+knows:
+
+```bash
+npx @openapitools/openapi-generator-cli generate \
+  -i https://app.aglyn.com/api/v1/openapi.json -g typescript-fetch -o ./aglyn-client
+```
+
+Two things to know when reading it:
+
+- The schemas use JSON Schema **2020-12**, so a field that can be `null` is a type
+  *union* (`"type": ["string", "null"]`), not OpenAPI 3.0's `nullable: true`. A
+  generator that only understands 3.0 will get optionality wrong.
+- Every write body **closes** — an unknown field is rejected, not ignored — with one
+  deliberate exception: a [dataset record](resources/datasets.md), whose fields are the
+  ones you defined in the dataset model.
+
 ## Service endpoints
 
 Three endpoints need no scope; any valid key can call them.
