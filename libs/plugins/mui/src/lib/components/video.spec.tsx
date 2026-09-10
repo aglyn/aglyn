@@ -18,12 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { render } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
-import Video, {
-  isoDuration,
-  posterSrc,
-  resolveVideoPreload,
-  schema,
-} from './video'
+import Video, { resolveVideoPreload, schema } from './video'
 
 const CDN = '/api/media/cdn'
 
@@ -103,27 +98,29 @@ describe('Video downloads nothing before it is asked to (AGL-2741)', () => {
 })
 
 describe('Video poster resolution (AGL-1215, AGL-2741)', () => {
-  it('resolves a media reference and asks for the WebP variant', () => {
-    const url = posterSrc('media:host1/abc')
-    expect(url).toBe(`${CDN}/host1/abc?w=1280`)
+  it('renders the poster at the shared single-url variant width', () => {
+    // The same width the page's `thumbnailUrl` asks for — a crawler that
+    // fetched different bytes would be describing a different picture.
+    const element = video(<Video src="https://x/a.mp4" poster="media:h/p" />)
+    expect(element.getAttribute('poster')).toBe(
+      `${CDN}/h/p?w=${Aglyn.MEDIA_CDN_POSTER_WIDTH}`,
+    )
   })
 
   it('leaves an off-site poster exactly as the author typed it', () => {
     // A hotlinked poster has no variants and no `?w=` handler behind it;
     // appending one would be a query string on somebody else's server.
-    expect(posterSrc('https://example.com/still.jpg')).toBe(
-      'https://example.com/still.jpg',
+    expect(
+      video(
+        <Video src="https://x/a.mp4" poster="https://example.com/still.jpg" />,
+      ).getAttribute('poster'),
+    ).toBe('https://example.com/still.jpg')
+  })
+
+  it('renders no poster attribute at all without one', () => {
+    expect(video(<Video src="https://x/a.mp4" />).hasAttribute('poster')).toBe(
+      false,
     )
-  })
-
-  it('renders the resolved poster on the element', () => {
-    const element = video(<Video src="https://x/a.mp4" poster="media:h/p" />)
-    expect(element.getAttribute('poster')).toBe(`${CDN}/h/p?w=1280`)
-  })
-
-  it('yields nothing for a blank poster', () => {
-    expect(posterSrc(undefined)).toBeUndefined()
-    expect(posterSrc('')).toBeUndefined()
   })
 })
 
@@ -289,22 +286,3 @@ describe('Video lightbox (AGL-2744)', () => {
   })
 })
 
-describe('isoDuration', () => {
-  it('writes seconds, minutes and hours the way schema.org reads them', () => {
-    expect(isoDuration(63)).toBe('PT1M3S')
-    expect(isoDuration(60)).toBe('PT1M')
-    expect(isoDuration(45)).toBe('PT45S')
-    expect(isoDuration(3600)).toBe('PT1H')
-    expect(isoDuration(3725)).toBe('PT1H2M5S')
-  })
-
-  it('declines anything that is not a positive running time', () => {
-    // An absent duration is omitted from the schema; `PT0S` would be a claim
-    // that the film is zero seconds long, which nobody meant to make.
-    expect(isoDuration(0)).toBeUndefined()
-    expect(isoDuration(-5)).toBeUndefined()
-    expect(isoDuration(undefined)).toBeUndefined()
-    expect(isoDuration('63')).toBeUndefined()
-    expect(isoDuration(Number.NaN)).toBeUndefined()
-  })
-})

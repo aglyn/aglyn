@@ -25,6 +25,10 @@
 export * from './binding-token-catalog'
 export * from './binding-tokens'
 export * from './breadcrumb-json-ld'
+// `VideoObject` for the Video elements a page actually ships (AGL-2747).
+// Beside the other structured-data builders, and server-only like them: only
+// the route emits JSON-LD, and a crawler-facing block has no client caller.
+export * from './video-object'
 export * from './collection-delete'
 export * from './collection-entries'
 export * from './collection-kind'

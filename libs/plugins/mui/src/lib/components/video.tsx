@@ -60,73 +60,14 @@ export const ID: Aglyn.ComponentId = 'video'
  *
  * `<video poster>` takes ONE url and no `srcset`, so unlike `image.tsx` there
  * is no candidate list to hand the browser and no `sizes` to resolve against —
- * a single width has to serve every viewport. 1280 is the widest variant that
- * is still a variant on a 1920 original, and asking for it is what turns a
- * 335 KB PNG poster into the 4 KB WebP the DAM already generated. A width the
- * asset has no variant for falls back to the original server-side, so this is
- * safe on any CDN-form url and on an asset whose variants were never built.
- */
-const POSTER_REQUEST_WIDTH = 1280
-
-/** Seconds in the units ISO-8601 durations are written in. */
-const SECONDS_PER_HOUR = 3600
-const SECONDS_PER_MINUTE = 60
-
-/**
- * A running time as an ISO-8601 duration (`PT1M3S`), which is the only form
- * `VideoObject.duration` is read in.
+ * a single width has to serve every viewport. Asking for it is what turns a
+ * 335 KB PNG poster into the 4 KB WebP the DAM already generated.
  *
- * Exported because the published page's structured data has to say the same
- * thing the element does, and a second implementation of this is a second
- * rounding rule. Returns `undefined` rather than `PT0S` for anything that is
- * not a positive finite number of seconds: an absent duration is omitted from
- * the schema, and a zero-length film is not a fact anybody meant to state.
+ * Read from `@aglyn/aglyn` rather than restated: the page's `thumbnailUrl`
+ * asks for the same width, and a crawler that fetches a different image from
+ * the one a visitor sees is describing a different picture.
  */
-export function isoDuration(seconds: unknown): string | undefined {
-  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0)
-    return undefined
-  const whole = Math.round(seconds)
-  const hours = Math.floor(whole / SECONDS_PER_HOUR)
-  const minutes = Math.floor((whole % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
-  const rest = whole % SECONDS_PER_MINUTE
-  return `PT${hours ? `${hours}H` : ''}${minutes ? `${minutes}M` : ''}${
-    rest || (!hours && !minutes) ? `${rest}S` : ''
-  }`
-}
-
-/**
- * One poster url at the variant width, from an already-resolved one.
- *
- * A hotlinked poster passes through untouched: it has no variants and no
- * handler behind it, so appending `?w=` would be a query string on somebody
- * else's server.
- */
-export function posterAtVariantWidth(
-  resolved: string | undefined,
-): string | undefined {
-  if (!resolved) return undefined
-  return Aglyn.isMediaCdnUrl(resolved)
-    ? `${resolved}?w=${POSTER_REQUEST_WIDTH}`
-    : resolved
-}
-
-/**
- * The poster url to render, resolved and at the variant width.
- *
- * Shared with the structured-data builder for the same reason `isoDuration`
- * is: `thumbnailUrl` and the `poster` attribute must name the same bytes, and
- * two spellings of "resolve the poster" is how they drift apart.
- */
-export function posterSrc(
-  stored: unknown,
-  options?: { hostId?: string | null },
-): string | undefined {
-  return posterAtVariantWidth(
-    Aglyn.resolveMediaSrc(typeof stored === 'string' ? stored : undefined, {
-      hostId: options?.hostId,
-    }),
-  )
-}
+const POSTER_REQUEST_WIDTH = Aglyn.MEDIA_CDN_POSTER_WIDTH
 
 /** How much of a video the browser may fetch before anyone asks for it. */
 export type VideoPreload = 'none' | 'metadata' | 'auto'
@@ -329,7 +270,10 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   const { hostId } = Aglyn.useSite()
   const src = Aglyn.resolveMediaSrc(storedSrc, { hostId })
   const posterBase = Aglyn.resolveMediaSrc(storedPoster, { hostId })
-  const poster = posterAtVariantWidth(posterBase)
+  const poster = Aglyn.mediaVariantSrc(storedPoster, {
+    hostId,
+    width: POSTER_REQUEST_WIDTH,
+  })
   const captions = Aglyn.resolveMediaSrc(captionsSrc, { hostId })
   /**
    * The lightbox's two pieces of state, and they are deliberately two.

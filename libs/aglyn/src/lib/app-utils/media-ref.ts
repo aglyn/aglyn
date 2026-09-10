@@ -135,6 +135,18 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
  * is not a registered URL scheme, so a browser handed one by mistake fails
  * loudly rather than fetching something.
  */
+/**
+ * The variant width a surface asks for when it can only ask for ONE.
+ *
+ * An `<img>` hands the browser {@link MEDIA_CDN_VARIANT_WIDTHS} and lets it
+ * choose. A `<video poster>` attribute and a `thumbnailUrl` in structured data
+ * each take a single url, so they have to name a width — and it has to be the
+ * SAME width, or a crawler fetching the thumbnail gets different bytes from
+ * the visitor looking at the poster. 1280 is the widest generated variant on a
+ * 1920 original.
+ */
+export const MEDIA_CDN_POSTER_WIDTH = 1280
+
 export const MEDIA_REF_PREFIX = 'media:'
 
 /**
@@ -466,6 +478,38 @@ export function absoluteMediaSrc(
  */
 export function isMediaCdnUrl(url: string | undefined | null): boolean {
   return Boolean(url && url.includes(`${MEDIA_CDN_ROUTE}/`))
+}
+
+/**
+ * One resolved URL at a chosen variant width (AGL-2741).
+ *
+ * `image.tsx` hands the browser the whole candidate list and lets it choose,
+ * which is right for an `<img>` and impossible everywhere else: a
+ * `<video poster>` attribute takes ONE url and no `srcset`, and so does a
+ * `thumbnailUrl` in structured data. Those callers still want the WebP variant
+ * rather than the 335 KB PNG original, and they have to name the width
+ * themselves.
+ *
+ * The width is only appended when the resolved url is a CDN one. A hotlinked
+ * image has no variants and no handler behind it, so a `?w=` there would be a
+ * query string on somebody else's server; a width the asset has no variant for
+ * falls back to the original server-side, so this is safe on any CDN-form url
+ * and on an asset whose variants were never generated.
+ *
+ * Shared rather than restated at each call site because a poster attribute and
+ * the `thumbnailUrl` describing it must name the SAME bytes — two spellings of
+ * "resolve the poster" is how those drift apart.
+ */
+export function mediaVariantSrc(
+  value: unknown,
+  options: ResolveMediaSrcOptions & { width: number },
+): string | undefined {
+  const resolved = resolveMediaSrc(
+    typeof value === 'string' ? value : undefined,
+    options,
+  )
+  if (!resolved) return undefined
+  return isMediaCdnUrl(resolved) ? `${resolved}?w=${options.width}` : resolved
 }
 
 /**
