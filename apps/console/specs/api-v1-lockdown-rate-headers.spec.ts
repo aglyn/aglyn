@@ -207,7 +207,17 @@ describe('AGL-2733 · the description is served without a key', () => {
     expect(document.openapi).toBe('3.1.0')
     expect(Object.keys(document.paths).length).toBeGreaterThan(20)
     // Cacheable, and reachable from a browser-based client.
-    expect(response.headers.get('Cache-Control')).toContain('s-maxage')
+    const cache = response.headers.get('Cache-Control') ?? ''
+    expect(cache).toContain('s-maxage=300')
+    /*
+      `max-age=0, must-revalidate` is the load-bearing half, and it was added
+      only after production showed why: Vercel CONSUMES `s-maxage` and
+      `stale-while-revalidate` and strips them from the client's copy, leaving
+      a bare `public` — which licenses heuristic caching. A browser then
+      invents a lifetime for a document that changes every deploy.
+    */
+    expect(cache).toContain('max-age=0')
+    expect(cache).toContain('must-revalidate')
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
   })
 

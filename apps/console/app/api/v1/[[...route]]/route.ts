@@ -71,8 +71,23 @@ async function dispatch(
       }),
       {
         headers: {
-          // Cacheable: it changes when the code changes, never per caller.
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+          /*
+            `max-age=0, must-revalidate` is LOAD-BEARING, not noise.
+
+            `s-maxage` and `stale-while-revalidate` are CDN directives, and
+            Vercel consumes them and strips them from what the client sees —
+            leaving a bare `Cache-Control: public`, which licenses HEURISTIC
+            caching. A browser is then free to invent a lifetime, and this
+            document changes with every deploy, so an integrator could hold a
+            description of an API we no longer serve with nothing telling
+            either of us. Measured on production before this line existed.
+
+            So: revalidate at the client (cheap — a 304), cache 5 minutes at
+            the edge. Same client-facing shape every other `/v1` response has.
+          */
+          'Cache-Control':
+            'public, max-age=0, must-revalidate, s-maxage=300, ' +
+            'stale-while-revalidate=3600',
           // Anonymous and read-only, so a browser-based client can fetch it.
           'Access-Control-Allow-Origin': '*',
         },
