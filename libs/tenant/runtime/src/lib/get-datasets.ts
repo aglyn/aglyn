@@ -22,6 +22,7 @@ import {
   tenantDataTag,
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
+import { FieldPath } from 'firebase-admin/firestore'
 
 /**
  * The single worst read amplifier of the compose bundle (AGL-1302): the
@@ -76,18 +77,7 @@ async function readDatasets(options: {
     const snapshot = await query.limit(50).get()
     await Promise.all(
       snapshot.docs.map(async (docSnapshot) => {
-        const recordsSnapshot = await docSnapshot.ref
-          .collection('records')
-          .limit(Aglyn.REPEAT_MAX_RECORDS)
-          .get()
-        const records = Aglyn.sortDatasetRecords(
-          recordsSnapshot.docs.map((recordSnapshot) => ({
-            $id: recordSnapshot.id,
-            ...(recordSnapshot.data() as Aglyn.HostDatasetRecord),
-          })),
-          // `$id` rides inside the value map so incoming reference hops
-          // (AGL-180) can resolve rows; the model carries field configs.
-        ).map((record) => ({ ...(record.values ?? {}), $id: record.$id }))
+        const records = await readRepeatRecords(docSnapshot.ref)
         const dataset: Aglyn.RepeatableDataset = {
           records,
           model: Aglyn.effectiveDatasetModel(
@@ -105,6 +95,53 @@ async function readDatasets(options: {
     console.error(error)
   }
   return datasets
+}
+
+/**
+ * The records a repeat renders, in the order it renders them.
+ *
+ * The rows a repeat shows are the ones `sortDatasetRecords` puts first: every
+ * record with an editor `order`, ascending, then the records without one —
+ * forms and Actions append those — by document id. A `limit()` with no
+ * `orderBy` cannot find them: Firestore answers it in document-id order, so on
+ * a dataset past the bound it reads an arbitrary sample, and sorting that
+ * sample afterwards only makes it look ordered.
+ *
+ * `orderBy('order')` reads the first group, and matches only documents that
+ * carry the field. When it comes back short, every ordered record is already
+ * in hand — so at most that many rows of the first page by document id can be
+ * ordered, and the rest of that page is exactly the first unordered records.
+ * Two bounded reads, never a walk of the collection.
+ */
+async function readRepeatRecords(
+  datasetRef: FirebaseFirestore.DocumentReference,
+): Promise<Array<Record<string, unknown>>> {
+  const recordsRef = datasetRef.collection('records')
+  const byOrder = await recordsRef
+    .orderBy('order')
+    .limit(Aglyn.REPEAT_MAX_RECORDS)
+    .get()
+  const snapshots = [...byOrder.docs]
+  if (byOrder.docs.length < Aglyn.REPEAT_MAX_RECORDS) {
+    const held = new Set(byOrder.docs.map((snapshot) => snapshot.id))
+    const byId = await recordsRef
+      .orderBy(FieldPath.documentId())
+      .limit(Aglyn.REPEAT_MAX_RECORDS)
+      .get()
+    snapshots.push(...byId.docs.filter((snapshot) => !held.has(snapshot.id)))
+  }
+  return (
+    Aglyn.sortDatasetRecords(
+      snapshots.map((snapshot) => ({
+        $id: snapshot.id,
+        ...(snapshot.data() as Aglyn.HostDatasetRecord),
+      })),
+    )
+      .slice(0, Aglyn.REPEAT_MAX_RECORDS)
+      // `$id` rides inside the value map so incoming reference hops (AGL-180)
+      // can resolve rows; the model carries field configs.
+      .map((record) => ({ ...(record.values ?? {}), $id: record.$id }))
+  )
 }
 
 export default getDatasets
