@@ -122,6 +122,24 @@ export function targetsForChangedFiles(files) {
 }
 
 /**
+ * Every manual deploy target, each carrying the files the range touched — none,
+ * for a target the range never reached (AGL-2793).
+ *
+ * A range answers what a merge WILL owe. Once the merge is serving, what has to
+ * be verified is whether production is converged with that sha, and a deploy an
+ * earlier promotion skipped is owed by it whether or not this range touched the
+ * target. Order follows MANUAL_DEPLOY_TARGETS, like the range-scoped list.
+ */
+export function withEveryTarget(owed) {
+  const byId = new Map(
+    (Array.isArray(owed) ? owed : []).map((entry) => [entry.target.id, entry]),
+  )
+  return MANUAL_DEPLOY_TARGETS.map(
+    (target) => byId.get(target.id) ?? { target, files: [] },
+  )
+}
+
+/**
  * Fold the per-target checker exits into one verdict.
  *
  * NOT-DEPLOYED beats CANNOT-CHECK when both occur: both are red, and one of

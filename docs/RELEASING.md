@@ -355,6 +355,12 @@ neither is clean. The same script runs in CI as `Promotion deploys`: a warning
 on the promotion PR, where the deploys are not yet due, and a failure on the
 push to `production`, where they are.
 
+CI passes `--every-target`, which verifies all three targets whether or not
+the range touched them. Without it, a deploy one promotion skipped is owed by
+exactly one push: the next promotion's range touches no rules file, verifies
+nothing, and passes with live rules still behind (AGL-2791). Add the flag by
+hand when you want the whole answer rather than this range's share of it.
+
 ### 4 — Deploy the security rules the batch contains
 
 Rules do **not** ride the merge. They deploy from a checkout pinned to the
