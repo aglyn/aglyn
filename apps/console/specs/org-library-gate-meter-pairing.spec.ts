@@ -278,8 +278,9 @@ describe('every ingress door passes the pairing (AGL-2003)', () => {
       }
     }
     // Fails if a door is added and left unpaired, and fails if the doors
-    // vanish — a zero-length sweep must not read as compliance.
-    expect(callSites.length).toBe(4)
+    // vanish — a zero-length sweep must not read as compliance. Five doors:
+    // one in `upload`, and two each in `upload-url` and `replace`.
+    expect(callSites.length).toBe(5)
     for (const site of callSites) {
       expect(site).toContain('billsOverage')
       // The scope, not a hardcoded literal: a route that passed `true` would

@@ -303,8 +303,9 @@ describe('every ingress door measures the pool (AGL-2075)', () => {
       }
     }
     // Fails if a door is added and left unpooled, and fails if the doors
-    // vanish — a zero-length sweep must not read as compliance.
-    expect(callSites.length).toBe(4)
+    // vanish — a zero-length sweep must not read as compliance. Five doors:
+    // one in `upload`, and two each in `upload-url` and `replace`.
+    expect(callSites.length).toBe(5)
     for (const site of callSites) {
       expect(site).toContain('allowanceMb')
     }
