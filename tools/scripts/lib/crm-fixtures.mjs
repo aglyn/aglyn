@@ -90,7 +90,7 @@ const DEFAULT_DEAL_STAGES = [
  * The search keys a company document carries, as `nameSearchFields` writes
  * them — the lowercase name and every word prefix up to twelve characters.
  */
-function nameSearchFields(name) {
+export function nameSearchFields(name) {
   const nameLower = name.trim().replace(/\s+/g, ' ').toLowerCase()
   const tokens = new Set()
   for (const word of nameLower.split(' ')) {

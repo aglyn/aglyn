@@ -198,17 +198,23 @@ export function verdicts() {
   }
 }
 
-/** Signs in through the real `/signin` UI; resolves once the router has left it. */
-export async function signInThroughUi(page) {
+/**
+ * Signs in through the real `/signin` UI; resolves once the router has left it.
+ *
+ * The seeded staff owner unless `email` and `password` name another seeded
+ * account — a customer's console is only what a customer's account renders.
+ */
+export async function signInThroughUi(page, { email = EMAIL, password = PASSWORD } = {}) {
   await page.goto(`${BASE_URL}/signin`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await page.fill('input[type="email"], input[name="email"]', EMAIL, { timeout: TIMEOUT_MS })
-  await page.fill('input[type="password"], input[name="password"]', PASSWORD)
+  await page.fill('input[type="email"], input[name="email"]', email, { timeout: TIMEOUT_MS })
+  await page.fill('input[type="password"], input[name="password"]', password)
   await page.click('button[type="submit"], button:has-text("Next")')
   await page.waitForURL((url) => !url.pathname.startsWith('/signin'), { timeout: TIMEOUT_MS })
 }
 
 /**
- * A headless Chrome with one signed-in context.
+ * A headless Chrome with one signed-in context — the seeded staff owner's,
+ * unless `email` and `password` name another seeded account.
  *
  * The notification pre-permission modal (AGL-663) is dismissed before any
  * app code runs, the way the docs capture does it: the key and value mirror
@@ -217,6 +223,8 @@ export async function signInThroughUi(page) {
  */
 export async function openConsole(options = {}) {
   const viewport = options.viewport ?? SHOT_VIEWPORT
+  const email = options.email ?? EMAIL
+  const password = options.password ?? PASSWORD
   mkdirSync(ARTIFACTS, { recursive: true })
   if (SHOTS_DIR) mkdirSync(SHOTS_DIR, { recursive: true })
   const browser = await chromium.launch({ headless: true, ...chromeExecutable() })
@@ -232,8 +240,8 @@ export async function openConsole(options = {}) {
   const page = await context.newPage()
   // An editor's unsaved-changes prompt would park a navigation forever.
   page.on('dialog', (dialog) => dialog.accept().catch(() => undefined))
-  await signInThroughUi(page)
-  console.log(`signed in through the UI as ${EMAIL}`)
+  await signInThroughUi(page, { email, password })
+  console.log(`signed in through the UI as ${email}`)
   return {
     browser,
     context,
