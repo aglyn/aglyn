@@ -21,6 +21,7 @@ import {
   appHandleJsonSuccess,
 } from '@aglyn/shared-util-rest-api'
 import getHost from '../../../../utils/get-host'
+import { publicReadApiGate, withPublicReadHeaders } from '../../_public-read-api'
 
 export const dynamic = 'force-dynamic'
 
@@ -113,6 +114,9 @@ function toPublicHost(host: AglynHost | null | undefined): PublicHost | null {
  * (AGL-2192). See `toPublicHost` before widening this.
  */
 export async function GET(request: Request): Promise<Response> {
+  const gate = publicReadApiGate(request)
+  if (gate.refusal) return gate.refusal
+
   /*
     `?host=` first, then the domain the request was ADDRESSED to (AGL-2716).
 
@@ -151,5 +155,5 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   if (error) return appHandleJsonError(error)
-  return appHandleJsonSuccess(data)
+  return withPublicReadHeaders(appHandleJsonSuccess(data), gate.headers)
 }

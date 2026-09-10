@@ -501,6 +501,18 @@ async function walk(page, db, auth, identity, created) {
 async function main() {
   if (!CONSOLE) throw new Error('SIGNUP_CANARY_ORIGIN is not set')
   if (!EMAIL_BASE) throw new Error('SIGNUP_CANARY_EMAIL is not set')
+  // Identity Platform will not reuse an address, so every run needs its own —
+  // and this makes one by appending a stamp to the LOCAL PART. Only a
+  // plus-address survives that: `zach+canary@x` becomes `zach+canary-a1b2@x`
+  // and still reaches the same mailbox, while a bare `canary@x` becomes
+  // `canary-a1b2@x`, which no mailbox and no group answers. That is a hard
+  // bounce charged to the sending domain on every walk, so it is refused here
+  // rather than discovered in the delivery logs.
+  if (!EMAIL_BASE.includes('+')) {
+    throw new Error(
+      `SIGNUP_CANARY_EMAIL must be a plus-address (name+tag@domain); got ${EMAIL_BASE}`,
+    )
+  }
   if (process.env['SIGNUP_CANARY_ENABLE'] !== '1') {
     console.error(
       'refusing to run: set SIGNUP_CANARY_ENABLE=1 to walk production signup',

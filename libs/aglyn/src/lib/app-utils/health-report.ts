@@ -2835,7 +2835,25 @@ export function isSignupCanaryOrgSlug(slug: string | null | undefined): boolean 
   return typeof slug === 'string' && slug.startsWith(SIGNUP_CANARY_ORG_SLUG_PREFIX)
 }
 
-export const SIGNUP_CANARY_STALE_AFTER_MS = 2 * 60 * 60 * 1000
+/**
+ * How old the last walk may be before the check goes red.
+ *
+ * Six hours, far wider than the schedule that writes it, and deliberately so.
+ * GitHub Actions serves `schedule` from a best-effort queue that drops most
+ * requests under load: measured 2026-09-10, `uptime-probe.yml` asks for every
+ * fifteen minutes and actually fired at gaps of 1h55m to 4h38m across the
+ * preceding day and a half. A window sized to the cron expression rather than
+ * to that behavior reds on ordinary queue depth.
+ *
+ * Widening it costs no detection speed, because staleness is not how a broken
+ * signup surfaces. A walk that cannot sign up FAILS and still writes its
+ * marker, which reads `signup-walk-failed` on the next poll. Staleness can
+ * only mean the walker never reported — a CI condition, not a product one —
+ * so this window's whole job is to notice a canary that has genuinely stopped,
+ * and it must not fire before then: this check grades the monitor that must
+ * never be muted.
+ */
+export const SIGNUP_CANARY_STALE_AFTER_MS = 6 * 60 * 60 * 1000
 
 /**
  * Grade the last recorded signup walk.
@@ -2873,7 +2891,7 @@ export function signupCanaryHealth(
     typeof marker.failedStep === 'string' ? marker.failedStep : null
   const carried = { ...base, ageMs, walkMs, reapedCleanly, failedStep }
 
-  // A stale PASS is not a pass. The walk that succeeded two hours ago says
+  // A stale PASS is not a pass. A walk that succeeded long enough ago says
   // nothing about the door now, and the whole point of a canary is currency.
   // Checked before the verdict so a stale failure reports as stale rather
   // than as a failure that may since have healed.

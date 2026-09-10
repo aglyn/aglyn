@@ -289,29 +289,32 @@ jobs:
           MAIN_GATE_SCHEDULE: ${{ github.event.schedule }}
           MAIN_GATE_INPUTS_FULL: ${{ inputs.full }}
         run: node tools/scripts/check-main-gate-full-sweep.mjs
-  full:
-    name: full (tests + production builds)
+  # ---------------------------------------------------------------------------
+  # THE FULL SWEEP, IN PARALLEL (AGL-2721)
+  # ---------------------------------------------------------------------------
+  # It was one job running six independent things in series and took 26-35
+  # minutes. Measured on run 34428799468: install 79s, typecheck 443s, lint
+  # 149s, guards 58s, tests 813s and still going, three production builds not
+  # yet started. Nothing in that list depends on anything else in it.
+  #
+  # Split across runners rather than parallelised inside one, deliberately.
+  # `TYPECHECK_CONCURRENCY: '2'` is a MEMORY ceiling, not a throughput choice —
+  # the driver sizes on CPU and dies on RAM (AGL-2684) — so adding concurrency
+  # inside a 4-vCPU / 16 GB runner reintroduces exactly the OOM that cap fixed.
+  # Separate runners give each step its own 16 GB and cost nothing: Actions
+  # minutes are free on this plan.
+  #
+  # `full` survives as an AGGREGATOR so two contracts do not move: the check
+  # name `full (tests + production builds)`, and `report`'s reading of
+  # `needs.full.result` — where `skipped` means the sweep was not due and must
+  # never be read as green.
+  full-typecheck:
+    name: full · typecheck
     runs-on: ubuntu-latest
-    # Its own group, so a long sweep never blocks the fast cadence above.
     concurrency:
-      group: main-gate-full
+      group: main-gate-full-typecheck
       cancel-in-progress: false
-    # The four things a promotion gate exists to prove, so it inherits the
-    # promotion gate's runtime. nx-ci.yml's 60 was measured against `nx
-    # affected`; this is run-many over all 40 projects plus three production
-    # builds, so it is bounded higher. Do not tighten without measuring the
-    # spread — a bound below the real distribution turns honest slow runs into
-    # cancellations, which is the AGL-2378 mistake.
-    timeout-minutes: 90
-    # The three original paths — a dispatch that asked for the sweep, and the
-    # hourly cron — are unchanged and still decided here, inside
-    # `check-main-gate-full-sweep.mjs`. `sweep-due` only ever ADDS the push
-    # path, so nothing that used to run stops running.
-    #
-    # `inputs.full` is READ (via that script). It was once declared and then
-    # ignored, so every manual dispatch ran the long sweep whatever the box
-    # said. A declared input that nothing reads is worse than no input: the UI
-    # offers a choice that silently does not exist.
+    timeout-minutes: 45
     needs: sweep-due
     if: needs.sweep-due.outputs.due == 'true'
     steps:
@@ -325,62 +328,113 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix cloud/functions
       - run: npm ci --prefix apps/docs
-
-      # Same 4-vCPU / 16 GB ceiling as the fast job above (AGL-2684). This job
-      # has never been seen to die in that wave, but it runs the identical
-      # command on the identical runner, so it sits on the same edge.
+      # The 4-vCPU / 16 GB ceiling (AGL-2684). On its own runner now, and the
+      # cap STAYS: the constraint is this job's own memory, not contention
+      # with the steps that used to share the box.
       - env:
           TYPECHECK_CONCURRENCY: '2'
         run: npm run typecheck
       - run: npx nx run docs:typecheck
+
+  full-lint:
+    name: full · lint + guards
+    runs-on: ubuntu-latest
+    concurrency:
+      group: main-gate-full-lint
+      cancel-in-progress: false
+    timeout-minutes: 30
+    needs: sweep-due
+    if: needs.sweep-due.outputs.due == 'true'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+      - run: npm ci
+      - run: npm ci --prefix cloud/functions
       - run: npx nx run-many -t lint --all --parallel=3
       - run: node tools/scripts/run-guards.mjs --concurrency 4
         # Same reason as the fast job above (AGL-2670).
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-      # The test run, REDIRECTED to a file (AGL-1617). It used to be `| tee`,
-      # and the tee was the reason the artifact was useless: a pipe makes
-      # nx's stdout ASYNCHRONOUS, and nx ends a failed run with
-      # process.exit(), which discards whatever is still in the pipe buffer.
-      # Measured both ways:
+
+  full-test:
+    name: full · tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: main-gate-full-test-${{ matrix.shard }}
+      cancel-in-progress: false
+    timeout-minutes: 45
+    needs: sweep-due
+    if: needs.sweep-due.outputs.due == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+      - run: npm ci
+      - run: npm ci --prefix cloud/functions
+      # Sharded the way nx-ci.yml shards its own: jest's `--shard` does the
+      # splitting and reaches jest THROUGH nx, so each shard runs a quarter of
+      # every project's files. `fail-fast: false` so one red shard does not
+      # cancel the others and cost the run its diagnosis.
       #
-      #   node -e 'process.stdout.write("x".repeat(5e6)); process.exit(1)'
-      #     | wc -c   ->      65,550   (one pipe buffer, the rest dropped)
-      #     > file    ->   5,000,009   (a regular file is synchronous)
-      #
-      # nx prints FAILED tasks last, so the dropped tail was always the
-      # failing task's output — this job's run 32718722567 named
-      # `console:test` and carried zero ` FAIL ` markers into the artifact,
-      # the same signature nx-ci.yml was seeing. The bytes were never
-      # written, so neither the artifact nor the digest could recover them.
-      #
-      # The cost is that the step no longer streams live into the job log;
-      # it is `cat` at the end instead. The artifact is the diagnostic path
-      # and it is now complete, which it never was.
+      # REDIRECTED to a file, not piped (AGL-1617). A pipe makes nx's stdout
+      # asynchronous and nx ends a failed run with process.exit(), which drops
+      # whatever is still buffered — always the failing task's output, since nx
+      # prints FAILED last.
       - name: test
         run: |
           status=0
           npx nx run-many -t test --all --parallel=3 --maxWorkers=2 \
+            --shard=${{ matrix.shard }}/4 \
             > "$RUNNER_TEMP/nx-test.log" 2>&1 || status=$?
           cat "$RUNNER_TEMP/nx-test.log"
           exit "$status"
 
       # --task-failed: this step only runs because the job is already red, so
-      # the premise comes from the workflow rather than from a log that may
-      # not contain it. A log with nothing in it is INCONCLUSIVE, not clean.
+      # the premise comes from the workflow rather than from a log that may not
+      # contain it. A log with nothing in it is INCONCLUSIVE, not clean.
       - if: failure()
         run: node tools/scripts/lib/ci-test-digest.mjs "$RUNNER_TEMP/nx-test.log" --task-failed
 
-      # The raw bytes. Named per job so a second upload in the same run
-      # cannot collide with this one.
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: nx-test-log-main-gate-full
+          name: nx-test-log-main-gate-full-${{ matrix.shard }}
           path: ${{ runner.temp }}/nx-test.log
           retention-days: 7
           if-no-files-found: warn
 
+  full-build:
+    name: full · production builds
+    runs-on: ubuntu-latest
+    concurrency:
+      group: main-gate-full-build
+      cancel-in-progress: false
+    timeout-minutes: 45
+    needs: sweep-due
+    if: needs.sweep-due.outputs.due == 'true'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+      - run: npm ci
+      - run: npm ci --prefix apps/docs
       # PRODUCTION builds, named individually. A bare `nx run-many -t build`
       # once went green while BOTH Next production builds errored on a
       # misplaced `use client`, and `docs` has no `production` configuration.
@@ -389,6 +443,39 @@ jobs:
       - run: npx nx run console:build:production
       - run: npx nx run tenant:build:production
       - run: npx nx run docs:build
+
+  # The aggregator. It exists so the check NAME and `report`'s
+  # `needs.full.result` both keep meaning exactly what they meant when this was
+  # one job.
+  #
+  # `always()` is load-bearing: without it a failed child SKIPS this job, and
+  # `report` reads `skipped` as "the sweep was not due" — turning a red sweep
+  # into a green verdict, which is the AGL-2378 shape.
+  full:
+    name: full (tests + production builds)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [sweep-due, full-typecheck, full-lint, full-test, full-build]
+    if: always() && needs.sweep-due.outputs.due == 'true'
+    steps:
+      - name: every part of the sweep passed
+        env:
+          TYPECHECK: ${{ needs.full-typecheck.result }}
+          LINT: ${{ needs.full-lint.result }}
+          TEST: ${{ needs.full-test.result }}
+          BUILD: ${{ needs.full-build.result }}
+        run: |
+          set -euo pipefail
+          bad=0
+          for part in "typecheck:$TYPECHECK" "lint:$LINT" "test:$TEST" "build:$BUILD"; do
+            name="${part%%:*}"; result="${part#*:}"
+            printf '  %-10s %s\n' "$name" "$result"
+            # `success` only. `skipped` is not a pass here — a part that did
+            # not run has proved nothing, and this job's whole purpose is to
+            # refuse to say otherwise.
+            [ "$result" = "success" ] || bad=1
+          done
+          [ "$bad" = 0 ] || { echo "::error::the full sweep did not pass in full"; exit 1; }
 
   # -------------------------------------------------------------------------
   # THE VERDICT, AND THE ALERT THAT CARRIES IT

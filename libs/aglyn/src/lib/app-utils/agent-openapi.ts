@@ -86,6 +86,61 @@ type Schema = Record<string, unknown>
 const MARKDOWN = 'text/markdown'
 
 /**
+ * The header that carries the API version, in both directions (AGL-2722).
+ *
+ * A header and not a URL segment, because most of this surface sits at a
+ * location some other specification fixed — `/openapi.json`, `/robots.txt`,
+ * `/llms.txt`, `/sitemap.xml`, `/manifest.webmanifest`. `/v1/robots.txt` is
+ * not a robots.txt: the crawler that needs it looks at the root and nowhere
+ * else. Versioning only the `/api/*` half would leave one surface running two
+ * rules, which is worse than either rule alone.
+ */
+export const API_VERSION_HEADER = 'Aglyn-API-Version'
+
+/**
+ * The version this description and these responses are.
+ *
+ * ⚠️ Independent of the platform's release version, and deliberately so. The
+ * platform ships several times a day; this shape is a promise to strangers and
+ * moves only when the promise does. Bump it when a field is removed or
+ * renamed, or when an operation narrows what it accepts — never for an
+ * addition, which is why a consumer is told to parse leniently.
+ */
+export const API_VERSION = '1.0.0'
+
+/**
+ * The RFC 9331 headers, and the 429, for the two operations that actually
+ * meter (AGL-2722).
+ *
+ * Declared on those two only, never blanket-applied. `/api/health` is an
+ * uptime probe answering from several regions on a schedule — metering it
+ * would turn a bookkeeping limit into a false outage — and the static files
+ * are served from the edge cache without ever reaching a counter. A header
+ * describing a limit that is not enforced is worse than no header, because a
+ * caller paces against it.
+ */
+const RATE_LIMIT_HEADERS: Schema = {
+  'RateLimit-Limit': { $ref: '#/components/headers/RateLimitLimit' },
+  'RateLimit-Remaining': { $ref: '#/components/headers/RateLimitRemaining' },
+  'RateLimit-Reset': { $ref: '#/components/headers/RateLimitReset' },
+}
+
+const TOO_MANY_REQUESTS: Schema = {
+  description:
+    'The address exceeded its per-minute budget. `Retry-After` names the ' +
+    'seconds to wait. Reaching this from ordinary reading would be ' +
+    'surprising — the budget is set well above what reading a whole site ' +
+    'costs.',
+  headers: {
+    ...RATE_LIMIT_HEADERS,
+    'Retry-After': { $ref: '#/components/headers/RetryAfter' },
+  },
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/Error' } },
+  },
+}
+
+/**
  * The `Accept` parameter, declared once and referenced by every page
  * operation.
  *
@@ -158,7 +213,11 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
         responses: {
           '200': {
             description: 'The OpenAPI document.',
-            content: { 'application/json': { schema: { type: 'object' } } },
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/OpenApiDocument' },
+              },
+            },
           },
         },
       },
@@ -222,7 +281,11 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
         responses: {
           '200': {
             description: 'The manifest.',
-            content: { 'application/manifest+json': { schema: { type: 'object' } } },
+            content: {
+              'application/manifest+json': {
+                schema: { $ref: '#/components/schemas/WebAppManifest' },
+              },
+            },
           },
         },
       },
@@ -519,7 +582,15 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
 
   const info: Schema = {
     title: `${options.siteName} — public API`,
-    version: options.version || '1.0.0',
+    /*
+      The CONTRACT version, not the build. `info.version` carrying the platform
+      release meant it changed several times a day, so a consumer reading it as
+      "the shape I was built against" was tracking deploy noise and had nothing
+      to pin. The build identifier keeps its purpose — telling two documents
+      apart — under its own key.
+    */
+    version: API_VERSION,
+    ...(options.version ? { 'x-aglyn-platform-version': options.version } : {}),
     summary: `Everything ${options.siteName} publishes for machine consumption.`,
     description:
       `The read-only surface of ${options.siteName}. Every operation is ` +
@@ -531,11 +602,70 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
       'page that carries them rather than to a spec published to every ' +
       'crawler; follow the form on the relevant page.\n\n' +
       `Start at [/llms.txt](${origin}/llms.txt) for what this site is for, ` +
-      `or [/sitemap.xml](${origin}/sitemap.xml) for every indexable URL.`,
+      `or [/sitemap.xml](${origin}/sitemap.xml) for every indexable URL.\n\n` +
+      '## Versioning and deprecation\n\n' +
+      'This surface is versioned by HEADER, not by URL. Send ' +
+      `\`${API_VERSION_HEADER}: ${API_VERSION}\` to pin the shape you were ` +
+      'built against; omit it and you get the current version. Every ' +
+      `response names the version that served it in the same header.\n\n` +
+      'A path version was the alternative and it does not fit this surface: ' +
+      'most of what is described here lives at a location some other ' +
+      'specification fixed — `/openapi.json`, `/robots.txt`, `/llms.txt`, ' +
+      '`/sitemap.xml`, `/manifest.webmanifest`. Moving those under `/v1/` ' +
+      'would break the specs that define them, and versioning only the ' +
+      '`/api/*` half would leave one surface with two rules.\n\n' +
+      'Additive changes — a new operation, a new optional field — ship ' +
+      'without a version bump, so parse leniently and ignore what you do ' +
+      'not recognise. Anything that removes or renames a field, or narrows ' +
+      'what an operation accepts, does bump it.\n\n' +
+      'Removal is announced on the responses themselves, not only in a ' +
+      'changelog. A deprecated operation answers with `Deprecation` (RFC ' +
+      '9745) from the moment it is deprecated, and `Sunset` (RFC 8594) ' +
+      'naming the date it stops answering. Both are HTTP dates. An ' +
+      'operation that has never carried either is not scheduled for ' +
+      'removal.',
     ...(options.contactEmail
       ? { contact: { name: options.siteName, email: options.contactEmail } }
       : {}),
     ...(options.termsOfServiceUrl ? { termsOfService: options.termsOfServiceUrl } : {}),
+  }
+
+  /*
+    Every response names the version that served it and declares the two
+    headers a removal is announced on; every operation accepts the version
+    request header. Attached by a walk rather than written into each operation
+    by hand — a policy stated in `info` and then missing from an operation is
+    not a policy, and eleven hand-copied blocks is exactly how that happens.
+  */
+  const versionedHeaders: Schema = {
+    [API_VERSION_HEADER]: { $ref: '#/components/headers/ApiVersion' },
+    Deprecation: { $ref: '#/components/headers/Deprecation' },
+    Sunset: { $ref: '#/components/headers/Sunset' },
+  }
+  /** The paths `publicReadApiGate` actually meters. Kept in step by AGL-2722's spec. */
+  const METERED = new Set(['/api/host', '/api/screen'])
+  for (const [pathName, pathItem] of Object.entries(paths as Record<string, Schema>)) {
+    const metered = METERED.has(pathName)
+    for (const operation of Object.values(pathItem)) {
+      if (!operation || typeof operation !== 'object') continue
+      const verb = operation as Schema
+      const responses = verb.responses as Record<string, Schema> | undefined
+      if (!responses) continue
+      if (metered && !responses['429']) responses['429'] = { ...TOO_MANY_REQUESTS }
+      for (const response of Object.values(responses)) {
+        // The operation's own headers win: a walk that overwrote them would
+        // silently drop something an operation deliberately said.
+        response.headers = {
+          ...versionedHeaders,
+          ...(metered ? RATE_LIMIT_HEADERS : {}),
+          ...((response.headers as Schema) ?? {}),
+        }
+      }
+      verb.parameters = [
+        ...((verb.parameters as unknown[]) ?? []),
+        { $ref: '#/components/parameters/ApiVersionRequest' },
+      ]
+    }
   }
 
   return {
@@ -557,6 +687,90 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
     components: {
       schemas: {
         Error: ERROR_SCHEMA,
+        OpenApiDocument: {
+          type: 'object',
+          description:
+            'An OpenAPI 3.1 description — this document. Described rather ' +
+            'than left as a bare object so a consumer knows which dialect ' +
+            'the schemas inside it use before it fetches them.',
+          required: ['openapi', 'info', 'paths'],
+          properties: {
+            openapi: {
+              type: 'string',
+              description: 'OpenAPI specification version, e.g. `3.1.0`.',
+            },
+            jsonSchemaDialect: {
+              type: 'string',
+              description: 'The JSON Schema dialect the schemas below use.',
+            },
+            info: {
+              type: 'object',
+              description: 'Title, version, summary and description.',
+            },
+            servers: {
+              type: 'array',
+              description: 'Origins this description applies to.',
+              items: { type: 'object' },
+            },
+            tags: {
+              type: 'array',
+              description: 'Operation groupings.',
+              items: { type: 'object' },
+            },
+            paths: {
+              type: 'object',
+              description: 'Every path, keyed by template, each with its verbs.',
+            },
+            components: {
+              type: 'object',
+              description: 'Reusable schemas, parameters and headers.',
+            },
+          },
+        },
+        WebAppManifest: {
+          type: 'object',
+          description:
+            'A W3C web app manifest. Only the members this site actually ' +
+            'emits are described; the specification allows more.',
+          properties: {
+            name: { type: 'string', description: 'Full name of the site.' },
+            short_name: {
+              type: 'string',
+              description: 'Name used where space is tight.',
+            },
+            description: { type: 'string', description: 'What the site is.' },
+            start_url: {
+              type: 'string',
+              description: 'Where an installed instance opens.',
+            },
+            scope: { type: 'string', description: 'URLs the install covers.' },
+            display: {
+              type: 'string',
+              description: 'Preferred display mode, e.g. `standalone`.',
+            },
+            theme_color: {
+              type: 'string',
+              description: 'CSS color for the surrounding UI.',
+            },
+            background_color: {
+              type: 'string',
+              description: 'CSS color painted before the site renders.',
+            },
+            icons: {
+              type: 'array',
+              description: 'Installable icons.',
+              items: {
+                type: 'object',
+                properties: {
+                  src: { type: 'string' },
+                  sizes: { type: 'string' },
+                  type: { type: 'string' },
+                  purpose: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
         SiteIdentity: {
           type: 'object',
           description: "A site's public identity.",
@@ -625,6 +839,69 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
             },
           },
           required: ['status'],
+        },
+      },
+      headers: {
+        ApiVersion: {
+          description:
+            'The API version that produced this response. Compare it with ' +
+            'the version you were built against; they differ only when ' +
+            'something was removed, renamed, or narrowed.',
+          schema: { type: 'string', examples: [API_VERSION] },
+        },
+        Deprecation: {
+          description:
+            'Present only on a deprecated operation, per RFC 9745: the HTTP ' +
+            'date the deprecation took effect. Its absence is meaningful — ' +
+            'an operation that has never carried this is not scheduled for ' +
+            'removal.',
+          schema: { type: 'string' },
+        },
+        Sunset: {
+          description:
+            'Present only once a removal date is set, per RFC 8594: the ' +
+            'HTTP date after which this operation stops answering. Always ' +
+            'accompanied by `Deprecation`.',
+          schema: { type: 'string' },
+        },
+        RateLimitLimit: {
+          description:
+            'Requests this address may make per window, per RFC 9331.',
+          schema: { type: 'integer' },
+        },
+        RateLimitRemaining: {
+          description:
+            'Requests left in the current window.\n\n' +
+            '⚠️ Counted PER SERVING INSTANCE, not across the deployment. ' +
+            'The limit is a backstop set far above ordinary reading, and an ' +
+            'exact global counter would cost every request two round trips ' +
+            'to enforce a number nobody should reach. Pace against it as a ' +
+            'courtesy signal, not as an exact budget.',
+          schema: { type: 'integer' },
+        },
+        RateLimitReset: {
+          description:
+            'Seconds until the current window resets — a duration, not a ' +
+            'timestamp, so a caller uses its own clock rather than trusting ' +
+            'ours.',
+          schema: { type: 'integer' },
+        },
+        RetryAfter: {
+          description:
+            'Seconds to wait before retrying. Sent only with a 429.',
+          schema: { type: 'integer' },
+        },
+      },
+      parameters: {
+        ApiVersionRequest: {
+          name: API_VERSION_HEADER,
+          in: 'header',
+          required: false,
+          description:
+            'Pin the response shape to a version you were built against. ' +
+            'Omit it to get the current version, which is what most callers ' +
+            'want — additive changes never bump it.',
+          schema: { type: 'string', examples: [API_VERSION] },
         },
       },
     },

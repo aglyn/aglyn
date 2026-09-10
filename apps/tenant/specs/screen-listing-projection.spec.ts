@@ -21,36 +21,8 @@
  * limitations under the License.
  */
 
-/**
- * `GET /api/screen?host=` may not publish a screen's secrets (AGL-2191).
- *
- * The route is anonymous by design — `/api` is outside the middleware matcher
- * and a site's page list is public information — so the boundary is not WHO
- * calls it, it is WHAT it returns. It used to return `screen.data()`, the whole
- * Firestore document, which carries `protection.passwordHash`: the unsalted
- * sha256 of the visitor password (AGL-87). Handing that to an anonymous caller
- * defeats the protection outright and offline, with none of the durable
- * brute-force budget `/api/protection/unlock` charges (AGL-794).
- *
- * ## What makes this spec able to fail
- *
- * The Firestore stand-in models `select()` the way Firestore does: a query with
- * a projection yields documents holding ONLY the projected fields, and a query
- * WITHOUT one yields the whole document. That is the load-bearing detail — an
- * unfaithful double that always masked would report green over a route that had
- * stopped projecting. Restoring the raw return (dropping the `select()` and the
- * `toPublicScreen` copy from `utils/get-all-screens.ts`) turns every assertion
- * below red, which is how this was proven.
- *
- * The public screen deliberately carries a `passwordHash` of its own. It is
- * there so the leak cannot be closed by the visibility FILTER alone: if someone
- * removes the projection but keeps the filter, that screen still ships its hash
- * and this spec still fails.
- */
+import { HostScreenVisibility } from '@aglyn/aglyn/server'
 
-import { HostScreenStatus, HostScreenVisibility } from '@aglyn/aglyn/server'
-
-/** A stored screen, exactly as Firestore holds it. */
 interface StoredScreen {
   id: string
   doc: Record<string, unknown>
@@ -59,11 +31,21 @@ interface StoredScreen {
 const HASH_PUBLIC = 'a'.repeat(64)
 const HASH_PROTECTED = 'b'.repeat(64)
 
+/*
+  ⚠️ NOT ONE OF THESE CARRIES A `status` FIELD, and that is deliberate
+  (AGL-2719). The previous fixture stamped `status: PUBLISHED` on every screen,
+  which is a shape production has never held — measured on the live site: 69
+  screen documents, `status` undefined on all 69. So the suite answered a
+  `where('status','==',PUBLISHED)` with rows while the same query returned
+  nothing in reality, and the endpoint shipped empty for every site on the
+  platform with a green test beside it.
+
+  A fixture must hold what the database holds. These do.
+*/
 const storedScreens: StoredScreen[] = [
   {
     id: 'screen-about',
     doc: {
-      status: HostScreenStatus.PUBLISHED,
       visibility: HostScreenVisibility.PUBLIC,
       slug: 'about',
       displayName: 'About',
@@ -79,16 +61,24 @@ const storedScreens: StoredScreen[] = [
         imageHeight: 630,
         imageAlt: 'The About page card',
       },
-      // A public page can still carry a stale hash. See the note above.
+      // A public page can still carry a stale hash.
       protection: { passwordHash: HASH_PUBLIC },
       localeVariants: { fr: 'screen-about-fr' },
       versionId: 'version-secret',
     },
   },
   {
+    id: 'screen-careers',
+    doc: {
+      visibility: HostScreenVisibility.PUBLIC,
+      slug: 'careers',
+      displayName: 'Careers',
+      order: 2,
+    },
+  },
+  {
     id: 'screen-investors',
     doc: {
-      status: HostScreenStatus.PUBLISHED,
       visibility: HostScreenVisibility.PASSWORD,
       slug: 'investors',
       displayName: 'Investor update Q3',
@@ -96,9 +86,18 @@ const storedScreens: StoredScreen[] = [
     },
   },
   {
+    id: 'screen-template',
+    doc: { visibility: HostScreenVisibility.PUBLIC, slug: 'products' },
+  },
+  {
+    id: 'screen-404',
+    doc: { visibility: HostScreenVisibility.PUBLIC, slug: '404' },
+  },
+  {
+    // In the collection but NOT in the routing map: an unpublished draft. The
+    // routing map is what the router serves, so this is not a page.
     id: 'screen-unpublished',
     doc: {
-      status: HostScreenStatus.UNPUBLISHED,
       visibility: HostScreenVisibility.PUBLIC,
       slug: 'unreleased',
       displayName: 'Unreleased',
@@ -106,14 +105,22 @@ const storedScreens: StoredScreen[] = [
   },
 ]
 
-/**
- * The `select()` mask the query asked for, captured so the assertions can also
- * state that a projection was requested at all rather than only that the
- * response happened to look clean.
- */
+/*
+  The routing map, which is now the published set. `screen-orphan` is in it
+  with no document behind it — a routing entry a publish left dangling, which
+  the router cannot render and this must not list.
+*/
+const mockRoutes: Record<string, string> = {
+  'screen-about': 'company/about',
+  'screen-careers': 'careers',
+  'screen-investors': 'investors',
+  'screen-template': 'products',
+  'screen-404': '404',
+  'screen-orphan': 'ghost',
+}
+
 let requestedProjection: string[] | null = null
 
-/** Firestore's own masking rule: absent projection = the whole document. */
 function applyProjection(
   doc: Record<string, unknown>,
   fields: string[] | null,
@@ -126,64 +133,21 @@ function applyProjection(
   return masked
 }
 
-interface QueryState {
-  filters: Array<[string, unknown]>
-  fields: string[] | null
-  limit: number
-  /** Which field the query ordered by, or null — see `orderedBy` below. */
-  orderBy: string | null
-  /** The `startAfter` cursor, exclusive. */
-  after: string | null
-}
-
-/**
- * The order the query asked for, captured so a test can assert that ONE was
- * asked for at all (AGL-2716).
- *
- * `limit()` with no `orderBy` returns an arbitrary slice, and a cursor into an
- * arbitrary order pages through a different set on every call — so "the
- * response looked right" is not evidence here. This is.
- */
-let orderedBy: string | null = null
-
-function mockMakeQuery(state: QueryState) {
-  const query = {
-    where: (field: string, _op: string, value: unknown) =>
-      mockMakeQuery({ ...state, filters: [...state.filters, [field, value]] }),
-    select: (...fields: string[]) => {
-      requestedProjection = fields
-      return mockMakeQuery({ ...state, fields })
+function mockMakeQuery(fields: string[] | null = null): any {
+  return {
+    select: (...next: string[]) => {
+      requestedProjection = next
+      return mockMakeQuery(next)
     },
-    orderBy: (field: string) => {
-      orderedBy = field
-      return mockMakeQuery({ ...state, orderBy: field })
-    },
-    startAfter: (after: string) => mockMakeQuery({ ...state, after }),
-    limit: (limit: number) => mockMakeQuery({ ...state, limit }),
+    limit: () => mockMakeQuery(fields),
     get: async () => {
-      let matched = storedScreens.filter((screen) =>
-        state.filters.every(([field, value]) => screen.doc[field] === value),
-      )
-      // `__name__` is the document id. Ordering by anything else is not
-      // modelled, because nothing asks for it.
-      if (state.orderBy === '__name__') {
-        matched = [...matched].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-      }
-      if (state.after) {
-        matched = matched.filter((screen) => screen.id > (state.after as string))
-      }
-      const page = matched.slice(0, state.limit).map((screen) => ({
+      const docs = storedScreens.map((screen) => ({
         id: screen.id,
-        data: () => applyProjection(screen.doc, state.fields),
+        data: () => applyProjection(screen.doc, fields),
       }))
-      return {
-        size: page.length,
-        docs: page,
-        forEach: (fn: (doc: (typeof page)[number]) => void) => page.forEach(fn),
-      }
+      return { size: docs.length, docs }
     },
   }
-  return query
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -192,20 +156,36 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       firestore: () => ({
         collection: () => ({
-          doc: () => ({
-            collection: () =>
-              mockMakeQuery({
-                filters: [],
-                fields: null,
-                limit: Infinity,
-                orderBy: null,
-                after: null,
-              }),
-          }),
+          doc: () => ({ collection: () => mockMakeQuery() }),
         }),
       }),
     }),
   },
+}))
+
+/*
+  Resolving the ADDRESSED name to a host document is the half of AGL-2719 that
+  the old mock could not express at all: it resolved every `.doc()` to the same
+  collection, so `.doc('aglyn.com')` — a document that does not exist — looked
+  identical to `.doc('DXnRbPH4CQ')`, which does.
+*/
+jest.mock('../utils/get-host', () => ({
+  __esModule: true,
+  default: async ({ host }: { host: string }) =>
+    host === 'demo.aglyn.app' || host === 'demo'
+      ? {
+          host: {
+            $id: 'host-demo',
+            screens: mockRoutes,
+            notFoundScreenId: 'screen-404',
+          },
+        }
+      : { host: undefined },
+}))
+
+jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
+  __esModule: true,
+  default: async () => new Set(['screen-template']),
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -219,7 +199,6 @@ async function callRoute(query = '?host=demo'): Promise<{ raw: string; body: any
 
 beforeEach(() => {
   requestedProjection = null
-  orderedBy = null
 })
 
 describe('GET /api/screen response projection (AGL-2191)', () => {
@@ -246,6 +225,7 @@ describe('GET /api/screen response projection (AGL-2191)', () => {
     const { body } = await callRoute()
     const allowed = new Set([
       '$id',
+      'path',
       'slug',
       'parentId',
       'order',
@@ -278,22 +258,30 @@ describe('GET /api/screen response projection (AGL-2191)', () => {
     expect(about.displayName).toBe('About')
     expect(about.order).toBe(1)
     expect(about.seo.title).toBe('About us')
-    // The card group survives whole, alt included (AGL-2398). `imageAlt` was
-    // added to storage and to the resolver by AGL-2417 but never to this
-    // key-by-key mapper, so a listing handed back an image with no
-    // description — half a group, which is the shape this asserts against.
+    // The card group survives whole, alt included (AGL-2398).
     expect(about.seo.image).toBe('media:host-demo/og-about')
     expect(about.seo.imageWidth).toBe(1200)
     expect(about.seo.imageHeight).toBe(630)
     expect(about.seo.imageAlt).toBe('The About page card')
   })
 
-  it('omits gated and unpublished screens entirely', async () => {
-    const { raw, body } = await callRoute()
+  it('serves the composed route, not just the slug segment', async () => {
+    // `slug` is one segment; the routing map holds the whole path. A caller
+    // rebuilding `/company/about` from `slug` + `parentId` is doing the
+    // router's job with less information than the router had.
+    const { body } = await callRoute()
+    const about = body.data.screens.find(
+      (screen: any) => screen.$id === 'screen-about',
+    )
+    expect(about.path).toBe('/company/about')
+    expect(about.slug).toBe('about')
+  })
+
+  it('omits gated screens entirely', async () => {
+    const { raw, body } = await callRoute('?host=demo&limit=100')
     const ids = body.data.screens.map((screen: any) => screen.$id)
 
     expect(ids).not.toContain('screen-investors')
-    expect(ids).not.toContain('screen-unpublished')
     // Not just the id — the TITLE of a members-only page is itself something
     // an anonymous listing should not disclose.
     expect(raw).not.toContain('Investor update Q3')
@@ -301,25 +289,105 @@ describe('GET /api/screen response projection (AGL-2191)', () => {
 })
 
 /**
- * The cursor `nextPageToken` names (AGL-2716). It was accepted by the route,
- * threaded into the reader, and read by nothing: the query was a bare
- * `.limit(5)` and the token came back `''` every time, so a site's sixth page
- * was unreachable through this endpoint.
+ * The two faults that made this endpoint answer `[]` for every site on the
+ * platform (AGL-2719). Each of these fails against the pre-fix reader.
  */
-describe('GET /api/screen pagination (AGL-2716)', () => {
-  it('orders the query — a cursor into an unordered slice pages nothing', () => {
-    return callRoute().then(() => {
-      expect(orderedBy).toBe('__name__')
-    })
+describe('GET /api/screen lists what the router actually serves (AGL-2719)', () => {
+  it('lists a screen that carries NO status field — which is every screen', async () => {
+    // The regression in one line. `where('status','==',PUBLISHED)` matched
+    // nothing because nothing writes `status`; these fixtures now hold the
+    // shape production holds, so a reader that still filtered on it returns
+    // an empty list here and fails.
+    const { body } = await callRoute('?host=demo&limit=100')
+    const ids = body.data.screens.map((screen: any) => screen.$id)
+
+    expect(ids).toContain('screen-about')
+    expect(ids).toContain('screen-careers')
+    for (const screen of storedScreens) {
+      expect(screen.doc.status).toBeUndefined()
+    }
   })
 
-  it('hands back a cursor when the page is full, and none when it is not', async () => {
+  it('resolves the site from the name the caller addressed, not a document id', async () => {
+    // `hosts/demo.aglyn.app` does not exist; `hosts/host-demo` does. Reading
+    // `.doc(host)` with the addressed name queried a document that is not
+    // there, which is fatal on its own even with a correct filter.
+    const { body } = await callRoute('?host=demo.aglyn.app&limit=100')
+    expect(body.data.screens.length).toBeGreaterThan(0)
+  })
+
+  it('says "no such site" rather than answering with an empty page', async () => {
+    // The failure mode that hid all of this: "no pages" and "no such site"
+    // read identically, so nothing downstream could tell them apart.
+    const { body } = await callRoute('?host=nobody.example&limit=100')
+    expect(body.status).not.toBe('success')
+  })
+
+  it('excludes template screens and error screens, exactly as the sitemap does', async () => {
+    const { body } = await callRoute('?host=demo&limit=100')
+    const ids = body.data.screens.map((screen: any) => screen.$id)
+
+    // A template is not a page — the router refuses to serve one.
+    expect(ids).not.toContain('screen-template')
+    // An error screen is a status, not a destination (AGL-2486).
+    expect(ids).not.toContain('screen-404')
+  })
+
+  it('skips a routing entry with no document behind it', async () => {
+    const { body } = await callRoute('?host=demo&limit=100')
+    const ids = body.data.screens.map((screen: any) => screen.$id)
+    expect(ids).not.toContain('screen-orphan')
+  })
+
+  it('lists nothing that is absent from the routing map', async () => {
+    // The collection holds drafts the router does not serve. The routing map,
+    // not the collection, is the published set.
+    const { body } = await callRoute('?host=demo&limit=100')
+    const ids = body.data.screens.map((screen: any) => screen.$id)
+    expect(ids).not.toContain('screen-unpublished')
+  })
+})
+
+/**
+ * The cursor `nextPageToken` names (AGL-2716), carried across the AGL-2719
+ * rewrite: the token is still the last id of the page just served, so a caller
+ * holding one from before the change keeps working.
+ */
+describe('GET /api/screen pagination (AGL-2716)', () => {
+  it('orders the listing, so a cursor addresses the same set on every call', async () => {
+    // The invariant `orderBy('__name__')` used to buy at the query. The set is
+    // now assembled in memory, so the ordering is asserted on the OUTPUT,
+    // which is the thing that actually had to hold.
+    const first = await callRoute('?host=demo&limit=100')
+    const again = await callRoute('?host=demo&limit=100')
+    const ids = (page: any) => page.body.data.screens.map((s: any) => s.$id)
+
+    expect(ids(first)).toEqual(ids(again))
+    expect(ids(first)).toEqual([...ids(first)].sort())
+  })
+
+  it('hands back a cursor when more remain, and none when they do not', async () => {
     const first = await callRoute('?host=demo&limit=1')
     expect(first.body.data.screens.length).toBe(1)
     expect(first.body.data.nextPageToken).toBeTruthy()
 
     const last = await callRoute('?host=demo&limit=100')
     expect(last.body.data.nextPageToken).toBe('')
+  })
+
+  it('never hands back a cursor that returns nothing', async () => {
+    // The old reader could: it compared the page size to the LIMIT, so a full
+    // page whose successor was empty still advertised a token.
+    let token = ''
+    let guard = 0
+    do {
+      const page: { body: any } = await callRoute(
+        `?host=demo&limit=1${token ? `&nextPageToken=${token}` : ''}`,
+      )
+      if (token) expect(page.body.data.screens.length).toBeGreaterThan(0)
+      token = page.body.data.nextPageToken
+      guard += 1
+    } while (token && guard < 20)
   })
 
   it('continues from the cursor without repeating a page', async () => {
@@ -333,7 +401,7 @@ describe('GET /api/screen pagination (AGL-2716)', () => {
     for (const id of secondIds) expect(firstIds).not.toContain(id)
   })
 
-  it('reaches every published, indexable screen by following the cursor', async () => {
+  it('reaches every listable screen by following the cursor', async () => {
     const seen: string[] = []
     let token = ''
     for (let request = 0; request < 20; request += 1) {
@@ -345,12 +413,13 @@ describe('GET /api/screen pagination (AGL-2716)', () => {
       if (!token) break
     }
     expect(seen).toContain('screen-about')
-    expect(seen).not.toContain('screen-unpublished')
+    expect(seen).toContain('screen-careers')
+    expect(seen).not.toContain('screen-investors')
     expect(new Set(seen).size).toBe(seen.length)
   })
 
   it('clamps a limit nobody should be able to ask for', async () => {
-    // A caller asking for 100,000 pages is asking for a Firestore sweep on an
+    // A caller asking for 100,000 pages is asking for a sweep on an
     // anonymous endpoint.
     const huge = await callRoute('?host=demo&limit=100000')
     expect(huge.body.data.screens.length).toBeLessThanOrEqual(100)
@@ -362,13 +431,9 @@ describe('GET /api/screen pagination (AGL-2716)', () => {
 
   it('resolves the site from the request host when no parameter is given', async () => {
     /*
-      The spelling a stranger can guess — before this the endpoint answered
-      `Bad request` to it, which made it undescribable in `/openapi.json`.
-
-      The `Host` header is set explicitly because a `Request` built in a test
-      carries none; a real one always does, which is the whole point of reading
-      it. `getAllScreens` is reached with whatever this resolves to, and the
-      mocked Firestore answers the same fixtures for any site.
+      The spelling a stranger can guess. The `Host` header is set explicitly
+      because a `Request` built in a test carries none; a real one always does,
+      which is the whole point of reading it.
     */
     const response = await GET(
       new Request('https://demo.aglyn.app/api/screen', {

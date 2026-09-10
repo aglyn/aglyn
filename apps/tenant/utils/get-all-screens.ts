@@ -17,6 +17,8 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
+import getHost from './get-host'
 
 /**
  * The read behind `GET /api/screen?host=` — a site's published pages, served
@@ -71,6 +73,13 @@ const PUBLIC_SCREEN_PROJECTION = [
 /** Exactly what `GET /api/screen` publishes about a page. */
 export interface PublicScreen {
   $id: string
+  /**
+   * The URL path the router serves this screen at, composed — `/company/about`
+   * rather than the `about` in `slug`. Read straight off the routing map,
+   * which is the same string {@link Aglyn.screenRoutePathToUrl} hands the sitemap,
+   * so a caller never has to rebuild it from `slug` and `parentId`.
+   */
+  path?: string
   slug?: string
   parentId?: string
   order?: number
@@ -91,10 +100,15 @@ export interface PublicScreen {
   }
 }
 
-function toPublicScreen(id: string, doc: Record<string, unknown>): PublicScreen {
+function toPublicScreen(
+  id: string,
+  doc: Record<string, unknown>,
+  path: string,
+): PublicScreen {
   const seo = (doc.seo ?? undefined) as Record<string, unknown> | undefined
   return {
     $id: id,
+    path,
     slug: doc.slug as string | undefined,
     parentId: doc.parentId as string | undefined,
     order: doc.order as number | undefined,
@@ -124,32 +138,60 @@ export const SCREEN_PAGE_SIZE_DEFAULT = 50
 export const SCREEN_PAGE_SIZE_MAX = 100
 
 /**
+ * The most screen documents one call will scan to decide what is listable.
+ * Matches the sitemap's own cap, because the two read the same set for the
+ * same reason and a site that outgrew one has outgrown both.
+ */
+const SCREEN_SCAN_MAX = 1000
+
+/**
  * Published pages for a site, one page of them at a time.
  *
- * ## The cursor is real now (AGL-2716)
+ * ## What "published" means here, and why it moved (AGL-2719)
  *
- * `nextPageToken` was accepted by the route, threaded into this function, and
- * READ BY NOTHING: the query was a bare `.limit(5)` and the returned token was
- * always `''`. So the endpoint published the first five pages of a site and
- * offered no way to reach the sixth — which made it undescribable in
- * `/openapi.json`, because the honest description was "returns some of your
- * pages, and there is no way to ask for the rest".
+ * The published set is `host.screens` — the routing map that decides what the
+ * router will actually serve — filtered by the same three exclusions
+ * `/sitemap.xml` applies. The two surfaces agreeing is the point rather than a
+ * convenience: a page listed here but withheld from the sitemap is a site
+ * advertising to agents a URL it hid from crawlers.
  *
- * ⚠️ `orderBy` IS LOAD-BEARING, not tidiness. `limit()` without an explicit
- * order returns an arbitrary slice, and a cursor into an arbitrary order is a
- * cursor into a different set on every call — pages would repeat and pages
- * would be missed. `__name__` is the document id: total, stable, and served by
- * Firestore's automatic single-field index alongside the `status` equality, so
- * this needs no composite index to be deployed with it.
+ * It used to be `where('status', '==', PUBLISHED)` against the screens
+ * collection, and it returned NOTHING, for every site on the platform. Two
+ * independent faults, either fatal on its own:
  *
- * ## The cursor is the last document READ, not the last one RETURNED
+ * 1. The `host` this receives is the name the caller addressed — `acme.com`,
+ *    or the `Host:` header — and it went straight into `.doc(host)`. Host
+ *    documents are keyed by uid, so the query addressed a document that does
+ *    not exist. Resolving through {@link getHost} is what the rest of the
+ *    runtime already does with that value.
+ * 2. Nothing writes `status`. Measured against production: 69 screen
+ *    documents, `status` undefined on all 69. `HostScreenStatus` is also a
+ *    BITFIELD — `SCHEDULED_TO_UPDATE_PUBLISHED` is `PUBLISHED | 32` — so an
+ *    `==` against `PUBLISHED` would miss a scheduled-update page even once
+ *    something did start writing the field.
  *
- * `isScreenIndexable` filters in memory, after the query, because visibility
- * cannot be expressed as a filter beside the status equality without a second
- * index and a second refusal to keep in step. So a page of 50 documents can
- * return fewer than 50 screens — and if the cursor were built from the last
- * RETURNED screen, every gated page at the end of a slice would be re-read on
- * the next request, or worse, everything after it skipped.
+ * ⚠️ Neither fault was visible from the test suite, and that is the durable
+ * lesson: the suite answered out of a fixture that stamped
+ * `status: PUBLISHED` on every screen and resolved every `.doc()` to the same
+ * collection. A mock cannot see a `where` clause that matches nothing in
+ * reality, nor a document id that addresses nothing. The spec beside this file
+ * now asserts the shapes production actually holds — a screen with NO `status`
+ * field at all, and a host addressed by hostname.
+ *
+ * ## An unresolvable host is an ERROR, not an empty page
+ *
+ * Returning `{ screens: [] }` for a site that does not exist is what let this
+ * hide: "no pages" and "no such site" read identically to every caller,
+ * including the ones that were supposed to notice. They are different answers
+ * and they are now said differently.
+ *
+ * ## The cursor
+ *
+ * The routing map is a field on the host document, so there is nothing to page
+ * AT the query — the whole set is in hand and a page is a slice of it, ordered
+ * by screen id. `nextPageToken` keeps its meaning, the last id of the page
+ * just served, so a caller holding a token from before this change keeps
+ * working.
  */
 export async function getAllScreens(
   host: Aglyn.HostUid,
@@ -161,59 +203,102 @@ export async function getAllScreens(
     nextPageToken: string
     error: Error | null
   } = { screens: [], nextPageToken: '', error: null }
-  const firestore = firebaseAdmin.app().firestore()
 
   const limit = Math.min(
     Math.max(1, Math.trunc(Number(pageSize)) || SCREEN_PAGE_SIZE_DEFAULT),
     SCREEN_PAGE_SIZE_MAX,
   )
 
-  let query = firestore
-    .collection('hosts')
-    .doc(host)
-    .collection('screens')
-    .where('status', '==', Aglyn.HostScreenStatus.PUBLISHED)
-    .orderBy('__name__')
-    .select(...PUBLIC_SCREEN_PROJECTION)
-    .limit(limit)
+  try {
+    const resolved = await getHost({ host })
+    const hostDoc = resolved?.host
+    if (!hostDoc?.$id) {
+      data.error = new Error(`No site is published at ${host}`)
+      return data
+    }
 
-  /*
-    The token IS the last document id. A document id is already public — it is
-    the `$id` of every screen in the response — so there is nothing to sign or
-    obscure, and an opaque encoding would only mean a caller cannot tell a
-    truncated token from an exhausted listing.
-  */
-  const cursor = String(nextPageToken ?? '').trim()
-  if (cursor) query = query.startAfter(cursor)
+    const routes = (hostDoc.screens ?? {}) as Record<string, string | undefined>
 
-  await query
-    .get()
-    .then((screens) => {
-      screens.forEach((screen) => {
-        const doc = (screen.data() ?? {}) as Record<string, unknown>
-        if (
-          !Aglyn.isScreenIndexable(doc as Aglyn.SearchIndexingScreen)
-        ) {
-          return
-        }
-        data.screens.push(toPublicScreen(screen.id, doc))
+    /*
+      Started before the screens read and awaited after it, so the two overlap
+      rather than costing a round trip each — the same shape `/sitemap.xml`
+      uses for the same pair of reads.
+    */
+    const templateScreenIdsPromise = getTemplateScreenIds({
+      hostId: hostDoc.$id,
+    })
+
+    const screenDocs = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostDoc.$id)
+      .collection('screens')
+      .select(...PUBLIC_SCREEN_PROJECTION)
+      .limit(SCREEN_SCAN_MAX)
+      .get()
+
+    const documents = new Map<string, Record<string, unknown>>()
+    for (const snapshot of screenDocs.docs) {
+      documents.set(snapshot.id, (snapshot.data() ?? {}) as Record<string, unknown>)
+    }
+
+    /*
+      Excluded for the three reasons the sitemap excludes them: a gated page
+      answers an agent with a password prompt rather than the page, a template
+      is not a page at all (the router refuses to serve one), and an error
+      screen is a status, not a destination.
+    */
+    const excluded = new Set<string>(await templateScreenIdsPromise)
+    for (const screenId of Aglyn.statusPageScreenIds(hostDoc as never)) {
+      excluded.add(screenId)
+    }
+
+    const listable = Object.entries(routes)
+      .filter(([screenId, path]) => {
+        if (typeof path !== 'string' || excluded.has(screenId)) return false
+        const doc = documents.get(screenId)
+        /*
+          A screen in the routing map with no document behind it is a routing
+          entry the publish left dangling. It is not listable — the router has
+          nothing to render — and it is not an error either.
+        */
+        if (!doc) return false
+        return Aglyn.isScreenIndexable(doc as Aglyn.SearchIndexingScreen)
       })
-      /*
-        A SHORT page is the end of the listing, and that is the only signal
-        there is: asking for one more document to find out would bill a read
-        per page for a fact the page count already implies. A full page whose
-        successor turns out to be empty costs the caller one extra request that
-        answers with no screens and an empty token — which is a correct answer,
-        just not the shortest possible conversation.
-      */
-      const last = screens.docs[screens.docs.length - 1]
-      data.nextPageToken = screens.size === limit && last ? last.id : ''
-    })
-    .catch((error) => {
-      console.error(error)
-      data.error = error
-    })
+      .map(([screenId, path]) => [screenId, path as string] as const)
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+
+    const cursor = String(nextPageToken ?? '').trim()
+    const start = cursor
+      ? listable.findIndex(([screenId]) => screenId > cursor)
+      : 0
+    const from = start === -1 ? listable.length : start
+    const page = listable.slice(from, from + limit)
+
+    for (const [screenId, path] of page) {
+      data.screens.push(
+        toPublicScreen(
+          screenId,
+          documents.get(screenId) as Record<string, unknown>,
+          Aglyn.screenRoutePathToUrl(path),
+        ),
+      )
+    }
+
+    /*
+      Exhausted when the slice reached the end of the set. Unlike the old query
+      this can be answered exactly, because the whole set was in hand — so a
+      caller is never handed a token that returns nothing.
+    */
+    const last = page[page.length - 1]
+    data.nextPageToken = from + page.length < listable.length && last ? last[0] : ''
+  } catch (error) {
+    console.error(error)
+    data.error = error as Error
+  }
 
   return data
 }
+
 export default getAllScreens

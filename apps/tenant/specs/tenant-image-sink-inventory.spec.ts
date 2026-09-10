@@ -277,6 +277,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'scheme-guard',
     why: "node.sx is the Styles panel's output and backgroundImage is a first-class field there, so sanitizeAuthorSx scrubs it before the merge — never props.sx, which is our own components' styles.",
   },
+  'libs/aglyn/src/lib/app-utils/agent-openapi.ts': {
+    markers: 1,
+    guard: 'platform',
+    why: "Not a sink: the `icons` marker is the JSON SCHEMA that DESCRIBES the web app manifest's `icons[].src` member in `/openapi.json` (AGL-2722). It is a `{ type: 'string' }` under a property key, so the only thing this file emits for it is the word `src` in a published description. The manifest's real icon URLs are built by `apps/tenant/app/api/manifest/route.ts`, which is declared above and is where that risk actually lives. No author string is read here and no URL is produced here.",
+  },
   'libs/aglyn/src/lib/app-utils/author-css.ts': {
     markers: 2,
     guard: 'scheme-guard',
