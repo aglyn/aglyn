@@ -621,6 +621,27 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       "Aglyn's own project id and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is deployment metadata about Aglyn's own functions — resource name, region, state and `updateTime`.",
   },
 
+  // Two more Google Cloud control planes, driven by operator setup scripts
+  // against Aglyn's own project. Google LLC is already an Annex III recipient
+  // and these add no new one; they are declared host by host for the same
+  // reason as the App Check pair above, and on the same first admissible
+  // reason: nothing personal reaches them.
+
+  'monitoring.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Cloud Monitoring `notificationChannels.list`, `alertPolicies.list` and `alertPolicies.patch`, called only by the operator CLI `tools/scripts/setup-alert-slack-channel.mjs` to attach an already-created Slack channel to a named subset of Aglyn's own alert policies. It is never imported by the console or tenant runtime — no request-serving code path reaches it — and it authenticates as the operator running it.",
+    dataReceived:
+      "Aglyn's own project id, the resource names of Aglyn's own alert policies and notification channels, and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is Aglyn's own alerting configuration.",
+  },
+  'run.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "The Cloud Run Admin API `jobs:run` URL, written by the operator CLIs `tools/scripts/setup-edge-admission-run.mjs` and `tools/scripts/setup-github-app-dispatch.mjs` as the target of a Cloud Scheduler job, so Aglyn's own scheduler starts Aglyn's own Cloud Run job on a timer. Neither script is imported by the console or tenant runtime, and no request-serving code path reaches the URL: Cloud Scheduler makes the request, inside Aglyn's project, as a dedicated service account.",
+    dataReceived:
+      "Aglyn's own project, region and job name, and an OAuth token for Aglyn's own service account. The POST carries no body, so nothing about any customer, member or visitor is sent.",
+  },
+
   // MARK – Literals that are never fetched
   //
   // Namespaces, contexts, link text, form placeholders, fixture values. Each
