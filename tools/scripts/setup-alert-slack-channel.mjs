@@ -18,12 +18,17 @@
 /**
  * GIVE THE OUTAGE ALERTS A SECOND ROUTE OFF THE MAILBOX (AGL-2757)
  *
- * All 21 alert policies in `aglyn-main` deliver to exactly one place: email to
- * `zach@aglyn.com`, channel `7043898327231541746`. A bounce, a forwarding
- * rule, or one over-broad Gmail filter takes every monitor silent while each
- * policy keeps reading ENABLED, with a channel attached, and healthy. That is
- * the same shape as AGL-2734 — a monitor that looks armed and reaches nobody —
- * moved one hop downstream, past everything the Monitoring API can report.
+ * All 21 alert policies in `aglyn-main` deliver to exactly one place: a single
+ * email channel, `7043898327231541746`. A bounce, a forwarding rule, or one
+ * over-broad mail filter takes every monitor silent while each policy keeps
+ * reading ENABLED, with a channel attached, and healthy. That is the same
+ * shape as AGL-2734 — a monitor that looks armed and reaches nobody — moved
+ * one hop downstream, past everything the Monitoring API can report.
+ *
+ * ⛔ The address itself is deliberately not written here. `check:contact-
+ * addresses` refuses an unprovisioned `@aglyn.com` address anywhere in tracked
+ * source, because an address that does not exist ACCEPTS mail and suppresses
+ * the bounce (AGL-1577). The channel id is the durable handle anyway.
  *
  *   node tools/scripts/setup-alert-slack-channel.mjs --dry-run
  *   node tools/scripts/setup-alert-slack-channel.mjs
