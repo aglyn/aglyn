@@ -2800,8 +2800,8 @@ export interface SignupCanaryCheck extends HealthCheck {
  * 1 to the denominator and 0 to the numerator, and after three walks the
  * platform reports `signup-drought` with nothing wrong.
  *
- * That is not theoretical. It fired on 2026-09-09 at `signupAttempts=6,
- * orgCreations=0` — six walks that had each just proved, end to end, that a
+ * That is not theoretical. It fired on 2026-09-09 at six attempts against
+ * zero creations — six walks that had each just proved, end to end, that a
  * stranger could sign up. A monitor that manufactures the outage it watches
  * for is worse than no monitor, and it is the same alarm fatigue AGL-2714
  * removed, arriving from inside the house.

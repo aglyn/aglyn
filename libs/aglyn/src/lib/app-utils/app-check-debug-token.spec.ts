@@ -195,8 +195,8 @@ describe('App Check debug tokens are read by nothing (AGL-2402)', () => {
     // The exemption rests entirely on `tools/e2e/` never being bundled. An
     // import from `apps/` or `libs/` would put the assignment on a path that
     // can reach a client bundle, which is the thing this guard exists for.
-    expect(filesNaming(`from ['\"].*e2e/signup-canary`)).toEqual([])
-    expect(filesNaming(`require[(]['\"].*e2e/signup-canary`)).toEqual([])
+    expect(filesNaming(`from ['"].*e2e/signup-canary`)).toEqual([])
+    expect(filesNaming(`require[(]['"].*e2e/signup-canary`)).toEqual([])
   })
 
   it('theCoverStillExists — the blindness is measured, not argued', () => {
