@@ -645,6 +645,12 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'The `g:` namespace URI of the Google Merchant product feed the commerce plugin generates. The feed is served BY us and fetched by whoever the merchant gives it to.',
     dataReceived: 'Nothing. No request is made.',
   },
+  'json-schema.org': {
+    disposition: 'no-request',
+    reason:
+      'The `jsonSchemaDialect` identifier emitted in the per-site OpenAPI document (AGL-2716), naming which JSON Schema draft the document conforms to. A version string in a document we publish; never dereferenced by us, and an agent that resolves it does so on its own account.',
+    dataReceived: 'Nothing. No request is made.',
+  },
   'schema.org': {
     disposition: 'no-request',
     reason:

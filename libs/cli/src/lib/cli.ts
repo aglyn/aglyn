@@ -209,7 +209,17 @@ async function get(
   url: string,
   accept: string,
   version: string,
-): Promise<{ ok: boolean; status: number; body: string }> {
+): Promise<{
+  ok: boolean
+  status: number
+  body: string
+  /**
+   * What the server said it sent. Read by the caller to tell a site that
+   * ignored `Accept` from one that answered it, so it belongs on the type
+   * rather than only on the two returns that happen to set it.
+   */
+  contentType: string
+}> {
   let response: Response
   try {
     response = await context.fetch(url, {
