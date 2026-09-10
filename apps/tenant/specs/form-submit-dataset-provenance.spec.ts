@@ -152,6 +152,7 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 }))
 
 import { POST } from '../app/api/forms/submit/route'
+import { signFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
 
 /** A dataset document the route will accept and append to. */
 const datasetDoc = (overrides: Record<string, any> = {}) => {
@@ -195,14 +196,19 @@ const submit = (body: Record<string, unknown> = {}) =>
         formName: 'Contact',
         path: '/contact',
         fields: { email: 'visitor@example.com', message: 'hello' },
-        datasetId: 'dataset-1',
-        fieldMap: { email: 'email', message: 'message' },
+        // The binding the page's compose signed into this form (AGL-2773);
+        // the route writes a record nowhere else.
+        datasetBinding: signFormDatasetBinding(HOST_ID, {
+          datasetId: 'dataset-1',
+          fieldMap: { email: 'email', message: 'message' },
+        }),
         ...body,
       }),
     }),
   ) as Promise<Response>
 
 beforeEach(() => {
+  process.env['TOKEN_SIGNING_SECRET'] = 'test-signing-secret'
   mockStore = { [`hosts/${HOST_ID}`]: { name: 'Site' } }
   mockDatasetRecords = []
   mockSubmissionUpdates = []
@@ -226,7 +232,7 @@ describe('AGL-2168 · dataset provenance on a submission', () => {
   it('stamps NOTHING when the form has no dataset bound', async () => {
     // The control. A route that stamped unconditionally would pass the case
     // above and put a chip on every submission in the database.
-    const response = await submit({ datasetId: '', dataset: '' })
+    const response = await submit({ datasetBinding: undefined })
     expect(response.status).toBe(200)
     expect(mockDatasetRecords).toHaveLength(0)
     expect(mockSubmissionUpdates).toHaveLength(0)

@@ -28,6 +28,7 @@ import getPluginInstalls from './get-plugin-installs'
 import getVariables, { getFunctions, getWorkflows } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
 import getScreenVersion from './get-screen-version'
+import { stampFormDatasetBindings } from './stamp-form-dataset-bindings'
 
 /**
  * Content-collection context for a compose (AGL-551): the collection the
@@ -587,7 +588,13 @@ export async function composeNodesWithChrome(options: {
   // the page actually ships — a slot grafted from a layout chain, an element
   // an author chose — rather than the screen as stored.
   const withLandmark = Aglyn.stampDocumentLandmark(finalNodes as any)
-  return Aglyn.canvas.processNodesToDenormalized(withLandmark as any)
+  // Each form's dataset binding, signed so the submit route can trust it
+  // (AGL-2773). Read off THIS tree, the one the page ships, so a form grafted
+  // from a layout, a component or a form entity is signed as it renders; and
+  // after every stage that rewrites props, so nothing changes what the
+  // signature covers.
+  const withFormBindings = stampFormDatasetBindings(withLandmark, hostId)
+  return Aglyn.canvas.processNodesToDenormalized(withFormBindings as any)
 }
 
 /**
