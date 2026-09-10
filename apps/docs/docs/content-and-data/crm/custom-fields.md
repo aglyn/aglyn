@@ -19,6 +19,12 @@ contact field is also a destination a form field can save into. Definitions are 
 across every site in the organization, like the records themselves; the values a site
 records on a contact are that site's own view of the person.
 
+:::info Plan availability
+Custom fields are part of the **CRM suite**, included from **Starter**; on Free the
+Fields section is shown locked and a contact's page carries no Custom fields card. See
+[What each plan includes](./overview.md#what-each-plan-includes).
+:::
+
 ## Define a field {#define-a-field}
 
 Open **CRM → Fields**, pick the tab for the record the field describes — **Contacts**,

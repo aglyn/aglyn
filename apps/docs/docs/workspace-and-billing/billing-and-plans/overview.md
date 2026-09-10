@@ -237,11 +237,9 @@ logged activities, pipelines and custom fields are not counted.
   falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
   current rate on your plan, per extra 1,000 records per month. Upgrading a tier is
   always cheaper than sustained overage.
-- On **Free**, the band is a hard limit and the next record of any kind is refused:
-  a new visitor past 100 keeps their member account and orders but no contact is
-  kept (the count of missed sign-ups is recorded and shown on the contacts page), and
-  a company or deal that would be the 101st record is refused with a message where
-  you tried to add it.
+- On **Free**, the band is a hard limit and the next record is refused: a new
+  visitor past 100 keeps their member account and orders but no contact is kept (the
+  count of missed sign-ups is recorded and shown on the contacts page).
 - **The billed count is the size of your CRM at the end of the month**, not its size
   on any other day. The three collections are a running total rather than a monthly
   tally, so a month has to be charged on one moment in it, and that moment is the
@@ -253,15 +251,22 @@ logged activities, pipelines and custom fields are not counted.
 
 ### The CRM suite {#the-crm-suite}
 
-The **Contacts** section — the list, its tags and notes, segments and CSV export — is
-on every plan including Free, because it is the audience your
-[email campaigns](../../marketing-and-automation/email-campaigns/overview.md) read.
+The **Contacts** section — the list and its filters, tags and notes, segments, CSV
+export, and removing or erasing a person — is on every plan including Free, because it
+is the audience your
+[email campaigns](../../marketing-and-automation/email-campaigns/overview.md) read. On
+Free, contacts arrive on their own from your forms, member sign-ups, orders and
+bookings.
+
 Everything built on that list is the **CRM suite**, included from **Starter**: Leads,
-Companies, Deals, Tasks, Reports and Fields, the two CRM cards on the site dashboard,
-the CRM steps in automations, and the `crm:*` resources of the REST API. On Free those
-sections still appear in the CRM rail, with a lock; opening one shows which plan
-includes it and a link to your plans. Records already held stay readable in Contacts
-whatever the plan.
+Companies, Deals, Tasks, Reports and Fields; on the Contacts section itself, adding a
+contact by hand, importing a CSV, saved views, and a contact's owner, lifecycle stage,
+company, custom fields, tasks, deals, files, logged calls and activities, one-to-one
+email and merges; the two CRM cards on the site dashboard; the CRM steps in
+automations; and the `crm:*` resources of the REST API. On Free those sections still
+appear in the CRM rail with a lock, and the suite's actions stay on the Contacts pages,
+shown locked; each shows which plan includes it and a link to your plans. Records
+already held stay readable in Contacts whatever the plan.
 
 ### One-to-one email {#one-to-one-email}
 

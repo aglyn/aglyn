@@ -259,6 +259,9 @@ Anyone who can open the CRM can work leads — that is the workspace's
 **data** permission, the same one that guards contacts. Converting a lead
 also requires a role on the site the lead belongs to.
 
+Working leads is part of the **CRM suite**, included from **Starter**. On Free the
+Leads section is shown locked, and your sites still capture leads.
+
 ## Related
 
 - [CRM overview](./overview.md)
