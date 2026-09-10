@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.112 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.111...v1.0.0-beta.112)
+
+### Added
+
+- **api-v1:** publish an OpenAPI 3.1 description of the customer REST API ([AGL-2733](https://linear.app/aglyn/issue/AGL-2733), [AGL-617](https://linear.app/aglyn/issue/AGL-617))
+
 ## v1.0.0-beta.111 — 2026-09-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.110...v1.0.0-beta.111)
