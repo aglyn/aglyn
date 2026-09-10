@@ -113,9 +113,13 @@ await step(tally, page, 'Add to list enrolls the person', async () => {
 })
 
 await step(tally, page, 'Properties Save writes the facet and the search echo', async () => {
-  await page.getByLabel('Phone').fill(NEW_PHONE.typed)
-  await page.getByLabel('Job title').fill(NEW_TITLE)
-  await cardNamed(page, 'Properties').getByRole('button', { name: 'Save', exact: true }).click()
+  // Scoped to the card and matched whole: `getByLabel` is a substring match,
+  // and the header's disabled Call button wears its reason ("This record has
+  // no phone number") as the label of the span MUI's Tooltip wraps it in.
+  const properties = cardNamed(page, 'Properties')
+  await properties.getByLabel('Phone', { exact: true }).fill(NEW_PHONE.typed)
+  await properties.getByLabel('Job title', { exact: true }).fill(NEW_TITLE)
+  await properties.getByRole('button', { name: 'Save', exact: true }).click()
   await expectSnackbar(page, 'Contact saved')
   const stored = await waitFor(
     async () => {
