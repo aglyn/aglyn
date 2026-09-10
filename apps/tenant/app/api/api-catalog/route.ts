@@ -17,6 +17,7 @@
 
 import {
   API_CATALOG_MEDIA_TYPE,
+  PLATFORM_BRAND_NAME,
   buildAgentApiCatalog,
   hostPublicOrigin,
   isSearchDiscouraged,
@@ -98,7 +99,10 @@ export async function GET(request: Request): Promise<Response> {
       },
       {
         url: `${CONSOLE_ORIGIN}/api/v1`,
-        title: 'Aglyn platform API',
+        // The product name is configuration, not a constant: a self-host
+        // operator who renamed the platform must not publish ours as the
+        // label on the API their own console serves.
+        title: `${PLATFORM_BRAND_NAME} platform API`,
         specUrl: `${CONSOLE_ORIGIN}/api/v1/openapi.json`,
         docsUrl: `${DOCS_ORIGIN}/api`,
       },
