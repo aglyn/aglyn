@@ -47,6 +47,18 @@ const MAX_ASSETS_PER_OP = 500
 const FIRESTORE_BATCH_LIMIT = 500
 
 /**
+ * A subtree holding more assets than one request may move. Its message is
+ * copy for the person who asked, so the handler answers it as a 422 with that
+ * copy instead of letting it ride the fixed 500.
+ */
+class FolderTooLargeError extends Error {
+  constructor() {
+    super('Folder too large to move in one operation')
+    this.name = 'FolderTooLargeError'
+  }
+}
+
+/**
  * Folder mutations that move REAL Storage objects (org DAM work): the
  * bucket tree mirrors the library tree, so renaming or deleting a folder
  * relocates every asset underneath to its new prefix — copy (token
@@ -183,7 +195,7 @@ async function handler(request: Request): Promise<Response> {
         const page = await mediaRef.where('folderId', 'in', chunk).get()
         snapshots.push(...page.docs)
         if (snapshots.length > MAX_ASSETS_PER_OP) {
-          throw new Error('Folder too large to move in one operation')
+          throw new FolderTooLargeError()
         }
       }
       return snapshots
@@ -215,9 +227,11 @@ async function handler(request: Request): Promise<Response> {
       ) {
         return Response.json({ error: 'A folder with that name already exists here' }, { status: 409 })
       }
+      // Walked BEFORE the rename lands: a subtree too large to move is refused
+      // with nothing written, rather than renamed and then refused.
+      const assets = await subtreeAssets(folderId)
       await foldersRef.doc(folderId).update({ name })
       // The rename changed every descendant's real prefix — relocate.
-      const assets = await subtreeAssets(folderId)
       for (const asset of assets) await relocateAsset(asset)
       return Response.json({ ok: true, moved: assets.length }, { status: 200 })
     }
@@ -610,8 +624,13 @@ async function handler(request: Request): Promise<Response> {
     // for anything else, so a real failure keeps the answer below.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
+    if (error instanceof FolderTooLargeError) {
+      return Response.json({ error: error.message }, { status: 422 })
+    }
     console.error('media folder operation failed', error)
-    return Response.json({ error: error?.message ?? 'Folder operation failed' }, { status: 500 })
+    // Fixed copy. A message thrown in here belongs to Firestore, Storage or
+    // the verifier, and would hand the caller our internals verbatim.
+    return Response.json({ error: 'Folder operation failed' }, { status: 500 })
   }
 }
 

@@ -308,13 +308,14 @@ async function handler(request: Request): Promise<Response> {
         // the service account needs firebaseauth.admin. Both are deployment
         // facts the customer cannot fix and must not be told to — surface it as
         // ours, the way the domain-attach route reports a missing Vercel token.
+        // The error is logged and never returned: its text names the project's
+        // identity configuration and service account.
         console.error('[orgs/sso] provisioning failed', error)
         return Response.json(
           {
             error:
               'Could not create the identity pool. This is on our side — the ' +
               'setup you entered was not saved. Please contact support.',
-            detail: (error as Error)?.message ?? null,
           },
           { status: 502 },
         )
