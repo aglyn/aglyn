@@ -122,8 +122,11 @@ const under = (path: string) =>
 
 const HOST = 'host-1'
 const ORG = 'org-1'
-/** An org with no consent groups declared: the site is a group of its own. */
-const org = { enabledPlugins: ['crm', 'bookings'] }
+/**
+ * An org with no consent groups declared — the site is a group of its own —
+ * on a plan that carries the CRM suite the filed rows belong to.
+ */
+const org = { plan: 'starter', enabledPlugins: ['crm', 'bookings'] }
 
 // Tuesday, September 15, 2026 at 10:00 AM in Chicago.
 const STARTS = Date.UTC(2026, 8, 15, 15, 0)
@@ -227,6 +230,26 @@ describe('the meeting a booking files', () => {
       reason: 'crm-off',
     })
     expect(under(`orgs/${ORG}/crmActivities`)).toEqual({})
+  })
+
+  /*
+   * The meeting and the follow-up are a CRM activity and a CRM task — the
+   * suite's records, included from Starter (AGL-2787). A Free workspace
+   * that runs the CRM plugin still captures the booker as a contact; it
+   * does not have its timeline filled with suite rows it cannot open.
+   */
+  it('files nothing for a plan without the CRM suite, and says so', async () => {
+    seedContact('contact-1', 'rhea@example.com')
+    const free = { plan: 'free', enabledPlugins: ['crm', 'bookings'] }
+    expect(await file({ org: free }, { crmFollowUpTask: true })).toEqual({
+      filed: false,
+      reason: 'not-entitled',
+    })
+    expect(under(`orgs/${ORG}/crmActivities`)).toEqual({})
+    expect(under(`orgs/${ORG}/crmTasks`)).toEqual({})
+    // A per-org grant of the suite on a Free plan files as any paid plan does.
+    const granted = { ...free, entitlements: { features: { crm: true } } }
+    expect((await file({ org: granted })).filed).toBe(true)
   })
 
   it('reads the host document for the deny-list when the caller holds none', async () => {

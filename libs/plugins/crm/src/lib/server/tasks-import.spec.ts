@@ -31,6 +31,8 @@ let manageData = true
 let members: Record<string, unknown>[] = []
 let written: Record<string, unknown>[] = []
 let commits = 0
+/** The site's org document; Starter is the lowest plan carrying the CRM suite. */
+let org: Record<string, unknown> = { plan: 'starter' }
 const listMembers = jest.fn(async () => members)
 
 const ORG_ID = 'org-1'
@@ -44,6 +46,8 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   registerPluginApiRoute: jest.fn(),
+  // The plan tables the suite gate reads, first so no module below is shadowed.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm-task-import'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/scope-tokens'),
@@ -98,7 +102,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       firestore: () => firestoreHandle,
     }),
   },
-  getOrgForHost: async () => ({ orgId: ORG_ID, org: {} }),
+  getOrgForHost: async () => ({ orgId: ORG_ID, org }),
   resolveOrgMembership: async () => membership,
   memberHasOrgPermission: async () => manageData,
   listOrgMembers: (...args: unknown[]) => listMembers(...(args as [])),
@@ -160,6 +164,7 @@ beforeEach(() => {
   members = []
   written = []
   commits = 0
+  org = { plan: 'starter' }
   taskSeq = 0
   listMembers.mockClear()
 })
@@ -247,5 +252,43 @@ describe('what a row becomes', () => {
     const out = await importRows([{ title: 'A', kind: 'lunch', due: 'soon' }])
     expect(listMembers).not.toHaveBeenCalled()
     expect(out.body.dropped).toEqual({ kind: 1, due: 1 })
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787): the tasks file is the CRM suite's to import, included
+ * from Starter, and refused for a Free workspace whoever is asking — before
+ * the roster is read or a batch is opened.
+ */
+describe('the plan (AGL-2787)', () => {
+  it('refuses a Free workspace, writing no task', async () => {
+    org = { plan: 'free' }
+    const out = await importRows([{ title: 'Call Maya', assigneeEmail: 'ada@example.com' }])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(out.body.error).toMatch(/part of the CRM suite/)
+    expect(out.body.error).toMatch(/Included from Starter/)
+    expect(written).toEqual([])
+    expect(commits).toBe(0)
+    expect(listMembers).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff importing into a Free workspace the same way', async () => {
+    org = { plan: 'free' }
+    decodedToken = { uid: 'staff-uid', staff: true }
+    hostRoles = {}
+    membership = null
+    const out = await importRows([{ title: 'Call Maya' }])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(written).toEqual([])
+  })
+
+  it('admits Starter, the lowest plan that carries the suite', async () => {
+    org = { plan: 'starter' }
+    const out = await importRows([{ title: 'Call Maya' }])
+    expect(out.code).toBe(200)
+    expect(out.body.created).toBe(1)
+    expect(commits).toBe(1)
   })
 })

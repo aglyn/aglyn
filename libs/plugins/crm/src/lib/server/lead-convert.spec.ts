@@ -184,7 +184,8 @@ const HOST = 'h1'
 const ORG = 'org1'
 const CALLER = 'uid-caller'
 
-let mockOrg: Record<string, unknown> = {}
+/** The site's org document; Starter is the lowest plan carrying the CRM suite. */
+let mockOrg: Record<string, unknown> = { plan: 'starter' }
 const mockVerifyIdToken = jest.fn(async () => ({ uid: CALLER }))
 const mockLogHostActivity = jest.fn(async () => undefined)
 const mockResolveOrgPermissions = jest.fn(async () => ({
@@ -351,7 +352,7 @@ const leadPath = (id: string) => `hosts/${HOST}/leads/${id}`
 beforeEach(() => {
   docs.clear()
   autoId = 0
-  mockOrg = {}
+  mockOrg = { plan: 'starter' }
   mockUpsertPlants = true
   mockUpsertHostContact.mockClear()
   mockAssignment = { outcome: 'none', reason: 'no-rule' }
@@ -677,7 +678,7 @@ describe('converting a lead', () => {
   })
 
   it('stamps org-wide scope when the org has chosen it', async () => {
-    mockOrg = { defaultResourceScope: 'org' }
+    mockOrg = { plan: 'starter', defaultResourceScope: 'org' }
     await call({
       hostId: HOST,
       leadId: 'lead-1',
@@ -800,6 +801,71 @@ describe('converting a lead', () => {
     const title = await call({ hostId: HOST, leadId: 'lead-1', deal: { title: '  ' } })
     expect(title.status).toBe(400)
     expect(mockVerifyIdToken).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787). A lead's conversion is the CRM suite's, included from
+ * Starter. The route asks once the caller is admitted, and it asks of the
+ * workspace, so staff converting inside a Free one are refused as a member
+ * is: no contact, company, deal or pipeline is written, and the lead is left
+ * as it was.
+ */
+describe('the plan (AGL-2787)', () => {
+  const CONVERSION = {
+    hostId: HOST,
+    leadId: 'lead-1',
+    createCompany: { name: 'Acme Coffee' },
+    deal: { title: 'Acme — first order' },
+  }
+  const expectNothingConverted = () => {
+    expect(mockUpsertHostContact).not.toHaveBeenCalled()
+    expect(mockAssignOwnerForCapture).not.toHaveBeenCalled()
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+    expect(all(`orgs/${ORG}/contacts`)).toEqual([])
+    expect(all(`orgs/${ORG}/companies`)).toEqual([])
+    expect(all(`orgs/${ORG}/deals`)).toEqual([])
+    expect(all(`orgs/${ORG}/pipelines`)).toEqual([])
+    expect(docs.get(leadPath('lead-1'))?.status).toBeUndefined()
+  }
+
+  beforeEach(() => {
+    mockLogHostActivity.mockClear()
+  })
+
+  it('refuses a Free workspace, converting nothing', async () => {
+    mockOrg = { plan: 'free' }
+    const { status, body } = await call(CONVERSION)
+    expect(status).toBe(403)
+    expect(body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(body.error).toMatch(/part of the CRM suite/)
+    expect(body.error).toMatch(/Included from Starter/)
+    expectNothingConverted()
+  })
+
+  it('refuses staff converting inside a Free workspace the same way', async () => {
+    mockOrg = { plan: 'free' }
+    mockVerifyIdToken.mockResolvedValueOnce({ uid: 'staff-uid', staff: true } as never)
+    mockResolveOrgPermissions.mockResolvedValueOnce({
+      orgId: ORG,
+      role: null,
+      isOwner: false,
+      permissions: {},
+      orgWide: false,
+      hostRole: null,
+    } as never)
+    const { status, body } = await call(CONVERSION)
+    expect(status).toBe(403)
+    expect(body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expectNothingConverted()
+  })
+
+  it('admits Starter, the lowest plan that carries the suite', async () => {
+    mockOrg = { plan: 'starter' }
+    const { status, body } = await call(CONVERSION)
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ ok: true, alreadyConverted: false })
+    expect(all(`orgs/${ORG}/deals`)).toHaveLength(1)
   })
 })
 

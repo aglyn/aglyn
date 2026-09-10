@@ -75,6 +75,8 @@ const state = {
   /** What the org resolver answers the ORG variant (AGL-2634). */
   orgPermissions: {} as Record<string, unknown>,
   orgLines: [] as Array<{ orgId: string; actor: unknown; action: string; target: unknown }>,
+  /** The org document both variants read; Starter is the lowest plan carrying the CRM suite. */
+  org: { plan: 'starter' } as Record<string, unknown>,
 }
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
@@ -131,6 +133,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       auth: () => ({
         verifyIdToken: async (token: string) => {
+          // A support engineer's token, which the org variant admits.
+          if (token === 'staff') return { uid: 'staff-1', staff: true }
           if (token !== 'good') throw new Error('bad token')
           return { uid: 'u1' }
         },
@@ -140,12 +144,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   getOrgForHost: async (hostId: string) =>
     hostId === 'shop' || hostId === 'other-shop'
-      ? { orgId: 'org-1', org: {} }
+      ? { orgId: 'org-1', org: state.org }
       : null,
   resolveOrgMembership: async () =>
     state.member ? { orgId: 'org-1', member: state.member } : null,
   memberHasOrgPermission: async () => state.permitted,
-  getOrgDoc: async (orgId: string) => (orgId === 'org-1' ? { $id: 'org-1' } : null),
+  getOrgDoc: async (orgId: string) =>
+    orgId === 'org-1' ? { $id: 'org-1', ...state.org } : null,
   logOrgActivity: async (orgId: string, actor: unknown, action: string, target: unknown) => {
     state.orgLines.push({ orgId, actor, action, target })
   },
@@ -207,6 +212,7 @@ beforeEach(() => {
   state.updates.length = 0
   state.contactUpdates.length = 0
   state.orgLines.length = 0
+  state.org = { plan: 'starter' }
   state.member = { role: 'editor', allHosts: true }
   state.permitted = true
   state.orgPermissions = {
@@ -537,5 +543,64 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
     expect((await call({ ...ORG, stageId: 'proposal-sent' })).status).toBe(200)
     expect(state.orgLines).toEqual([])
     expect((await call({ orgId: 'org-1', dealId: 'nope', stageId: 'negotiation' })).status).toBe(404)
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787). Deals are the CRM suite's, included from Starter, at
+ * either level. The plan is asked once the caller is authorized, and of the
+ * workspace, so staff acting at the organization level are refused as a
+ * member is. A refused move writes, floors, announces and logs nothing.
+ */
+describe('the plan (AGL-2787)', () => {
+  const expectRefused = (answer: { status: number; body: any }) => {
+    expect(answer.status).toBe(403)
+    expect(answer.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(answer.body.error).toMatch(/part of the CRM suite/)
+    expect(answer.body.error).toMatch(/Included from Starter/)
+  }
+  const expectNothingMoved = () => {
+    expect(state.updates).toEqual([])
+    expect(state.contactUpdates).toEqual([])
+    expect(emitted).toEqual([])
+    expect(state.orgLines).toEqual([])
+  }
+
+  it('refuses a Free workspace under a site, for a move and a win alike', async () => {
+    state.org = { plan: 'free' }
+    expectRefused(await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' }))
+    expectRefused(await call({ hostId: 'shop', dealId: 'd1', status: 'won' }))
+    expectNothingMoved()
+  })
+
+  it('refuses a Free workspace at the organization level', async () => {
+    state.org = { plan: 'free' }
+    expectRefused(await call({ orgId: 'org-1', dealId: 'd1', stageId: 'negotiation' }))
+    expectRefused(await call({ orgId: 'org-1', dealId: 'd1', status: 'won' }))
+    expectNothingMoved()
+  })
+
+  it('refuses staff acting inside a Free workspace the same way', async () => {
+    state.org = { plan: 'free' }
+    state.orgPermissions = { ...state.orgPermissions, orgWide: false, permissions: {} }
+    expectRefused(
+      await call({ orgId: 'org-1', dealId: 'd1', stageId: 'negotiation' }, { token: 'staff' }),
+    )
+    expectNothingMoved()
+  })
+
+  it('tells a member without data.manage about the permission, not the plan', async () => {
+    state.org = { plan: 'free' }
+    state.permitted = false
+    const { status, body } = await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' })
+    expect(status).toBe(403)
+    expect(body).toEqual({ error: 'Moving a deal requires the "Manage data" permission.' })
+  })
+
+  it('admits Starter, the lowest plan that carries the suite, at both levels', async () => {
+    state.org = { plan: 'starter' }
+    expect((await call({ hostId: 'shop', dealId: 'd1', stageId: 'negotiation' })).status).toBe(200)
+    expect((await call({ orgId: 'org-1', dealId: 'd1', stageId: 'qualified' })).status).toBe(200)
+    expect(state.updates).toHaveLength(2)
   })
 })

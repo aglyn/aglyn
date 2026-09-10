@@ -98,6 +98,7 @@ import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-me
 import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
 import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
 import { CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler } from './server/inbound-address'
+import { crmSuiteRefusal } from './server/suite-gate'
 import {
   CRM_RECIPE_INSTALL_ROUTE,
   CRM_RECIPE_STATUS_ROUTE,
@@ -205,6 +206,17 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
     return
   }
   try {
+    // A lifecycle stage is the suite's (AGL-2787) — see `suite-gate.ts`.
+    const owner = await getOrgForHost(hostId)
+    if (!owner) {
+      res.status(404).json({ error: 'Unknown site' })
+      return
+    }
+    const suite = crmSuiteRefusal(owner.org, "Moving a contact's lifecycle stage")
+    if (suite) {
+      res.status(suite.status).json(suite.body)
+      return
+    }
     const contactsRef = await orgDataCollectionForHost(hostId, 'contacts')
     const snapshot = await contactsRef.doc(contactId).get()
     if (!snapshot.exists || !visibleToHost(snapshot.get('visibleTo'), hostId)) {
@@ -411,6 +423,14 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
         })
         return
       }
+    }
+
+    // A person typed in by the team is the suite's; the capture doors that
+    // fill a Free workspace's contacts do not come through here (AGL-2787).
+    const suite = crmSuiteRefusal(resolved.org, 'Adding a contact by hand')
+    if (suite) {
+      res.status(suite.status).json(suite.body)
+      return
     }
 
     if (companyId) {
