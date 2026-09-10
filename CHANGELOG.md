@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.117 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.116...v1.0.0-beta.117)
+
+### Added
+
+- **agents:** publish an RFC 9727 API catalog on every tenant site ([AGL-2750](https://linear.app/aglyn/issue/AGL-2750))
+
+### Changed
+
+- **api:** paginate /api/screen on `cursor`, keeping the old spelling ([AGL-2751](https://linear.app/aglyn/issue/AGL-2751))
+
+### Documentation
+
+- **specs:** say what an omitted barrel export costs, without pointing at a note ([AGL-2742](https://linear.app/aglyn/issue/AGL-2742))
+
+<details>
+<summary>Also in this release: 1 ci</summary>
+
+- **pre-commit:** lint the staged tools scripts, and write down the tiers ([AGL-2752](https://linear.app/aglyn/issue/AGL-2752))
+
+</details>
+
 ## v1.0.0-beta.116 — 2026-09-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/30a394bd6...v1.0.0-beta.116)
