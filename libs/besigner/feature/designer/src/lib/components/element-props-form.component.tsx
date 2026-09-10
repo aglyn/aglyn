@@ -44,6 +44,7 @@ import {
   hasBindings,
   inheritedMediaAlt,
   intrinsicMediaSize,
+  videoMediaProps,
   MISSING_BINDING_LABEL,
   NODE_ANIMATION_DELAY_PROP,
   NODE_ANIMATION_DURATION_PROP,
@@ -1587,6 +1588,20 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
               propName,
               assetWidth: asset?.width,
               assetHeight: asset?.height,
+            }),
+            // The video companions (AGL-2741): running time, which the
+            // published page's `VideoObject` needs and no render path can
+            // read, and the generated poster frame, which is what makes
+            // `preload="none"` cost a thumbnail instead of a black box.
+            // Gated on the component id inside the helper for the same
+            // reason as the pair above, and the poster is a DEFAULT — the
+            // helper refuses to overwrite one the author already chose.
+            ...videoMediaProps({
+              componentId: node?.componentId,
+              propName,
+              assetDuration: asset?.duration,
+              assetPoster: asset?.posterUrl,
+              placementPoster: current?.props?.['poster'],
             }),
           })
         })

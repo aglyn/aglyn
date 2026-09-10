@@ -111,8 +111,17 @@ export function inheritedMediaAlt(options: {
  * decoration: a prop written onto an element that does not destructure it
  * reaches `...rest` and is spread onto the DOM, so an unlisted element would
  * gain an invalid `intrinsicwidth` attribute in its published HTML.
+ *
+ * `video` joins `image` for the same reason and with the same consequence
+ * (AGL-2741). A `<video>` laid out `width: 100%; height: auto` has no height
+ * until its metadata arrives, and with `preload="none"` its metadata never
+ * arrives at all until someone presses play — so the element is zero-height
+ * for the whole life of the page unless the pair reserves its box. Video
+ * dimensions are best-effort in exactly the way image dimensions are; the
+ * `usable` gate below is what makes an absent or zero capture a no-op rather
+ * than a collapsed element.
  */
-const INTRINSIC_SIZE_COMPONENT_IDS = new Set(['image'])
+const INTRINSIC_SIZE_COMPONENT_IDS = new Set(['image', 'video'])
 
 /**
  * The intrinsic `width`/`height` to copy onto a node when an author picks a
@@ -168,6 +177,69 @@ export function intrinsicMediaSize(options: {
     typeof value === 'number' && Number.isFinite(value) && value > 0
   if (!usable(assetWidth) || !usable(assetHeight)) return {}
   return { intrinsicWidth: assetWidth, intrinsicHeight: assetHeight }
+}
+
+/** The one element that reads the props below off its node. */
+const VIDEO_COMPONENT_ID = 'video'
+
+/**
+ * The video-only companions to {@link intrinsicMediaSize}: the running time
+ * and the generated poster, copied onto the node when an author picks a video
+ * asset (AGL-2741).
+ *
+ * Same route and same reasoning as the dimensions — no tenant render path
+ * reads a media document, so anything the published page needs to know about
+ * an asset has to ride on the node. What differs is that neither field exists
+ * on a media document yet: the DAM's video pipeline is what writes them, and
+ * until it does this returns `{}` on every pick and the element renders
+ * exactly as it does today. That is the intended resting state, not a
+ * placeholder — an author-set poster and an author-typed duration are
+ * first-class, and these only save the typing when the pipeline can.
+ *
+ * ## The rules, which are the same three that govern the dimensions
+ *
+ * * **Only the `video` element, only its `src`.** A duration spread onto an
+ *   element that does not destructure it becomes a `duration` attribute in
+ *   the published HTML.
+ * * **Never clobber an author's poster.** A poster already on the placement
+ *   wins outright, the way {@link inheritedMediaAlt} lets a typed alt win.
+ *   The generated frame is a default for a blank field, and a pick that
+ *   silently replaced a chosen poster would make re-picking the source
+ *   destructive.
+ * * **`{}` when unknown**, never a key with an `undefined` value: callers
+ *   spread this into a props object `updateNodeProps` REPLACES wholesale, so
+ *   a present-but-undefined key strips what an earlier pick stored.
+ *
+ * @returns the props to spread, or `{}` when the caller should write nothing.
+ */
+export function videoMediaProps(options: {
+  /** The element being written to — its persisted component id. */
+  componentId?: unknown
+  /** The attribute the picker was opened for; only `src` carries a video. */
+  propName?: unknown
+  /** The chosen asset's running time in seconds, when the DAM knows it. */
+  assetDuration?: unknown
+  /** The poster frame the DAM generated for the asset, when it has one. */
+  assetPoster?: unknown
+  /** The poster already on the placement — an author's choice always wins. */
+  placementPoster?: unknown
+}): { durationSeconds?: number; poster?: string } {
+  const { componentId, propName, assetDuration, assetPoster, placementPoster } =
+    options ?? {}
+  if (propName !== 'src') return {}
+  if (String(componentId ?? '') !== VIDEO_COMPONENT_ID) return {}
+  const patch: { durationSeconds?: number; poster?: string } = {}
+  if (
+    typeof assetDuration === 'number' &&
+    Number.isFinite(assetDuration) &&
+    assetDuration > 0
+  ) {
+    patch.durationSeconds = assetDuration
+  }
+  const chosen = typeof placementPoster === 'string' ? placementPoster.trim() : ''
+  const generated = typeof assetPoster === 'string' ? assetPoster.trim() : ''
+  if (!chosen && generated) patch.poster = generated
+  return patch
 }
 
 export interface ImageDimensions {

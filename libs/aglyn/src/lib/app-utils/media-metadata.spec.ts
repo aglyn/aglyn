@@ -18,6 +18,7 @@
 import {
   inheritedMediaAlt,
   intrinsicMediaSize,
+  videoMediaProps,
   MEDIA_ALT_MAX_LENGTH,
   MEDIA_TAG_MAX_COUNT,
   normalizeMediaTags,
@@ -265,5 +266,97 @@ describe('intrinsicMediaSize', () => {
 
   it('tolerates being called with nothing at all', () => {
     expect(intrinsicMediaSize({})).toEqual({})
+  })
+
+  it('covers the video element too (AGL-2741)', () => {
+    // An <img> with no ratio is zero-height until its bytes decode. A
+    // `preload="none"` <video> with no ratio is zero-height until somebody
+    // presses play, which on most pages is never.
+    expect(
+      intrinsicMediaSize({
+        componentId: 'video',
+        propName: 'src',
+        assetWidth: 1920,
+        assetHeight: 1080,
+      }),
+    ).toEqual({ intrinsicWidth: 1920, intrinsicHeight: 1080 })
+  })
+
+  it('still refuses a video asset the DAM never measured', () => {
+    expect(intrinsicMediaSize({ componentId: 'video', propName: 'src' })).toEqual(
+      {},
+    )
+  })
+})
+
+describe('videoMediaProps', () => {
+  const asset = { assetDuration: 63, assetPoster: 'media:h/still' }
+  const forVideo = (extra: Record<string, unknown> = {}) =>
+    videoMediaProps({
+      componentId: 'video',
+      propName: 'src',
+      ...asset,
+      ...extra,
+    })
+
+  it('carries the running time and the generated poster onto the node', () => {
+    expect(forVideo()).toEqual({
+      durationSeconds: 63,
+      poster: 'media:h/still',
+    })
+  })
+
+  it('never overwrites a poster the author chose', () => {
+    // Re-picking the source must not be destructive: the generated frame is
+    // a default for a blank field, not a correction of a deliberate choice.
+    expect(forVideo({ placementPoster: 'media:h/mine' })).toEqual({
+      durationSeconds: 63,
+    })
+  })
+
+  it('treats a blank placement poster as unset', () => {
+    // Presets ship empty strings, so requiring an absent key would skip the
+    // commonest authoring path — drop a preset, then point it at an asset.
+    expect(forVideo({ placementPoster: '   ' })).toHaveProperty('poster')
+  })
+
+  it('writes nothing for an element that would spread it onto the DOM', () => {
+    expect(
+      videoMediaProps({ componentId: 'image', propName: 'src', ...asset }),
+    ).toEqual({})
+  })
+
+  it('writes nothing for an attribute that does not carry a video', () => {
+    expect(
+      videoMediaProps({ componentId: 'video', propName: 'poster', ...asset }),
+    ).toEqual({})
+  })
+
+  it('refuses a duration that is not a positive finite number of seconds', () => {
+    for (const assetDuration of [0, -1, Number.NaN, '63', null, undefined]) {
+      expect(forVideo({ assetDuration })).not.toHaveProperty('durationSeconds')
+    }
+  })
+
+  it('is the resting state today: an asset with neither field writes nothing', () => {
+    // The DAM's video pipeline is what publishes duration and poster. Until
+    // it does, every pick lands here and the element uses what the author set.
+    expect(videoMediaProps({ componentId: 'video', propName: 'src' })).toEqual(
+      {},
+    )
+  })
+
+  it('never returns a present key holding undefined', () => {
+    const result = videoMediaProps({
+      componentId: 'video',
+      propName: 'src',
+      assetDuration: undefined,
+      assetPoster: undefined,
+    })
+    expect(Object.keys(result)).toEqual([])
+  })
+
+  it('tolerates being called with nothing at all', () => {
+    expect(videoMediaProps({})).toEqual({})
   })
 })

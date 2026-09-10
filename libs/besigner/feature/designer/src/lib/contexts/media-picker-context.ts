@@ -47,11 +47,25 @@ export interface MediaPickerContextValue {
    * put a per-image Firestore read on the hottest cached path; carrying them
    * on the node costs two numbers and is read like any other prop. They are
    * best-effort at upload, so either may be absent.
+   *
+   * `duration` and `posterUrl` are the video half of the same bargain
+   * (AGL-2741) and travel for the same reason. Both are written by the DAM's
+   * video pipeline; until that lands neither is ever sent, `Aglyn.videoMediaProps`
+   * returns nothing, and an author's own poster and running time are what the
+   * element uses — which is the resting state, not a degraded one.
    */
   onPickMedia?: (
     onPick: (
       value: string,
-      asset?: { alt?: string; width?: number; height?: number },
+      asset?: {
+        alt?: string
+        width?: number
+        height?: number
+        /** Running time in seconds, when the asset is a video the DAM has probed. */
+        duration?: number
+        /** The poster frame the DAM generated for a video asset. */
+        posterUrl?: string
+      },
     ) => void,
   ) => void
   /**
