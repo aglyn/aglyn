@@ -244,9 +244,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The real video metadata bounds (AGL-2742). `videoUploadFields` calls
   // `normalizeVideoMetadata` on every video finalize, and this fake replaces
   // the WHOLE barrel — so omitting it is `undefined` at the call site and a
-  // 500, which is what the note above is about. First in the object on
-  // purpose: every explicit stub below (including `readImageDimensions`,
-  // which this module also exports) still wins.
+  // 500 that reads as a route bug. First in the object on purpose: every
+  // explicit stub below (including `readImageDimensions`, which this module
+  // also exports) still wins.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-metadata'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/upload-inspection'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
