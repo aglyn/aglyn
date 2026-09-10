@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.116 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/30a394bd6...v1.0.0-beta.116)
+
+### Added
+
+- **tools:** produce video renditions with ffmpeg, for nothing a month ([AGL-2745](https://linear.app/aglyn/issue/AGL-2745), [AGL-1515](https://linear.app/aglyn/issue/AGL-1515), [AGL-1442](https://linear.app/aglyn/issue/AGL-1442), [AGL-2742](https://linear.app/aglyn/issue/AGL-2742))
+- **media-cdn:** serve a video's poster and renditions, and keep the edge verdict ([AGL-2743](https://linear.app/aglyn/issue/AGL-2743), [AGL-1515](https://linear.app/aglyn/issue/AGL-1515), [AGL-1881](https://linear.app/aglyn/issue/AGL-1881))
+- **dam:** capture a video's duration, size and poster frame at upload ([AGL-2742](https://linear.app/aglyn/issue/AGL-2742), [AGL-1515](https://linear.app/aglyn/issue/AGL-1515), [AGL-1474](https://linear.app/aglyn/issue/AGL-1474))
+- **analytics:** count video plays where the CDN can only count bytes ([AGL-2746](https://linear.app/aglyn/issue/AGL-2746), [AGL-176](https://linear.app/aglyn/issue/AGL-176))
+
+### Fixed
+
+- **crm:** log an org-hub action to the org, not to a host nobody has a role on ([AGL-2738](https://linear.app/aglyn/issue/AGL-2738), [AGL-2634](https://linear.app/aglyn/issue/AGL-2634))
+- **media-cdn:** a poster that does not exist must 404, never serve the film ([AGL-2743](https://linear.app/aglyn/issue/AGL-2743), [AGL-2742](https://linear.app/aglyn/issue/AGL-2742))
+- **plugins:** keep an unchecked plugin origin out of the server HTML ([AGL-2735](https://linear.app/aglyn/issue/AGL-2735))
+- **waf:** admit the two endpoints /openapi.json advertises ([AGL-2748](https://linear.app/aglyn/issue/AGL-2748), [AGL-2722](https://linear.app/aglyn/issue/AGL-2722), [AGL-2727](https://linear.app/aglyn/issue/AGL-2727))
+
+### Documentation
+
+- **backfills:** list the video rendition producer beside the media scripts ([AGL-2745](https://linear.app/aglyn/issue/AGL-2745))
+- **firewall:** record the endpoint a published contract could not reach ([AGL-2748](https://linear.app/aglyn/issue/AGL-2748), [AGL-2716](https://linear.app/aglyn/issue/AGL-2716))
+
 ## v1.0.0-beta.115 — 2026-09-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/e0a18f449...v1.0.0-beta.115)
