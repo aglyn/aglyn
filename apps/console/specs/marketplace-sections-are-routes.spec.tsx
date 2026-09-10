@@ -162,7 +162,8 @@ describe('Marketplace sections are routes (AGL-2501)', () => {
     for (const [pathname, label] of [
       ['/acme/marketplace/browse', 'Browse All'],
       ['/acme/marketplace/installed', 'Installed'],
-      ['/acme/marketplace/licences', 'Licences'],
+      // The slug predates the American copy and stays: it is a URL, not a label.
+      ['/acme/marketplace/licences', 'Licenses'],
       ['/acme/marketplace/payouts', 'Payouts'],
       ['/acme/marketplace/sales', 'Sales'],
     ] as const) {
@@ -188,7 +189,7 @@ describe('Marketplace sections are routes (AGL-2501)', () => {
 
   it('back and forward walk sections', () => {
     const { rerender } = renderAt('/acme/marketplace/licences')
-    expect(crumbs()).toEqual(['Marketplace', 'Licences'])
+    expect(crumbs()).toEqual(['Marketplace', 'Licenses'])
 
     /*
      * A navigation, NOT a remount. Back and forward move between two states of
