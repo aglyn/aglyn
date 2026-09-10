@@ -1471,6 +1471,16 @@ export async function serveMediaCdn(
       )
     }
 
+    // HEAD returns here, before the delivery counter below (AGL-2811). It
+    // carries a GET's headers and no body, and `servedBytes` is the whole
+    // object for any request without a range. `serves` and `bytes` count
+    // representations that left, which is also why the 304 and 416 exits
+    // above return before this point.
+    if (req.method === 'HEAD') {
+      res.status(200).end()
+      return
+    }
+
     // Delivery volume (AGL-176): per-asset serves/bytes on the AGL-82
     // analytics day-doc, fire-and-forget. Only cache MISSES reach this
     // code — edge-cached responses aren't counted, so these are origin
@@ -1502,10 +1512,6 @@ export async function serveMediaCdn(
         { merge: true },
       )
       .catch(() => undefined)
-    if (req.method === 'HEAD') {
-      res.status(200).end()
-      return
-    }
     if (partial) res.status(206)
     // `start`/`end` are inclusive in `createReadStream`, matching the parsed
     // range — GCS is asked for exactly the requested bytes and nothing is
