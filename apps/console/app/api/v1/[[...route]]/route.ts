@@ -25,6 +25,10 @@ import { buildDocsUrl } from '../../../../constants/docs-links'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { authenticateApiV1 } from '../../../../utils/api-v1'
+import {
+  buildCustomerApiOpenApi,
+  CUSTOMER_API_OPENAPI_PATH,
+} from '../../../../utils/api-v1-openapi'
 import { dispatchResource, handleUsage } from '../../../../utils/api-v1-resources'
 
 // lockdown-423: via apps/console/utils/api-v1.ts — every /v1 dispatch
@@ -38,12 +42,48 @@ async function dispatch(
   request: Request,
   routeContext: RouteContext,
 ): Promise<Response> {
+  const { route } = await routeContext.params
+  const segments = route ?? []
+
+  /*
+    The DESCRIPTION is public, and is answered ahead of `authenticateApiV1`
+    (AGL-2733). A description of how to authenticate that itself requires
+    authentication is useless at the only moment anyone wants it — before they
+    have a key — and it carries nothing that is not already published at
+    `/api` in the docs, so the gate would protect nothing and cost discovery
+    everything.
+
+    It also spends no pre-auth budget, because it reads no key and looks
+    nothing up.
+  */
+  if (segments.length === 1 && segments[0] === 'openapi.json') {
+    if (request.method !== 'GET') {
+      return ApiErrors.methodNotAllowed({ headers: { Allow: 'GET' } })
+    }
+    const origin = new URL(request.url).origin
+    return apiJson(
+      buildCustomerApiOpenApi({
+        origin,
+        // The OPERATOR's docs and brand, not ours (AGL-2186): this is served
+        // from their public API.
+        documentationUrl: buildDocsUrl('/api'),
+        brandName: PLATFORM_BRAND_NAME,
+      }),
+      {
+        headers: {
+          // Cacheable: it changes when the code changes, never per caller.
+          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+          // Anonymous and read-only, so a browser-based client can fetch it.
+          'Access-Control-Allow-Origin': '*',
+        },
+      },
+    )
+  }
+
   const authenticated = await authenticateApiV1(request)
   if (authenticated instanceof Response) return authenticated
   const { context } = authenticated
 
-  const { route } = await routeContext.params
-  const segments = route ?? []
   const { headers } = context
 
   // Root + key introspection stay here; resources dispatch to their handlers.
@@ -65,6 +105,9 @@ async function dispatch(
         // The operator's OWN docs, not ours (AGL-2186) — this is returned in
         // the body of THEIR public API's responses.
         documentation: buildDocsUrl('/api'),
+        // The machine-readable twin (AGL-2733). A client that finds the root
+        // should not have to read prose to discover the description exists.
+        openapi: CUSTOMER_API_OPENAPI_PATH,
         // Only top-level resources belong here. Form submissions are a
         // sub-resource of sites (`/v1/sites/{id}/form-submissions`) and are
         // deliberately absent — advertising `forms` 404'd every client that

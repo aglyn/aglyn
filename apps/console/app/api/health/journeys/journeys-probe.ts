@@ -86,14 +86,17 @@ import {
   firebaseAdmin,
   getPlatformLockdown,
   readAppCheckAttestation,
+  readEdgeAdmission,
   readSignupCanaryWalk,
 } from '@aglyn/tenant-data-admin'
 import {
   isLockdownActive,
   lockdownBlocks,
   appCheckAttestationHealth,
+  edgeAdmissionHealth,
   signupCanaryHealth,
   type AppCheckAttestationCheck,
+  type EdgeAdmissionCheck,
   type SignupCanaryCheck,
 } from '@aglyn/aglyn/server'
 
@@ -149,6 +152,11 @@ export interface JourneysProbeResult {
    * must not be able to go dark just because the canary did.
    */
   appCheckAttestation?: AppCheckAttestationCheck
+  /**
+   * Absent unless `EDGE_ADMISSION_ENABLED`, for the reason the two above are:
+   * a check nobody is writing must make no claim rather than a false one.
+   */
+  edgeAdmission?: EdgeAdmissionCheck
 }
 
 
@@ -307,9 +315,10 @@ export async function probePublishAnnounce(): Promise<PublishAnnounceCheck> {
  */
 import {
   appCheckAttestationEnabled,
+  edgeAdmissionEnabled,
   signupCanaryEnabled,
 } from './journeys-verdict'
-export { appCheckAttestationEnabled, signupCanaryEnabled }
+export { appCheckAttestationEnabled, edgeAdmissionEnabled, signupCanaryEnabled }
 
 export async function probeSignupCanary(): Promise<SignupCanaryCheck> {
   const startedAt = Date.now()
@@ -331,23 +340,46 @@ export async function probeAppCheckAttestation(): Promise<AppCheckAttestationChe
   return appCheckAttestationHealth(samples, Date.now() - startedAt)
 }
 
+/**
+ * Is the edge still admitting real visitors? (AGL-2720)
+ *
+ * A read of one document a scheduled job fills from the metered page-view
+ * counters. The sum itself is not computed here: it is a scan across every
+ * host's analytics, which is a cost a public endpoint has no business paying
+ * on demand.
+ */
+export async function probeEdgeAdmission(): Promise<EdgeAdmissionCheck> {
+  const startedAt = Date.now()
+  const marker = await readEdgeAdmission()
+  return edgeAdmissionHealth(marker, Date.now() - startedAt)
+}
+
 /** All of them, in parallel. Each is independent and each memoises separately. */
 export async function probeJourneys(): Promise<JourneysProbeResult> {
   const canaryOn = signupCanaryEnabled()
   const attestationOn = appCheckAttestationEnabled()
-  const [create, publishRules, publishAnnounce, signupCanary, appCheckAttestation] =
-    await Promise.all([
-      probeCreate(),
-      probePublishRules(),
-      probePublishAnnounce(),
-      canaryOn ? probeSignupCanary() : Promise.resolve(undefined),
-      attestationOn ? probeAppCheckAttestation() : Promise.resolve(undefined),
-    ])
+  const edgeOn = edgeAdmissionEnabled()
+  const [
+    create,
+    publishRules,
+    publishAnnounce,
+    signupCanary,
+    appCheckAttestation,
+    edgeAdmission,
+  ] = await Promise.all([
+    probeCreate(),
+    probePublishRules(),
+    probePublishAnnounce(),
+    canaryOn ? probeSignupCanary() : Promise.resolve(undefined),
+    attestationOn ? probeAppCheckAttestation() : Promise.resolve(undefined),
+    edgeOn ? probeEdgeAdmission() : Promise.resolve(undefined),
+  ])
   return {
     create,
     publishRules,
     publishAnnounce,
     ...(signupCanary ? { signupCanary } : {}),
     ...(appCheckAttestation ? { appCheckAttestation } : {}),
+    ...(edgeAdmission ? { edgeAdmission } : {}),
   }
 }

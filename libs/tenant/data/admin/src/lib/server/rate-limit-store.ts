@@ -1431,6 +1431,58 @@ export async function readSignupCanaryWalk(options?: {
  * One document, overwritten each run — the last reading is the only one that
  * answers "is attestation working now".
  */
+/**
+ * Where the metered-traffic sampler leaves its reading (AGL-2720).
+ *
+ * One document, like every sibling here. The sampler owns the judgement about
+ * whether the total moved; this file only carries it.
+ */
+export const EDGE_ADMISSION_DOC_ID = 'edgeAdmission_production'
+
+/** Budget for the single-document read on the health path. */
+const EDGE_ADMISSION_READ_BUDGET_MS = 2_000
+
+/**
+ * Read the last metered-traffic sample.
+ *
+ * Deliberately has NO max-age rejection, which is the one place this differs
+ * from {@link readAppCheckAttestation}. The quantity graded is already an age
+ * — how long since traffic moved — so discarding an old marker would turn the
+ * loudest possible reading into `edge-admission-unavailable` and lose which
+ * of the two things broke.
+ */
+export async function readEdgeAdmission(options?: {
+  firestore?: any
+  budgetMs?: number
+}): Promise<{
+  sampledAtMs?: number
+  advancedAtMs?: number
+  day?: string
+  total?: number
+} | null> {
+  try {
+    const firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+    const snapshot = await withBudget<any>(
+      firestore
+        .collection(RATE_LIMIT_COLLECTION)
+        .doc(EDGE_ADMISSION_DOC_ID)
+        .get(),
+      options?.budgetMs ?? EDGE_ADMISSION_READ_BUDGET_MS,
+    )
+    if (!snapshot?.exists) return null
+    const advancedAtMs = snapshot.get('advancedAtMs')
+    if (typeof advancedAtMs !== 'number') return null
+    return {
+      sampledAtMs: snapshot.get('sampledAtMs'),
+      advancedAtMs,
+      day: snapshot.get('day'),
+      total: snapshot.get('total'),
+    }
+  } catch {
+    return null
+  }
+}
+
 export const APP_CHECK_ATTESTATION_DOC_ID = 'appCheckAttestation_production'
 
 /** How long a sample survives the sweep. */

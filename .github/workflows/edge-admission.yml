@@ -1,0 +1,59 @@
+# Is the edge still letting real visitors in? (AGL-2720)
+#
+# Every synthetic on this platform carries the `x-aglyn-probe` firewall
+# bypass, because bot protection refuses a datacenter IP outright. If the edge
+# began challenging real people, every other check would ride past the broken
+# thing and stay green.
+#
+# Nothing can probe that. Vercel publishes no challenged-versus-allowed
+# metric, and a probe cannot substitute: `curl` from a home connection is
+# challenged too, and that is the HEALTHY state, because the challenge is
+# answerable and a non-JS client cannot answer it.
+#
+# So this samples the outcome instead — metered page views, written by real
+# browsers after the edge admitted them — and stamps when that number last
+# grew. The verdict is `edgeAdmissionHealth`.
+#
+# Its own workflow rather than a job on the signup canary: this watches a
+# different thing, and the canary's schedule should be free to move to a real
+# scheduler without dragging this along or leaving it behind.
+
+name: Edge admission
+
+on:
+  schedule:
+    # A request rate, not a work rate. GitHub drops most scheduled runs
+    # (AGL-2723), so this asks often and the script's own forty-five minute
+    # floor decides whether a delivered run does anything.
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+# One sampler at a time. Two concurrent runs would both read the same prior
+# marker and the second would decide "unchanged" against a total the first had
+# already written.
+concurrency:
+  group: edge-admission
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      # firebase-admin only. The full workspace install is not needed and
+      # would cost minutes per run — the probe-uptime.mjs precedent.
+      - name: Install firebase-admin
+        run: npm install --no-save --no-audit --no-fund firebase-admin@13
+      - name: Sample the metered page views
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: node tools/e2e/edge-admission.mjs

@@ -46,6 +46,9 @@ import {
   SERVER_ERROR_WINDOW_MINUTES,
   serverErrorsHealth,
   signupCanaryHealth,
+  EDGE_ADMISSION_QUIET_AFTER_MS,
+  EDGE_ADMISSION_SAMPLE_STALE_AFTER_MS,
+  edgeAdmissionHealth,
   SIGNUP_CANARY_STALE_AFTER_MS,
 
   type SignupCanaryMarker,
@@ -2010,6 +2013,129 @@ describe('signupCanaryHealth (AGL-2715)', () => {
  * refusing real people. This grades that directly, from counts a token cannot
  * move: one canary request an hour against roughly a thousand a day.
  */
+describe('edgeAdmissionHealth (AGL-2720)', () => {
+  const NOW = 1_700_000_000_000
+  const marker = (over: Record<string, unknown> = {}) => ({
+    sampledAtMs: NOW,
+    advancedAtMs: NOW,
+    day: '2026-09-10',
+    total: 62,
+    ...over,
+  })
+
+  it('no marker reds rather than reporting calm', () => {
+    // The whole family's rule: "nobody measured" and "traffic is arriving"
+    // are the two readings this exists to keep apart.
+    const check = edgeAdmissionHealth(null, 3, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('edge-admission-unavailable')
+    expect(check.quietMs).toBeNull()
+  })
+
+  it('a marker with no advance stamp is unavailable, not quiet', () => {
+    const check = edgeAdmissionHealth(marker({ advancedAtMs: undefined }), 3, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('edge-admission-unavailable')
+  })
+
+  it('traffic that moved inside the window is green', () => {
+    const check = edgeAdmissionHealth(
+      marker({ advancedAtMs: NOW - EDGE_ADMISSION_QUIET_AFTER_MS + 1 }),
+      3,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+  })
+
+  it('exactly at the window is still green; one past it reds', () => {
+    // Pins the comparison as strictly-greater, so the boundary cannot drift
+    // into an off-by-one that reds a platform serving traffic.
+    expect(
+      edgeAdmissionHealth(
+        marker({ advancedAtMs: NOW - EDGE_ADMISSION_QUIET_AFTER_MS }),
+        3,
+        NOW,
+      ).ok,
+    ).toBe(true)
+    const past = edgeAdmissionHealth(
+      marker({ advancedAtMs: NOW - EDGE_ADMISSION_QUIET_AFTER_MS - 1 }),
+      3,
+      NOW,
+    )
+    expect(past.ok).toBe(false)
+    expect(past.code).toBe('edge-admits-nobody')
+  })
+
+  it('an advance stamped in the FUTURE cannot buy silence forever', () => {
+    // A clock skew or a hand-edited marker must not mint permanent green by
+    // making the quiet period negative. Same guard the canary carries.
+    const check = edgeAdmissionHealth(marker({ advancedAtMs: NOW + 86_400_000 }), 3, NOW)
+    expect(check.quietMs).toBe(0)
+    expect(check.ok).toBe(true)
+  })
+
+  it('the window is sized to the burst, not to the daily average', () => {
+    // Pinned to the VALUE. The cases above take the window symbolically and
+    // would pass at any window at all, including a minute.
+    //
+    // Twelve hours. The daily average of the quietest sampled day is 2.4
+    // views an hour, which would make six hours look damning — but the day
+    // measured had every view from ONE host of thirteen, and traffic that
+    // concentrated arrives in bursts with long empty stretches.
+    expect(EDGE_ADMISSION_QUIET_AFTER_MS).toBe(12 * 60 * 60 * 1000)
+  })
+
+  it('a stalled SAMPLER is named as one, not blamed on the edge', () => {
+    // The trap this check would otherwise walk into: `advancedAtMs` only
+    // moves when the sampler runs, so a job that stopped looks identical to
+    // traffic that stopped — and the responder goes to the firewall while the
+    // real fault is a cron. Distinct code, checked first.
+    const check = edgeAdmissionHealth(
+      marker({
+        sampledAtMs: NOW - EDGE_ADMISSION_SAMPLE_STALE_AFTER_MS - 1,
+        advancedAtMs: NOW - EDGE_ADMISSION_QUIET_AFTER_MS - 1,
+      }),
+      3,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('edge-sample-stale')
+  })
+
+  it('a marker with no sample stamp cannot be graded as traffic', () => {
+    const check = edgeAdmissionHealth(marker({ sampledAtMs: undefined }), 3, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('edge-sample-stale')
+    expect(check.sampleAgeMs).toBeNull()
+  })
+
+  it('the sampler window is tighter than the quiet window', () => {
+    // Pinned as a RELATIONSHIP, not just two values: if the sampler's window
+    // ever grew past the quiet one, a stalled job would spend hours reported
+    // as an edge outage before anything said otherwise.
+    expect(EDGE_ADMISSION_SAMPLE_STALE_AFTER_MS).toBe(6 * 60 * 60 * 1000)
+    expect(EDGE_ADMISSION_SAMPLE_STALE_AFTER_MS).toBeLessThan(
+      EDGE_ADMISSION_QUIET_AFTER_MS,
+    )
+  })
+
+  it('publishes counts and a day only — no host, no path, no visitor', () => {
+    // The endpoint is public. The question is whether traffic arrives, not
+    // whose traffic it was.
+    const check = edgeAdmissionHealth(marker(), 3, NOW)
+    expect(Object.keys(check).sort()).toEqual([
+      'day',
+      'ms',
+      'ok',
+      'quietAfterMs',
+      'quietMs',
+      'sampleAgeMs',
+      'total',
+    ])
+  })
+})
+
 describe('appCheckAttestationHealth (AGL-2715)', () => {
   const IDP = APP_CHECK_GRADED_SERVICE
   const OTHER = 'firestore.googleapis.com'
