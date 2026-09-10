@@ -59,6 +59,23 @@ const INJECTED_STACK = [
   '@https://aglyn.com/pricing:1:6257',
 ].join('\n')
 
+/**
+ * The same bridge in the Android webview, captured verbatim out of
+ * `client-errors` on 2026-09-10 (AGL-2786). V8 format, and every frame is
+ * under the webview's own `iabjs://` scheme rather than the document — the
+ * shape the document comparison alone cannot see.
+ */
+const ANDROID_INJECTED_STACK = [
+  'Error: Error invoking postMessage: Java object is gone',
+  '    at sendDataToNative (iabjs://navigation_performance_logger_android:1:10632)',
+  '    at sendBeforeUnloadMessage (iabjs://navigation_performance_logger_android:1:14286)',
+  '    at iabjs://navigation_performance_logger_android:1:19687',
+].join('\n')
+
+/** One frame in a script we served. */
+const OWN_FRAME =
+  '    at rJ (https://aglyn.com/_next/static/immutable/chunks/3cuw.js:31:45769)'
+
 describe('isInjectedThirdPartyFrame (AGL-2523)', () => {
   it('is TRUE only when every frame is the document itself', () => {
     expect(isInjectedThirdPartyFrame(INJECTED_STACK, PAGE)).toBe(true)
@@ -102,6 +119,24 @@ describe('isInjectedThirdPartyFrame (AGL-2523)', () => {
     // handles, so a webview frame carrying `?fbclid=…` still matches.
     const q = 'f@https://aglyn.com/pricing?fbclid=abc:1:2'
     expect(isInjectedThirdPartyFrame(q, PAGE)).toBe(true)
+  })
+})
+
+describe('isInjectedThirdPartyFrame — foreign schemes (AGL-2786)', () => {
+  it('is TRUE when every frame is under the Android webview scheme', () => {
+    expect(isInjectedThirdPartyFrame(ANDROID_INJECTED_STACK, PAGE)).toBe(true)
+  })
+
+  it('is FALSE once one of our frames joins them', () => {
+    expect(
+      isInjectedThirdPartyFrame(`${ANDROID_INJECTED_STACK}\n${OWN_FRAME}`, PAGE),
+    ).toBe(false)
+  })
+
+  it('is TRUE for an extension content script', () => {
+    const extension =
+      'TypeError: x is undefined\n    at run (chrome-extension://abcdefghijklmnop/content.js:4:17)'
+    expect(isInjectedThirdPartyFrame(extension, PAGE)).toBe(true)
   })
 })
 
@@ -214,6 +249,28 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
 
   it('reports a stackless error rather than guessing about it', () => {
     throwInPage('stackless boom', undefined)
+    expect(reported()).toHaveLength(1)
+  })
+
+  it('DROPS the Android webview bridge, every frame under iabjs:// (AGL-2786)', () => {
+    throwInPage('Error invoking postMessage: Java object is gone', ANDROID_INJECTED_STACK)
+    expect(beacon).not.toHaveBeenCalled()
+  })
+
+  it('REPORTS our error when the bridge is on the same stack (AGL-2786)', () => {
+    throwInPage('bridge called into ours', `${ANDROID_INJECTED_STACK}\n${OWN_FRAME}`)
+    expect(reported()).toHaveLength(1)
+  })
+
+  it('judges the WHOLE stack, so our frame past the clamp still keeps it (AGL-2786)', () => {
+    const bridgeFrames = Array.from(
+      { length: 150 },
+      (_, i) => `    at f${i} (iabjs://navigation_performance_logger_android:1:${i})`,
+    )
+    const long = [ANDROID_INJECTED_STACK, ...bridgeFrames, OWN_FRAME].join('\n')
+    // Anti-vacuity: our frame must really sit beyond what the report carries.
+    expect(long.indexOf(OWN_FRAME)).toBeGreaterThan(8_192)
+    throwInPage('long bridge stack', long)
     expect(reported()).toHaveLength(1)
   })
 })

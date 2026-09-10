@@ -45,6 +45,8 @@
  * module graph (AGL-52); every importer is already a client module.
  */
 
+import { isForeignScriptUrl, stackFrameUrls } from './foreign-script'
+
 export interface ErrorBeaconEvent {
   /** 'error' | 'unhandledrejection' — which handler caught it. */
   kind: string
@@ -89,40 +91,31 @@ function clamp(value: unknown, max: number): string {
 }
 
 /**
- * Every URL a stack frame points at, whichever engine produced the stack.
- *
- * One pattern covers both formats because the frame's URL is always followed
- * by `:line:col`: V8 writes `at fn (URL:1:2)` and `at URL:1:2`, WebKit and
- * Firefox write `fn@URL:1:2` and `@URL:1:2`. Matching on the suffix rather
- * than on the prefix means neither engine needs its own branch, and a format
- * this code has never seen degrades to "no frames parsed" rather than to a
- * wrong answer.
- */
-function stackFrameUrls(stack: string): string[] {
-  const urls: string[] = []
-  const frame = /((?:https?|file|blob):\/\/[^\s()]+?):\d+:\d+/g
-  let match: RegExpExecArray | null
-  while ((match = frame.exec(stack)) !== null) urls.push(match[1])
-  return urls
-}
-
-/**
  * Was this thrown by a script somebody ELSE evaluated into our page?
  *
- * Measured 2026-09-02 (AGL-2523) on aglyn.com/pricing, reported as an error
- * of ours:
+ * Two tells, both read off the frames' URLs and neither off a function name —
+ * a name would be a denylist needing a new entry per vendor.
+ *
+ * **Every frame is the DOCUMENT.** Measured 2026-09-02 (AGL-2523) on
+ * aglyn.com/pricing, reported as an error of ours:
  *
  *     sendDataToNative@https://aglyn.com/pricing:1:1325
  *     sendPageHideMessage@https://aglyn.com/pricing:1:4139
  *     @https://aglyn.com/pricing:1:6257
  *
  * `sendDataToNative` is the Meta in-app browser's native bridge, injected by
- * the Facebook/Instagram webview. The tell is not the function name — that
- * would be a denylist needing a new entry per vendor — but the URLs: every
- * frame is the DOCUMENT, so the code was evaluated inline in the page rather
- * than loaded from a script we served. Nothing we ship can be fixed in
- * response to it, which is the same test the opaque `Script error.` cut
- * already applies.
+ * the Facebook/Instagram webview. In WebKit's format the code was evaluated
+ * inline, so every frame is the document rather than a script we served.
+ *
+ * **Every frame is under a FOREIGN scheme.** Measured 2026-09-10 (AGL-2786) on
+ * aglyn.com, the same bridge in the Android webview:
+ *
+ *     at sendDataToNative (iabjs://navigation_performance_logger_android:1:10632)
+ *
+ * That webview names its scripts under its own `iabjs://` scheme, and
+ * extensions do the same under theirs — see `FOREIGN_SCRIPT_SCHEMES`. A frame
+ * may carry either tell. Nothing we ship can be fixed in response to any of
+ * them, which is the same test the opaque `Script error.` cut already applies.
  *
  * ⚑ Deliberately `every`, and deliberately compared against the document
  * rather than against our asset path. A rule like "no frame under
@@ -142,7 +135,9 @@ export function isInjectedThirdPartyFrame(
   const urls = stackFrameUrls(stack)
   // No frames parsed is not evidence of anything — keep the report.
   if (!urls.length) return false
-  return urls.every((url) => scrubUrl(url) === documentUrl)
+  return urls.every(
+    (url) => isForeignScriptUrl(url) || scrubUrl(url) === documentUrl,
+  )
 }
 
 /**
@@ -306,11 +301,14 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
       // actionable attached; reporting it would only create a noisy group.
       if (!message || message === 'Script error.') return
       const pageUrl = scrubUrl(window.location.href)
-      const stack = error?.stack ? clamp(error.stack, MAX_STACK) : undefined
+      const fullStack = error?.stack ? String(error.stack) : undefined
       // A webview or extension that evaluated its own code into our page —
       // see `isInjectedThirdPartyFrame`. Nothing we ship can be changed in
       // response, so it is dropped on the same test as `Script error.`.
-      if (stack && isInjectedThirdPartyFrame(stack, pageUrl)) return
+      // Judged on the WHOLE stack, before the clamp: a frame of ours past the
+      // clamp still makes the error ours.
+      if (fullStack && isInjectedThirdPartyFrame(fullStack, pageUrl)) return
+      const stack = fullStack ? clamp(fullStack, MAX_STACK) : undefined
       enqueue({
         // MARKED, not dropped: a translator causes these and so does a real
         // render divergence, and only a rate tells them apart.
