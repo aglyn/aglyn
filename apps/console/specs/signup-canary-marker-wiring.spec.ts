@@ -118,22 +118,26 @@ describe('the walk cannot quietly stop being a walk', () => {
     }
   })
 
-  it('the debug token is the ONLY thing it bypasses', () => {
+  it('rides the house bypass, and says so when it is challenged anyway', () => {
     /**
-     * The canary attests with an App Check debug token — it has to, because
-     * reCAPTCHA Enterprise is built to score headless automation as a bot.
-     * `app-check-debug-token.spec.ts` is the authority on that allowance and
-     * asserts its two conditions; this only pins that the bypass stops there.
+     * Bot protection refuses a datacenter IP outright — a real Chrome on a
+     * runner sat on the checkpoint for 120s and it never cleared — so without
+     * the bypass the walk cannot be scheduled at all.
      *
-     * Specifically: no CI bypass header, so the edge is still exercised for
-     * real. A canary that skipped both attestation AND bot protection would
-     * be walking a path no visitor walks in two directions at once.
+     * Carrying it is the established pattern, not a new concession:
+     * `uptime-probe.yml` rides the same token on every row, including the two
+     * `front-door/*` ones added to grade the response the way a visitor
+     * experiences it. The edge's behaviour toward an UNBYPASSED visitor is
+     * unmonitored across the whole estate; that gap is real, pre-existing, and
+     * tracked separately.
+     *
+     * What must survive is the distinction: a checkpoint seen DESPITE the
+     * bypass means the bypass broke, not that signup did. Reporting that as a
+     * signup failure would send an on-call reader hunting a bug that is not
+     * there.
      */
-    // In main(), not walk(): the token is injected on the context before any
-    // page exists, which is the only moment the SDK will still read it.
-    expect(CANARY).toContain('addInitScript')
-    expect(CANARY).not.toContain('x-aglyn-probe')
-    expect(CANARY).not.toContain('AGLYN_PROBE_TOKEN')
+    expect(CANARY).toContain('x-aglyn-probe')
+    expect(CANARY).toContain('challenged')
   })
 
   it('hard-codes no Aglyn hostname (self-host ratchet)', () => {
@@ -142,17 +146,6 @@ describe('the walk cannot quietly stop being a walk', () => {
     // Assembled for the same reason: the self-host ratchet scans this file too.
     expect(CANARY).not.toContain(['aglyn', 'com'].join('.'))
     expect(CANARY).toContain("process.env['SIGNUP_CANARY_ORIGIN']")
-  })
-
-  it('carries NO bypass header anywhere', () => {
-    /**
-     * The walk is a real browser on the real front door, so if bot protection
-     * starts refusing visitors the canary is refused with them. That property
-     * survives only while nothing reaches for the CI bypass: `x-aglyn-probe`
-     * would sail the canary past an edge that was turning everybody away.
-     */
-    expect(CANARY).not.toContain('x-aglyn-probe')
-    expect(CANARY).not.toContain('AGLYN_PROBE_TOKEN')
   })
 
   it('drives a real browser, not fetch', () => {

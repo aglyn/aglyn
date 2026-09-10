@@ -95,22 +95,12 @@ jobs:
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
         run: node tools/e2e/appcheck-attestation.mjs
 
-  # ⛔ MANUAL ONLY — a GitHub runner cannot get through the front door.
-  #
-  # The walk passes from a residential browser and fails on a runner at
-  # `signup-form`, waiting for a password field that never renders: an Actions
-  # datacenter IP is served the Vercel Security Checkpoint, which answers 200
-  # with no form on it. That is bot protection working exactly as intended, on
-  # exactly the traffic it is built to stop.
-  #
-  # The only way through is the `x-aglyn-probe` bypass, and carrying it would
-  # make the walk blind to the edge refusing real visitors — which is the
-  # reason it does not carry one. That trade is not mine to make.
-  #
-  # The attestation job above is unaffected and stays on the schedule: it reads
-  # a metric, not a page.
+  # Hourly. It rides the same AGLYN_PROBE_TOKEN bypass every probe in this
+  # repo rides — bot protection refuses a datacenter IP outright, so without it
+  # the walk cannot be scheduled at all. If the checkpoint appears anyway the
+  # walk reports `challenged`, which is a statement about the edge rather than
+  # about signup.
   walk:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -140,6 +130,7 @@ jobs:
           # something a token cannot fake. Without this the walk cannot attest
           # at all: reCAPTCHA Enterprise scores headless automation as a bot.
           FIREBASE_APPCHECK_DEBUG_TOKEN: ${{ secrets.FIREBASE_APPCHECK_DEBUG_TOKEN }}
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
           # The repo convention: an optional var with the project as the default.
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}

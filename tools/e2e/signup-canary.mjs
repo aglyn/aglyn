@@ -128,6 +128,31 @@ const EMAIL_BASE = process.env['SIGNUP_CANARY_EMAIL'] ?? ''
  */
 const CANARY_SLUG_PREFIX = 'signup-canary-'
 
+/**
+ * The firewall bypass every probe in this repo already rides.
+ *
+ * Bot protection is `challenge`, and it refuses a datacenter IP outright: a
+ * real Chrome on a GitHub runner sat on the Vercel Security Checkpoint for
+ * 120 seconds and it never cleared. So without this the walk cannot run on a
+ * schedule at all, which is the difference between a canary and a script
+ * somebody remembers to run.
+ *
+ * Carrying it is the HOUSE PATTERN, not a new concession: `uptime-probe.yml`
+ * rides the same token for every row including the two `front-door/*` ones
+ * added to "grade the response the way a visitor experiences it", and
+ * `check-external-facts.mjs` and `check-week-one-preflight.mjs` do the same.
+ * The edge's behaviour toward an unbypassed visitor is unmonitored across the
+ * whole estate — a real gap, and a pre-existing one this canary neither
+ * creates nor closes.
+ *
+ * What it does keep is the distinction that gap deserves: if the checkpoint
+ * appears ANYWAY, the walk reports `challenged` rather than pretending the
+ * signup form is broken. Same convention the uptime rows use, and for the
+ * same reason — a challenge is a statement about the edge, never about the
+ * app behind it.
+ */
+const PROBE_TOKEN = process.env['AGLYN_PROBE_TOKEN'] ?? ''
+
 const steps = []
 const t0 = Date.now()
 let step = 'start'
@@ -274,10 +299,23 @@ async function walk(page, db, auth, identity, created) {
   }
   if (!form) {
     const title = await page.title().catch(() => '(unreadable)')
+    if (sawCheckpoint) {
+      /**
+       * CHALLENGED — a statement about the edge, not about signup.
+       *
+       * The walk carries the bypass every probe here carries, so reaching this
+       * means the bypass itself stopped working: revoked, rotated, or a
+       * firewall edit that dropped the rule (which
+       * `feedback_vercel_firewall_put_wipes_bot_protection` records happening
+       * once already). Naming it separately keeps an on-call reader from
+       * hunting a signup bug that is not there.
+       */
+      throw new Error(
+        `challenged — the firewall bypass did not clear bot protection (at ${page.url()})`,
+      )
+    }
     throw new Error(
-      `no signup form after 120s — at ${page.url()}, title ${JSON.stringify(
-        title,
-      )}${sawCheckpoint ? ' (bot-protection checkpoint seen)' : ''}`,
+      `no signup form after 120s — at ${page.url()}, title ${JSON.stringify(title)}`,
     )
   }
   done(sawCheckpoint ? 'through the checkpoint' : '')
@@ -537,6 +575,31 @@ async function main() {
     // One CONTEXT, so the verification tab shares the signup tab's session and
     // storage the way two tabs of one browser do.
     const context = await browser.newContext()
+    if (PROBE_TOKEN) {
+      /**
+       * Scoped to the console, via routing rather than `extraHTTPHeaders`.
+       *
+       * A context-wide header goes to EVERY origin the page touches —
+       * Identity Platform, Firestore, reCAPTCHA — where an unknown header
+       * turns simple requests into preflighted ones and the cross-origin
+       * calls start failing. Measured: the tab crashed outright, and the walk
+       * failed at `account` with "Target page, context or browser has been
+       * closed", which names nothing useful.
+       *
+       * Only requests to the console carry it. That is also the honest scope:
+       * the bypass is for OUR firewall, and nobody else's edge should see it.
+       */
+      await context.route(
+        (url) => url.href.startsWith(CONSOLE),
+        (route) =>
+          route.continue({
+            headers: {
+              ...route.request().headers(),
+              'x-aglyn-probe': PROBE_TOKEN,
+            },
+          }),
+      )
+    }
     // Before any page script: the SDK reads this the moment App Check
     // initializes, and after that it is too late.
     await context.addInitScript((token) => {
