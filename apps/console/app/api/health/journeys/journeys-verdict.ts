@@ -276,3 +276,16 @@ export function signupCanaryEnabled(): boolean {
 export function appCheckAttestationEnabled(): boolean {
   return process.env['APP_CHECK_ATTESTATION_ENABLED'] === '1'
 }
+
+/**
+ * Is the metered-traffic sample being taken for this deployment? (AGL-2720)
+ *
+ * Same shape and same reasoning as its two siblings. A third flag rather than
+ * a shared one because this watches a different thing from a different
+ * writer: the canary proves the app admits a stranger, attestation proves App
+ * Check admits a visitor, and this proves the EDGE does. Any of the three can
+ * be off without the other two losing their meaning.
+ */
+export function edgeAdmissionEnabled(): boolean {
+  return process.env['EDGE_ADMISSION_ENABLED'] === '1'
+}

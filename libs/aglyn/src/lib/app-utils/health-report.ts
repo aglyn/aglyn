@@ -2955,6 +2955,170 @@ export interface AppCheckVerificationSample {
   count?: number
 }
 
+/**
+ * IS THE EDGE STILL LETTING REAL VISITORS IN? (AGL-2720)
+ *
+ * Every synthetic on this platform carries the `x-aglyn-probe` firewall
+ * bypass, because bot protection refuses a datacenter IP outright. So if the
+ * edge started challenging real people, every check would ride past the thing
+ * that was broken and stay green.
+ *
+ * Measured 2026-09-10 while looking for something to close that: Vercel
+ * publishes no challenged-versus-allowed metric — seven endpoints probed, the
+ * only one that answers returns rule actions rather than traffic. And a probe
+ * cannot substitute, because the discriminator is not "was this request
+ * challenged" but "can a REAL BROWSER get in": `curl` from a residential
+ * address is challenged too, and that is the healthy state, since the
+ * challenge is answerable and a non-JS client cannot answer it.
+ *
+ * What is left is the outcome, and it was already being counted for money.
+ * Metered page views are written by real browsers on real customer sites
+ * after the edge admitted them — 57 to 563 a day across hosts over the
+ * preceding week. Nothing synthetic touches that number: the probes ride the
+ * bypass and the signup canary walks the console, neither of which is a
+ * metered tenant page view.
+ *
+ * So the question this asks is simply whether that number is still moving. A
+ * platform serving tens of views an hour that serves none for hours has
+ * either lost its edge or lost every customer site, and both are worth waking
+ * somebody for.
+ *
+ * ⛔ What it is NOT. It watches the TENANT edge, because that is where the
+ * volume is. The console's own front door serves a handful of signup views a
+ * day — too few to floor, and now partly synthetic — so a firewall change
+ * scoped only to `aglyn-console` would not show up here. It is also not a
+ * latency or correctness check: it says traffic arrives, nothing more.
+ *
+ * ⚠️ And the volume is CONCENTRATED. On the day this was built, one host of
+ * thirteen produced every view. So this reds if that one site goes quiet for
+ * half a day, which is why the window is what it is — see
+ * {@link EDGE_ADMISSION_QUIET_AFTER_MS}.
+ */
+/**
+ * What the metered-traffic sampler leaves behind.
+ *
+ * `advancedAtMs` is the whole point and it is the WRITER's judgement, not the
+ * reader's: the sampler compares this reading against the last one and stamps
+ * the moment the total actually grew. A day rollover sets the counter back to
+ * zero, so a grader handed a single sample could not tell midnight from an
+ * outage.
+ */
+export interface EdgeAdmissionMarker {
+  /** When the sampler last ran. Context; the verdict does not use it. */
+  sampledAtMs?: number
+  /** The last moment the metered total was seen to GROW. The clock. */
+  advancedAtMs?: number
+  /** Which UTC day the total belongs to. */
+  day?: string
+  /** The running total for that day at the last sample. */
+  total?: number
+}
+
+export interface EdgeAdmissionCheck extends HealthCheck {
+  /** How long since the metered total last moved, or null with no marker. */
+  quietMs: number | null
+  /** The day the sampled total belongs to, so a rollover is readable. */
+  day: string | null
+  /** The running total for that day at the last sample. */
+  total: number | null
+  /** How long the total may sit still before this reds. */
+  quietAfterMs: number
+  /** How long since the sampler last reported, or null with no marker. */
+  sampleAgeMs: number | null
+}
+
+/**
+ * How long metered page views may sit still before the edge is presumed shut.
+ *
+ * Twelve hours, and the width is deliberate rather than lazy.
+ *
+ * The quietest full day in the sampled week carried 57 views — about 2.4 an
+ * hour on average, which would make six hours of zero look damning. But the
+ * average is the wrong statistic here: measured 2026-09-10, the day's 62 views
+ * came from ONE host of thirteen. Traffic that concentrated arrives in bursts,
+ * and a burst distribution produces long empty stretches with nothing wrong.
+ * A window sized to the average would page on one of them, which is how the
+ * monitor that must never be ignored gets ignored.
+ *
+ * Twelve hours of exactly zero, on a platform serving 57 to 563 views a day,
+ * is not a quiet stretch. It is slower to fire than anyone would like, and it
+ * is the only thing that catches a fully blocked edge at all — nothing else
+ * would ever fire, because every other check rides the bypass.
+ *
+ * ⚑ Tighten it once the real quiet-period distribution is known: the sampler
+ * stamps `advancedAtMs` on every run, so a week of markers says what the true
+ * maximum gap is. Do not tighten it from the daily average.
+ */
+export const EDGE_ADMISSION_QUIET_AFTER_MS = 12 * 60 * 60 * 1000
+
+/**
+ * How old the sampler's own reading may be before it stops being evidence.
+ *
+ * Six hours, sized like `SIGNUP_CANARY_STALE_AFTER_MS` to a scheduler that
+ * drops most of what it is asked for (AGL-2723) rather than to the cron
+ * expression. Shorter than the quiet window on purpose: a stalled sampler
+ * should be named as one BEFORE its frozen reading has had time to look like
+ * an edge outage.
+ */
+export const EDGE_ADMISSION_SAMPLE_STALE_AFTER_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Grade the last recorded metered-traffic sample.
+ *
+ * Pure, like every sibling. The sampler decides when the total last MOVED and
+ * stamps it; this only asks how long ago that was. Keeping the movement
+ * detection in the writer is what lets the door stay a read: a day rollover
+ * resets the counter to zero, and a grader looking at one sample could not
+ * tell that from traffic stopping.
+ */
+export function edgeAdmissionHealth(
+  marker: EdgeAdmissionMarker | null,
+  ms: number,
+  nowMs: number = Date.now(),
+  quietAfterMs: number = EDGE_ADMISSION_QUIET_AFTER_MS,
+  sampleStaleAfterMs: number = EDGE_ADMISSION_SAMPLE_STALE_AFTER_MS,
+): EdgeAdmissionCheck {
+  const base: Omit<EdgeAdmissionCheck, 'ok' | 'code'> = {
+    ms,
+    quietMs: null,
+    day: null,
+    total: null,
+    quietAfterMs,
+    sampleAgeMs: null,
+  }
+  // No marker, or one that cannot be read. Absence of proof reds here for the
+  // same reason it does on every sibling: "nobody measured" and "traffic is
+  // arriving" are the two readings this exists to keep apart.
+  if (!marker || typeof marker.advancedAtMs !== 'number') {
+    return { ...base, ok: false, code: 'edge-admission-unavailable' }
+  }
+  const sampleAgeMs =
+    typeof marker.sampledAtMs === 'number'
+      ? Math.max(0, nowMs - marker.sampledAtMs)
+      : null
+  const carried = {
+    ...base,
+    quietMs: Math.max(0, nowMs - marker.advancedAtMs),
+    day: typeof marker.day === 'string' ? marker.day : null,
+    total: typeof marker.total === 'number' ? marker.total : null,
+    sampleAgeMs,
+  }
+  // ⛔ CHECKED FIRST, AND THE ORDER IS THE POINT.
+  //
+  // `advancedAtMs` only moves when the sampler runs, so a sampler that has
+  // stopped looks exactly like traffic that has stopped — and the responder
+  // would go looking at the firewall while the real fault was a job that
+  // never fired. That is the confusion `canary-stale` was built to avoid on
+  // the check next door, and it costs one comparison to avoid here too.
+  if (sampleAgeMs === null || sampleAgeMs > sampleStaleAfterMs) {
+    return { ...carried, ok: false, code: 'edge-sample-stale' }
+  }
+  if (carried.quietMs !== null && carried.quietMs > quietAfterMs) {
+    return { ...carried, ok: false, code: 'edge-admits-nobody' }
+  }
+  return { ...carried, ok: true }
+}
+
 export interface AppCheckAttestationCheck extends HealthCheck {
   /** Allowed over total for the graded service, or null with no traffic. */
   allowRate: number | null
