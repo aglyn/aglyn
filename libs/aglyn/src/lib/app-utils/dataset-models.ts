@@ -23,9 +23,12 @@ import { type DatasetFieldEntry, humanizeDatasetFieldId } from './datasets'
  * blueprint in `libs/shared/data/types/src/lib/dod.ts` (kept as the
  * referenced design doc — this module is the single runtime source of
  * truth). A model lives on the dataset doc
- * (`orgs/{orgId}/datasets/{id}.model`) and drives the typed editor,
- * import validation, and any server-side writes through the shared
- * `validateDocument`/`coerceDocumentValues` pair so they can't disagree.
+ * (`orgs/{orgId}/datasets/{id}.model`) and drives the typed editor, import
+ * and site-restore validation, and the console and `/v1` record writes
+ * through the shared `validateDocument`/`coerceDocumentValues` pair so they
+ * can't disagree. Form submissions and automation steps write through
+ * `buildDatasetRecordValues` instead, which stores each value as text and
+ * validates nothing.
  *
  * Storage conventions (Firestore-safe): timestamps as epoch millis
  * numbers, coordinates as `{ latitude, longitude }`, `sorted` as arrays,

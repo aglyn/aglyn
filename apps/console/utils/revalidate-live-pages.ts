@@ -199,13 +199,13 @@ export function describeRevalidateShortfall(
   if (!pathsDropped && !scanTruncated) return null
   // Deliberately says what to DO. "Truncated" is accurate and useless: the
   // reader's question is whether their site is broken, and the answer is that
-  // it catches up on its own within the minute.
+  // it catches up on its own once the page's hour-long ISR window lapses.
   const stale = pathsDropped
     ? `${pathsDropped} page${pathsDropped === 1 ? '' : 's'}`
     : 'Some pages'
   return (
     `${lead} ${stale} that use this are too many to refresh at once — ` +
-    'they update on their own within a minute.'
+    'they update on their own within an hour.'
   )
 }
 

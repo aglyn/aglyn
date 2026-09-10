@@ -61,7 +61,7 @@ describe('describeRevalidateShortfall (AGL-1239)', () => {
     )
     expect(message).toContain('12 pages')
     // Says what happens next, not just that something was truncated.
-    expect(message).toMatch(/within a minute/)
+    expect(message).toMatch(/within an hour/)
   })
 
   it('is singular for one page', () => {
