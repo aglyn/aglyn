@@ -322,6 +322,10 @@ None of the three is ever displayed as text on the page.
 **Captions file** takes a WebVTT (`.vtt`) file — pick it with **Browse media**. Fill in
 **Captions label** and **Captions language** so the player can name the track.
 
+Turn on **Open in a lightbox** and the poster becomes a play button that opens the
+film full size over the page, with a close button and `Esc` to dismiss. It needs a
+poster; without one the player stays in the page as usual.
+
 :::tip
 Picking a video from the media library also copies its dimensions onto the element,
 which reserves the right-shaped box before anything loads and stops the rest of the

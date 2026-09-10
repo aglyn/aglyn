@@ -86,6 +86,10 @@ const TENANT_IMAGE_SOURCES = [
   'libs/plugins/mui/src/lib/components/collection.tsx',
   'libs/plugins/mui/src/lib/components/markdown.tsx',
   'libs/plugins/mui/src/lib/components/product.tsx',
+  // The Video element renders an `<img>` too, in lightbox mode (AGL-2744).
+  // Listed so the sweep is complete: an element that renders a poster and is
+  // not scanned is exactly the blind spot this file exists to close.
+  'libs/plugins/mui/src/lib/components/video.tsx',
   'libs/plugins/commerce/src/lib/components/product-grid.tsx',
   'libs/plugins/commerce/src/lib/components/related-products.tsx',
   'libs/plugins/commerce/src/lib/components/wishlist.tsx',
@@ -115,6 +119,23 @@ const EAGER_BY_DESIGN: ReadonlyArray<{ file: string; srcExpression: string }> =
       // The gallery hero at the top of a product page.
       file: 'libs/plugins/commerce/src/lib/components/product-detail.tsx',
       srcExpression: 'galleryImage',
+    },
+    {
+      // The lightbox poster (AGL-2744), and this one is an exemption that
+      // BUYS something rather than spending it.
+      //
+      // A poster is not one image among several in a grid — it is the entire
+      // visual of a media element an author placed on purpose, and it is
+      // standing in for a video that is not being downloaded at all. The
+      // alternative it replaces, `<video poster>`, is fetched eagerly by
+      // every browser, so deferring this would be a regression against what
+      // the element rendered yesterday rather than a saving over it.
+      //
+      // It takes no `fetchpriority` either, for the reason `image.tsx` gives
+      // at length: "the element the author placed" is still not "the LCP",
+      // and nothing here has seen the viewport.
+      file: 'libs/plugins/mui/src/lib/components/video.tsx',
+      srcExpression: 'posterBase',
     },
   ]
 
@@ -300,7 +321,10 @@ describe('every tenant-rendered image declares its loading rank (AGL-2486)', () 
         ),
     ).map((exemption) => `${exemption.file} (src=${exemption.srcExpression})`)
     expect(unmatched).toEqual([])
-    expect(EAGER_BY_DESIGN).toHaveLength(2)
+    // Moved 2 → 3 for the Video lightbox poster (AGL-2744). The number is
+    // pinned so a third exemption cannot arrive as a side effect of somebody
+    // making a red test green; the reasoning for this one is at its entry.
+    expect(EAGER_BY_DESIGN).toHaveLength(3)
   })
 
   it('spreads the one shared set rather than three literals', () => {

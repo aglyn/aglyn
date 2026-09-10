@@ -215,6 +215,80 @@ describe('Video structured-data fields never reach the DOM', () => {
   })
 })
 
+describe('Video lightbox (AGL-2744)', () => {
+  const trigger = (element: JSX.Element) =>
+    render(element).container.querySelector('button') as HTMLButtonElement
+
+  it('renders a play button over the poster instead of a player', () => {
+    const { container } = render(
+      <Video src="https://x/a.mp4" poster="media:h/p" lightbox title="Tour" />,
+    )
+    expect(container.querySelector('video')).toBeNull()
+    const button = container.querySelector('button') as HTMLButtonElement
+    expect(button.getAttribute('aria-label')).toBe('Play video: Tour')
+    expect(button.getAttribute('type')).toBe('button')
+  })
+
+  it('still names its purpose when the author gave no title', () => {
+    expect(
+      trigger(
+        <Video src="https://x/a.mp4" poster="media:h/p" lightbox />,
+      ).getAttribute('aria-label'),
+    ).toBe('Play video')
+  })
+
+  it('hands the poster the full candidate list an inline player cannot take', () => {
+    // The one advantage of this mode: `<video poster>` accepts a single url,
+    // an `<img>` accepts every width the DAM generated.
+    const img = render(
+      <Video src="https://x/a.mp4" poster="media:h/p" lightbox />,
+    ).container.querySelector('img') as HTMLImageElement
+    expect(img.getAttribute('src')).toBe(`${CDN}/h/p`)
+    expect(img.getAttribute('srcset')).toContain(`${CDN}/h/p?w=320 320w`)
+    expect(img.getAttribute('srcset')).toContain(`${CDN}/h/p?w=1920 1920w`)
+    // Silent for a screen reader: the button beside it already says what
+    // this is, and alt text would announce the same film twice.
+    expect(img.getAttribute('alt')).toBe('')
+  })
+
+  it('falls back to the inline player with no poster to click', () => {
+    // A lightbox trigger with nothing to show is a blank rectangle claiming
+    // to be a film.
+    const { container } = render(<Video src="https://x/a.mp4" lightbox />)
+    expect(container.querySelector('button')).toBeNull()
+    expect(container.querySelector('video')).toBeTruthy()
+  })
+
+  it('is off by default, so no published document changes', () => {
+    const { container } = render(
+      <Video src="https://x/a.mp4" poster="media:h/p" />,
+    )
+    expect(container.querySelector('button')).toBeNull()
+    expect(container.querySelector('video')).toBeTruthy()
+  })
+
+  it('mounts no dialog until the trigger has been approached', () => {
+    // The lazy chunk is what holds `@mui/material/Dialog`, and the whole
+    // point of the split is that a page which is merely LOOKED at never
+    // requests it.
+    const { container, baseElement } = render(
+      <Video src="https://x/a.mp4" poster="media:h/p" lightbox />,
+    )
+    expect(container.querySelector('button')).toBeTruthy()
+    expect(baseElement.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('server-renders the trigger without reaching for the dialog', () => {
+    // `lazy()` throws on the server if it is ever rendered there. Nothing
+    // arms it during SSR, and this is what says so.
+    expect(() =>
+      renderToString(
+        <Video src="https://x/a.mp4" poster="media:h/p" lightbox title="T" />,
+      ),
+    ).not.toThrow()
+  })
+})
+
 describe('isoDuration', () => {
   it('writes seconds, minutes and hours the way schema.org reads them', () => {
     expect(isoDuration(63)).toBe('PT1M3S')

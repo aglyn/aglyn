@@ -16,12 +16,41 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiVideo } from '@aglyn/shared-data-mdi'
+import { mdiPlay, mdiVideo } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import type { SxProps } from '@mui/material/styles'
-import { forwardRef, type ReactNode } from 'react'
+import {
+  Suspense,
+  forwardRef,
+  lazy,
+  useCallback,
+  useState,
+  type ReactNode,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+
+/**
+ * The lightbox, behind a lazy boundary rather than a plain import (AGL-2744).
+ *
+ * `video-lightbox.tsx` is the only module in the tenant's component graph that
+ * names `@mui/material/Dialog`, and `plugin.ts` imports every element in this
+ * bundle eagerly — so naming it here would put the whole MUI Dialog stack on
+ * every published page of every customer site, which is precisely what
+ * AGL-1290 took OFF those pages by withholding `dialog-confirm` and
+ * `navigation-drawer` from the shared JSX barrel.
+ *
+ * Behind `lazy()` it is a chunk nothing on a first paint requests: not on a
+ * page without a video, not on a page with one, only for a visitor who has
+ * asked to watch. Same shape as `product-detail.tsx`'s Payment Element, for
+ * the same reason.
+ */
+const VideoLightbox = lazy(() =>
+  import('./video-lightbox').then((module) => ({
+    default: module.VideoLightbox,
+  })),
+)
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'video'
@@ -66,7 +95,23 @@ export function isoDuration(seconds: unknown): string | undefined {
 }
 
 /**
- * The poster url to render, at the variant width rather than at full size.
+ * One poster url at the variant width, from an already-resolved one.
+ *
+ * A hotlinked poster passes through untouched: it has no variants and no
+ * handler behind it, so appending `?w=` would be a query string on somebody
+ * else's server.
+ */
+export function posterAtVariantWidth(
+  resolved: string | undefined,
+): string | undefined {
+  if (!resolved) return undefined
+  return Aglyn.isMediaCdnUrl(resolved)
+    ? `${resolved}?w=${POSTER_REQUEST_WIDTH}`
+    : resolved
+}
+
+/**
+ * The poster url to render, resolved and at the variant width.
  *
  * Shared with the structured-data builder for the same reason `isoDuration`
  * is: `thumbnailUrl` and the `poster` attribute must name the same bytes, and
@@ -76,14 +121,11 @@ export function posterSrc(
   stored: unknown,
   options?: { hostId?: string | null },
 ): string | undefined {
-  const resolved = Aglyn.resolveMediaSrc(
-    typeof stored === 'string' ? stored : undefined,
-    { hostId: options?.hostId },
+  return posterAtVariantWidth(
+    Aglyn.resolveMediaSrc(typeof stored === 'string' ? stored : undefined, {
+      hostId: options?.hostId,
+    }),
   )
-  if (!resolved) return undefined
-  return Aglyn.isMediaCdnUrl(resolved)
-    ? `${resolved}?w=${POSTER_REQUEST_WIDTH}`
-    : resolved
 }
 
 /** How much of a video the browser may fetch before anyone asks for it. */
@@ -158,6 +200,16 @@ export interface VideoProps {
    * author otherwise, and omitted from the schema when neither happened.
    */
   durationSeconds?: number
+  /**
+   * Show the poster as a play button and open the film in a dialog
+   * (AGL-2744).
+   *
+   * Default OFF, so every document published before this keeps rendering the
+   * inline player it was authored against. Requires a poster — there is
+   * nothing to click without one — and falls back to inline playback when
+   * there is none, rather than rendering a button with no face.
+   */
+  lightbox?: boolean
   /** Captions file — a WebVTT (`.vtt`) URL or media reference. */
   captionsSrc?: string
   /** What the captions track is called in the player's menu. */
@@ -242,6 +294,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     description: _description,
     uploadDate: _uploadDate,
     durationSeconds: _durationSeconds,
+    lightbox,
     captionsSrc,
     captionsLabel,
     captionsLang,
@@ -275,8 +328,39 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   // understand the same value.
   const { hostId } = Aglyn.useSite()
   const src = Aglyn.resolveMediaSrc(storedSrc, { hostId })
-  const poster = posterSrc(storedPoster, { hostId })
+  const posterBase = Aglyn.resolveMediaSrc(storedPoster, { hostId })
+  const poster = posterAtVariantWidth(posterBase)
   const captions = Aglyn.resolveMediaSrc(captionsSrc, { hostId })
+  /**
+   * The lightbox's two pieces of state, and they are deliberately two.
+   *
+   * `open` is what the dialog reads. `armed` is whether the chunk has been
+   * ASKED for, which happens on the first hover or focus rather than on the
+   * click — so by the time a visitor's pointer has travelled from the poster
+   * to the play badge, the module is usually already there and the dialog
+   * opens on the same frame as the click. A visitor who never goes near the
+   * poster never arms it and never fetches it, which is the whole bargain.
+   *
+   * `armed` never goes back to false. Re-mounting `lazy()` after a close
+   * would not re-download anything (the module is resolved), and leaving it
+   * mounted is what lets a second open be instant.
+   */
+  const [open, setOpen] = useState(false)
+  const [armed, setArmed] = useState(false)
+  const arm = useCallback(() => setArmed(true), [])
+  const closeLightbox = useCallback(() => setOpen(false), [])
+  const openLightbox = useCallback(() => {
+    setArmed(true)
+    setOpen(true)
+  }, [])
+  /**
+   * The besigner canvas is inert (AGL-830): opening a focus-trapping dialog
+   * inside the editor would steal the author's keyboard mid-edit, and the
+   * click on a poster there means "select this node", not "watch this".
+   * The trigger still RENDERS as a button, because what an author sees on the
+   * canvas has to be what a visitor gets.
+   */
+  const { editorInert } = Aglyn.useScreenLink(undefined)
   if (!src) {
     return (
       <Box
@@ -318,6 +402,173 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     !height && usable(intrinsicWidth) && usable(intrinsicHeight)
       ? `${intrinsicWidth} / ${intrinsicHeight}`
       : undefined
+  const track = captions ? (
+    // `default` so the track is selected without the visitor hunting for it
+    // in the player's menu. A captions file an author took the trouble to
+    // attach is one they meant people to see, and the browser still offers
+    // the switch that turns it off.
+    <track
+      kind="captions"
+      src={captions}
+      srcLang={captionsLang || undefined}
+      label={captionsLabel || undefined}
+      default
+    />
+  ) : null
+  /**
+   * Poster-first, dialog on click (AGL-2744).
+   *
+   * Requires a poster, and falls back to the inline player without one rather
+   * than rendering a button with no face. That is not a limitation to work
+   * around — a lightbox trigger with nothing to show is a blank rectangle
+   * that claims to be a film.
+   */
+  if (lightbox && poster) {
+    return (
+      <Box
+        ref={ref}
+        {...rest}
+        sx={[
+          {
+            display: 'block',
+            position: 'relative',
+            width: width || '100%',
+            height: height || 'auto',
+          },
+          ...nodeSx,
+        ]}
+      >
+        <Box
+          component="button"
+          type="button"
+          // Inert on the canvas: a focus-trapping dialog opened inside the
+          // editor would take the author's keyboard away mid-edit, and the
+          // click there means "select this node". Same shape as the Drawer's
+          // `editorInert ? undefined : handler`.
+          onClick={editorInert ? undefined : openLightbox}
+          // Arming on hover and on focus, not on click, is what makes the
+          // dialog open on the same frame as the press — and it costs a
+          // visitor who never approaches the poster nothing at all.
+          onPointerEnter={editorInert ? undefined : arm}
+          onFocus={editorInert ? undefined : arm}
+          // The button IS the play control, so it says so. Without a title it
+          // still announces its purpose rather than reading as an image.
+          aria-label={title ? `Play video: ${title}` : 'Play video'}
+          sx={{
+            // A button reset: the poster is the control, so none of the
+            // browser's own chrome should show through it.
+            appearance: 'none',
+            border: 0,
+            p: 0,
+            m: 0,
+            display: 'block',
+            width: '100%',
+            font: 'inherit',
+            color: 'inherit',
+            background: 'none',
+            cursor: editorInert ? 'default' : 'pointer',
+            position: 'relative',
+            overflow: 'hidden',
+            borderRadius: radius != null ? `${radius}px` : undefined,
+            // The focus ring is the theme's, not a literal: a keyboard
+            // visitor has to be able to see where they are on a poster of
+            // unknown brightness.
+            '&:focus-visible': {
+              outline: '2px solid',
+              outlineColor: 'primary.dark',
+              outlineOffset: 2,
+            },
+          }}
+        >
+          <Box
+            component="img"
+            src={posterBase}
+            // The poster is an `<img>` here rather than a `<video poster>`,
+            // which is the one advantage this mode has over the inline one:
+            // an `<img>` takes the DAM's whole candidate list, so a phone
+            // downloads `?w=320` where the inline player has to be handed a
+            // single width for every viewport.
+            srcSet={
+              Aglyn.isMediaCdnUrl(posterBase)
+                ? Aglyn.MEDIA_CDN_VARIANT_WIDTHS.map(
+                    (variant) => `${posterBase}?w=${variant} ${variant}w`,
+                  ).join(', ')
+                : undefined
+            }
+            sizes={Aglyn.isMediaCdnUrl(posterBase) ? '100vw' : undefined}
+            // Empty by design. The button's `aria-label` already names the
+            // film and its purpose; alt text here would make a screen reader
+            // read the same thing twice, once as a control and once as a
+            // picture.
+            alt=""
+            // No `loading` hint, deliberately — see `deferred-images.spec`,
+            // where this element is exempt. A poster is the entire visual of
+            // a media element an author placed on purpose, and a browser
+            // fetches `<video poster>` eagerly too, so deferring it would be
+            // a regression against what this element rendered yesterday
+            // rather than a saving.
+            decoding="async"
+            sx={{
+              display: 'block',
+              width: '100%',
+              height: height || 'auto',
+              objectFit: 'cover',
+              aspectRatio,
+            }}
+          />
+          <Box
+            aria-hidden
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              color: 'common.white',
+              bgcolor: 'rgba(0, 0, 0, 0.55)',
+              boxShadow: 6,
+              // Gated in CSS rather than behind a JS branch, so toggling the
+              // OS setting after load resolves in BOTH directions — the same
+              // reason `element-animation-assets` puts every rule it has
+              // inside this query.
+              '@media (prefers-reduced-motion: no-preference)': {
+                transition: 'transform 150ms, background-color 150ms',
+                'button:hover &, button:focus-visible &': {
+                  transform: 'translate(-50%, -50%) scale(1.08)',
+                  bgcolor: 'rgba(0, 0, 0, 0.75)',
+                },
+              },
+            }}
+          >
+            <MdiIcon path={mdiPlay.path} sx={{ fontSize: 36, ml: '4px' }} />
+          </Box>
+        </Box>
+        {armed ? (
+          // `fallback={null}`: the poster is still on screen underneath, so
+          // there is nothing to cover and a spinner would only flash. The
+          // chunk is usually resolved before the click anyway.
+          <Suspense fallback={null}>
+            <VideoLightbox
+              open={open}
+              onClose={closeLightbox}
+              title={title}
+              src={src}
+              poster={poster}
+              aspectRatio={aspectRatio}
+              loop={loop}
+              muted={muted}
+              captions={track}
+            />
+          </Suspense>
+        ) : null}
+      </Box>
+    )
+  }
   return (
     <Box
       ref={ref}
@@ -344,19 +595,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
         ...nodeSx,
       ]}
     >
-      {captions ? (
-        // `default` so the track is selected without the visitor hunting for
-        // it in the player's menu. A captions file an author took the trouble
-        // to attach is one they meant people to see, and the browser still
-        // offers the switch that turns it off.
-        <track
-          kind="captions"
-          src={captions}
-          srcLang={captionsLang || undefined}
-          label={captionsLabel || undefined}
-          default
-        />
-      ) : null}
+      {track}
     </Box>
   )
 })
@@ -435,6 +674,15 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Duration (seconds)',
       type: 'number',
+    },
+    {
+      name: 'lightbox',
+      description:
+        'Show the poster as a play button and open the film full size in a ' +
+        'dialog. Needs a poster image; without one the player stays in the ' +
+        'page.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Open in a lightbox',
     },
     {
       name: 'preload',
