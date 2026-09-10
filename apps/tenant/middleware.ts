@@ -24,6 +24,14 @@ import {
   COLOR_SCHEME_HINT_HEADER,
   parseColorSchemeHint,
 } from '@aglyn/shared-ui-theme/util/color-scheme-hint'
+// Deep import for the same reason (AGL-2716): `wantsMarkdown` is one pure
+// function, and reaching it through `@aglyn/aglyn/server` would pin that whole
+// barrel — every app-util, every foundation type — into the edge bundle.
+import {
+  isPageUnacceptable,
+  notAcceptableBody,
+  wantsMarkdown,
+} from '@aglyn/aglyn/app-utils/accept-negotiation'
 import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import {
   parseThemeModeCookie,
@@ -149,6 +157,21 @@ export const config = {
     // listed for the same reason the feed is: a per-host SEO file whose route
     // is a rewrite should be findable in the matcher, not only in the handler.
     '/sitemaps/:section/:page.xml',
+    // Agent-facing discovery files (AGL-2716), rewritten like the three SEO
+    // files above and needed here for the same reason: both are shaped
+    // `name.ext`, which the catch-all's own exclusion refuses.
+    '/llms.txt',
+    '/openapi.json',
+    // The `.md` spelling of a page (llmstxt.org), e.g. `/pricing.md`. A NESTED
+    // path such as `/blog/post.md` already reaches the catch-all — its
+    // `name.ext` exclusion only looks at the first segment — but a top-level
+    // one does not, so it needs an entry of its own.
+    //
+    // The three reserved prefixes are excluded here exactly as they are in the
+    // catch-all: `/api/…`, Next's own output and the public directory must
+    // never be reinterpreted as a page just because a file under them ends
+    // `.md`.
+    '/((?!(?:api|_next|_static)(?![\\w-])).+\\.md)',
   ],
 }
 
@@ -721,6 +744,11 @@ export const middleware: NextMiddleware = async (req, event) => {
     '/sitemap.xml': '/api/sitemap',
     '/robots.txt': '/api/robots',
     '/manifest.webmanifest': '/api/manifest',
+    // Agent discovery (AGL-2716). Same shape and same reason as the three
+    // above: a per-host file whose contents are a function of the host record,
+    // so it cannot be a static file in `public/`.
+    '/llms.txt': '/api/llms',
+    '/openapi.json': '/api/openapi',
   }
   // A collection's feed at `/{collection}/rss.xml` (AGL-1385). The feed route
   // has existed since AGL-81 and was reachable only as
@@ -754,11 +782,152 @@ export const middleware: NextMiddleware = async (req, event) => {
     if (childSitemap) {
       seoUrl.searchParams.set('sitemapPath', req.nextUrl.pathname)
     }
-    // The query can be dropped across dev rewrites, so the resolved tenant
-    // host also travels as a request header the api routes prefer.
+    // The query can be dropped across rewrites, so the resolved tenant host
+    // also travels as a request header the api routes prefer.
     const seoHeaders = new Headers(req.headers)
     seoHeaders.set('x-aglyn-tenant-host', tenantHost)
+    /*
+      The COLLECTION travels the same way (AGL-2716), and until now it did not.
+
+      `host` was given a header for exactly this reason and its neighbour was
+      left on the query alone, so `/{collection}/rss.xml` resolved the site and
+      then answered `400 Missing host or collection` — MEASURED against the dev
+      server, where the rewrite target's query does not reach the handler. It is
+      the same trap AGL-1501 documents for `/api/locked` and that the Markdown
+      route below carries its path around.
+    */
+    if (rssMatch) seoHeaders.set('x-aglyn-collection', rssMatch[1])
+    if (childSitemap) {
+      seoHeaders.set('x-aglyn-sitemap-path', req.nextUrl.pathname)
+    }
     return NextResponse.rewrite(seoUrl, { request: { headers: seoHeaders } })
+  }
+
+  /*
+   * MARKDOWN CONTENT NEGOTIATION (AGL-2716, acceptmarkdown.com).
+   *
+   * Two spellings reach the same handler, and both have to be decided HERE
+   * rather than in the page:
+   *
+   *  - `Accept: text/markdown`, parsed properly — q-values, specificity and
+   *    `q=0` — by `wantsMarkdown`. A substring test on this header serves raw
+   *    Markdown to Chrome, whose document `Accept` ends in the full wildcard.
+   *  - a `.md` suffix on the path, which is the llmstxt.org convention and the
+   *    only spelling available to an agent whose fetch tool sets no headers.
+   *
+   * WHY MIDDLEWARE. A `page.tsx` can only return a React tree, so the
+   * catch-all has no way to answer one request with HTML and the next with
+   * `text/markdown`. A rewrite to a route handler does — and it also keeps the
+   * ISR cache honest, because the two representations become two paths and
+   * therefore two cache keys, rather than one key that can serve neither
+   * honestly. That is the same trade the scheme segment below makes.
+   *
+   * Placed AFTER the lockdown check and the SEO rewrites, deliberately: a
+   * locked site must not answer a Markdown request with its content, and
+   * `/robots.txt` is a text file that has no Markdown variant to negotiate.
+   */
+  /*
+   * 406 NOT ACCEPTABLE — the fourth of acceptmarkdown.com's four checks, and
+   * the one that is easy to get dangerously wrong.
+   *
+   * This fires ONLY when the request accepts NEITHER representation the site
+   * can produce: every entry in `Accept` is either unmatched or explicitly
+   * refused with `q=0`. `Accept: application/pdf` is the case. A missing
+   * header, the full wildcard, `text/html`, `text/markdown` and every real
+   * browser header all fall through — the guide's own warning is that
+   * implementations 406 far too eagerly, and a 406 on an ordinary page request
+   * is an outage for whoever sent it.
+   *
+   * The body lists what IS available, as RFC 9110 §15.5.7 recommends, because
+   * the client here is an agent: one that is told the alternatives can retry
+   * correctly on its next call instead of writing the URL off.
+   *
+   * `no-store`, because the correct answer to this URL depends entirely on a
+   * request header — caching the refusal would hand it to the next client that
+   * asked properly.
+   */
+  const accept = req.headers.get('accept')
+  if (isPageUnacceptable(accept)) {
+    return new Response(notAcceptableBody(accept), {
+      status: 406,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        Vary: 'Accept',
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
+
+  const markdownSuffix = /\.md$/i.test(req.nextUrl.pathname)
+  /*
+    `/search` is EXCLUDED, and not because it is hard.
+
+    The results page computes its results in the BROWSER — the server render is
+    the empty shell, and `search-results.component.tsx` says so. A Markdown
+    variant of it would therefore be a heading and no results: a document that
+    answers the question wrongly rather than not at all. Serving HTML here is
+    the honest answer, and `/openapi.json` describes the search operation as
+    HTML-only for the same reason, so nothing advertises a variant that does
+    not exist.
+  */
+  const negotiable = !req.nextUrl.pathname.startsWith('/search')
+  if (negotiable && (markdownSuffix || wantsMarkdown(req.headers.get('accept')))) {
+    const markdownUrl = req.nextUrl.clone()
+    markdownUrl.pathname = '/api/markdown'
+    markdownUrl.search = ''
+    markdownUrl.searchParams.set('host', tenantHost)
+    markdownUrl.searchParams.set(
+      'path',
+      // The `.md` is the REQUEST's spelling of "give me markdown", not part of
+      // the page's address — `/pricing.md` and `/pricing` are one page.
+      markdownSuffix
+        ? // `/index.md` — and ONLY that exact path — is the home page's `.md`
+          // spelling: the root has no filename to hang a suffix on, so it
+          // takes the directory-index convention and maps back to `/`.
+          //
+          // Scoped to the whole path rather than to any trailing `/index.md`,
+          // so `/blog/index.md` still addresses a page called `index` under
+          // `/blog` if one exists. The one collision this DOES create is a
+          // top-level screen published at `/index`, whose Markdown form is
+          // shadowed by the home page's. `index` is not a reserved slug, so
+          // that is a real if unlikely case; the home page is the one every
+          // agent tries first, and it is the one worth spelling.
+          /^\/index\.md$/i.test(req.nextUrl.pathname)
+          ? '/'
+          : req.nextUrl.pathname.replace(/\.md$/i, '')
+        : req.nextUrl.pathname,
+    )
+    if (markdownSuffix) markdownUrl.searchParams.set('md', '1')
+    // The query the page itself was given (a search `?q=`, a paginated list)
+    // travels too: the Markdown of `/search?q=widgets` is the results for
+    // widgets, not an empty results page.
+    for (const [key, value] of req.nextUrl.searchParams) {
+      if (key !== 'host' && key !== 'path' && key !== 'md') {
+        markdownUrl.searchParams.set(key, value)
+      }
+    }
+    /*
+      ⚠️ THE PATH TRAVELS AS A HEADER, and it has to.
+
+      A route handler behind a rewrite sees the ORIGINAL REQUEST URL — the same
+      trap `/api/sitemap` documents at AGL-1501 — so the `path` set on the
+      rewrite target above never reaches the handler. MEASURED before this
+      line existed: `GET /home` with `Accept: text/markdown` reached the
+      handler, which read no `path`, resolved the empty slug, and answered a
+      Markdown 404 for a page that serves 200 as HTML. The query is still set
+      as well, for the direct `/api/markdown?host=&path=` call, which has no
+      rewrite in front of it and therefore no header.
+    */
+    const markdownHeaders = new Headers(req.headers)
+    markdownHeaders.set('x-aglyn-tenant-host', tenantHost)
+    markdownHeaders.set(
+      'x-aglyn-markdown-path',
+      markdownUrl.searchParams.get('path') ?? '/',
+    )
+    if (markdownSuffix) markdownHeaders.set('x-aglyn-markdown-suffix', '1')
+    return NextResponse.rewrite(markdownUrl, {
+      request: { headers: markdownHeaders },
+    })
   }
 
   /**
@@ -1070,10 +1239,19 @@ export const middleware: NextMiddleware = async (req, event) => {
    * only make sense together, and dropping either one re-opens the outage from
    * the other end.
    *
-   * Appended rather than set: Next appends its own `RSC`,
-   * `Next-Router-State-Tree` and friends to this same header for app-router
-   * responses, and `Vary` is a list — overwriting it would cost the router's
-   * own cache correctness to buy the scheme's.
+   * Appended rather than set: `Vary` is a list, and overwriting it would cost
+   * the router's own cache correctness to buy the scheme's.
+   *
+   * ⚠️ AND IT NEVER REACHES THE WIRE — measured 2026-09-09 against a dev
+   * server and a production build (AGL-2716). A published page answers
+   * `Vary: rsc, next-router-state-tree, next-router-prefetch,
+   * next-router-segment-prefetch, Accept-Encoding`: Next writes that header on
+   * the page pipeline, and neither this append nor a `headers()` rule in
+   * `next.config.js` survives it. So the CDN cache is NOT split by scheme
+   * today, and has not been. The RENDER path is unaffected — the scheme is a
+   * path segment (AGL-2708), so the origin serves and caches two documents
+   * either way; what is missing is the signal to caches in front of it, which
+   * can hand one scheme's document to a browser in the other.
    *
    * ⚠️ CHROMIUM ONLY. Firefox and Safari implement neither the hint nor this
    * negotiation and simply ignore all three headers, so their visitors keep
@@ -1083,6 +1261,33 @@ export const middleware: NextMiddleware = async (req, event) => {
   response.headers.set('Accept-CH', COLOR_SCHEME_HINT)
   response.headers.set('Critical-CH', COLOR_SCHEME_HINT)
   response.headers.append('Vary', COLOR_SCHEME_HINT)
+  /*
+   * `Vary: Accept` — the other half of markdown negotiation (AGL-2716).
+   *
+   * The rewrite above means the two representations are served by two
+   * different PATHS, so the origin cache is already split by them. This header
+   * is about everybody else's: a shared cache keys on the URL a client asked
+   * for, which is the same URL for both.
+   *
+   * ⚠️ MEASURED, AND IT DOES NOT REACH THE WIRE ON A PAGE. An app-router
+   * document answers `Vary: rsc, next-router-state-tree,
+   * next-router-prefetch, next-router-segment-prefetch, Accept-Encoding` and
+   * nothing else — checked against a dev server AND a production build. Next
+   * writes that header on the page pipeline and neither a middleware append
+   * nor a `headers()` rule in `next.config.js` survives it. The same is true
+   * of `Vary: Sec-CH-Prefers-Color-Scheme` two lines up, which has therefore
+   * never split a CDN cache by scheme either — see the comment above it, whose
+   * "Next appends its own … to this same header" describes what `appendHeader`
+   * does inside Next rather than what happens to a value set out here.
+   *
+   * It is kept because it costs one header write, it is correct by
+   * construction, and it starts working the day that pipeline changes. What
+   * actually carries the contract today is the MARKDOWN RESPONSE, which is a
+   * route handler and sets its own `Vary: Accept` — and that is the response
+   * the negotiation is judged on, since it is the one a client that sent
+   * `Accept: text/markdown` receives.
+   */
+  response.headers.append('Vary', 'Accept')
   // The deliberate, versionless platform fingerprint (AGL-2088), replacing the
   // accidental `x-aglyn-package-version` / `x-aglyn-process-version` pair that
   // shipped from `next.config` on every response of every site regardless of

@@ -61,7 +61,20 @@ export async function GET(request: Request): Promise<Response> {
       url.searchParams.get('host') ??
       '',
   )
-  const collectionSlug = url.searchParams.get('collection') ?? ''
+  /*
+    The HEADER first, then the query (AGL-2716). A route handler behind a
+    rewrite is not guaranteed to see the rewrite target's query — the same
+    reason `host` above prefers `x-aglyn-tenant-host`. Without this the feed
+    answered `400 Missing host or collection` for every linkable
+    `/{collection}/rss.xml`, having resolved the site perfectly well one line
+    up. The query still serves a direct
+    `/api/collections-rss?host=&collection=` call, which has no rewrite in
+    front of it and therefore no header.
+  */
+  const collectionSlug =
+    request.headers.get('x-aglyn-collection') ??
+    url.searchParams.get('collection') ??
+    ''
   if (!host || !collectionSlug) {
     return new Response('Missing host or collection', { status: 400 })
   }

@@ -82,8 +82,20 @@
 import { getApp } from 'firebase-admin/app'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, exactly like the sibling health route.
-import { firebaseAdmin, getPlatformLockdown } from '@aglyn/tenant-data-admin'
-import { isLockdownActive, lockdownBlocks } from '@aglyn/aglyn/server'
+import {
+  firebaseAdmin,
+  getPlatformLockdown,
+  readAppCheckAttestation,
+  readSignupCanaryWalk,
+} from '@aglyn/tenant-data-admin'
+import {
+  isLockdownActive,
+  lockdownBlocks,
+  appCheckAttestationHealth,
+  signupCanaryHealth,
+  type AppCheckAttestationCheck,
+  type SignupCanaryCheck,
+} from '@aglyn/aglyn/server'
 
 import { PUBLISH_OUTBOX_COLLECTION } from '../../../../constants/publish-outbox'
 import {
@@ -126,7 +138,19 @@ export interface JourneysProbeResult {
   create: CreateCheck
   publishRules: PublishRulesCheck
   publishAnnounce: PublishAnnounceCheck
+  /**
+   * Absent until the canary is switched on (AGL-2715). See
+   * `signupCanaryEnabled` for why this is omitted rather than reported green.
+   */
+  signupCanary?: SignupCanaryCheck
+  /**
+   * Absent until something is sampling the metric. Independent of the canary
+   * on purpose: this is what covers the canary's debug-token blindness, so it
+   * must not be able to go dark just because the canary did.
+   */
+  appCheckAttestation?: AppCheckAttestationCheck
 }
+
 
 /**
  * The preflight reads every create path makes, plus the valve that refuses
@@ -268,11 +292,62 @@ export async function probePublishAnnounce(): Promise<PublishAnnounceCheck> {
 }
 
 /** All three, in parallel. Each is independent and each memoises separately. */
+/**
+ * Did a stranger actually sign up? (AGL-2715)
+ *
+ * The only check on this endpoint that reports a DEMONSTRATION rather than a
+ * precondition. `probeCreate` above reads that the platform is unlocked and
+ * the probe's name is free; this reads what happened when something actually
+ * walked the whole path — account, verification, session, org — and deleted
+ * what it made.
+ *
+ * A read of one document. The walk itself is a scheduled job, because this
+ * endpoint is public and unauthenticated and a probe that created an account
+ * would be an org factory for anyone with `curl`.
+ */
+import {
+  appCheckAttestationEnabled,
+  signupCanaryEnabled,
+} from './journeys-verdict'
+export { appCheckAttestationEnabled, signupCanaryEnabled }
+
+export async function probeSignupCanary(): Promise<SignupCanaryCheck> {
+  const startedAt = Date.now()
+  const marker = await readSignupCanaryWalk()
+  return signupCanaryHealth(marker, Date.now() - startedAt)
+}
+
+/**
+ * Is attestation working for real visitors? (AGL-2715)
+ *
+ * A read of one document that a scheduled job fills from Cloud Monitoring.
+ * The rate itself is Google's; this endpoint has no business calling
+ * Monitoring — a second credential, a slow call, and a quota anyone with
+ * `curl` could spend.
+ */
+export async function probeAppCheckAttestation(): Promise<AppCheckAttestationCheck> {
+  const startedAt = Date.now()
+  const samples = await readAppCheckAttestation()
+  return appCheckAttestationHealth(samples, Date.now() - startedAt)
+}
+
+/** All of them, in parallel. Each is independent and each memoises separately. */
 export async function probeJourneys(): Promise<JourneysProbeResult> {
-  const [create, publishRules, publishAnnounce] = await Promise.all([
-    probeCreate(),
-    probePublishRules(),
-    probePublishAnnounce(),
-  ])
-  return { create, publishRules, publishAnnounce }
+  const canaryOn = signupCanaryEnabled()
+  const attestationOn = appCheckAttestationEnabled()
+  const [create, publishRules, publishAnnounce, signupCanary, appCheckAttestation] =
+    await Promise.all([
+      probeCreate(),
+      probePublishRules(),
+      probePublishAnnounce(),
+      canaryOn ? probeSignupCanary() : Promise.resolve(undefined),
+      attestationOn ? probeAppCheckAttestation() : Promise.resolve(undefined),
+    ])
+  return {
+    create,
+    publishRules,
+    publishAnnounce,
+    ...(signupCanary ? { signupCanary } : {}),
+    ...(appCheckAttestation ? { appCheckAttestation } : {}),
+  }
 }

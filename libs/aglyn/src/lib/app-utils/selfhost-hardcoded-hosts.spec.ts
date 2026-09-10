@@ -499,10 +499,16 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'unlisted in 94b6a011c, which left this ratchet red on main.',
   },
   {
-    file: 'tools/scripts/lib/firewall-posture.mjs',
-    count: 1,
+    file: 'libs/cli/src/lib/cli.ts',
+    count: 2,
     reason:
-      "One `serves` label — 'every customer site on *.aglyn.app and their custom domains' — naming which Aglyn-operated Vercel project a posture row is about. Internal ops tool: it asserts the WAF configuration of Aglyn's OWN Vercel projects through the Vercel API, so a self-hoster has nothing for it to check and never runs it. The hostname is report text for a human reading the output, not an input to any behaviour. RATCHETED 5 -> 1 on 2026-08-23 (AGL-2486): the AGL-2483 pass moved the other four into prose that `stripComments` removes. The ratchet compares EXACTLY, so a decrease fails too — deliberately, because an allowance nobody tightens stops describing the file it guards (AGL-2483).",
+      "AGL-2717. Two literals in the published `@aglyn/cli`, and neither is a host a self-hoster's deployment resolves. (1) `'https://app.aglyn.com/api/v1'` is the `??` DEFAULT of `AGLYN_API_URL` and nothing else reads it — the shape this allowlist's own guidance names as belonging here — so an operator points that variable, or `--base`, at their own instance and the literal is never evaluated. (2) `(+https://aglyn.com)` is the contact URL inside this client's own User-Agent, which is correct however the client is pointed: a self-hoster running `@aglyn/cli` is running OUR tool, and the operator of a site it fetches needs somewhere to complain about the tool rather than about the instance. Neither is reachable by a tenant site's runtime; this file ships only in the CLI package.",
+  },
+  {
+    file: 'tools/scripts/lib/firewall-posture.mjs',
+    count: 5,
+    reason:
+      "Five `serves` / `why` labels naming which Aglyn-operated Vercel project a posture row is about: the tenant's '*.aglyn.app and their custom domains', 'docs.aglyn.com', 'app.aglyn.com', 'plugins.aglyn.com' and the plugin loader's 'plugins.aglyn.com/load'. Internal ops tool: it asserts the WAF configuration of Aglyn's OWN Vercel projects through the Vercel API, so a self-hoster has nothing for it to check and never runs it. Every one is report text for a human reading the output, not an input to any behaviour. ⚠️ THE PREVIOUS COUNT OF 1 WAS AN ARTIFACT, not a ratchet (corrected 2026-09-09, AGL-2716). It claimed 'RATCHETED 5 -> 1 … the AGL-2483 pass moved the other four into prose that stripComments removes'. The four were never moved: `stripComments` pairs `/*` with the NEXT `*/` non-greedily, and a comment boundary in that file happened to span these four CODE lines and swallow them. Adding an unrelated block comment re-paired the boundary and all five reappeared at once — the same four, still in code, never having gone anywhere. The ratchet compares EXACTLY, so a decrease fails too; if these ever genuinely go away, lower the count and say what removed them.",
   },
   {
     file: 'tools/scripts/lib/stripe-webhook-health.mjs',

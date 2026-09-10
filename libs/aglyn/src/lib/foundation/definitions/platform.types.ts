@@ -244,6 +244,86 @@ export interface AglynHost extends AglynDocument {
       type?: HostEntityType
       name?: string
       logo?: string
+      /**
+       * What the publisher IS, in a sentence — `Organization.description`
+       * (AGL-2716).
+       *
+       * Distinct from {@link AglynHost.seo.description}, which is the meta
+       * description of the site's home page: one describes a business, the
+       * other describes a document, and a site whose home page is a product
+       * launch should not be telling an AI assistant that the company is a
+       * product launch. Unset falls back to the site description, because a
+       * fallback that is approximately right beats an entity with no
+       * description at all — which is what every site published before this
+       * field existed.
+       */
+      description?: string
+      /**
+       * The publisher's own canonical address, when it is not this site —
+       * a brand site for a company whose main presence is elsewhere. Unset
+       * means this site's origin, which is the common case.
+       */
+      url?: string
+      /**
+       * Profiles that identify the SAME entity — `schema.org/sameAs`. The
+       * company's LinkedIn, its Crunchbase entry, its Wikipedia article. Not
+       * a link list: a page that merely mentions the entity is not the
+       * entity, and listing one teaches a consumer the wrong identity.
+       */
+      sameAs?: string[]
+      /**
+       * How to reach a person — `Organization.contactPoint`.
+       *
+       * Split into fields rather than stored as a `contactPoint` object
+       * because the console collects them as three form controls, and a
+       * nested object in a settings document is a shape a partial write can
+       * blank. Assembled at serialization; see `siteEntityJsonLd`.
+       */
+      email?: string
+      telephone?: string
+      /**
+       * Which kind of enquiry that contact answers — `customer support`,
+       * `sales`, `technical support`. Free text, because `schema.org` defines
+       * the property as text rather than an enumeration.
+       */
+      contactType?: string
+      /**
+       * Postal address — `Organization.address`, a `PostalAddress`.
+       *
+       * Every field optional and every field omitted when blank: a partial
+       * address is still a real answer to "where are they", while a
+       * `PostalAddress` carrying empty strings is a claim that the street is
+       * the empty string.
+       */
+      address?: {
+        streetAddress?: string
+        addressLocality?: string
+        addressRegion?: string
+        postalCode?: string
+        /** ISO 3166-1 alpha-2, or a country name. */
+        addressCountry?: string
+      }
+    }
+    /**
+     * Guidance for AI agents, published in `/llms.txt` (AGL-2716).
+     *
+     * Its own key rather than a field on `entity`, because it is about the
+     * SITE's usefulness rather than about who publishes it — and because the
+     * two are edited by different people at different times.
+     */
+    agent?: {
+      /**
+       * When an agent should reach for this site: the jobs it is the right
+       * source for, in the author's own words.
+       *
+       * Absent is not a gap. `buildLlmsTxt` derives a when-to-use section
+       * from what the site demonstrably publishes, so a site whose author
+       * writes nothing here still ships checkable guidance; this is the place
+       * to say the things that cannot be derived.
+       */
+      whenToUse?: string
+      /** How an agent should call the site — endpoints, etiquette, limits. */
+      howToUse?: string
     }
   }
   /**

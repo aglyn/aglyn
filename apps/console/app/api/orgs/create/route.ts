@@ -15,9 +15,13 @@
  * limitations under the License.
  */
 
-import { PLATFORM_BRANDING_PROFILE, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  PLATFORM_BRANDING_PROFILE,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   generateOrgSlug,
+  isSignupCanaryOrgSlug,
   isValidOrgSlug,
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
@@ -97,7 +101,12 @@ async function handler(request: Request): Promise<Response> {
      * the org is the control, and a monitoring breadcrumb must never be able
      * to delay or fail it.
      */
-    recordSignupAttempt()
+    // ⚠️ Except the canary's own (AGL-2715). It creates a real org and then
+    // deletes it, so its attempt marker would outlive the org it made: +1 to
+    // the drought's denominator, +0 to its numerator, every hour. Three walks
+    // and the platform reports an outage it has just disproved. Measured at
+    // `signupAttempts=6, orgCreations=0` on 2026-09-09.
+    if (!isSignupCanaryOrgSlug(slug)) recordSignupAttempt()
     /*
      * NOBODY CLAIMS A WORKSPACE ADDRESS UNTIL THEY HAVE PROVED THE EMAIL
      * (AGL-2590).

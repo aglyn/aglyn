@@ -252,9 +252,7 @@ function buildMetadata(props: Props): Metadata {
       ...(authorDescription ? { description: authorDescription } : {}),
       // Paged archives stay indexable, like the collection listing's — they
       // are distinct sets of posts, not duplicates of page 1.
-      ...(searchDiscouraged
-        ? { robots: { index: false, follow: true } }
-        : {}),
+      ...(searchDiscouraged ? { robots: { index: false, follow: true } } : {}),
       ...(authorCanonical
         ? { alternates: { canonical: authorCanonical } }
         : {}),
@@ -517,16 +515,42 @@ function buildMetadata(props: Props): Metadata {
     if (canonical) languages[screen?.locale || 'x-default'] = canonical
   }
   const hasLanguages = Object.keys(languages).length > 0
+  /*
+    The Markdown representation, advertised in the head (AGL-2716).
+
+    `<link rel="alternate" type="text/markdown">` is what llmstxt.org names as
+    the way a page points at its own clean-text form, and it is the only route
+    for an agent that reads HTML but sets no `Accept` header — which is most of
+    them. The `.md` spelling rather than the negotiated one, deliberately: a
+    link has no request headers to carry, so the URL has to be the thing that
+    asks.
+
+    Withheld from a noindex page for the same reason its canonical is: a page
+    the site has asked crawlers to skip should not be advertising a second
+    address for the same content.
+  */
+  const markdownAlternate =
+    canonical && !noindex
+      ? // The home page has no filename to hang the suffix on, so it takes the
+        // directory-index spelling — `https://site/` becomes
+        // `https://site/index.md`, which the middleware maps back to the root.
+        canonical.endsWith('/')
+        ? `${canonical}index.md`
+        : `${canonical}.md`
+      : undefined
   const alternates = {
     ...(canonical ? { canonical } : {}),
     ...(hasLanguages ? { languages } : {}),
+    ...(markdownAlternate
+      ? { types: { 'text/markdown': markdownAlternate } }
+      : {}),
   }
 
   return {
     title: fullTitle,
     ...(description ? { description } : {}),
     ...(noindex ? { robots: { index: false, follow: true } } : {}),
-    ...(canonical || hasLanguages ? { alternates } : {}),
+    ...(canonical || hasLanguages || markdownAlternate ? { alternates } : {}),
     openGraph: {
       title: fullTitle,
       ...(description ? { description } : {}),
@@ -578,6 +602,36 @@ function buildJsonLd(props: Props): string[] {
   // and a number is always false; nothing here could ever have said Person.
   const publisher = Aglyn.hostSeoEntityJsonLd(host?.seo?.entity)
 
+  /*
+    THE SITE'S OWN ENTITY, as a top-level node (AGL-2716).
+
+    `publisher` above already names the entity, and it is not enough for the
+    readers this exists for: it is nested two levels inside a `WebSite` or an
+    `Article`, it carries a name and a picture and nothing else, and it is
+    absent entirely on the sites whose author never found the Entity form. An
+    assistant asked "who runs this site and how do I reach them", or an audit
+    checking whether a business is identifiable, looks for a TOP-LEVEL
+    `Organization` with `name`, `description`, `contactPoint` and `address`.
+
+    `siteEntityJsonLd` falls back to the site's own identity, so every site
+    publishes a complete entity rather than only the configured ones, and it
+    shares an `@id` with the nested publisher so a consumer merges the two
+    instead of reading a site that names its publisher twice with different
+    detail.
+
+    Computed HERE, above every branch, and prepended to each of them. This
+    function returns early four times — author page, collection list, content
+    entry, and the general case — and a node pushed in only the last of them
+    would be missing from exactly the pages an agent is most likely to land on.
+    Emitted on every page rather than only the home page for the same reason:
+    an agent fetches one URL and reads what is on it.
+  */
+  const siteEntity = Aglyn.siteEntityJsonLd(host, {
+    origin: canonicalBase,
+    hostId: host?.$id,
+  })
+  const siteEntityLd = siteEntity ? [Aglyn.safeJsonLd(siteEntity)] : []
+
   /**
    * The author page → `ProfilePage` wrapping the `Person` (AGL-2518).
    *
@@ -601,7 +655,7 @@ function buildJsonLd(props: Props): string[] {
       origin: canonicalBase,
       hostId: host?.$id,
     })
-    if (!canonicalBase || !person) return []
+    if (!canonicalBase || !person) return siteEntityLd
     const authorUrl =
       canonicalBase +
       Aglyn.contentAuthorPageAtUrl({
@@ -609,6 +663,7 @@ function buildJsonLd(props: Props): string[] {
         page: author.page,
       })
     return [
+      ...siteEntityLd,
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
         '@type': 'ProfilePage',
@@ -652,7 +707,9 @@ function buildJsonLd(props: Props): string[] {
       const entries: any[] = Array.isArray(content.entries)
         ? content.entries
         : []
-      if (!canonicalBase || !collectionSlug || entries.length === 0) return []
+      if (!canonicalBase || !collectionSlug || entries.length === 0) {
+        return siteEntityLd
+      }
       // The list a filtered URL describes is the FILTERED one (AGL-1321):
       // naming and addressing it as the whole collection would tell a crawler
       // that five different pages are all the same list.
@@ -685,6 +742,7 @@ function buildJsonLd(props: Props): string[] {
           )
         : undefined
       return [
+        ...siteEntityLd,
         ...(listCrumbs
           ? [
               Aglyn.safeJsonLd({
@@ -792,6 +850,7 @@ function buildJsonLd(props: Props): string[] {
         )
       : undefined
     return [
+      ...siteEntityLd,
       ...(entryCrumbs
         ? [
             Aglyn.safeJsonLd({
@@ -879,7 +938,7 @@ function buildJsonLd(props: Props): string[] {
   }
 
   // Screen render → WebSite (+ BreadcrumbList for nested paths).
-  const ld: string[] = []
+  const ld: string[] = [...siteEntityLd]
 
   // Product detail → Product/Offer (AGL-660). Emitted HERE, on the server,
   // from the payload the commerce resolver already resolved (AGL-659). The
@@ -1126,8 +1185,7 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
    * is a hit on `unstable_cache` rather than a second trip.
    */
   const routedHost = result.props.data?.host as
-    | { $id?: string; screens?: Record<string, string> }
-    | undefined
+    { $id?: string; screens?: Record<string, string> } | undefined
   let screenRoutes: Record<string, string> | undefined
   if (routedHost?.$id) {
     const routing = await getTemplateScreenRouting({ hostId: routedHost.$id })

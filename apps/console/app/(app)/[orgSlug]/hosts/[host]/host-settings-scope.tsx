@@ -565,6 +565,199 @@ const seoSchema: FormSchema = {
           picker. The Entity logo card is the editor, and it takes a URL too,
           so nothing an author could do here is gone.
         */
+        {
+          component: FieldComponentType.TEXT_FIELD,
+          name: 'seo.entity.description',
+          label: 'Description',
+          multiline: true,
+          rows: 2,
+          helperText:
+            'What the publisher IS, in a sentence — not what this page is ' +
+            'about. Falls back to the site description above',
+          help: docsHelp('seo', {
+            anchor: '#structured-data',
+            excerpt:
+              'One sentence describing the organization or person behind ' +
+              'the site — published as the entity’s `description` so AI ' +
+              'assistants can say who you are.',
+          }),
+          validate: [
+            {
+              type: FieldValidatorType.MAX_LENGTH,
+              threshold: 300,
+              message: 'Please enter a shorter description',
+            },
+          ],
+        },
+        {
+          component: FieldComponentType.TEXT_FIELD,
+          name: 'seo.entity.url',
+          label: 'Website',
+          type: 'url',
+          helperText:
+            'Only when the publisher’s main address is somewhere else — ' +
+            'leave blank and this site’s own address is used',
+          help: docsHelp('seo', {
+            anchor: '#structured-data',
+            excerpt:
+              'The publisher’s canonical address, for a brand site whose ' +
+              'company lives at a different domain.',
+          }),
+        },
+        {
+          /*
+            CONTACT AND ADDRESS (AGL-2716). These are what turn "a name" into
+            "a business a reader can verify" — an assistant asked how to reach
+            you answers from `contactPoint`, and `address` is what a local
+            search result is built from. Both were unauthorable until now, so
+            every site published an Organization with neither.
+
+            Flat fields rather than one nested `contactPoint` object, matching
+            how the document stores them: a nested object in a settings
+            document is a shape a partial write can blank, and the serializer
+            assembles the object anyway.
+          */
+          component: FieldComponentType.TEXT_FIELD,
+          name: 'seo.entity.email',
+          label: 'Contact email',
+          type: 'email',
+          helperText:
+            'Published in your structured data and in /llms.txt, so an AI ' +
+            'assistant can tell someone how to reach you',
+          help: docsHelp('seo', {
+            anchor: '#structured-data',
+            excerpt:
+              'A published contact address for the organization. Appears in ' +
+              'the site’s `contactPoint` structured data.',
+          }),
+          FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+        },
+        {
+          component: FieldComponentType.TEXT_FIELD,
+          name: 'seo.entity.telephone',
+          label: 'Contact phone',
+          type: 'tel',
+          helperText: 'In international form, e.g. +1-512-555-0100',
+          FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+        },
+        {
+          component: FieldComponentType.TEXT_FIELD,
+          name: 'seo.entity.contactType',
+          label: 'Contact is for',
+          helperText:
+            'What that contact answers — e.g. customer support, sales, ' +
+            'press. Defaults to customer support',
+          FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+        },
+        {
+          component: FieldComponentType.SUB_FORM,
+          name: 'seo.entity.address',
+          title: 'Address',
+          className: false,
+          help: docsHelp('seo', {
+            anchor: '#structured-data',
+            excerpt:
+              'Your postal address, published as `PostalAddress` structured ' +
+              'data. Partial is fine — every field is optional.',
+          }),
+          fields: [
+            {
+              component: FieldComponentType.TEXT_FIELD,
+              name: 'seo.entity.address.streetAddress',
+              label: 'Street',
+              FormFieldGridProps: { size: { xs: 12 } },
+            },
+            {
+              component: FieldComponentType.TEXT_FIELD,
+              name: 'seo.entity.address.addressLocality',
+              label: 'City',
+              FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+            },
+            {
+              component: FieldComponentType.TEXT_FIELD,
+              name: 'seo.entity.address.addressRegion',
+              label: 'State or region',
+              FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+            },
+            {
+              component: FieldComponentType.TEXT_FIELD,
+              name: 'seo.entity.address.postalCode',
+              label: 'Postal code',
+              FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+            },
+            {
+              component: FieldComponentType.TEXT_FIELD,
+              name: 'seo.entity.address.addressCountry',
+              label: 'Country',
+              helperText: 'A country name, or its two-letter code',
+              FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      /*
+        AGENT GUIDANCE (AGL-2716) — what `/llms.txt` publishes above its
+        derived link lists.
+
+        Its own sub-form rather than a field on Entity, because it is about the
+        SITE's usefulness rather than about who publishes it, and because the
+        two are written by different people at different times.
+
+        Both fields are OPTIONAL and the file is useful without them:
+        `buildLlmsTxt` derives a when-to-use section from what the site
+        demonstrably publishes — its collections, their entry counts, its
+        search and its OpenAPI document — so a site whose author writes nothing
+        here still ships checkable guidance. These are for the things that
+        cannot be derived.
+      */
+      component: FieldComponentType.SUB_FORM,
+      name: 'seo.agent',
+      title: 'AI agents',
+      className: false,
+      help: docsHelp('seo', {
+        anchor: '#structured-data',
+        excerpt:
+          'What AI agents are told about your site in /llms.txt — when to ' +
+          'reach for you, and how to call you.',
+      }),
+      fields: [
+        {
+          component: FieldComponentType.TEXT_FIELD,
+          name: 'seo.agent.whenToUse',
+          label: 'When to use this site',
+          multiline: true,
+          rows: 3,
+          helperText:
+            'The questions this site is the best source for. Be specific — ' +
+            'marketing copy does not read as guidance, and an agent ' +
+            'discounts a claim it cannot check',
+          validate: [
+            {
+              type: FieldValidatorType.MAX_LENGTH,
+              threshold: 1000,
+              message: 'Please write something shorter',
+            },
+          ],
+        },
+        {
+          component: FieldComponentType.TEXT_FIELD,
+          name: 'seo.agent.howToUse',
+          label: 'How an agent should call you',
+          multiline: true,
+          rows: 3,
+          helperText:
+            'Anything an agent should know before it fetches — which pages ' +
+            'answer what, how often you update, what not to rely on',
+          validate: [
+            {
+              type: FieldValidatorType.MAX_LENGTH,
+              threshold: 1000,
+              message: 'Please write something shorter',
+            },
+          ],
+        },
       ],
     },
   ],

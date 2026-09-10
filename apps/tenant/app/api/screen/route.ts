@@ -33,14 +33,28 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams
-  const host = params.get('host')
+  /*
+    `?host=` first, then the domain the request was ADDRESSED to (AGL-2716) —
+    the same fallback `/api/host` takes, and for the same reason: an agent
+    already talking to `acme.com` should not have to name it again, and a
+    parameter it has to guess is a parameter it gets wrong.
+  */
+  const host =
+    params.get('host') ||
+    request.headers.get('x-aglyn-tenant-host') ||
+    request.headers.get('host')
   const nextPageToken = params.get('nextPageToken') ?? undefined
+  const limit = params.get('limit') ?? undefined
   if (!host) return appHandleJsonError(new Error('Bad request'))
 
   let data = null
   let error = null
   try {
-    data = await getAllScreens(host, nextPageToken)
+    data = await getAllScreens(
+      host,
+      nextPageToken,
+      limit == null ? undefined : Number(limit),
+    )
     if (data?.error) error = data?.error
   } catch (err) {
     console.error(err)

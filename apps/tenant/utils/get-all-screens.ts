@@ -117,9 +117,44 @@ function toPublicScreen(id: string, doc: Record<string, unknown>): PublicScreen 
   }
 }
 
+/** Pages per response when the caller names no `limit`. */
+export const SCREEN_PAGE_SIZE_DEFAULT = 50
+
+/** The most a caller may ask for in one response. */
+export const SCREEN_PAGE_SIZE_MAX = 100
+
+/**
+ * Published pages for a site, one page of them at a time.
+ *
+ * ## The cursor is real now (AGL-2716)
+ *
+ * `nextPageToken` was accepted by the route, threaded into this function, and
+ * READ BY NOTHING: the query was a bare `.limit(5)` and the returned token was
+ * always `''`. So the endpoint published the first five pages of a site and
+ * offered no way to reach the sixth — which made it undescribable in
+ * `/openapi.json`, because the honest description was "returns some of your
+ * pages, and there is no way to ask for the rest".
+ *
+ * ⚠️ `orderBy` IS LOAD-BEARING, not tidiness. `limit()` without an explicit
+ * order returns an arbitrary slice, and a cursor into an arbitrary order is a
+ * cursor into a different set on every call — pages would repeat and pages
+ * would be missed. `__name__` is the document id: total, stable, and served by
+ * Firestore's automatic single-field index alongside the `status` equality, so
+ * this needs no composite index to be deployed with it.
+ *
+ * ## The cursor is the last document READ, not the last one RETURNED
+ *
+ * `isScreenIndexable` filters in memory, after the query, because visibility
+ * cannot be expressed as a filter beside the status equality without a second
+ * index and a second refusal to keep in step. So a page of 50 documents can
+ * return fewer than 50 screens — and if the cursor were built from the last
+ * RETURNED screen, every gated page at the end of a slice would be re-read on
+ * the next request, or worse, everything after it skipped.
+ */
 export async function getAllScreens(
   host: Aglyn.HostUid,
   nextPageToken?: string,
+  pageSize?: number,
 ) {
   const data: {
     screens: PublicScreen[]
@@ -128,13 +163,30 @@ export async function getAllScreens(
   } = { screens: [], nextPageToken: '', error: null }
   const firestore = firebaseAdmin.app().firestore()
 
-  await firestore
+  const limit = Math.min(
+    Math.max(1, Math.trunc(Number(pageSize)) || SCREEN_PAGE_SIZE_DEFAULT),
+    SCREEN_PAGE_SIZE_MAX,
+  )
+
+  let query = firestore
     .collection('hosts')
     .doc(host)
     .collection('screens')
     .where('status', '==', Aglyn.HostScreenStatus.PUBLISHED)
+    .orderBy('__name__')
     .select(...PUBLIC_SCREEN_PROJECTION)
-    .limit(5)
+    .limit(limit)
+
+  /*
+    The token IS the last document id. A document id is already public — it is
+    the `$id` of every screen in the response — so there is nothing to sign or
+    obscure, and an opaque encoding would only mean a caller cannot tell a
+    truncated token from an exhausted listing.
+  */
+  const cursor = String(nextPageToken ?? '').trim()
+  if (cursor) query = query.startAfter(cursor)
+
+  await query
     .get()
     .then((screens) => {
       screens.forEach((screen) => {
@@ -146,6 +198,16 @@ export async function getAllScreens(
         }
         data.screens.push(toPublicScreen(screen.id, doc))
       })
+      /*
+        A SHORT page is the end of the listing, and that is the only signal
+        there is: asking for one more document to find out would bill a read
+        per page for a fact the page count already implies. A full page whose
+        successor turns out to be empty costs the caller one extra request that
+        answers with no screens and an empty token — which is a correct answer,
+        just not the shortest possible conversation.
+      */
+      const last = screens.docs[screens.docs.length - 1]
+      data.nextPageToken = screens.size === limit && last ? last.id : ''
     })
     .catch((error) => {
       console.error(error)

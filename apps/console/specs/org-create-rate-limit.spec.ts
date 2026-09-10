@@ -129,6 +129,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  // AGL-2715: the canary exclusion. A wholesale mock that omits a new
+  // barrel export makes the route throw, not the assertion fail.
+  isSignupCanaryOrgSlug: (slug: string) =>
+    typeof slug === 'string' && slug.startsWith('signup-canary-'),
   __esModule: true,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,

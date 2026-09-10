@@ -18,11 +18,17 @@
 /**
  * Can a customer create and publish? (AGL-2586)
  *
- * Three checks — `create`, `publishRules`, `publishAnnounce` — over the four
- * journeys a paying customer buys: create an org, create a site, create a
- * screen, publish it and see it live. What each one asserts, why nothing is
- * written, and what is deliberately left to the tenant render canaries, is
- * in `journeys-probe.ts`.
+ * Four checks — `create`, `publishRules`, `publishAnnounce`, `signupCanary` —
+ * over the journeys a paying customer buys: sign up, create an org, create a
+ * site, create a screen, publish it and see it live. What each one asserts,
+ * why nothing is written HERE, and what is deliberately left to the tenant
+ * render canaries, is in `journeys-probe.ts`.
+ *
+ * `signupCanary` is the odd one and the important one (AGL-2715): the other
+ * three read preconditions, and it reads the recorded outcome of something
+ * that actually walked the signup end to end on production and deleted what
+ * it made. It is the only check on this platform that reports a
+ * demonstration rather than an inference.
  *
  * ONE endpoint for the three rather than three, because they share a subject
  * and a first responder: the body's `checks` says which half is out, and
@@ -66,8 +72,18 @@ const journeysProbe = memoizeWithTtl<JourneysProbeResult>(PROBE_TTL_MS, () =>
 )
 
 export async function GET(): Promise<Response> {
-  const { create, publishRules, publishAnnounce } = await journeysProbe()
-  const checks = { create, publishRules, publishAnnounce }
+  const { create, publishRules, publishAnnounce, signupCanary, appCheckAttestation } =
+    await journeysProbe()
+  // Spread rather than assigned: an absent canary must leave no key at all,
+  // because `signupCanary: undefined` would serialize into the body as a
+  // check with no verdict.
+  const checks = {
+    create,
+    publishRules,
+    publishAnnounce,
+    ...(signupCanary ? { signupCanary } : {}),
+    ...(appCheckAttestation ? { appCheckAttestation } : {}),
+  }
   const status = healthStatus(checks)
   return Response.json(
     healthBody({

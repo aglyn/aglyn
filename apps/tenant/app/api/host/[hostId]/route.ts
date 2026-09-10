@@ -113,7 +113,24 @@ function toPublicHost(host: AglynHost | null | undefined): PublicHost | null {
  * (AGL-2192). See `toPublicHost` before widening this.
  */
 export async function GET(request: Request): Promise<Response> {
-  const host = new URL(request.url).searchParams.get('host')
+  /*
+    `?host=` first, then the domain the request was ADDRESSED to (AGL-2716).
+
+    The parameter is what every existing caller sends and it keeps winning, so
+    nothing changes for them. The fallback is what makes the endpoint callable
+    without it: an agent talking to `acme.com` should not have to learn that
+    the site it is already talking to has a name it must repeat back. Before
+    this, a request with no parameter was answered `Bad request` — an endpoint
+    that refused the only spelling a stranger could guess.
+
+    `normalizeHostAlias`, inside `getHost`, already maps a `Host:` value — port
+    and trailing dot included — onto the two spellings the lookup can query, so
+    this is a fallback and not a second resolver.
+  */
+  const host =
+    new URL(request.url).searchParams.get('host') ||
+    request.headers.get('x-aglyn-tenant-host') ||
+    request.headers.get('host')
   if (!host) return appHandleJsonError(new Error('Bad request'))
 
   let data = null

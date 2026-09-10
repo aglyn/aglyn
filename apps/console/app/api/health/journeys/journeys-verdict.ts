@@ -236,3 +236,43 @@ export function publishAnnounceHealth(
   if (stale > 0) return { ...base, ok: false, code: 'announce-stale' }
   return { ...base, ok: true }
 }
+
+/**
+ * Is the signup canary switched on for this deployment?
+ *
+ * ## Why the check is OMITTED rather than defaulted green
+ *
+ * `signupCanaryHealth` grades a missing marker as `canary-unavailable`, red —
+ * deliberately, because "nothing has demonstrated a stranger can sign up" is
+ * exactly what it must not report as calm. That is right once a canary is
+ * expected to be running, and wrong before one exists: a deployment with no
+ * canary would red `/api/health/journeys` forever and page on the First-run
+ * journeys monitor, which is the alarm-fatigue failure AGL-2714 just fixed.
+ *
+ * Defaulting it GREEN instead would be worse — a check that reports a
+ * demonstration nobody performed. So it is neither: the check is absent from
+ * the body, and the endpoint makes no claim about signup at all until
+ * something is actually walking it.
+ *
+ * `healthStatus` grades only the checks present, so an absent check cannot
+ * hold the endpoint red or green.
+ */
+export function signupCanaryEnabled(): boolean {
+  return process.env['SIGNUP_CANARY_ENABLED'] === '1'
+}
+
+/**
+ * Is the App Check attestation sample being taken for this deployment?
+ *
+ * Same shape and same reasoning as `signupCanaryEnabled`: with nothing
+ * sampling the metric, a missing reading is graded red — correctly, once a
+ * sampler is expected — and would page forever on a deployment that has none.
+ * Reporting it green instead would claim a measurement nobody took.
+ *
+ * A SEPARATE flag from the canary's, deliberately. This check is what covers
+ * the canary's debug-token blindness, so tying the two together would let the
+ * cover disappear with the thing it covers.
+ */
+export function appCheckAttestationEnabled(): boolean {
+  return process.env['APP_CHECK_ATTESTATION_ENABLED'] === '1'
+}

@@ -1305,3 +1305,211 @@ export async function consumeRateLimit(
 }
 
 export default consumeRateLimit
+
+/**
+ * Document id for the signup canary's verdict (AGL-2715).
+ *
+ * One document, not a bucketed series: this records the LAST walk, and a
+ * history of walks answers a question nobody asks during an incident. The
+ * walk that matters is the most recent one.
+ *
+ * Written by the scheduled canary, read by `/api/health/journeys`. The split
+ * is the same one the beacon heartbeat makes and for a stronger reason: the
+ * canary CREATES AN ACCOUNT AND AN ORG, and the door that reports it is
+ * public and unauthenticated. A probe that walked the signup itself would
+ * hand anyone with `curl` an org factory.
+ *
+ * ⚠️ NOT in the `rateLimits` TTL's usual seven-day shape. There is exactly one
+ * of these and it is overwritten on every run, so it costs one document
+ * forever; `expiresAt` is still stamped, far enough out that a canary which
+ * stopped running expires its own evidence rather than leaving a stale pass
+ * lying around to be misread. The health verdict's own staleness window is
+ * two hours, so expiry is a backstop, not the mechanism.
+ */
+export const SIGNUP_CANARY_DOC_ID = 'signupCanary_production'
+
+/** How long a recorded walk survives the sweep. */
+const SIGNUP_CANARY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Budget for the single-document read on the health path. */
+const SIGNUP_CANARY_READ_BUDGET_MS = 2_000
+
+export interface SignupCanaryVerdict {
+  /** Whether every step of the walk succeeded. */
+  ok: boolean
+  /** Which step broke. Never an error message, never a uid or an email. */
+  failedStep?: string | null
+  /** Wall clock for the whole walk. */
+  elapsedMs: number
+  /** Whether the walk deleted everything it created. */
+  reapedCleanly: boolean
+}
+
+/**
+ * Record the outcome of one signup walk.
+ *
+ * AWAITED by its caller, unlike every other recorder in this file. Those are
+ * breadcrumbs on a request path where the user's work is the control and the
+ * marker must never delay it. This one IS the work: a canary whose verdict
+ * did not land has not reported, and the door it feeds would rather red on a
+ * missing marker than believe a walk nobody wrote down.
+ *
+ * `set` without merge, deliberately: this document is a snapshot of the last
+ * walk, and merging would let a field from a previous run survive into a
+ * verdict it was not part of — a `failedStep` outliving the failure that
+ * produced it, read beside a fresh `ok: true`.
+ */
+export async function recordSignupCanaryWalk(
+  verdict: SignupCanaryVerdict,
+  options?: { now?: number; firestore?: any },
+): Promise<void> {
+  const nowMs = options?.now ?? Date.now()
+  const firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+  await firestore
+    .collection(RATE_LIMIT_COLLECTION)
+    .doc(SIGNUP_CANARY_DOC_ID)
+    .set({
+      walkedAtMs: nowMs,
+      ok: verdict.ok === true,
+      failedStep: verdict.failedStep ?? null,
+      elapsedMs: Number(verdict.elapsedMs) || 0,
+      reapedCleanly: verdict.reapedCleanly === true,
+      expiresAt: new Date(nowMs + SIGNUP_CANARY_RETENTION_MS),
+    })
+}
+
+/**
+ * The last recorded walk, or null (AGL-2715).
+ *
+ * Null covers the same three cases `readBeaconHeartbeat` folds, for the same
+ * reason: no marker has ever been written, the document holds nothing usable,
+ * and the store would not answer inside its budget. Each one means *nothing
+ * here has demonstrated that a stranger can sign up*, and the verdict grades
+ * all three as `canary-unavailable`. Distinguishing them could only ever be
+ * used to forgive something unproven.
+ */
+export async function readSignupCanaryWalk(options?: {
+  firestore?: any
+  budgetMs?: number
+}): Promise<{
+  walkedAtMs?: number
+  ok?: boolean
+  failedStep?: string | null
+  elapsedMs?: number
+  reapedCleanly?: boolean
+} | null> {
+  try {
+    const firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+    const snapshot = await withBudget<any>(
+      firestore.collection(RATE_LIMIT_COLLECTION).doc(SIGNUP_CANARY_DOC_ID).get(),
+      options?.budgetMs ?? SIGNUP_CANARY_READ_BUDGET_MS,
+    )
+    if (!snapshot?.exists) return null
+    const walkedAtMs = snapshot.get('walkedAtMs')
+    if (typeof walkedAtMs !== 'number' || !Number.isFinite(walkedAtMs)) return null
+    return {
+      walkedAtMs,
+      ok: snapshot.get('ok') === true,
+      failedStep: snapshot.get('failedStep') ?? null,
+      elapsedMs: snapshot.get('elapsedMs'),
+      reapedCleanly: snapshot.get('reapedCleanly'),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Document id for the App Check attestation sample (AGL-2715).
+ *
+ * The rate is published by Google to Cloud Monitoring, which a public health
+ * endpoint has no business calling: it needs a second credential, it is slow,
+ * and its quota is not something a route anyone can curl should be able to
+ * spend. So a scheduled job samples it and this holds the answer, exactly as
+ * the signup canary's own verdict is held.
+ *
+ * One document, overwritten each run — the last reading is the only one that
+ * answers "is attestation working now".
+ */
+export const APP_CHECK_ATTESTATION_DOC_ID = 'appCheckAttestation_production'
+
+/** How long a sample survives the sweep. */
+const APP_CHECK_ATTESTATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Budget for the single-document read on the health path. */
+const APP_CHECK_ATTESTATION_READ_BUDGET_MS = 2_000
+
+/**
+ * Record one sampling of the App Check verification counts.
+ *
+ * Awaited by its caller, like the canary's verdict and unlike the breadcrumbs
+ * in this file: the sample IS the work, and a door would rather report a
+ * missing reading than believe one nobody wrote down.
+ */
+export async function recordAppCheckAttestation(
+  samples: Array<{
+    result?: string
+    security?: string
+    service?: string
+    count?: number
+  }>,
+  options?: { now?: number; firestore?: any },
+): Promise<void> {
+  const nowMs = options?.now ?? Date.now()
+  const firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+  await firestore
+    .collection(RATE_LIMIT_COLLECTION)
+    .doc(APP_CHECK_ATTESTATION_DOC_ID)
+    .set({
+      sampledAtMs: nowMs,
+      samples,
+      expiresAt: new Date(nowMs + APP_CHECK_ATTESTATION_RETENTION_MS),
+    })
+}
+
+/**
+ * The last attestation sample, or null (AGL-2715).
+ *
+ * Null folds the three cases its siblings fold — never written, unusable, and
+ * the store would not answer — because each means *nothing here has shown that
+ * attestation is working*, and the verdict grades all three as
+ * `attestation-unavailable`.
+ *
+ * A sample older than the window it describes is also null. A stale reading is
+ * not a reading: reporting a six-hour-old rate as current is how a check comes
+ * to say attestation is fine long after it stopped being.
+ */
+export async function readAppCheckAttestation(options?: {
+  firestore?: any
+  budgetMs?: number
+  now?: number
+  maxAgeMs?: number
+}): Promise<Array<{
+  result?: string
+  security?: string
+  service?: string
+  count?: number
+}> | null> {
+  try {
+    const firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+    const snapshot = await withBudget<any>(
+      firestore
+        .collection(RATE_LIMIT_COLLECTION)
+        .doc(APP_CHECK_ATTESTATION_DOC_ID)
+        .get(),
+      options?.budgetMs ?? APP_CHECK_ATTESTATION_READ_BUDGET_MS,
+    )
+    if (!snapshot?.exists) return null
+    const sampledAtMs = snapshot.get('sampledAtMs')
+    if (typeof sampledAtMs !== 'number') return null
+    const nowMs = options?.now ?? Date.now()
+    // Twice the window it covers: one missed sampling is tolerated, two are
+    // not, and the reading still describes a period that overlaps now.
+    const maxAgeMs = options?.maxAgeMs ?? 12 * 60 * 60 * 1000
+    if (nowMs - sampledAtMs > maxAgeMs) return null
+    const samples = snapshot.get('samples')
+    return Array.isArray(samples) ? samples : null
+  } catch {
+    return null
+  }
+}

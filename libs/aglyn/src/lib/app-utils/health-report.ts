@@ -2713,3 +2713,344 @@ export async function writeCronBeat(
     return false
   }
 }
+
+/**
+ * DID A STRANGER ACTUALLY SIGN UP? (AGL-2715)
+ *
+ * Every other signup check on this platform is an inference. The auth doors
+ * assert that Identity Platform is reachable and refuses an account that
+ * cannot exist — configuration, not a signup. `probeCreate` reads that the
+ * platform is unlocked and the probe's name is free — preconditions, not a
+ * signup. `signupVolume`, `signupRefusals` and `signupDrought` count what
+ * happened afterwards — a consequence, observed late.
+ *
+ * The strongest thing any of them could say, on the day AGL-2714 paged, was
+ * "somebody got an account recently", and recently was 24 hours ago. AGL-2581
+ * is what that costs: signup refused every visitor for three days while the
+ * monitor named for signups stayed green.
+ *
+ * So something has to WALK it. A canary creates an account, verifies it,
+ * mints a session, provisions an org, and deletes all of it — against
+ * production, on a schedule — then stamps what happened into one marker. This
+ * verdict reads that marker.
+ *
+ * ## Why the walk is not done here
+ *
+ * Health probes on this platform are read-only and cost-bounded by contract,
+ * and this one is served from a PUBLIC unauthenticated endpoint. A probe that
+ * created an account would hand anyone with `curl` an org factory. The write
+ * lives in a scheduled job; the door only reports. Same split as the beacon
+ * heartbeat (AGL-2713), for the same reason.
+ *
+ * ## The four ways this reds, and why residue is one of them
+ *
+ * A canary that walks perfectly and fails to clean up is not a success. It
+ * leaves a real org, with a real slug reservation and a real host, on the
+ * production estate — every hour, forever. `canary-left-residue` is red even
+ * though the signup itself worked, because the alternative is a monitor that
+ * quietly fills the database it is monitoring.
+ */
+export interface SignupCanaryMarker {
+  /** When the walk finished. The freshness clock. */
+  walkedAtMs?: number
+  /** Whether every step of the walk succeeded. */
+  ok?: boolean
+  /** Which step broke, for the body. Never an error message, never a uid. */
+  failedStep?: string | null
+  /** Wall clock for the whole walk. */
+  elapsedMs?: number
+  /** Whether the walk deleted everything it created. */
+  reapedCleanly?: boolean
+}
+
+export interface SignupCanaryCheck extends HealthCheck {
+  /** Age of the last recorded walk, or null when there is no marker. */
+  ageMs: number | null
+  /** Which step broke on that walk, when one did. */
+  failedStep: string | null
+  /** How long the walk took, for the latency graph. */
+  walkMs: number | null
+  /** Whether it cleaned up after itself. */
+  reapedCleanly: boolean | null
+  /** The age past which a walk stops counting as evidence. */
+  staleAfterMs: number
+}
+
+/**
+ * How old the last successful walk may be before this reds.
+ *
+ * Two hours against an hourly schedule — one missed run is tolerated, two are
+ * not. A canary that runs hourly and reds at 61 minutes would page on every
+ * GitHub Actions queue delay, and an alarm that cries wolf on infrastructure
+ * latency is one nobody reads by the time signup actually breaks. Two misses
+ * is a pattern rather than a hiccup.
+ *
+ * This is deliberately NOT generous enough to sleep through AGL-2581: three
+ * days of refused signups would red this inside two hours.
+ */
+/**
+ * Workspace-slug prefix the signup canary owns, and the one piece of the
+ * product that has to know the canary exists (AGL-2715).
+ *
+ * ## Why an exclusion is not optional
+ *
+ * The canary creates a real org and then deletes it. `signupDrought` compares
+ * durable ATTEMPT markers against a live COUNT of orgs — and a deleted org
+ * leaves the count while its attempt marker stays. So every canary walk adds
+ * 1 to the denominator and 0 to the numerator, and after three walks the
+ * platform reports `signup-drought` with nothing wrong.
+ *
+ * That is not theoretical. It fired on 2026-09-09 at six attempts against
+ * zero creations — six walks that had each just proved, end to end, that a
+ * stranger could sign up. A monitor that manufactures the outage it watches
+ * for is worse than no monitor, and it is the same alarm fatigue AGL-2714
+ * removed, arriving from inside the house.
+ *
+ * ## Why the slug, and what that costs
+ *
+ * `/api/orgs/create` receives the requested slug before it does anything, so
+ * this needs no secret, no header and no second code path — the canary is
+ * excluded by being what it says it is.
+ *
+ * The cost is that the prefix is caller-supplied: someone naming their
+ * workspace `signup-canary-…` would not be counted in the drought's
+ * denominator. That is bounded to one uncounted attempt per such workspace,
+ * and it cannot hide an outage, because an outage is many attempts by many
+ * people and only the oddly-named ones would go missing.
+ *
+ * The canary declares the same prefix in `tools/e2e/signup-canary.mjs`, which
+ * cannot import this file — it runs outside the workspace. They are held
+ * together by `apps/console/specs/signup-canary-marker-wiring.spec.ts`.
+ */
+export const SIGNUP_CANARY_ORG_SLUG_PREFIX = 'signup-canary-'
+
+/**
+ * Is this org creation the canary's own?
+ *
+ * Exported as a function rather than leaving callers to compare strings, so
+ * the one place that decides is the one place to read when asking why a
+ * number looks wrong.
+ */
+export function isSignupCanaryOrgSlug(slug: string | null | undefined): boolean {
+  return typeof slug === 'string' && slug.startsWith(SIGNUP_CANARY_ORG_SLUG_PREFIX)
+}
+
+export const SIGNUP_CANARY_STALE_AFTER_MS = 2 * 60 * 60 * 1000
+
+/**
+ * Grade the last recorded signup walk.
+ *
+ * Pure, like every sibling: the route reads the marker, this decides. Ordered
+ * by which mistake costs most — a missing marker is treated as failure, never
+ * as calm, because "no evidence" and "evidence of success" are the two
+ * readings this whole issue exists to stop anyone from confusing.
+ */
+export function signupCanaryHealth(
+  marker: SignupCanaryMarker | null,
+  ms: number,
+  nowMs: number = Date.now(),
+  staleAfterMs: number = SIGNUP_CANARY_STALE_AFTER_MS,
+): SignupCanaryCheck {
+  const base: Omit<SignupCanaryCheck, 'ok' | 'code'> = {
+    ms,
+    ageMs: null,
+    failedStep: null,
+    walkMs: null,
+    reapedCleanly: null,
+    staleAfterMs,
+  }
+  // No marker at all, or a store that would not answer. The canary has never
+  // run, or cannot be read — either way nothing here has demonstrated that a
+  // stranger can sign up, and this check exists to say so out loud.
+  if (!marker || typeof marker.walkedAtMs !== 'number') {
+    return { ...base, ok: false, code: 'canary-unavailable' }
+  }
+  const ageMs = Math.max(0, nowMs - marker.walkedAtMs)
+  const walkMs = typeof marker.elapsedMs === 'number' ? marker.elapsedMs : null
+  const reapedCleanly =
+    typeof marker.reapedCleanly === 'boolean' ? marker.reapedCleanly : null
+  const failedStep =
+    typeof marker.failedStep === 'string' ? marker.failedStep : null
+  const carried = { ...base, ageMs, walkMs, reapedCleanly, failedStep }
+
+  // A stale PASS is not a pass. The walk that succeeded two hours ago says
+  // nothing about the door now, and the whole point of a canary is currency.
+  // Checked before the verdict so a stale failure reports as stale rather
+  // than as a failure that may since have healed.
+  if (ageMs > staleAfterMs) {
+    return { ...carried, ok: false, code: 'canary-stale' }
+  }
+  if (marker.ok !== true) {
+    return { ...carried, ok: false, code: 'signup-walk-failed' }
+  }
+  // Walked fine, did not clean up. Red anyway — see the docblock.
+  if (reapedCleanly === false) {
+    return { ...carried, ok: false, code: 'canary-left-residue' }
+  }
+  return { ...carried, ok: true }
+}
+
+/**
+ * IS ATTESTATION WORKING FOR REAL PEOPLE? (AGL-2715)
+ *
+ * The signup canary walks the real journey, but it attests with an App Check
+ * DEBUG TOKEN — because this project's provider is reCAPTCHA Enterprise, which
+ * is built to score headless automation as a bot and always will. Everything
+ * else in that walk is real; the attestation step is not. So the canary is
+ * structurally blind to the one failure it sits closest to: App Check refusing
+ * the people it is supposed to admit.
+ *
+ * That blindness is not acceptable on its own, and it is not fixed by
+ * argument. It is fixed by measuring the thing directly.
+ *
+ * ## What this reads, and why a token cannot fool it
+ *
+ * Firebase publishes `firebaseappcheck.googleapis.com/services/verification_count`
+ * to Cloud Monitoring, labelled by `result` (ALLOW / DENY) and `security`
+ * (VALID / INVALID / MISSING_UNKNOWN_ORIGIN), per service. Those counts are
+ * every request from every visitor.
+ *
+ * The canary contributes at most one verification an hour against roughly a
+ * thousand a day, and its debug-token attestation lands in the same ALLOW
+ * bucket as everyone else's. So it cannot hold this green: if attestation
+ * collapses for real people the rate collapses with it, one canary request
+ * notwithstanding.
+ *
+ * ## Why only Identity Platform is graded
+ *
+ * `identitytoolkit.googleapis.com` is the service signup depends on, and it
+ * runs clean — 939 ALLOW against 3 DENY over the 24 hours to 2026-09-09.
+ * `firestore.googleapis.com` in the same window was 5493 ALLOW against 1046
+ * DENY, because client Firestore reads are reached by crawlers and stale tabs
+ * that legitimately fail attestation. Grading that number would either mute
+ * this check with a floor low enough to admit the noise, or page on the noise.
+ * The other services are reported for diagnosis and decide nothing.
+ */
+export interface AppCheckVerificationSample {
+  /** `ALLOW` or `DENY`. */
+  result?: string
+  /** `VALID`, `INVALID`, `MISSING_UNKNOWN_ORIGIN`, … — for the body only. */
+  security?: string
+  /** The service the verdict was rendered for. */
+  service?: string
+  /** Requests in this bucket over the window. */
+  count?: number
+}
+
+export interface AppCheckAttestationCheck extends HealthCheck {
+  /** Allowed over total for the graded service, or null with no traffic. */
+  allowRate: number | null
+  /** Requests the rate is taken over. */
+  allowed: number
+  denied: number
+  /** Below this many requests the rate says nothing and is not graded. */
+  minimumRequests: number
+  /** The floor the rate must clear. */
+  minimumAllowRate: number
+  /** The service graded. Everything else is context. */
+  service: string
+  /** Denials by `security`, so a red says which way it broke. */
+  deniedBy: Record<string, number>
+  /** The window the counts cover. */
+  windowMinutes: number
+}
+
+/** The service signup depends on. See the docblock for why it is the only one. */
+export const APP_CHECK_GRADED_SERVICE = 'identitytoolkit.googleapis.com'
+
+/**
+ * Window the attestation rate is taken over.
+ *
+ * Six hours, not one. This metric is aggregated by Google on its own schedule
+ * and arrives late, so a one-hour window reads empty for reasons that have
+ * nothing to do with attestation. Six hours is long enough to always carry
+ * traffic on this platform and short enough that a real collapse is caught the
+ * same working day.
+ */
+export const APP_CHECK_WINDOW_MINUTES = 6 * 60
+
+/**
+ * Requests below which the rate is not graded.
+ *
+ * A ratio over three requests is noise wearing a percentage. Twenty is a
+ * fraction of the ~940 a day Identity Platform sees, so a healthy platform
+ * always clears it, and a platform quiet enough not to is a platform where
+ * this check has nothing to say.
+ */
+export const APP_CHECK_MIN_REQUESTS = 20
+
+/**
+ * The floor the allow rate must clear.
+ *
+ * 0.90, against a measured 0.997. The gap is deliberate: a handful of genuine
+ * denials is ordinary — a stale tab, a bot, a browser that failed its
+ * reCAPTCHA — and a floor set near the observed rate would page on those.
+ *
+ * What this is built to catch is not a drift of a few percent; it is the
+ * documented failure mode of `recaptcha-allowlist.ts`, where an origin that is
+ * attached and routed but not allowlisted renders a console that can never
+ * sign anyone in. That reads as ~0%, not 85%.
+ */
+export const APP_CHECK_MIN_ALLOW_RATE = 0.9
+
+/**
+ * Grade attestation for real visitors.
+ *
+ * Pure, like every sibling: something else reads Cloud Monitoring, this
+ * decides. Null samples are degraded rather than calm — an unreadable metric
+ * is not evidence that attestation works, and this check exists precisely
+ * because "we did not look" was being reported as "it is fine".
+ */
+export function appCheckAttestationHealth(
+  samples: AppCheckVerificationSample[] | null,
+  ms: number,
+  service: string = APP_CHECK_GRADED_SERVICE,
+  minimumRequests: number = APP_CHECK_MIN_REQUESTS,
+  minimumAllowRate: number = APP_CHECK_MIN_ALLOW_RATE,
+  windowMinutes: number = APP_CHECK_WINDOW_MINUTES,
+): AppCheckAttestationCheck {
+  const base: Omit<AppCheckAttestationCheck, 'ok' | 'code'> = {
+    ms,
+    allowRate: null,
+    allowed: 0,
+    denied: 0,
+    minimumRequests,
+    minimumAllowRate,
+    service,
+    deniedBy: {},
+    windowMinutes,
+  }
+  if (samples === null) {
+    return { ...base, ok: false, code: 'attestation-unavailable' }
+  }
+  let allowed = 0
+  let denied = 0
+  const deniedBy: Record<string, number> = {}
+  for (const sample of samples) {
+    if (sample.service !== service) continue
+    // `Number(...) || 0` for the reason every sibling gives: a corrupt count
+    // must not turn the total into NaN, which compares false against every
+    // threshold and would report calm forever.
+    const count = Number(sample.count) || 0
+    if (sample.result === 'ALLOW') allowed += count
+    else if (sample.result === 'DENY') {
+      denied += count
+      const why = sample.security || 'UNKNOWN'
+      deniedBy[why] = (deniedBy[why] ?? 0) + count
+    }
+  }
+  const total = allowed + denied
+  const carried = { ...base, allowed, denied, deniedBy }
+  // Too little traffic to say anything. Reported, not hidden: an on-call
+  // person reading a green body deserves to know this one abstained.
+  if (total < minimumRequests) {
+    return { ...carried, ok: true, code: 'not-enough-traffic', allowRate: null }
+  }
+  const allowRate = allowed / total
+  return {
+    ...carried,
+    allowRate,
+    ok: allowRate >= minimumAllowRate,
+    ...(allowRate >= minimumAllowRate ? {} : { code: 'attestation-failing' }),
+  }
+}

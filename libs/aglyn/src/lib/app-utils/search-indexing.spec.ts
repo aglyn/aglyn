@@ -17,8 +17,10 @@
 
 import { HostScreenVisibility } from '../foundation/definitions/platform.types'
 import {
+  AI_AGENT_USER_AGENTS,
   buildRobotsTxt,
   isPageIndexable,
+  statusPageScreenIds,
   isScreenIndexable,
   isSearchDiscouraged,
 } from './search-indexing'
@@ -134,16 +136,59 @@ describe('search-indexing policy (AGL-1263)', () => {
 
   describe('buildRobotsTxt', () => {
     it('allows everything and names the sitemap by default', () => {
-      expect(buildRobotsTxt({ host: {}, origin: 'https://shop.example.com' }))
-        .toBe(
-          'User-agent: *\nAllow: /\nSitemap: https://shop.example.com/sitemap.xml\n',
-        )
+      const body = buildRobotsTxt({ host: {}, origin: 'https://shop.example.com' })
+      expect(body.startsWith('User-agent: *\nAllow: /\n')).toBe(true)
+      expect(body.endsWith('Sitemap: https://shop.example.com/sitemap.xml\n')).toBe(
+        true,
+      )
     })
 
     it('omits the sitemap line rather than emitting "undefined"', () => {
       const body = buildRobotsTxt({ host: {} })
-      expect(body).toBe('User-agent: *\nAllow: /\n')
+      expect(body.startsWith('User-agent: *\nAllow: /\n')).toBe(true)
+      expect(body).not.toContain('Sitemap:')
       expect(body).not.toContain('undefined')
+    })
+
+    it('names every AI agent in its own group (AGL-2716)', () => {
+      // A named group is a STATEMENT, where the wildcard is only the absence
+      // of a restriction — and it is the line an owner edits to change the
+      // decision later.
+      const body = buildRobotsTxt({ host: {}, origin: 'https://shop.example.com' })
+      for (const agent of AI_AGENT_USER_AGENTS) {
+        expect(body).toContain(`User-agent: ${agent}\nAllow: /`)
+      }
+      expect(AI_AGENT_USER_AGENTS).toContain('ClaudeBot')
+      expect(AI_AGENT_USER_AGENTS).toContain('ChatGPT-User')
+      expect(AI_AGENT_USER_AGENTS).toContain('Google-Extended')
+      expect(AI_AGENT_USER_AGENTS).toContain('DeepSeekBot')
+      expect(AI_AGENT_USER_AGENTS).toContain('ora-agent')
+    })
+
+    it('parses as groups separated by a blank line', () => {
+      // `robots.txt` groups end at a blank line. Without one, a following
+      // `User-agent:` continues the PREVIOUS group's agent list instead of
+      // starting a new record — harmless here, since every group says the same
+      // thing, but the file would no longer mean what it appears to.
+      const body = buildRobotsTxt({ host: {} })
+      const groups = body.trim().split('\n\n')
+      expect(groups.length).toBe(1 + AI_AGENT_USER_AGENTS.length)
+      for (const group of groups) {
+        expect(group.split('\n')[0].startsWith('User-agent: ')).toBe(true)
+      }
+    })
+
+    it('drops the named groups too when search is discouraged', () => {
+      // A named group would OUTRANK the wildcard: `robots.txt` precedence
+      // gives the most specific matching group, so an `Allow` under
+      // `User-agent: ClaudeBot` would invite the readers the switch refuses.
+      const body = buildRobotsTxt({
+        host: { seo: { discourageSearchEngines: true } },
+      })
+      expect(body).toBe('User-agent: *\nDisallow: /\n')
+      for (const agent of AI_AGENT_USER_AGENTS) {
+        expect(body).not.toContain(agent)
+      }
     })
 
     it('disallows everything and names no sitemap when discouraged', () => {
@@ -159,5 +204,37 @@ describe('search-indexing policy (AGL-1263)', () => {
       expect(body).not.toContain('shop.example.com')
       expect(body).not.toContain('Allow: /')
     })
+  })
+})
+
+describe('statusPageScreenIds (AGL-2716)', () => {
+  it('excludes a screen published at a bare status path', () => {
+    expect([
+      ...statusPageScreenIds({ screens: { a: '/404', b: '503', c: '/pricing' } }),
+    ].sort()).toEqual(['a', 'b'])
+  })
+
+  it('keeps a real page whose slug merely contains a status code', () => {
+    expect(
+      statusPageScreenIds({ screens: { a: '/404-guide', b: '/products/503' } }).size,
+    ).toBe(0)
+  })
+
+  it('excludes a BOUND error screen even at an ordinary path', () => {
+    expect([
+      ...statusPageScreenIds({
+        screens: { oops: '/whoops' },
+        errorScreens: { 500: 'oops' },
+      }),
+    ]).toEqual(['oops'])
+  })
+
+  it('excludes the not-found binding', () => {
+    expect([...statusPageScreenIds({ notFoundScreenId: 'nf' })]).toEqual(['nf'])
+  })
+
+  it('is empty for a host with nothing to exclude', () => {
+    expect(statusPageScreenIds(null).size).toBe(0)
+    expect(statusPageScreenIds({}).size).toBe(0)
   })
 })

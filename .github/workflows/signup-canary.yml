@@ -1,0 +1,132 @@
+# Can a stranger sign up right now? (AGL-2715)
+#
+# Every other signup check on this platform is an inference. The auth doors
+# assert Identity Platform is reachable, `probeCreate` reads that the platform
+# is unlocked and a name is free, and the volume/refusal/drought checks count
+# what happened afterwards. On the day AGL-2714 paged, the strongest thing any
+# of them could say was "somebody got an account recently", and recently was 24
+# hours ago. AGL-2581 is what that costs: signup refused every visitor for
+# three days while the monitor named for signups stayed green.
+#
+# This job walks it. It creates a real account and a real org on PRODUCTION,
+# then deletes them and stamps the verdict into one marker that
+# `/api/health/journeys` reports as `signupCanary` — graded by the existing
+# First-run journeys monitor, so no new row on the uptime board.
+#
+# ## Why hourly
+#
+# `SIGNUP_CANARY_STALE_AFTER_MS` is two hours, so one missed run is tolerated
+# and two are not. Running more often would page on ordinary GitHub Actions
+# queue delay; running less often would let the staleness window expire on a
+# healthy platform.
+#
+# ## Why a browser, and why no bypass header
+#
+# Identity Platform enforces App Check and this project's provider is reCAPTCHA
+# Enterprise, which has no server-side equivalent — `accounts:signUp` from any
+# script is refused 401. So the walk has to happen on a page.
+#
+# That turns out to be the better design anyway: a browser exercises the edge
+# for real. The walk carries no bypass header of any kind, so if bot protection
+# starts refusing visitors the canary is refused with them. An ordinary desktop
+# Chrome User-Agent measured `429 x-vercel-mitigated: challenge` on 2026-09-09,
+# so this is not hypothetical.
+#
+# ## Failure is reported by the marker, not by this job's exit code
+#
+# The script always writes its verdict and then exits non-zero on a bad walk.
+# The red that matters is the health door going red, because that is what
+# pages; a red run here is the same signal arriving by a second road.
+
+name: Signup canary
+
+# ⛔ THE SCHEDULE WAITS FOR THE EXCLUSION TO BE LIVE (AGL-2715).
+#
+# The walk passes — three consecutive green runs on production. What is not
+# yet on production is the exclusion that stops it tripping the alarm it
+# watches: the canary creates a real org and deletes it, so its durable attempt
+# marker outlives the org and `signupDrought` sees +1 denominator, +0
+# numerator, every hour. It fired that way on 2026-09-09 at
+# `signupAttempts=6, orgCreations=0`.
+#
+# `isSignupCanaryOrgSlug` in `/api/orgs/create` fixes it, and it only takes
+# effect once that route is DEPLOYED. Turning the cron on before then would
+# manufacture an hourly outage on a healthy platform — the third false alarm on
+# this monitor in one day.
+#
+# Restore the cron after the promotion carrying the exclusion is live and one
+# manual run has been shown not to move `signupAttempts`.
+on:
+  schedule:
+    # Hourly, off the top of the hour where every other scheduled job in this
+    # repo clusters and Actions queues are deepest. Only the attestation job
+    # runs on this — see the `walk` job's own guard.
+    - cron: '25 * * * *'
+  workflow_dispatch: {}
+
+# One walk at a time. Two concurrent runs would race for the same orphan sweep
+# and each would try to reap the other's org mid-flight.
+concurrency:
+  group: signup-canary
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Is App Check admitting real people? Reads only, and independent of the walk
+  # on purpose: this is the cover for the walk's debug-token blindness, so it
+  # must not go dark just because the walk did.
+  attestation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Install firebase-admin
+        run: npm install --no-save --no-audit --no-fund firebase-admin@13
+      - name: Sample the verification counts
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: node tools/e2e/appcheck-attestation.mjs
+
+  # ⛔ Manual only until the App Check exemption lands. See the walk's docblock.
+  walk:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # firebase-admin and playwright-core only. The full workspace install is
+      # not needed and would cost minutes per hour.
+      - name: Install the two runtime dependencies
+        run: npm install --no-save --no-audit --no-fund firebase-admin@13 playwright-core@1
+
+      # ubuntu-latest ships Chrome. The front-door half needs a real browser:
+      # a fetch tool cannot solve the edge challenge, which is the whole point.
+      - name: Locate Chrome
+        run: echo "CHROME_PATH=$(which google-chrome || which chromium-browser || which chromium)" >> "$GITHUB_ENV"
+
+      - name: Walk the signup
+        env:
+          SIGNUP_CANARY_ENABLE: '1'
+          SIGNUP_CANARY_ORIGIN: ${{ vars.SIGNUP_CANARY_ORIGIN }}
+          # The repo convention: an optional var with the project as the default.
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # Where the welcome mail lands. Org creation welcomes the owner of a
+          # first workspace, so this must be a REAL deliverable address — an
+          # address that hard-bounces would cost the sending domain a bounce
+          # every hour. Defaults to a plus-address on the owner's mailbox.
+          SIGNUP_CANARY_EMAIL: ${{ vars.SIGNUP_CANARY_EMAIL }}
+        run: node tools/e2e/signup-canary.mjs

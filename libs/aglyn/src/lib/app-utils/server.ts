@@ -292,6 +292,13 @@ export * from './plugin-manifest'
 // first-party image.
 export * from './email-starter-policy'
 export * from './safe-json-ld'
+// Agent readiness (AGL-2716): content negotiation, the Markdown rendering of a
+// page, `/llms.txt` and the per-site OpenAPI document. All pure, all server-safe.
+export * from './accept-negotiation'
+export * from './agent-openapi'
+export * from './author-html-markdown'
+export * from './llms-txt'
+export * from './page-markdown'
 export * from './request-geo'
 export * from './request-ip'
 export * from './search-indexing'

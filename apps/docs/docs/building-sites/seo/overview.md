@@ -210,6 +210,81 @@ page to resolve a relative path against, so a relative address is a blank card.
 Published sites emit **JSON-LD** for blogs, the site, and breadcrumbs, giving search
 engines rich context about your content.
 
+Every page also carries a top-level **`Organization`** (or `Person`) describing who
+publishes the site — the entity AI assistants read when someone asks who you are or
+how to reach you. It is filled in from **Setup → SEO → Entity**, and it falls back to
+your site name and description, so a site that has never touched that form still
+publishes a named, described entity.
+
+Two fields are worth adding by hand, because nothing can guess them:
+
+- **Contact email / phone**, published as `contactPoint`;
+- **Address**, published as a `PostalAddress`. Partial is fine — a city and a country
+  are still a real answer.
+
+## AI agents
+
+Agents read a site differently from a browser. Aglyn publishes four things for them,
+on every site, with nothing to switch on.
+
+### Markdown for any page
+
+Every page serves a **Markdown** version of itself with the navigation, styling and
+scripts removed. Two ways to ask:
+
+```bash
+curl -H "Accept: text/markdown" https://your-site/pricing
+curl https://your-site/pricing.md
+```
+
+Both return the same document: the page title, its summary, the content region, and a
+`Source:` line carrying the canonical URL. Site chrome is left out — that is the point.
+The HTML page links to its own Markdown with
+`<link rel="alternate" type="text/markdown">`, so an agent reading the HTML can find it.
+
+A request that accepts neither HTML nor Markdown — `Accept: application/pdf`, say — is
+answered `406 Not Acceptable` with a plain-text list of what IS available. Ordinary
+browser requests are never affected.
+
+The **search** page is the one exception: its results are computed in the browser, so
+there is no Markdown version to serve and it stays HTML.
+
+### `/llms.txt`
+
+A short guide at `https://your-site/llms.txt` telling an agent what the site is for and
+which addresses answer what — your collections and their entry counts, search, the
+sitemap, the API description, and a contact route when you publish one.
+
+You can lead it with your own words. **Setup → SEO → AI agents** has two boxes:
+
+- **When to use this site** — the questions you are the best source for. Be specific;
+  an agent discounts a claim it cannot check, and generic marketing copy does not read
+  as guidance.
+- **How an agent should call you** — anything worth knowing before it fetches.
+
+Both are optional. The rest of the file is derived from what your site actually
+publishes, so it is never empty and never out of date.
+
+### `/openapi.json`
+
+A machine-readable **OpenAPI 3.1** description of everything your site serves, generated
+per site so it always names your own domain. Every operation carries a unique
+`operationId`, a description, typed parameters and a response schema — the shape an AI
+tool-calling integration reads to turn your site into callable functions.
+
+It describes reads only. Your forms still work exactly as they did; they are simply not
+listed as an endpoint for every crawler on the internet to call.
+
+### Crawler access
+
+`robots.txt` names the major AI crawlers and assistants explicitly — GPTBot,
+ClaudeBot, Google-Extended, PerplexityBot and the rest — and allows them, alongside the
+usual wildcard rule.
+
+Turning on **Discourage search engines** reverses all of it in one switch: `robots.txt`
+refuses everything including those named agents, and `/llms.txt` and `/openapi.json`
+stop being served at all.
+
 ## Analytics integration
 
 Add your **Google Analytics** ID to track traffic alongside Aglyn's built-in
