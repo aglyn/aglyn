@@ -85,6 +85,8 @@ interface SeededHost {
  */
 let orgStore: Record<string, Record<string, unknown>>
 let mockHosts: SeededHost[]
+/** `orgs/{id}/datasets` counts, by org; 0 for an org not listed. */
+let mockDatasetCounts: Record<string, number> = {}
 
 /** Every console notification the sweep produced, in order. */
 let mockOrgNotifications: Array<{ orgId: string; title: string }>
@@ -242,7 +244,17 @@ function fakeOrgDoc(orgId: string) {
         else for (const key of Object.keys(data)) delete data[key]
         if (!options?.merge) mergeInto(data, value)
       },
-      collection: () => emptyCollection(),
+      collection: (name: string) =>
+        name === 'datasets'
+          ? {
+              ...emptyCollection(),
+              count: () => ({
+                get: async () => ({
+                  data: () => ({ count: mockDatasetCounts[orgId] ?? 0 }),
+                }),
+              }),
+            }
+          : emptyCollection(),
       update: async (patch: Record<string, unknown>) => {
         // Dotted paths are NESTED paths in `update()` only — the distinction
         // `api/billing/usage-budget` turns on. Modelled so this suite can
@@ -720,5 +732,55 @@ describe('the seed suppresses ALERTS, never ENFORCEMENT (AGL-2413)', () => {
     // …and it did so without mailing anybody.
     expect(sendCount()).toBe(0)
     await expect(response.json()).resolves.toMatchObject({ capped: 1 })
+  })
+})
+
+/**
+ * The datasets alert measures the limit a create is refused at (AGL-2773).
+ *
+ * `checkDatasetQuota` enforces the datasets a plan includes PLUS the ones the
+ * org bought, clamped to the plan's maximum. Measured against the maximum, an
+ * org with nothing bought hears nothing until it has used a third of a limit
+ * it cannot reach, and the console banner beside it says something else.
+ */
+describe('the datasets alert measures the enforced limit (AGL-2773)', () => {
+  /** A subscribed Starter org: 3 datasets included, up to 10 with add-ons. */
+  const starterOrg = (extra: Record<string, unknown> = {}) => ({
+    'org-starter': {
+      name: 'Starter',
+      slug: 'org-starter',
+      ownerUid: 'u1',
+      plan: 'starter',
+      ...extra,
+    },
+  })
+  const datasetAlerts = () =>
+    mockOrgNotifications.filter((notification) =>
+      /datasets/i.test(notification.title),
+    )
+
+  beforeEach(() => {
+    mockDatasetCounts = {}
+  })
+
+  it('alerts an org that has used every dataset it can create', async () => {
+    orgStore = starterOrg()
+    mockHosts = [{ id: 'site-s', orgId: 'org-starter', pageViews: 0 }]
+    mockDatasetCounts['org-starter'] = 3
+
+    await run()
+
+    expect(datasetAlerts()).toHaveLength(1)
+  })
+
+  it('does not alert an org measured against the datasets it bought', async () => {
+    // Five bought make the Starter limit 8, so 3 in use is under 80%.
+    orgStore = starterOrg({ seatAddons: { datasets: 5 } })
+    mockHosts = [{ id: 'site-s', orgId: 'org-starter', pageViews: 0 }]
+    mockDatasetCounts['org-starter'] = 3
+
+    await run()
+
+    expect(datasetAlerts()).toHaveLength(0)
   })
 })

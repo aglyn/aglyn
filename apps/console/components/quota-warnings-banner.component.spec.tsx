@@ -40,6 +40,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 
 /** Every org/host path the banner ASKED for, by count() or getDocs(). */
 const countedPaths: string[] = []
+/** What a `count()` answers per path; 3 for any path not listed. */
+const mockCountFor: Record<string, number> = {}
 const scope = { orgWide: true, loaded: false }
 const currentOrg: { org: Record<string, unknown>; orgId: string } = {
   org: { plan: 'business' },
@@ -53,7 +55,7 @@ jest.mock('firebase/firestore', () => ({
   getDoc: jest.fn().mockResolvedValue({ exists: () => false, data: () => ({}) }),
   getCountFromServer: jest.fn((path: string) => {
     countedPaths.push(path)
-    return Promise.resolve({ data: () => ({ count: 3 }) })
+    return Promise.resolve({ data: () => ({ count: mockCountFor[path] ?? 3 }) })
   }),
   // Three org-wide members, matching the count the aggregate used to return,
   // so the seat row still reads 3 used and every quota assertion below is
@@ -231,6 +233,48 @@ const billingLinks = () =>
   screen
     .queryAllByRole('link')
     .filter((link) => link.getAttribute('href')?.includes('billing'))
+
+/**
+ * The datasets row measures the limit a create is refused at (AGL-2773).
+ *
+ * `checkDatasetQuota` is what the create routes enforce: the datasets a plan
+ * includes PLUS the ones the org bought, clamped to the plan's maximum.
+ * Measured against the included amount alone, an org that bought extra
+ * datasets is told it has reached a limit it has not, and an org with none
+ * bought is warned against a number it cannot create up to.
+ *
+ * The rows beside it read this file's stubbed entitlements; this row reads the
+ * real plan table through `checkDatasetQuota`, which is the point.
+ */
+describe('QuotaWarningsBanner datasets row (AGL-2773)', () => {
+  beforeEach(() => {
+    scope.loaded = true
+    scope.orgWide = true
+    mockCountFor['hosts/host-1/screens'] = 0
+  })
+  afterEach(() => {
+    for (const key of Object.keys(mockCountFor)) delete mockCountFor[key]
+  })
+
+  it('does not warn an org using datasets it bought', async () => {
+    // Starter includes 3 and sells up to 10, so five bought make the limit 8.
+    currentOrg.org = { plan: 'starter', seatAddons: { datasets: 5 } }
+    mockCountFor['orgs/org-1/datasets'] = 5
+    // A breached screens row lands in the same update as the datasets row, so
+    // a rendered banner proves the datasets row was measured, not skipped.
+    mockCountFor['hosts/host-1/screens'] = 3
+    render(<QuotaWarningsBanner />)
+    const banner = await screen.findByText(/screens/)
+    expect(banner.textContent).not.toMatch(/datasets/)
+  })
+
+  it('warns an org that has used every dataset it can create', async () => {
+    currentOrg.org = { plan: 'starter' }
+    mockCountFor['orgs/org-1/datasets'] = 3
+    render(<QuotaWarningsBanner />)
+    expect(await screen.findByText(/datasets/)).toBeTruthy()
+  })
+})
 
 describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
   it('offers Upgrade to an org-wide viewer', async () => {

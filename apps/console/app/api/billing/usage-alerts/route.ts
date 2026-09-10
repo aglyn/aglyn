@@ -27,6 +27,7 @@ import {
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
   type OrgBandwidthCap,
+  checkDatasetQuota,
   planMetersInfraOverage,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -700,7 +701,9 @@ async function handler(request: Request): Promise<Response> {
           key: 'datasets',
           label: 'datasets',
           used: datasetCount,
-          limit: entitlements.maxDatasetsPerOrg,
+          // The limit a create is refused at: included plus bought, clamped
+          // to the plan's maximum — the number the console banner shows too.
+          limit: checkDatasetQuota(orgData as never, datasetCount).limit,
         },
         {
           key: 'dataStorage',
