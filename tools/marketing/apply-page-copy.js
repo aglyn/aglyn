@@ -85,7 +85,9 @@ const applyPageCopy = (COPY, { dryRun = true } = {}) => {
     },
     {
       kind: 'explore',
-      slots: 17,
+      // One card per product other than the page's own, so the grid grows with
+      // the roster and its slot count comes from the copy.
+      slots: (s) => 3 + 2 * (s.items?.length ?? 0),
       flatten: (s) => [
         s.eyebrow,
         s.heading,
@@ -156,11 +158,12 @@ const applyPageCopy = (COPY, { dryRun = true } = {}) => {
         problems.push(`[${i}] ${spec.kind}: copy shape — ${err.message}`)
         return
       }
-      if (nodes.length !== spec.slots) {
-        problems.push(`[${i}] ${spec.kind}: canvas has ${nodes.length} text slots, contract says ${spec.slots}`)
+      const slots = typeof spec.slots === 'function' ? spec.slots(copySection) : spec.slots
+      if (nodes.length !== slots) {
+        problems.push(`[${i}] ${spec.kind}: canvas has ${nodes.length} text slots, contract says ${slots}`)
       }
-      if (values.length !== spec.slots) {
-        problems.push(`[${i}] ${spec.kind}: copy yields ${values.length} strings, contract says ${spec.slots}`)
+      if (values.length !== slots) {
+        problems.push(`[${i}] ${spec.kind}: copy yields ${values.length} strings, contract says ${slots}`)
       }
       const blanks = values
         .map((v, k) => (v !== null && !v.trim() ? k : -1))

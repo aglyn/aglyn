@@ -37,11 +37,11 @@ const AUTHORED = {
   '5:1': { component: 'h2' }, '6:1': { component: 'h2' }, '7:0': { component: 'h2' },
 }
 
-function stubCanvas() {
+function stubCanvas(slots = SLOTS) {
   const nodes = new Map()
   const root = { nodes: [] }
   nodes.set('_@_', root)
-  SLOTS.forEach((n, i) => {
+  slots.forEach((n, i) => {
     const kids = []
     for (let k = 0; k < n; k++) {
       const id = `${i}:${k}`
@@ -114,6 +114,36 @@ for (const page of PAGES) {
   check(applyPageCopy(shifted, { dryRun: true }).problems?.length > 0, 'refuses a section one card short')
   const ov = JSON.parse(readFileSync('tools/marketing/product-copy/copy-product-overview.json', 'utf8'))
   check(applyPageCopy(ov, { dryRun: true }).problems?.length > 0, 'refuses copy-product-overview (11 sections)')
+}
+
+// Explore carries one card per product other than the page's own, so its slot
+// count comes from the copy rather than from a fixed contract. A ten-card deck
+// must pour into a ten-card grid and be refused by a seven-card one.
+{
+  const COPY = JSON.parse(readFileSync('tools/marketing/product-copy/copy-datasets.json', 'utf8'))
+  const explore = COPY.sections.find((s) => s.kind === 'explore')
+  const slots = SLOTS.map((n, i) => (i === 5 ? 3 + 2 * explore.items.length : n))
+  console.log(`datasets — ${explore.items.length} explore cards`)
+
+  globalThis.window = { AglynModule: { canvas: stubCanvas(), CANVAS_ROOT_ELEMENT_ID: '_@_' } }
+  let applyPageCopy = eval(`${src}; applyPageCopy`)
+  check(applyPageCopy(COPY, { dryRun: true }).problems?.length > 0, 'refuses the deck on a seven-card Explore grid')
+
+  const canvas = stubCanvas(slots)
+  globalThis.window = { AglynModule: { canvas, CANVAS_ROOT_ELEMENT_ID: '_@_' } }
+  applyPageCopy = eval(`${src}; applyPageCopy`)
+  const res = applyPageCopy(COPY, { dryRun: false })
+  // Every slot is written except the early-access chip, which the copy leaves null.
+  const expectedWrites = slots.reduce((sum, n) => sum + n, 0) - 1
+  check(res.wrote === expectedWrites, `${expectedWrites} writes (got ${res.wrote}${res.problems ? `; ${res.problems.join('; ')}` : ''})`)
+  const labels = explore.items.map((_, k) => canvas._nodes.get(`5:${3 + 2 * k}`).props.children)
+  check(
+    labels.every((label, k) => label === explore.items[k].title),
+    `explore labels land in card order (last two: ${JSON.stringify(labels.slice(-2))})`,
+  )
+  const stats = COPY.sections.find((s) => s.kind === 'early-access').items.flatMap((item) => [item.title, item.body])
+  const got = Array.from({ length: 8 }, (_, k) => canvas._nodes.get(`6:${5 + k}`).props.children)
+  check(got.every((v, k) => v === stats[k]), `stat band is figure-then-label (got ${JSON.stringify(got.slice(0, 4))}…)`)
 }
 
 console.log(failures ? `\nFAILED — ${failures} check(s)` : '\nAll checks passed.')

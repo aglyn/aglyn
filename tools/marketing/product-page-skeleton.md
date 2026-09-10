@@ -2,7 +2,8 @@
 
 Derived by reading the built `/product/besigner` document live
 (screen `o1Q1hKCS-O`, version `2LvVaALEET`) on 2026-08-03.
-**8 sections, 74 text slots**, in document order. Every other `/product/*`
+**8 sections**, in document order — 74 text slots with a seven-card Explore
+grid, and two more for every card past that. Every other `/product/*`
 page is this skeleton with the copy swapped.
 
 | # | `ariaLabel` | slots | order of the text nodes |
@@ -12,7 +13,7 @@ page is this skeleton with the copy swapped.
 | 2 | Capabilities | 14 | eyebrow · **h2** · then **6 ×** (card title, card body) |
 | 3 | Deep-dive · canvas | 9 | eyebrow · **h2** · body · then **3 ×** (title, body) |
 | 4 | How it works | 11 | eyebrow · **h2** · then **3 ×** (step number, step title, step body) |
-| 5 | Explore the platform | 17 | eyebrow · **h2** · body · then **7 ×** (screen-link label, body) |
+| 5 | Explore the platform | 3 + 2 per card | eyebrow · **h2** · body · then, per card, (screen-link label, body) |
 | 6 | Early access | 13 | chip · **h2** · body · button · button · then **4 ×** (figure, label) |
 | 7 | CTA | 4 | **h2** · body · button · button |
 
@@ -22,12 +23,13 @@ Node kinds in the slot lists: `txt` = `muiTypography`, `BTN` = `muiButton`,
 
 ## Section 5 is per-page
 
-"Explore the platform" links to the *other* products. On `/product/besigner`
-it lists Console · Commerce · Forms & Inbox · Media · Workflows · Plugins ·
-Analytics — i.e. the nine products minus the page you are on, minus
-Marketing. On every other page, swap the page's own entry out and **Besigner
-in**, keeping seven. The `screenId` on each `muiScreenLink` must be re-pointed
-to match.
+"Explore the platform" links to the *other* products: every product in
+mega-menu order except the page you are on, so the grid grows with the roster
+(nine cards on the live detail pages today, ten once Datasets is added). Its
+slot count is therefore not fixed — `apply-page-copy.js` takes it from the
+copy's `explore.items` and refuses a canvas whose grid holds a different
+number, so add or remove cards before pouring. The `screenId` on each
+`muiScreenLink` must be re-pointed to match.
 
 ## Invariants that are already correct in the skeleton — do not re-derive
 
