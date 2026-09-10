@@ -79,6 +79,7 @@ import {
   type CrmRecipeSiteStatus,
 } from '../constants/api-routes'
 import { authorizeOrgCaller, orgHostIds, readCrmRouteScope } from './org-caller'
+import { crmSuiteRefusal } from './suite-gate'
 
 export const CRM_RECIPE_INSTALL_ROUTE = CRM_API_ROUTES.recipeInstall
 export const CRM_RECIPE_STATUS_ROUTE = CRM_API_ROUTES.recipeStatus
@@ -270,6 +271,15 @@ export const crmRecipeInstallHandler: PluginApiHandler = async (req, res) => {
         return
       }
       writer = caller
+    }
+
+    // A recipe is a CRM automation first (AGL-2787): the suite is asked
+    // before the actions builder, so a plan without either is told about
+    // the one the recipe belongs to.
+    const suite = crmSuiteRefusal(writer.org, 'A CRM recipe')
+    if (suite) {
+      res.status(suite.status).json(suite.body)
+      return
     }
 
     // The gate the site's own Recipes menu applies, judged here from the

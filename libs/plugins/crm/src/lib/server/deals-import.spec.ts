@@ -33,7 +33,8 @@ let membership: { orgId: string; member: Record<string, unknown> } | null = {
 }
 let manageData = true
 let members: Record<string, unknown>[] = []
-let org: Record<string, unknown> = {}
+/** The site's org document; Starter is the lowest plan carrying the CRM suite. */
+let org: Record<string, unknown> = { plan: 'starter' }
 let crmRecordsCount = 0
 let pipelines: Record<string, Record<string, unknown>> = {}
 let deals: Record<string, Record<string, unknown>> = {}
@@ -190,7 +191,7 @@ beforeEach(() => {
   membership = { orgId: ORG_ID, member: { $id: 'editor-uid', role: 'editor' } }
   manageData = true
   members = []
-  org = {}
+  org = { plan: 'starter' }
   crmRecordsCount = 0
   pipelines = { 'p-sales': SALES }
   deals = {}
@@ -311,10 +312,47 @@ describe('what a row becomes', () => {
 
 describe('the records band', () => {
   it('refuses the rows past a hard band, counting what this request created', async () => {
-    org = { plan: 'free' }
+    // A Free workspace granted the suite still hard-bands at 100; 99 are used, so one create fits.
+    org = { plan: 'free', entitlements: { features: { crm: true } } }
     crmRecordsCount = 99
     const out = await importRows([{ title: 'A' }, { title: 'B' }])
     expect(out.body.created).toBe(1)
     expect(out.body.skipped).toEqual([{ index: 1, title: 'B', reason: 'records-band' }])
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787): the deals file is the CRM suite's to import, included
+ * from Starter, and refused for a Free workspace whoever is asking — before
+ * a pipeline is read or a deal filed.
+ */
+describe('the plan (AGL-2787)', () => {
+  it('refuses a Free workspace, reading no pipeline and filing no deal', async () => {
+    org = { plan: 'free' }
+    const out = await importRows([{ title: 'Acme renewal', stage: 'Proposal sent' }])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(out.body.error).toMatch(/part of the CRM suite/)
+    expect(out.body.error).toMatch(/Included from Starter/)
+    expect(stored()).toEqual([])
+    expect(pipelineReads).toBe(0)
+  })
+
+  it('refuses staff importing into a Free workspace the same way', async () => {
+    org = { plan: 'free' }
+    decodedToken = { uid: 'staff-uid', staff: true }
+    hostRoles = {}
+    manageData = false
+    const out = await importRows([{ title: 'Acme renewal' }])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(stored()).toEqual([])
+  })
+
+  it('admits Starter, the lowest plan that carries the suite', async () => {
+    org = { plan: 'starter' }
+    const out = await importRows([{ title: 'Acme renewal' }])
+    expect(out.code).toBe(200)
+    expect(out.body.created).toBe(1)
   })
 })

@@ -414,6 +414,57 @@ describe('crm/recipe-install', () => {
   })
 })
 
+/**
+ * THE PLAN (AGL-2787). A recipe is a CRM automation first: the suite is asked
+ * once the caller is authorized and BEFORE the actions builder, so a Free
+ * workspace, which carries neither, is told about the suite the recipe
+ * belongs to. It is asked of the workspace, so staff are refused alike.
+ */
+describe('the plan (AGL-2787)', () => {
+  const expectSuiteRefusal = ({ status: code, answer }: { status: number; answer: any }) => {
+    expect(code).toBe(403)
+    expect(answer).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(answer.error).toMatch(/part of the CRM suite/)
+    expect(answer.error).toMatch(/Included from Starter/)
+    expect(answer.error).not.toMatch(/actions builder/)
+  }
+
+  beforeEach(() => {
+    orgs[ORG] = { $id: ORG, plan: 'free' }
+  })
+
+  it('refuses a Free workspace at the organization level with the suite’s refusal, installing nothing', async () => {
+    expectSuiteRefusal(await install(welcome))
+    expect(actionsOf('host-a')).toEqual({})
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('refuses a Free workspace under a site the same way', async () => {
+    expectSuiteRefusal(await install({ hostId: 'host-a', recipeId: 'followUpWonDeal' }))
+    expect(actionsOf('host-a')).toEqual({})
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff installing inside a Free workspace, at either level', async () => {
+    mockDecoded = { ...mockDecoded, staff: true }
+    mockPermissions = { ...orgWideManager(), orgWide: false, permissions: {} }
+    expectSuiteRefusal(await install(welcome))
+    expectSuiteRefusal(await install({ hostId: 'host-b', recipeId: 'followUpWonDeal' }))
+    expect(actionsOf('host-a')).toEqual({})
+    expect(actionsOf('host-b')).toEqual({})
+  })
+
+  it('admits Starter past the suite, where the actions builder’s own gate answers', async () => {
+    orgs[ORG] = { $id: ORG, plan: 'starter' }
+    const { status: code, answer } = await install(welcome)
+    expect(code).toBe(403)
+    expect(answer.error).toMatch(/actions builder/)
+    expect(answer).not.toHaveProperty('reason')
+    expect(actionsOf('host-a')).toEqual({})
+  })
+})
+
 describe('crm/recipe-status', () => {
   it('reads the stamps back for every site of the org, counting unstamped actions rather than ignoring them', async () => {
     docs.set('hosts/host-a/actions/w', { name: 'W', recipe: 'welcomeNewLead', steps: [] })

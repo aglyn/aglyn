@@ -21,6 +21,7 @@ import { Button, Tooltip } from '@mui/material'
 import { useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import CrmSendEmailDialog from './crm-send-email-dialog'
+import { CrmSuiteLockedButton } from './crm-suite-lock'
 
 export interface CrmSendEmailButtonProps {
   /**
@@ -38,6 +39,12 @@ export interface CrmSendEmailButtonProps {
   /** The record's address, when the page holds it. */
   email?: string | null
   name?: string | null
+  /**
+   * The org's plan lacks the CRM suite, whose act one-to-one email is
+   * (AGL-2788): the button stands locked where it would be, and no dialog
+   * opens.
+   */
+  suiteLocked?: boolean
 }
 
 /**
@@ -51,10 +58,13 @@ export interface CrmSendEmailButtonProps {
  * To field is blank.
  */
 export function CrmSendEmailButton(props: CrmSendEmailButtonProps) {
-  const { hostId, org, contactId, leadId, dealId, email, name } = props
+  const { hostId, org, contactId, leadId, dealId, email, name, suiteLocked = false } = props
   const [open, setOpen] = useState(false)
   const address = String(email ?? '').trim()
   const orgMount = useCrmOrgMount()
+  if (suiteLocked) {
+    return <CrmSuiteLockedButton variant="outlined">{'Send email'}</CrmSuiteLockedButton>
+  }
   // A site to send from, or an org whose sites the dialog can offer.
   const canSend = Boolean(hostId) || Boolean(orgMount)
   // A contact can be read for its address on open; a deal names one or

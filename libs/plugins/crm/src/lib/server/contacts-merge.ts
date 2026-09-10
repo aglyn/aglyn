@@ -64,6 +64,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { authorizeOrgCaller, readCrmRouteScope } from './org-caller'
+import { crmSuiteRefusal } from './suite-gate'
 
 export const CONTACTS_MERGE_ROUTE = 'crm/contacts-merge'
 
@@ -122,6 +123,7 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
 
   try {
     let orgId: string
+    let org: unknown
     let actor: { uid: string; email: string | null }
     let actorName: string | null
     let orgActor: typeof actor | null = null
@@ -135,6 +137,7 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
         return
       }
       orgId = caller.orgId
+      org = caller.org
       actor = { uid: caller.uid, email: caller.email }
       actorName = caller.name || null
       orgActor = actor
@@ -163,8 +166,15 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
         return
       }
       orgId = resolved.orgId
+      org = resolved.org
       actor = { uid: decoded.uid, email: decoded.email ?? null }
       actorName = typeof decoded['name'] === 'string' ? decoded['name'] : null
+    }
+    // Merging is the suite's at either level (AGL-2787).
+    const suite = crmSuiteRefusal(org, 'Merging two contacts')
+    if (suite) {
+      res.status(suite.status).json(suite.body)
+      return
     }
     const firestore = firebaseAdmin.app().firestore()
     const result = await mergeContacts({

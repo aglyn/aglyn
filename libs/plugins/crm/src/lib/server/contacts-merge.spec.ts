@@ -47,6 +47,8 @@ let mockMergeResult: Record<string, unknown> = {
   emails: ['jane@acme.com', 'jane@gmail.com'],
   repointed: { deals: 1, tasks: 0, activities: 0, leads: 0 },
 }
+/** The org document both variants read; Starter is the lowest plan carrying the CRM suite. */
+let mockOrg: Record<string, unknown> = { plan: 'starter' }
 const mockMergeContacts = jest.fn(async () => mockMergeResult)
 const mockVerifyIdToken = jest.fn(async () => mockDecoded)
 const mockResolveOrgPermissions = jest.fn(async () => mockPermissions)
@@ -67,8 +69,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: async (hostId: string) =>
-    hostId === HOST ? { orgId: ORG, org: {} } : null,
-  getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG } : null),
+    hostId === HOST ? { orgId: ORG, org: mockOrg } : null,
+  getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG, ...mockOrg } : null),
   logOrgActivity: (...args: unknown[]) => (mockLogOrgActivity as any)(...args),
   mergeContacts: (...args: unknown[]) => (mockMergeContacts as any)(...args),
 }))
@@ -124,6 +126,7 @@ beforeEach(() => {
     emails: ['jane@acme.com', 'jane@gmail.com'],
     repointed: { deals: 1, tasks: 0, activities: 0, leads: 0 },
   }
+  mockOrg = { plan: 'starter' }
   mockMergeContacts.mockClear()
   mockResolveOrgPermissions.mockClear()
   mockLogOrgActivity.mockClear()
@@ -245,5 +248,60 @@ describe('crm/contacts-merge at the organization level', () => {
   it('writes no org line under a site — the site variant’s feed is the site’s', async () => {
     await call(good)
     expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787). Merging is the CRM suite's, included from Starter, at
+ * either level. It is asked once the caller is admitted, and of the
+ * workspace, so staff merging inside a Free one are refused as a member is.
+ */
+describe('the plan (AGL-2787)', () => {
+  const orgLevel = { orgId: ORG, survivorId: 'c-keep', mergedId: 'c-gone' }
+  const expectRefused = ({ status, answer }: { status: number; answer: any }) => {
+    expect(status).toBe(403)
+    expect(answer).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(answer.error).toMatch(/part of the CRM suite/)
+    expect(answer.error).toMatch(/Included from Starter/)
+  }
+
+  it('refuses a Free workspace under a site, merging nothing', async () => {
+    mockOrg = { plan: 'free' }
+    expectRefused(await call(good))
+    expect(mockMergeContacts).not.toHaveBeenCalled()
+  })
+
+  it('refuses a Free workspace at the organization level, writing no org line', async () => {
+    mockOrg = { plan: 'free' }
+    expectRefused(await call(orgLevel))
+    expect(mockMergeContacts).not.toHaveBeenCalled()
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff merging inside a Free workspace the same way, at either level', async () => {
+    mockOrg = { plan: 'free' }
+    mockDecoded = { ...mockDecoded, staff: true }
+    mockPermissions = { ...mockPermissions, orgWide: false, permissions: {} }
+    expectRefused(await call(good))
+    expectRefused(await call(orgLevel))
+    expect(mockMergeContacts).not.toHaveBeenCalled()
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('tells a site-scoped member about the permission, not the plan', async () => {
+    mockOrg = { plan: 'free' }
+    mockPermissions = { ...mockPermissions, orgWide: false }
+    const { status, answer } = await call(good)
+    expect(status).toBe(403)
+    expect(answer).toEqual({
+      error: 'Merging contacts requires the data permission across the whole workspace',
+    })
+  })
+
+  it('admits Starter, the lowest plan that carries the suite, at both levels', async () => {
+    mockOrg = { plan: 'starter' }
+    expect((await call(good)).status).toBe(200)
+    expect((await call(orgLevel)).status).toBe(200)
+    expect(mockMergeContacts).toHaveBeenCalledTimes(2)
   })
 })

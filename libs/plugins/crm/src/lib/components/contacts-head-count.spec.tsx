@@ -195,6 +195,9 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
+  AppLink: ({ href, children }: { href: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   MdiIcon: () => null,
   useConfirmationContext: () => ({
@@ -214,6 +217,8 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   // The list reads its own address for a seeded filter (AGL-2612); none here.
   useSearchParams: () => new URLSearchParams(),
+  // The Free workspace's suite notice links to the plans by org (AGL-2788).
+  useParams: () => ({ orgSlug: 'acme', host: 'shop' }),
 }))
 
 const BASE_PATH = '/acme/hosts/shop/contacts'

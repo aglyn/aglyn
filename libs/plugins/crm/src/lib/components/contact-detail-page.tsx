@@ -51,6 +51,7 @@ import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
+import { CrmSuiteNotice, crmSuiteIncluded, crmSuiteLockedReason } from './crm-suite-lock'
 import { useErasePersonAction } from './erase-person-action'
 import RecordFilesCard from './record-files-card'
 import { RecordTasksCard } from './record-tasks-card'
@@ -124,6 +125,15 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   } = useCrmScope({ hostId, org })
   const mount = useCrmOrgMount()
   const merge = useContactMergeDialog()
+  /*
+   * THE CRM SUITE (AGL-2788). Reading this person is on every plan, and so
+   * are their tags, notes, deletion and erasure. Working them — owner, stage
+   * and company; tasks, deals, files and custom fields; a logged call or
+   * activity; one-to-one email; a merge — is the suite's. The shell mounted
+   * this page once the org had settled, so this is the plan, not a paint of
+   * the org still loading.
+   */
+  const suiteIncluded = crmSuiteIncluded(org)
 
   const {
     data: row,
@@ -304,8 +314,8 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       key: 'merge',
       label: 'Merge into…',
       icon: <MdiIcon path={mdiMerge.path} size={0.8} />,
-      disabled: !row,
-      disabledReason: 'The contact has not loaded',
+      disabled: !row || !suiteIncluded,
+      disabledReason: suiteIncluded ? 'The contact has not loaded' : crmSuiteLockedReason(),
       onClick: () => merge.open(),
     },
     {
@@ -379,6 +389,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 org={org}
                 link={{ contactId: id }}
                 phone={record.phone}
+                suiteLocked={!suiteIncluded}
               />
               <CrmSendEmailButton
                 hostId={siteHostId}
@@ -386,6 +397,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 contactId={id}
                 email={record.email}
                 name={record.name}
+                suiteLocked={!suiteIncluded}
               />
             </>
           ) : null
@@ -449,6 +461,14 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
       </CrmRecordHeader>
       {record && row && scope ? (
         <>
+          {suiteIncluded ? null : (
+            <CrmSuiteNotice>
+              {'Working this contact — the owner, stage and company, tasks, ' +
+                'deals, files and custom fields, logging a call or an activity, ' +
+                'one-to-one email and merging duplicates — is part of the CRM ' +
+                'suite.'}
+            </CrmSuiteNotice>
+          )}
           {/*
             The cross-site fact, at the organization level only (AGL-2630):
             which sites know this person, and their consent for each. Under
@@ -464,6 +484,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             scope={scope}
             seed={{ status, fromCache }}
             members={members}
+            suiteLocked={!suiteIncluded}
           />
           <ContactAssociationsCard
             hostId={siteHostId}
@@ -475,35 +496,47 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             basePath={basePath}
             bookingsHref={bookingsHref}
           />
-          <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
+          {/*
+            The suite's own cards — custom fields, deals, tasks, files — are
+            named in the notice above on a plan without the suite, rather than
+            drawn as four upsells in a row.
+          */}
+          {suiteIncluded ? (
+            <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />
+          ) : null}
           <ContactTimelineCard
             hostId={hostId}
             org={org}
             contactId={id}
             contact={row}
             campaignHref={campaignHref}
+            suiteLocked={!suiteIncluded}
           />
-          <ContactDealsCard
-            hostId={hostId}
-            org={org}
-            basePath={basePath}
-            contactId={id}
-            contactName={record.name || record.email}
-          />
-          <RecordTasksCard hostId={hostId} org={org} basePath={basePath} contactId={id} />
-          {/*
-            The files are the VIEWING holder's, like everything else on this
-            page: the write is a facet path, so a contract one brand filed
-            never appears on a sibling brand's copy of the person.
-          */}
-          <RecordFilesCard
-            scope={scope}
-            collection="contacts"
-            recordId={id}
-            facetGroupId={consentGroup.groupId}
-            mediaIds={record.mediaIds}
-            topic="contactRecord"
-          />
+          {suiteIncluded ? (
+            <>
+              <ContactDealsCard
+                hostId={hostId}
+                org={org}
+                basePath={basePath}
+                contactId={id}
+                contactName={record.name || record.email}
+              />
+              <RecordTasksCard hostId={hostId} org={org} basePath={basePath} contactId={id} />
+              {/*
+                The files are the VIEWING holder's, like everything else on this
+                page: the write is a facet path, so a contract one brand filed
+                never appears on a sibling brand's copy of the person.
+              */}
+              <RecordFilesCard
+                scope={scope}
+                collection="contacts"
+                recordId={id}
+                facetGroupId={consentGroup.groupId}
+                mediaIds={record.mediaIds}
+                topic="contactRecord"
+              />
+            </>
+          ) : null}
           <ContactDuplicatesCard
             current={{ id, doc: row }}
             scope={scope}
@@ -511,6 +544,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             visibleTo={visibleTo}
             basePath={basePath}
             onMerge={(candidate) => merge.open({ other: candidate, keep: 'current' })}
+            suiteLocked={!suiteIncluded}
           />
           <ContactMergeDialog
             {...merge.state}

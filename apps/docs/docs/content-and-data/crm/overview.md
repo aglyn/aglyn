@@ -89,12 +89,14 @@ under Billing & plans.
 
 | | Free | Starter and above |
 | --- | --- | --- |
-| **Contacts** — the list, tags, notes, segments, CSV import and export, bulk actions | Yes, banded at 100 records | Yes, banded by tier and metered past the band |
-| **The CRM suite** — Leads, Companies, Deals, Tasks, Reports and Fields; the two CRM dashboard cards; the CRM automation steps; the `crm:*` REST resources | Shown in the rail with a lock; opening a section names the plan that includes it | Yes |
+| **Contacts** — the list and its filters, tags and notes, segments, CSV export, a contact's name, phone, job title and address, removing a contact from a site and erasing a person | Yes, banded at 100 records | Yes, banded by tier and metered past the band |
+| **The CRM suite** — Leads, Companies, Deals, Tasks, Reports and Fields; on Contacts, **New contact**, **Import CSV**, saved views, and a contact's owner, lifecycle stage, company, custom fields, tasks, deals, files, logged calls and activities and merges, one record at a time or from the bulk bar; the two CRM dashboard cards; the CRM automation steps; the `crm:*` REST resources | The sections are shown in the rail with a lock, and the suite's actions on Contacts are shown locked; each names the plan that includes it | Yes |
 | **One-to-one email** from a record | None | A daily cap by tier — see [One-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email) |
 
 The contacts list is on every plan because it is the audience your email campaigns
-read; the suite is what a sales team builds on that list. A record's **activity log**
+read. On Free, contacts arrive on their own from your forms, member sign-ups, orders and
+bookings; working them by hand is the suite, which is what a sales team builds on that
+list. A record's **activity log**
 is bounded on every plan at **5,000 logged activities per record** — a call a day for
 fourteen years — after which the log dialog, the automation step and the API refuse
 another entry on that record with a message saying so.
@@ -119,6 +121,10 @@ you:
   site; see [Bulk actions](./bulk-actions.md).
 - **Export to CSV**, and **Import CSV** — see below.
 
+On Free, **New contact**, **Import CSV**, saved views, logging an activity, and a
+contact's owner, stage and company stay on the page, shown locked: they are the
+[CRM suite](#what-each-plan-includes), included from Starter.
+
 Under the list, a **Recent activity** feed shows the newest calls, emails,
 meetings and notes anyone on the team has logged against any record.
 
@@ -127,6 +133,7 @@ meetings and notes anyone on the team has logged against any record.
 **Import CSV** on the Contacts section brings a spreadsheet of people in — map its
 columns to contact fields, preview the first rows, and import in batches with a report
 of what was added, updated and skipped. See [Import contacts from CSV](./import.md).
+Importing is part of the [CRM suite](#what-each-plan-includes), included from Starter.
 
 ## Segments
 

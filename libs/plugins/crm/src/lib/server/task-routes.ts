@@ -57,6 +57,7 @@ import {
   type CrmRouteScope,
   readCrmRouteScope,
 } from './org-caller'
+import { crmSuiteRefusal } from './suite-gate'
 
 /**
  * The two things a task does that a browser must not do alone (AGL-2599).
@@ -101,7 +102,14 @@ import {
  * request as a whole is refused only for what refuses every task alike.
  */
 
-export type Refusal = { ok: false; status: number; body: { error: string } }
+export type Refusal = {
+  ok: false
+  status: number
+  body: { error: string; reason?: string; code?: string }
+}
+
+/** What the suite gate names when a task route refuses a plan without it. */
+const TASKS_ACT = "Working a record's tasks"
 
 export interface Writer {
   ok: true
@@ -144,6 +152,9 @@ export async function authorizeCrmWriter(
       refusal: ORG_REFUSAL,
     })
     if (caller.ok === false) return refuse(caller.status, caller.error)
+    // The plan after the person (AGL-2787): see `suite-gate.ts`.
+    const suite = crmSuiteRefusal(caller.org, TASKS_ACT)
+    if (suite) return { ok: false, status: suite.status, body: suite.body }
     return {
       ok: true,
       uid: caller.uid,
@@ -193,6 +204,8 @@ export async function authorizeCrmWriter(
       )
     }
   }
+  const suite = crmSuiteRefusal(org, TASKS_ACT)
+  if (suite) return { ok: false, status: suite.status, body: suite.body }
   return {
     ok: true,
     uid: decoded.uid,

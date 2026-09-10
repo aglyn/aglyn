@@ -23,6 +23,7 @@ import { Button, Link, Tooltip } from '@mui/material'
 import { useState } from 'react'
 import type { ActivityRecordLink } from './activity-queries'
 import { useActivityScope } from './activity-queries'
+import { CrmSuiteLockedButton } from './crm-suite-lock'
 import { LogActivityDialog } from './log-activity-dialog'
 
 /**
@@ -77,6 +78,11 @@ export interface CrmCallButtonProps {
   link: ActivityRecordLink
   /** The record's number, when the page holds one. */
   phone?: string | null
+  /**
+   * The org's plan lacks the CRM suite (AGL-2788). Logging the call is the
+   * suite's and stands locked; dialing the number is not, and stays.
+   */
+  suiteLocked?: boolean
 }
 
 /**
@@ -93,7 +99,7 @@ export interface CrmCallButtonProps {
  * is, because a call placed from a mobile is still a call to log.
  */
 export function CrmCallButton(props: CrmCallButtonProps) {
-  const { hostId, org, link, phone } = props
+  const { hostId, org, link, phone, suiteLocked = false } = props
   const [open, setOpen] = useState(false)
   const scope = useActivityScope(hostId, org)
   const text = String(phone ?? '').trim()
@@ -123,10 +129,14 @@ export function CrmCallButton(props: CrmCallButtonProps) {
       ) : (
         call
       )}
-      <Button size="small" variant="outlined" onClick={() => setOpen(true)}>
-        {'Log a call'}
-      </Button>
-      {open ? (
+      {suiteLocked ? (
+        <CrmSuiteLockedButton variant="outlined">{'Log a call'}</CrmSuiteLockedButton>
+      ) : (
+        <Button size="small" variant="outlined" onClick={() => setOpen(true)}>
+          {'Log a call'}
+        </Button>
+      )}
+      {open && !suiteLocked ? (
         <LogActivityDialog
           open
           onClose={() => setOpen(false)}

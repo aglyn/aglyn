@@ -112,6 +112,7 @@ import {
   dealEventPayload,
 } from './model/deal-board-model'
 import { authorizeOrgCaller, readCrmRouteScope } from './server/org-caller'
+import { crmSuiteRefusal } from './server/suite-gate'
 
 /** The most a lost reason may carry — a sentence or two, not a post-mortem. */
 export const LOST_REASON_MAX = 500
@@ -202,6 +203,10 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     orgId = owner.orgId
     org = owner.org as Record<string, unknown>
   }
+
+  // Deals are the CRM suite's, at either level (AGL-2787).
+  const suite = crmSuiteRefusal(org, 'Moving a deal through its pipeline')
+  if (suite) return res.status(suite.status).json(suite.body)
 
   const firestore = firebaseAdmin.app().firestore()
   const orgRef = firestore.collection('orgs').doc(orgId)

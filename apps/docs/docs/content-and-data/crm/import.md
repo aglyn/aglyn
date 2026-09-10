@@ -15,6 +15,11 @@ the record you already have.
 The address is `…/hosts/{site}/crm/contacts`. Importing needs the same
 **Manage data** permission as editing a contact.
 
+:::info Plan availability
+Importing is part of the **CRM suite**, included from **Starter**; on Free **Import CSV**
+is shown locked. See [What each plan includes](./overview.md#what-each-plan-includes).
+:::
+
 ## Three steps
 
 1. **Choose the file.** A CSV with a header row. Up to **5,000 rows** per file —

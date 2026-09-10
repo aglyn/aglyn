@@ -47,6 +47,7 @@ import {
   convertHostLead,
 } from '@aglyn/tenant-runtime/convert-host-lead'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { crmSuiteRefusal } from './suite-gate'
 
 // The stage picker moved to the runtime with the writes; re-exported so the
 // pipeline code that imports it from here keeps its import.
@@ -234,6 +235,12 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       return
     }
     const { orgId, org } = resolved
+    // A lead's conversion is the suite's, like its status and owner (AGL-2787).
+    const suite = crmSuiteRefusal(org, 'Converting a lead')
+    if (suite) {
+      res.status(suite.status).json(suite.body)
+      return
+    }
     const result = await convertHostLead({
       firestore: firebaseAdmin.app().firestore(),
       hostId,

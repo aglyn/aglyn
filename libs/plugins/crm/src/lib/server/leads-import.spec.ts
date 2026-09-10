@@ -165,6 +165,8 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   registerPluginApiRoute: jest.fn(),
+  // The plan tables the suite gate reads, first so no module below is shadowed.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/consent-groups'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
@@ -280,8 +282,12 @@ beforeEach(() => {
   leadCeiling = 200_000
   // An org that pooled its sites — so the import context resolves REAL scope
   // tokens, and a lead that carried none proves the route dropped them
-  // rather than never having had any.
-  org = { consentGroups: [{ id: 'brand', name: 'Brand', hostIds: [HOST_ID, OTHER_HOST_ID] }] }
+  // rather than never having had any — on Starter, the lowest plan carrying
+  // the CRM suite.
+  org = {
+    plan: 'starter',
+    consentGroups: [{ id: 'brand', name: 'Brand', hostIds: [HOST_ID, OTHER_HOST_ID] }],
+  }
 })
 
 describe('the request shape and the gates', () => {
@@ -540,5 +546,40 @@ describe('the consent group is the site’s own', () => {
     expect(
       readMarketingBasis(leadAt('dana@example.com') ?? null, group).basis,
     ).toBe('unrecorded')
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787): the leads file is the CRM suite's to import, included
+ * from Starter, and refused for a Free workspace whoever is asking — before
+ * any site's leads are read or written.
+ */
+describe('the plan (AGL-2787)', () => {
+  it('refuses a Free workspace, filing no lead under any site', async () => {
+    org = { ...org, plan: 'free' }
+    const out = await importRows([{ email: 'dana@example.com', status: 'working' }])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(out.body.error).toMatch(/part of the CRM suite/)
+    expect(out.body.error).toMatch(/Included from Starter/)
+    expect(leadPaths()).toEqual([])
+  })
+
+  it('refuses staff importing into a Free workspace the same way', async () => {
+    org = { ...org, plan: 'free' }
+    decodedToken = { uid: 'staff-uid', staff: true }
+    docs.set(`hosts/${HOST_ID}`, { memberRoles: {} })
+    membership = null
+    const out = await importRows([{ email: 'dana@example.com' }])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(leadPaths()).toEqual([])
+  })
+
+  it('admits Starter, the lowest plan that carries the suite', async () => {
+    const out = await importRows([{ email: 'dana@example.com' }])
+    expect(out.code).toBe(200)
+    expect(out.body.created).toBe(1)
+    expect(leadAt('dana@example.com')).toBeDefined()
   })
 })

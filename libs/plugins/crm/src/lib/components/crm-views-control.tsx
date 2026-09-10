@@ -23,6 +23,7 @@ import {
   mdiChevronDown,
   mdiContentSaveOutline,
   mdiDeleteOutline,
+  mdiLockOutline,
   mdiPencilOutline,
   mdiPlus,
   mdiShareVariantOutline,
@@ -54,6 +55,7 @@ import {
 } from '@mui/material'
 import { useCallback, useState } from 'react'
 import type { CrmSavedViewController } from '../hooks/use-crm-saved-view'
+import { crmSuiteLockedReason } from './crm-suite-lock'
 
 /** A filter set offered in the menu beside the saved views — a Contacts segment. */
 export interface CrmViewPreset {
@@ -76,6 +78,12 @@ export interface CrmViewsControlProps {
    * writes it, because a segment is the contacts list's own record.
    */
   onSaveAsSegment?: (() => void) | null
+  /**
+   * The org's plan lacks the CRM suite, whose saved views are (AGL-2788).
+   * Every act on a view stands in the menu, locked; views already saved
+   * still open, and segments — which are not views — stay on every plan.
+   */
+  suiteLocked?: boolean
 }
 
 type NameDialog =
@@ -121,6 +129,7 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
     presets = [],
     presetsLabel = 'Segments',
     onSaveAsSegment,
+    suiteLocked = false,
   } = props
   const {
     views,
@@ -139,6 +148,10 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [dialog, setDialog] = useState<NameDialog>(null)
   const close = () => setAnchor(null)
+  // On a plan without the suite each act on a view is drawn with the rail's
+  // lock in place of its own glyph, and says why beneath its label.
+  const lockedReason = suiteLocked ? crmSuiteLockedReason() : undefined
+  const glyph = (path: string) => (suiteLocked ? mdiLockOutline.path : path)
 
   const mine = views.filter((view) => view.ownerUid === uid)
   const shared = views.filter((view) => view.ownerUid !== uid)
@@ -347,7 +360,7 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
         <Divider />
         {current && canEdit ? (
           <MenuItem
-            disabled={!dirty || busy}
+            disabled={suiteLocked || !dirty || busy}
             onClick={() => {
               close()
               void attempt(
@@ -358,22 +371,25 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
             }}
           >
             <ListItemIcon>
-              <MdiIcon path={mdiContentSaveOutline.path} size={0.8} />
+              <MdiIcon path={glyph(mdiContentSaveOutline.path)} size={0.8} />
             </ListItemIcon>
-            <ListItemText primary="Save changes" />
+            <ListItemText primary="Save changes" secondary={lockedReason} />
           </MenuItem>
         ) : null}
         <MenuItem
-          disabled={!uid || busy}
+          disabled={suiteLocked || !uid || busy}
           onClick={() => {
             close()
             setDialog({ mode: 'create', name: '', shared: false })
           }}
         >
           <ListItemIcon>
-            <MdiIcon path={mdiPlus.path} size={0.8} />
+            <MdiIcon path={glyph(mdiPlus.path)} size={0.8} />
           </ListItemIcon>
-          <ListItemText primary={current ? 'Save as new view…' : 'Save as view…'} />
+          <ListItemText
+            primary={current ? 'Save as new view…' : 'Save as view…'}
+            secondary={lockedReason}
+          />
         </MenuItem>
         {dirty ? (
           <MenuItem
@@ -402,21 +418,21 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
         ) : null}
         {current && canEdit ? (
           <MenuItem
-            disabled={busy}
+            disabled={suiteLocked || busy}
             onClick={() => {
               close()
               setDialog({ mode: 'rename', name: current.name })
             }}
           >
             <ListItemIcon>
-              <MdiIcon path={mdiPencilOutline.path} size={0.8} />
+              <MdiIcon path={glyph(mdiPencilOutline.path)} size={0.8} />
             </ListItemIcon>
-            <ListItemText primary="Rename…" />
+            <ListItemText primary="Rename…" secondary={lockedReason} />
           </MenuItem>
         ) : null}
         {current && canEdit ? (
           <MenuItem
-            disabled={busy}
+            disabled={suiteLocked || busy}
             onClick={() => {
               close()
               void attempt(
@@ -427,14 +443,17 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
             }}
           >
             <ListItemIcon>
-              <MdiIcon path={mdiShareVariantOutline.path} size={0.8} />
+              <MdiIcon path={glyph(mdiShareVariantOutline.path)} size={0.8} />
             </ListItemIcon>
-            <ListItemText primary={current.shared ? 'Stop sharing' : 'Share with the team'} />
+            <ListItemText
+              primary={current.shared ? 'Stop sharing' : 'Share with the team'}
+              secondary={lockedReason}
+            />
           </MenuItem>
         ) : null}
         {currentId && current ? (
           <MenuItem
-            disabled={busy}
+            disabled={suiteLocked || busy}
             onClick={() => {
               close()
               void attempt(
@@ -447,16 +466,21 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
             }}
           >
             <ListItemIcon>
-              <MdiIcon path={isDefault ? mdiStar.path : mdiStarOutline.path} size={0.8} />
+              <MdiIcon
+                path={glyph(isDefault ? mdiStar.path : mdiStarOutline.path)}
+                size={0.8}
+              />
             </ListItemIcon>
             <ListItemText
               primary={isDefault ? 'Clear default' : 'Set as default'}
-              secondary={isDefault ? undefined : 'Opens first when you come here'}
+              secondary={
+                lockedReason ?? (isDefault ? undefined : 'Opens first when you come here')
+              }
             />
           </MenuItem>
         ) : defaultViewId ? (
           <MenuItem
-            disabled={busy}
+            disabled={suiteLocked || busy}
             onClick={() => {
               close()
               void attempt(
@@ -467,17 +491,20 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
             }}
           >
             <ListItemIcon>
-              <MdiIcon path={mdiStarOutline.path} size={0.8} />
+              <MdiIcon path={glyph(mdiStarOutline.path)} size={0.8} />
             </ListItemIcon>
-            <ListItemText primary={`Make ${allLabel.toLowerCase()} the default`} />
+            <ListItemText
+              primary={`Make ${allLabel.toLowerCase()} the default`}
+              secondary={lockedReason}
+            />
           </MenuItem>
         ) : null}
         {current && canEdit ? (
-          <MenuItem disabled={busy} onClick={() => void handleDelete()}>
+          <MenuItem disabled={suiteLocked || busy} onClick={() => void handleDelete()}>
             <ListItemIcon>
-              <MdiIcon path={mdiDeleteOutline.path} size={0.8} />
+              <MdiIcon path={glyph(mdiDeleteOutline.path)} size={0.8} />
             </ListItemIcon>
-            <ListItemText primary="Delete view…" />
+            <ListItemText primary="Delete view…" secondary={lockedReason} />
           </MenuItem>
         ) : null}
       </Menu>

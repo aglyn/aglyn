@@ -12,6 +12,12 @@ columns showing, and the column it is sorted by, under a name. A view is the
 list the way you work it — "my open leads in Texas" — and it is there again
 when you come back.
 
+:::info Plan availability
+Saved views are part of the **CRM suite**, included from **Starter**. On Free the views
+menu on the Contacts list still offers your [segments](./overview.md#segments) and
+**Save as segment…**, and every act on a view is shown locked.
+:::
+
 ## The views control
 
 Above each list, a button names the view the list is showing — **All

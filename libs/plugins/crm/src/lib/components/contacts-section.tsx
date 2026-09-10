@@ -110,6 +110,7 @@ import { NoNextActivityToggle } from './crm-next-activity-column'
 import { useCompanyOptions } from './company-picker'
 import CrmFilterBar, { type CrmFilterOption } from './crm-filter-bar'
 import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
+import { CrmSuiteLockedButton, CrmSuiteNotice, crmSuiteIncluded } from './crm-suite-lock'
 
 /**
  * The shared labels, under the name this file has always called them.
@@ -204,6 +205,14 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // and the viewing group and the scope clause are both `null`.
   const crmScope = useCrmScope({ hostId, org })
   const { scope: dataScope, orgId, consentGroup, visibleTo: visibleToTokens } = crmScope
+  /*
+   * THE CRM SUITE (AGL-2788). This list is on every plan — the capture
+   * projection, its tags, notes, segments and export — and working the people
+   * on it by hand is the suite's: adding one, importing a file, a saved view,
+   * the owner, stage and company of a selection. The shell mounts this page
+   * only once the org has settled, so the plan read here is an answer.
+   */
+  const suiteIncluded = crmSuiteIncluded(org)
   // The org's site list, at the organization level only — what names the
   // sites in the "Known by" column (AGL-2630).
   const mount = useCrmOrgMount()
@@ -847,7 +856,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   : `${quota.used.toLocaleString()} CRM records`
               }`}
             </Typography>
-            <ContactImportButton hostId={hostId} org={org} />
+            {suiteIncluded ? (
+              <ContactImportButton hostId={hostId} org={org} />
+            ) : (
+              <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+            )}
             <Button
               size="small"
               onClick={handleExport}
@@ -859,19 +872,33 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 list. Disabled until the org has resolved, because the route
                 resolves the org from the site and a click before that has
                 nowhere to write. */}
-            <Button
-              size="small"
-              variant="contained"
-              color="primary"
-              disabled={!dataScope}
-              onClick={() => {
-                setCreateError(null)
-                setCreateOpen(true)
-              }}
-            >
-              {'New contact'}
-            </Button>
+            {suiteIncluded ? (
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                disabled={!dataScope}
+                onClick={() => {
+                  setCreateError(null)
+                  setCreateOpen(true)
+                }}
+              >
+                {'New contact'}
+              </Button>
+            ) : (
+              <CrmSuiteLockedButton variant="contained" color="primary">
+                {'New contact'}
+              </CrmSuiteLockedButton>
+            )}
           </Stack>
+          {suiteIncluded ? null : (
+            <CrmSuiteNotice>
+              {'Contacts arrive here on their own from your forms, sign-ups, ' +
+                'orders and bookings. Adding one by hand, importing a CSV, ' +
+                "saved views, and a contact's owner, stage and company are " +
+                'part of the CRM suite.'}
+            </CrmSuiteNotice>
+          )}
           {/*
             The view this list is showing, and the clauses narrowing it
             (AGL-2617). The control names the view and holds everything a
@@ -883,6 +910,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             <CrmViewsControl
               controller={views}
               allLabel="All contacts"
+              suiteLocked={!suiteIncluded}
               presets={segmentPresets}
               onSaveAsSegment={
                 segmentFilters && dataScope ? () => setSegmentName('') : null
@@ -993,10 +1021,19 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               description={
                 contactsStatus === 'loading'
                   ? undefined
-                  : 'Form submissions, member sign-ups, orders and bookings become contacts on their own; add one by hand or bring a list in from a CSV.'
+                  : suiteIncluded
+                    ? 'Form submissions, member sign-ups, orders and bookings become contacts on their own; add one by hand or bring a list in from a CSV.'
+                    : 'Form submissions, member sign-ups, orders and bookings become contacts on their own.'
               }
               action={
-                contactsStatus === 'loading' ? undefined : (
+                contactsStatus === 'loading' ? undefined : !suiteIncluded ? (
+                  <Stack direction="row" spacing={1}>
+                    <CrmSuiteLockedButton variant="contained" color="primary">
+                      {'New contact'}
+                    </CrmSuiteLockedButton>
+                    <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+                  </Stack>
+                ) : (
                   <Stack direction="row" spacing={1}>
                     <Button
                       size="small"
@@ -1033,7 +1070,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                     ' Sorting reorders that window.'}
                 </Typography>
               ) : null}
-              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} />
+              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} suiteLocked={!suiteIncluded} />
               <CrmColumnOrderProvider value={grid.columnOrder}>
                 <ListTable
                   rows={visible}

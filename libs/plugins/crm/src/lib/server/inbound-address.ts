@@ -34,6 +34,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { CRM_API_ROUTES } from '../constants/api-routes'
 import { authorizeOrgCaller, readCrmRouteScope } from './org-caller'
+import { crmSuiteRefusal } from './suite-gate'
 
 /**
  * `POST /api/crm/inbound-address` — the workspace's email capture address
@@ -89,6 +90,8 @@ interface Caller {
   uid: string
   email: string | null
   orgId: string
+  /** The org document, for the plan the address belongs to. */
+  org: unknown
   /** Whether this caller may replace the token. */
   canRotate: boolean
 }
@@ -137,6 +140,7 @@ async function authorizeSiteCaller(
     uid: decoded.uid,
     email: decoded.email ?? null,
     orgId,
+    org: resolved.org,
     canRotate: canManageOrg(member?.role ?? null),
   }
 }
@@ -160,6 +164,7 @@ async function authorizeOrgLevelCaller(
     uid: caller.uid,
     email: caller.email,
     orgId,
+    org: caller.org,
     // `manage-org` admitted them when they asked to rotate; a reader who
     // did not ask is not told whether they could.
     canRotate: rotate,
@@ -192,6 +197,13 @@ export const crmInboundAddressHandler: PluginApiHandler = async (req, res) => {
     }
     if (rotate && !caller.canRotate) {
       res.status(403).json({ error: CRM_INBOUND_ROTATE_REFUSAL })
+      return
+    }
+    // The first ask mints the token, so reading the address is a write on
+    // a plan without the suite; the webhook refuses such a plan's mail too.
+    const suite = crmSuiteRefusal(caller.org, 'The email capture address')
+    if (suite) {
+      res.status(suite.status).json(suite.body)
       return
     }
     const firestore = firebaseAdmin.app().firestore()

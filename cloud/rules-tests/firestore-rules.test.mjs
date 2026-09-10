@@ -2077,7 +2077,7 @@ describe('hosts', () => {
       'overlays', 'experiments', 'emailCampaigns', 'emailTemplates',
       'coupons', 'discounts', 'reviews', 'siteMembers',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
-      'settings', 'media', 'mediaFolders', 'leads',
+      'settings', 'media', 'mediaFolders',
       'licenseKeys', 'reservations', 'resources', 'productCategories',
       // `suppressions` JOINS this list in AGL-2042 rather than being denied
       // with the other six. AGL-2042's description names it as server-written,
@@ -2103,6 +2103,12 @@ describe('hosts', () => {
     // `an author cannot create or delete a member post (AGL-2372)` and its
     // two siblings, beside the regression guard that keeps the console
     // card's Delete button working.
+    //
+    // `leads` LEFT this list in AGL-2801: its create and update are excluded
+    // from the catch-all and re-granted by a dedicated block that also asks
+    // the plan for the CRM suite. All three legs, on a plan with the suite
+    // and on Free, are asserted in `the CRM suite collections answer to the
+    // plan (AGL-2801)`.
     //
     // `inventoryAdjustments` LEFT this list in AGL-2269 and is not an
     // oversight: it is now append-only, so it fails the update/delete legs
@@ -9339,6 +9345,175 @@ describe('an email template is every editor\'s when shared and its owner\'s when
  * COLLECTION scope only (AGL-2486). Everything below is about that field
  * being checked as carefully as a path would have been.
  */
+/**
+ * THE CRM SUITE IS THE PLAN'S IN THE DATABASE TOO (AGL-2801).
+ *
+ * The 2026-09-05 pricing decision includes the CRM suite from Starter and
+ * keeps the contacts list on Free. The companion collections above, the saved
+ * views, the email templates and a lead's working state are the suite, so on
+ * a workspace whose plan does not carry it a create and an update are refused
+ * — while a read and a delete, the workspace's own records, are not. The plan
+ * question is `resolveOrgEntitlements`', restated: a per-org grant or
+ * revocation wins, a missing plan is Free, and a paid plan whose subscription
+ * died is Free until billing restores it.
+ *
+ * The org cases run over all eight collections by name, the companion suite's
+ * discipline, so a clause dropped from one block fails naming that block.
+ */
+describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
+  const SUITE = [
+    'companies',
+    'pipelines',
+    'deals',
+    'crmTasks',
+    'crmActivities',
+    'contactFields',
+    'crmViews',
+    'crmEmailTemplates',
+  ]
+  /** A document each collection's rule admits on a plan with the suite. */
+  const payload = (name, uid) => ({
+    name: 'record',
+    hostId: HOST,
+    visibleTo: ['org'],
+    ...(name === 'crmViews'
+      ? {
+          section: 'contacts', filters: [], columns: [], sort: null,
+          ownerUid: uid, createdByUid: uid, shared: false,
+        }
+      : {}),
+    ...(name === 'crmEmailTemplates'
+      ? {
+          subject: 'Hello', body: 'Still keen?', kind: 'template',
+          visibility: 'shared', createdByUid: uid, createdAtMs: 1, updatedAtMs: 1,
+        }
+      : {}),
+  })
+  const record = (uid, name, id) => doc(authed(uid), 'orgs', ORG, name, id)
+  const lead = (uid, id) => doc(authed(uid), 'hosts', HOST, 'leads', id)
+  /** Merged onto the seeded org, which starts on Pro. */
+  const setOrg = (fields) =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG), fields, { merge: true })
+    })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const name of SUITE) {
+        await setDoc(doc(db, 'orgs', ORG, name, 'held'), payload(name, OWNER))
+      }
+      await setDoc(doc(db, 'hosts', HOST, 'leads', 'lead-held'), {
+        email: 'lead@example.test', status: 'new',
+      })
+    })
+  })
+
+  it('refuses a Free workspace every create and update, and keeps its reads and deletes', async () => {
+    await setOrg({ plan: 'free' })
+    for (const name of SUITE) {
+      await mustDeny(
+        `the owner creating a ${name} record on Free`,
+        setDoc(record(OWNER, name, 'new'), payload(name, OWNER)),
+      )
+      await mustDeny(
+        `the owner updating a ${name} record on Free`,
+        updateDoc(record(OWNER, name, 'held'), { name: 'renamed' }),
+      )
+      await mustAllow(
+        `the owner reading a ${name} record on Free`,
+        getDoc(record(OWNER, name, 'held')),
+      )
+      await mustAllow(
+        `the owner deleting a ${name} record on Free`,
+        deleteDoc(record(OWNER, name, 'held')),
+      )
+    }
+  })
+
+  it('admits Starter, and reads an org with no plan as Free', async () => {
+    await setOrg({ plan: 'starter' })
+    for (const name of SUITE) {
+      await mustAllow(
+        `the owner creating a ${name} record on Starter`,
+        setDoc(record(OWNER, name, 'new'), payload(name, OWNER)),
+      )
+      await mustAllow(
+        `the owner updating a ${name} record on Starter`,
+        updateDoc(record(OWNER, name, 'held'), { name: 'renamed' }),
+      )
+    }
+    // Replaced rather than merged, so the org carries no plan at all.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG), {
+        name: 'Acme', slug: 'acme', ownerUid: OWNER, hosts: { [HOST]: true },
+      })
+    })
+    await mustDeny(
+      'the owner creating a company on an org with no plan',
+      setDoc(record(OWNER, 'companies', 'planless'), payload('companies', OWNER)),
+    )
+  })
+
+  it('honors a per-org grant on Free and a revocation on a paid plan', async () => {
+    await setOrg({ plan: 'free', entitlements: { features: { crm: true } } })
+    await mustAllow(
+      'the owner creating a deal on Free with the suite granted',
+      setDoc(record(OWNER, 'deals', 'granted'), payload('deals', OWNER)),
+    )
+    await setOrg({ plan: 'pro', entitlements: { features: { crm: false } } })
+    await mustDeny(
+      'the owner creating a deal on Pro with the suite revoked',
+      setDoc(record(OWNER, 'deals', 'revoked'), payload('deals', OWNER)),
+    )
+  })
+
+  it('reads a paid plan whose subscription died as Free, from either status field', async () => {
+    await setOrg({ plan: 'pro', billingStatus: 'canceled' })
+    await mustDeny(
+      'the owner creating a task on a canceled Pro subscription',
+      setDoc(record(OWNER, 'crmTasks', 'canceled'), payload('crmTasks', OWNER)),
+    )
+    await setOrg({ billingStatus: 'active' })
+    await mustAllow(
+      'the owner creating a task on an active Pro subscription',
+      setDoc(record(OWNER, 'crmTasks', 'active'), payload('crmTasks', OWNER)),
+    )
+    // No mirrored status: the legacy inline subscription speaks instead.
+    await setOrg({ billingStatus: '', subscription: { status: 'unpaid' } })
+    await mustDeny(
+      'the owner creating a task on a legacy unpaid subscription',
+      setDoc(record(OWNER, 'crmTasks', 'unpaid'), payload('crmTasks', OWNER)),
+    )
+  })
+
+  it("refuses a Free workspace a lead's working state, and keeps its read and delete", async () => {
+    await setOrg({ plan: 'free' })
+    await mustDeny(
+      'an editor setting a lead status on Free',
+      updateDoc(lead(EDITOR, 'lead-held'), { status: 'contacted' }),
+    )
+    await mustDeny(
+      'an editor creating a lead on Free',
+      setDoc(lead(EDITOR, 'lead-new'), { email: 'new@example.test' }),
+    )
+    await mustAllow('an editor reading a lead on Free', getDoc(lead(EDITOR, 'lead-held')))
+    await mustAllow('an editor deleting a lead on Free', deleteDoc(lead(EDITOR, 'lead-held')))
+  })
+
+  it("keeps a lead's authoring on a plan with the suite", async () => {
+    await mustAllow(
+      'an editor creating a lead on Pro',
+      setDoc(lead(EDITOR, 'lead-new'), { email: 'new@example.test' }),
+    )
+    await mustAllow(
+      'an editor setting a lead status on Pro',
+      updateDoc(lead(EDITOR, 'lead-new'), { status: 'contacted' }),
+    )
+    await mustAllow('an editor deleting a lead on Pro', deleteDoc(lead(EDITOR, 'lead-new')))
+  })
+})
+
 describe('a publish outbox entry may only be written for a host you can publish to (AGL-2575)', () => {
   const OUTBOX = 'publishOutbox'
   /** An entry shaped exactly as `stagePublishOutboxEntry` writes one. */
