@@ -147,7 +147,7 @@ checkbox group needs at least one box ticked.
 ### Labels and placeholders
 
 Every field has a **Label** — the visible name of the input, and the one screen
-readers announce. A field can also carry a **Placeholder**: a grey example
+readers announce. A field can also carry a **Placeholder**: a gray example
 inside the empty input, such as `you@company.com` or "Tell us about your setup".
 Set one and the label moves above the box so both are readable at once; leave it
 empty and the label keeps its floating behavior.

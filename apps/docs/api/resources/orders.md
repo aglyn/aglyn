@@ -10,7 +10,7 @@ Read the orders a site's store has taken, so you can push them into accounting,
 fulfillment, or a warehouse system — and **record the shipment** when your warehouse,
 3PL or label printer sends the parcel.
 
-That one write is the only one. Creating, cancelling or refunding an order moves money
+That one write is the only one. Creating, canceling or refunding an order moves money
 or stock, and those stay in the console and the storefront.
 
 Orders belong to a **site**, not to the organization, because each site runs its own
@@ -107,7 +107,7 @@ shipment) **and** a plan that includes commerce. If your plan doesn't, they answ
 | `partially_fulfilled` | Some line items have shipped. |
 | `fulfilled` | Everything has shipped. |
 | `delivered` | Confirmed delivered. |
-| `cancelled` | Cancelled; stock returned. |
+| `cancelled` | Canceled; stock returned. |
 | `refunded` | Refunded — check `refundedCents` for how much, and `disputed` for why. |
 
 `refunded` and `cancelled` are terminal. Everything else can still move.
@@ -139,7 +139,7 @@ anything else to an order.
 | Action | Over the API? | Why |
 | --- | --- | --- |
 | Mark fulfilled / delivered | **Yes**, `orders:write` | A forward status change and a timeline entry. No stock moves, no money moves. |
-| Cancel an order | No — console | Cancelling **returns held stock**, under its own transaction. |
+| Cancel an order | No — console | Canceling **returns held stock**, under its own transaction. |
 | Refund an order | No — console | A refund **moves money**, under its own transaction. |
 | Create an order | No — storefront, POS or a console draft | An order is created by a payment, not by a status. |
 
@@ -270,7 +270,7 @@ request.
 | `trackingNumber` | string | Optional. Free text. Trimmed to 60 characters. |
 
 Any other field in the body is **refused by name**, never ignored — so a typo like
-`tracking_number` comes back as a `400` telling you which key it didn't recognise
+`tracking_number` comes back as a `400` telling you which key it didn't recognize
 rather than a `200` that quietly dropped half your shipment.
 
 ```bash
@@ -322,7 +322,7 @@ the API can never make a move the console would refuse.
 
 A move this table refuses answers `409 conflict` with `code: "order_transition"`, and
 the message names the status that refused it. That is the answer to give up on, not to
-retry: it means the order moved on without you — usually refunded or cancelled in the
+retry: it means the order moved on without you — usually refunded or canceled in the
 console while your queue was still holding it.
 
 ```json

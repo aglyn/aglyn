@@ -134,6 +134,19 @@ test('a persisted value is left alone in source', () => {
   assert.deepEqual(findInSource("const o = { status: 'cancelled' }", 'x.ts'), [])
 })
 
+test('a URL in a string literal is somebody else\'s path, not our copy', () => {
+  // The Irish DPC and UK ICO breach-report links in `member-state-exposure.ts`
+  // have `/organisations/` in their real paths. Americanising either is a 404.
+  const source =
+    "const ico = 'https://ico.org.uk/for-organisations/report-a-breach/'"
+  assert.deepEqual(findInSource(source, 'x.ts'), [])
+})
+
+test('but copy sitting beside a URL is still copy', () => {
+  const source = "const s = 'See https://ico.org.uk/for-organisations/ to organise it'"
+  assert.deepEqual(words(findInSource(source, 'x.ts')), ['organise'])
+})
+
 test('an MUI palette token is left alone in source', () => {
   assert.deepEqual(findInSource("const sx = { color: 'grey.500' }", 'x.ts'), [])
 })

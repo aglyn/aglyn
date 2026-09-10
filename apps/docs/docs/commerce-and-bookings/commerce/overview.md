@@ -238,19 +238,19 @@ Statuses render as colored pills, and the color is part of the message:
 
 | Status | Pill | Color |
 | --- | --- | --- |
-| `pending` | **Pending** | Neutral grey — an unpaid order is not a problem, it is not money yet. |
+| `pending` | **Pending** | Neutral gray — an unpaid order is not a problem, it is not money yet. |
 | `paid` | **Paid** | Green. |
 | `partially_fulfilled` | **Partly fulfilled** | Amber — something is still owed to the buyer. |
 | `fulfilled` | **Fulfilled** | Blue. |
 | `delivered` | **Delivered** | Blue. |
-| `cancelled` | **Canceled** | Neutral grey. |
+| `cancelled` | **Canceled** | Neutral gray. |
 | `refunded` | **Refunded** | Red. |
 
 The left column is the value in the API and the CSV; the middle one is what the
 console shows. They differ in one place — `partially_fulfilled` displays as **Partly
 fulfilled** — so a filter or a script written against the label will miss it.
 
-Red and grey are reserved deliberately. Canceled and refunded are the states worth
+Red and gray are reserved deliberately. Canceled and refunded are the states worth
 spotting in a scan of fifty rows, and coloring pending as a warning would spend that
 attention on orders that are merely young.
 

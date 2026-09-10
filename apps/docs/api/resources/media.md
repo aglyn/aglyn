@@ -211,7 +211,7 @@ platform vetted it":
 
 - **We check the declared content type against an allowlist** and refuse the rest.
 - **We measure the real decoded size** against the per-type ceiling.
-- **We check that the bytes match the type you declared.** A file labelled
+- **We check that the bytes match the type you declared.** A file labeled
   `application/pdf` has to start with a PDF header, a `.docx` has to be a ZIP, a
   `image/png` has to carry a PNG signature. A mismatch is refused with `415`
   (`type_mismatch`). Text types — `text/plain`, `text/csv`, `text/markdown`,

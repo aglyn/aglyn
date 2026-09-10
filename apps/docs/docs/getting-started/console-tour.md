@@ -124,7 +124,7 @@ Each card carries:
 | Pill | Hover tells you |
 | --- | --- |
 | **Live** (green) | How many pages are published — "12 published pages." |
-| **Draft** (grey outline) | "Nothing published yet — visitors see the placeholder." |
+| **Draft** (gray outline) | "Nothing published yet — visitors see the placeholder." |
 | **Maintenance** (amber) | "Every path serves the maintenance screen." |
 | **Suspended** (red) | "This site is serving a lockdown notice instead of content." |
 

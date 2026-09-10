@@ -97,7 +97,7 @@ from. See [contacts](resources/contacts.md#read-only-fields).
 Several resources are **read-only** over the API, and the missing write scope is
 deliberate in each case rather than an oversight:
 
-- **Cancelling and refunding an order**, and **products**, move money and stock.
+- **Canceling and refunding an order**, and **products**, move money and stock.
   `orders:write` stops precisely at the line where they begin: it records shipments,
   which change no money and no stock. A cancel returns held inventory and a refund
   returns money, each under its own transaction with its own decisions, so both stay

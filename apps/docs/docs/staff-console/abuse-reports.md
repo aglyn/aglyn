@@ -260,7 +260,7 @@ publication pass rather than a repo edit.
 Two things follow for you. **Details on the filing and details on the page must
 match** — if you are ever asked to correct one, correct both. And until the
 publication lands, **still do not tell a reporter or a customer that we are
-operating inside the safe harbour**: the registration is necessary and is not
+operating inside the safe harbor**: the registration is necessary and is not
 sufficient.
 :::
 
@@ -342,7 +342,7 @@ is a harm *we* are causing to *our own customer*.
 
 ## Repeat infringers {#repeat-infringers}
 
-§512(i) conditions the **entire** safe harbour — every limitation in §512, not
+§512(i) conditions the **entire** safe harbor — every limitation in §512, not
 just the hosting one — on having adopted **and reasonably implemented** a policy
 for terminating repeat infringers, and on informing subscribers of it. Providers
 most often lose on the second half: a policy that exists as prose while nothing
@@ -410,7 +410,7 @@ incident.
   getting worse does not raise its voice.
 - **The reporter is emailed their reference, when they left an address**
   (AGL-2400). This paragraph used to say the opposite — *"no
-  auto-acknowledgement email to the reporter"* — and had been wrong since the
+  auto-acknowledgment email to the reporter"* — and had been wrong since the
   receipt shipped. An anonymous report still gets nothing, correctly: there is
   nobody to write to, and the queue says so on the row rather than leaving you
   to infer it from an empty field.
@@ -443,7 +443,7 @@ incident.
   equally true of an address that was never created. The check that can fail is
   `groups.google.com/a/aglyn.com/g/<name>` — it returns **404** for an address
   that does not exist.
-  Each is a single-member group with no auto-acknowledgement, so a report sits
+  Each is a single-member group with no auto-acknowledgment, so a report sits
   unread and unacknowledged whenever its one member is away (AGL-2400).
   **The form is still the better route** — it captures the §512(c)(3)(A) fields
   a free-text email will not. If someone asks where to send a report, send them

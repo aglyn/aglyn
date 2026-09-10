@@ -158,7 +158,7 @@ Set them before `docker compose build`, not just before `up`.
 The counter-notice flow, the 10–14 business-day put-back clock and the
 repeat-infringer strike ledger all work on your install. Aglyn's designated
 agent registration does not extend to you: §512(c)(2) makes registering an
-agent with the U.S. Copyright Office a *precondition* of the safe harbour
+agent with the U.S. Copyright Office a *precondition* of the safe harbor
 rather than a formality.
 
 So `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_*` defaults to unset, unset means the

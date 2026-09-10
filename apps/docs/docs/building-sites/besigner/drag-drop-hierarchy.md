@@ -137,7 +137,7 @@ any time a drag is fiddly.
 Each action is a single undoable step, and each obeys exactly the same rules a drag does — including
 the leaf rule. An element whose content is an attribute (a **Markdown** block, a **Reusable
 Component** instance, a **Layout Slot**, a **List Item Text**) can't hold other elements, so **Move
-into element above** is greyed out over one, and **Move out of container** refuses to drop an
+into element above** is grayed out over one, and **Move out of container** refuses to drop an
 element into one. When an action is unavailable the Besigner says why rather than moving the element
 somewhere it would never render.
 

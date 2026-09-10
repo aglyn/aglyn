@@ -211,7 +211,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
         token: 'DEVICE_COOKIE',
         surface: CONSOLE_HOST,
         purpose:
-          'Recognises a device you have signed in from before, so a sign-in from a new one can be flagged to you',
+          'Recognizes a device you have signed in from before, so a sign-in from a new one can be flagged to you',
         duration: '365 days',
         httpOnly: true,
       },

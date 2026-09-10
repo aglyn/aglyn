@@ -248,12 +248,30 @@ export function findInMarkdown(source) {
   return scan(masked, lineAt).sort((a, b) => a.line - b.line)
 }
 
+/**
+ * A URL inside a string literal is somebody else's path, not our copy.
+ *
+ * `member-state-exposure.ts` links the Irish DPC and the UK ICO breach-report
+ * pages, whose paths are literally `/en/organisations/` and
+ * `/for-organisations/`. Americanising either is a 404, not a copy fix — the
+ * spelling belongs to the regulator's site. Blanked rather than cut so the
+ * offsets around them still name the right line.
+ *
+ * Markdown gets this for free in `maskMarkdown`; a string literal needs it
+ * said again because the parser hands over the whole literal.
+ */
+function maskUrls(text) {
+  return text.replace(/https?:\/\/\S+/g, blank)
+}
+
 /** British spellings in a source file's user-visible copy. */
 export function findInSource(source, path = 'source.tsx') {
   const { file, spans } = copySpans(source, path)
   const found = []
   for (const { text, start } of spans)
-    found.push(...scan(text, (pos) => lineOf(file, start + pos), DATA_VALUED))
+    found.push(
+      ...scan(maskUrls(text), (pos) => lineOf(file, start + pos), DATA_VALUED),
+    )
   return found.sort((a, b) => a.line - b.line)
 }
 

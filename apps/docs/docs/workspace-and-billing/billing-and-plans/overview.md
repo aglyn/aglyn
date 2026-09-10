@@ -329,7 +329,7 @@ your tax ID and vice versa.
 If a payment fails, the invoice stays **open** and the Billing page shows it with a
 **Pay now** button.
 
-- **It works even if the subscription has already been cancelled.** Dunning cancels
+- **It works even if the subscription has already been canceled.** Dunning cancels
   subscriptions after enough failed retries; the invoice is still owed and still
   payable, and paying it does not require a plan.
 - **Your bank may ask you to confirm the payment.** That step is your bank's, not

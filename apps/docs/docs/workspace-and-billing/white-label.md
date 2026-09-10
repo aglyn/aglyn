@@ -47,7 +47,7 @@ see Billing to upgrade. Enterprise plans can enable it per organization."*
 ## The fields {#fields}
 
 Every field is optional. **Leave one blank and it keeps the Aglyn default for
-that field** — the greyed-out placeholder text in each box is that default, so
+that field** — the grayed-out placeholder text in each box is that default, so
 a blank box is showing you exactly what will be used.
 
 Two fields are the exception, and both fall back to **nothing** rather than to

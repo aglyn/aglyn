@@ -61,7 +61,7 @@ switch to your key's 120/min. If you are pacing against these, read them per res
 rather than caching the first one you saw.
 :::
 
-:::caution Repeatedly sending a key we don't recognise
+:::caution Repeatedly sending a key we don't recognize
 Looking up a key costs us work even when it turns out not to exist, so an IP address
 that sends a large number of **unrecognised** keys in a short time starts getting `429`
 instead of `401`. Wait `Retry-After` seconds and it clears.

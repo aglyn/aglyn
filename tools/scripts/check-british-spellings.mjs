@@ -109,6 +109,30 @@ const EXEMPT = [
   /^tools\/scripts\/check-british-spellings\.mjs$/,
 ]
 
+/**
+ * What is left in the baseline, and why none of it is debt (AGL-2764).
+ *
+ * The 51 prose occurrences this gate first measured are gone. The SIX that
+ * remain are all one thing — a British spelling that is a VALUE rather than a
+ * word — and every one of them would be a breaking change to "fix":
+ *
+ *  - `marketplace-sections.ts` — `id: 'licences'` is a `MarketplaceSectionId`
+ *    union member, bound to `Route.ORG_MARKETPLACE_LICENCES` and to the
+ *    checkout mapping `purchase: 'licences'`. The `label` beside it DID move to
+ *    *Licenses*, which is the whole point: the display layer is American and
+ *    the stored value is untouched.
+ *  - `marketplace/(sections)/licences/page.tsx` — the same id as a ROUTE
+ *    SEGMENT, and the import path of the panel component named after it.
+ *    Renaming it is a URL change and a file move.
+ *  - `plugin-review-checklist.ts` — `id: 'behaviour'` is a checklist key
+ *    persisted on review records, and `plugin-reviews/[listingId]/page.tsx`
+ *    matches it with `case 'behaviour':`. The two must agree, and the stored
+ *    side cannot be rewritten without a migration.
+ *
+ * So a row here is not a TODO. Anyone lowering one should be changing a route
+ * or writing a migration, not correcting a spelling.
+ */
+
 const args = process.argv.slice(2)
 const asJson = args.includes('--json')
 const write = args.includes('--write')

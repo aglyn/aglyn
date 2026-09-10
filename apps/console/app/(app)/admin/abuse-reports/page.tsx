@@ -1234,7 +1234,7 @@ function AdminAbuseReports() {
                         <Typography variant="body2">
                           {report.hasReporterContact
                             ? `${report.reporterName ?? 'no name given'} — ${report.reporterEmail ?? 'no address recorded'}`
-                            : 'Filed anonymously. There is no address on this report, so no follow-up question is possible and no acknowledgement can be sent.'}
+                            : 'Filed anonymously. There is no address on this report, so no follow-up question is possible and no acknowledgment can be sent.'}
                         </Typography>
                       ) : (
                         // These two sentences are NOT the same fact and must

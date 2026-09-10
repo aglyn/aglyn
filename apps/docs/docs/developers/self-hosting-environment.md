@@ -398,7 +398,7 @@ unavailable and the rest of the platform runs.
 
 **Where to get these:** [dashboard.stripe.com](https://dashboard.stripe.com) →
 **Developers** → **API keys** for the two keys, **Developers** → **Webhooks** for
-the signing secrets, and **Product catalogue** → each price → its price id.
+the signing secrets, and **Product catalog** → each price → its price id.
 
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |

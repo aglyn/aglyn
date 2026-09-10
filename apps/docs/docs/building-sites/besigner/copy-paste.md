@@ -28,7 +28,7 @@ already inside it, the container wins: you get one copy, not two.
 
 Select where it should go and press <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>V</kbd>, or choose
 **Paste** from the same **⋮** menu. The menu item names what's waiting — *Paste Stack*,
-*Paste 3 elements* — and is greyed out when nothing has been copied.
+*Paste 3 elements* — and is grayed out when nothing has been copied.
 
 Where it lands follows the same rule as **Add element**:
 

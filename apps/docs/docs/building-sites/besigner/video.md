@@ -29,7 +29,7 @@ The poster is what makes the element cheap. With one, **Preload** defaults to
 fetching *nothing* — a visitor downloads the poster and not one byte of the film
 until they press play. Without a poster the element falls back to fetching the
 video's length and dimensions, because a video with neither a poster nor metadata
-paints a black rectangle. If you want the old behaviour on a postered video, set
+paints a black rectangle. If you want the old behavior on a postered video, set
 **Preload** to *Length and dimensions only*.
 
 ## Captions {#video-captions}

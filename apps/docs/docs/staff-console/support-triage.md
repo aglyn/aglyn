@@ -74,7 +74,7 @@ different runbook, and in each case answering as support is the wrong action.
 | It reads like | Route it to |
 | -- | -- |
 | "I can see another customer's data", "this URL shows me someone else's site", any report of data exposure | **[Breach notification](https://github.com/aglyn/aglyn/blob/main/docs/BREACH_NOTIFICATION.md)**. Do not reply first. §1 of that runbook is *preserve evidence*, and the Vercel runtime log holds ~60 minutes. |
-| A vulnerability report, "I found a bug in your auth" | [`SECURITY.md`](https://github.com/aglyn/aglyn/blob/main/SECURITY.md) — 3-day acknowledgement. Confirm receipt, do not discuss specifics in the ticket thread. |
+| A vulnerability report, "I found a bug in your auth" | [`SECURITY.md`](https://github.com/aglyn/aglyn/blob/main/SECURITY.md) — 3-day acknowledgment. Confirm receipt, do not discuss specifics in the ticket thread. |
 | A takedown demand, a DMCA notice, a counter-notice, a police or court request | **[Abuse reports](abuse-reports.md)**. DMCA has its own statutory clock and its own form. |
 | Child sexual abuse material, or any report of it | **[Abuse reports § CSAM](abuse-reports.md)** — immediately, and above everything else on this page. |
 | "Delete all my data", "send me everything you hold on me", a GDPR/CCPA request | **[Privacy requests](https://github.com/aglyn/aglyn/blob/main/docs/PRIVACY_REQUESTS.md)** — statutory deadline from the date received, so record that date first. |
@@ -147,7 +147,7 @@ worse than one that admits the gap:
   (AGL-1911) from Google Workspace group configuration: each is a Google Group
   accepting posts from anyone on the web, unmoderated, with a single member
   subscribed to every message. What is *not* closed is that each has exactly one
-  member and sends no auto-acknowledgement (AGL-2400) — so mail is accepted and
+  member and sends no auto-acknowledgment (AGL-2400) — so mail is accepted and
   archived whether or not anyone is reading. `security@` is the declared primary
   breach-detection channel, and the 72-hour clock runs from awareness, so a
   report arriving through the support queue may still be the copy someone

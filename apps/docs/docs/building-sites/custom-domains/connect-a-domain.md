@@ -132,7 +132,7 @@ same. Its one cost is that the address is pinned in your zone by hand: keep it i
 you ever see the domain stop resolving long after it was working.
 
 :::note Cloudflare and other proxies
-CNAME flattening at the apex works, but leave the record **DNS only** (grey cloud) until
+CNAME flattening at the apex works, but leave the record **DNS only** (gray cloud) until
 verification succeeds — a proxied record resolves to the proxy's addresses, not Aglyn's.
 :::
 

@@ -308,7 +308,7 @@ describes **this file**, and it says one of exactly three things:
 
 | Line | Dot | What it means |
 | --- | --- | --- |
-| **Served from storage · no CDN, no variants** | grey | This asset has no CDN path — a plan without the media CDN, or an asset stored before you had it. |
+| **Served from storage · no CDN, no variants** | gray | This asset has no CDN path — a plan without the media CDN, or an asset stored before you had it. |
 | **CDN · variants 320 / 640 / 1280** | green | On the CDN, with those WebP widths generated for it. The widths listed are the ones this file actually has. |
 | **CDN · no responsive variants for this file** | green | On the CDN, serving the original bytes only. |
 

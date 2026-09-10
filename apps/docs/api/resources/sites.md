@@ -103,7 +103,7 @@ Refusals:
 | `400` | `validation_failed` | Missing `displayName`, or a `subdomain` that is malformed or reserved. Never consumes the idempotency key — fix the body and retry with the same one. |
 | `403` | `site_quota` | Your plan's site limit is reached. Upgrade or add extra sites, then retry with the same key. |
 | `409` | `subdomain_taken` | Something already uses that subdomain. The message lists free alternatives. Also the answer when another request claims the same subdomain at the same moment: uniqueness is settled inside the transaction that creates the site, so exactly one of two simultaneous creates wins and the loser writes nothing at all — no site, no slot spent. |
-| `429` | — | More than 10 creates in an hour for this organization. Honour `Retry-After`. |
+| `429` | — | More than 10 creates in an hour for this organization. Honor `Retry-After`. |
 
 Each of those releases the key, so the retry that should finally succeed is not
 answered with a replay of the refusal.
@@ -133,7 +133,7 @@ You need this more often than it first looks. Writing a
 cached: pages are rebuilt at most every 60 seconds, and that cache is
 stale-while-revalidate — the first visitor after the window still gets the old copy
 while the new one is built behind them. So without a publish, "my record is in the API
-but not on the site" is the expected behaviour for up to a couple of minutes, and you
+but not on the site" is the expected behavior for up to a couple of minutes, and you
 cannot tell it apart from a write that failed.
 
 ```bash

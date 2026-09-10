@@ -260,9 +260,9 @@ export function OrgLicencesPanel({
       {held.length === 0 ? (
         <EmptyState
           read={outcome(orgLicencesRead)}
-          subject="this workspace’s licences"
+          subject="this workspace’s licenses"
           iconPath={ICON_VARIANT_COMPONENT.path}
-          title={'This workspace holds no licences'}
+          title={'This workspace holds no licenses'}
           description={
             'Anything bought for this workspace shows up here, whoever on ' +
             'the team paid for it.'
