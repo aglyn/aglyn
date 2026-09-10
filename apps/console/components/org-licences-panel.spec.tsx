@@ -77,7 +77,7 @@ describe('OrgLicencesPanel presents its empty tab like the rest of the console',
   it('renders both zero-states on cards once both reads have SETTLED', () => {
     const { container } = renderPanel(EMPTY_LOADED, EMPTY_LOADED)
 
-    expect(screen.getByText(/this workspace holds no licences/i)).toBeTruthy()
+    expect(screen.getByText(/this workspace holds no licenses/i)).toBeTruthy()
     expect(screen.getByText(/you have not bought anything yet/i)).toBeTruthy()
     // The complaint in one assertion: card surfaces, not loose text. Two
     // zero-states plus nothing else on this tab that is a card.
@@ -90,7 +90,7 @@ describe('OrgLicencesPanel presents its empty tab like the rest of the console',
       { data: [], status: 'loading', serverDenied: false },
     )
 
-    expect(screen.queryByText(/holds no licences/i)).toBeNull()
+    expect(screen.queryByText(/holds no licenses/i)).toBeNull()
     expect(screen.queryByText(/have not bought anything/i)).toBeNull()
   })
 
@@ -103,7 +103,7 @@ describe('OrgLicencesPanel presents its empty tab like the rest of the console',
       { data: [], status: 'success', serverDenied: true },
     )
 
-    expect(screen.queryByText(/holds no licences/i)).toBeNull()
+    expect(screen.queryByText(/holds no licenses/i)).toBeNull()
     expect(screen.queryByText(/have not bought anything/i)).toBeNull()
     expect(screen.getAllByText(/could not be loaded/i).length).toBe(2)
   })
@@ -117,7 +117,7 @@ describe('OrgLicencesPanel presents its empty tab like the rest of the console',
       serverDenied: false,
     })
 
-    expect(screen.getByText(/this workspace holds no licences/i)).toBeTruthy()
+    expect(screen.getByText(/this workspace holds no licenses/i)).toBeTruthy()
     expect(screen.queryByText(/have not bought anything/i)).toBeNull()
   })
 
@@ -148,7 +148,7 @@ describe('OrgLicencesPanel presents its empty tab like the rest of the console',
   it('never lists a refunded purchase as a licence', () => {
     // AGL-1546, re-pinned because the zero-state now depends on the SAME
     // filtered array: a refunded-only workspace must reach "holds no
-    // licences", not a card with a row the install route will refuse.
+    // licenses", not a card with a row the install route will refuse.
     renderPanel(
       {
         data: [
@@ -168,6 +168,6 @@ describe('OrgLicencesPanel presents its empty tab like the rest of the console',
     )
 
     expect(screen.queryByText('$25.00')).toBeNull()
-    expect(screen.getByText(/this workspace holds no licences/i)).toBeTruthy()
+    expect(screen.getByText(/this workspace holds no licenses/i)).toBeTruthy()
   })
 })
