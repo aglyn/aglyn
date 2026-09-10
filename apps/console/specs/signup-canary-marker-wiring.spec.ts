@@ -166,7 +166,14 @@ describe('the walk cannot quietly stop being a walk', () => {
   it('asserts the form, not merely a 200', () => {
     // A Vercel challenge page is served with a 200 and no form on it, so a
     // status check alone would pass straight through the outage this watches.
-    expect(walkSource()).toContain("waitForSelector('input[name=\"Passwd\"]'")
+    const walk = walkSource()
+    // The field itself, however it is waited for. A challenge page is a 200
+    // (or a 429) with no form on it, so a status check would pass straight
+    // through the outage this watches.
+    expect(walk).toContain('input[name="Passwd"]')
+    // And it must wait THROUGH the checkpoint rather than treat it as
+    // failure: the interstitial solves itself and navigates on for a browser.
+    expect(walk).toMatch(/checkpoint/i)
   })
 
   it('waits for the typed name to be HELD before redeeming the code', () => {
