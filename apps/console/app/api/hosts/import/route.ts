@@ -58,6 +58,7 @@ import {
   nonPageScreenIds,
 } from '../resources/count-billable-screens'
 import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
+import { ensureCustomFieldTypes } from '../../../../utils/ensure-custom-field-types'
 
 /**
  * The document to store, built from a bundle item by ALLOW-list (AGL-1382).
@@ -1204,6 +1205,9 @@ async function handler(request: Request): Promise<Response> {
         // v1 exports (no model) validate through the derived text model,
         // same as the live migration — everything passes, by design.
         const model = effectiveDatasetModel(item)
+        // A plugin's field validator only runs once its plugin has registered
+        // it, so a bundle's out-of-range rating is reported like any other.
+        await ensureCustomFieldTypes(model)
         const records: any[] = Array.isArray(item.records) ? item.records : []
         for (const record of records.slice(0, 1000)) {
           if (!record?.$id) continue

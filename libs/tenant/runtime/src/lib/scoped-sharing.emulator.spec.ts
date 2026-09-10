@@ -64,7 +64,11 @@ describeEmulated('scoped sharing, agency scenario (AGL-1047)', () => {
   }, 60_000)
 
   it('a client site renders only what it may see', async () => {
-    const datasets = await getDatasets({ hostId: CLIENT })
+    // Asked for all three by name, as three repeats on one page would.
+    const datasets = await getDatasets({
+      hostId: CLIENT,
+      keys: ['Shared Brand', 'Client Products', 'Internal Rates'],
+    })
     const names = Object.keys(datasets)
     expect(names).toContain('Shared Brand')
     expect(names).toContain('Client Products')
@@ -73,7 +77,10 @@ describeEmulated('scoped sharing, agency scenario (AGL-1047)', () => {
   }, 60_000)
 
   it('an internal site still sees the internal data', async () => {
-    const datasets = await getDatasets({ hostId: INTERNAL })
+    const datasets = await getDatasets({
+      hostId: INTERNAL,
+      keys: ['Internal Rates'],
+    })
     expect(Object.keys(datasets)).toContain('Internal Rates')
   }, 60_000)
 
@@ -81,8 +88,11 @@ describeEmulated('scoped sharing, agency scenario (AGL-1047)', () => {
     // Both sites bind a repeatable to "Products". Each must get its own.
     // This is the shape the original bug took: the map was keyed by
     // displayName across the whole org, so whichever loaded last won.
-    const clientSets = await getDatasets({ hostId: CLIENT })
-    const internalSets = await getDatasets({ hostId: INTERNAL })
+    const clientSets = await getDatasets({ hostId: CLIENT, keys: ['Products'] })
+    const internalSets = await getDatasets({
+      hostId: INTERNAL,
+      keys: ['Products'],
+    })
     expect(clientSets['Products']?.records?.[0]?.['name']).toBe('client-row')
     expect(internalSets['Products']?.records?.[0]?.['name']).toBe(
       'internal-row',

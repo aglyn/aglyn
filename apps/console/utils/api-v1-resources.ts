@@ -95,6 +95,7 @@ import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-emai
 import { createHash, randomUUID } from 'crypto'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
+import { ensureCustomFieldTypes } from './ensure-custom-field-types'
 import { handleActivities } from './api-v1/crm-activities'
 import { handleCompanies } from './api-v1/crm-companies'
 import { handleDeals } from './api-v1/crm-deals'
@@ -546,6 +547,8 @@ async function createRecord(
   recordsRef: FirebaseFirestore.CollectionReference,
 ): Promise<Response> {
   const model = effectiveDatasetModel(datasetSnap.data() ?? {})
+  // A plugin's field validator only runs once its plugin has registered it.
+  await ensureCustomFieldTypes(model)
   const body = await readJsonBody(request)
   const coerced = coerceDocumentValues(model, (body.values as Record<string, unknown>) ?? {})
   const errors = validateDocument(model, coerced)
@@ -676,6 +679,8 @@ async function updateRecord(
   if (!snap.exists) return ApiErrors.notFound({ message: 'No such record', headers: ctx.headers })
 
   const model = effectiveDatasetModel(datasetSnap.data() ?? {})
+  // A plugin's field validator only runs once its plugin has registered it.
+  await ensureCustomFieldTypes(model)
   const body = await readJsonBody(request)
   // PATCH merges the supplied fields over the stored values.
   const merged = {

@@ -41,6 +41,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { ensureCustomFieldTypes } from '../../../../utils/ensure-custom-field-types'
 
 /**
  * `dataStorageMbPerOrg` for this route, rendered as the console's 403.
@@ -294,6 +295,9 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Unknown dataset' }, { status: 404 })
       }
       const model = effectiveDatasetModel(datasetSnapshot.data() as any)
+      // Before either validation below: a plugin's field validator only runs
+      // once its plugin's server entry has registered it.
+      await ensureCustomFieldTypes(model)
       const recordsRef = datasetRef.collection('records')
       const recordCount = (await recordsRef.count().get()).data().count
       const overRecordQuota = (limit: number) =>

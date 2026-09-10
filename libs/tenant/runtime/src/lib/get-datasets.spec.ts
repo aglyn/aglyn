@@ -22,12 +22,14 @@
  * WHICH rows is decided by the read, not by the sort that follows it: a
  * `limit()` with no `orderBy` is answered in document-id order, so past the
  * bound a repeat renders an arbitrary sample, sorted — which looks ordered and
- * is not.
+ * is not. The same holds one level up: WHICH datasets a site loads decides
+ * whether a repeat has anything to render at all.
  *
- * ⚠️ The Firestore double below models the two ordering facts the reader
- * depends on: an unordered query answers in document-id order, and
- * `orderBy(field)` matches only documents that carry the field. It cannot see
- * an index, so a green run here says nothing about whether a query is served.
+ * ⚠️ The Firestore double below models the ordering facts the reader depends
+ * on — an unordered query answers in document-id order, and `orderBy(field)`
+ * matches only documents that carry the field — and the site scope the real
+ * `orgDataQueryForHost` applies. It cannot see an index, so a green run here
+ * says nothing about whether a query is served.
  */
 
 import { REPEAT_MAX_RECORDS } from '@aglyn/aglyn/server'
@@ -101,21 +103,54 @@ const mockDatasetSnapshot = (dataset: MockDataset) =>
     ref: { collection: () => mockRecordsQuery(dataset.records) },
   })
 
-function mockDatasetsQuery(limit: number | null = null): any {
+/** The site scope `orgDataQueryForHost` applies, as `array-contains-any`. */
+const mockVisibleToSite = (dataset: MockDataset) =>
+  (dataset.data['visibleTo'] ?? []).some((token: string) =>
+    ['org', `host:${HOST_ID}`].includes(token),
+  )
+
+function mockDatasetsQuery(
+  equals: Array<[string, unknown]> = [],
+  limit: number | null = null,
+): any {
   return {
-    orderBy: () => mockDatasetsQuery(limit),
-    limit: (count: number) => mockDatasetsQuery(count),
+    where: (field: string, _op: string, value: unknown) =>
+      mockDatasetsQuery([...equals, [field, value]], limit),
+    orderBy: () => mockDatasetsQuery(equals, limit),
+    limit: (count: number) => mockDatasetsQuery(equals, count),
     get: async () => ({
-      docs: mockAnswer(mockDatasets, null, limit).map((row) =>
-        mockDatasetSnapshot(row as MockDataset),
-      ),
+      docs: mockAnswer(
+        mockDatasets
+          .filter(mockVisibleToSite)
+          .filter((dataset) =>
+            equals.every(([field, value]) => dataset.data[field] === value),
+          ),
+        null,
+        limit,
+      ).map((row) => mockDatasetSnapshot(row as MockDataset)),
     }),
   }
 }
 
+/** The org's `datasets` collection, read by id — no scope applied. */
+const mockDatasetsRef = {
+  parent: { parent: { id: 'orgs' } },
+  doc: (id: string) => ({
+    get: async () => {
+      const dataset = mockDatasets.find((candidate) => candidate.id === id)
+      return dataset
+        ? mockDatasetSnapshot(dataset)
+        : { id, exists: false, data: () => undefined, get: () => undefined }
+    },
+  }),
+}
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  orgDataQueryForHost: async () => ({ ref: {}, query: mockDatasetsQuery() }),
+  orgDataQueryForHost: async () => ({
+    ref: mockDatasetsRef,
+    query: mockDatasetsQuery(),
+  }),
 }))
 
 jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
@@ -138,10 +173,20 @@ const record = (
   data: { ...(order === undefined ? {} : { order }), values: { title } },
 })
 
-const titlesOf = async (datasetId: string) =>
-  ((await getDatasets({ hostId: HOST_ID }))[datasetId]?.records ?? []).map(
-    (row) => row['title'],
-  )
+const dataset = (
+  id: string,
+  records: MockRow[],
+  data: Record<string, unknown> = {},
+): MockDataset => ({
+  id,
+  data: { displayName: id, fields: ['title'], visibleTo: ['org'], ...data },
+  records,
+})
+
+const titlesOf = async (key: string) =>
+  (
+    (await getDatasets({ hostId: HOST_ID, keys: [key] }))[key]?.records ?? []
+  ).map((row) => row['title'])
 
 beforeEach(() => {
   mockDatasets = []
@@ -153,13 +198,12 @@ describe('a repeat over more records than it renders (AGL-2773)', () => {
     // Document ids run opposite to editor order, so the lowest ids hold the
     // highest `order`. A read by id takes orders 149 down to 50.
     mockDatasets = [
-      {
-        id: 'menu',
-        data: { displayName: 'Menu', fields: ['title'] },
-        records: Array.from({ length: 150 }, (_, index) =>
+      dataset(
+        'menu',
+        Array.from({ length: 150 }, (_, index) =>
           record(`r${pad(index)}`, 149 - index, `Dish ${149 - index}`),
         ),
-      },
+      ),
     ]
 
     expect(await titlesOf('menu')).toEqual(
@@ -176,13 +220,7 @@ describe('a repeat over more records than it renders (AGL-2773)', () => {
     const appended = Array.from({ length: 200 }, (_, index) =>
       record(`a${pad(index)}`, undefined, `Lead ${index}`),
     )
-    mockDatasets = [
-      {
-        id: 'leads',
-        data: { displayName: 'Leads', fields: ['title'] },
-        records: [...appended, ...pinned],
-      },
-    ]
+    mockDatasets = [dataset('leads', [...appended, ...pinned])]
 
     expect(await titlesOf('leads')).toEqual([
       ...Array.from({ length: 30 }, (_, index) => `Pinned ${index}`),
@@ -192,15 +230,11 @@ describe('a repeat over more records than it renders (AGL-2773)', () => {
 
   it('THE CONTROL: a dataset inside the bound renders every record, in order', async () => {
     mockDatasets = [
-      {
-        id: 'team',
-        data: { displayName: 'Team', fields: ['title'] },
-        records: [
-          record('b', 1, 'Second'),
-          record('c', undefined, 'Unordered'),
-          record('a', 0, 'First'),
-        ],
-      },
+      dataset('team', [
+        record('b', 1, 'Second'),
+        record('c', undefined, 'Unordered'),
+        record('a', 0, 'First'),
+      ]),
     ]
 
     expect(await titlesOf('team')).toEqual(['First', 'Second', 'Unordered'])
@@ -210,20 +244,100 @@ describe('a repeat over more records than it renders (AGL-2773)', () => {
     // The render path re-reads this hourly per site; an unbounded read here
     // is the cost regression, whatever it buys in correctness.
     mockDatasets = [
-      {
-        id: 'leads',
-        data: { displayName: 'Leads', fields: ['title'] },
-        records: Array.from({ length: 500 }, (_, index) =>
+      dataset(
+        'leads',
+        Array.from({ length: 500 }, (_, index) =>
           record(`a${pad(index)}`, index % 3 ? undefined : index, `Row ${index}`),
         ),
-      },
+      ),
     ]
 
-    await getDatasets({ hostId: HOST_ID })
+    await getDatasets({ hostId: HOST_ID, keys: ['leads'] })
 
     expect(mockRecordReads.length).toBeLessThanOrEqual(2)
     expect(
       mockRecordReads.every((read) => read.limit === REPEAT_MAX_RECORDS),
     ).toBe(true)
+  })
+})
+
+describe('a site with more datasets than one page of them (AGL-2773)', () => {
+  /** `count` datasets the site can see, `d000`…, one record each. */
+  const many = (count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      dataset(`d${pad(index)}`, [record(`r${index}`, 0, `Row of ${index}`)], {
+        displayName: `Dataset ${index}`,
+      }),
+    )
+
+  it('loads a repeated dataset wherever it falls among the site’s datasets', async () => {
+    mockDatasets = many(60)
+
+    expect(await titlesOf('d057')).toEqual(['Row of 57'])
+  })
+
+  it('resolves a repeat that names its dataset by display name', async () => {
+    mockDatasets = many(60)
+
+    expect(await titlesOf('Dataset 58')).toEqual(['Row of 58'])
+  })
+
+  it('loads the dataset a reference field points at, for its one hop', async () => {
+    mockDatasets = [
+      ...many(60),
+      dataset('zz-posts', [record('p1', 0, 'Hello')], {
+        model: {
+          order: ['title', 'author'],
+          fields: {
+            title: { name: 'Title', type: 'text' },
+            author: {
+              name: 'Author',
+              type: 'reference',
+              reference: { datasetId: 'zz-authors' },
+            },
+          },
+        },
+      }),
+      dataset('zz-authors', [record('a1', 0, 'Ada')]),
+    ]
+
+    const datasets = await getDatasets({ hostId: HOST_ID, keys: ['zz-posts'] })
+
+    expect(datasets['zz-authors']?.records.map((row) => row['title'])).toEqual(
+      ['Ada'],
+    )
+  })
+
+  it('reads records only for the datasets the page repeats over', async () => {
+    mockDatasets = many(60)
+
+    await getDatasets({ hostId: HOST_ID, keys: ['d001'] })
+
+    expect(mockRecordReads.length).toBeLessThanOrEqual(2)
+  })
+
+  it('reads nothing for a page that repeats over nothing', async () => {
+    mockDatasets = many(3)
+
+    expect(await getDatasets({ hostId: HOST_ID, keys: [] })).toEqual({})
+    expect(mockRecordReads).toHaveLength(0)
+  })
+
+  it('THE LEAK GUARD: never loads a dataset this site cannot see, by id or by name', async () => {
+    // AGL-1039: a client site binding a repeat to the agency's internal
+    // dataset must render nothing, whichever way the key names it.
+    mockDatasets = [
+      dataset('internal', [record('x', 0, 'Secret')], {
+        displayName: 'Internal rates',
+        visibleTo: ['host:another-site'],
+      }),
+    ]
+
+    const datasets = await getDatasets({
+      hostId: HOST_ID,
+      keys: ['internal', 'Internal rates'],
+    })
+
+    expect(datasets).toEqual({})
   })
 })
