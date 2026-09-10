@@ -24,7 +24,7 @@
  * Audience-band overage is withheld while the Contacts PAGE is dark
  * (AGL-1604).
  *
- * `release_contacts` gates one surface — the console Contacts page and its nav
+ * `release_crm` gates one surface — the console Contacts page and its nav
  * tab. Ingestion (`upsertHostContact`, called from forms, memberships, orders,
  * newsletters, POS and bookings) and `GET /v1/contacts` both keep running, so
  * records accrue and the band is crossed while the org has no console way to
@@ -56,10 +56,10 @@ const CRON_SECRET = 'test-cron-secret'
 import { RELEASE_FLAGS, type ReleaseFlagValue } from '@aglyn/aglyn/server'
 
 /**
- * EVERY flag, at its registry default, before `release_contacts` is set
+ * EVERY flag, at its registry default, before `release_crm` is set
  * (AGL-1688).
  *
- * This fixture used to name `release_contacts` alone, which worked only while
+ * This fixture used to name `release_crm` alone, which worked only while
  * the cron consulted exactly one flag. AGL-1688 added a second gate to the
  * same loop, and a map missing that key threw inside `isReleaseFlagOn` —
  * swallowed by the per-org catch and surfacing as a 207 that says nothing
@@ -300,7 +300,7 @@ function seed(options: {
   mockMeterEvents = []
   mockFlagValues = {
     ...flagDefaults(),
-    release_contacts: options.flag ?? { enabled: false },
+    release_crm: options.flag ?? { enabled: false },
   }
 }
 
@@ -419,7 +419,7 @@ describe('the suppression reverses itself when Contacts ships', () => {
     // Config value would under-bill exactly the orgs that CAN open Contacts.
     seed({
       flag: { enabled: false },
-      overrides: { release_contacts: true },
+      overrides: { release_crm: true },
     })
     const write = (await rollUp())['org-1']
     expect(write.contactsOverageBilled).toBe(true)
@@ -431,7 +431,7 @@ describe('the suppression reverses itself when Contacts ships', () => {
     // it must not be invoiced, flag or no flag.
     seed({
       flag: { enabled: true },
-      overrides: { release_contacts: false },
+      overrides: { release_crm: false },
     })
     const write = (await rollUp())['org-1']
     expect(write.contactsOverageBilled).toBe(false)

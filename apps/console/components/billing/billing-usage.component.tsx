@@ -747,7 +747,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const emailOveragePrice = priceEmailSendOverage(org, emailOverage)
   // ...unless the invoice is withholding it (AGL-1658). AGL-1604 stopped the
   // usage cron putting `contactsOverageUsd` into `billedCents` while
-  // `release_contacts` is off for the org, and this caption kept quoting the
+  // `release_crm` is off for the org, and this caption kept quoting the
   // dollar figure — the same defect with the sign reversed, on the page a
   // customer reads before deciding to stay.
   //
@@ -763,12 +763,13 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // Billing text must follow what is billed, not who is looking.
   //
   // Gated on `ready` — before Remote Config activation every flag reads its
-  // registry default (`release_contacts` is default-off), so an unguarded
-  // caption would assert "not billed" for one paint on an org that IS billed.
+  // registry default, which is no org's verdict, so an unguarded caption
+  // would make a claim about money for one paint that the org's own verdict
+  // may contradict.
   // A billing claim is not made until the verdict that decides it has settled;
   // the head-count meter above renders throughout.
   const { released: contactsBilled, ready: releaseFlagsReady } =
-    useReleaseFlag('release_contacts')
+    useReleaseFlag('release_crm')
   // The overage caption is confined to a plan that can be charged for the
   // excess (`overageRateUsd` non-null) and to a settled flag verdict; the
   // breakdown caption above it renders regardless, because the parts are a

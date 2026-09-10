@@ -127,7 +127,7 @@ function sectionBody(
  * Contacts (AGL-109 → AGL-395 → AGL-2595): the CRM hub — people, companies,
  * deals, tasks, reports and fields — owned by the contacts plugin and
  * rendered by the shell's generic plugin route. The shell applies the
- * `release_contacts` gate (via the nav tab) and passes the resolved `org`
+ * `release_crm` gate (via the nav tab) and passes the resolved `org`
  * doc, which the people section reads for the `contactsPerHost` quota.
  *
  * Sections are ROUTES, following the hubs that migrated before it (AGL-2501):

@@ -47,7 +47,7 @@ first syllable (IPA `/ˈæɡlɪn/`).
   </a>
   <a className="home-card" href="/content-and-data">
     <div className="home-card__title">Content &amp; data</div>
-    <p className="home-card__desc">Datasets and dynamic content, the media library, forms, and the CRM (rolling out).</p>
+    <p className="home-card__desc">Datasets and dynamic content, the media library, forms, and the CRM.</p>
   </a>
   <a className="home-card" href="/marketing-and-automation">
     <div className="home-card__title">Marketing &amp; automation</div>

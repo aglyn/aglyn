@@ -69,7 +69,7 @@ describe('server per-org release flag overrides (AGL-1635)', () => {
           releaseFlags: {
             release_edit_bar: true,
             release_not_a_flag: true,
-            release_contacts: 'yes',
+            release_crm: 'yes',
           },
         }),
       )

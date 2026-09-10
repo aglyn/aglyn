@@ -130,64 +130,6 @@ export const FLAG_DOC_PAGES: Partial<
         'An aggregate guide: it opens with a `:::info Plan availability` admonition for COMMERCE itself, which is shipped and paid-for and has nothing to do with this flag. A whole-file price check here would fail on that admonition forever, and defanging it would remove the guard from the pages that need it.',
     },
   ],
-  // AGL-1601 / AGL-1603 / AGL-1604. The flag gates the console PAGE only —
-  // ingestion, `GET /v1/contacts` and the audience-band meter all run — so
-  // every disclosure below says the page is unavailable, not the feature.
-  release_contacts: [
-    {
-      path: 'docs/content-and-data/crm/overview.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'api/resources/contacts.md',
-      // The surface is the CRM hub now (AGL-2595), and the page names it by
-      // that name: the flag still gates only the console page, so the
-      // disclosure is that the console's CRM is rolling out while the API
-      // is live.
-      disclosure: [/console's \*\*CRM\*\*[\s\S]{0,80}rolling out/],
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'docs/getting-started/console-tour.md',
-      // AGL-1603's worst item: the page offered a remedy (enable the plugin
-      // under Organization → Plugins) that CANNOT work for a Remote Config
-      // flag. Both halves are asserted — the qualification and the dead end.
-      disclosure: [
-        /\*\*CRM\*\* is the exception[\s\S]{0,200}rolling out/,
-        /dead end/i,
-      ],
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'docs/intro.md',
-      disclosure: [/the CRM \(rolling out\)/i],
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'The docs home carries a general "Plan availability" callout explaining the docs convention; it is not a claim about Contacts.',
-    },
-    {
-      path: 'docs/whats-new.md',
-      disclosure: [
-        // The hub's own entry at the top of the page and the older CRM
-        // entry lower down both carry the marker; either form satisfies it.
-        /\[(?:The CRM hub|CRM)\][^\n]*\n?[^\n]*\*\(rolling out\)\*/,
-        // The release note still quotes the real overage rates. That is
-        // allowed only while it says, next to them, that nobody is billed.
-        /per 1,000\/month[\s\S]{0,400}not billed yet/i,
-      ],
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'A changelog prices the whole product; the Contacts rates specifically are covered by the windowed "not billed yet" disclosure above.',
-    },
-    {
-      path: 'docs/workspace-and-billing/billing-and-plans/overview.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'The billing page IS the price list — the plan table and audience bands are real numbers matching plan-entitlements.ts. The Rolling out admonition carries the qualification that paid audience overage is not billed while the page is dark.',
-    },
-  ],
 
   // AGL-1302 follow-on. The template AGL-1603 was told to copy.
   release_edit_bar: [

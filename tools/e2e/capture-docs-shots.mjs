@@ -847,7 +847,11 @@ await installStaffOnlyChromeStyles(context)
     await browser.close()
     process.exit(1)
   }
-  console.log(`GUARD staff-only chrome hidden: ${hidden.join(', ')}`)
+  console.log(
+    hidden.length
+      ? `GUARD staff-only chrome hidden: ${hidden.join(', ')}`
+      : 'GUARD staff-only chrome: no release-flagged tab ships off, so there is nothing to hide',
+  )
 }
 
 const stripDevChrome = (page) =>

@@ -1,10 +1,10 @@
 {
   "parameters": {
-    "release_contacts": {
+    "release_crm": {
       "defaultValue": {
-        "value": "{\"enabled\":false,\"rolloutPercent\":0,\"note\":\"Held until Contacts CRM v1 is ready (AGL-227)\"}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Released to every workspace 2026-09-10 (AGL-2772)\"}"
       },
-      "description": "Unified contacts list, segments and profile drawer (Contacts CRM v1).",
+      "description": "The CRM: contacts, leads, companies, deals, tasks, reports and fields.",
       "valueType": "JSON"
     },
     "release_bookings": {

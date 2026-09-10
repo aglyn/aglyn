@@ -36,7 +36,7 @@ const CrmTasksDueCard = lazy(
  * CRM feature plugin (AGL-395, the hub since AGL-2595). Console-only — its
  * records live in Firestore and have no canvas element, so there is no UI
  * bundle. The console half declares the CRM nav + hub through the
- * ConsoleExtension registry (release_contacts gate via the nav tab); the
+ * ConsoleExtension registry (release_crm gate via the nav tab); the
  * contacts section reads the `contactsPerHost` quota off the shell-passed
  * `org`.
  *
@@ -150,7 +150,7 @@ export function registerCrmConsole(): void {
         // Sections as ROUTES (AGL-2595): each is a real URL the shell
         // resolves and gates, so the page mounts the one being read and a
         // bare `/crm` lands on the first. Every section inherits this
-        // item's `release_contacts` gate.
+        // item's `release_crm` gate.
         sections: CRM_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-contacts',
         icon: { path: mdiCardAccountDetailsOutline.path },
