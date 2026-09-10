@@ -25,10 +25,11 @@ import {
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Button, Link, Stack, Typography } from '@mui/material'
 import { type ReactNode, useCallback, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import type { CrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { COMPANY_DETACH_LIMIT } from '../model/companies'
@@ -105,9 +106,11 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
-  // The site whose feed the act is logged in: the mounted one, or at the
-  // organization level the company's own (AGL-2630).
-  const logActivity = useHostActivityLogger(hostId ?? company.hostId ?? undefined)
+  // The feed the act is logged in, decided by the level it was performed
+  // at (AGL-2738): this site's under a site, the organization's at the org
+  // hub, where a client-direct append to the company's own site would face
+  // a gate the record write never had to pass.
+  const logActivity = useCrmActivityLogger(hostId)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   // The org's company fields (AGL-2661): one row each under the fixed

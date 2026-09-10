@@ -19,9 +19,15 @@ import {
   isLockdownActive,
   isOrgWideScope,
   type LockdownState,
+  MEDIA_CDN_POSTER_PARAM,
+  MEDIA_CDN_RENDITION_PARAM,
   MEDIA_CDN_ROUTE,
+  MEDIA_POSTER_OBJECT_SUFFIX,
+  mediaPosterObjectPath,
+  mediaRenditionObjectPath,
   normalizeHostLockdown,
   normalizeOrgLockdown,
+  parseMediaRenditions,
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -64,7 +70,11 @@ const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
  */
 export function mediaCdnForwardedQuery(query: NextApiRequest['query']): string {
   const params = new URLSearchParams()
-  for (const key of ['w', 'download', 'exp', 'sig'] as const) {
+  // `poster` and `r` join the set for the reason the others are in it: the
+  // redirect must name the SAME representation the caller asked for, or a
+  // stale content pin on a poster URL lands the browser on the master video
+  // (AGL-2743).
+  for (const key of ['w', 'poster', 'r', 'download', 'exp', 'sig'] as const) {
     const raw = query[key]
     const value = Array.isArray(raw) ? raw[0] : raw
     if (value !== undefined && value !== '') params.set(key, String(value))
@@ -669,6 +679,20 @@ export function wantsMediaDownload(value: unknown): boolean {
   return normalized === '1' || normalized === 'true'
 }
 
+/**
+ * Whether `?poster=1` was asked for (AGL-2743).
+ *
+ * Deliberately the same two-spelling rule as {@link wantsMediaDownload},
+ * and for the same reason rather than out of symmetry: the query string is
+ * part of the CDN cache key, so every accepted spelling of "yes" is another
+ * edge entry holding identical bytes. A poster is the response most likely
+ * to be requested at volume from a grid, which makes cache-key discipline
+ * worth more here than anywhere else on the route.
+ */
+export function mediaCdnWantsPoster(value: unknown): boolean {
+  return wantsMediaDownload(value)
+}
+
 /** Anything that cannot appear literally in an HTTP field-value. */
 const NON_ASCII_FIELD_VALUE = /[^\x20-\x7e]/g
 /** ...and what additionally cannot appear inside a quoted-string. */
@@ -1038,7 +1062,82 @@ export async function serveMediaCdn(
 
     const width = Number(req.query['w'] ?? 0)
     const variants: number[] = snapshot.get('variants') ?? []
-    const useVariant = Boolean(width) && variants.includes(width)
+    /*
+     * WHICH REPRESENTATION OF THIS ASSET (AGL-2743).
+     *
+     * Three derived forms now sit behind one media id — the image variants
+     * `?w=` has selected since AGL-175, a video's poster still, and its
+     * encoded renditions. They are resolved here, together, because they are
+     * mutually exclusive and because every one of them has to reach the ETag,
+     * the cache tier and the object path in agreement. A second lookup later
+     * in the handler is how a poster ends up cached under the master's
+     * validator.
+     *
+     * Precedence is poster, then rendition, then width, and it is total: a
+     * caller sending `?poster=1&r=720p` gets the poster rather than an error,
+     * because the parameters are a REQUEST for a representation and the only
+     * useful answer to an incoherent one is the safest coherent one.
+     *
+     * ## Falling back to the master is right for a WIDTH and wrong for a POSTER
+     *
+     * `?w=` on an asset with no such variant serves the original, and that has
+     * always been safe because both answers are the same KIND of thing: an
+     * image, larger than asked for. A rendition inherits it for the same
+     * reason — an unknown `?r=` serves the master, which is the same video in
+     * more bytes.
+     *
+     * `?poster=1` cannot. The caller asked for a still and the master is a
+     * film, so the fallback would answer a `<video poster>` with 60 MB of
+     * `video/mp4` — a request for 40 KB satisfied with the entire asset,
+     * which is the precise cost this feature exists to remove, delivered by
+     * the feature itself. So a poster that does not exist is a **404**, and
+     * that is the better answer in the browser too: a `<video>` whose
+     * `poster` 404s behaves exactly like a `<video>` with no `poster`, which
+     * is what every video did before AGL-2742. It also lets a renderer emit
+     * the attribute without first reading the document — the property the
+     * fallback was supposed to buy, bought honestly.
+     */
+    const poster = snapshot.get('poster')
+    const posterVariants: number[] = poster?.variants ?? []
+    const wantsPoster = mediaCdnWantsPoster(req.query[MEDIA_CDN_POSTER_PARAM])
+    if (wantsPoster && !poster) {
+      // See above: a still is not a film, so this is the one representation
+      // that must refuse rather than degrade. `no-store` because the answer
+      // is about a DOCUMENT field that a poster backfill can change at any
+      // time, and a cached 404 would outlive the fix.
+      setCacheControl('private, no-store')
+      res.status(404).json({ error: 'No poster' })
+      return
+    }
+    const usePoster = wantsPoster
+    const usePosterVariant = usePoster && Boolean(width) && posterVariants.includes(width)
+    const renditionKey = req.query[MEDIA_CDN_RENDITION_PARAM]
+    const rendition = usePoster
+      ? undefined
+      : parseMediaRenditions(snapshot.get('videoRenditions')).find(
+          (entry) =>
+            entry.key ===
+            String(Array.isArray(renditionKey) ? renditionKey[0] : (renditionKey ?? '')),
+        )
+    const useVariant =
+      !usePoster && !rendition && Boolean(width) && variants.includes(width)
+    /**
+     * The ETag's representation tag, and the cache key's conscience.
+     *
+     * A validator is not scoped to a URL in practice — the reasoning the
+     * `-dl` suffix below was added for — so two representations of one asset
+     * that share a validator can be swapped for each other by any cache that
+     * revalidates. Between an image variant and its original that is a wrong
+     * size; between a poster and its video it is a 40 KB still standing in
+     * for a 40 MB film, or the reverse.
+     */
+    const representation = usePoster
+      ? `-poster${usePosterVariant ? `-w${width}` : ''}`
+      : rendition
+        ? `-r${rendition.key}`
+        : useVariant
+          ? `-w${width}`
+          : ''
     // Read only here, past every gate — a refusal above returns before the
     // parameter is ever looked at, so `?download=1` can never be the reason
     // a response happens (AGL-1411).
@@ -1055,7 +1154,7 @@ export async function serveMediaCdn(
     // headers, and the file would open in a tab anyway. Same bytes, different
     // representation, so: different validator.
     const etag = currentHash
-      ? `"${currentHash}${useVariant ? `-w${width}` : ''}${download ? '-dl' : ''}"`
+      ? `"${currentHash}${representation}${download ? '-dl' : ''}"`
       : null
     // AGL-1515: which cache tier may hold this response is a function of the
     // served type — see mediaCdnEdgeCacheable. Decided here from the DOC's
@@ -1066,9 +1165,21 @@ export async function serveMediaCdn(
       mediaCdnEdgeCacheable(type)
         ? MEDIA_CDN_STABLE_CACHE_CONTROL
         : MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL
-    const docServedType = useVariant
-      ? 'image/webp'
-      : snapshot.get('contentType')
+    // A poster is `image/webp` and therefore edge-cacheable through the rule
+    // that already exists — which is the whole delivery argument for it
+    // (AGL-2743). `mediaCdnEdgeCacheable` is untouched: nothing here relaxes
+    // AGL-1515, because a poster genuinely IS an image and no player ranges
+    // into a `<video poster>`. A RENDITION reports its own `video/*` type and
+    // stays origin-only, deliberately — a small fixed-size rendition is
+    // exactly the size class Vercel's 10 MB cap admits, so edge-caching one
+    // would maximize exposure to the very hybrid AGL-1515 recorded rather
+    // than avoid it.
+    const docServedType =
+      usePoster || useVariant
+        ? 'image/webp'
+        : rendition
+          ? rendition.contentType
+          : snapshot.get('contentType')
     if (!hashed) {
       setCacheControl(stableCacheControlFor(docServedType))
       if (etag) res.setHeader('ETag', etag)
@@ -1103,7 +1214,21 @@ export async function serveMediaCdn(
         )
       },
     })
-    const objectPath = useVariant ? `${basePath}__w${width}.webp` : basePath
+    // Every derived path is built from `basePath`, which `mediaStoragePathInScope`
+    // has already proved is inside this scope's prefix (AGL-1881), plus a
+    // suffix whose grammar admits no separator: the widths are numbers,
+    // and `parseMediaRendition` refuses a key or extension that is not
+    // `[a-z0-9-]`. So no representation can address an object the master
+    // could not.
+    const objectPath = usePoster
+      ? usePosterVariant
+        ? `${basePath}${MEDIA_POSTER_OBJECT_SUFFIX}__w${width}.webp`
+        : mediaPosterObjectPath(basePath)
+      : rendition
+        ? mediaRenditionObjectPath(basePath, rendition)
+        : useVariant
+          ? `${basePath}__w${width}.webp`
+          : basePath
     const file = bucket.file(objectPath)
     const [metadata] = await file.getMetadata().catch(() => [null as any])
     if (!metadata) {
@@ -1111,13 +1236,16 @@ export async function serveMediaCdn(
       return
     }
 
-    const servedType = useVariant
-      ? 'image/webp'
-      : String(
-          metadata.contentType ??
-            snapshot.get('contentType') ??
-            'application/octet-stream',
-        )
+    const servedType =
+      usePoster || useVariant
+        ? 'image/webp'
+        : rendition
+          ? rendition.contentType
+          : String(
+              metadata.contentType ??
+                snapshot.get('contentType') ??
+                'application/octet-stream',
+            )
     res.setHeader('Content-Type', servedType)
     // AGL-1474: an SVG (or anything else a browser treats as a document) gets
     // the sandboxing policy. Everything else keeps the base one set above —

@@ -43,7 +43,7 @@ import { render } from '@testing-library/react'
 import PluginFrame from './plugin-frame'
 import type { PluginFrameProps } from './plugin-frame'
 
-/** Cross-origin, so `assertCrossOrigin` lets the frame render at all. */
+/** Cross-origin, so `isCrossOrigin` lets the frame render at all. */
 const BASE: PluginFrameProps = {
   pluginOrigin: 'https://plugins.example.com',
   listingId: 'listing-1',

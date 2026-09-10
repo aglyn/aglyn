@@ -140,3 +140,82 @@ export function sendAnalyticsBeacon(
     return false
   }
 }
+
+/**
+ * The playback events `/api/analytics/collect` counts (AGL-2746).
+ *
+ * A closed vocabulary, exported so the player and the route cannot drift: an
+ * event the route does not recognize is silently discarded with a 204, which
+ * is the correct behavior for an unauthenticated collector and a terrible
+ * way to find out a player is sending `'started'`.
+ *
+ * Quartiles rather than a position. A percentage would be a continuous,
+ * visitor-supplied value arriving on a Firestore map key, and four buckets
+ * answer the only question anyone asks of a watch curve — where people stop.
+ */
+export type VideoAnalyticsEvent =
+  | 'play'
+  | 'progress25'
+  | 'progress50'
+  | 'progress75'
+  | 'complete'
+
+/**
+ * The quartile event a playhead has just crossed, or undefined.
+ *
+ * `previousFraction` is what the player last reported, so a seek backwards
+ * re-fires nothing and a normal watch fires each quartile exactly once. The
+ * caller keeps that one number; this keeps the thresholds, so a player does
+ * not carry its own copy of 0.25/0.5/0.75 — which is the shape of duplication
+ * that made `analyticsPathKey` a shared function.
+ *
+ * `complete` is NOT produced here. It belongs to the `ended` event, which is
+ * the only signal that distinguishes watching to the end from seeking to it.
+ */
+export function videoQuartileEvent(
+  fraction: number,
+  previousFraction: number,
+): VideoAnalyticsEvent | undefined {
+  const crossed = (threshold: number) =>
+    fraction >= threshold && previousFraction < threshold
+  if (crossed(0.75)) return 'progress75'
+  if (crossed(0.5)) return 'progress50'
+  if (crossed(0.25)) return 'progress25'
+  return undefined
+}
+
+/**
+ * Report one playback event for one DAM asset.
+ *
+ * Rides {@link sendAnalyticsBeacon}, so it inherits both halves of that gate
+ * — production surfaces only, and never a browser carrying the internal-traffic
+ * opt-in. Inheriting them matters even though these counters never reach an
+ * invoice: a preview deployment and a developer's `next dev` both point at the
+ * production Firebase project, so without the gate every local page load of a
+ * page carrying a video would add plays to a customer's dashboard.
+ *
+ * Returns whether the browser accepted the beacon. Every caller today treats
+ * it as fire-and-forget.
+ */
+export function sendVideoAnalyticsBeacon(
+  options: {
+    hostId: string
+    /** The DAM media id, not a URL. */
+    mediaId: string
+    event: VideoAnalyticsEvent
+    /** Page path, for parity with every other beacon. Optional. */
+    path?: string
+  },
+  context: AnalyticsBeaconContext = {},
+): boolean {
+  if (!options.hostId || !options.mediaId) return false
+  return sendAnalyticsBeacon(
+    {
+      hostId: options.hostId,
+      mediaId: options.mediaId,
+      video: options.event,
+      ...(options.path ? { path: options.path } : {}),
+    },
+    context,
+  )
+}

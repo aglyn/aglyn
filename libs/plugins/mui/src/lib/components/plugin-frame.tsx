@@ -43,7 +43,15 @@ import {
  * (plugin) origin's privileges — not the parent's — so it stays walled off
  * from the app while still being able to load its own bundle and honor the
  * plugin-origin CSP's `connect-src`. The combination is only unsafe for a
- * SAME-origin frame; `assertCrossOrigin` below refuses that case.
+ * SAME-origin frame; `isCrossOrigin` below refuses that case.
+ *
+ * SERVER RENDER: the origin comparison needs `window.location.origin`, so a
+ * server render cannot make it and neither render that has to agree with the
+ * server makes it. Both emit the frame with no `src` — the plugin URL is
+ * attached on the render after mount, once the origin has actually been
+ * checked. That keeps the server HTML and the first client render identical
+ * whatever `pluginOrigin` is set to, and it keeps an unverified origin out of
+ * the markup a browser would start loading before any of this code runs.
  */
 export interface PluginFrameProps {
   /** Dedicated plugin origin, e.g. `https://plugins.aglyn.app`. */
@@ -81,9 +89,22 @@ export interface PluginFrameProps {
 
 type FrameState = 'loading' | 'ready' | 'error'
 
-/** The frame is only safe when its src origin differs from the app's. */
-function assertCrossOrigin(pluginOrigin: string): boolean {
-  if (typeof window === 'undefined') return true // SSR: render placeholder
+/**
+ * Does `pluginOrigin` resolve to an origin other than the app's own?
+ *
+ * True is the only answer that lets the frame render: the sandbox pair in
+ * the SANDBOX NOTE is containment exactly while the frame's origin differs
+ * from the page's, and is a no-op when it doesn't.
+ *
+ * Browser-only, and unavoidably so. The app's origin is
+ * `window.location.origin` and no constant stands in for it — a site answers
+ * on both its platform address and any custom domain attached to it, and the
+ * console, a preview, a self-host container and a dev server each run this
+ * under a different one. Callers ask only once mounted; the `catch` refuses
+ * an unparsable origin, and refuses a call made without a `window` for the
+ * same reason — an origin nothing compared is not an origin anything cleared.
+ */
+function isCrossOrigin(pluginOrigin: string): boolean {
   try {
     return new URL(pluginOrigin).origin !== window.location.origin
   } catch {
@@ -144,6 +165,20 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
     const [height, setHeight] = useState<number>(
       capabilities?.size?.height ?? 120,
     )
+    /**
+     * Whether this render is running in a browser, where `isCrossOrigin` can
+     * be answered.
+     *
+     * Every other input here is a prop or a build-time env and so reads the
+     * same on both sides; the origin comparison is the one that doesn't, and
+     * a render that branches on it disagrees with the server for any
+     * `pluginOrigin` that is same-origin to the app. Deferring it to the
+     * render after mount costs nothing visible: the frame is hidden until the
+     * guest posts `ready`, and the listener that hears `ready` is registered
+     * in an effect, so no plugin has ever painted before this point either.
+     */
+    const [mounted, setMounted] = useState(false)
+    useEffect(() => setMounted(true), [])
 
     const allowedEvents = capabilities?.events
     const allowedProps = capabilities?.props
@@ -157,13 +192,21 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
       [filteredProps],
     )
 
-    const originUsable =
-      Boolean(pluginOrigin) &&
-      !revoked &&
-      assertCrossOrigin(String(pluginOrigin))
+    /**
+     * Three answers, not two: `null` while the check is still unanswerable,
+     * `false` once the browser has refused the origin. Collapsing them would
+     * put the refusal placeholder in the server HTML of every correctly
+     * configured site, which is the same mismatch pointing the other way.
+     */
+    const crossOrigin: boolean | null =
+      mounted && pluginOrigin ? isCrossOrigin(pluginOrigin) : null
 
+    const originUsable = !revoked && crossOrigin === true
+
+    // Undefined, never `''`: an empty `src` is still an `src`, and the frame
+    // must carry no address at all until the origin behind it has cleared.
     const src = useMemo(() => {
-      if (!originUsable) return ''
+      if (!originUsable) return undefined
       const url = new URL('/load', String(pluginOrigin))
       url.searchParams.set('listing', listingId)
       url.searchParams.set('v', version)
@@ -291,7 +334,9 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
         <Placeholder message="Plugins are not enabled on this deployment." />
       )
     }
-    if (!originUsable) {
+    // A refusal the browser actually made. `null` — not yet checked — falls
+    // through to the frame below, which carries no `src` until it clears.
+    if (crossOrigin === false) {
       return (
         <Placeholder message="Plugin cannot be loaded safely here." />
       )

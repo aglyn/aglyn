@@ -22,11 +22,7 @@ import { mdiDeleteOutline, mdiMerge } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  useFirestore,
-  useFirestoreDoc,
-  useHostActivityLogger,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { Stack, Tooltip, Typography } from '@mui/material'
 import {
   arrayRemove,
@@ -37,6 +33,7 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
+import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { CrmCreateSiteDefault, useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactPrimaryGroup, contactRecordFromDoc } from '../model/contact-record'
@@ -156,7 +153,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
    * primary holder's, or nothing for a row no site has captured.
    */
   const siteHostId = hostId ?? (consentGroup.hostId || null)
-  const logActivity = useHostActivityLogger(siteHostId ?? undefined)
+  /*
+   * The feed the act is logged in, decided by the level it was performed
+   * at (AGL-2738) and so given the MOUNTED site rather than `siteHostId`:
+   * at the org hub a client-direct append to the holder's own site would
+   * face a gate the record write never had to pass.
+   */
+  const logActivity = useCrmActivityLogger(hostId)
   const record = useMemo(
     () => (row ? contactRecordFromDoc(row, consentGroup) : null),
     [row, consentGroup],
@@ -255,7 +258,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           updatedAt: new Date(),
         })
       }
-      logActivity('Removed contact from this site', {
+      // `siteLabel` and not "this site": at the organization level the line
+      // lands in a feed that spans every site, so it has to name the one.
+      logActivity(`Removed contact from ${siteLabel}`, {
         type: 'contact',
         id,
         name: record?.name || record?.email,

@@ -135,11 +135,27 @@ const MEDIA_SERVER_WRITTEN_NOT_FROZEN: Record<string, string> = {}
  * object, so the parse below cannot see them.
  *
  * Named rather than ignored: this is the guard's own blind spot, and a blind
- * spot nobody wrote down is the AGL-1354 shape. Both are best-effort image
- * metadata read from the file header — never a gate, never billed, and
- * absent entirely when the header was unreadable.
+ * spot nobody wrote down is the AGL-1354 shape. `width`/`height` are
+ * best-effort image metadata read from the file header — never a gate, never
+ * billed, and absent entirely when the header was unreadable.
+ *
+ * The four video fields (AGL-2742 / AGL-2745) arrive the same way, through
+ * `...videoFields` — an UNCONDITIONAL spread of a value computed by
+ * `videoUploadFields`, which `fieldsOf` does not follow because it only
+ * follows the `...(cond ? {…} : {})` idiom. They are listed here and frozen
+ * in the rules anyway, so being invisible costs the guard a derivation rather
+ * than an enforcement. `videoRenditions` in particular is the one that most
+ * resembles `storagePath`: its `key` and `ext` compose a Storage object path
+ * on an Admin-SDK read.
  */
-const INVISIBLE_TO_THE_PARSE = ['width', 'height']
+const INVISIBLE_TO_THE_PARSE = [
+  'width',
+  'height',
+  'video',
+  'poster',
+  'posterError',
+  'videoRenditions',
+]
 
 const read = (relativePath: string): string =>
   readFileSync(resolve(REPO_ROOT, relativePath), 'utf8')

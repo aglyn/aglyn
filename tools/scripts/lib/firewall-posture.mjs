@@ -530,6 +530,52 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'path', op: 're', value: '/rss\\.xml$' }),
         ]),
       }),
+      Object.freeze({
+        name: 'Public read API bypass',
+        why: 'the published OpenAPI document advertised /api/host and /api/screen at an address every agent can read, and both answered a challenge no fetch tool can solve',
+        /*
+          The endpoints `/openapi.json` DESCRIBES (AGL-2748).
+
+          `/openapi.json` has been on the crawler allowlist above since
+          AGL-2716, so any agent can read the contract. Neither endpoint the
+          contract names was on it. MEASURED on production 2026-09-10 with the
+          default curl User-Agent:
+
+            /openapi.json   200  application/json
+            /api/host       429  Vercel Security Checkpoint
+            /api/screen     429  Vercel Security Checkpoint
+
+          A document that can be read but not acted on is worse than no
+          document: it spends the caller's trust and then refuses them. An
+          agent-readiness audit read it exactly that way — it found the
+          RateLimit headers declared in the spec, could not observe one on a
+          live response, and reported the API as authentication-gated. It is
+          not gated. It was unreachable.
+
+          These two are a different class from the discovery documents above,
+          and so they are a different rule rather than four more entries on
+          that list: they carry their own limiter. `publicReadApiGate` meters
+          every address at 600/minute and answers 429 with `RateLimit-*` and
+          `Retry-After` (AGL-2722). Removing the challenge here does not remove
+          the ceiling — it replaces an unanswerable JavaScript challenge with a
+          limit a caller can read and pace against, which is the whole reason
+          those headers are published.
+
+          EXACT PATHS, NOT A PREFIX, for the reason the rule above gives and
+          one more that is specific to this namespace: `/api/screen/nodes` and
+          `/api/screen/not-found` sit directly under it, are internal to the
+          render, and must stay challenged. `op: 'pre'` on `/api/screen` would
+          admit both. `/api/host` has no such children today, and is written
+          `eq` anyway so that adding one is not a silent widening.
+        */
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze(['/api/host', '/api/screen']),
+          }),
+        ]),
+      }),
       SOCIAL_CRAWLER_BYPASS_RULE,
       AI_AGENT_BYPASS_RULE,
     ]),

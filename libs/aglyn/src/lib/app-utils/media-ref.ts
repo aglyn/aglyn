@@ -703,3 +703,259 @@ export function mediaNodeSrc(media: {
     undefined
   )
 }
+
+/**
+ * The derived objects a VIDEO asset carries, and how a caller asks for one
+ * (AGL-2742 / AGL-2743).
+ *
+ * ## Why these are query parameters on the asset's own URL
+ *
+ * The alternative was a second media document — a poster with its own id,
+ * pointed at from the video's. It was refused for the reason the whole
+ * `media:` scheme exists: a reference names an ASSET so that replacing its
+ * bytes propagates everywhere without re-linking. Two documents are two
+ * lifecycles that can diverge, and the first replace of a video would leave
+ * the old poster live under an id no reader knows is stale. One id, one
+ * delete, one replace — and a DAM grid that shows the film rather than the
+ * film plus a mystery still.
+ *
+ * The parameters mirror `?w=`, which has selected a derived object since
+ * AGL-175. Nothing about the reference itself changes: the same stored
+ * `media:{scope}/{id}` yields the master, the poster and every rendition,
+ * because which representation you want is a rendering decision and the
+ * document records only which asset.
+ */
+export const MEDIA_CDN_POSTER_PARAM = 'poster'
+
+/** Selects a video rendition by key. See {@link isMediaRenditionKey}. */
+export const MEDIA_CDN_RENDITION_PARAM = 'r'
+
+/**
+ * Object-path suffix for a video's poster still. The width variants sit
+ * under it as `{objectPath}__poster__w{n}.webp`, which is exactly what
+ * `generateMediaVariants` produces when handed `{objectPath}__poster` — the
+ * poster reuses the image variant generator whole rather than teaching it
+ * about video.
+ */
+export const MEDIA_POSTER_OBJECT_SUFFIX = '__poster'
+
+/** Object-path prefix for a rendition: `{objectPath}__r{key}.{ext}`. */
+export const MEDIA_RENDITION_OBJECT_PREFIX = '__r'
+
+/**
+ * The grammar a rendition key must fit.
+ *
+ * Deliberately narrower than the segment grammar above: a key becomes part
+ * of a Storage object path, and the two characters `SEGMENT` allows that
+ * this does not — `_` and a leading `-` — are the two that would let a
+ * crafted key collide with the `__w{n}` and `__poster` suffixes. `720p` and
+ * `720p-av1` fit; `_poster` and `_w320` cannot.
+ */
+const RENDITION_KEY = /^[a-z0-9][a-z0-9-]{0,23}$/
+
+/** Whether a value may be used as a rendition key, minted or received. */
+export function isMediaRenditionKey(value: unknown): value is string {
+  return typeof value === 'string' && RENDITION_KEY.test(value)
+}
+
+/**
+ * One encoded delivery copy of a video, as recorded on the media document.
+ *
+ * Richer than the image variants' bare `number[]`, and the difference is not
+ * incidental. An image variant is fully described by its width because every
+ * one of them is WebP at quality 80 — the width IS the identity. A rendition
+ * is a (resolution, container, codec) triple, and the whole point of having
+ * more than one is to offer a browser a choice between codecs at the SAME
+ * resolution. A `number[]` cannot express that, so the array carries the
+ * facts a `<source>` element needs instead of forcing the renderer to
+ * reconstruct them from a naming convention.
+ */
+export interface MediaVideoRendition {
+  /** Selector, unique per asset. Fits {@link isMediaRenditionKey}. */
+  key: string
+  /** What the CDN serves it as, and what a `<source type>` should say. */
+  contentType: string
+  /** Object-path extension, so the path is derivable from the doc alone. */
+  ext: string
+  width: number
+  height: number
+  sizeBytes: number
+}
+
+/** Container extension grammar. Same argument as {@link RENDITION_KEY}. */
+const RENDITION_EXT = /^[a-z0-9]{1,8}$/
+
+/**
+ * Read one stored rendition entry, or null.
+ *
+ * ⚠️ This is a SECURITY gate, not a convenience. `key` and `ext` are
+ * interpolated into a Cloud Storage object path by
+ * {@link mediaRenditionObjectPath}, and the media document they come from is
+ * writable by anyone with editor rights on the scope. An entry carrying
+ * `key: '../../../adminAudit-archive/x'` would otherwise walk straight out of
+ * the asset's prefix on an admin-SDK bucket read — the same class of hole
+ * `mediaStoragePathInScope` closes for `storagePath` (AGL-1881), reached by a
+ * different field.
+ *
+ * The two grammars admit no `/`, no `.` and no `..`, so a validated entry
+ * cannot leave the object it belongs to whatever the document says.
+ */
+export function parseMediaRendition(value: unknown): MediaVideoRendition | null {
+  if (!value || typeof value !== 'object') return null
+  const entry = value as Record<string, unknown>
+  const key = entry['key']
+  const ext = entry['ext']
+  const contentType = entry['contentType']
+  if (!isMediaRenditionKey(key)) return null
+  if (typeof ext !== 'string' || !RENDITION_EXT.test(ext)) return null
+  if (typeof contentType !== 'string' || !/^video\/[\w.+-]{1,64}$/.test(contentType)) {
+    return null
+  }
+  const width = Math.round(Number(entry['width']))
+  const height = Math.round(Number(entry['height']))
+  const sizeBytes = Math.round(Number(entry['sizeBytes']))
+  if (!Number.isFinite(width) || width <= 0) return null
+  if (!Number.isFinite(height) || height <= 0) return null
+  return {
+    key,
+    ext,
+    contentType,
+    width,
+    height,
+    sizeBytes: Number.isFinite(sizeBytes) && sizeBytes > 0 ? sizeBytes : 0,
+  }
+}
+
+/**
+ * Every VALID rendition on a document, in stored order.
+ *
+ * Order is the document's, and it is meaningful: a renderer emits one
+ * `<source>` per entry and a browser takes the FIRST it can decode, so the
+ * producer writes the most efficient codec first. Dropping an invalid entry
+ * rather than refusing the list keeps one malformed row from costing an asset
+ * every rendition it has.
+ */
+export function parseMediaRenditions(value: unknown): MediaVideoRendition[] {
+  if (!Array.isArray(value)) return []
+  const parsed: MediaVideoRendition[] = []
+  for (const entry of value) {
+    const rendition = parseMediaRendition(entry)
+    if (rendition) parsed.push(rendition)
+  }
+  return parsed
+}
+
+/** Storage object path of an asset's poster still. */
+export function mediaPosterObjectPath(objectPath: string): string {
+  return `${objectPath}${MEDIA_POSTER_OBJECT_SUFFIX}.webp`
+}
+
+/**
+ * Storage object path of one rendition. The `.` before the extension is the
+ * only one in the suffix, so a path is unambiguous even when a key contains
+ * digits that look like a width.
+ */
+export function mediaRenditionObjectPath(
+  objectPath: string,
+  rendition: { key: string; ext: string },
+): string {
+  return `${objectPath}${MEDIA_RENDITION_OBJECT_PREFIX}${rendition.key}.${rendition.ext}`
+}
+
+/**
+ * Append CDN query parameters to a resolved media URL.
+ *
+ * Private assets already carry `exp`/`sig`, and the pinned form already
+ * carries a hash segment, so this has to merge rather than assign — hence
+ * the `?`/`&` test instead of a template literal. Kept private: every public
+ * entry point below decides for itself whether a value is even eligible.
+ */
+function withMediaCdnQuery(
+  src: string,
+  params: readonly (readonly [string, string])[],
+): string {
+  const query = params.map(([key, value]) => `${key}=${value}`).join('&')
+  return `${src}${src.includes('?') ? '&' : '?'}${query}`
+}
+
+/**
+ * Whether a resolved value is one THIS platform serves, and so one that can
+ * be asked for a poster or a rendition.
+ *
+ * An author-typed hotlink and a raw `firebasestorage.googleapis.com` URL both
+ * pass through {@link resolveMediaSrc} untouched, and neither has a poster.
+ * Appending `?poster=1` to them would produce a URL that either 404s or —
+ * worse, on a permissive third-party host — serves the whole video under a
+ * name that promises 40 KB.
+ *
+ * ⚠️ Deliberately the PREFIX test and not {@link isMediaCdnPath}, which is
+ * the strict validator two functions above. The strict form refuses the
+ * PINNED shape — `/api/media/cdn/{scope}/{id}/{hash}` — because its media-id
+ * segment then contains a `/`, and a pinned reference is exactly what
+ * `resolveMediaSrc` emits for every asset the picker has written since
+ * AGL-2685. Using it here would silently return undefined for the newest
+ * half of the corpus.
+ *
+ * Nothing is lost by being looser: the strict grammar is a SUBSET of this
+ * prefix, and everything the prefix additionally admits is a same-origin
+ * path into this platform's own route — which is the only question this
+ * predicate asks.
+ */
+function derivedObjectEligible(src: string | undefined): src is string {
+  if (!src) return false
+  return src.startsWith(`${MEDIA_CDN_ROUTE}/`)
+}
+
+/**
+ * The poster URL for a stored media reference, or undefined when the value
+ * cannot have one.
+ *
+ * `width` narrows to a generated poster variant. An asset with no variant at
+ * that width still answers — `serveMediaCdn` falls back to the full poster,
+ * the same degradation `?w=` has always had — so a renderer may advertise
+ * the standard {@link MEDIA_CDN_VARIANT_WIDTHS} in a `srcSet` without
+ * consulting the document.
+ *
+ * ⚠️ Returning a URL is NOT a promise that a poster exists. Nothing here can
+ * read a media document, and a video uploaded before AGL-2742 — or by a
+ * browser that could not decode it — has none.
+ *
+ * That case answers **404**, deliberately and not as a gap: `serveMediaCdn`
+ * refuses a poster it does not have rather than falling back to the master,
+ * because answering a request for a 40 KB still with 60 MB of `video/mp4` is
+ * the exact cost this exists to remove. So a `<video poster>` built from this
+ * degrades to a `<video>` with no poster, which is what every video on the
+ * platform did before AGL-2742 — which is why this is allowed to answer
+ * without knowing. A caller putting the URL somewhere a 404 is NOT free (an
+ * `<img>`, an `og:image`) must read `poster` off the document first.
+ */
+export function mediaPosterSrc(
+  value: string | undefined | null,
+  options?: ResolveMediaSrcOptions & { width?: number },
+): string | undefined {
+  const src = resolveMediaSrc(value, options)
+  if (!derivedObjectEligible(src)) return undefined
+  const width = Number(options?.width)
+  const params: (readonly [string, string])[] = [[MEDIA_CDN_POSTER_PARAM, '1']]
+  if (Number.isFinite(width) && width > 0) {
+    params.push(['w', String(Math.round(width))])
+  }
+  return withMediaCdnQuery(src, params)
+}
+
+/**
+ * The URL of one rendition. Undefined for a key that does not fit the
+ * grammar, so a malformed key never reaches a `<source src>` — an empty
+ * `src` makes a browser re-request the PAGE, which is a far more expensive
+ * mistake than a missing source element.
+ */
+export function mediaRenditionSrc(
+  value: string | undefined | null,
+  key: string,
+  options?: ResolveMediaSrcOptions,
+): string | undefined {
+  if (!isMediaRenditionKey(key)) return undefined
+  const src = resolveMediaSrc(value, options)
+  if (!derivedObjectEligible(src)) return undefined
+  return withMediaCdnQuery(src, [[MEDIA_CDN_RENDITION_PARAM, key]])
+}

@@ -15,13 +15,19 @@
  * limitations under the License.
  */
 
-// Fails when the AI agents a site INVITES in `robots.txt` are not the same set
-// the WAF ADMITS (AGL-2716).
+// Fails when a site publishes an invitation the edge does not honor.
 //
 //   npm run check:agent-readiness
 //
-// Nothing here touches the network. It reads two source files and compares two
-// lists.
+// Two invariants, the same shape — something we PUBLISH measured against what
+// the WAF ADMITS — and both silent when they break:
+//
+//   1. The AI agents `robots.txt` INVITES are the agents the WAF ADMITS
+//      (AGL-2716).
+//   2. Every concrete path `/openapi.json` ADVERTISES is one an UNNAMED machine
+//      client can actually reach (AGL-2748).
+//
+// Nothing here touches the network. It reads source files and compares lists.
 //
 // ## Why this guard exists
 //
@@ -60,7 +66,26 @@ const AGENTS_SOURCE = join(
   REPO_ROOT,
   'libs/aglyn/src/lib/app-utils/search-indexing.ts',
 )
+const OPENAPI_SOURCE = join(
+  REPO_ROOT,
+  'libs/aglyn/src/lib/app-utils/agent-openapi.ts',
+)
 const RULE_NAME = 'AI agent bypass'
+const TENANT_PROJECT = 'aglyn-tenant'
+
+/**
+ * Advertised paths that answer HTML to a person, whose posture is a product
+ * decision rather than a defect.
+ *
+ * `/search` renders a page. The challenge is doing real work there — a search
+ * endpoint is the most expensive thing an unnamed crawler can hammer — and the
+ * agents named in `robots.txt` still reach it through the User-Agent rule.
+ * Contrast `/api/host` and `/api/screen`, which exist only for machines and
+ * have no reader that could ever solve a challenge.
+ *
+ * Adding to this set is a deliberate act. That is what the set is for.
+ */
+const PAGE_PATHS = new Set(['/search'])
 
 function fail(message) {
   console.error(`✖ ${message}`)
@@ -172,6 +197,119 @@ if (drifted) {
       'Then PATCH the live rule — see the header of firewall-posture.mjs, and ' +
       'never use PUT.',
   )
-  process.exit(1)
 }
+
+/**
+ * The paths the tenant's OpenAPI document advertises.
+ *
+ * Two spellings, because two of them are conditional on the customer's own
+ * content and are assigned rather than declared: a quoted key inside the
+ * `paths` object, and a `paths['…'] =` assignment for the feed and the search
+ * page. Both anchor to a quoted literal, so a path assembled by concatenation
+ * would be missed — which is why the pass line prints the count. Compare it
+ * against the operation count in the served document if you ever doubt it.
+ */
+function readAdvertisedPaths() {
+  let source
+  try {
+    source = readFileSync(OPENAPI_SOURCE, 'utf8')
+  } catch {
+    return fail(`cannot read ${OPENAPI_SOURCE} — did the builder move?`)
+  }
+  const declared = [...source.matchAll(/^ {4}'(\/[^']*)': \{$/gm)]
+  const assigned = [...source.matchAll(/^\s*paths\['(\/[^']*)'\] = \{$/gm)]
+  const paths = [...new Set([...declared, ...assigned].map((entry) => entry[1]))]
+  if (paths.length === 0) {
+    return fail(
+      'no paths parsed out of agent-openapi.ts. If the `paths` object was ' +
+        'reshaped, update this parser rather than deleting the check.',
+    )
+  }
+  return paths
+}
+
+/** Whether one declared path condition matches `path`. */
+function pathConditionMatches(condition, path) {
+  const values = condition.valueAnyOf ?? [condition.value]
+  if (condition.op === 'eq') return values.includes(path)
+  if (condition.op === 'pre') return values.some((value) => path.startsWith(value))
+  if (condition.op === 're') return values.some((value) => new RegExp(value).test(path))
+  // An op this guard does not model is not evidence of admission.
+  return false
+}
+
+/**
+ * The rule that admits an UNNAMED machine client to `path`, or null.
+ *
+ * A group admits only when EVERY condition in it is a path condition, and that
+ * is the whole subtlety. The plugin job runner is bypassed by path AND a shared
+ * secret, so a stranger does not reach it. The `AI agent bypass` is a
+ * User-Agent alone, so it admits two dozen names and nobody else. Counting
+ * either as admission would report the reachable set as larger than it is —
+ * the direction that hides the bug instead of showing it.
+ */
+function admittingRule(project, path) {
+  for (const rule of project.bypassRules ?? []) {
+    const groups = [
+      rule.conditions ?? [],
+      ...(rule.alsoRequiresGroups ?? []).map((condition) => [condition]),
+    ]
+    for (const group of groups) {
+      if (group.length === 0) continue
+      const admits = group.every(
+        (condition) =>
+          condition.type === 'path' && pathConditionMatches(condition, path),
+      )
+      if (admits) return rule.name
+    }
+  }
+  return null
+}
+
+const tenant = EXPECTED_POSTURE.find(
+  (project) => project.project === TENANT_PROJECT,
+)
+if (!tenant) fail(`no \`${TENANT_PROJECT}\` project in the declared posture`)
+
+/*
+  TEMPLATED PATHS ARE SKIPPED, and the reason is not laziness. `/{path}` is
+  every page on the site, whose challenge is the product decision `PAGE_PATHS`
+  describes; `/{collectionSlug}/rss.xml` has its admission asserted by the rule
+  that declares it, as a regex anchored to the suffix. Matching a WAF pattern
+  against an OpenAPI template would be comparing two approximations, and a
+  guard that is allowed to be approximately right stops being evidence.
+*/
+const unreachable = []
+let examined = 0
+for (const path of readAdvertisedPaths()) {
+  if (path.includes('{') || PAGE_PATHS.has(path)) continue
+  examined += 1
+  if (!admittingRule(tenant, path)) unreachable.push(path)
+}
+
+if (unreachable.length === 0) {
+  console.log(
+    `✔ ${TENANT_PROJECT}: ${examined} advertised paths, every one admitted to ` +
+      'a client whose User-Agent nobody has heard of',
+  )
+} else {
+  console.error(
+    `✖ ${TENANT_PROJECT}: /openapi.json advertises paths the WAF challenges`,
+  )
+  for (const path of unreachable) console.error(`   ${path}`)
+  console.error(
+    '   → an agent reads the contract, calls what it names, and is answered a\n' +
+      '     429 challenge it cannot solve. A document that can be read but not\n' +
+      '     acted on spends the caller trust it earned and then refuses them.',
+  )
+  console.error(
+    '\nFix by adding the path to a bypass rule in ' +
+      'tools/scripts/lib/firewall-posture.mjs — exact paths, not a prefix, ' +
+      'unless the whole namespace under it is public. Then PATCH the live ' +
+      'rule; never use PUT. If the path genuinely belongs to a human-facing ' +
+      `page, add it to \`PAGE_PATHS\` above and say why.`,
+  )
+}
+
+if (drifted || unreachable.length > 0) process.exit(1)
 process.exit(0)

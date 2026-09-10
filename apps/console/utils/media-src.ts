@@ -89,4 +89,47 @@ export function mediaThumbnailSrc(
   return `${mediaSrc(media)}?w=${width}`
 }
 
+/**
+ * A `src` for a VIDEO's poster still, or `undefined` when it has none
+ * (AGL-2742).
+ *
+ * The DAM grid drew a video tile as a `<video src>` pointing at the master.
+ * A browser paints a first frame by fetching enough of the file to decode
+ * one, so a folder of eight clips was tens of megabytes of Storage egress
+ * per view — the same defect {@link mediaThumbnailSrc} was written to fix for
+ * images, on the type where each tile costs a hundred times more. And unlike
+ * an image tile it could not be helped by a variant, because until now a
+ * video had nothing smaller to serve.
+ *
+ * Returns `undefined` rather than a fallback URL on purpose: the caller has
+ * to branch anyway (a `<video>` with no poster still needs `preload="none"`
+ * so it stops fetching), and an "always answers" helper would hand back a URL
+ * that 404s for every video uploaded before this shipped.
+ *
+ * Mirrors `Aglyn.mediaPosterSrc` for a media DOCUMENT rather than a stored
+ * `media:` reference — the console holds documents, the renderer holds
+ * references, and neither can use the other's input.
+ */
+export function mediaPosterThumbnailSrc(
+  media: {
+    url?: string
+    cdnPath?: string
+    poster?: { variants?: number[] } | null
+  },
+  width?: number,
+): string | undefined {
+  // A poster is only reachable through the CDN route, so a free-tier or
+  // private asset has no URL that could serve one — the same reason
+  // `mediaThumbnailSrc` gives up on `?w=` there.
+  if (!media.poster || !media.cdnPath || media.cdnPath.includes('?')) {
+    return undefined
+  }
+  const variants = media.poster.variants ?? []
+  // Only a width that was actually generated. `serveMediaCdn` would fall
+  // back to the full poster for any other, which works and defeats the point
+  // — a 1920px still in a 116px tile.
+  const narrowed = width && variants.includes(width) ? `&w=${width}` : ''
+  return `${mediaSrc(media)}?poster=1${narrowed}`
+}
+
 export default mediaSrc

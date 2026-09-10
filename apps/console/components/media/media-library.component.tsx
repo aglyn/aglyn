@@ -129,6 +129,7 @@ import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { mediaSrc, mediaThumbnailSrc } from '../../utils/media-src'
+import { probeVideoFile } from '../../utils/video-probe'
 import {
   readAnalyticsDays,
   recentDayIds,
@@ -2738,6 +2739,37 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         typeof currentFolder === 'string' && currentFolder !== 'all'
           ? currentFolder
           : null
+      /*
+       * The video probe (AGL-2742), run BEFORE either upload branch because
+       * both need its result and neither server can produce it.
+       *
+       * This is the one moment the platform has a decoder and the file in the
+       * same place. After the PUT the bytes are in Cloud Storage and the only
+       * thing that could read a duration or paint a first frame out of them is
+       * an ffmpeg this repo does not have and a transcoder the budget does not
+       * justify. A `<video>` and a `<canvas>` do it here for nothing.
+       *
+       * `probeVideoFile` never throws and never blocks for more than its own
+       * timeouts, so the worst case is the upload this console has always
+       * done, a few seconds later. It is skipped outright for a non-video, so
+       * an image path is untouched.
+       */
+      const probe = contentType.startsWith('video/')
+        ? await probeVideoFile(file)
+        : null
+      // One shape, sent by both branches. `posterError` carries the client's
+      // reason only when there is no poster — a captured poster alongside a
+      // "could not read the duration" note is a success with a footnote, and
+      // the server records the footnote against the metadata, not the poster.
+      const videoBody = probe
+        ? {
+            ...(probe.video ? { video: probe.video } : {}),
+            ...(probe.posterBase64 ? { poster: probe.posterBase64 } : {}),
+            ...(probe.reason && !probe.posterBase64
+              ? { posterError: probe.reason }
+              : {}),
+          }
+        : {}
       try {
         // Large files go direct-to-storage via signed URLs (AGL-167/1317):
         // Vercel 413s any request body over 4.5MB at the platform layer, so
@@ -2796,6 +2828,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 mediaId: minted.mediaId,
                 fileName: file.name,
                 folderId: uploadFolderId,
+                // AGL-2742. Rides the finalize call the client was already
+                // making rather than a second round trip — and only on this
+                // branch does the poster's base64 have to be watched against
+                // the 4.5 MB body wall, which `MEDIA_POSTER_MAX_BYTES` sits
+                // an order of magnitude below.
+                ...videoBody,
               }),
             },
           )
@@ -2822,6 +2860,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             fileName: file.name,
             contentType,
             folderId: uploadFolderId,
+            // AGL-2742 — the same fields on the direct route. A video small
+            // enough to take this branch is under 3 MB, so its poster is a
+            // rounding error beside the file itself.
+            ...videoBody,
             data: await fileToBase64(file),
           }),
         })

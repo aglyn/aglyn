@@ -21,6 +21,10 @@ import { useCallback, useState } from 'react'
 import { useCrmApi } from '../components/use-crm-api'
 import type { CrmOrgActivityKind } from '../constants/api-routes'
 import {
+  orgActivityRefusal,
+  reportDroppedActivityLine,
+} from '../model/crm-activity-report'
+import {
   bulkReport,
   type CrmBulkOutcome,
   type CrmBulkSkip,
@@ -113,7 +117,11 @@ export function useCrmBulkApply(options: CrmBulkApplyOptions = {}) {
         void callCrm('org-activity', {
           action: sentence,
           target: { type: recordKind },
-        }).catch((error) => console.error(error))
+        })
+          .then(({ response, payload }) => {
+            if (!response.ok) throw orgActivityRefusal(response.status, payload)
+          })
+          .catch(reportDroppedActivityLine)
       }
       setBusy(false)
       return outcome

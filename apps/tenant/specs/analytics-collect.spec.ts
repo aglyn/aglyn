@@ -1184,3 +1184,87 @@ describe('form view and start counters', () => {
     expect(form().stats).toBeUndefined()
   })
 })
+
+/**
+ * Video playback counting (AGL-2746).
+ *
+ * The billing invariant is what most of this suite is about, and it is not a
+ * nicety: `analytics/{day}.total` is the ONLY field `/api/billing/report-usage`
+ * reads out of a day doc, it rolls into `orgs/{orgId}/usage/{month}.pageViews`,
+ * and from there into the Stripe meter, the free plan's bandwidth band and the
+ * abuse ceiling. A play is not a page view. A player firing five quartile
+ * beacons over one film must not put five page views on a customer's invoice,
+ * and the mechanism that guarantees it is a single `return noContent()` — one
+ * line, easily lost in a refactor, and undetectable in production until an
+ * invoice is disputed.
+ */
+describe('video playback counting (AGL-2746)', () => {
+  it('counts a play under the same media map the CDN writes serves into', async () => {
+    const route = loadRoute()
+    const response = await route.POST(
+      beacon({ hostId: HOST_ID, mediaId: 'film1', video: 'play' }),
+    )
+    expect(response.status).toBe(204)
+    expect(dayDoc().media.film1.plays).toBe(1)
+  })
+
+  it('accumulates the quartiles and the completion separately', async () => {
+    const route = loadRoute()
+    for (const event of ['play', 'progress25', 'progress50', 'progress75', 'complete']) {
+      await route.POST(beacon({ hostId: HOST_ID, mediaId: 'film1', video: event }))
+    }
+    expect(dayDoc().media.film1).toEqual({
+      plays: 1,
+      progress25: 1,
+      progress50: 1,
+      progress75: 1,
+      completes: 1,
+    })
+  })
+
+  it('⛔ never touches `total` — five beacons, zero page views', async () => {
+    const route = loadRoute()
+    for (const event of ['play', 'progress25', 'progress50', 'progress75', 'complete']) {
+      await route.POST(beacon({ hostId: HOST_ID, mediaId: 'film1', video: event }))
+    }
+    // Absent, not zero. `total` is written with an increment, so the field
+    // existing at all would mean the pageview branch ran.
+    expect(dayDoc().total).toBeUndefined()
+    expect(dayDoc().paths).toBeUndefined()
+    expect(dayDoc().devices).toBeUndefined()
+  })
+
+  it('stamps the retention expiry on a day doc created by playback alone', async () => {
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, mediaId: 'film1', video: 'play' }))
+    expect(dayDoc().expiresAt).toBeInstanceOf(Date)
+  })
+
+  it('drops an event outside the closed vocabulary', async () => {
+    const route = loadRoute()
+    const response = await route.POST(
+      beacon({ hostId: HOST_ID, mediaId: 'film1', video: 'started' }),
+    )
+    // 204 either way: nothing renders this response, and an unauthenticated
+    // collector that told a caller which event names it accepts would be
+    // documenting its own write surface.
+    expect(response.status).toBe(204)
+    expect(dayDoc()).toBeUndefined()
+  })
+
+  it('refuses a mediaId that could not be a Firestore map key', async () => {
+    const route = loadRoute()
+    for (const mediaId of ['a.b', 'a/b', '$x', '', 'x'.repeat(65)]) {
+      await route.POST(beacon({ hostId: HOST_ID, mediaId, video: 'play' }))
+    }
+    expect(dayDoc()).toBeUndefined()
+  })
+
+  it('drops playback counters for a spoofed hostId', async () => {
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: 'not-a-host', mediaId: 'film1', video: 'play' }),
+    )
+    expect(mockStore[`hosts/not-a-host/analytics/${DAY}`]).toBeUndefined()
+  })
+})
