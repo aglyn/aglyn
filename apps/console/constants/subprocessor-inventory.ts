@@ -621,25 +621,25 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       "Aglyn's own project id and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is deployment metadata about Aglyn's own functions — resource name, region, state and `updateTime`.",
   },
 
-  // Two more Google Cloud control planes, driven by operator setup scripts
-  // against Aglyn's own project. Google LLC is already an Annex III recipient
-  // and these add no new one; they are declared host by host for the same
-  // reason as the App Check pair above, and on the same first admissible
-  // reason: nothing personal reaches them.
+  // Google Cloud control-plane endpoints named by the operator scripts that
+  // provision alerting and scheduled jobs: the platform configuring or starting
+  // something in its own project, with no tenant, member or visitor record in
+  // scope to send. `not-a-subprocessor` on the first admissible reason, and NOT
+  // `no-request` — both are really called.
 
   'monitoring.googleapis.com': {
     disposition: 'not-a-subprocessor',
     reason:
-      "Cloud Monitoring `notificationChannels.list`, `alertPolicies.list` and `alertPolicies.patch`, called only by the operator CLI `tools/scripts/setup-alert-slack-channel.mjs` to attach an already-created Slack channel to a named subset of Aglyn's own alert policies. It is never imported by the console or tenant runtime — no request-serving code path reaches it — and it authenticates as the operator running it.",
+      "Cloud Monitoring v3, called only by the operator script `tools/scripts/setup-alert-slack-channel.mjs`: it lists the project's notification channels and alert policies, adds the existing Slack channel to every outage policy that lacks it (a PATCH with `updateMask=notificationChannels`), then reads the policies back to prove the route is attached. No console or tenant code imports it, so no request-serving path reaches it, and it authenticates as the operator running it — Monitoring refuses the Firebase service account.",
     dataReceived:
-      "Aglyn's own project id, the resource names of Aglyn's own alert policies and notification channels, and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is Aglyn's own alerting configuration.",
+      "The project id, the resource names of alert policies and notification channels, and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is the project's own alerting configuration.",
   },
   'run.googleapis.com': {
     disposition: 'not-a-subprocessor',
     reason:
-      "The Cloud Run Admin API `jobs:run` URL, written by the operator CLIs `tools/scripts/setup-edge-admission-run.mjs` and `tools/scripts/setup-github-app-dispatch.mjs` as the target of a Cloud Scheduler job, so Aglyn's own scheduler starts Aglyn's own Cloud Run job on a timer. Neither script is imported by the console or tenant runtime, and no request-serving code path reaches the URL: Cloud Scheduler makes the request, inside Aglyn's project, as a dedicated service account.",
+      'The Cloud Run Admin API `jobs.run` address, written by `tools/scripts/setup-edge-admission-run.mjs` and `tools/scripts/setup-github-app-dispatch.mjs` as the target of a Cloud Scheduler HTTP job. Scheduler POSTs to it on a cron, with an OAuth token for the job\'s dedicated service account, to start the edge-admission sampler or the job that dispatches the signup canary workflow. The same scripts deploy those jobs through `gcloud run jobs`, as the operator. No console or tenant code imports either script.',
     dataReceived:
-      "Aglyn's own project, region and job name, and an OAuth token for Aglyn's own service account. The POST carries no body, so nothing about any customer, member or visitor is sent.",
+      "Job definitions — a container built from the repository's own scripts, its service account, non-secret identifiers as environment variables, and Secret Manager references by name, never a secret value — and bodiless run requests naming a job. Nothing personal is in either: no customer, member or visitor record is read or sent to define or start a job.",
   },
 
   // MARK – Literals that are never fetched

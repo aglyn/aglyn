@@ -37,13 +37,11 @@
  * `edge-admission` needed nothing but `firebase-admin`, so it became a Cloud
  * Run job authenticating as its own service account and lost BOTH credentials.
  * The canary walks a real signup through the Vercel checkpoint: it needs Chrome
- * and two secrets that are write-only in GitHub (`AGLYN_PROBE_TOKEN`, and the
- * App Check debug token the canary attests with) which nobody can read back
- * out. So the walk stays on Actions, where minutes are free and those secrets
- * already live, and only the TRIGGER moves here.
- *
- * The debug token is described here, not named: its variable name may appear
- * only in the files `app-check-debug-token.spec.ts` exempts by path (AGL-2402).
+ * and two secrets that are write-only in GitHub, which nobody can read back
+ * out: `AGLYN_PROBE_TOKEN`, and the App Check debug token `signup-canary.yml`
+ * binds (`app-check-debug-token.spec.ts` allows that variable's name only in
+ * the files it lists). So the walk stays on Actions, where minutes are free and
+ * those secrets already live, and only the TRIGGER moves here.
  *
  * ## ⚠️ OAuth, not OIDC, again
  *

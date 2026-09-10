@@ -162,7 +162,6 @@ describe('Marketplace sections are routes (AGL-2501)', () => {
     for (const [pathname, label] of [
       ['/acme/marketplace/browse', 'Browse All'],
       ['/acme/marketplace/installed', 'Installed'],
-      // The slug predates the American copy and stays: it is a URL, not a label.
       ['/acme/marketplace/licences', 'Licenses'],
       ['/acme/marketplace/payouts', 'Payouts'],
       ['/acme/marketplace/sales', 'Sales'],
