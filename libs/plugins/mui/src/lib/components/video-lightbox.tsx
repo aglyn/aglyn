@@ -114,16 +114,25 @@ export function VideoLightbox(props: VideoLightboxProps) {
       onClose={onClose}
       maxWidth="lg"
       fullWidth
-      // No `DialogTitle` — the film is the content and a heading above it
-      // would only push it down. So the accessible name is given directly;
-      // without one a screen reader announces an unlabelled dialog.
-      aria-label={title || FALLBACK_LABEL}
       transitionDuration={reduceMotion ? 0 : undefined}
       slotProps={{
         paper: {
+          /**
+           * ⚠️ The label goes on the PAPER, not on `<Dialog>`.
+           *
+           * `role="dialog"` lives on the paper; props spread onto `Dialog`
+           * reach the Modal root, which is `role="presentation"`. Written
+           * there first and measured in a browser: the presentation root
+           * carried the name and the dialog itself had none, which is an
+           * unlabelled dialog announced to a screen reader — the exact
+           * failure the label was added to prevent. No `DialogTitle`,
+           * deliberately: the film is the content, and a heading above it
+           * would only push it down.
+           */
+          'aria-label': title || FALLBACK_LABEL,
           // The paper is a frame around a video, not a sheet of content:
-          // no padding, and the same corner radius the theme gives every
-          // other surface rather than a literal.
+          // no padding, and a black ground so a letterboxed film has
+          // something to sit on rather than a white margin.
           sx: {
             position: 'relative',
             overflow: 'hidden',
