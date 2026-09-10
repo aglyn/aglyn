@@ -9,6 +9,17 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.111 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.110...v1.0.0-beta.111)
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **cli:** @aglyn/cli 0.1.2 ([AGL-2724](https://linear.app/aglyn/issue/AGL-2724))
+
+</details>
+
 ## v1.0.0-beta.110 — 2026-09-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.109...v1.0.0-beta.110)
