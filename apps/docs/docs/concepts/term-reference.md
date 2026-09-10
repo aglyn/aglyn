@@ -30,6 +30,12 @@ them all alphabetically within each group.
 
 ## Platform & accounts
 
+### Aglyn
+
+The platform these docs cover — the console you build in and the sites you
+publish. Pronounced **AG-lin** — "ag" as in *agriculture*, with the stress on
+the first syllable (IPA `/ˈæɡlɪn/`).
+
 ### Organization (org)
 
 The account entity: one subscription, one team roster, one plugin

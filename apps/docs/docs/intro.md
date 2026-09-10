@@ -16,6 +16,9 @@ description: What Aglyn is, the core concepts, and how to find your way around t
   </p>
 </div>
 
+**Aglyn** is pronounced **AG-lin** — "ag" as in *agriculture*, with the stress on the
+first syllable (IPA `/ˈæɡlɪn/`).
+
 ![A site's dashboard in the Aglyn console](/img/getting-started/console-dashboard.png)
 
 ## Start here
