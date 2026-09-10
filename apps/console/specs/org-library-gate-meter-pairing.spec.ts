@@ -255,7 +255,12 @@ describe('every ingress door passes the pairing (AGL-2003)', () => {
     // fields fail the same way and should fail the same guard.
     const fs = require('fs') as typeof import('fs')
     const path = require('path') as typeof import('path')
-    const root = path.join(__dirname, '..', 'app', 'api')
+    // `app/api` holds the console's routes; `utils` holds the /v1 REST API's
+    // handlers, which reach the same gate from outside any route file.
+    const roots = [
+      path.join(__dirname, '..', 'app', 'api'),
+      path.join(__dirname, '..', 'utils'),
+    ]
     const files: string[] = []
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -264,7 +269,7 @@ describe('every ingress door passes the pairing (AGL-2003)', () => {
         else if (entry.name.endsWith('.ts')) files.push(full)
       }
     }
-    walk(root)
+    for (const root of roots) walk(root)
     const callSites: string[] = []
     for (const file of files) {
       const source = fs.readFileSync(file, 'utf8')
@@ -278,9 +283,10 @@ describe('every ingress door passes the pairing (AGL-2003)', () => {
       }
     }
     // Fails if a door is added and left unpaired, and fails if the doors
-    // vanish — a zero-length sweep must not read as compliance. Five doors:
-    // one in `upload`, and two each in `upload-url` and `replace`.
-    expect(callSites.length).toBe(5)
+    // vanish — a zero-length sweep must not read as compliance. Six doors:
+    // one in `upload`, two each in `upload-url` and `replace`, and the /v1
+    // upload in `utils/api-v1-resources.ts`.
+    expect(callSites.length).toBe(6)
     for (const site of callSites) {
       expect(site).toContain('billsOverage')
       // The scope, not a hardcoded literal: a route that passed `true` would
