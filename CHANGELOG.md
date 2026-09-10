@@ -9,6 +9,25 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.109 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/0049273ec...v1.0.0-beta.109)
+
+### Added
+
+- **api:** version the public read API and meter it honestly ([AGL-2722](https://linear.app/aglyn/issue/AGL-2722), [AGL-617](https://linear.app/aglyn/issue/AGL-617))
+
+### Fixed
+
+- **api:** list the pages the router serves, not a status nothing writes ([AGL-2719](https://linear.app/aglyn/issue/AGL-2719))
+
+<details>
+<summary>Also in this release: 1 ci</summary>
+
+- **main-gate:** run the full sweep in parallel, 26-35 min -> ~8 ([AGL-2721](https://linear.app/aglyn/issue/AGL-2721), [AGL-2684](https://linear.app/aglyn/issue/AGL-2684))
+
+</details>
+
 ## v1.0.0-beta.108 — 2026-09-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/7c74e81aa...v1.0.0-beta.108)
