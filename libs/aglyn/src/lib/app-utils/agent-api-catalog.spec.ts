@@ -18,6 +18,7 @@
 import {
   API_CATALOG_MEDIA_TYPE,
   API_CATALOG_PATH,
+  type CatalogApi,
   buildAgentApiCatalog,
 } from './agent-api-catalog'
 
@@ -39,7 +40,11 @@ const PLATFORM = {
   docsUrl: 'https://docs.example.test/api',
 }
 
-const catalog = (apis = [SITE, PLATFORM]): any =>
+// Typed as the interface rather than inferred from the default: inference
+// makes every optional field of `CatalogApi` mandatory at the call sites,
+// which locks out the one shape this file most needs to pass — an API with
+// nothing but an anchor.
+const catalog = (apis: readonly CatalogApi[] = [SITE, PLATFORM]): any =>
   buildAgentApiCatalog({ origin: ORIGIN, apis }) as any
 
 const contextFor = (document: any, anchor: string): any =>
