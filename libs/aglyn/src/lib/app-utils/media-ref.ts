@@ -887,10 +887,23 @@ function withMediaCdnQuery(
  * Appending `?poster=1` to them would produce a URL that either 404s or —
  * worse, on a permissive third-party host — serves the whole video under a
  * name that promises 40 KB.
+ *
+ * ⚠️ Deliberately the PREFIX test and not {@link isMediaCdnPath}, which is
+ * the strict validator two functions above. The strict form refuses the
+ * PINNED shape — `/api/media/cdn/{scope}/{id}/{hash}` — because its media-id
+ * segment then contains a `/`, and a pinned reference is exactly what
+ * `resolveMediaSrc` emits for every asset the picker has written since
+ * AGL-2685. Using it here would silently return undefined for the newest
+ * half of the corpus.
+ *
+ * Nothing is lost by being looser: the strict grammar is a SUBSET of this
+ * prefix, and everything the prefix additionally admits is a same-origin
+ * path into this platform's own route — which is the only question this
+ * predicate asks.
  */
 function derivedObjectEligible(src: string | undefined): src is string {
   if (!src) return false
-  return isMediaCdnPath(src) || src.startsWith(`${MEDIA_CDN_ROUTE}/`)
+  return src.startsWith(`${MEDIA_CDN_ROUTE}/`)
 }
 
 /**
