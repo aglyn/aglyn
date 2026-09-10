@@ -198,18 +198,45 @@ describe('api-http', () => {
       expect(checkRateLimit('a', opts).allowed).toBe(false)
     })
 
-    it('emits X-RateLimit-* headers with Reset in epoch seconds', () => {
-      const headers = rateLimitHeaders({
-        allowed: true,
-        limit: 120,
-        remaining: 119,
-        resetMs: 90_000,
-      })
+    it('emits BOTH spellings, and the legacy one byte-for-byte (AGL-2727)', () => {
+      // `now` is passed so the RFC `Reset` is a fixed duration rather than a
+      // value that drifts with the clock the test runs on.
+      const headers = rateLimitHeaders(
+        { allowed: true, limit: 120, remaining: 119, resetMs: 90_000 },
+        60_000,
+      )
       expect(headers).toEqual({
+        // Unchanged. Integrations already read these, and `Reset` stays an
+        // EPOCH second — a header that changes meaning under a client is
+        // worse than one it has to learn.
         'X-RateLimit-Limit': '120',
         'X-RateLimit-Remaining': '119',
         'X-RateLimit-Reset': '90',
+        // RFC 9331, which is what a caller not written against this specific
+        // API looks for. Its `Reset` is SECONDS REMAINING: 90s - 60s = 30.
+        'RateLimit-Limit': '120',
+        'RateLimit-Remaining': '119',
+        'RateLimit-Reset': '30',
       })
+    })
+
+    it('never lets the two spellings disagree', () => {
+      // Both are derived from ONE result. Two independently-computed budgets
+      // on a single response is a bug that reads as a rounding error.
+      const headers = rateLimitHeaders(
+        { allowed: false, limit: 5, remaining: 0, resetMs: 10_000 },
+        1_000,
+      )
+      expect(headers['RateLimit-Limit']).toBe(headers['X-RateLimit-Limit'])
+      expect(headers['RateLimit-Remaining']).toBe(headers['X-RateLimit-Remaining'])
+    })
+
+    it('never reports a negative wait for a window that already closed', () => {
+      const headers = rateLimitHeaders(
+        { allowed: true, limit: 5, remaining: 5, resetMs: 1_000 },
+        9_000,
+      )
+      expect(headers['RateLimit-Reset']).toBe('0')
     })
   })
 })

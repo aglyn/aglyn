@@ -288,13 +288,36 @@ export function peekRateLimit(
   }
 }
 
-/** Standard `X-RateLimit-*` headers (Reset is epoch seconds). */
+/**
+ * Rate-limit headers, in BOTH spellings (AGL-2727).
+ *
+ * `X-RateLimit-*` is the de-facto set this API has always sent, and it is kept
+ * verbatim — including `Reset` as an epoch second — because integrations are
+ * already reading it and a header that changes meaning under a client is worse
+ * than one it has to learn.
+ *
+ * `RateLimit-*` is RFC 9331, which is what a caller that was not written
+ * against this specific API looks for, and increasingly what an agent looks
+ * for. Same numbers, standard spelling. Its `Reset` is SECONDS REMAINING, not
+ * an epoch — that is the RFC's own choice, and the better one: a duration is
+ * read against the caller's clock rather than ours, so a skewed clock cannot
+ * turn "wait 12 seconds" into "wait until 1970".
+ *
+ * ⚠️ Both are computed from the SAME `result`, so they can never disagree.
+ * Two independently-derived budgets on one response is a bug that reads as a
+ * rounding error.
+ */
 export function rateLimitHeaders(
   result: RateLimitResult,
+  now: number = Date.now(),
 ): Record<string, string> {
+  const remainingSeconds = Math.max(0, Math.ceil((result.resetMs - now) / 1000))
   return {
     'X-RateLimit-Limit': String(result.limit),
     'X-RateLimit-Remaining': String(result.remaining),
     'X-RateLimit-Reset': String(Math.ceil(result.resetMs / 1000)),
+    'RateLimit-Limit': String(result.limit),
+    'RateLimit-Remaining': String(result.remaining),
+    'RateLimit-Reset': String(remainingSeconds),
   }
 }

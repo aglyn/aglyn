@@ -429,13 +429,20 @@ export async function runCli(
         context.err('no published pages\n')
         return EXIT_OK
       }
-      const width = Math.max(
-        ...collected.map((s) => String(s['slug'] ?? '').length),
-        4,
-      )
+      /*
+        `path` over `slug` (AGL-2719). `slug` is ONE segment, so a page at
+        `/use-cases/portfolios` printed as `portfolios` — a listing whose
+        left column could not be pasted into a browser, and which collides
+        whenever two sections share a leaf name. The routing map carries the
+        composed path and the endpoint now returns it; `slug` stays the
+        fallback for a server that predates it.
+      */
+      const addressOf = (screen: Record<string, unknown>) =>
+        String(screen['path'] ?? screen['slug'] ?? '')
+      const width = Math.max(...collected.map((s) => addressOf(s).length), 4)
       for (const screen of collected) {
         context.out(
-          `${pad(String(screen['slug'] ?? ''), width)}  ${String(
+          `${pad(addressOf(screen), width)}  ${String(
             screen['displayName'] ?? '',
           )}\n`,
         )

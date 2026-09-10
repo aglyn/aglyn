@@ -654,6 +654,33 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
       }),
       Object.freeze({
+        name: 'Customer REST API bypass',
+        why: 'the paid customer REST API answered a 429 challenge page to every machine client — curl, Postman, node-fetch, a Go client and a well-formed bearer call all got HTML where they expected the JSON envelope, so an entitlement people pay for could not be called at all',
+        // ADDED 2026-09-10 (AGL-2727). Measured against production first: five
+        // ordinary API clients and an `Authorization:`-bearing request were
+        // all answered `429 text/html`. `app.aglyn.com/api/v1` is the
+        // documented base URL — 73 references in the repo — so this was not a
+        // corner of the product, it was the whole programmatic surface.
+        //
+        // Exactly the argument the Machine traffic bypass above already makes,
+        // applied to the one machine caller it forgot: `/api/v1` enforces its
+        // OWN auth. `apps/console/utils/api-v1.ts` resolves an API key, gates
+        // on the org's entitlement, and carries both a per-key
+        // `consumeRateLimit` and a pre-auth `checkRateLimit` budget on
+        // unproductive key lookups. A bot challenge in front of that is
+        // redundant against a caller holding a key and fatal to one that is
+        // not a browser.
+        //
+        // PREFIX, not the exact paths the sibling rule uses: `/api/v1` is a
+        // catch-all route whose surface is the API's own resource list, so an
+        // exact list here would go stale the first time a resource is added —
+        // and the failure would again be a customer's integration answering
+        // HTML, which is the thing this rule exists to stop.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/v1' }),
+        ]),
+      }),
+      Object.freeze({
         name: 'Plugin loader control plane bypass',
         why: 'plugins.aglyn.com/load fetches both of these SERVER-SIDE and can carry no bypass header; challenged, a site on a verified custom domain cannot frame a plugin at all',
         // ADDED 2026-08-23 (AGL-2483), repairing a live break that the console
