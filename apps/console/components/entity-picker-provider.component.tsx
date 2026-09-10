@@ -26,6 +26,8 @@ import {
   type EntityOption,
   type EntityPickerKind,
   effectiveDatasetModel,
+  scopeTokensForHost,
+  visibleToHost,
 } from '@aglyn/aglyn'
 import {
   collection,
@@ -435,13 +437,30 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
     text: queries.forms ?? '',
     deps: [firestore, paths.forms?.join('/') ?? ''],
   })
+  /**
+   * Only the datasets THIS site may use (AGL-1044).
+   *
+   * Datasets are owned by the org and shared per site, and a page bound to a
+   * dataset its site cannot see renders nothing there. The site's tokens are a
+   * subset of those of any viewer who can open the site, so the query also
+   * satisfies the AGL-1041 rules for a scoped collaborator, and
+   * `array-contains-any` with `orderBy(__name__)` is served by the automatic
+   * single-field index.
+   */
+  const datasetScope = useMemo(
+    () => [
+      where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId)),
+    ],
+    [hostId],
+  )
   // Console-created datasets store the human name as `displayName`
   // (AGL-536); `name` covers pre-migration docs, via the label fallback.
   const datasets = useEntityPickerList({
     path: paths.datasets,
     labelField: 'displayName',
+    scope: datasetScope,
     text: queries.datasets ?? '',
-    deps: [firestore, paths.datasets?.join('/') ?? ''],
+    deps: [firestore, paths.datasets?.join('/') ?? '', hostId],
   })
 
   /**
@@ -494,6 +513,8 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
   pathsRef.current = paths
   const labelFieldsRef = useRef(labelFields)
   labelFieldsRef.current = labelFields
+  const hostIdRef = useRef(hostId)
+  hostIdRef.current = hostId
 
   const resolve = useCallback((kind: EntityPickerKind, id: string) => {
     const path = pathsRef.current[kind]
@@ -508,10 +529,16 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
     getDoc(doc(firestore, path[0], ...path.slice(1), id))
       .then((snapshot) => {
         const data = snapshot.exists() ? (snapshot.data() as any) : null
-        const option: EntityOption | null =
-          data && !data.deletedAt
-            ? { id, label: String(data[labelField] ?? data.name ?? id) }
-            : null
+        // A dataset this site cannot see resolves as unavailable: the page
+        // renders nothing from it, and the picker has to say so.
+        const usable =
+          data &&
+          !data.deletedAt &&
+          (kind !== 'datasets' ||
+            visibleToHost(data.visibleTo, hostIdRef.current))
+        const option: EntityOption | null = usable
+          ? { id, label: String(data[labelField] ?? data.name ?? id) }
+          : null
         setResolved((previous) => ({
           ...previous,
           [kind]: { ...(previous[kind] ?? {}), [id]: option },
