@@ -33,7 +33,6 @@ import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
-  useHostActivityLogger,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -50,6 +49,7 @@ import {
 } from '@mui/material'
 import { deleteField, doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { contactCompanyLinkWrites } from '../model/companies'
 import { type ContactRecord, parseContactTags } from '../model/contact-record'
 import { setContactStage } from '../model/crm-api'
@@ -147,10 +147,16 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  // The site a stage move is routed through and the act is logged in: the
-  // mounted one, or at the organization level the holder's own (AGL-2630).
+  // The site a stage move is routed through: the mounted one, or at the
+  // organization level the holder's own (AGL-2630).
   const siteHostId = hostId ?? (consentGroup.hostId || null)
-  const logActivity = useHostActivityLogger(siteHostId ?? undefined)
+  /*
+   * The feed the act is logged in, decided by the level it was performed
+   * at (AGL-2738) and so given the MOUNTED site rather than `siteHostId`:
+   * at the org hub a client-direct append to the holder's own site would
+   * face a gate the record write never had to pass.
+   */
+  const logActivity = useCrmActivityLogger(hostId)
   const companies = useCompanyOptions({ hostId, org })
   const createCompany = useCreateCompany({ hostId, org })
 

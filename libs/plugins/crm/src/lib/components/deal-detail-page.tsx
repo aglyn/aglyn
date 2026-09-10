@@ -20,12 +20,13 @@ import { CRM_COLLECTIONS, dealStageById, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Button, Stack, Typography } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { CrmCreateSiteDefault } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useDealStageApi } from '../hooks/use-deal-stage-api'
@@ -65,9 +66,11 @@ export function DealDetailPage(props: CrmDetailPageProps) {
   const { confirm } = useConfirmationContext()
   const scope = useCrmScope({ hostId, org })
   const { data: deal, status, fromCache } = useDeal(scope.orgId, id)
-  // The site whose feed the act is logged in: the mounted one, or at the
-  // organization level the deal's own (AGL-2630).
-  const logActivity = useHostActivityLogger(hostId ?? deal?.hostId ?? undefined)
+  // The feed the act is logged in, decided by the level it was performed
+  // at (AGL-2738): this site's under a site, the organization's at the org
+  // hub, where a client-direct append to the deal's own site would face a
+  // gate the record write never had to pass.
+  const logActivity = useCrmActivityLogger(hostId)
   const pipelineState = usePipeline(scope.orgId, {
     hostId,
     org: (org ?? null) as Record<string, unknown> | null,
