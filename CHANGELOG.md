@@ -9,6 +9,19 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.114 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.113...v1.0.0-beta.114)
+
+### Fixed
+
+- **activity:** an audit line with no actor is refused before it is written ([AGL-2735](https://linear.app/aglyn/issue/AGL-2735))
+- **guard:** teach the posture fixture the three rules it never learned ([AGL-2727](https://linear.app/aglyn/issue/AGL-2727), [AGL-2716](https://linear.app/aglyn/issue/AGL-2716), [AGL-2717](https://linear.app/aglyn/issue/AGL-2717))
+
+### Documentation
+
+- **beacon:** the hydration cluster was a shipped bug, not somebody's extension ([AGL-2735](https://linear.app/aglyn/issue/AGL-2735))
+
 ## v1.0.0-beta.113 — 2026-09-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.112...v1.0.0-beta.113)

@@ -157,12 +157,26 @@ export function isInjectedThirdPartyFrame(
  * design. Dropping would hide a real hydration regression, which is a genuine
  * and expensive bug; the entries stay in `client-errors` at full severity and
  * still group in Error Reporting. What the mark buys is that the log-match
- * policy can stop paging for ONE visitor whose browser rewrote the DOM, while
- * a rate-based policy on the same mark still catches a systemic one.
+ * policy can stop paging on a single report, while a rate-based policy on the
+ * same mark still catches a systemic one.
  *
- * Measured 2026-09-01: eight #418 reports inside a nine-minute window, one
- * build, three different pages — one visitor, and the same pages loaded with
- * a clean console the next day.
+ * ⚠️ THE MARK IS NOT A VERDICT, and the one cluster this repo has measured is
+ * why. Eight #418 reports arrived inside a nine-minute window on 2026-09-01,
+ * on one build, and the three pages they came from were exactly the three
+ * carrying a form — `/`, `/pricing` and the solutions pages reported nothing
+ * in the same window, which no browser-side rewrite would respect. A placed
+ * form was expanding inside its own grafted subtree, so every page carrying
+ * one shipped six nested `<form>` elements; nested forms are invalid HTML, the
+ * parser dropped the inner ones, and the client tree disagreed with the server
+ * tree. The visible cost was a submission the route never received, because
+ * the native submit came from an unhandled ancestor and the browser fell back
+ * to a GET with the visitor's name, email and message in the address bar. The
+ * reports stopped because the nesting was fixed, roughly a quarter of an hour
+ * after the last one.
+ *
+ * So a rate low enough not to page is a reason to READ the entry — the page
+ * it names, and whether the set of pages has a shape — never a reason to
+ * assume somebody's extension.
  */
 const HYDRATION_MINIFIED = /Minified React error #(?:418|423|425)\b/
 const HYDRATION_TEXT =

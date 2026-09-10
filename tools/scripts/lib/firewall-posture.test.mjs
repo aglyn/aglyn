@@ -69,6 +69,16 @@ const CRAWLER_UA_PATTERN = EXPECTED_POSTURE.find(
   (e) => e.project === 'aglyn-tenant',
 ).bypassRules.find((r) => r.name === 'Social preview crawler bypass').conditions[0].value
 
+/**
+ * The AI agent allowlist, read off the declaration for the same reason and
+ * with more force behind it: the pattern names two dozen agents, and it gained
+ * `aglyn-cli` in the commit after the one that introduced it, so a literal
+ * transcribed here would already be a commit behind.
+ */
+const AI_AGENT_UA_PATTERN = EXPECTED_POSTURE.find(
+  (e) => e.project === 'aglyn-tenant',
+).bypassRules.find((r) => r.name === 'AI agent bypass').conditions[0].value
+
 /** The live-good aglyn-tenant config, with the probe secret stubbed. */
 function healthyTenantConfig() {
   return {
@@ -159,10 +169,21 @@ function healthyTenantConfig() {
             '/manifest.webmanifest',
             '/api/manifest',
             '/api/collections-rss',
+            // Agent discovery and the two API routes the middleware rewrites
+            // them onto, live since 2026-09-09 (AGL-2716). These are what an
+            // agent whose User-Agent nobody has heard of reads first.
+            '/llms.txt',
+            '/openapi.json',
+            '/api/llms',
+            '/api/openapi',
           ].map((value) => ({ conditions: [{ type: 'path', op: 'eq', value }] })),
           // The sixth mouth, added live 2026-09-03: `/sitemap.xml` is an index
           // now, and the children it names live under this prefix (AGL-2520).
           { conditions: [{ type: 'path', op: 'pre', value: '/sitemaps/' }] },
+          // The LINKABLE feed path (AGL-2716). `/api/collections-rss` above is
+          // the rewrite target, and a WAF matches the path the client asked
+          // for, so the only address anyone can link to needs its own mouth.
+          { conditions: [{ type: 'path', op: 're', value: '/rss\\.xml$' }] },
         ],
       },
       {
@@ -175,15 +196,26 @@ function healthyTenantConfig() {
           { conditions: [{ type: 'user_agent', op: 're', value: CRAWLER_UA_PATTERN }] },
         ],
       },
+      {
+        name: 'AI agent bypass',
+        id: 'rule_ai_agent_bypass_Nw8Jd3',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ type: 'user_agent', op: 're', value: AI_AGENT_UA_PATTERN }] },
+        ],
+      },
     ],
   }
 }
 
 /**
  * The console as actually deployed: the probe rule; ONE machine-traffic rule
- * that is a single hole with fifteen mouths (fourteen exact paths and one
- * `/api/health` prefix); and, since 2026-08-23, the plugin loader control
- * plane bypass — one exact path plus one prefix.
+ * that is a single hole with seventeen mouths (sixteen exact paths and one
+ * `/api/health` prefix); since 2026-08-23, the plugin loader control plane
+ * bypass — one exact path plus one prefix; and since 2026-09-10 the customer
+ * REST API prefix, which is the whole paid programmatic surface.
  *
  * The path list must stay complete, not merely plausible. Since AGL-2520 the
  * checker asserts COVERAGE as well as scope, so a fixture missing a declared
@@ -251,6 +283,19 @@ function healthyConsoleConfig() {
             ],
           },
         ],
+      },
+      {
+        name: 'Customer REST API bypass',
+        id: 'rule_customer_rest_api_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        // A PREFIX, where the machine-traffic rule above pins exact paths:
+        // `/api/v1` is a catch-all whose surface is the API's own resource
+        // list, so an exact list would go stale the first time a resource was
+        // added — and go stale as a customer's integration being answered
+        // HTML (AGL-2727).
+        conditionGroup: [{ conditions: [{ op: 'pre', type: 'path', value: '/api/v1' }] }],
       },
       {
         name: 'Plugin loader control plane bypass',
@@ -589,10 +634,15 @@ test('the console posture as deployed passes', () => {
   assert.equal(result.ok, true)
 })
 
-test('a THIRTEENTH group for an undeclared path fails', () => {
+test('one more group for an undeclared path fails', () => {
   // The whole point of declaring the allowlist. Appending a group is how a
-  // scoped bypass quietly becomes a wide one, and groups are OR'd so the
-  // original eleven still look right.
+  // scoped bypass quietly becomes a wide one, and groups are OR'd so every
+  // declared path still looks right beside it.
+  //
+  // Counted in words rather than by number on purpose: the previous name and
+  // comment each carried a count, both went stale as paths were added, and a
+  // test whose name misdescribes what it does is read as the truth long
+  // before anyone re-derives it.
   const config = healthyConsoleConfig()
   ruleNamed(config, 'Machine traffic bypass').conditionGroup.push({
     conditions: [{ op: 'eq', type: 'path', value: '/api/orgs' }],
@@ -808,6 +858,19 @@ function docsConfig() {
       action: bypass(),
       conditionGroup: [
         { conditions: [{ type: 'user_agent', op: 're', value: CRAWLER_UA_PATTERN }] },
+      ],
+    },
+    {
+      // Docs carries the agent allowlist for the same reason the tenant does:
+      // the API reference is the one surface an agent must read to call
+      // anything at all (AGL-2716).
+      name: 'AI agent bypass',
+      id: 'rule_ai_agent_docs',
+      active: true,
+      valid: true,
+      action: bypass(),
+      conditionGroup: [
+        { conditions: [{ type: 'user_agent', op: 're', value: AI_AGENT_UA_PATTERN }] },
       ],
     },
     {
