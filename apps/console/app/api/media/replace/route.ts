@@ -257,6 +257,39 @@ async function handler(request: Request): Promise<Response> {
           { status: 413 },
         )
       }
+      // The same band the finalize below measures, at the same delta
+      // (AGL-1886's rule for the sibling route): the two must not disagree
+      // about whether these bytes fit, or a customer signs a URL, waits out a
+      // 200 MB upload, and is refused at the end of it.
+      {
+        const band = await resolveOrgMediaBand({
+          firestore: scope.scopeRef.firestore,
+          orgId: scope.orgId,
+          org: org as any,
+          currentHostId: scope.collection === 'hosts' ? scope.scopeId : null,
+        })
+        const projected =
+          band.usedBytes -
+          Number(mediaSnapshot.get('sizeBytes') ?? 0) +
+          sizeBytes
+        const gate = mediaStorageGate({
+          org: org as any,
+          usedMb: projected / (1024 * 1024),
+          allowanceMb: band.allowanceMb,
+          billsOverage: scopeBillsStorageOverage(scope.collection),
+        })
+        if (!gate.allowed) {
+          return Response.json(
+            {
+              error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
+              code: gate.code,
+              projectedOverageUsd: gate.projectedOverageUsd,
+              monthlyCapUsd: gate.monthlyCapUsd,
+            },
+            { status: gate.status },
+          )
+        }
+      }
       const [uploadUrl] = await bucket
         .file(`${objectPath}${REPLACE_STAGING_SUFFIX}`)
         .getSignedUrl({
