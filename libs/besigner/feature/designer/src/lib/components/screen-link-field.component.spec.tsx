@@ -25,11 +25,19 @@ const SCREENS = { s1: 'pricing', s2: 'company/contact', s3: '/' }
 const LABELS = { s1: 'Pricing', s2: 'Contact', s3: 'Home' }
 
 /** A controlled host, so what the picker emits is what it reads back. */
-function Harness(props: { initial?: string; onValue?: (v: string) => void }) {
+function Harness(props: {
+  initial?: string
+  onValue?: (v: string) => void
+  screens?: Record<string, string>
+  labels?: Record<string, string>
+}) {
   const [value, setValue] = useState(props.initial ?? '')
   return (
     <Aglyn.ScreenLinkContext.Provider
-      value={{ screens: SCREENS, labels: LABELS }}
+      value={{
+        screens: props.screens ?? SCREENS,
+        labels: props.labels ?? LABELS,
+      }}
     >
       <ScreenLinkValuePicker
         label="Default"
@@ -158,5 +166,54 @@ describe('ScreenLinkValuePicker (AGL-1335)', () => {
     expect(screen.getByRole('combobox').textContent).toBe(
       'Use the component default (Contact)',
     )
+  })
+})
+
+/**
+ * The `Link` prop picker offers collection listings (AGL-2799) — the same
+ * targets, from the same builder, as the attributes panel's Screen picker.
+ */
+describe('ScreenLinkValuePicker and collection listings (AGL-2799)', () => {
+  const ROUTES = { ...SCREENS, 'collection:blog': 'blog' }
+  const NAMES = { ...LABELS, 'collection:blog': 'Blog' }
+  const LISTING = 'Blog (/blog) — collection listing'
+
+  const renderWithListings = (initial?: string) =>
+    render(<Harness initial={initial} screens={ROUTES} labels={NAMES} />)
+
+  it('offers the listing beside the screens, marked as a listing', () => {
+    renderWithListings()
+    openSelect()
+    expect(screen.getByRole('option', { name: LISTING })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Pricing (/pricing)' })).toBeTruthy()
+  })
+
+  it('stores the collection id, never the path', () => {
+    renderWithListings()
+    openSelect()
+    fireEvent.click(screen.getByRole('option', { name: LISTING }))
+    expect(stored()).toBe('collection:blog')
+    expect(screen.queryByLabelText('External URL')).toBeNull()
+  })
+
+  it('reopens a stored listing with that listing selected', () => {
+    renderWithListings('collection:blog')
+    expect(screen.getByRole('combobox').textContent).toBe(LISTING)
+    expect(stored()).toBe('collection:blog')
+  })
+
+  it('names a listing whose collection is gone, and keeps the value', () => {
+    renderWithListings('collection:gone')
+    expect(screen.getByRole('combobox').textContent).toBe(
+      '⚠ Unavailable collection listing (gone) — deleted or has no slug',
+    )
+    expect(stored()).toBe('collection:gone')
+  })
+
+  it('turns a typed /blog into the listing it was standing in for', () => {
+    renderWithListings('/blog')
+    openSelect()
+    fireEvent.click(screen.getByRole('option', { name: LISTING }))
+    expect(stored()).toBe('collection:blog')
   })
 })

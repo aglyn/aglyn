@@ -54,6 +54,8 @@ export interface CollectionTemplateRoute {
 
 /** The fields this reads off a `hosts/{hostId}/collections` document. */
 export interface CollectionTemplateSource {
+  /** The document id, as `useFirestoreCollection`'s `idField` stamps it. */
+  $id?: unknown
   slug?: unknown
   displayName?: unknown
   /** `'content'` | `'catalog'` (AGL-954); absent reads as content. */
@@ -235,6 +237,51 @@ export function collectionListRoutesByScreenId(
     if (listScreenId) routes[listScreenId] = slug
   }
   return routes
+}
+
+/** One content collection's listing page, as a link picker offers it. */
+export interface CollectionListingTarget {
+  /** The routing slug the listing is served at, e.g. `blog`. */
+  slug: string
+  /** What the picker calls it: the collection's name, or its slug. */
+  name: string
+}
+
+/**
+ * Every content collection's LISTING as a link target, keyed by collection id
+ * (AGL-2799): `blog` → `/blog`, `yQuEudFcgR` → `/newsroom`.
+ *
+ * The console twin of the tenant runtime's `collectCollectionListings`, under
+ * the conditions {@link collectionListRoutesByScreenId} applies and for its
+ * reasons — a slug to be served at, and content kind — but with no list
+ * template required: `/{slug}` serves the built-in listing when no screen
+ * renders it, and that page is exactly as linkable.
+ *
+ * The name falls back to the slug because a bare document id is not something
+ * an author recognizes in a list of pages.
+ */
+export function collectionListingTargets(
+  collections:
+    | ReadonlyArray<CollectionTemplateSource | null | undefined>
+    | null
+    | undefined,
+): Record<string, CollectionListingTarget> {
+  const targets: Record<string, CollectionListingTarget> = {}
+  for (const contentCollection of collections ?? []) {
+    if (!contentCollection) continue
+    if (!servesAContentRoute(contentCollection)) continue
+    const collectionId =
+      typeof contentCollection.$id === 'string' ? contentCollection.$id : ''
+    const slug =
+      typeof contentCollection.slug === 'string' ? contentCollection.slug : ''
+    if (!collectionId || !slug) continue
+    const name =
+      typeof contentCollection.displayName === 'string'
+        ? contentCollection.displayName.trim()
+        : ''
+    targets[collectionId] = { slug, name: name || slug }
+  }
+  return targets
 }
 
 /** The path a template route is served at: `/blog`, `/blog/{entry}`. */

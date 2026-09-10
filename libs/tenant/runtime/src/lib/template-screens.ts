@@ -90,7 +90,8 @@ interface FieldSnapshotLike {
 }
 
 interface QuerySnapshotLike {
-  docs: Array<FieldSnapshotLike>
+  /** `id` is the document id — read only for a collection's listing. */
+  docs: Array<FieldSnapshotLike & { id?: string }>
 }
 
 /** Screen documents that say what they are — only the id is read. */
@@ -195,12 +196,46 @@ export function collectCollectionListRoutes(sources: {
   return routes
 }
 
+/**
+ * Every content collection's LISTING as a link target: collection id → slug
+ * (AGL-2799).
+ *
+ * `/{slug}` serves a content collection's listing whether or not a list
+ * template screen renders it — the built-in fallback composes one otherwise —
+ * so this is a different fact from {@link collectCollectionListRoutes}, which
+ * answers only for the collections that have such a screen. A link authored
+ * against a listing stores the collection's id, and `linkableScreenRoutes`
+ * turns this table into the `collection:<id>` entries it resolves through.
+ *
+ * The same two conditions as the list routes, for the same reasons: a slug,
+ * since `/{slug}` is the whole address, and content kind, since a catalog
+ * collection's listing is commerce's `/collections/{slug}`. `id` is optional
+ * on the structural snapshot type, so a document without one is skipped
+ * rather than keyed as `undefined`.
+ */
+export function collectCollectionListings(sources: {
+  collections?: QuerySnapshotLike | null
+}): Record<string, string> {
+  const listings: Record<string, string> = {}
+  for (const contentCollection of sources.collections?.docs ?? []) {
+    if (contentCollection.get('kind') === 'catalog') continue
+    const collectionId = contentCollection.id
+    if (typeof collectionId !== 'string' || !collectionId) continue
+    const slug = contentCollection.get('slug')
+    if (typeof slug !== 'string' || !slug) continue
+    listings[collectionId] = slug
+  }
+  return listings
+}
+
 /** What the tenant router has to correct the published route table by. */
 export interface TemplateScreenRouting {
   /** Screens the router drops before matching — see {@link getTemplateScreenIds}. */
   templateScreenIds: Set<string>
   /** Where a list template is really served — see {@link collectCollectionListRoutes}. */
   listRoutes: Record<string, string>
+  /** Every content collection's listing, by id — see {@link collectCollectionListings}. */
+  collectionListings: Record<string, string>
 }
 
 /**
@@ -282,6 +317,7 @@ export async function getTemplateScreenRouting(options: {
         return {
           ids: [...routing.templateScreenIds],
           listRoutes: routing.listRoutes,
+          collectionListings: routing.collectionListings,
         }
       },
     })
@@ -290,6 +326,9 @@ export async function getTemplateScreenRouting(options: {
       // stored shape is an array and it is rehydrated here.
       templateScreenIds: new Set(cached?.ids ?? []),
       listRoutes: cached?.listRoutes ?? {},
+      // An entry written without this field reads as no listings until it
+      // revalidates, which the TTL above bounds.
+      collectionListings: cached?.collectionListings ?? {},
     }
   } catch (error) {
     // The contract is "never rejects" — a cache failure degrades to the
@@ -377,11 +416,18 @@ async function readTemplateScreenRouting(options: {
         host,
       }),
       listRoutes: collectCollectionListRoutes({ collections }),
+      // The same read again: a document's id comes with it whatever the
+      // field mask projects.
+      collectionListings: collectCollectionListings({ collections }),
     }
   } catch (error) {
     // The ref construction itself threw (no initialised admin app, say).
     console.error('template screen lookup failed:', error)
-    return { templateScreenIds: new Set<string>(), listRoutes: {} }
+    return {
+      templateScreenIds: new Set<string>(),
+      listRoutes: {},
+      collectionListings: {},
+    }
   }
 }
 

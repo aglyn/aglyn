@@ -262,6 +262,7 @@ async function renderMarkdown(
     screenRoutes = Aglyn.linkableScreenRoutes(routedHost.screens, {
       routedElsewhere: routing.listRoutes,
       unrouted: routing.templateScreenIds,
+      collectionListings: routing.collectionListings,
     })
   }
 

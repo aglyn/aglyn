@@ -1535,6 +1535,7 @@ export async function loadNotFoundScreen(
           {
             routedElsewhere: routing.listRoutes,
             unrouted: routing.templateScreenIds,
+            collectionListings: routing.collectionListings,
           },
         ),
       }),

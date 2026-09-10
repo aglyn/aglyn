@@ -133,6 +133,35 @@ describe('the routing map the renderer receives (AGL-1998)', () => {
     expect((props?.data as any)?.host?.screens).toEqual(PUBLISHED_MAP)
   })
 
+  it('carries every collection listing as a target of its own (AGL-2799)', async () => {
+    mockRouting.mockResolvedValue({
+      templateScreenIds: new Set(['blogListTmpl', 'blogEntryTmpl']),
+      listRoutes: { blogListTmpl: 'blog' },
+      collectionListings: { blog: 'blog', yQuEudFcgR: 'newsroom' },
+    })
+
+    const routes = (await renderPage())?.screenRoutes as Record<string, string>
+
+    // Keyed by the collection's id — the value a drawer's Blog link stores.
+    expect(routes['collection:blog']).toBe('blog')
+    expect(routes['collection:yQuEudFcgR']).toBe('newsroom')
+    // Beside the screens, never instead of them.
+    expect(routes.blogListTmpl).toBe('blog')
+    expect(routes.home).toBe('/')
+  })
+
+  it('moves a listing link with its collection’s renamed slug (AGL-2799)', async () => {
+    mockRouting.mockResolvedValue({
+      templateScreenIds: new Set<string>(),
+      listRoutes: {},
+      collectionListings: { blog: 'articles' },
+    })
+
+    const routes = (await renderPage())?.screenRoutes as Record<string, string>
+
+    expect(routes['collection:blog']).toBe('articles')
+  })
+
   it('does not go looking when no host resolved', async () => {
     mockLoad.mockResolvedValue({ props: { data: {}, nodes: null } })
 

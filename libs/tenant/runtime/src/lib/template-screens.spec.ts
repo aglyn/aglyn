@@ -23,6 +23,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   COLLECTION_TEMPLATE_SCREEN_FIELDS,
+  collectCollectionListings,
   collectCollectionListRoutes,
   collectTemplateScreenIds,
   getTemplateScreenIds,
@@ -196,6 +197,30 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270, AGL-1400)', () => {
     expect(collectionsQuery.get).toHaveBeenCalledTimes(1)
   })
 
+  it('answers where every collection listing lives, from the same read (AGL-2799)', async () => {
+    const fields: Record<string, Record<string, unknown>> = {
+      blog: { slug: 'blog', listScreenId: 'blogListTmpl' },
+      yQuEudFcgR: { slug: 'newsroom' },
+    }
+    collectionsQuery.get.mockResolvedValue({
+      docs: Object.keys(fields).map((id) => ({
+        id,
+        get: (field: string) => fields[id][field],
+      })),
+    })
+
+    const routing = await getTemplateScreenRouting({ hostId: 'host-1' })
+
+    expect(routing.collectionListings).toEqual({
+      blog: 'blog',
+      yQuEudFcgR: 'newsroom',
+    })
+    expect(routing.listRoutes).toEqual({ blogListTmpl: 'blog' })
+    // A document's id comes with it whatever the mask projects, so this is
+    // still the one collections query.
+    expect(collectionsQuery.get).toHaveBeenCalledTimes(1)
+  })
+
   it('unions the store templates into the same set', async () => {
     collectionsQuery.get.mockResolvedValue(
       snapshotOf([{ entryScreenId: 'entry-1' }]),
@@ -338,5 +363,54 @@ describe('collectCollectionListRoutes (AGL-1998)', () => {
   it('tolerates an absent collections read', () => {
     expect(collectCollectionListRoutes({})).toEqual({})
     expect(collectCollectionListRoutes({ collections: null })).toEqual({})
+  })
+})
+
+describe('collectCollectionListings (AGL-2799)', () => {
+  /** A snapshot whose documents carry their ids, as a real query's do. */
+  const snapshotWithIds = (
+    docs: Array<{ id?: string } & Record<string, unknown>>,
+  ) => ({
+    docs: docs.map(({ id, ...fields }) => ({
+      id,
+      get: (field: string) => fields[field],
+    })),
+  })
+
+  it('maps every content collection to its slug, keyed by document id', () => {
+    expect(
+      collectCollectionListings({
+        collections: snapshotWithIds([
+          { id: 'blog', slug: 'blog', listScreenId: 'blogListTmpl' },
+          { id: 'yQuEudFcgR', slug: 'newsroom', kind: 'content' },
+        ]),
+      }),
+    ).toEqual({ blog: 'blog', yQuEudFcgR: 'newsroom' })
+  })
+
+  it('needs no list template — the built-in listing is a page too', () => {
+    expect(
+      collectCollectionListings({
+        collections: snapshotWithIds([{ id: 'notes', slug: 'notes' }]),
+      }),
+    ).toEqual({ notes: 'notes' })
+  })
+
+  it('ignores a catalog collection, one with no slug, and a document with no id', () => {
+    expect(
+      collectCollectionListings({
+        collections: snapshotWithIds([
+          { id: 'shoes', slug: 'shoes', kind: 'catalog' },
+          { id: 'drafts', slug: '' },
+          { id: 'odd', slug: 42 },
+          { slug: 'anonymous' },
+        ]),
+      }),
+    ).toEqual({})
+  })
+
+  it('tolerates an absent collections read', () => {
+    expect(collectCollectionListings({})).toEqual({})
+    expect(collectCollectionListings({ collections: null })).toEqual({})
   })
 })

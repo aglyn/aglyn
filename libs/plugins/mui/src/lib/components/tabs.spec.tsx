@@ -892,3 +892,44 @@ describe('a tab whose screen is unpublished or deleted (AGL-1893)', () => {
     })
   })
 })
+
+/**
+ * A tab linked to a collection's listing page (AGL-2799).
+ *
+ * The strip reads its per-tab targets straight off the routing map rather
+ * than through `useLinkTarget`, so it is the consumer most able to disagree
+ * with the Screen Link about what a `collection:<id>` value means.
+ */
+describe('a tab linked to a collection listing (AGL-2799)', () => {
+  const ROUTES = {
+    'screen-changelog': 'changelog',
+    'collection:blog': 'blog',
+  }
+
+  const row = (blogTarget: string) => (
+    <TabsElement labels={'Blog\nChangelog'} tabLink1={blogTarget} ssrPanels>
+      <TabPanelElement label="Changelog">{'Changelog body'}</TabPanelElement>
+    </TabsElement>
+  )
+
+  const renderRow = (blogTarget: string) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ screens: ROUTES }}>
+        {row(blogTarget)}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('navigates to the listing', () => {
+    renderRow('collection:blog')
+    expect(screen.getByRole('link', { name: 'Blog' }).getAttribute('href')).toBe(
+      '/blog',
+    )
+  })
+
+  it('stops being a control once the collection is gone', () => {
+    renderRow('collection:gone')
+    const blogTab = document.getElementById('tab-blog') as HTMLButtonElement
+    expect(blogTab.disabled).toBe(true)
+    expect(blogTab.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(true)
+  })
+})
