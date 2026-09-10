@@ -138,9 +138,12 @@ import {
 } from '../../utils/analytics-day-cache'
 import {
   isAllowedUploadType,
+  MEDIA_UPLOAD_KIND_LABELS,
+  mediaUploadKind,
   normalizeUploadContentType,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
   requiresFileUploadEntitlement,
+  uploadAcceptForKind,
   UPLOAD_ACCEPT_ATTRIBUTE,
   UPLOAD_TYPES_MESSAGE,
 } from '../../utils/media-upload-limits'
@@ -389,6 +392,23 @@ function fileToBase64(file: File): Promise<string> {
     }
     reader.readAsDataURL(file)
   })
+}
+
+/**
+ * The doc revision the caller was looking at, as the replace route's 409
+ * precondition. Absent rather than zero when the asset carries no timestamp —
+ * the route treats a missing precondition as "no opinion", and sending one it
+ * cannot compare would refuse every replace of a legacy document.
+ */
+function replacePrecondition(media: unknown): { expectedUpdatedAtMs?: number } {
+  const updatedAt = (media as { updatedAt?: unknown })?.updatedAt as {
+    toMillis?: () => number
+    seconds?: number
+  } | null
+  const updatedAtMs =
+    updatedAt?.toMillis?.() ??
+    (updatedAt?.seconds ? updatedAt.seconds * 1000 : undefined)
+  return updatedAtMs ? { expectedUpdatedAtMs: updatedAtMs } : {}
 }
 
 /**
@@ -1869,55 +1889,200 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     if (next === null) return
     setEditor((prev) => (prev ? { ...prev, tags: next } : prev))
   }, [editor?.tags, tagDraft])
+  /**
+   * The tail every replace shares: report, log, close, reload.
+   *
+   * Split out because a replace now arrives three ways — a base64 body, a
+   * signed finalize, and the image editor's transform — and the half that
+   * has to stay identical between them is what the person sees afterwards.
+   */
+  const finishReplace = useCallback(
+    async (media: any, response: Response) => {
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        enqueueSnackbar(payload?.error ?? 'Replace failed', {
+          ...uploadRefusalOptions(payload),
+          allowDuplicate: true,
+        })
+        return false
+      }
+      // Not "Image replaced" any more (AGL-2732): the same button now swaps a
+      // PDF, a deck or a film.
+      enqueueSnackbar('File replaced', { variant: 'success', persist: false })
+      logActivity('Replaced media file', {
+        type: 'media',
+        id: media.$id ?? media.id,
+        name: media?.fileName ?? media.$id ?? media.id,
+      })
+      setEditor(null)
+      refresh()
+      return true
+    },
+    [enqueueSnackbar, logActivity, refresh],
+  )
   const replaceMediaBytes = useCallback(
-    async (media: any, base64: string, contentType: string) => {
-      if (!media) return
-      const mediaId = media.$id ?? media.id
-      const updatedAtMs =
-        media?.updatedAt?.toMillis?.() ??
-        (media?.updatedAt?.seconds ? media.updatedAt.seconds * 1000 : undefined)
+    async (media: any, base64: string, contentType: string, extra?: object) => {
+      if (!media) return false
       const response = await authorizedFetch(user, '/api/media/replace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...scopeBody,
-          mediaId,
+          mediaId: media.$id ?? media.id,
           contentType,
           data: base64,
-          ...(updatedAtMs ? { expectedUpdatedAtMs: updatedAtMs } : {}),
+          ...replacePrecondition(media),
+          ...(extra ?? {}),
         }),
       })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        return void enqueueSnackbar(payload?.error ?? 'Replace failed', {
-          ...uploadRefusalOptions(payload),
-          allowDuplicate: true,
-        })
-      }
-      enqueueSnackbar('Image replaced', { variant: 'success', persist: false })
-      logActivity('Replaced media file', {
-        type: 'media',
-        id: mediaId,
-        name: media?.fileName ?? mediaId,
-      })
-      setEditor(null)
-      refresh()
+      return finishReplace(media, response)
     },
-    [user, scopeId, enqueueSnackbar, logActivity, refresh],
+    [user, scopeId, finishReplace],
   )
   const replaceBytes = useCallback(
     (base64: string, contentType: string) =>
       replaceMediaBytes(editor?.media, base64, contentType),
     [editor, replaceMediaBytes],
   )
-  // Card-level replace (AGL-827): overflow "Replace file" opens a chooser
-  // for that specific asset. A ref holds the target so click() isn't racing
-  // a state update.
+  /**
+   * Replace an asset's bytes with a file a person just chose (AGL-2732).
+   *
+   * Three things the old image-only path did not have to do:
+   *
+   * 1. **Route on size.** A 7 MB PDF cannot ride a base64 JSON body — Vercel
+   *    rejects the request at ~4.5 MB before any handler runs — and that,
+   *    not the 415, is why replacing the published brand guidelines was
+   *    impossible. Above the threshold the bytes go browser→storage through
+   *    a signed URL and the route finalizes them, exactly as a first upload
+   *    does.
+   * 2. **Probe a video.** The poster and the duration come from the browser,
+   *    because there is no decoder on either server. A replace that skipped
+   *    the probe would land a new film with the previous one's poster
+   *    deleted and none to put back.
+   * 3. **Check the family here too.** The route refuses a cross-family swap,
+   *    but the picker is already narrowed to the family, so a file that
+   *    reaches this check came from a drag or a browser that reports types
+   *    loosely — and saying which kinds are involved is more use than a 415.
+   */
+  const replaceMediaFile = useCallback(
+    async (media: any, file: File) => {
+      if (!media || !file) return
+      const contentType = normalizeUploadContentType(file.type, file.name)
+      const kind = mediaUploadKind(contentType)
+      if (!kind) {
+        return void enqueueSnackbar(
+          `"${file.name}" skipped — ${UPLOAD_TYPES_MESSAGE.toLowerCase()}`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+      }
+      const assetKind = mediaUploadKind(
+        normalizeUploadContentType(String(media.contentType ?? ''), ''),
+      )
+      if (assetKind && assetKind !== kind) {
+        return void enqueueSnackbar(
+          `"${file.name}" is ${MEDIA_UPLOAD_KIND_LABELS[kind]} and this ` +
+            `file is ${MEDIA_UPLOAD_KIND_LABELS[assetKind]} — replacing ` +
+            'keeps the same link everywhere it is used, so upload it as a ' +
+            'new file instead.',
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+      }
+      const mediaId = media.$id ?? media.id
+      setBusy(true)
+      try {
+        // The video probe (AGL-2742), before either branch because both need
+        // it and neither server can produce it.
+        const probe = kind === 'video' ? await probeVideoFile(file) : null
+        const videoBody = probe
+          ? {
+              ...(probe.video ? { video: probe.video } : {}),
+              ...(probe.posterBase64 ? { poster: probe.posterBase64 } : {}),
+              ...(probe.reason && !probe.posterBase64
+                ? { posterError: probe.reason }
+                : {}),
+            }
+          : {}
+        if (file.size <= SIGNED_UPLOAD_THRESHOLD_BYTES) {
+          await replaceMediaBytes(media, await fileToBase64(file), contentType, {
+            fileName: file.name,
+            ...videoBody,
+          })
+          return
+        }
+        const mint = await authorizedFetch(user, '/api/media/replace', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...scopeBody,
+            mediaId,
+            contentType,
+            fileName: file.name,
+            sizeBytes: file.size,
+            ...replacePrecondition(media),
+          }),
+        })
+        const minted = await mint.json().catch(() => ({}))
+        if (!mint.ok || !minted?.uploadUrl) {
+          return void enqueueSnackbar(
+            minted?.error ?? `Replace failed for "${file.name}"`,
+            uploadRefusalOptions(minted),
+          )
+        }
+        const put = await fetch(minted.uploadUrl, {
+          method: 'PUT',
+          // Must match the type the signed URL was minted for exactly.
+          headers: { 'Content-Type': minted.contentType ?? contentType },
+          body: file,
+        })
+        if (!put.ok) {
+          return void enqueueSnackbar(
+            `Replace failed for "${file.name}" — try again`,
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
+        const finalize = await authorizedFetch(user, '/api/media/replace', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...scopeBody,
+            mediaId,
+            fileName: file.name,
+            ...replacePrecondition(media),
+            ...videoBody,
+          }),
+        })
+        await finishReplace(media, finalize)
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar(`Replace failed for "${file.name}"`, {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setBusy(false)
+      }
+    },
+    [user, scopeId, replaceMediaBytes, finishReplace, enqueueSnackbar],
+  )
+  // Card-level replace: the overflow "Replace file" opens a chooser for that
+  // specific asset. A ref holds the target so click() isn't racing a state
+  // update.
   const cardReplaceInputRef = useRef<HTMLInputElement>(null)
   const cardReplaceTargetRef = useRef<any>(null)
   const requestCardReplace = useCallback((media: any) => {
     cardReplaceTargetRef.current = media
-    cardReplaceInputRef.current?.click()
+    const input = cardReplaceInputRef.current
+    // Written straight onto the node rather than through state (AGL-2732):
+    // one hidden input serves every card, and the picker opens in the same
+    // tick as this click — a re-render would arrive after the dialog.
+    if (input) {
+      input.accept = uploadAcceptForKind(
+        mediaUploadKind(
+          normalizeUploadContentType(String(media?.contentType ?? ''), ''),
+        ),
+      )
+    }
+    input?.click()
   }, [])
   const handleCardReplaceFile = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1926,34 +2091,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const media = cardReplaceTargetRef.current
       cardReplaceTargetRef.current = null
       if (!file || !media) return
-      if (!file.type.startsWith('image/')) {
-        return void enqueueSnackbar('Replace with an image file', {
-          variant: 'warning',
-          persist: false,
-        })
-      }
-      setBusy(true)
-      try {
-        await replaceMediaBytes(media, await fileToBase64(file), file.type)
-      } finally {
-        setBusy(false)
-      }
+      await replaceMediaFile(media, file)
     },
-    [replaceMediaBytes, enqueueSnackbar],
+    [replaceMediaFile],
   )
   const handleReplaceFile = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
       event.target.value = ''
-      if (!file || !file.type.startsWith('image/')) return
-      setBusy(true)
-      try {
-        await replaceBytes(await fileToBase64(file), file.type)
-      } finally {
-        setBusy(false)
-      }
+      if (!file) return
+      await replaceMediaFile(editor?.media, file)
     },
-    [replaceBytes],
+    [editor, replaceMediaFile],
   )
 
   // Bulk tag/delete (AGL-173) on the current selection.
@@ -3342,7 +3491,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           component="input"
           ref={cardReplaceInputRef}
           type="file"
-          accept="image/*"
+          // One hidden input serves every card, so the family narrowing is
+          // written onto the node by `requestCardReplace` in the same tick as
+          // the click (AGL-2732). This is the value before any card has asked.
+          accept={UPLOAD_ACCEPT_ATTRIBUTE}
           onChange={handleCardReplaceFile}
           sx={{ display: 'none' }}
         />
@@ -3722,11 +3874,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       ? handleCopySignedLink(media)
                       : undefined
                   }
-                  onReplace={
-                    String(media.contentType ?? '').startsWith('image/')
-                      ? () => requestCardReplace(media)
-                      : undefined
-                  }
+                  // Every family, not only images (AGL-2732). This prop was
+                  // gated on `image/`, which is why an audit run against a
+                  // PDF concluded the console had no replace at all: the
+                  // capability shipped in AGL-184 and was invisible on every
+                  // asset that was not a picture.
+                  onReplace={() => requestCardReplace(media)}
                   onDetails={() => {
                     // The third AGL-1466 surface, and the busiest (AGL-1480).
                     // This seeded the "Shared with" control with the org token
@@ -3865,25 +4018,38 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 {'Download file'}
               </Button>
             ) : null}
+            {/* Replace is for EVERY family (AGL-2732); the transforms beside
+                it are genuinely image-only — there is nothing to crop or
+                rotate about a PDF — so the two split here rather than
+                sharing one `image/` test. */}
+            {editor?.media ? (
+              <Button
+                size="small"
+                onClick={() => replaceInputRef.current?.click()}
+              >
+                {'Replace file'}
+              </Button>
+            ) : null}
             {String(editor?.media?.contentType ?? '').startsWith('image/') ? (
-              <>
-                <Button
-                  size="small"
-                  onClick={() => replaceInputRef.current?.click()}
-                >
-                  {'Replace file'}
-                </Button>
-                <Button size="small" onClick={() => setImageEditorOpen(true)}>
-                  {'Edit image'}
-                </Button>
-              </>
+              <Button size="small" onClick={() => setImageEditorOpen(true)}>
+                {'Edit image'}
+              </Button>
             ) : null}
           </Stack>
           <Box
             component="input"
             ref={replaceInputRef}
             type="file"
-            accept="image/*"
+            // Narrowed to the asset's own family, so the picker cannot offer a
+            // file the route is about to refuse.
+            accept={uploadAcceptForKind(
+              mediaUploadKind(
+                normalizeUploadContentType(
+                  String(editor?.media?.contentType ?? ''),
+                  '',
+                ),
+              ),
+            )}
             onChange={handleReplaceFile}
             sx={{ display: 'none' }}
           />

@@ -70,7 +70,9 @@ plan**, free included; large video uploads and higher storage are gated by plan.
     members with organization-wide access.
   - **Download file** — always, public or private. See
     [Download the original file](#download-file).
-  - **Replace file** — images only.
+  - **Replace file** — for any file, not only images. The new file has to be the same
+    kind as the one it replaces (a picture for a picture, a video for a video, a
+    document for a document), because every page that uses it keeps the same link.
   - **Details** and **Delete**.
 
   **Copy URL** gives you a full absolute URL on the site's own domain, ready to paste
@@ -150,8 +152,12 @@ same thing. The exact caps are in
 - Documents and archives are stored and served exactly as you uploaded them — nothing
   is opened, extracted or converted. Macro-enabled Office files (`.docm`, `.xlsm`,
   `.pptm`) are not accepted.
-- Rename, **replace the file** behind an asset, and edit images in place. Replace is
-  available from the asset's details drawer and straight from the card's overflow menu.
+- Rename, **replace the file** behind an asset, and edit images in place. Replace works
+  for images, video, PDFs, archives and documents alike — it is available from the
+  asset's details drawer and straight from the card's overflow menu, and it keeps the
+  asset's link, folder, tags, alt text, custom fields and sharing exactly as they were.
+  Swapping one kind of file for another is not allowed: upload that as a new file.
+  Cropping, rotating and resizing stay images-only, for the obvious reason.
 
 ### Size and plan limits
 
@@ -246,7 +252,9 @@ A media URL is keyed to the **asset**, not to its bytes or its location. That me
 link you copied stays correct when you:
 
 - **Replace the file** — every screen, layout, and content entry that embeds it serves
-  the new image immediately, with no re-linking.
+  the new file immediately, with no re-linking. A replaced video also drops the poster
+  frame and any encoded versions of the old footage, so nothing left over is served
+  under the new file's link.
 - **Move it between folders** — organizing your library never breaks a live page.
 
 So replacing a logo across a whole site is one upload, not a hunt for every reference.

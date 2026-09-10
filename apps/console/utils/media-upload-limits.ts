@@ -251,6 +251,47 @@ export function requiresFileUploadEntitlement(contentType: string): boolean {
 }
 
 /**
+ * The three families a stored asset belongs to (AGL-2732).
+ *
+ * Derived from the same table above rather than from a prefix test, for the
+ * reason `isImageUploadType` stopped being one: a family decides what the
+ * platform does with the bytes, and `startsWith('video/')` answers for a
+ * label nothing here accepts.
+ *
+ * It exists for **replace**, which is the one operation that changes an
+ * asset's type under references that already exist. A `cdnPath` embedded in a
+ * published page was chosen for a picture, a film or a download, and those
+ * are three different elements — an `<img>` pointing at a PDF is a broken
+ * page, not an updated one. Swapping WITHIN a family is the whole point of
+ * replace (a corrected PDF, a re-cut MP4, a Word file reissued as a PDF);
+ * swapping ACROSS one is a new asset wearing an old id.
+ */
+export type MediaUploadKind = 'image' | 'video' | 'document'
+
+/**
+ * Which family an accepted content type belongs to, or `undefined` for a type
+ * media ingress does not accept at all — the same answer shape
+ * `signedUploadMaxBytes` gives, and for the same reason: one value means
+ * "refuse it" rather than "treat it as the default".
+ */
+export function mediaUploadKind(
+  contentType: string,
+): MediaUploadKind | undefined {
+  if (isImageUploadType(contentType)) return 'image'
+  if (VIDEO_TYPES.has(contentType)) return 'video'
+  return UPLOAD_TYPES_BY_CONTENT_TYPE.has(contentType) ? 'document' : undefined
+}
+
+/** How a family is named in a refusal a person reads. */
+export const MEDIA_UPLOAD_KIND_LABELS: Readonly<
+  Record<MediaUploadKind, string>
+> = {
+  image: 'an image',
+  video: 'a video',
+  document: 'a document',
+}
+
+/**
  * Ceiling on the signed direct-to-storage path, or `undefined` for a type
  * that is not accepted at all.
  *
@@ -293,6 +334,34 @@ export const UPLOAD_ACCEPT_ATTRIBUTE = [
   'application/x-zip-compressed',
   ...UPLOAD_TYPES.flatMap((spec) => spec.extensions),
 ].join(',')
+
+/**
+ * The `accept` for a picker that may only offer ONE family (AGL-2732).
+ *
+ * Replace keeps the asset's id and its published URL, so the file it offers
+ * has to be the same kind of thing the references already point at. Narrowing
+ * the native picker is the cheap half of saying so — the route refuses a
+ * cross-family swap either way, but a person should not be able to choose a
+ * PNG for a PDF and only then be told.
+ *
+ * Derived from {@link UPLOAD_TYPES} like every other layer. An unrecognized
+ * family (a legacy asset with no usable stored type) falls back to the full
+ * attribute rather than to nothing, which matches the route's own decision to
+ * let that asset be replaced at all.
+ */
+export function uploadAcceptForKind(kind: MediaUploadKind | undefined): string {
+  if (!kind) return UPLOAD_ACCEPT_ATTRIBUTE
+  if (kind === 'image') return 'image/*'
+  const rows = UPLOAD_TYPES.filter(
+    (spec) => mediaUploadKind(spec.contentType) === kind,
+  )
+  return [
+    ...rows.map((spec) => spec.contentType),
+    // Windows' zip alias, listed for the same reason it is listed above.
+    ...(kind === 'document' ? ['application/x-zip-compressed'] : []),
+    ...rows.flatMap((spec) => spec.extensions),
+  ].join(',')
+}
 
 /** One sentence, used by the client snackbar and both routes' 415s. */
 export const UPLOAD_TYPES_MESSAGE =
