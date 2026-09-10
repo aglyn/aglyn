@@ -50,8 +50,10 @@ GET  https://app.aglyn.com/api/health/auth-doors
                                                DELIVERED (AGL-2673)
 GET  https://app.aglyn.com/api/health/journeys
                                                create + publish stay AUTHORIZED,
-                                               and published cache drops land
-                                               (AGL-2586)
+                                               published cache drops land
+                                               (AGL-2586), a stranger really did
+                                               SIGN UP, and App Check still
+                                               admits real visitors (AGL-2715)
 GET  https://aglyn.com/api/health/funnel       contact / sales / demo forms still
                                                ACCEPT and ROUTE a lead (AGL-2586)
 HEAD <any>                                     the SAME probe and status as GET
@@ -60,10 +62,18 @@ HEAD <any>                                     the SAME probe and status as GET
 The last three are JOURNEY checks rather than component checks, and the
 distinction is the whole of AGL-2586: every endpoint above them can be green
 while nobody can get in, nobody can publish, and every lead the site collects
-is dropped on the floor. None writes anything — all three assert reachability
-and authorization without committing, so no synthetic account, org, site,
-screen or lead is ever created in production. What each one asserts, and what
-it deliberately does not, is in the docblocks:
+is dropped on the floor. The endpoints themselves still write nothing — they
+assert reachability and authorization without committing, and serving one
+creates no account, org, site, screen or lead.
+
+⚠️ The one exception is not the endpoint but what it reports. `signupCanary`
+relays a marker stamped by a scheduled job that DOES create a real account and
+a real org on production and then deletes them (AGL-2715). Reading the health
+door never triggers that; the walk runs on its own schedule. Its orgs are
+excluded from the signup counters by `isSignupCanaryOrgSlug`, and removing that
+exclusion makes the canary manufacture the drought it is meant to watch.
+
+What each one asserts, and what it deliberately does not, is in the docblocks:
 `apps/console/app/api/health/auth-doors/auth-doors-probe.ts`,
 `apps/console/app/api/health/journeys/journeys-probe.ts` and
 `apps/tenant/app/api/health/funnel/funnel-probe.ts`.
@@ -190,6 +200,32 @@ funnel metric, reaped on a schedule; its address named by an environment
 variable in the repo with the value in the secret store, exactly as
 `AGLYN_PROBE_TOKEN` is handled; and its own line in the table above saying what
 the extra coverage buys.
+
+### The journeys — what `/api/health/journeys` grades
+
+Five checks, and they fail for unrelated reasons. Read which one carries a
+`code` before acting: the monitor is named for first-run journeys, but two of
+the five say nothing about whether a customer is affected.
+
+| Check | Green means | Goes red when |
+| --- | --- | --- |
+| `create` | creating a workspace, a site and a screen stays authorized — asserted without committing anything | the create path refuses or stops answering |
+| `publishRules` | every publish path a customer can take is still authorized | a publish route refuses, or a rule leaves a path uncovered |
+| `publishAnnounce` | published cache drops are landing rather than piling up in the outbox | entries go pending, stale or stalled |
+| `signupCanary` | a scheduled walk really did create and verify an account on production, recently, and cleaned up after itself | `signup-walk-failed` — **a stranger could not sign up**, `failedStep` names where; `canary-left-residue` — the walk passed but left an org behind; `canary-stale` / `canary-unavailable` — the WALKER did not report |
+| `appCheckAttestation` | App Check's allow rate on `identitytoolkit.googleapis.com` over six hours is at or above 90% across at least 20 requests | attestation is refusing real visitors, which breaks sign-up and sign-in for everybody |
+
+⛔ **`canary-stale` is not a signup outage.** It means the scheduled walker did
+not report, which is a CI condition. Check the "Signup canary" workflow's run
+history before touching the product — and read the history, not the cron
+expression: GitHub drops most scheduled runs, so an hourly ask delivers closer
+to every three hours (AGL-2723). The staleness window is six hours for exactly
+that reason, and widening it costs nothing, because a walk that CANNOT sign up
+fails and still writes its marker as `signup-walk-failed`.
+
+⚑ Cross-check before escalating: **Signups** is a separate monitor counting real
+attempts. If this endpoint is red while Signups is green, no visitor is being
+refused.
 
 ### The funnel — what `/api/health/funnel` grades
 
