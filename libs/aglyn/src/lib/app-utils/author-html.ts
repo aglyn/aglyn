@@ -377,8 +377,18 @@ function escapeAttribute(value: string): string {
  * The comparison is made on a copy with every C0 control and space removed
  * and folded to lower case, because browsers strip exactly those while
  * resolving a scheme — `"java\tscript:alert(1)"` navigates.
+ *
+ * Exported because the sanitizer is not the only reader of author markup
+ * (AGL-2740). The Markdown representation of a page converts the same stored
+ * fragment without sanitizing it, and a scheme rule it re-spelled for itself
+ * is a scheme rule that can disagree — which is how `screen:` survived into a
+ * link target the page itself refuses to render.
  */
-function isAllowedUrl(tag: string, attribute: string, decoded: string): boolean {
+export function isAllowedAuthorHtmlUrl(
+  tag: string,
+  attribute: string,
+  decoded: string,
+): boolean {
   // eslint-disable-next-line no-control-regex
   const stripped = decoded.replace(/[\u0000-\u0020\u007f]/g, '').toLowerCase()
   if (!stripped) return true
@@ -406,7 +416,7 @@ function filterSrcset(tag: string, attribute: string, decoded: string): string |
     .filter((candidate) => {
       if (!candidate) return false
       const url = candidate.split(/\s+/)[0] ?? ''
-      return isAllowedUrl(tag, attribute, url)
+      return isAllowedAuthorHtmlUrl(tag, attribute, url)
     })
   return kept.length ? kept.join(', ') : null
 }
@@ -738,7 +748,7 @@ export function sanitizeAuthorHtml(
         }
         value = safe
       } else if (URL_ATTRIBUTES.has(name)) {
-        if (!isAllowedUrl(tag, name, value)) {
+        if (!isAllowedAuthorHtmlUrl(tag, name, value)) {
           note(
             'url',
             `${name} on <${tag}> is removed — only https:, data: and blob: URLs are allowed.`,

@@ -230,7 +230,10 @@ describe('buildPageMarkdown', () => {
     ).toBe('[Blog](https://example.test/blog)\n')
   })
 
-  it('falls back to the stored href when the screen has no route', () => {
+  it('absolutizes a plain href that names no screen at all', () => {
+    // Named for what the fixture actually holds: there is no `screenId` here,
+    // so this proves the literal-href path and NOT the unresolved-screen one
+    // the two cases below cover.
     const nodes = page(
       {
         link: {
@@ -243,6 +246,95 @@ describe('buildPageMarkdown', () => {
     expect(buildPageMarkdown({ nodes, context: { origin: ORIGIN } })).toBe(
       '[Sign up](https://example.test/signup)\n',
     )
+  })
+
+  it('resolves a `screen:<id>` value stored in the HREF slot (AGL-2740)', () => {
+    /*
+      The shape a `Link`-typed component prop writes (AGL-1335): the author
+      picked a screen on a reusable CTA, and the graft put the stored value in
+      whichever slot that component binds — here `href`. Reading `screenId`
+      alone emitted the raw token as the link target, so every page built from
+      that component published `[See pricing](screen:v0clP6xQl-)` to the agents
+      `/llms.txt` points at.
+    */
+    const nodes = page(
+      {
+        cta: {
+          componentId: 'muiButton',
+          props: { href: 'screen:v0clP6xQl-', children: 'See pricing' },
+        },
+      },
+      ['cta'],
+    )
+    const markdown = buildPageMarkdown({
+      nodes,
+      context: { origin: ORIGIN, screenRoutes: { 'v0clP6xQl-': 'pricing' } },
+    })
+    expect(markdown).toBe('[See pricing](https://example.test/pricing)\n')
+    expect(markdown).not.toContain('screen:')
+  })
+
+  it('resolves a `screen:<id>` value in the SCREEN slot, and the root screen', () => {
+    const nodes = page(
+      {
+        a: {
+          componentId: 'muiScreenLink',
+          props: { screenId: 'screen:sc1', children: 'Blog' },
+        },
+        b: {
+          componentId: 'muiScreenLink',
+          props: { screenId: 'screen:home', children: 'Home' },
+        },
+      },
+      ['a', 'b'],
+    )
+    expect(
+      buildPageMarkdown({
+        nodes,
+        context: { origin: ORIGIN, screenRoutes: { sc1: 'blog', home: '/' } },
+      }),
+    ).toBe('[Blog](https://example.test/blog)\n\n[Home](https://example.test/)\n')
+  })
+
+  it('emits the label alone when the authored screen has no route', () => {
+    /*
+      Parity with the HTML, which renders no href at all here (`useLinkTarget`
+      returns the resolved value or nothing). Falling back to the stored `href`
+      would republish the path AGL-1998 removed: `blog-list-template` is what
+      publishing wrote, and the router serves that screen at `/blog` instead.
+    */
+    const nodes = page(
+      {
+        link: {
+          componentId: 'muiScreenLink',
+          props: {
+            screenId: 'screen:retired',
+            href: '/blog-list-template',
+            children: 'Blog',
+          },
+        },
+      },
+      ['link'],
+    )
+    expect(
+      buildPageMarkdown({
+        nodes,
+        context: { origin: ORIGIN, screenRoutes: { sc1: 'blog' } },
+      }),
+    ).toBe('Blog\n')
+  })
+
+  it('refuses a link target the page itself would refuse to render', () => {
+    const nodes = page(
+      {
+        link: {
+          componentId: 'muiButton',
+          props: { href: 'javascript:alert(1)', children: 'Click' },
+        },
+      },
+      ['link'],
+    )
+    expect(buildPageMarkdown({ nodes, context: { origin: ORIGIN } })).toBe('Click\n')
   })
 
   it('groups list items into one list rather than a run of paragraphs', () => {

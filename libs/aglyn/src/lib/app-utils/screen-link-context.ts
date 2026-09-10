@@ -24,7 +24,12 @@ import {
   ScreenLinkContext,
   type ScreenRouteMap,
 } from './screen-link-context-value'
-import { parseScreenLinkValue } from './screen-link-value'
+import {
+  EXTERNAL_HREF_PATTERN,
+  SAFE_HREF_PATTERN,
+  resolveScreenHref,
+  splitLinkValue,
+} from './screen-link-value'
 
 export * from './screen-link-context-value'
 
@@ -185,93 +190,23 @@ export function brokenScreenLinkProps(
 }
 
 /**
- * Turns a screen id into its current href against a routing map, or
- * `undefined` when there is no id or the id has no entry (unpublished or
- * deleted). Pure and hook-free on purpose: an element that resolves ONE
- * target uses {@link useScreenLink}, but a row of them — the Tabs strip's
- * per-tab links (AGL-1312) — cannot call a hook per item, and the
- * map-to-path contract (root is `'/'`, everything else gains a leading
- * slash) must have exactly one implementation.
- */
-export function resolveScreenHref(
-  screens: ScreenRouteMap | undefined,
-  screenId: string | null | undefined,
-): string | undefined {
-  if (!screenId) return undefined
-  // A value that arrived through a `Link`-typed component prop (AGL-1335)
-  // carries the prefix, because there it has to be distinguishable from the
-  // raw path strings those props held before the picker existed. Stripping
-  // it HERE rather than at each call site is the same "one resolver" rule
-  // the doc comment above states: every surface that resolves a screen id
-  // must accept both spellings, or a prop-fed tab strip would resolve where
-  // a prop-fed button did not.
-  const id = parseScreenLinkValue(screenId) ?? screenId
-  const path = screens?.[id]
-  if (path === undefined) return undefined
-  return path === '/' ? '/' : `/${path}`
-}
-
-/**
- * Link VALUE parsing lives in `./screen-link-value` — server-safe, because
- * the where-used scan runs on the server and the `createContext` this module
- * reaches keeps it out of the `@aglyn/aglyn/server` barrel (AGL-703).
+ * Link VALUE parsing AND resolution live in `./screen-link-value` —
+ * server-safe, because the where-used scan and the Markdown representation of
+ * a page both run on the server, and the `createContext` this module reaches
+ * keeps it out of the `@aglyn/aglyn/server` barrel (AGL-703, AGL-2740).
  * Re-exported here so every existing importer, and the spec beside this file,
  * keeps reaching them at the address they have always used.
  */
 export {
+  EXTERNAL_HREF_PATTERN,
+  SAFE_HREF_PATTERN,
   SCREEN_LINK_VALUE_PREFIX,
   formatScreenLinkValue,
   nodesReferenceScreen,
   parseScreenLinkValue,
+  resolveScreenHref,
+  splitLinkValue,
 } from './screen-link-value'
-
-/**
- * Navigable protocols only. A stored `javascript:`/`data:` href would
- * execute in visitors' browsers, so the guard the linking components each
- * carried is here instead — one copy, one place to harden.
- */
-export const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:|\/|#)/i
-
-/** Of those, the ones that actually leave the site (new-tab decisions). */
-export const EXTERNAL_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:)/i
-
-/**
- * Sorts an element's two link inputs into "a screen id" and "a literal
- * href", tolerating either value arriving in either slot (AGL-1335).
- *
- * Both slots are string props, and a component prop bound with
- * `{{prop.link}}` can be dropped into whichever one the author reached for
- * first. So the ROUTING is driven by the value's shape, not by which field
- * it sits in:
- *
- * - a `screen:`-prefixed value is a screen reference wherever it appears;
- * - an href-shaped value (`/x`, `https://…`, `#a`, `mailto:`) in the screen
- *   slot is a literal href — a real screen id never looks like that, and
- *   the alternative is a link that silently resolves to nothing;
- * - anything else in the screen slot is a bare screen id, exactly as before.
- *
- * A resolved screen id always wins: `screenId` has taken precedence over
- * `href` since AGL-139, and this must not change which of the two an
- * already-published page follows.
- */
-export function splitLinkValue(
-  screenId: string | null | undefined,
-  href: string | null | undefined,
-): { screenId?: string; href?: string } {
-  const rawScreen = typeof screenId === 'string' ? screenId.trim() : ''
-  const rawHref = typeof href === 'string' ? href.trim() : ''
-  const fromScreenSlot = parseScreenLinkValue(rawScreen)
-  if (fromScreenSlot) return { screenId: fromScreenSlot }
-  if (rawScreen && !SAFE_HREF_PATTERN.test(rawScreen)) {
-    return { screenId: rawScreen }
-  }
-  const fromHrefSlot = parseScreenLinkValue(rawHref)
-  if (fromHrefSlot) return { screenId: fromHrefSlot }
-  // An href-shaped value in the screen slot beats an empty href slot, and
-  // loses to a real one — the screen slot was never meant to hold a path.
-  const literal = rawHref || rawScreen
-  return literal ? { href: literal } : {}
-}
 
 /** What a linking element renders — see {@link useLinkTarget}. */
 export interface ResolvedLinkTarget extends ResolvedScreenLink {

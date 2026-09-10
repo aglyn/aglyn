@@ -47,7 +47,7 @@
  * so markup this file has never heard of still contributes its text.
  */
 
-import { decodeCharacterReferences } from './author-html'
+import { decodeCharacterReferences, isAllowedAuthorHtmlUrl } from './author-html'
 import { absoluteMediaSrc } from './media-ref'
 
 /**
@@ -209,10 +209,23 @@ function escapeInline(value: string): string {
   return value.replace(/([\\`*_[\]<>])/g, '\\$1')
 }
 
-/** Absolutize a link target, leaving anything already absolute alone. */
+/**
+ * Absolutize a link target, leaving anything already absolute alone.
+ *
+ * Scheme-checked against {@link isAllowedAuthorHtmlUrl} — the sanitizer's own
+ * rule, not a second spelling of it (AGL-2740). A Custom HTML fragment is
+ * stored UNSANITIZED and cleaned at render, so this converter is the one
+ * reader of it that never sees the sanitizer run: without the check, an
+ * `<a href="screen:v0clP6xQl-">` an author hand-typed loses its href in the
+ * page and keeps it in the Markdown, which publishes a link target the page
+ * itself refuses. Refused targets keep their TEXT — the caller emits the
+ * unlinked label — because dropping the words as well would silently shorten
+ * the document.
+ */
 function absoluteHref(href: string, context?: AuthorHtmlMarkdownContext): string {
   const value = href.trim()
   if (!value) return ''
+  if (!isAllowedAuthorHtmlUrl('a', 'href', value)) return ''
   if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('//')) return value
   const origin = context?.origin?.replace(/\/+$/, '') ?? ''
   if (!origin) return value
