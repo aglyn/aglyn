@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { buildAgentOpenApi } from './agent-openapi'
+import {
+  API_VERSION,
+  API_VERSION_HEADER,
+  buildAgentOpenApi,
+} from './agent-openapi'
 
 const ORIGIN = 'https://acme.test'
 
@@ -53,10 +57,24 @@ describe('buildAgentOpenApi — document shape', () => {
     expect(spec({ origin: `${ORIGIN}/` }).servers[0].url).toBe(ORIGIN)
   })
 
-  it('carries a title and a version', () => {
+  it('carries a title, the contract version, and the build separately', () => {
     const document = spec({ version: '1.2.3' })
     expect(document.info.title).toBe('Acme — public API')
-    expect(document.info.version).toBe('1.2.3')
+    /*
+      `info.version` is the CONTRACT (AGL-2722). It used to be the platform
+      release, which moved several times a day — so a consumer reading it as
+      "the shape I was built against" was tracking deploy noise and had
+      nothing it could pin. The build keeps its own key, and its own purpose.
+    */
+    expect(document.info.version).toBe(API_VERSION)
+    expect(document.info['x-aglyn-platform-version']).toBe('1.2.3')
+  })
+
+  it('bumps the contract version only deliberately', () => {
+    // A guard on the promise, not on the string: if this fails, a removal or
+    // a rename shipped and the version has to move with it.
+    expect(API_VERSION).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(spec({ version: '9.9.9' }).info.version).toBe(API_VERSION)
   })
 
   it('publishes contact and terms only when the site has them', () => {
@@ -88,8 +106,20 @@ describe('buildAgentOpenApi — function-calling compatibility', () => {
   })
 
   it('types every parameter and describes it', () => {
+    // Parameters may be inline or a `$ref` into `components.parameters`.
+    // Resolving first is the point: a bare `$ref` is not an untyped
+    // parameter, and judging it as one would push every shared parameter
+    // back inline just to satisfy the check.
+    const resolve = (parameter: any) => {
+      const ref: string | undefined = parameter?.$ref
+      if (!ref) return parameter
+      const name = ref.replace('#/components/parameters/', '')
+      return document.components.parameters[name]
+    }
     for (const { op } of operations(document)) {
-      for (const parameter of op.parameters ?? []) {
+      for (const raw of op.parameters ?? []) {
+        const parameter = resolve(raw)
+        expect(parameter).toBeTruthy()
         expect(parameter.schema?.type).toBeTruthy()
         expect(parameter.description).toBeTruthy()
         expect(typeof parameter.required).toBe('boolean')
@@ -107,6 +137,42 @@ describe('buildAgentOpenApi — function-calling compatibility', () => {
     }
   })
 
+  it('states the version policy on every operation, not only in the prose', () => {
+    /*
+      A policy described in `info` and missing from the operations is not a
+      policy — it is a paragraph. Every response has to name the version that
+      served it, and every operation has to accept the pin.
+    */
+    const ops = [...operations(document)]
+    expect(ops.length).toBeGreaterThan(0)
+    for (const { op } of ops) {
+      const accepts = (op.parameters ?? []).some(
+        (parameter: any) =>
+          parameter?.$ref === '#/components/parameters/ApiVersionRequest',
+      )
+      expect(accepts).toBe(true)
+
+      for (const response of Object.values<any>(op.responses)) {
+        expect(response.headers?.[API_VERSION_HEADER]).toBeTruthy()
+        // The two headers a removal is announced on. Declared everywhere and
+        // SENT only when true, so their absence carries the meaning the
+        // description says it does.
+        expect(response.headers?.Deprecation).toBeTruthy()
+        expect(response.headers?.Sunset).toBeTruthy()
+      }
+    }
+  })
+
+  it('leaves an operation its own headers when the walk runs', () => {
+    // The walk merges; it must not overwrite. An operation that deliberately
+    // declares a header would otherwise lose it to a blanket policy.
+    for (const { op } of operations(document)) {
+      for (const response of Object.values<any>(op.responses)) {
+        expect(Object.keys(response.headers).length).toBeGreaterThanOrEqual(3)
+      }
+    }
+  })
+
   it('resolves every $ref it uses', () => {
     const refs = new Set<string>()
     JSON.stringify(document, (key, value) => {
@@ -115,8 +181,14 @@ describe('buildAgentOpenApi — function-calling compatibility', () => {
     })
     expect(refs.size).toBeGreaterThan(0)
     for (const ref of refs) {
-      const name = ref.replace('#/components/schemas/', '')
-      expect(document.components.schemas[name]).toBeTruthy()
+      // Resolve by SECTION rather than assuming every ref is a schema —
+      // headers and parameters are referenced the same way, and a check that
+      // only knew about schemas passed by looking up the wrong table and
+      // finding undefined nowhere near the ref that was actually wrong.
+      const match = /^#\/components\/([^/]+)\/(.+)$/.exec(ref)
+      expect(match).toBeTruthy()
+      const [, section, name] = match as RegExpExecArray
+      expect(document.components[section]?.[name]).toBeTruthy()
     }
   })
 

@@ -20,6 +20,7 @@ import {
   appHandleJsonSuccess,
 } from '@aglyn/shared-util-rest-api'
 import getAllScreens from '../../../utils/get-all-screens'
+import { publicReadApiGate, withPublicReadHeaders } from '../_public-read-api'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +33,9 @@ export const dynamic = 'force-dynamic'
  * widening what this hands back.
  */
 export async function GET(request: Request): Promise<Response> {
+  const gate = publicReadApiGate(request)
+  if (gate.refusal) return gate.refusal
+
   const params = new URL(request.url).searchParams
   /*
     `?host=` first, then the domain the request was ADDRESSED to (AGL-2716) —
@@ -61,6 +65,6 @@ export async function GET(request: Request): Promise<Response> {
     error = err
   }
 
-  if (error) return appHandleJsonError(error)
-  return appHandleJsonSuccess(data)
+  if (error) return withPublicReadHeaders(appHandleJsonError(error), gate.headers)
+  return withPublicReadHeaders(appHandleJsonSuccess(data), gate.headers)
 }
