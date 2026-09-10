@@ -18,11 +18,21 @@
 /**
  * Can a customer create and publish? (AGL-2586)
  *
- * Four checks — `create`, `publishRules`, `publishAnnounce`, `signupCanary` —
- * over the journeys a paying customer buys: sign up, create an org, create a
- * site, create a screen, publish it and see it live. What each one asserts,
- * why nothing is written HERE, and what is deliberately left to the tenant
- * render canaries, is in `journeys-probe.ts`.
+ * Five checks over the journeys a paying customer buys: sign up, create an
+ * org, create a site, create a screen, publish it and see it live. `create`,
+ * `publishRules` and `publishAnnounce` read preconditions here; `signupCanary`
+ * and `edgeAdmission` relay markers a scheduled job left behind, and
+ * `appCheckAttestation` relays a sampled rate. What each one asserts, why
+ * nothing is written HERE, and what is deliberately left to the tenant render
+ * canaries, is in `journeys-probe.ts`.
+ *
+ * ⛔ THE THREE RELAYED ONES ARE OPTIONAL, AND EACH NEEDS TWO EDITS TO APPEAR:
+ * the probe has to return it AND this handler has to name it. `edgeAdmission`
+ * shipped once with only the first, so the flag was on, the sampler was
+ * running, the marker was fresh, and the body said nothing — the check simply
+ * was not there. Anything added to `JourneysProbeResult` has to be destructured
+ * and spread below, and `journeys-route-emits-optional-checks.spec.ts` is what
+ * refuses the next one that is not.
  *
  * `signupCanary` is the odd one and the important one (AGL-2715): the other
  * three read preconditions, and it reads the recorded outcome of something
@@ -72,8 +82,14 @@ const journeysProbe = memoizeWithTtl<JourneysProbeResult>(PROBE_TTL_MS, () =>
 )
 
 export async function GET(): Promise<Response> {
-  const { create, publishRules, publishAnnounce, signupCanary, appCheckAttestation } =
-    await journeysProbe()
+  const {
+    create,
+    publishRules,
+    publishAnnounce,
+    signupCanary,
+    appCheckAttestation,
+    edgeAdmission,
+  } = await journeysProbe()
   // Spread rather than assigned: an absent canary must leave no key at all,
   // because `signupCanary: undefined` would serialize into the body as a
   // check with no verdict.
@@ -83,6 +99,7 @@ export async function GET(): Promise<Response> {
     publishAnnounce,
     ...(signupCanary ? { signupCanary } : {}),
     ...(appCheckAttestation ? { appCheckAttestation } : {}),
+    ...(edgeAdmission ? { edgeAdmission } : {}),
   }
   const status = healthStatus(checks)
   return Response.json(
