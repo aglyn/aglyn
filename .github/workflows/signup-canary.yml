@@ -59,8 +59,9 @@ name: Signup canary
 on:
   schedule:
     # Hourly, off the top of the hour where every other scheduled job in this
-    # repo clusters and Actions queues are deepest. Only the attestation job
-    # runs on this — see the `walk` job's own guard.
+    # repo clusters and Actions queues are deepest. Both jobs run on it.
+    # SIGNUP_CANARY_STALE_AFTER_MS is two hours, so one missed run is
+    # tolerated and two are not.
     - cron: '25 * * * *'
   workflow_dispatch: {}
 
@@ -94,9 +95,10 @@ jobs:
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
         run: node tools/e2e/appcheck-attestation.mjs
 
-  # ⛔ Manual only until the App Check exemption lands. See the walk's docblock.
+  # Hourly. The exclusion that stops this tripping the alarm it watches
+  # (`isSignupCanaryOrgSlug` in /api/orgs/create) went live in v1.0.0-beta.107
+  # and was demonstrated first: a full walk moved `signupAttempts` by 0.
   walk:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
