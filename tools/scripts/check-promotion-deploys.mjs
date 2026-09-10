@@ -38,6 +38,16 @@
 // without a single network call, which is what keeps this cheap enough to run
 // on every promotion.
 //
+//   npm run check:promotion-deploys -- --every-target   # verify all three, touched or not
+//
+// `--every-target` verifies every target against the head of the range whether
+// or not the range touched it (AGL-2793). The range answers what a merge WILL
+// owe, which is the question on a promotion PR. Once the merge is serving, the
+// question is whether production is converged with that sha, and a deploy an
+// earlier promotion skipped is owed by it just the same: scoped to its own
+// range, the next push touched no rules file, verified nothing and passed with
+// live rules still behind (AGL-2791). The Promotion deploys workflow passes it.
+//
 // Each target delegates to the checker that already knows how to compare it
 // (`check-rules-drift`, `check-functions-drift`, `check-index-drift`) and
 // reads its exit code on the convention all three share. Their credentials are
@@ -66,12 +76,14 @@ import {
   describeResult,
   foldResults,
   targetsForChangedFiles,
+  withEveryTarget,
 } from './lib/promotion-deploys.mjs'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
 let range = process.env.PROMOTION_RANGE || 'origin/production..HEAD'
 let listOnly = false
+let everyTarget = false
 let only = null
 const args = process.argv.slice(2).filter((a) => a !== '--')
 for (let i = 0; i < args.length; i += 1) {
@@ -93,8 +105,12 @@ for (let i = 0; i < args.length; i += 1) {
     listOnly = true
     continue
   }
+  if (arg === '--every-target') {
+    everyTarget = true
+    continue
+  }
   console.error(
-    `Unknown argument '${arg}'. Usage: check-promotion-deploys [--range=<base>..<head>] [--only=<id,...>] [--list]`,
+    `Unknown argument '${arg}'. Usage: check-promotion-deploys [--range=<base>..<head>] [--only=<id,...>] [--every-target] [--list]`,
   )
   process.exit(2)
 }
@@ -158,8 +174,10 @@ try {
   process.exit(2)
 }
 
-let owed = targetsForChangedFiles(changed)
+const touchedByRange = targetsForChangedFiles(changed)
+let owed = everyTarget ? withEveryTarget(touchedByRange) : touchedByRange
 if (only) owed = owed.filter((entry) => only.includes(entry.target.id))
+const untouched = owed.filter((entry) => entry.files.length === 0)
 
 console.log(
   `Range: ${range} (${baseSha.slice(0, 9)}..${headSha.slice(0, 9)}), ${changed.length} file(s) changed.`,
@@ -172,10 +190,23 @@ if (owed.length === 0) {
   process.exit(0)
 }
 
-console.log(`\nOwed by this range: ${owed.map((e) => e.target.label).join(', ')}`)
+const owedByRange = owed.filter((entry) => entry.files.length > 0)
+if (owedByRange.length > 0) {
+  console.log(
+    `\nOwed by this range: ${owedByRange.map((e) => e.target.label).join(', ')}`,
+  )
+}
+if (untouched.length > 0) {
+  console.log(
+    `\nNot touched by this range, verified anyway (--every-target): ${untouched.map((e) => e.target.label).join(', ')}`,
+  )
+}
 for (const { target, files } of owed) {
   console.log(`\n  ${target.label} (${target.id})`)
   for (const file of files) console.log(`    ${file}`)
+  if (files.length === 0) {
+    console.log('    no path in this range; an earlier promotion may still owe it')
+  }
   console.log(`    deploy: ${target.deployCommand}`)
   console.log(`    if skipped: ${target.cost}`)
 }
@@ -213,7 +244,17 @@ if (verdict.exitCode === CHECKER_EXIT.NOT_DEPLOYED) {
   console.error(
     [
       '',
-      `${verdict.notDeployed.length} manual deploy(s) this range owes have not happened.`,
+      everyTarget
+        ? `${verdict.notDeployed.length} manual deploy(s) the head of this range depends on have not happened.`
+        : `${verdict.notDeployed.length} manual deploy(s) this range owes have not happened.`,
+      ...verdict.notDeployed
+        .filter((result) =>
+          untouched.some((entry) => entry.target.id === result.target.id),
+        )
+        .map(
+          (result) =>
+            `${result.target.label}: this range touched none of its paths, so the deploy was owed by an earlier promotion and never made.`,
+        ),
       'Run them from a checkout at the promoted SHA, then re-run this check.',
       'Nothing about the Vercel deployment tells you this: the merge shipped the',
       'app code and reported success, which is exactly how it read on 2026-09-04.',
@@ -227,4 +268,8 @@ if (verdict.exitCode === CHECKER_EXIT.CANNOT_CHECK) {
   )
   process.exit(2)
 }
-console.log('\nEvery manual deploy this range owes has happened.')
+console.log(
+  everyTarget
+    ? '\nEvery manual deploy target is deployed at the head of this range.'
+    : '\nEvery manual deploy this range owes has happened.',
+)

@@ -16,10 +16,15 @@ name: Promotion deploys
 # fired because `consoleFastCrons` was three days stale.
 #
 # rules-drift.yml, index-drift.yml and functions-drift.yml each answer "does
-# live match?" standing. This workflow asks the narrower question a promotion
-# actually poses — "does THIS range owe a deploy, and is it done?" — and that
-# is the version that can be a gate rather than an alarm. A range touching none
-# of those paths passes without a single network call.
+# live match?" standing. This workflow asks the question a promotion actually
+# poses — "is every manual deploy the promoted sha depends on done?" — and
+# that is the version that can be a gate rather than an alarm.
+#
+# It verifies EVERY target, not only those the range touched (`--every-target`,
+# AGL-2793). Scoped to the range, a skipped deploy was owed by exactly one push:
+# the next promotion touched no rules file, verified nothing, and went green
+# with live rules still behind (AGL-2791). The ledger still names which targets
+# this range itself touched.
 #
 # ---------------------------------------------------------------------------
 # WHY THE SAME CHECK IS A WARNING ON THE PR AND A FAILURE ON THE PUSH
@@ -123,7 +128,7 @@ jobs:
           fi
           echo "range=$range"
           code=0
-          node tools/scripts/check-promotion-deploys.mjs --range="$range" \
+          node tools/scripts/check-promotion-deploys.mjs --range="$range" --every-target \
             > "$RUNNER_TEMP/ledger.txt" 2>&1 || code=$?
           echo "code=$code" >> "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/ledger.txt"
@@ -145,14 +150,14 @@ jobs:
           fi
           case "${{ steps.ledger.outputs.code }}" in
             0)
-              echo "Every manual deploy this range owes has happened (or it owes none)."
+              echo "Every manual deploy the head of this range depends on has happened."
               ;;
             1)
               if [ "$blocking" = true ]; then
-                echo "::error::This range owes a manual deploy that has not happened. Production is already serving code that assumes it. See the job summary."
+                echo "::error::A manual deploy the promoted sha depends on has not happened, whether this range owes it or an earlier promotion skipped it. Production is already serving code that assumes it. See the job summary."
                 exit 1
               fi
-              echo "::warning::This promotion will owe a manual deploy. Not blocking — the deploys are due AT the promotion, from a checkout at the promoted SHA. See the job summary for the ledger and run them straight after the merge."
+              echo "::warning::This promotion will owe a manual deploy, or production still owes one an earlier promotion skipped. Not blocking — the deploys are due AT the promotion, from a checkout at the promoted SHA. See the job summary for the ledger and run them straight after the merge."
               ;;
             2)
               if [ "$blocking" = true ]; then
