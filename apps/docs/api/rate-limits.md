@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Rate limits & usage
-description: The per-key request limit, the X-RateLimit headers, and how the monthly quota bills.
+description: The per-key request limit, the RateLimit and X-RateLimit headers, and how the monthly quota bills.
 ---
 
 # Rate limits & usage
@@ -33,9 +33,22 @@ Every response carries the current budget:
 
 | Header | Meaning |
 | --- | --- |
-| `X-RateLimit-Limit` | Requests allowed per window (`120`). |
-| `X-RateLimit-Remaining` | Requests left in the current window. |
+| `RateLimit-Limit` | Requests allowed per window (`120`). |
+| `RateLimit-Remaining` | Requests left in the current window. |
+| `RateLimit-Reset` | **Seconds until** the window resets. |
+| `X-RateLimit-Limit` | Same number as `RateLimit-Limit`. |
+| `X-RateLimit-Remaining` | Same number as `RateLimit-Remaining`. |
 | `X-RateLimit-Reset` | When the window resets, as a Unix timestamp in **seconds**. |
+
+Both spellings carry the same budget and are computed from the same reading, so they
+can never disagree. `RateLimit-*` is [RFC 9331][rfc9331]; reach for it if you are
+writing a general HTTP client, and note that its `Reset` is a **duration** while
+`X-RateLimit-Reset` is a **timestamp** — the two are not interchangeable.
+
+`X-RateLimit-*` is the older set this API has always sent. It is not deprecated and
+has no removal date; if you are already reading it, keep reading it.
+
+[rfc9331]: https://www.rfc-editor.org/rfc/rfc9331
 
 The one exception is a `401` for a key we can't identify (missing or invalid) — there's
 no budget to report when we don't know whose it is.
@@ -61,7 +74,7 @@ When you exceed the limit, the request returns `429` with a `Retry-After` header
 
 ### Staying under the limit
 
-- Read `X-RateLimit-Remaining` and slow down as it approaches zero.
+- Read `RateLimit-Remaining` (or `X-RateLimit-Remaining`) and slow down as it approaches zero.
 - On a `429`, wait `Retry-After` seconds. Requests made while limited still count, so
   hammering the endpoint keeps the window pinned — back off rather than retrying
   immediately.
@@ -99,7 +112,7 @@ minting extra keys does not raise it.
 
 Two practical consequences:
 
-- **`X-RateLimit-*` does not describe it.** Those headers report your key's 120/min
+- **Neither `RateLimit-*` nor `X-RateLimit-*` describes it.** Those headers report your key's 120/min
   budget. A publish `429` carries `Retry-After`, and that is the number to obey.
 - **Publish once per batch.** A sync that writes 500 records and publishes once stays
   well inside the budget; publishing per record is refused after ten and gains nothing,
