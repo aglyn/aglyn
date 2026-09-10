@@ -37,6 +37,8 @@ import {
   ORG_SCOPE_TOKEN,
   planLabelGrantingFeature,
   planLegacyFolderMigration,
+  type ScopeToken,
+  scopeToStore,
   storedScope,
   visibleToHost,
   wouldCreateCycle,
@@ -1762,6 +1764,23 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     const scopeChanged =
       JSON.stringify([...previousScope].sort()) !==
       JSON.stringify([...editor.visibleTo].sort())
+    // The scope this save writes, or null when it writes none. Only an
+    // org-wide member may change it — the AGL-1042 rules deny anyone else, so
+    // sending it would fail the whole write rather than just this field.
+    //
+    // A selection `scopeToStore` cannot store refuses the save rather than
+    // writing a substitute: the org token would share the file with every
+    // site, and anything narrower would drop sites somebody picked.
+    const scopeWrite =
+      orgId && viewerOrgWide && scopeChanged
+        ? scopeToStore(editor.visibleTo)
+        : null
+    if (scopeWrite?.problem) {
+      return void enqueueSnackbar(scopeWrite.problem, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     // Narrowing can break a LIVE page (AGL-1045). Before taking an asset
     // away from a site, find out which sites actually use it and name them
     // — silently breaking a published client site is the worst outcome this
@@ -1805,12 +1824,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           folderId,
           // Legacy string kept in sync until every reader is on folderId.
           folder: folderId ? (folderNameById[folderId] ?? '') : '',
-          // Sharing scope (AGL-1045). Only an org-wide member may change
-          // it — the AGL-1042 rules deny anyone else, so sending it would
-          // fail the whole write rather than just this field.
-          ...(orgId && viewerOrgWide && scopeChanged
-            ? { visibleTo: normalizeVisibleTo(editor.visibleTo) ?? [ORG_SCOPE_TOKEN] }
-            : {}),
+          // Sharing scope (AGL-1045) — see `scopeWrite`.
+          ...(scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {}),
           // Rename (AGL-184): display-name only; the Storage object id/URL
           // stays stable so existing references keep resolving.
           ...(editor.fileName.trim()
@@ -2515,7 +2530,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
 
   const applyScopeToSelection = useCallback(
-    async (ids: string[], next: string[]) => {
+    async (ids: string[], next: ScopeToken[]) => {
       const narrowing = ids.filter((id) =>
         narrowsScope(
           scopeOfMedia(items.find((item: any) => item.$id === id)),
@@ -2547,7 +2562,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // write would take the other 49 down with it.
       for (const [index, id] of ids.entries()) {
         await updateDoc(doc(firestore, scopeCollection, scopeId, 'media', id), {
-          visibleTo: normalizeVisibleTo(next) ?? [ORG_SCOPE_TOKEN],
+          // Already a storable scope: `handleScopeApply`, the one caller,
+          // normalizes the selection and refuses one it cannot store.
+          visibleTo: next,
         })
         setScopeRun({ done: index + 1, total: ids.length, running: true })
       }
@@ -4332,6 +4349,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         )
                       })}
                     </Box>
+                  ) : null}
+                  {editor &&
+                  !editor.scopeUnset &&
+                  scopeToStore(editor.visibleTo).problem ? (
+                    <Typography variant="caption" color="error">
+                      {scopeToStore(editor.visibleTo).problem}
+                    </Typography>
                   ) : null}
                 </>
               ) : (
