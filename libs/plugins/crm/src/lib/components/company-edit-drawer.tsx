@@ -31,7 +31,6 @@ import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navig
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
-  useHostActivityLogger,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -53,6 +52,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -144,10 +144,12 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { scope, createTokens, createHostId } = useCrmScope({ hostId, org })
-  // The site a new company is captured by, or the one an existing company
-  // was — and the site whose feed the act is logged in.
-  const companyHostId = company ? (company.hostId ?? null) : createHostId
-  const logActivity = useHostActivityLogger(companyHostId ?? undefined)
+  // The feed the act is logged in is the level it was PERFORMED at
+  // (AGL-2738): this site's under a site, the organization's at the org
+  // hub. `createHostId` is where the record is STAMPED, which at the hub is
+  // a site the reader picked and may hold no role on — a different question
+  // from where the line belongs, and a gate the record write never faced.
+  const logActivity = useCrmActivityLogger(hostId)
 
   const [draft, setDraft] = useState<CompanyDraft>(EMPTY_COMPANY_DRAFT)
   const [busy, setBusy] = useState(false)
