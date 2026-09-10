@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+import {
+  MEDIA_POSTER_OBJECT_SUFFIX,
+  mediaPosterObjectPath,
+  readImageDimensions,
+} from '@aglyn/aglyn/server'
+
 import { MEDIA_CDN_VARIANT_WIDTHS } from './serve-media-cdn'
 
 /**
@@ -343,5 +349,136 @@ export async function probeMediaVariantSupport(): Promise<{
     // A CODE, never the message: the health endpoint is public and an error
     // from a native module can carry filesystem paths.
     return { ok: false, code: classifyLoadFailure(error) }
+  }
+}
+
+/**
+ * The largest poster this will accept from a client (AGL-2742).
+ *
+ * The browser encodes the still it captured as WebP at quality ~0.72, and a
+ * 1920-wide frame of real video lands between 40 KB and 250 KB. 4 MB is
+ * therefore ~16x the worst realistic case and is not a quality knob: it is
+ * the point past which the bytes stopped being a poster. It has to sit well
+ * under the platform's 4.5 MB request-body wall, because the poster rides
+ * base64 in the finalize call and a ceiling that admits a body the platform
+ * will reject turns a refusal we can explain into a 413 we cannot.
+ */
+export const MEDIA_POSTER_MAX_BYTES = 4 * 1024 * 1024
+
+/**
+ * The widest poster stored. Above this a still is being kept at a resolution
+ * no `<video poster>` paints — the element scales it to the player box, and
+ * the largest realistic player box is the 1920 the variant widths already
+ * top out at.
+ */
+export const MEDIA_POSTER_MAX_WIDTH = 1920
+
+/** WebP quality for the poster. Higher than a variant's 80 would not show. */
+const POSTER_QUALITY = 72
+
+export interface MediaPosterOutcome {
+  /** Set only when a poster object was actually written. */
+  poster?: { width: number; height: number; variants: number[] }
+  /**
+   * Present ONLY when a poster was offered and could not be produced —
+   * the same two-failure-class contract {@link MediaVariantOutcome} keeps.
+   * An upload with no poster offered returns an empty object, not an error.
+   */
+  error?: string
+}
+
+/**
+ * Turn a client-supplied still into the asset's poster (AGL-2742).
+ *
+ * ## The re-encode is a security control, not a compression pass
+ *
+ * These bytes come from a browser, over the wire, and land in the shared
+ * media bucket under an org's own prefix, where `serveMediaCdn` will stream
+ * them `inline` from the console's origin and from every tenant site's. That
+ * is precisely the shape of AGL-1474, where an uploaded `image/svg+xml`
+ * turned out to be a scripted document served from `app.aglyn.com`.
+ *
+ * Nothing here trusts the declared type, the magic bytes, or the extension.
+ * The buffer is decoded by `sharp` and **re-encoded** to WebP, so what gets
+ * stored is bytes this process produced. A polyglot, an SVG, an HTML file
+ * with a PNG header — each either fails to decode (reported, no object
+ * written) or becomes a real raster WebP with whatever it was smuggling
+ * discarded. That is a stronger guarantee than any sniffing gate, and it is
+ * why the poster is allowed to be client-generated at all.
+ *
+ * ## Why it reuses `generateMediaVariants` rather than looping itself
+ *
+ * A poster IS an image, and the width set a poster should offer is the width
+ * set every other image offers — the srcSet the renderer already knows how
+ * to write. Handing the generator `{objectPath}__poster` as its object path
+ * makes it emit `{objectPath}__poster__w{n}.webp` with no knowledge that
+ * video exists, and inherits its skip rule, its partial-run reporting and
+ * its refusal to fail an upload. A private loop here would be a second set
+ * of widths to keep in step, which is the defect AGL-175's widths list was
+ * moved into `@aglyn/aglyn` to prevent.
+ *
+ * The dimensions returned are read back from the ENCODED bytes rather than
+ * taken from the caller. The browser's report is what sized the capture, and
+ * the resize below may have changed it; a document that records what was
+ * asked for instead of what was written is how an `aspect-ratio` drifts off
+ * by the cap.
+ */
+export async function generateMediaPoster(options: {
+  /** Raw bytes as received. Never assumed to be an image of any kind. */
+  buffer: Buffer
+  /** Object path of the ORIGINAL video, without the poster suffix. */
+  objectPath: string
+  saveVariant: (path: string, bytes: Buffer) => Promise<void>
+  maxWidth?: number
+}): Promise<MediaPosterOutcome> {
+  const posterPath = mediaPosterObjectPath(options.objectPath)
+  let webp: Buffer
+  try {
+    const sharp = await loadSharp()
+    webp = await sharp(options.buffer)
+      .resize({
+        width: options.maxWidth ?? MEDIA_POSTER_MAX_WIDTH,
+        withoutEnlargement: true,
+      })
+      .webp({ quality: POSTER_QUALITY })
+      .toBuffer()
+  } catch (error) {
+    console.error('media poster encode failed', options.objectPath, error)
+    return { error: `poster encode failed — ${describe(error)}` }
+  }
+
+  // Read the WRITTEN bytes. `readImageDimensions` parses the WebP chunk
+  // headers this encoder just emitted, so this is a measurement of the
+  // stored object and not a restatement of the request.
+  const dimensions = readImageDimensions(new Uint8Array(webp))
+  if (!dimensions) {
+    return { error: 'poster encoded but its dimensions were unreadable' }
+  }
+
+  try {
+    await options.saveVariant(posterPath, webp)
+  } catch (error) {
+    console.error('media poster save failed', posterPath, error)
+    return { error: `poster save failed — ${describe(error)}` }
+  }
+
+  // Widths for the poster, generated from the poster's own bytes. A failure
+  // past this point still leaves a usable full-size poster on the document,
+  // which is the whole reason the object above is written first.
+  const outcome = await generateMediaVariants({
+    buffer: webp,
+    contentType: 'image/webp',
+    sourceWidth: dimensions.width,
+    objectPath: `${options.objectPath}${MEDIA_POSTER_OBJECT_SUFFIX}`,
+    saveVariant: options.saveVariant,
+  })
+
+  return {
+    poster: {
+      width: dimensions.width,
+      height: dimensions.height,
+      variants: outcome.variants,
+    },
+    ...(outcome.error ? { error: outcome.error } : {}),
   }
 }

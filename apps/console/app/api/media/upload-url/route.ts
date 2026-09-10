@@ -35,6 +35,7 @@ import {
   scopeBillsStorageOverage,
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
+import { videoUploadFields } from '../../../../utils/server/media-video-fields'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -586,6 +587,39 @@ async function handler(request: Request): Promise<Response> {
         })
       : { variants: [] as number[], error: undefined }
 
+    /*
+     * The video half (AGL-2742), and the reason it arrives in the FINALIZE
+     * body rather than being read here.
+     *
+     * This route never holds the video. The browser PUT it straight to GCS
+     * and this function was handed a path — which is exactly why the block
+     * above is careful never to pull one back. A duration and a frame size
+     * live in an MP4's `moov` atom, which the format permits at the END of
+     * the file, so reading them server-side means downloading up to 200 MB
+     * to learn twelve bytes. A poster frame is worse: it needs a decoder,
+     * and there is none in this runtime at any price the budget allows.
+     *
+     * The uploader's browser had both, for free, before the PUT. So it
+     * measures and captures, and sends the result along with the finalize
+     * call it was already making. The poster rides base64 in this body and
+     * is bounded well under the 4.5 MB platform wall; the numbers are
+     * client data and are bounded by `normalizeVideoMetadata` before they
+     * reach the document.
+     */
+    const videoFields = await videoUploadFields({
+      contentType,
+      video: body?.['video'],
+      poster: body?.['poster'],
+      probeReason: body?.['posterError'],
+      objectPath,
+      cdnAllowed,
+      saveVariant: (path, bytes) =>
+        bucket.file(path).save(bytes, {
+          contentType: 'image/webp',
+          metadata: { cacheControl: 'public, max-age=31536000, immutable' },
+        }),
+    })
+
     const token = randomUUID()
     await file.setMetadata({
       metadata: { firebaseStorageDownloadTokens: token },
@@ -609,6 +643,11 @@ async function handler(request: Request): Promise<Response> {
       // and the reason `[]` on a `.pptx` is a design statement rather than a
       // symptom.
       ...(dimensions ?? {}),
+      // AGL-2742: `video`, `poster` and `posterError`, or nothing at all for
+      // every non-video. Spread for the same reason `dimensions` is — an
+      // asset that has none of them carries none of the keys, so `poster`
+      // being absent is a fact a query can use rather than a null to test.
+      ...videoFields,
       uploadedBy: decoded.uid,
       variants,
       // Only when something actually went wrong (AGL-1468). An asset with

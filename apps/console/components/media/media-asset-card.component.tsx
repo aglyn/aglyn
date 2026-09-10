@@ -38,7 +38,11 @@ import {
 } from '@mui/material'
 import { type MouseEvent, useState } from 'react'
 import { mediaFileTypeIcon } from '../../utils/media-file-icon'
-import { mediaSrc, mediaThumbnailSrc } from '../../utils/media-src'
+import {
+  mediaPosterThumbnailSrc,
+  mediaSrc,
+  mediaThumbnailSrc,
+} from '../../utils/media-src'
 
 export interface MediaAssetCardProps {
   media: Aglyn.AglynHostMedia
@@ -132,6 +136,15 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
   // any type the allowlist grows later — gets a glyph, because the `<img>`
   // this used to fall through to renders an EMPTY card (AGL-1463).
   const isImage = contentType.startsWith('image/')
+  // A video's generated poster still (AGL-2742), or undefined — an asset
+  // uploaded before it existed, a free-tier asset with no `cdnPath`, or a
+  // browser that could not paint a frame. The tile branches on the value
+  // rather than on `isVideo`, because "this is a video" and "this video has
+  // a still to draw" are different questions and the second one is newer
+  // than most of the library.
+  const videoPoster = isVideo
+    ? mediaPosterThumbnailSrc(media, 320)
+    : undefined
   const { Icon: FileTypeIcon, label: fileTypeLabel } =
     mediaFileTypeIcon(contentType)
   const fileName = media.fileName ?? (media as any).$id
@@ -228,18 +241,36 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
         />
       ) : null}
 
-      {isVideo ? (
+      {isVideo && videoPoster ? (
+        // A generated poster still (AGL-2742) — an `<img>`, not a `<video>`.
+        // The tile now costs a ~5 KB edge-cached WebP instead of however much
+        // of a 60 MB film a browser needs to decode one frame, and a folder
+        // of clips stops being tens of megabytes of Storage egress per view.
+        <CardMedia
+          component="img"
+          image={videoPoster}
+          alt={media.alt || fileName || ''}
+          onClick={handlePrimary}
+          sx={thumbSx}
+        />
+      ) : isVideo ? (
         <CardMedia
           component="video"
-          // The CDN URL, now that `serveMediaCdn` answers Range requests
-          // (AGL-1442 S4) — a `<video>` with `preload="metadata"`-style
-          // behavior issues ranged fetches, and until S4 only the raw
-          // storage URL would honor them, which is why this branch stayed
-          // on `media.url` when the image branch moved. No `?w=`: variants
-          // are WebP stills of IMAGES, a video has none to select.
-          // `mediaSrc` falls back to `media.url` when there is no `cdnPath`
-          // (free tier, private assets), preserving today's behavior there.
+          // No poster: an asset uploaded before AGL-2742, or one whose
+          // browser could not paint a frame. The CDN URL, now that
+          // `serveMediaCdn` answers Range requests (AGL-1442 S4) — a
+          // `<video>` with `preload="metadata"`-style behavior issues ranged
+          // fetches, and until S4 only the raw storage URL would honor them,
+          // which is why this branch stayed on `media.url` when the image
+          // branch moved. `mediaSrc` falls back to `media.url` when there is
+          // no `cdnPath` (free tier, private assets).
           src={mediaSrc(media)}
+          // ⛔ `none`, not the browser default. Without a poster this element
+          // is the tile, and the default fetches enough of the file to paint
+          // a frame — which for a video is the cost this whole branch exists
+          // to avoid. It shows an empty frame instead, which is what the
+          // glyph branch below has always shown for every other type.
+          preload="none"
           muted
           onClick={handlePrimary}
           sx={thumbSx}

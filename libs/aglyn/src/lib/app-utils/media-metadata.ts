@@ -285,3 +285,125 @@ export function readImageDimensions(
 
   return null
 }
+
+/**
+ * What the platform knows about a VIDEO asset (AGL-2742).
+ *
+ * ## Why this is not `width`/`height` on the document beside an image's
+ *
+ * An image's dimensions are read from its own header by
+ * {@link readImageDimensions}, server-side, from bytes the platform holds.
+ * None of that is available for video: the dimensions live in a `moov` atom
+ * that an MP4 is free to place at the END of the file, so reading them
+ * server-side means fetching up to 200 MB back out of Storage to answer a
+ * question worth twelve bytes — the exact download `generateStoredMediaVariants`
+ * is written to avoid. So these numbers arrive from the BROWSER, which had
+ * the file in hand and a decoder already loaded, and they are consequently
+ * client data: every field is bounded here before it reaches a document.
+ *
+ * They live under their own key rather than widening `width`/`height`
+ * because the provenance differs and a reader should be able to tell. A
+ * `width` on a media document means "measured from the bytes"; a
+ * `video.width` means "reported by the uploader's browser". Folding the two
+ * together would make the weaker claim indistinguishable from the stronger
+ * one on every asset in the library.
+ */
+export interface MediaVideoMetadata {
+  /** Duration in whole milliseconds. Always finite and positive. */
+  durationMs: number
+  /** Coded frame width in pixels, after any display-aspect correction. */
+  width: number
+  height: number
+  /**
+   * A short label for what produced the file, when the browser offered one
+   * (`video/mp4; codecs="avc1.640028"` collapses to `avc1.640028`). Absent
+   * far more often than present — no browser API reports the codec of a
+   * local file, so this is only ever filled from a `MediaCapabilities` probe
+   * or a container sniff, and nothing depends on it.
+   */
+  codec?: string
+}
+
+/**
+ * The upper bound on a stored duration: 24 hours.
+ *
+ * Not a policy about what may be uploaded — the DAM's ceiling is 200 MB of
+ * bytes and says nothing about running time. This is the bound past which a
+ * number stops being a duration and starts being a bug, and the specific
+ * bug it exists for is real: `HTMLMediaElement.duration` is `Infinity` for a
+ * stream and for some WebM files until the element has been seeked to the
+ * end. `Infinity` fails the finite test below before it reaches this
+ * constant, but a browser that reports a plausible-looking 10^12 instead
+ * would otherwise write a document claiming a 31-year film.
+ */
+export const MEDIA_VIDEO_MAX_DURATION_MS = 24 * 60 * 60 * 1000
+
+/** The largest coded dimension accepted, matching the 8K ceiling encoders use. */
+export const MEDIA_VIDEO_MAX_DIMENSION = 16384
+
+/**
+ * Bound a browser's report into something safe to store, or refuse it whole.
+ *
+ * All-or-nothing on purpose. A partial record — a duration with no
+ * dimensions — is worse than none: `VideoObject` JSON-LD would emit a
+ * `duration` and omit `width`, and a renderer sizing its container from
+ * `video.height` would find the key present and the value absent. The three
+ * numbers are produced by one `loadedmetadata` event and are meaningful only
+ * together, so they are accepted or rejected together.
+ *
+ * `codec` is the exception and is dropped rather than refused, for the same
+ * reason `formatMediaRef` drops a malformed content pin: it is a label
+ * nothing branches on, and losing the whole record over it would trade a
+ * working poster and a correct aspect ratio for a cosmetic string.
+ */
+export function normalizeVideoMetadata(
+  input: unknown,
+): MediaVideoMetadata | null {
+  if (!input || typeof input !== 'object') return null
+  const source = input as Record<string, unknown>
+  const durationMs = Math.round(Number(source['durationMs']))
+  const width = Math.round(Number(source['width']))
+  const height = Math.round(Number(source['height']))
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return null
+  if (durationMs > MEDIA_VIDEO_MAX_DURATION_MS) return null
+  if (!Number.isFinite(width) || width <= 0 || width > MEDIA_VIDEO_MAX_DIMENSION)
+    return null
+  if (
+    !Number.isFinite(height) ||
+    height <= 0 ||
+    height > MEDIA_VIDEO_MAX_DIMENSION
+  )
+    return null
+  const rawCodec = source['codec']
+  const codec =
+    typeof rawCodec === 'string' && /^[\w.,\- ]{1,64}$/.test(rawCodec.trim())
+      ? rawCodec.trim()
+      : undefined
+  return codec ? { durationMs, width, height, codec } : { durationMs, width, height }
+}
+
+/**
+ * The `duration` a schema.org `VideoObject` wants: an ISO 8601 duration.
+ *
+ * Whole seconds, and never a fractional component. Google's structured-data
+ * documentation accepts `PT1M30S` and treats sub-second precision as noise,
+ * and a `PT1M30.437S` in a rich result is a number nobody asked for. A
+ * duration under one second rounds UP to `PT1S` rather than to `PT0S`, which
+ * would read as "no duration" to a consumer that tests for truthiness.
+ */
+export function videoDurationIso8601(
+  durationMs: number | undefined | null,
+): string | undefined {
+  const total = Math.max(1, Math.round(Number(durationMs) / 1000))
+  if (!Number.isFinite(total)) return undefined
+  if (!durationMs || Number(durationMs) <= 0) return undefined
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  const parts = [
+    hours ? `${hours}H` : '',
+    minutes ? `${minutes}M` : '',
+    seconds ? `${seconds}S` : '',
+  ].join('')
+  return `PT${parts || '0S'}`
+}

@@ -32,6 +32,7 @@ import {
   scopeBillsStorageOverage,
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
+import { videoUploadFields } from '../../../../utils/server/media-video-fields'
 import {
   deleteMediaWithTombstone,
   emailUnverifiedResponse,
@@ -375,6 +376,26 @@ async function handler(request: Request): Promise<Response> {
         })
       : { variants: [] as number[], error: undefined }
 
+    // The video half (AGL-2742). This route DOES hold the bytes — but
+    // holding them buys nothing here, because the missing capability is a
+    // decoder, not a download: `sharp` reads pictures and there is no ffmpeg
+    // in this runtime. So the metadata and the poster frame come from the
+    // uploader's browser on both routes, through one shared function, rather
+    // than one route growing a private half-implementation of the other's.
+    const videoFields = await videoUploadFields({
+      contentType,
+      video: body?.['video'],
+      poster: body?.['poster'],
+      probeReason: body?.['posterError'],
+      objectPath,
+      cdnAllowed,
+      saveVariant: (path, bytes) =>
+        bucket.file(path).save(bytes, {
+          contentType: 'image/webp',
+          metadata: { cacheControl: 'public, max-age=31536000, immutable' },
+        }),
+    })
+
     await scopeRef.collection('media').doc(mediaId).set({
       fileName,
       contentType,
@@ -383,6 +404,10 @@ async function handler(request: Request): Promise<Response> {
       storagePath: objectPath,
       folderId,
       ...(dimensions ?? {}),
+      // AGL-2742 — `video`, `poster`, `posterError`, or no keys at all for a
+      // non-video. See the signed route for the same spread and the same
+      // reason.
+      ...videoFields,
       uploadedBy: decoded.uid,
       contentHash,
       contentSha256,

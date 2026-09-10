@@ -188,6 +188,15 @@ service cloud.firestore {
      *    present, so this is a fallback rather than the only input, which is
      *    what makes it a hardening rather than a second CRITICAL.
      *
+     * `video`, `poster`, `posterError` and `videoRenditions` (AGL-2742 /
+     * AGL-2745) join them, and `videoRenditions` is not lower stakes: its
+     * `key` and `ext` are interpolated into a Cloud Storage object path that
+     * `serveMediaCdn` reads with the Admin SDK, which Storage rules do not
+     * govern. `parseMediaRendition` refuses anything with a separator in it,
+     * so the path cannot escape the asset either way — this is the second
+     * lock, on the same door, for the field that most resembles
+     * `storagePath`.
+     *
      * The rest — `cdnPath`, `contentHash`, `createdAt`, `sizeBytes`,
      * `svgSanitized`, `uploadedBy`, `url`, `variants`, `variantsError` — are
      * lower stakes individually, and are frozen for the AGL-1367 reason:
@@ -213,13 +222,15 @@ service cloud.firestore {
       return !request.resource.data.keys().hasAny([
         'storagePath', 'private', 'cdnPath', 'url', 'contentType',
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
-        'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt']);
+        'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
+        'video', 'poster', 'posterError', 'videoRenditions']);
     }
     function mediaObjectFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'storagePath', 'private', 'cdnPath', 'url', 'contentType',
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
-        'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt']);
+        'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
+        'video', 'poster', 'posterError', 'videoRenditions']);
     }
 
     // ------------------------------------------------------------------
