@@ -295,6 +295,7 @@ export * from './safe-json-ld'
 // Agent readiness (AGL-2716): content negotiation, the Markdown rendering of a
 // page, `/llms.txt` and the per-site OpenAPI document. All pure, all server-safe.
 export * from './accept-negotiation'
+export * from './agent-api-catalog'
 export * from './agent-openapi'
 export * from './author-html-markdown'
 export * from './llms-txt'

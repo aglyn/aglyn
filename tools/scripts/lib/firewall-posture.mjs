@@ -483,6 +483,12 @@ export const EXPECTED_POSTURE = Object.freeze([
               '/openapi.json',
               '/api/llms',
               '/api/openapi',
+              // The API catalog, RFC 9727 (AGL-2750). Same class again, and
+              // the same two spellings: a WAF matches the path the CLIENT
+              // asked for, so the public path is what does the work and the
+              // rewrite target is named beside it for a direct call.
+              '/.well-known/api-catalog',
+              '/api/api-catalog',
             ]),
           }),
         ]),

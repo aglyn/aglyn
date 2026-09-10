@@ -66,6 +66,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => ({}) }) },
   visitorContentRefusal: async () => mockLockdownRefusal,
+  // `/.well-known/api-catalog` runs through `publicReadApiGate`, which meters
+  // on this. Always-allowed here: the limiter has its own tests, and a shared
+  // in-process counter would make these cases depend on their own order.
+  checkRateLimit: () => ({
+    allowed: true,
+    limit: 600,
+    remaining: 599,
+    resetMs: Date.now() + 60_000,
+  }),
 }))
 
 jest.mock('../app/api/_agent-site-facts', () => ({
@@ -81,6 +90,8 @@ jest.mock('../app/api/_agent-site-facts', () => ({
 const { GET: llmsGet } = require('../app/api/llms/route')
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { GET: openapiGet } = require('../app/api/openapi/route')
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { GET: catalogGet } = require('../app/api/api-catalog/route')
 
 const DEMO_SITE = {
   $id: 'host-demo',
@@ -205,5 +216,90 @@ describe('GET /openapi.json', () => {
     mockHost.record = null
     expect((await openapiGet(request('/api/openapi'))).status).toBe(404)
     expect((await openapiGet(request('/api/openapi', ''))).status).toBe(400)
+  })
+})
+
+describe('GET /.well-known/api-catalog (AGL-2750)', () => {
+  const read = async (query?: string) => {
+    const response = await catalogGet(
+      query === undefined
+        ? request('/api/api-catalog')
+        : request('/api/api-catalog', query),
+    )
+    return { response, body: JSON.parse(await response.text()) }
+  }
+  const contextFor = (body: any, anchor: string) =>
+    body.linkset.find((entry: any) => entry.anchor === anchor)
+
+  it('serves a linkset, under the media type RFC 9727 requires', async () => {
+    const { response } = await read()
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toBe(
+      'application/linkset+json; charset=utf-8',
+    )
+  })
+
+  it('names both APIs, anchored at the catalog itself', async () => {
+    const { body } = await read()
+    expect(body.linkset[0].anchor).toBe(
+      'https://demo.example.com/.well-known/api-catalog',
+    )
+    expect(body.linkset[0].item.map((link: any) => link.href)).toEqual([
+      'https://demo.example.com/',
+      'https://app.aglyn.com/api/v1',
+    ])
+  })
+
+  it("points the site's entry at this site's own origin, not the request's", async () => {
+    // Same property `/openapi.json` asserts: the document names the site's
+    // canonical origin, never the domain the request happened to arrive on.
+    const site = contextFor(await read().then((r) => r.body), 'https://demo.example.com/')
+    expect(site['service-desc']).toEqual([
+      { href: 'https://demo.example.com/openapi.json', type: 'application/json' },
+    ])
+    expect(site['service-doc']).toEqual([
+      { href: 'https://demo.example.com/llms.txt', type: 'text/markdown' },
+    ])
+    expect(site['status']).toEqual([
+      { href: 'https://demo.example.com/api/health', type: 'application/json' },
+    ])
+  })
+
+  it('points the platform entry at the keyed, typed API', async () => {
+    const platform = contextFor(
+      await read().then((r) => r.body),
+      'https://app.aglyn.com/api/v1',
+    )
+    expect(platform['service-desc']).toEqual([
+      { href: 'https://app.aglyn.com/api/v1/openapi.json', type: 'application/json' },
+    ])
+  })
+
+  it('is readable cross-origin, like the document it sits beside', async () => {
+    const { response } = await read()
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+  })
+
+  it('publishes the rate-limit headers the read API promises', async () => {
+    const { response } = await read()
+    expect(response.headers.get('RateLimit-Limit')).toBe('600')
+  })
+
+  it('404s a search-discouraged site', async () => {
+    ;(mockHost.record as any).seo.discourageSearchEngines = true
+    expect((await catalogGet(request('/api/api-catalog'))).status).toBe(404)
+  })
+
+  it('refuses while the site is locked down', async () => {
+    // A site under takedown must not publish an index of its own endpoints
+    // through the refusal.
+    mockLockdownRefusal = new Response('locked', { status: 423 })
+    expect((await catalogGet(request('/api/api-catalog'))).status).toBe(423)
+  })
+
+  it('404s an unresolvable site, and 400s a request naming none', async () => {
+    mockHost.record = null
+    expect((await catalogGet(request('/api/api-catalog'))).status).toBe(404)
+    expect((await catalogGet(request('/api/api-catalog', ''))).status).toBe(400)
   })
 })

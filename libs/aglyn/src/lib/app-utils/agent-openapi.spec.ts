@@ -16,6 +16,10 @@
  */
 
 import {
+  API_CATALOG_MEDIA_TYPE,
+  API_CATALOG_PATH,
+} from './agent-api-catalog'
+import {
   API_VERSION,
   API_VERSION_HEADER,
   buildAgentOpenApi,
@@ -263,5 +267,34 @@ describe('buildAgentOpenApi — what it describes', () => {
     const json = JSON.stringify(spec({ collections: [{ slug: 'blog' }] }))
     expect(json).not.toContain('undefined')
     expect(JSON.parse(json).openapi).toBe('3.1.0')
+  })
+})
+
+describe('buildAgentOpenApi — the API catalog (AGL-2750)', () => {
+  it('documents the path `API_CATALOG_PATH` names', () => {
+    /*
+      The key is a LITERAL in the builder, not `[API_CATALOG_PATH]`, because
+      `check:agent-readiness` parses the path keys out of the source to assert
+      that the WAF admits every one of them — and a computed key is invisible
+      to a regex. This test is what keeps the literal and the constant in step,
+      and it is the whole reason the duplication is allowed to exist.
+    */
+    expect(Object.keys(spec().paths)).toContain(API_CATALOG_PATH)
+  })
+
+  it('serves it as a linkset rather than as bare JSON', () => {
+    const operation = spec().paths[API_CATALOG_PATH].get
+    expect(Object.keys(operation.responses['200'].content)).toEqual([
+      API_CATALOG_MEDIA_TYPE,
+    ])
+  })
+
+  it('describes the catalog rather than leaving it an untyped object', () => {
+    const operation = spec().paths[API_CATALOG_PATH].get
+    const ref = operation.responses['200'].content[API_CATALOG_MEDIA_TYPE].schema
+    expect(ref.$ref).toBe('#/components/schemas/ApiCatalog')
+    // A $ref nothing resolves is worse than no schema: a generator follows it.
+    expect(spec().components.schemas.ApiCatalog).toBeDefined()
+    expect(spec().components.schemas.CatalogLink).toBeDefined()
   })
 })
