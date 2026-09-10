@@ -19,7 +19,7 @@ import { appLinkClassKey } from '@aglyn/shared-ui-jsx'
 import { consoleThemeLight } from '@aglyn/shared-ui-theme'
 import { tabClasses } from '@mui/material'
 import { ThemeProvider } from '@mui/material/styles'
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { HubSections, type HubSection } from './hub-tabs'
 
 jest.mock('next/navigation', () => ({
@@ -181,6 +181,20 @@ describe.each(['desktop', 'phone'] as const)(
         (label as Node).compareDocumentPosition(lock as Node) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy()
+    })
+
+    it('tells assistive technology which sections are locked', () => {
+      const { tab } = renderRail(SECTIONS, viewport)
+      // A locked tab's accessible name carries the lock after its label; an
+      // included tab's name is its label and nothing more.
+      expect(
+        screen.getByRole('tab', { name: /^Leads\s*Not included in your plan$/ }),
+      ).toBe(tab('Leads'))
+      expect(
+        screen.getByRole('tab', { name: /^Deals\s*Not included in your plan$/ }),
+      ).toBe(tab('Deals'))
+      expect(screen.getByRole('tab', { name: 'Contacts' })).toBe(tab('Contacts'))
+      expect(screen.getByRole('tab', { name: 'Segments' })).toBe(tab('Segments'))
     })
 
     it('leaves a rail with nothing locked as plain labels', () => {

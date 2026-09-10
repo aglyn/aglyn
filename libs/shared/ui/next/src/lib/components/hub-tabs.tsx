@@ -288,6 +288,12 @@ export function useActiveSection(
  * and its label is pinned to the row's top edge. Inside the label, a locked
  * tab is the same tab as an unlocked one: same classes, same height, same
  * alignment, on the vertical rail and the stacked one alike.
+ *
+ * The lock is named through `titleAccess`, which gives the svg `role="img"`
+ * and a `<title>`, so its words reach the tab's accessible name (AGL-2794).
+ * An `aria-label` cannot: MUI's `SvgIcon` renders any icon without a title
+ * `aria-hidden`, and a label on a hidden element is never read, so the tab
+ * would announce itself exactly like a section the plan includes.
  */
 function LockedSectionLabel(props: { label: string }) {
   return (
@@ -298,7 +304,7 @@ function LockedSectionLabel(props: { label: string }) {
       {props.label}
       <MdiIcon
         path={mdiLockOutline.path}
-        aria-label="Not included in your plan"
+        titleAccess="Not included in your plan"
       />
     </Box>
   )
