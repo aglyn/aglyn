@@ -109,10 +109,17 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const { consumeRateLimit } = jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/rate-limit-store',
   )
+  // …and the REAL key-format predicate. It decides whether an unknown key is
+  // charged against the pre-auth budget, so stubbing it would make the
+  // charged/uncharged distinction this spec asserts a property of the stub.
+  const { isValidApiKeyFormat } = jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/api-keys',
+  )
   return {
     __esModule: true,
     ...apiHttp,
     consumeRateLimit,
+    isValidApiKeyFormat,
     lockdownJsonResponse,
     firebaseAdmin: {
       app: () => ({
@@ -147,6 +154,7 @@ jest.mock('firebase-admin/firestore', () => ({
 
 import { lockdownJsonResponse } from '@aglyn/tenant-data-admin'
 import { GET } from '../app/api/v1/[[...route]]/route'
+import { resetPreAuthLookupBudgetForTests } from '../utils/api-v1'
 
 /** Every key gets its own bucket so `remaining` is deterministic. */
 let keySeq = 0
@@ -165,6 +173,13 @@ const headerNames = (response: Response) =>
 
 beforeEach(() => {
   jest.clearAllMocks()
+  /*
+    The pre-auth budget is a module-level map keyed on the client address, so
+    every test in this file shares ONE bucket and `remaining` would otherwise
+    depend on the order the tests happened to run in — which is exactly the
+    kind of assertion that passes locally and fails on a shard.
+  */
+  resetPreAuthLookupBudgetForTests()
   keySeq += 1
   mockVerifyApiKey.mockResolvedValue({
     orgId: 'org-1',
@@ -173,6 +188,89 @@ beforeEach(() => {
   })
   mockGetOrgDoc.mockResolvedValue(ORG)
   mockLockdownRefusal.mockResolvedValue(null)
+})
+
+/** A syntactically valid key that no lookup will resolve. */
+const WELL_FORMED_UNKNOWN = 'aglyn_sk_' + 'a'.repeat(32)
+
+/**
+ * What an ANONYMOUS caller is told about its budget (AGL-2727).
+ *
+ * These refusals used to carry nothing, on the reasoning that the 120/min
+ * belongs to a key we deliberately declined to identify — publishing it would
+ * be a number about nobody. That reasoning is right and is unchanged.
+ *
+ * What it missed: a second, real budget applies to exactly this caller. The
+ * per-IP lookup budget is what refuses it, on a counter its own requests move,
+ * and withholding that left a client guessing at the one moment it wanted to
+ * back off.
+ */
+describe('AGL-2727 · an anonymous refusal reports the budget that applies to it', () => {
+  it('answers a request with NO credential 401, carrying the pre-auth budget', async () => {
+    const response = await GET(
+      new Request('https://app.aglyn.com/api/v1'),
+      { params: Promise.resolve({ route: [] as string[] }) },
+    )
+
+    expect(response.status).toBe(401)
+    // 60, the per-IP lookup budget — NOT 120, which is a key's and would be
+    // a number about a caller we never identified.
+    expect(response.headers.get('RateLimit-Limit')).toBe('60')
+    expect(response.headers.get('X-RateLimit-Limit')).toBe('60')
+    // Nothing was looked up, so nothing was charged.
+    expect(response.headers.get('RateLimit-Remaining')).toBe('60')
+  })
+
+  it('charges a well-formed unknown key and reports what is LEFT', async () => {
+    mockVerifyApiKey.mockResolvedValue(null)
+
+    const response = await call(WELL_FORMED_UNKNOWN)
+
+    expect(response.status).toBe(401)
+    // Peeked AFTER the charge: a budget read that ignores the request
+    // reporting it is off by one at precisely the moment it matters.
+    expect(Number(response.headers.get('RateLimit-Remaining'))).toBeLessThan(60)
+  })
+
+  it('does not charge a MALFORMED token, and says so in the budget', async () => {
+    mockVerifyApiKey.mockResolvedValue(null)
+
+    const response = await call('not-an-aglyn-key')
+
+    expect(response.status).toBe(401)
+    // A malformed token costs no Firestore read, so charging it would make
+    // this budget a second, undocumented request cap rather than a truthful
+    // count of reads.
+    expect(response.headers.get('RateLimit-Remaining')).toBe('60')
+  })
+
+  it('never leaks a per-KEY budget onto an anonymous refusal', async () => {
+    mockVerifyApiKey.mockResolvedValue(null)
+
+    const response = await call(WELL_FORMED_UNKNOWN)
+
+    // The regression this guards: reaching for `rateLimitHeaders(rate)` — the
+    // 120/min object built further down — because it is the one already in
+    // scope on the authenticated path.
+    expect(response.headers.get('RateLimit-Limit')).not.toBe('120')
+    expect(response.headers.get('X-RateLimit-Limit')).not.toBe('120')
+  })
+
+  it('sends both spellings, and each exactly once', async () => {
+    mockVerifyApiKey.mockResolvedValue(null)
+
+    const names = headerNames(await call(WELL_FORMED_UNKNOWN))
+    for (const header of [
+      'ratelimit-limit',
+      'ratelimit-remaining',
+      'ratelimit-reset',
+      'x-ratelimit-limit',
+      'x-ratelimit-remaining',
+      'x-ratelimit-reset',
+    ]) {
+      expect(names.filter((n) => n.toLowerCase() === header)).toHaveLength(1)
+    }
+  })
 })
 
 describe('AGL-1596 · the lockdown 423 keeps the rate-limit budget', () => {

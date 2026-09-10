@@ -251,7 +251,6 @@ export async function authenticateApiV1(
   request: Request,
 ): Promise<{ context: ApiV1Context } | Response> {
   const token = extractToken(request)
-  if (!token) return ApiErrors.unauthorized()
 
   // AGL-2414: bound the read amplification BEFORE spending the read. See
   // PREAUTH_LOOKUP_LIMIT for why this budget is IP-keyed, per-instance, and
@@ -264,14 +263,32 @@ export async function authenticateApiV1(
   }
   const budget = peekRateLimit(budgetKey, budgetOptions)
   if (!budget.allowed) {
-    // No `X-RateLimit-*`. Those headers describe the 120/min budget of a
-    // specific key, and this refusal happens precisely because we declined to
-    // find out which key — reporting a per-key budget here would be a number
-    // about nobody. Same reasoning as the 401 that carries none, and
-    // `apps/docs/api/rate-limits.md` states it for both.
+    /*
+      The headers describe THIS budget — the per-IP lookup budget — and not the
+      120/min of a key we declined to identify (AGL-2727).
+
+      That distinction is the whole of it. Publishing a per-key budget on an
+      anonymous refusal would be a number about nobody, which is why this
+      carried nothing at all for a long time. But the caller IS being limited,
+      by a real limit, on a counter its own requests moved — and telling it
+      "you are rate limited" while withholding the budget that says so leaves
+      it guessing at exactly the moment it wanted to back off.
+    */
     return ApiErrors.rateLimited(
       Math.max(1, Math.ceil((budget.resetMs - Date.now()) / 1000)),
+      rateLimitHeaders(budget),
     )
+  }
+
+  /*
+    No credential at all spends no lookup — there is nothing to look up — so
+    this is refused without charging the budget. It still REPORTS the budget:
+    the limit applies to this caller the moment it sends a real key, and a
+    client discovering the API is exactly the one that benefits from learning
+    the shape of the limit before it starts guessing.
+  */
+  if (!token) {
+    return ApiErrors.unauthorized({ headers: rateLimitHeaders(budget) })
   }
 
   const verified = await verifyApiKey(token)
@@ -282,7 +299,15 @@ export async function authenticateApiV1(
     // nothing; making it free is what keeps this budget a truthful count of
     // reads rather than a second, undocumented request cap.
     if (isValidApiKeyFormat(token)) checkRateLimit(budgetKey, budgetOptions)
-    return ApiErrors.unauthorized()
+    /*
+      Peeked AFTER the charge above, so `remaining` is what the caller has
+      left rather than what it had on arrival — a budget read that ignores the
+      request reporting it is off by one at precisely the moment it matters.
+      Again the per-IP budget, never the per-key one.
+    */
+    return ApiErrors.unauthorized({
+      headers: rateLimitHeaders(peekRateLimit(budgetKey, budgetOptions)),
+    })
   }
 
   // From here the key is known, so the rate-limit budget is knowable — and a

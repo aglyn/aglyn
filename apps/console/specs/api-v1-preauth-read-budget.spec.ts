@@ -199,18 +199,30 @@ describe('AGL-2414 · the pre-auth Firestore read is bounded', () => {
     expect(statuses.filter((s) => s === 429)).toHaveLength(140)
   })
 
-  it('answers the refusal with Retry-After and NO per-key budget headers', async () => {
+  it('answers the refusal with Retry-After and THIS budget, never the per-key one', async () => {
     for (let i = 0; i < PREAUTH_LOOKUP_LIMIT; i += 1) await call(unknownToken(i))
     const refused = await call(unknownToken(999))
 
     expect(refused.status).toBe(429)
     expect(Number(refused.headers.get('Retry-After'))).toBeGreaterThan(0)
     expect(await refused.json()).toMatchObject({ error: { type: 'rate_limited' } })
-    // `X-RateLimit-*` describe ONE key's 120/min. This refusal happens because
-    // we declined to find out which key, so a per-key budget here would be a
-    // number about nobody — the same reason the 401 carries none.
-    expect(refused.headers.get('X-RateLimit-Limit')).toBeNull()
-    expect(refused.headers.get('X-RateLimit-Remaining')).toBeNull()
+
+    /*
+      This assertion used to be `toBeNull()` on both, and the intent it was
+      written to protect has NOT changed: a key's 120/min must never appear on
+      a refusal that happened precisely because we declined to identify the
+      key. That would be a number about nobody.
+
+      What changed (AGL-2727) is that the caller IS being limited, by a real
+      limit, on a counter its own requests moved — so the refusal now reports
+      THAT budget. Asserting absence was the broadest way to state the intent;
+      asserting the VALUE states it exactly, and still fails the moment a
+      per-key figure leaks here.
+    */
+    expect(refused.headers.get('X-RateLimit-Limit')).toBe(String(PREAUTH_LOOKUP_LIMIT))
+    expect(refused.headers.get('RateLimit-Limit')).toBe(String(PREAUTH_LOOKUP_LIMIT))
+    expect(refused.headers.get('X-RateLimit-Limit')).not.toBe('120')
+    expect(refused.headers.get('RateLimit-Remaining')).toBe('0')
   })
 
   it('charges a VALID key nothing, however much traffic it sends', async () => {
