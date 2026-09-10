@@ -290,7 +290,7 @@ describe('the canary is excluded from the drought it would otherwise trip', () =
 /**
  * The workflow hands the walk what it needs (AGL-2715).
  *
- * The first CI run failed on a missing `FIREBASE_APPCHECK_DEBUG_TOKEN`: the
+ * The first CI run failed on a missing App Check debug-token binding: the
  * binding had been stripped out of the workflow while the walk was held, and
  * was not restored when the carve-out came back. The script cannot attest
  * without it, so every scheduled run would have failed — hourly, on a healthy

@@ -120,6 +120,21 @@ const ROTATION_RUNBOOK = 'docs/SECRET_ROTATION.md'
  */
 const SIGNUP_CANARY = 'tools/e2e/signup-canary.mjs'
 
+/**
+ * The workflow that hands the canary its token.
+ *
+ * A secret BINDING, not a read: `FIREBASE_APPCHECK_DEBUG_TOKEN: ${{ secrets.… }}`
+ * puts the value in one CI job's environment and nowhere else. It cannot
+ * reach a bundle — GitHub Actions YAML is not compiled into anything — and
+ * the script it feeds is the single exemption above, whose own conditions
+ * `theCanaryIsNotShipped` and `theCoverStillExists` assert.
+ *
+ * Exempted by exact path rather than by a `.github/**` pattern, deliberately:
+ * a workflow that handed the token to some OTHER job would still be caught,
+ * which is the failure worth catching.
+ */
+const CANARY_WORKFLOW = '.github/workflows/signup-canary.yml'
+
 function filesNaming(pattern: string): string[] {
   try {
     // `--untracked` deliberately: a violation arrives as a NEW file, and a
@@ -155,7 +170,8 @@ describe('App Check debug tokens are read by nothing (AGL-2402)', () => {
         file !== REPORTING_TOOL &&
         file !== SELF &&
         file !== ROTATION_RUNBOOK &&
-        file !== SIGNUP_CANARY,
+        file !== SIGNUP_CANARY &&
+        file !== CANARY_WORKFLOW,
     )
     expect(offenders).toEqual([])
   })
