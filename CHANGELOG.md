@@ -13,6 +13,10 @@ content on the marketing site and is written separately.
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.110...v1.0.0-beta.111)
 
+### Added
+
+- **api-v1:** report the budget that actually applies to an anonymous caller ([AGL-2727](https://linear.app/aglyn/issue/AGL-2727))
+
 <details>
 <summary>Also in this release: 1 chore</summary>
 
