@@ -170,8 +170,10 @@ Build a feedback survey with four fields:
 4. A **Multiline** field named `comments` for anything else.
 
 Submissions land in the inbox like any other form — a visitor who ticks two
-checkboxes submits `topics: Products, Pricing`, and the rating arrives as a
-number you can chart from a bound [dataset](../datasets/overview.md).
+checkboxes submits `topics: Products, Pricing`, and the rating arrives as `4`.
+Like every form value it is stored as text, including in a bound
+[dataset](../datasets/overview.md), whose filters and sorts still compare it as a
+number.
 
 ## After submit
 

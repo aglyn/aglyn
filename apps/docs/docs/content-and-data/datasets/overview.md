@@ -34,8 +34,9 @@ and record caps, and extra-dataset add-ons are available.
 ## Model builder
 
 Define a model in the schema dialog with **typed fields** (text, number, date, reference,
-and more). The model is stored on the dataset itself, and records are validated against
-it on every server-side write.
+and more). The model is stored on the dataset itself. Records added or imported in the
+console, or written through the REST API, are validated against it; form submissions and
+automation steps store their values as text without validating them.
 
 ## Typed documents
 
@@ -63,10 +64,12 @@ Datasets belong to the **workspace**, not to a single site, so one dataset can d
 on every site you run. When that isn't what you want, the **Sharing** control on each
 dataset decides which sites can see it:
 
-- **All sites** — everyone in the workspace, on every site. The default, and what every
-  existing dataset already uses.
-- **This site only** — the dataset is usable on one site and invisible everywhere else.
+- **All sites** — everyone in the workspace, on every site. A dataset you create on a
+  Data page starts here.
 - **Selected sites…** — pick the sites that share it, up to 30.
+
+A dataset with no sharing stored is visible to **no** site; its control reads **Not
+shared with any site** until you choose one of the two.
 
 This matters most for agencies. If you run three internal sites alongside twelve client
 sites, your rate card can be shared with the internal three and stay invisible to the
@@ -96,7 +99,8 @@ Datasets round-trip via **CSV and JSON**: export your records, edit them elsewhe
 re-import with validation on the way in.
 
 A whole-site export includes the datasets and media **that site can see**, and nothing
-else — an agency exporting a client site gets that client's data only. On restore,
+else — an agency exporting a client site gets that client's data only. It carries up to
+50 datasets and 1,000 records from each, so export a larger dataset on its own. On restore,
 everything comes back shared with **the site you restored into**, not with whatever it was
 shared with before. Widen it afterwards if you meant to share it. That direction is
 deliberate: a bundle can be restored into a different site or a different workspace

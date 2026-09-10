@@ -407,7 +407,7 @@ publicly listed. → [Publisher handbook](../developers/plugins/publishing/publi
 ### Dataset
 
 A structured, org-scoped data collection with a typed schema — the backing
-store for dynamic content, forms, and commerce.
+store for dynamic content and forms.
 → [Datasets](../content-and-data/datasets/overview.md)
 
 ### Record

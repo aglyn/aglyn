@@ -51,7 +51,7 @@ Aglyn features are gated by plan. Flag it with an admonition right under the H1:
 
 ```md
 :::info Plan availability
-**Pro**. 1 dataset on Free; unlimited on Pro and above.
+**Starter** and above. 3 datasets on Starter; 15 on Pro.
 :::
 ```
 

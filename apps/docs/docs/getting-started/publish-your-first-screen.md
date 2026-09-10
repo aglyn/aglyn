@@ -62,7 +62,7 @@ saves so you can jump straight to the real page.
   gets the new version, usually within seconds.
 - **Publishing a layout or a reusable component** refreshes every page that uses it
   the same way. When that fan-out is very large, the publish confirms that the
-  remaining pages *"update on their own within a minute"* — and they do.
+  remaining pages *"update on their own within an hour"* — and they do.
 - **Saving is not publishing.** A save writes your working version; the live site
   serves the published one. The one subtle case: if you edit the version that is
   *currently live* and press Save, the live site catches up on its own within about a
