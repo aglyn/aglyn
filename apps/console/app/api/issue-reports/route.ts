@@ -51,6 +51,7 @@ import {
   reportFieldsForKind,
   reportTitle,
 } from '../_lib/linear-issues'
+import { invalidIdTokenResponse } from '../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — the same reasoning as support (AGL-1506): a member of a locked
 // org must still be able to tell us something is broken, and the bug they hit may be the
@@ -231,8 +232,12 @@ export async function POST(request: Request): Promise<Response> {
     let decoded: Awaited<ReturnType<ReturnType<typeof app.auth>['verifyIdToken']>>
     try {
       decoded = await app.auth().verifyIdToken(idToken)
-    } catch {
-      return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+    } catch (error) {
+      // A refused credential is a 401 (AGL-1993). Anything else is thrown on
+      // to the catch below, which logs it and answers 500.
+      const unauthenticated = invalidIdTokenResponse(error)
+      if (unauthenticated) return unauthenticated
+      throw error
     }
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()

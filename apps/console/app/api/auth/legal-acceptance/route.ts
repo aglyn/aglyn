@@ -26,6 +26,7 @@ import {
   LEGAL_DOCUMENTS,
 } from '../../../../constants/legal-documents'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — records the caller's own ToS acceptance during sign-in; pre-org,
 // so the org/host/user scope verdict has nothing to bind to; the session mint carries
@@ -88,8 +89,13 @@ async function handler(request: Request): Promise<Response> {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     uid = decoded.uid
     staff = decoded['staff'] === true
-  } catch {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  } catch (error) {
+    // A refused credential is a 401 (AGL-1993). A check that could not run is
+    // ours, so it is a 500 rather than a request to sign in again.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error('[auth/legal-acceptance] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
   }
 
   // Feature lockdown: SIGNUPS (AGL-1510). This endpoint exists solely to
@@ -156,8 +162,13 @@ async function statusHandler(request: Request): Promise<Response> {
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     uid = decoded.uid
-  } catch {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  } catch (error) {
+    // The same split as the POST above (AGL-1993): a refused credential is a
+    // 401, a check that could not run is a 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error('[auth/legal-acceptance] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
   }
 
   try {

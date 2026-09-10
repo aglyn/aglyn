@@ -33,6 +33,7 @@ import {
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
 import { encodeBundleTimestamps } from '../../_lib/bundle-timestamps'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Whole-site export (AGL-163): one JSON bundle of everything designable —
@@ -401,6 +402,10 @@ async function handler(request: Request): Promise<Response> {
       },
     })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Export failed' }, { status: 500 })
   }

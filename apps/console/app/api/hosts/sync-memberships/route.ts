@@ -24,6 +24,7 @@ import {
   lockdownRefusal,
   syncHostProjectionForMembers,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Re-fan a host's per-member `hostMemberships` rows from its current doc
@@ -80,6 +81,10 @@ async function handler(request: Request): Promise<Response> {
     if (orgId) await syncHostProjectionForMembers(orgId, hostId)
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Sync failed' }, { status: 500 })
   }

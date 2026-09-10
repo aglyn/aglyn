@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — platform-global billing configuration with no org
 // subject, feeding the self-serve billing page; the billing surface stays
@@ -64,8 +65,13 @@ async function handler(request: Request): Promise<Response> {
       { status: 200 },
     )
   } catch (error) {
+    // A refused credential is a 401 (AGL-1993). A check that could not run is
+    // ours, so it is a 500; the card already fails HIGH when it cannot reach
+    // this route.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
   }
 }
 

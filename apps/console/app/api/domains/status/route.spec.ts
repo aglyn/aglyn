@@ -186,7 +186,11 @@ describe('it answers for the site in the URL, to someone who belongs to it', () 
 
   it('401s on a token that does not verify', async () => {
     seedHost('mine', { cname: 'example.com' })
-    mockVerifyIdToken.mockRejectedValue(new Error('bad token'))
+    mockVerifyIdToken.mockRejectedValue(
+      Object.assign(new Error('Firebase ID token has invalid signature.'), {
+        code: 'auth/argument-error',
+      }),
+    )
     expect((await GET(get('mine'))).status).toBe(401)
   })
 

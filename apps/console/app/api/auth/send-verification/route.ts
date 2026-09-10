@@ -25,6 +25,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
 import { renderSystemEmail } from '../../_lib/render-system-email'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — account recovery/verification must always work; pre-org, and the
 // session mint carries the lockdown gate.
@@ -151,6 +152,10 @@ async function handler(request: Request): Promise<Response> {
     await meterPlatformEmail()
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[auth/send-verification] failed', error)
     // Identity Platform throttles link minting on its own, ahead of and
     // independently of the per-uid budget above, and reports it as a 400

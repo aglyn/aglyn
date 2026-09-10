@@ -53,6 +53,7 @@ import {
   readCapacityCounts,
 } from '../../../../utils/server/capacity-in-use'
 import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
 // billing lock; part of the surface AGL-1501 keeps sessions alive for.
@@ -998,6 +999,10 @@ async function handler(request: Request): Promise<Response> {
       unrecognizedItems,
     }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Subscription operation failed' }, { status: 502 })
   }

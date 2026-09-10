@@ -39,6 +39,7 @@ import {
   isFolderScopePreviewRequest,
 } from '../../../../utils/server/media-scope'
 import { moveAssetsWithinBudget } from '../../../../utils/server/media-move'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
 const MAX_ASSETS_PER_OP = 500
@@ -605,6 +606,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error: any) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('media folder operation failed', error)
     return Response.json({ error: error?.message ?? 'Folder operation failed' }, { status: 500 })
   }

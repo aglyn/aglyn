@@ -66,6 +66,7 @@ import {
   deviceRevocationRefuses,
 } from '../../_lib/device-revocation'
 import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 export const dynamic = 'force-dynamic'
 
@@ -530,8 +531,15 @@ async function handler(request: Request): Promise<Response> {
             console.error('[auth/session] provider address registration failed', error)
           }
         })
-      } catch {
-        return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+      } catch (error) {
+        // A refused credential is still a 401 that clears nothing (AGL-1993):
+        // only a VERIFIED caller may retire a tombstone. A mint that could not
+        // complete — the Google cert fetch, a read in the gate above that
+        // threw — is ours, so it answers 500 and clears nothing either.
+        const unauthenticated = invalidIdTokenResponse(error)
+        if (unauthenticated) return unauthenticated
+        console.error('[auth/session] POST mint could not complete', error)
+        return Response.json({ error: 'Mint failed' }, { status: 500 })
       }
       const signAuth = tenantId
         ? auth.tenantManager().authForTenant(tenantId)

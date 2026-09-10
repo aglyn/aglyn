@@ -31,6 +31,7 @@ import {
   type MediaScanHost,
   scanMediaReferences,
 } from '../../../../utils/server/scan-media-references'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Per-asset usage scan (AGL-176/AGL-845): where is this asset used, asked
@@ -184,6 +185,10 @@ async function handler(request: Request): Promise<Response> {
     // an author as "nothing uses this".
     return Response.json({ references, complete, coverage }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('media references scan failed', mediaId, error)
     return Response.json({ error: 'Scan failed' }, { status: 500 })
   }

@@ -65,6 +65,7 @@ import {
   viewScreenBlock,
   visibleAssistText,
 } from '../../_lib/assist-view-context'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Aglyn Assist chat proxy (AGL-1860, phase 1 — capability levels 1–2).
@@ -1173,6 +1174,10 @@ async function handler(request: Request): Promise<Response> {
       },
     })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Assistant request failed' }, { status: 500 })
   }

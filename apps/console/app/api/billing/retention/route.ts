@@ -43,6 +43,7 @@ import {
   WINBACK_DURATION_MONTHS,
   WINBACK_PERCENT_OFF,
 } from '../../_lib/retention'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — the retention funnel is part of the LEAVE path
 // (survey → downsell → winback → cancel); a billing lockdown must not trap
@@ -430,6 +431,10 @@ async function handler(request: Request): Promise<Response> {
       throw error
     }
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Retention operation failed' }, { status: 502 })
   }

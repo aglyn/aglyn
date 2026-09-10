@@ -35,6 +35,7 @@ import {
   unpublishSsoDomains,
   verifyDomainClaim,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Self-serve enterprise SSO setup (AGL-1210).
@@ -74,7 +75,20 @@ async function handler(request: Request): Promise<Response> {
   if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
 
   try {
-    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    // The 401 mapping is scoped to the CALLER's verification (AGL-2796).
+    // `invalidIdTokenResponse` reads `auth/user-not-found` as "this token's
+    // account is gone", which is false of the members `enforceSsoSignInMethods`
+    // unlinks and signs out below: one of them vanishing mid-sweep keeps the
+    // 500 rather than telling the admin their own sign-in has ended.
+    const auth = firebaseAdmin.app().auth()
+    let decoded: Awaited<ReturnType<typeof auth.verifyIdToken>>
+    try {
+      decoded = await auth.verifyIdToken(idToken)
+    } catch (error) {
+      const unauthenticated = invalidIdTokenResponse(error)
+      if (unauthenticated) return unauthenticated
+      throw error
+    }
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }

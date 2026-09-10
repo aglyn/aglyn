@@ -58,6 +58,7 @@ import {
   isImpersonationSession,
   listAuthTenantIds,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 interface IdentityRow {
   /** Pool the record lives in; null = the project pool. */
@@ -84,8 +85,15 @@ async function handler(request: Request): Promise<Response> {
     // additionally ASSERTS a matching tenant, which is not wanted here: this
     // route must answer for callers from every pool.
     decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-  } catch {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  } catch (error) {
+    // A refused credential is a 401 (AGL-1993). A check that could not run is
+    // ours, so it is a 500: this route exists to diagnose sign-in, and calling
+    // a staff member's token bad during an outage would send that diagnosis
+    // the wrong way.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error('[auth/staff-self-check] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
   }
 
   const currentTenantId = decoded.firebase?.tenant ?? null

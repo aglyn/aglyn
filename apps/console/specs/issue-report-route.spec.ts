@@ -277,7 +277,11 @@ describe('AGL-2185 · the route refuses before it works', () => {
   })
 
   it('turns away a token Firebase rejects', async () => {
-    mockVerifyIdToken.mockRejectedValue(new Error('bad token'))
+    mockVerifyIdToken.mockRejectedValue(
+      Object.assign(new Error('Firebase ID token has invalid signature.'), {
+        code: 'auth/argument-error',
+      }),
+    )
     const response = await post()
     expect(response.status).toBe(401)
     expect(fetchCalls).toHaveLength(0)

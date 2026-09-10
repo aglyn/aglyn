@@ -24,6 +24,7 @@ import {
   lockdownRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Lists the org's trusted-realm plugin installs for the console's realm
@@ -66,6 +67,10 @@ export async function GET(request: Request): Promise<Response> {
     const installs = await getRealmPluginInstalls({ orgId })
     return Response.json({ installs }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Realm plugin lookup failed' }, { status: 500 })
   }
