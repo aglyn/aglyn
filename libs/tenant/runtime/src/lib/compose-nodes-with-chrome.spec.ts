@@ -245,11 +245,10 @@ describe('composeNodesWithChrome read fan-out (AGL-1225)', () => {
 /**
  * AGL-1440: the datasets read is paid for only by pages that repeat.
  *
- * `getDatasets` is the largest single term in a cold tenant render — every
- * dataset the host may see plus up to 100 records each, up to ~5,050 Firestore
- * reads — and it was issued on EVERY render of EVERY path, then handed to
- * `expandRepeatables`, which returns its input untouched when nothing on the
- * page carries `repeatDataset`.
+ * `getDatasets` is the largest single term in a cold tenant render — up to two
+ * pages of records for every dataset a page repeats over — and
+ * `expandRepeatables` returns its input untouched when nothing on the page
+ * carries `repeatDataset`, so a page with no repeatable must not pay for it.
  *
  * Two properties have to hold together, and only one of them is about cost:
  *
@@ -287,7 +286,8 @@ describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
       screenNodes: SCREEN_NODES,
     })
     expect(mockGetDatasets).toHaveBeenCalledTimes(1)
-    expect(mockGetDatasets).toHaveBeenCalledWith({ hostId: 'h1' })
+    // Keyed: the page asks for the datasets it repeats over, not the site's.
+    expect(mockGetDatasets).toHaveBeenCalledWith({ hostId: 'h1', keys: ['Team'] })
   })
 
   it('still reads datasets when the repeatable comes from the LAYOUT', async () => {
@@ -343,11 +343,32 @@ describe('composeNodesWithChrome gates the datasets read (AGL-1440)', () => {
     expect(mockGetDatasets).toHaveBeenCalledTimes(1)
   })
 
-  it('reads datasets at most once even when screen AND layout repeat', async () => {
+  it('reads a key the layout adds on its own, never re-reading the screen’s', async () => {
+    // The screen's read goes out before the layout resolves (AGL-1428), so a
+    // repeat the layout adds is read afterwards — for that key alone, because
+    // the screen's datasets are already in hand.
     mockGetPublishedLayoutVersion.mockReset()
     mockGetPublishedLayoutVersion.mockImplementationOnce(
       tracked('layout1', {
         version: { nodes: layoutWithRepeat('Other') },
+        layout: {},
+      }),
+    )
+    await composeNodesWithChrome({
+      hostId: 'h1',
+      layoutId: 'L1',
+      screenNodes: SCREEN_NODES,
+    })
+    expect(
+      mockGetDatasets.mock.calls.map(([options]) => options.keys),
+    ).toEqual([['Team'], ['Other']])
+  })
+
+  it('reads datasets once when the layout repeats over what the screen named', async () => {
+    mockGetPublishedLayoutVersion.mockReset()
+    mockGetPublishedLayoutVersion.mockImplementationOnce(
+      tracked('layout1', {
+        version: { nodes: layoutWithRepeat('Team') },
         layout: {},
       }),
     )
