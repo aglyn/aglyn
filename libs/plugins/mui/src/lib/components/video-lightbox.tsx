@@ -50,6 +50,10 @@ import Dialog from '@mui/material/Dialog'
 import IconButton from '@mui/material/IconButton'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import type { ReactNode } from 'react'
+import {
+  useVideoPlaybackBeacon,
+  type VideoPlaybackBeaconOptions,
+} from './video-playback-beacon'
 
 export interface VideoLightboxProps {
   open: boolean
@@ -66,6 +70,12 @@ export interface VideoLightboxProps {
   muted?: boolean
   /** The `<track>` the inline element would have rendered, if any. */
   captions?: ReactNode
+  /**
+   * What a play in this dialog is counted against (AGL-2781). Each open is
+   * its own viewing, so the element passes the facts and the dialog keys the
+   * viewing to `open`.
+   */
+  playback?: Omit<VideoPlaybackBeaconOptions, 'viewingKey'>
 }
 
 /** What a dialog is called when the author gave the video no title. */
@@ -92,7 +102,12 @@ export function VideoLightbox(props: VideoLightboxProps) {
     loop,
     muted,
     captions,
+    playback,
   } = props
+  const playbackHandlers = useVideoPlaybackBeacon({
+    ...playback,
+    viewingKey: open,
+  })
   /**
    * `prefers-reduced-motion` reaches the DIALOG, not the video.
    *
@@ -176,6 +191,9 @@ export function VideoLightbox(props: VideoLightboxProps) {
         // rather than the dialog, and so a keyboard visitor who opened this
         // with `Enter` is already on the control they wanted.
         autoFocus
+        onPlay={playbackHandlers.onPlay}
+        onTimeUpdate={playbackHandlers.onTimeUpdate}
+        onEnded={playbackHandlers.onEnded}
         sx={{ display: 'block', width: '100%', height: 'auto', aspectRatio }}
       >
         {captions}
