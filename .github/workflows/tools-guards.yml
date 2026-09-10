@@ -794,6 +794,24 @@ jobs:
       - run: npm run test:brand-literals
       - run: npm run check:brand-literals
 
+      # British-spelling ratchet (AGL-2763), the third of the same shape. The
+      # standing rule is American spelling on every customer-facing surface;
+      # nothing mechanical enforced it, and the drift it was written about came
+      # straight back — `colour` in the Besigner styling pages, one of them a
+      # HEADING whose anchor was already generated into two console help
+      # registries, so a spelling fix became a link-integrity change.
+      #
+      # It sweeps the four PUBLISHED apps/docs content roots plus the console
+      # and docs-site source, which is why `apps/**` in the `paths:` filter is
+      # what makes it able to see its own regression — the lesson the colour
+      # census records above, applied to a third tree. Its detector is
+      # unit-tested separately: the two carve-outs the rule itself insists on,
+      # code comments and persisted values like an order's `cancelled`, are
+      # exclusions a ratchet cannot express and a wrong one would either bury
+      # the signal or demand a schema migration.
+      - run: npm run test:british-spellings
+      - run: npm run check:british-spellings
+
       # The shared-ui-jsx barrel allowlist (AGL-1895). Same reason as the two
       # ratchets above for living here rather than only in nx-ci.yml, and one
       # more: it is about the CONTENT of libs/, so `libs/**` in the `paths:`

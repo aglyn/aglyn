@@ -119,6 +119,7 @@ const REPO_WIDE = new Set([
   // Sweep every tracked file, or every file under apps/ libs/ cloud/.
   'check:nul-bytes',
   'check:brand-literals',
+  'check:british-spellings',
   'check:hardcoded-colours',
   'check:no-tax-identifiers',
   'check:residential-address',
