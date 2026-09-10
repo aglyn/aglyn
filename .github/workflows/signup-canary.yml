@@ -95,10 +95,22 @@ jobs:
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
         run: node tools/e2e/appcheck-attestation.mjs
 
-  # Hourly. The exclusion that stops this tripping the alarm it watches
-  # (`isSignupCanaryOrgSlug` in /api/orgs/create) went live in v1.0.0-beta.107
-  # and was demonstrated first: a full walk moved `signupAttempts` by 0.
+  # ⛔ MANUAL ONLY — a GitHub runner cannot get through the front door.
+  #
+  # The walk passes from a residential browser and fails on a runner at
+  # `signup-form`, waiting for a password field that never renders: an Actions
+  # datacenter IP is served the Vercel Security Checkpoint, which answers 200
+  # with no form on it. That is bot protection working exactly as intended, on
+  # exactly the traffic it is built to stop.
+  #
+  # The only way through is the `x-aglyn-probe` bypass, and carrying it would
+  # make the walk blind to the edge refusing real visitors — which is the
+  # reason it does not carry one. That trade is not mine to make.
+  #
+  # The attestation job above is unaffected and stays on the schedule: it reads
+  # a metric, not a page.
   walk:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
