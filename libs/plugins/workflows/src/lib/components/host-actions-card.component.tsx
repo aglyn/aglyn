@@ -36,6 +36,7 @@ import {
   CRM_TASK_MAX_DUE_DAYS,
   type CrmActivityKind,
   type CrmTaskKind,
+  datasetPickerOptions,
   ELEMENT_SCOPED_SITE_EVENTS,
   HOST_ACTION_STEP_LABELS,
   HOST_EVENT_TYPES,
@@ -596,13 +597,9 @@ export function HostActionsCard(props: {
       name: workflow.name as string,
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
-  const datasetOptions = (datasetDocs ?? [])
-    .filter((dataset: any) => !dataset.deletedAt && dataset.name)
-    .map((dataset: any) => ({
-      id: dataset.$id as string,
-      name: dataset.name as string,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  // Labeled by `displayName`, which every create path writes; the legacy
+  // `name` only covers pre-migration documents.
+  const datasetOptions = datasetPickerOptions(datasetDocs)
   const overlayOptions = (overlayDocs ?? [])
     .filter((overlay: any) => !overlay.deletedAt)
     .map((overlay: any) => ({
