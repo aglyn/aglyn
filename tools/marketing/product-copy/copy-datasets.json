@@ -1,0 +1,269 @@
+{
+  "page": "Datasets",
+  "figmaNodeId": "1853:9095",
+  "frameName": "Product — Datasets",
+  "frameSize": { "width": 1440, "height": 5622 },
+  "notes": "The eleventh product page (AGL-2769). Same 8-section skeleton as the other detail pages, cloned from `Product — CRM` (1638:8653) so the section rhythm matches. Three things differ from the older decks and are deliberate. (1) `explore` carries TEN cards — every product except the page's own; the older decks record seven because they were extracted when the roster was smaller, and on the 3-up 451px grid ten wraps 3+3+3+1. (2) Nothing on the page states a product count: the `9 products built in` stat the older decks reproduce was stale at ten products and an eleventh falsifies it outright. (3) Both mockups show a Job openings dataset. An earlier draft used products, which implied a Commerce relationship that does not exist — Commerce keeps its own product storage and does not use datasets. Job openings are structured, filterable, shareable across brand sites, imported from a spreadsheet and written by integrations, and no plugin owns them. Every claim was checked against `libs/plugins/data`, `dataset-models.ts`, `dataset-query.ts`, `expand-repeatables.ts`, `plan-entitlements.ts`, the console dataset route and the /v1 handlers in `apps/console/utils/api-v1-resources.ts`; `claimsToVerify` records what was questioned and how each was resolved.",
+  "sections": [
+    {
+      "kind": "hero",
+      "figmaNodeId": "1853:9097",
+      "eyebrow": "DATASETS · STRUCTURED CONTENT",
+      "heading": "One data store behind every site you run.",
+      "subheading": null,
+      "body": [
+        "Datasets are typed collections that belong to your organization, not to a single site. Model the fields once, edit records in the console, bind them to a component that repeats — and let forms, workflows and the API write to the same rows."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See how it works", "variant": "text" }
+      ],
+      "items": [],
+      "image": {
+        "describe": "Datasets records mockup, 920×580, floating card with the standard two-shadow hero treatment. Topbar: Aglyn mark, 'Datasets', breadcrumb '/ Job openings'. Three quota tiles — 'Datasets · this org' 12 / 'of 15 on Pro'; 'Records · Job openings' 48 / 'of 10,000'; 'Dataset storage' 1.4 GB / 'of 5 GB' — the three metered dimensions at Pro's real bands (`datasetsPerOrg` 15, `recordsPerDataset` 10,000, `dataStorageMbPerOrg` 5,120). Below, a records table in the model's display order — Code, Title, Team, Headcount, Status, Posted — with six rows: REQ-118 Senior Brand Designer · Design · 1 · Open · Jul 24; REQ-117 Staff Software Engineer · Engineering · 2 · Open · Jul 24; REQ-116 Data Analyst · Operations · 1 · On hold · Jul 23; REQ-115 Support Specialist · Support · 3 · Open · Jul 23; REQ-114 Content Writer · Growth · 1 · Open · Jul 22; REQ-113 Technical Recruiter · People · 1 · On hold · Jul 22. Status renders as the house chip, green Open and amber On hold.",
+        "figmaNodeId": "1853:9107",
+        "component": "Mockup/Datasets Records (1851:975)"
+      },
+      "notes": "Two columns: text column left, mockup bleeding off the right edge — the deliberate container-overflow exception the skeleton records. The quota tiles are the point of the shot: they show the product is org-scoped and metered without a line of prose having to say so. The record count stays under 100 because a repeat renders at most 100 records (`REPEAT_MAX_RECORDS`), so the sample never depicts a dataset larger than one repeat can show."
+    },
+    {
+      "kind": "statement",
+      "figmaNodeId": "1853:9108",
+      "eyebrow": null,
+      "heading": "A dataset is not a spreadsheet bolted onto a page. It is a typed model — every field carries a type and its rules, and the console and the API validate each record against it.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": "Single 34px Bold pull-quote at text/muted, one run, no emphasized phrase. It names the console and the API only, because those are the writers that run `validateDocument`: the console dataset route and `createRecord`/`updateRecord` in `api-v1-resources.ts`. A bound form and a workflow action write through `buildDatasetRecordValues`, which keeps known field ids and drops the rest but checks no type or rule, so 'every write' would be false."
+    },
+    {
+      "kind": "capabilities",
+      "figmaNodeId": "1853:9110",
+      "eyebrow": "WHAT A DATASET GIVES YOU",
+      "heading": "Model it once. Use it everywhere.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Typed fields, not free text",
+          "body": "Text, boolean, integer, number, date and time, coordinates, list and reference — each with its own rules, checked on every console and API write.",
+          "meta": null
+        },
+        {
+          "title": "Rename the label, keep the id",
+          "body": "A field’s display name can change whenever you like; the reference id that bindings, forms and imports use never moves. Descriptions show as hints.",
+          "meta": null
+        },
+        {
+          "title": "One store, every site",
+          "body": "Datasets belong to the organization, so one collection drives pages across every site. Sharing narrows that per dataset, and the server enforces it.",
+          "meta": null
+        },
+        {
+          "title": "References and many-to-many",
+          "body": "Point a field at another dataset’s records, allow multiple for many-to-many, or create a join collection that pairs two. A delete checks what still points at it.",
+          "meta": null
+        },
+        {
+          "title": "Forms, workflows and the API",
+          "body": "A bound form, a workflow action and the /v1 API write the same rows as the record editor — by id, so renaming a dataset never breaks a binding.",
+          "meta": null
+        },
+        {
+          "title": "CSV and JSON, both directions",
+          "body": "Export streams the whole collection and refuses a short file. Import matches columns by id or display name and validates every row on the way in.",
+          "meta": null
+        }
+      ],
+      "image": null,
+      "notes": "Centered eyebrow + heading, 3-column card grid, 2 rows, house icon tiles. Card 1 lists the EIGHT authorable field types (`AUTHORABLE_TYPES` in the schema dialog), not the twelve `DatasetFieldType` knows — `int64`, `map`, `bytes` and `nil` exist for compatibility and are not offered in the picker. Card 4's join collection is the Data page's 'Add join collection' dialog, which asks for two collections before Create. Its delete clause is the referential-integrity check: `referencedIds` lets one `array-contains` query find every record still pointing at the one being deleted. Card 6's 'refuses a short file' is the export row-count check: the console compares `X-Aglyn-Export-Rows` with the rows received and saves nothing when they differ."
+    },
+    {
+      "kind": "deep-dive",
+      "figmaNodeId": "1853:9159",
+      "eyebrow": "ON THE CANVAS",
+      "heading": "Bind a component and it repeats.",
+      "subheading": null,
+      "body": [
+        "Point a component at a dataset in the Besigner and it renders once per record. Filter and sort with the same short expressions the console uses, and a repeat badge tells you when a component is data-driven."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "title": "Repeat",
+          "body": "One component, one record — a list, a grid or a gallery driven by your rows.",
+          "meta": null
+        },
+        {
+          "title": "Filter & sort",
+          "body": "Short expressions like status == Open or posted desc — the same syntax the console’s Data page filters and sorts with.",
+          "meta": null
+        },
+        {
+          "title": "Limit",
+          "body": "Cap each repeat at the rows a section needs — up to 100 records per repeat.",
+          "meta": null
+        }
+      ],
+      "image": {
+        "describe": "Datasets schema mockup, 880×580 in this section. Topbar breadcrumb '/ Job openings / Schema'. Three tiles — 'Fields in this model' 6 / 'in display order'; 'Sharing' All sites / 'enforced on the server'; 'Records' 48 / 'of 10,000 on Pro'. Below, the model table — Display name, Reference ID, Type, Validation, Required, Description — with the same six fields in the same order as the records shot: Code / code / Text / Pattern / Required / 'Requisition code'; Title / title / Text / 1–120 chars / Required / 'Shown as the listing heading'; Team / team / Reference / → Teams / Required / 'One Teams record'; Headcount / headcount / Integer / min 1 / Optional / 'Hires planned for the role'; Status / status / Text / Open, On hold / Optional / 'Pre-filled as Open'; Posted / posted / Date & time / — / Required / 'Date the role was posted'. Required renders as the house chip, green Required and grey Optional.",
+        "figmaNodeId": "1853:9186",
+        "component": "Mockup/Datasets Schema (1851:1098)"
+      },
+      "notes": "The schema shot carries the display-name-versus-reference-id distinction as two adjacent columns, which is the only way to show it without prose, and it is the page's evidence for the per-field description. Every cell is a real model capability: `validation.regex` (Pattern), `min`/`max` as a text length or a number bound, `options` (the schema dialog's comma-separated enum), a single `reference`, and `default` ('Pre-filled when creating documents'). The filter and sort syntax is `parseDatasetFilter`/`parseDatasetSort` in `dataset-query.ts`, which both the Data page's Filter and Sort inputs and a repeat's `repeatFilter`/`repeatSort` use. Limit is `repeatLimit`, capped by `REPEAT_MAX_RECORDS` (100). The repeat badge is the notice in the element props panel ('Repeats over dataset …'), not a canvas overlay."
+    },
+    {
+      "kind": "how-it-works",
+      "figmaNodeId": "1853:9187",
+      "eyebrow": "HOW IT WORKS",
+      "heading": "From a model to a live page.",
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [
+        {
+          "title": "Model",
+          "body": "Open the Data page in your organization, name the collection, and give each field the type it needs — with a display name, a description, and the rules it should hold.",
+          "meta": "01"
+        },
+        {
+          "title": "Fill",
+          "body": "Type records in the console, import a CSV or JSON file, point a form at the dataset, or POST them to /v1 on Business and up. The console and the API validate every record.",
+          "meta": "02"
+        },
+        {
+          "title": "Publish",
+          "body": "Bind a component over the dataset and publish the site. A write over the API does not publish on its own — call the publish endpoint when you want it live.",
+          "meta": "03"
+        }
+      ],
+      "image": null,
+      "notes": "Step 03 is the AGL-2462 fact stated as a step rather than as a caveat: `POST /v1/sites/{siteId}/publish` exists (scope `sites:publish`, 10 publishes per site per hour). It deliberately names NO propagation window — see claimsToVerify. Step 02 carries the /v1 plan gate: `apiAccess` is false on Starter and Pro, and this page otherwise says datasets start at Starter."
+    },
+    {
+      "kind": "explore",
+      "figmaNodeId": "1853:9207",
+      "eyebrow": "ONE PLATFORM",
+      "heading": "Datasets work with the rest of Aglyn.",
+      "subheading": "Every product below runs on the same platform — explore what else is built in.",
+      "body": [],
+      "actions": [],
+      "items": [
+        { "title": "Besigner", "body": "Design on a live canvas and publish in one click.", "meta": null },
+        { "title": "Console", "body": "Manage every site, team, and setting in one place.", "meta": null },
+        { "title": "Commerce", "body": "Storefronts, checkout, subscriptions & digital goods.", "meta": null },
+        { "title": "Forms & Inbox", "body": "Collect submissions in one Inbox and route them onward.", "meta": null },
+        { "title": "CRM", "body": "Leads, contacts, deals & tasks.", "meta": null },
+        { "title": "Media", "body": "A real DAM — folders, drag-and-drop, metadata.", "meta": null },
+        { "title": "Workflows", "body": "Automate the busywork with triggers & actions.", "meta": null },
+        { "title": "Plugins", "body": "Install templates and layouts, or publish and sell your own.", "meta": null },
+        { "title": "Analytics", "body": "Privacy-first traffic, top pages, and store revenue.", "meta": null },
+        { "title": "Marketing", "body": "Email campaigns, popups, and A/B testing.", "meta": null }
+      ],
+      "image": null,
+      "notes": "TEN link-cards — every product except this page's own. The heading follows the live detail pages' '<Product> works with the rest of Aglyn.', the subheading is the one seven of them share, and each card blurb is the one at least eight of the nine live Explore grids carry. An earlier heading, 'Datasets sit under the rest of Aglyn.', implied the other products are built on datasets, which Commerce is not. On the 3-up 451px grid ten wraps 3+3+3+1 with the last card centered by the wrap. The `screenId` on each card must be derived from `hosts/DXnRbPH4CQ.screens` at apply time — the skeleton ships these cards unbound, and transcribing an id from an earlier run has already shipped dangling links once."
+    },
+    {
+      "kind": "early-access",
+      "figmaNodeId": "1853:9307",
+      "eyebrow": null,
+      "heading": "Datasets are included from Starter.",
+      "subheading": null,
+      "body": [
+        "Every paid plan carries datasets, records and dataset storage, and the bands rise with the plan. From Starter to Agency, extra datasets are an add-on and storage past your band meters at the published rate."
+      ],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See what’s included", "variant": "outlined" }
+      ],
+      "items": [
+        { "title": "8", "body": "field types you can author", "meta": "stat" },
+        { "title": "1", "body": "model, on every site that shares it", "meta": "stat" },
+        { "title": "2", "body": "formats, in and out", "meta": "stat" },
+        { "title": "7", "body": "filter operators", "meta": "stat" }
+      ],
+      "image": null,
+      "notes": "The chip reads 'Included from Starter', matching the CRM page rather than the older 'Now in early access'. `dataStore` is false on Free and true from Starter, so 'included from Starter' is the accurate gate — do not soften it to 'every plan'. 'From Starter to Agency' is exact: those plans carry `extraDatasetMonthlyUsd` and `extraDataGbMonthlyUsd` rates, and Enterprise carries neither. The four stats are product facts, not roster counts: 8 is `AUTHORABLE_TYPES`; 1 is the single model a dataset keeps, read by every site it is shared with; 2 is CSV and JSON on both import and export; 7 is `DATASET_QUERY_OPS`. The older decks' `9 / products built in` pair is deliberately absent. Figures are 44px ExtraBold in primary.dark — never author the retired brand-blue literal out of Figma."
+    },
+    {
+      "kind": "cta",
+      "figmaNodeId": "1853:9331",
+      "eyebrow": null,
+      "heading": "Give your content a model.",
+      "subheading": null,
+      "body": ["Datasets are included from the Starter plan."],
+      "actions": [
+        { "label": "Start free", "variant": "contained" },
+        { "label": "See pricing", "variant": "text" }
+      ],
+      "items": [],
+      "image": null,
+      "notes": "Full-bleed gradient band, white centered text, the shared 190.72deg gradient literal. Heading is 56px Black on one line."
+    }
+  ],
+  "claimsToVerify": [
+    {
+      "section": "how-it-works (step 03) + the page as a whole",
+      "phrase": "A write over the API does not publish on its own — call the publish endpoint when you want it live.",
+      "concern": "RESOLVED, and the resolution is the reason no number appears. AGL-2462 described the fallback as a 60-second TTL and shipped `POST /v1/sites/{siteId}/publish`. The window is no longer 60 seconds: `PUBLISHED_SITE_DATA_TTL_SECONDS` is 3600 and the tenant page's `revalidate` is 3600 (214330ceb, AGL-1302, 2026-08-25). The 60 survives in the `handlePublish` docblock in `api-v1-resources.ts` and in the published API page, which still tells customers a new record appears 'within the minute' without a publish. The copy therefore states the mechanism and no window at all. If a window is ever published here, read the constant, not the comment."
+    },
+    {
+      "section": "early-access",
+      "phrase": "storage past your band meters at the published rate",
+      "concern": "RESOLVED — but note the asymmetry, because it is easy to state backwards. Record count is a HARD band: a write past `recordsPerDataset` is refused at the console route and the /v1 record handler, skipped by the form leg, and refused by the workflow step, and there is no per-record overage. Dataset STORAGE is the opposite: every plan carrying an `extraDataGbMonthlyUsd` rate resolves to 'never-blocks' and bills the overage instead. The copy meters storage and never claims records are metered. Do not merge the two into one sentence."
+    },
+    {
+      "section": "capabilities (card 1) + early-access (stat 1)",
+      "phrase": "Text, boolean, integer, number, date and time, coordinates, list and reference / 8 field types you can author",
+      "concern": "RESOLVED. `DatasetFieldType` has twelve members but the schema dialog's picker offers eight; `int64`, `map`, `bytes` and `nil` are carried for compatibility and are only shown when an existing field already holds one. Eight is the number a customer can act on. If the picker gains a type, both the card and the stat move together."
+    },
+    {
+      "section": "statement + capabilities (cards 1 and 5) + how-it-works (step 02)",
+      "phrase": "validated against on every server-side write — from the console, from a form, from a workflow, or over the API / Four ways in, one set of rules / Every path validates against the same model.",
+      "concern": "RESOLVED by rewriting all four. Only two writers validate: the console dataset route and the /v1 record handlers run `coerceDocumentValues` + `validateDocument`. The form-submission leg (`apps/tenant/app/api/forms/submit/route.ts`) and the workflow step (`libs/tenant/runtime/src/lib/run-event-actions.ts`) build values with `buildDatasetRecordValues`, which keeps known field ids as strings and checks no type or rule. The copy now credits validation to the console and the API only, and card 5 claims just the shared rows and the by-id binding. The form leg is also best-effort: with the record or storage quota full, the submission still lands in the Inbox and the row is skipped. The docs page `content-and-data/datasets/overview.md` still says records are validated 'on every server-side write'."
+    },
+    {
+      "section": "capabilities (card 3)",
+      "phrase": "Sharing narrows that per dataset, and the server enforces it.",
+      "concern": "RESOLVED against `libs/tenant/runtime/src/lib/get-datasets.ts` — the tenant renderer filters by host scope, so this is not a console-only affordance. Note the cap the copy does not state: a 'Selected sites' scope holds at most 30 hosts, because `array-contains-any` caps there. 'All sites' and 'This site only' have no cap."
+    },
+    {
+      "section": "explore",
+      "phrase": "ten link-cards",
+      "concern": "OPEN as a design question, not a truth question. Ten cards on a 3-up grid wrap 3+3+3+1. Every other detail page will reach ten the moment Datasets is added to their Explore grids, so this is the shape the whole set is heading for. Either accept the trailing card — the built /product page already ships a 10-card grid that wraps the same way — or re-cut the grid to a 4-up. Do not resolve it by dropping a product from the roster; that is the failure AGL-2736 and AGL-2759 were both filed for."
+    },
+    {
+      "section": "deep-dive (third item)",
+      "phrase": "Search — Records reachable through a published repeatable are indexed by your site’s search.",
+      "concern": "RESOLVED by cutting it. Site search keeps no index of records: `apps/tenant/utils/search-content.ts` scans at most `DATASET_RECORD_SCAN_LIMIT` (50) records per reachable dataset per query and returns at most 5 rows from each, so a record past the first 50 is never found. Replaced by 'Limit' (`repeatLimit`, capped at `REPEAT_MAX_RECORDS`)."
+    },
+    {
+      "section": "capabilities (card 4) + early-access (stat 4)",
+      "phrase": "generate a join collection in one click / 1-click many-to-many join collection",
+      "concern": "RESOLVED by cutting 'one click'. 'Add join collection' opens a dialog that asks for a first and a second collection before Create. The card now says 'create a join collection that pairs two', and the stat became '7 filter operators'."
+    },
+    {
+      "section": "early-access (stat 2)",
+      "phrase": "4 ways to write a record",
+      "concern": "RESOLVED by cutting it. The code names four doors onto records (the console route, /v1, the form leg and the workflow step), but import rides the console route and restoring a site export writes records too, so the figure depends on what a reader counts. Replaced by '1 model, on every site that shares it'."
+    },
+    {
+      "section": "deep-dive (body)",
+      "phrase": "it renders once per record",
+      "concern": "OPEN. True per record up to a bound: the tenant reads at most `REPEAT_MAX_RECORDS` (100) records per dataset and filters and sorts those in memory (`dataset-query.ts`), so on a larger dataset a filter or sort only considers the first 100 rows read. The Limit item states the 100 cap; whether the page should also say that filter and sort are bounded is a copy decision, not a fact to look up."
+    },
+    {
+      "section": "hero + capabilities (card 5) + how-it-works (steps 02 and 03)",
+      "phrase": "the API / the /v1 API / POST them to /v1",
+      "concern": "RESOLVED. The API is Business and up (`apiAccess` is false on Starter and Pro) while datasets start at Starter. Step 02 carries the gate, so the page does not imply API access from Starter."
+    },
+    {
+      "section": "hero image + deep-dive image",
+      "phrase": "Mockup/Datasets Records and Mockup/Datasets Schema sample data",
+      "concern": "RESOLVED. Both mockups used products — SKU, price, availability, 'Shown on the product card' — which implied a Commerce relationship that does not exist. They now show one Job openings dataset: the same six fields in the same display order, the same record count, and a model whose every cell is a real capability."
+    }
+  ]
+}

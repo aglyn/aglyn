@@ -82,6 +82,10 @@ const SPECS = [
   { key: 'product-plugins', name: 'Plugins', slug: 'plugins', parent: PRODUCT, order: 6, description: 'Product detail — Plugins & Marketplace.' },
   { key: 'product-analytics', name: 'Analytics', slug: 'analytics', parent: PRODUCT, order: 7, description: 'Product detail — Analytics.' },
   { key: 'product-marketing', name: 'Marketing', slug: 'marketing', parent: PRODUCT, order: 8, description: 'Product detail — Marketing.' },
+  // `order` is written only when a screen is created, so it sequences these
+  // specs rather than the live sidebar: a screen created in the console (CRM)
+  // holds an order this file never assigned, and 9 may share a slot with it.
+  { key: 'product-datasets', name: 'Datasets', slug: 'datasets', parent: PRODUCT, order: 9, description: 'Product detail — Datasets.' },
 
   // Commercial
   { key: 'demo', name: 'Demo', slug: 'demo', description: 'Book a demo.' },
