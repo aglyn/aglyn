@@ -111,6 +111,16 @@ export function inheritedMediaAlt(options: {
  * decoration: a prop written onto an element that does not destructure it
  * reaches `...rest` and is spread onto the DOM, so an unlisted element would
  * gain an invalid `intrinsicwidth` attribute in its published HTML.
+ *
+ * ⛔ `video` is NOT here, and its absence is a decision rather than an
+ * oversight (AGL-2749). A video needs the pair at least as badly as an image
+ * does — `preload="none"` means its metadata never arrives until someone
+ * presses play, so the element is zero-height for the whole life of the page
+ * without it — but it cannot get it from `width`/`height`. Those are read
+ * from the bytes by the server and are absent on every video, deliberately:
+ * AGL-2742 kept the client-measured triple in its own `video` record so a
+ * reader can tell a server measurement from a browser's report.
+ * {@link videoMediaProps} is where a video gets its pair.
  */
 const INTRINSIC_SIZE_COMPONENT_IDS = new Set(['image'])
 
@@ -168,6 +178,102 @@ export function intrinsicMediaSize(options: {
     typeof value === 'number' && Number.isFinite(value) && value > 0
   if (!usable(assetWidth) || !usable(assetHeight)) return {}
   return { intrinsicWidth: assetWidth, intrinsicHeight: assetHeight }
+}
+
+/** The one element that reads the props below off its node. */
+const VIDEO_COMPONENT_ID = 'video'
+
+/**
+ * The video-only companions to {@link intrinsicMediaSize}, copied onto the
+ * node when an author picks a video asset (AGL-2741, rewritten against the
+ * real document shape in AGL-2749).
+ *
+ * Same route and same reasoning as the image dimensions: no tenant render path
+ * reads a media document, so anything a published page needs to know about an
+ * asset has to ride on the node like any other prop.
+ *
+ * ## Why a video does not simply use {@link intrinsicMediaSize}
+ *
+ * A video's pixel dimensions are NOT in `media.width`/`media.height`. Those
+ * are read from the bytes by the server and carry a stronger claim than a
+ * browser's report, so AGL-2742 kept the client-measured triple in its own
+ * `video` record rather than widening them — a reader that folded the two
+ * together would lose the ability to tell which it had. A video therefore
+ * reaches its intrinsic pair through here, and `intrinsicMediaSize` finds
+ * nothing to copy for one.
+ *
+ * ## The three rules
+ *
+ * * **Only the `video` element, only its `src`.** A `durationSeconds` spread
+ *   onto an element that does not destructure it becomes an invalid attribute
+ *   in the published HTML.
+ * * **The duration is stored in SECONDS**, because the author-facing field is
+ *   in seconds and a person types 63, not 63000. `videoDurationIso8601` takes
+ *   milliseconds, and the structured-data builder is the one place that
+ *   converts back.
+ * * **`{}` when unknown**, never a key with an `undefined` value: callers
+ *   spread this into a props object `updateNodeProps` REPLACES wholesale, so
+ *   a present-but-undefined key strips what an earlier pick stored.
+ *
+ * `posterFromSource` is a FLAG rather than a url, deliberately. The generated
+ * poster is `?poster=1` on the video's own reference, which
+ * {@link mediaPosterSrc} builds without reading anything — and that url is
+ * explicitly not a promise the poster exists. This flag IS the promise: it is
+ * written only when the document records one, which is what lets
+ * `videoPosterSrc` offer the derived url to an `<img>` and to a
+ * `thumbnailUrl`, where a 404 would be a broken image and a rich result
+ * pointing at nothing.
+ *
+ * An author's own poster is never touched here. It wins at render time
+ * instead (`videoPosterSrc`), so re-picking the SOURCE cannot quietly replace
+ * a frame somebody chose.
+ *
+ * @returns the props to spread, or `{}` when the caller should write nothing.
+ */
+export function videoMediaProps(options: {
+  /** The element being written to — its persisted component id. */
+  componentId?: unknown
+  /** The attribute the picker was opened for; only `src` carries a video. */
+  propName?: unknown
+  /**
+   * The chosen asset's `video` record, as {@link normalizeVideoMetadata}
+   * bounds it — `durationMs`, `width` and `height`, all three or none.
+   */
+  assetVideo?: unknown
+  /** The chosen asset's generated `poster` record, when it has one. */
+  assetPoster?: unknown
+}): {
+  durationSeconds?: number
+  intrinsicWidth?: number
+  intrinsicHeight?: number
+  posterFromSource?: boolean
+} {
+  const { componentId, propName, assetVideo, assetPoster } = options ?? {}
+  if (propName !== 'src') return {}
+  if (String(componentId ?? '') !== VIDEO_COMPONENT_ID) return {}
+  const patch: {
+    durationSeconds?: number
+    intrinsicWidth?: number
+    intrinsicHeight?: number
+    posterFromSource?: boolean
+  } = {}
+  // Through the DAM's own validator rather than a second reading of the same
+  // three numbers: it is all-or-nothing by design, and re-deriving that rule
+  // here is how two files come to disagree about what a partial record means.
+  const video = normalizeVideoMetadata(assetVideo)
+  if (video) {
+    // Never rounds to zero: a sub-second clip is still a clip, and a stored
+    // `0` reads as "no duration" to everything downstream.
+    patch.durationSeconds = Math.max(1, Math.round(video.durationMs / 1000))
+    patch.intrinsicWidth = video.width
+    patch.intrinsicHeight = video.height
+  }
+  // A poster RECORD, not a poster url — see the note above. Its mere presence
+  // on the document is the whole fact being carried.
+  if (assetPoster && typeof assetPoster === 'object') {
+    patch.posterFromSource = true
+  }
+  return patch
 }
 
 export interface ImageDimensions {

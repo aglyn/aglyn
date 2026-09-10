@@ -79,6 +79,8 @@ export interface AgentOpenApiOptions {
   termsOfServiceUrl?: string
 }
 
+import { API_CATALOG_MEDIA_TYPE } from './agent-api-catalog'
+
 /** A JSON-Schema-shaped object; loose on purpose — this is a document, not a type. */
 type Schema = Record<string, unknown>
 
@@ -216,6 +218,31 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
             content: {
               'application/json': {
                 schema: { $ref: '#/components/schemas/OpenApiDocument' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/.well-known/api-catalog': {
+      get: {
+        operationId: 'getApiCatalog',
+        summary: 'API catalog',
+        description:
+          'Every API that answers for this site, as an RFC 9727 catalog in ' +
+          'RFC 9264 linkset form. Two of them exist and they are not ' +
+          'interchangeable: this site’s own API, described by the document ' +
+          'you are reading, is anonymous and read-only; the platform API it ' +
+          'names is keyed, typed and writes. Each entry carries the API’s ' +
+          '`service-desc` (its OpenAPI description), `service-doc` and, where ' +
+          'there is one, `status`.',
+        tags: ['Discovery'],
+        responses: {
+          '200': {
+            description: 'The catalog.',
+            content: {
+              [API_CATALOG_MEDIA_TYPE]: {
+                schema: { $ref: '#/components/schemas/ApiCatalog' },
               },
             },
           },
@@ -417,8 +444,8 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
           'description and dates. Gated pages — private, password-protected, ' +
           'members-only and unlisted — are omitted, so this listing never ' +
           'advertises an address a visitor cannot open. Paginate by passing ' +
-          'the previous response’s `nextPageToken`; an empty token means the ' +
-          'last page.',
+          'the previous response’s `cursor`; an empty cursor means the last ' +
+          'page.',
         tags: ['Content'],
         parameters: [
           {
@@ -431,7 +458,7 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
             schema: { type: 'string' },
           },
           {
-            name: 'nextPageToken',
+            name: 'cursor',
             in: 'query',
             required: false,
             description:
@@ -462,13 +489,13 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
                           type: 'array',
                           items: { $ref: '#/components/schemas/PublishedPage' },
                         },
-                        nextPageToken: {
+                        cursor: {
                           type: 'string',
                           description:
                             'Cursor for the next request; empty on the last page.',
                         },
                       },
-                      required: ['screens', 'nextPageToken'],
+                      required: ['screens', 'cursor'],
                     },
                   },
                   required: ['status'],
@@ -687,6 +714,66 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
     components: {
       schemas: {
         Error: ERROR_SCHEMA,
+        ApiCatalog: {
+          type: 'object',
+          description:
+            'An RFC 9264 linkset. Each member of `linkset` is a link ' +
+            'CONTEXT keyed by its `anchor`: the first is anchored at the ' +
+            'catalog and lists its members under `item`, and each one after ' +
+            'it is anchored at a single API and carries that API’s links.',
+          required: ['linkset'],
+          properties: {
+            linkset: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['anchor'],
+                properties: {
+                  anchor: {
+                    type: 'string',
+                    format: 'uri',
+                    description:
+                      'What every link in this object is a link FROM.',
+                  },
+                  item: {
+                    type: 'array',
+                    description: 'Catalog membership — the APIs listed.',
+                    items: { $ref: '#/components/schemas/CatalogLink' },
+                  },
+                  'service-desc': {
+                    type: 'array',
+                    description:
+                      'Machine-readable description of the anchored API.',
+                    items: { $ref: '#/components/schemas/CatalogLink' },
+                  },
+                  'service-doc': {
+                    type: 'array',
+                    description: 'Documentation written for a person.',
+                    items: { $ref: '#/components/schemas/CatalogLink' },
+                  },
+                  status: {
+                    type: 'array',
+                    description: 'Where the anchored API reports its health.',
+                    items: { $ref: '#/components/schemas/CatalogLink' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        CatalogLink: {
+          type: 'object',
+          description: 'One link in a linkset.',
+          required: ['href'],
+          properties: {
+            href: { type: 'string', format: 'uri' },
+            type: {
+              type: 'string',
+              description: 'Media type of the target, when it is known.',
+            },
+            title: { type: 'string', description: 'Human label.' },
+          },
+        },
         OpenApiDocument: {
           type: 'object',
           description:

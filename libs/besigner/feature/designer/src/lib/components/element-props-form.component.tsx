@@ -44,6 +44,7 @@ import {
   hasBindings,
   inheritedMediaAlt,
   intrinsicMediaSize,
+  videoMediaProps,
   MISSING_BINDING_LABEL,
   NODE_ANIMATION_DELAY_PROP,
   NODE_ANIMATION_DURATION_PROP,
@@ -1587,6 +1588,20 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
               propName,
               assetWidth: asset?.width,
               assetHeight: asset?.height,
+            }),
+            // The video companions (AGL-2749): the running time a published
+            // page's `VideoObject` needs, the pixel pair that reserves the
+            // player's box before any byte of video arrives, and a flag
+            // saying the DAM generated a poster still. Gated on the component
+            // id inside the helper for the same reason as the pair above.
+            // Spread AFTER `intrinsicMediaSize` deliberately — a video's
+            // dimensions come from its own `video` record, and this is the
+            // one that has them.
+            ...videoMediaProps({
+              componentId: node?.componentId,
+              propName,
+              assetVideo: asset?.video,
+              assetPoster: asset?.poster,
             }),
           })
         })

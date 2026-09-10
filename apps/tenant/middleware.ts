@@ -162,6 +162,10 @@ export const config = {
     // `name.ext`, which the catch-all's own exclusion refuses.
     '/llms.txt',
     '/openapi.json',
+    // The API catalog (RFC 9727, AGL-2750). Listed for the same reason as the
+    // two above and one of its own: the catch-all's exclusion refuses a first
+    // segment shaped `name.ext`, and `.well-known` is exactly that shape.
+    '/.well-known/api-catalog',
     // The `.md` spelling of a page (llmstxt.org), e.g. `/pricing.md`. A NESTED
     // path such as `/blog/post.md` already reaches the catch-all — its
     // `name.ext` exclusion only looks at the first segment — but a top-level
@@ -749,6 +753,9 @@ export const middleware: NextMiddleware = async (req, event) => {
     // so it cannot be a static file in `public/`.
     '/llms.txt': '/api/llms',
     '/openapi.json': '/api/openapi',
+    // RFC 9727 reserves the public path; the handler is an api route like its
+    // neighbours, because the document is a function of the host record.
+    '/.well-known/api-catalog': '/api/api-catalog',
   }
   // A collection's feed at `/{collection}/rss.xml` (AGL-1385). The feed route
   // has existed since AGL-81 and was reachable only as

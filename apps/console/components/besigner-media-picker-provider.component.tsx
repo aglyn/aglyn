@@ -45,7 +45,13 @@ export function BesignerMediaPickerProvider(
   // rather than importing it: this provider is the console's side of that
   // contract, and the two must widen together — a metadata field the designer
   // accepts but this never sends is a copy that silently does not happen.
-  type PickedAsset = { alt?: string; width?: number; height?: number }
+  type PickedAsset = {
+    alt?: string
+    width?: number
+    height?: number
+    video?: unknown
+    poster?: unknown
+  }
   const pendingPick = useRef<
     ((value: string, asset?: PickedAsset) => void) | null
   >(null)
@@ -118,11 +124,20 @@ export function BesignerMediaPickerProvider(
           // for the pick to copy them onto the node. Handed over raw; the
           // call site decides which prop names they land under, because only
           // it knows what the element declares.
+          // A video's measurements and its generated poster ride the same
+          // route (AGL-2749), handed over as the document's own records
+          // rather than flattened: `video.width`/`video.height` are what the
+          // uploader's browser reported and `media.width`/`media.height` are
+          // what the server read from the bytes, and the two are kept apart
+          // on the document precisely so a reader knows which it has.
+          // `videoMediaProps` at the call site decides what to store.
           if (src)
             pendingPick.current?.(src, {
               alt: media.alt,
               width: media.width,
               height: media.height,
+              video: media.video,
+              poster: media.poster,
             })
           pendingPick.current = null
           setOpen(false)

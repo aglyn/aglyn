@@ -294,6 +294,19 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
   },
   {
+    file: 'apps/tenant/app/api/api-catalog/route.ts',
+    count: 2,
+    reason:
+      'AGL-2750. Readers of NEXT_PUBLIC_CONSOLE_URL and NEXT_PUBLIC_DOCS_ORIGIN, ' +
+      'whose literals are only their `||` defaults — case (a), the same shape and ' +
+      'the same two variables as `api/edit-context/route.ts` below and the ' +
+      "middleware's console redirect. Both are documented in `.env.selfhost.example` " +
+      '(lines 69 and 595), so an operator who followed setup has already pointed ' +
+      'them at their own console and docs, and the catalog this route publishes ' +
+      'names those. What the literals cover is Aglyn own cloud, where neither ' +
+      'variable is set on the `aglyn-tenant` project.',
+  },
+  {
     file: 'apps/tenant/app/api/edit-context/route.ts',
     count: 1,
     reason:

@@ -275,6 +275,21 @@ tool-calling integration reads to turn your site into callable functions.
 It describes reads only. Your forms still work exactly as they did; they are simply not
 listed as an endpoint for every crawler on the internet to call.
 
+### `/.well-known/api-catalog`
+
+Two APIs answer for your site's data, and they are not interchangeable. The
+`/openapi.json` above describes what the **site** serves — your pages, feeds and
+sitemap — and it is anonymous and read-only. The **Aglyn platform API** describes the
+same records as typed JSON, takes an API key, and writes.
+
+An agent that finds only the first concludes there is no write API. The catalog is the
+one document that names both, published at `/.well-known/api-catalog` in the format
+[RFC 9727](https://www.rfc-editor.org/rfc/rfc9727.html) reserves for exactly this
+question. Each entry carries that API's OpenAPI description, its documentation and,
+where there is one, its health endpoint.
+
+Nothing to configure — every site publishes it.
+
 ### Crawler access
 
 `robots.txt` names the major AI crawlers and assistants explicitly — GPTBot,
@@ -282,8 +297,9 @@ ClaudeBot, Google-Extended, PerplexityBot and the rest — and allows them, alon
 usual wildcard rule.
 
 Turning on **Discourage search engines** reverses all of it in one switch: `robots.txt`
-refuses everything including those named agents, and `/llms.txt` and `/openapi.json`
-stop being served at all.
+refuses everything including those named agents, and `/llms.txt`, `/openapi.json` and
+`/.well-known/api-catalog` stop being served at all. A site that has asked not to be
+found does not publish an index of its own endpoints.
 
 ## Analytics integration
 

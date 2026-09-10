@@ -632,6 +632,32 @@ function buildJsonLd(props: Props): string[] {
   })
   const siteEntityLd = siteEntity ? [Aglyn.safeJsonLd(siteEntity)] : []
 
+  /*
+    THE VIDEOS THE PAGE ACTUALLY SHIPS (AGL-2747).
+
+    Every other block here is derived from a screen, an entry or the host —
+    metadata ABOUT the page. A video is not metadata about anything: it is a
+    thing an author placed IN the page, and the only record that it is there
+    is the node. So this is the one builder that reads `props.nodes`, which is
+    the channel commerce already uses for its `Product` block (its site-page
+    enricher walks the same map to seed `pageData`) and the one
+    `pageAnimationAssets` walks below.
+
+    Prepended to every branch, and computed HERE for the reason the site entity
+    is: this function returns early four times, and a node pushed into only the
+    last of them would be missing from the collection and entry pages a film is
+    just as likely to sit on.
+
+    `pageVideoObjects` returns `[]` for a page with no video and for a video
+    whose author has not filled in the four fields a video result requires, so
+    the common page emits nothing extra at all.
+  */
+  const videoLd = Aglyn.pageVideoObjects(props.nodes, {
+    origin: canonicalBase,
+    hostId: host?.$id,
+  }).map((video) => Aglyn.safeJsonLd(video))
+  const leadingLd = [...siteEntityLd, ...videoLd]
+
   /**
    * The author page → `ProfilePage` wrapping the `Person` (AGL-2518).
    *
@@ -655,7 +681,7 @@ function buildJsonLd(props: Props): string[] {
       origin: canonicalBase,
       hostId: host?.$id,
     })
-    if (!canonicalBase || !person) return siteEntityLd
+    if (!canonicalBase || !person) return leadingLd
     const authorUrl =
       canonicalBase +
       Aglyn.contentAuthorPageAtUrl({
@@ -663,7 +689,7 @@ function buildJsonLd(props: Props): string[] {
         page: author.page,
       })
     return [
-      ...siteEntityLd,
+      ...leadingLd,
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
         '@type': 'ProfilePage',
@@ -708,7 +734,7 @@ function buildJsonLd(props: Props): string[] {
         ? content.entries
         : []
       if (!canonicalBase || !collectionSlug || entries.length === 0) {
-        return siteEntityLd
+        return leadingLd
       }
       // The list a filtered URL describes is the FILTERED one (AGL-1321):
       // naming and addressing it as the whole collection would tell a crawler
@@ -742,7 +768,7 @@ function buildJsonLd(props: Props): string[] {
           )
         : undefined
       return [
-        ...siteEntityLd,
+        ...leadingLd,
         ...(listCrumbs
           ? [
               Aglyn.safeJsonLd({
@@ -850,7 +876,7 @@ function buildJsonLd(props: Props): string[] {
         )
       : undefined
     return [
-      ...siteEntityLd,
+      ...leadingLd,
       ...(entryCrumbs
         ? [
             Aglyn.safeJsonLd({
@@ -938,7 +964,7 @@ function buildJsonLd(props: Props): string[] {
   }
 
   // Screen render → WebSite (+ BreadcrumbList for nested paths).
-  const ld: string[] = [...siteEntityLd]
+  const ld: string[] = [...leadingLd]
 
   // Product detail → Product/Offer (AGL-660). Emitted HERE, on the server,
   // from the payload the commerce resolver already resolved (AGL-659). The
@@ -1140,7 +1166,6 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
     if (statusCode === 301 || statusCode === 308) permanentRedirect(destination)
     redirect(destination)
   }
-  const jsonLd = buildJsonLd(result.props)
   // Withhold the subtrees of lazy tab panels that will not mount (AGL-1285).
   //
   // Applied HERE rather than inside the loader, and the distinction is the
@@ -1200,6 +1225,22 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   const clientProps: Props = screenRoutes
     ? { ...prunedProps, screenRoutes }
     : prunedProps
+  /**
+   * Structured data, built from what the page SHIPS (AGL-2747).
+   *
+   * This used to run above the prune, on `result.props`, and moving it is the
+   * whole reason it moved: `buildJsonLd` now reads `props.nodes` to publish a
+   * `VideoObject` for each Video element, and a video inside a withheld lazy
+   * tab panel is not in the HTML. A `VideoObject` describing a player that is
+   * not on the page is precisely the mismatch a video rich result is checked
+   * for, and it would be reported against the page rather than ignored.
+   *
+   * Behaviour-preserving for every block that was already here: `clientProps`
+   * is `result.props` with `nodes` pruned, `deferral` set and `screenRoutes`
+   * added, and none of the host, screen, content, author or `pageData` fields
+   * the other builders read is touched by any of those.
+   */
+  const jsonLd = buildJsonLd(clientProps)
   // Element animations (AGL-2486). Derived from the PRUNED node map, so a
   // deferred tab panel's animations don't drag the stylesheet onto a page that
   // is not shipping them; the runtime re-scans on mutation, so a panel opened

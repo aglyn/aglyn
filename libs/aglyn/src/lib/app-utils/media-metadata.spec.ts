@@ -18,6 +18,7 @@
 import {
   inheritedMediaAlt,
   intrinsicMediaSize,
+  videoMediaProps,
   MEDIA_ALT_MAX_LENGTH,
   MEDIA_TAG_MAX_COUNT,
   normalizeMediaTags,
@@ -265,5 +266,108 @@ describe('intrinsicMediaSize', () => {
 
   it('tolerates being called with nothing at all', () => {
     expect(intrinsicMediaSize({})).toEqual({})
+  })
+
+  it('leaves a video to videoMediaProps (AGL-2749)', () => {
+    // Not an oversight: `width`/`height` are read from the bytes by the
+    // server and are absent on every video, so a video that came through
+    // here would silently get nothing while looking like it was handled.
+    expect(
+      intrinsicMediaSize({
+        componentId: 'video',
+        propName: 'src',
+        assetWidth: 1920,
+        assetHeight: 1080,
+      }),
+    ).toEqual({})
+  })
+})
+
+describe('videoMediaProps', () => {
+  const video = { durationMs: 63_000, width: 1920, height: 1080 }
+  const asset = { assetVideo: video, assetPoster: { width: 1920, height: 1080, variants: [320] } }
+  const forVideo = (extra: Record<string, unknown> = {}) =>
+    videoMediaProps({
+      componentId: 'video',
+      propName: 'src',
+      ...asset,
+      ...extra,
+    })
+
+  it('carries the running time, the pixel pair and the poster flag', () => {
+    expect(forVideo()).toEqual({
+      durationSeconds: 63,
+      intrinsicWidth: 1920,
+      intrinsicHeight: 1080,
+      posterFromSource: true,
+    })
+  })
+
+  it('stores the duration in SECONDS, because that is what an author types', () => {
+    expect(forVideo({ assetVideo: { ...video, durationMs: 90_500 } })).toMatchObject(
+      { durationSeconds: 91 },
+    )
+  })
+
+  it('never rounds a sub-second clip down to no duration at all', () => {
+    expect(forVideo({ assetVideo: { ...video, durationMs: 400 } })).toMatchObject(
+      { durationSeconds: 1 },
+    )
+  })
+
+  it('refuses a partial record whole, the way the DAM validator does', () => {
+    // A duration with no dimensions is worse than none: the schema would
+    // carry a `duration` and no shape, and the player would reserve no box.
+    expect(forVideo({ assetVideo: { durationMs: 63_000 } })).toEqual({
+      posterFromSource: true,
+    })
+    expect(forVideo({ assetVideo: { ...video, width: 0 } })).toEqual({
+      posterFromSource: true,
+    })
+  })
+
+  it('records the poster as a FLAG, never as a url', () => {
+    // The url is derivable from `src` by anybody; only the document knows
+    // whether it resolves to anything, and a 404 in an `<img>` is a broken
+    // image rather than a graceful degradation.
+    expect(forVideo().posterFromSource).toBe(true)
+    expect(forVideo({ assetPoster: undefined })).not.toHaveProperty(
+      'posterFromSource',
+    )
+  })
+
+  it('writes nothing for an element that would spread it onto the DOM', () => {
+    expect(
+      videoMediaProps({ componentId: 'image', propName: 'src', ...asset }),
+    ).toEqual({})
+  })
+
+  it('writes nothing for an attribute that does not carry a video', () => {
+    expect(
+      videoMediaProps({ componentId: 'video', propName: 'poster', ...asset }),
+    ).toEqual({})
+  })
+
+  it('writes nothing for an asset the DAM never probed', () => {
+    // A video uploaded before AGL-2742 has neither record, and the element
+    // falls back to what its author set — which is the resting state, not a
+    // degraded one.
+    expect(videoMediaProps({ componentId: 'video', propName: 'src' })).toEqual(
+      {},
+    )
+  })
+
+  it('never returns a present key holding undefined', () => {
+    const result = videoMediaProps({
+      componentId: 'video',
+      propName: 'src',
+      assetVideo: undefined,
+      assetPoster: undefined,
+    })
+    expect(Object.keys(result)).toEqual([])
+  })
+
+  it('tolerates being called with nothing at all', () => {
+    expect(videoMediaProps({})).toEqual({})
   })
 })

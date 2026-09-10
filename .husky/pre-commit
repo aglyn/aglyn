@@ -9,3 +9,21 @@ if git diff --cached --name-only --diff-filter=ACMRD |
   grep -qE '^apps/docs/|^tools/scripts/generate-|\.generated\.ts$'; then
   node tools/scripts/check-staged-docs-registries.mjs || exit 1
 fi
+
+# `tools/` sits outside every Nx project tsconfig, so `npm run typecheck` never
+# reads it and a newly written script's first review is `check:lint-tools` in
+# CI — historically the most frequent red in the Main Gate (AGL-2752). Linting
+# it here costs seconds and moves that verdict before the push.
+#
+# Scoped to the STAGED paths, not to `tools/` as a whole: several sessions share
+# this checkout, and a whole-directory lint would report a peer's in-flight edit
+# as this commit's failure. The extension list mirrors the `files:` selectors in
+# eslint.config.mjs — a path eslint has no config for exits non-zero on sight,
+# which is why the pattern is a filter rather than the guard's own trigger list.
+staged_tools=$(git diff --cached --name-only --diff-filter=ACMR |
+  grep -E '^tools/.*\.(m?js|cjs|jsx|ts|tsx)$' || true)
+if [ -n "$staged_tools" ]; then
+  # shellcheck disable=SC2086 -- deliberate word splitting; paths are newline
+  # separated and this repository has no whitespace in tracked filenames.
+  npx --no-install eslint --no-error-on-unmatched-pattern $staged_tools || exit 1
+fi

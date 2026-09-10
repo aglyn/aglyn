@@ -399,9 +399,20 @@ export async function runCli(
       */
       const collected: Array<Record<string, unknown>> = []
       let token = ''
+      /*
+        THE NAME THE SERVER SPOKE LAST is the name we send back (AGL-2751).
+
+        `cursor` is canonical, and echoing it blindly is wrong: an instance
+        that has not deployed the rename reads only `nextPageToken`, so a
+        `cursor=` it ignores means it re-serves page one, forever, and the loop
+        below collects the same page a hundred times. Reading the old field as
+        a fallback does not save that — the request has to carry the spelling
+        the server understands.
+      */
+      let cursorParam = 'cursor'
       for (let request = 0; request < 100; request += 1) {
         const query = new URLSearchParams()
-        if (token) query.set('nextPageToken', token)
+        if (token) query.set(cursorParam, token)
         if (args.limit) query.set('limit', String(args.limit))
         const result = await get(
           context,
@@ -415,10 +426,17 @@ export async function runCli(
         }
         const data = envelopeData(result.body) as {
           screens?: Array<Record<string, unknown>>
+          cursor?: string
           nextPageToken?: string
         } | null
         for (const screen of data?.screens ?? []) collected.push(screen)
-        token = String(data?.nextPageToken ?? '')
+        if (typeof data?.cursor === 'string') {
+          token = data.cursor
+          cursorParam = 'cursor'
+        } else {
+          token = String(data?.nextPageToken ?? '')
+          cursorParam = 'nextPageToken'
+        }
         if (!token) break
       }
       if (args.json) {

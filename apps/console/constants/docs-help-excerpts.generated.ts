@@ -176,6 +176,7 @@ export const DOCS_HELP_EXCERPTS = {
   troubleshooting: 'Fix the common reasons a custom domain won\'t verify or attach.',
   uptimeAndStatus: 'The live status page, what it does and does not show, and why there is no committed uptime percentage yet.',
   versionsAndPublishing: 'Every screen, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
+  video: 'The Video element — the poster frame that decides what a visitor downloads, captions, the lightbox, and the three fields a video search result needs.',
   views: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
   webhooks: 'Connect Aglyn to other systems with outbound and inbound webhooks.',
   whiteLabel: 'Replace the Aglyn brand across the console, your published sites, and transactional email — product name, logo, colors, support URL, and email from-name.',

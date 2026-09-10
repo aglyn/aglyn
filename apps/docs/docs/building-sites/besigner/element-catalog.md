@@ -298,7 +298,7 @@ itself change what the rest of the page shows — wire an
 | Element | What it's for |
 | --- | --- |
 | **Image** | An image with fit, size and radius controls, an optional link, and an automatic responsive `srcSet` for media-library URLs. |
-| **Video** | Hosted or embedded video. |
+| **Video** | A video file from your media library, poster first. See [Video](video.md). |
 | **Icon** | Any icon from the icon picker. |
 | **Image List** / **Image List Item** | A dense gallery. See [Image List](#image-list) below. |
 
@@ -334,6 +334,7 @@ One element in this group belongs to neither:
 ## Related
 
 - [The Besigner](overview.md)
+- [Video](video.md) — posters, preload, captions and the lightbox
 - [Drag-and-drop hierarchy](drag-drop-hierarchy.md) — which elements accept which children
 - [Long documents in markdown](long-form-markdown.md) — the Markdown and Table of contents elements
 - [Responsive styling](responsive-styling.md)

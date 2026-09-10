@@ -47,11 +47,27 @@ export interface MediaPickerContextValue {
    * put a per-image Firestore read on the hottest cached path; carrying them
    * on the node costs two numbers and is read like any other prop. They are
    * best-effort at upload, so either may be absent.
+   *
+   * `video` and `poster` are the video half of the same bargain (AGL-2749),
+   * and they are the DOCUMENT's own records rather than anything flattened on
+   * the way here — a video's dimensions live inside `video` precisely so a
+   * reader can tell a browser's report from a server measurement, and
+   * flattening them into `width`/`height` above would throw that distinction
+   * away at the seam. `Aglyn.videoMediaProps` owns what happens to them; a
+   * host that sends neither leaves every element exactly as it was.
    */
   onPickMedia?: (
     onPick: (
       value: string,
-      asset?: { alt?: string; width?: number; height?: number },
+      asset?: {
+        alt?: string
+        width?: number
+        height?: number
+        /** The asset's `video` record: `durationMs`, `width`, `height`. */
+        video?: unknown
+        /** The asset's generated `poster` record, when the DAM made one. */
+        poster?: unknown
+      },
     ) => void,
   ) => void
   /**

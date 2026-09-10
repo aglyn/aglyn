@@ -25,7 +25,7 @@ import { publicReadApiGate, withPublicReadHeaders } from '../_public-read-api'
 export const dynamic = 'force-dynamic'
 
 /**
- * Published screens for a host (`?host=&nextPageToken=`). GET only.
+ * Published screens for a host (`?host=&cursor=`). GET only.
  *
  * Anonymous by design — a site's page list is public — so what bounds it is
  * the RESPONSE, not the caller. `getAllScreens` returns an allow-listed
@@ -47,7 +47,17 @@ export async function GET(request: Request): Promise<Response> {
     params.get('host') ||
     request.headers.get('x-aglyn-tenant-host') ||
     request.headers.get('host')
-  const nextPageToken = params.get('nextPageToken') ?? undefined
+  /*
+    `cursor` is the canonical spelling (AGL-2751); `nextPageToken` is the
+    spelling this route shipped with and is still accepted.
+
+    Not a deprecation that can be completed on a schedule: `@aglyn/cli@0.1.2`
+    is published on npm and its `pages` command sends the old name, so every
+    copy already installed sends it until its owner upgrades — which is not an
+    event we get to observe. The alias costs one `??`.
+  */
+  const cursor =
+    params.get('cursor') ?? params.get('nextPageToken') ?? undefined
   const limit = params.get('limit') ?? undefined
   if (!host) return appHandleJsonError(new Error('Bad request'))
 
@@ -56,7 +66,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     data = await getAllScreens(
       host,
-      nextPageToken,
+      cursor,
       limit == null ? undefined : Number(limit),
     )
     if (data?.error) error = data?.error
@@ -66,5 +76,15 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   if (error) return withPublicReadHeaders(appHandleJsonError(error), gate.headers)
-  return withPublicReadHeaders(appHandleJsonSuccess(data), gate.headers)
+  /*
+    BOTH SPELLINGS GO OUT. `cursor` is what `/openapi.json` documents and what
+    a new caller should read; `nextPageToken` is what the published CLI reads,
+    and dropping it would break every installed copy on the day this deployed.
+    `getAllScreens` keeps its own field name — the rename is a fact about this
+    route's public contract, not about the reader underneath it.
+  */
+  return withPublicReadHeaders(
+    appHandleJsonSuccess(data && { ...data, cursor: data.nextPageToken }),
+    gate.headers,
+  )
 }

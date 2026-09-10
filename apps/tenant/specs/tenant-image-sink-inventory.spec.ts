@@ -418,9 +418,14 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The canvas Product card resolves its stored imageUrl with siteRelativeMediaSrc. Resolution only.',
   },
   'libs/plugins/mui/src/lib/components/video.tsx': {
-    markers: 1,
+    markers: 3,
     guard: 'media-ref',
-    why: 'The video poster frame through resolveMediaSrc. The video src itself is media-src, a different directive, and out of this inventory on purpose.',
+    why: 'The video poster frame, now in three places: the inline `<video poster>`, the lightbox trigger\'s `<img>` (AGL-2744), and the poster handed to the lightbox dialog. All three are the same stored `poster` prop through the same resolver — `mediaVariantSrc` for the two single-url sinks and `resolveMediaSrc` for the `<img>` that also gets a `?w=` srcSet — so the host surface is unchanged from when this was one marker. The video src itself is media-src, a different directive, and out of this inventory on purpose.',
+  },
+  'libs/plugins/mui/src/lib/components/video-lightbox.tsx': {
+    markers: 1,
+    guard: 'projection',
+    why: 'The dialog `<video poster>` (AGL-2744). This module resolves nothing itself: `video.tsx` calls `Aglyn.mediaVariantSrc` and passes the finished url in as a prop, which is why the marker here is a projection of the entry above rather than a second sink with its own reach.',
   },
   'libs/tenant/runtime/src/lib/collection-fallback-nodes.ts': {
     markers: 1,
