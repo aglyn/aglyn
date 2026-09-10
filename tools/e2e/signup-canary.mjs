@@ -663,6 +663,40 @@ async function main() {
           }),
       )
     }
+    /**
+     * ⛔ THE CANARY MUST NOT BE A VISITOR (AGL-2720).
+     *
+     * This walks the real signup page in a real browser, so without this it
+     * fires `page_view` into GA4 on every step, every hour, forever — landing
+     * in exactly the signup funnel the ad spend is measured against, and
+     * looking most like real demand on the days there is none. An internal
+     * traffic filter cannot catch it either: those match on IP and this runs
+     * from whatever address a hosted runner happens to have.
+     *
+     * Blocked at the network rather than by a flag in the app, so the page
+     * under test is the page a visitor gets — a build that skipped analytics
+     * for the canary would be a different build from the one being proved.
+     *
+     * ⚠️ Analytics ONLY. reCAPTCHA is served from `google.com` and
+     * `gstatic.com` and App Check dies without it, so the list is exact
+     * hostnames rather than anything matching "google".
+     */
+    const ANALYTICS_HOSTS = new Set([
+      'www.googletagmanager.com',
+      'www.google-analytics.com',
+      'analytics.google.com',
+      'ssl.google-analytics.com',
+      'stats.g.doubleclick.net',
+    ])
+    await context.route(
+      (url) =>
+        ANALYTICS_HOSTS.has(url.hostname) ||
+        url.hostname.endsWith('.analytics.google.com') ||
+        /^region\d+\.google-analytics\.com$/.test(url.hostname) ||
+        url.pathname.startsWith('/_vercel/insights'),
+      (route) => route.abort(),
+    )
+
     // Before any page script: the SDK reads this the moment App Check
     // initializes, and after that it is too late.
     await context.addInitScript((token) => {

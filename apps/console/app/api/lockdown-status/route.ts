@@ -70,9 +70,22 @@ export async function GET(request: Request): Promise<Response> {
   // shell polls on every load is a different question and would drown this
   // one in noise.
   //
+  // ⛔ A PROBE'S OWN VISIT IS NOT TRAFFIC (AGL-2720).
+  //
+  // Every synthetic here rides `x-aglyn-probe`, and the signup canary walks
+  // this page in a real browser on a schedule. Counting those inflates the
+  // one number that tells an incident responder whether anybody was actually
+  // arriving, and it inflates it most on a dead platform — when the synthetic
+  // is the only visitor left. Measured 2026-09-10: three of the last four
+  // serve markers were the canary's own.
+  //
+  // The header is the firewall bypass rather than a flag invented for this,
+  // so anything able to set it is already trusted at the edge and there is no
+  // new way to suppress a real visitor's count.
+  const isProbe = request.headers.get('x-aglyn-probe') !== null
   // Not awaited, and it cannot throw: the page's own latency is not spent on
   // a monitoring breadcrumb.
-  if (feature === 'signups') recordSignupServed()
+  if (feature === 'signups' && !isProbe) recordSignupServed()
   const nowMs = Date.now()
   const platform = await getPlatformLockdown()
   // Expiry filter on BOTH carriers: once `untilMs` passes, the lock is
