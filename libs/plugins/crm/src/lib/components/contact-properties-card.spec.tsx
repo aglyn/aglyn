@@ -197,6 +197,59 @@ describe('a stage move', () => {
   })
 })
 
+/**
+ * On a plan without the CRM suite (AGL-2788) the owner, the stage and the
+ * company are the suite's: shown locked, and left out of the save — while
+ * the rest of the profile, the tags and the notes save as on every plan.
+ */
+describe('on a plan without the CRM suite', () => {
+  const renderLocked = () =>
+    render(
+      <ContactPropertiesCard
+        hostId="host-1"
+        record={{ ...record, ownerUid: 'uid-7' }}
+        consentGroup={GROUP}
+        scope={['orgs', 'org-1']}
+        seed={{ status: 'success', fromCache: false }}
+        members={{
+          options: [],
+          ready: true,
+          memberName: (uid) => uid,
+          memberEmail: (uid) => uid,
+        }}
+        suiteLocked
+      />,
+    )
+
+  it('locks the owner and the stage, and says which plan includes them', () => {
+    renderLocked()
+    expect(
+      screen.getByRole('combobox', { name: 'Lifecycle stage' }).getAttribute('aria-disabled'),
+    ).toBe('true')
+    expect(screen.getByRole('combobox', { name: 'Owner' }).getAttribute('aria-disabled')).toBe(
+      'true',
+    )
+    expect(screen.getAllByText('Part of the CRM suite, included from Starter')).toHaveLength(2)
+  })
+
+  it('saves the profile and leaves the owner, the stage and the company out of the write', async () => {
+    renderLocked()
+    fireEvent.change(screen.getByLabelText('Job title'), {
+      target: { value: 'Head roaster' },
+    })
+    save()
+    await waitFor(() => expect(writes).toHaveLength(1))
+    const data = writes[0].data
+    expect(data).toHaveProperty([facetPath('jobTitle')], 'Head roaster')
+    expect(data).toHaveProperty([facetPath('tags')], ['wholesale'])
+    expect(data).not.toHaveProperty([facetPath('ownerUid')])
+    expect(data).not.toHaveProperty([facetPath('lifecycleStage')])
+    expect(data).not.toHaveProperty([facetPath('companyName')])
+    expect(data).not.toHaveProperty('companyName')
+    expect(setContactStage).not.toHaveBeenCalled()
+  })
+})
+
 describe('a save that moves nothing', () => {
   it('never calls the route, and keeps the stage it has in the write', async () => {
     renderCard()

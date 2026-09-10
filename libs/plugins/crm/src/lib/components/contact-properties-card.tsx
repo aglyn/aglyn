@@ -63,6 +63,7 @@ import {
   ContactAddressFields,
   type AddressDraft,
 } from './contact-address-fields'
+import { crmSuiteLockedReason } from './crm-suite-lock'
 import type { OrgMembers } from './use-org-members'
 
 export interface ContactPropertiesCardProps {
@@ -83,6 +84,13 @@ export interface ContactPropertiesCardProps {
   seed: { status: 'loading' | 'success' | 'error'; fromCache: boolean }
   /** The team, for the owner picker and the owner's name. */
   members: OrgMembers
+  /**
+   * The org's plan lacks the CRM suite (AGL-2788). The owner, the lifecycle
+   * stage and the company are the suite's: they show, locked, and a save
+   * leaves them as they are. The rest of the profile, the tags and the notes
+   * save as on every plan.
+   */
+  suiteLocked?: boolean
 }
 
 /**
@@ -143,7 +151,16 @@ export interface ContactPropertiesCardProps {
  * as the label, and the picker offers it as the company to link or create.
  */
 export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
-  const { hostId, org, record, consentGroup, scope, seed, members } = props
+  const {
+    hostId,
+    org,
+    record,
+    consentGroup,
+    scope,
+    seed,
+    members,
+    suiteLocked = false,
+  } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -220,18 +237,18 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     const storedCompany = companyName.trim().slice(0, 120)
     // A stage that differs from the record's and is not a clearing is a
     // MOVE, and a move is the server's to write — see the note above.
-    const stageMoved = Boolean(lifecycleStage) && lifecycleStage !== record.lifecycleStage
+    const stageMoved =
+      !suiteLocked && Boolean(lifecycleStage) && lifecycleStage !== record.lifecycleStage
     /*
      * The link, when it changed: the facet's id and the mirror on this
      * document, and the count on each company it moved. `null` when the
      * picker was left where the record had it, in which case the save is
-     * the one `updateDoc` it always was.
+     * the one `updateDoc` it always was — and always on a plan without the
+     * suite, whose company is not this save's to move.
      */
-    const link = contactCompanyLinkWrites(
-      record.companyLink,
-      consentGroup.groupId,
-      companyId,
-    )
+    const link = suiteLocked
+      ? null
+      : contactCompanyLinkWrites(record.companyLink, consentGroup.groupId, companyId)
     setSaving(true)
     try {
       const verdict = await writeGuardedBySeed(
@@ -242,22 +259,29 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
         },
         async () => {
           const contactRef = doc(firestore, scope[0], scope[1], 'contacts', record.$id)
+          // The suite's fields, written only on a plan that carries the suite.
+          const suiteFields = suiteLocked
+            ? {}
+            : {
+                [path('companyName')]: storedCompany || deleteField(),
+                [path('ownerUid')]: ownerUid || deleteField(),
+                ...(stageMoved
+                  ? {}
+                  : { [path('lifecycleStage')]: lifecycleStage || deleteField() }),
+                // The company's search echo — see `HostContact.phone`.
+                companyName: storedCompany || deleteField(),
+              }
           const payload = {
             ...(link?.contact ?? {}),
             [path('name')]: text(nameOverride, 120),
             [path('phone')]: normalizedPhone || deleteField(),
             [path('jobTitle')]: text(jobTitle, 120),
-            [path('companyName')]: storedCompany || deleteField(),
             [path('address')]: storedAddress ?? deleteField(),
-            [path('ownerUid')]: ownerUid || deleteField(),
-            ...(stageMoved
-              ? {}
-              : { [path('lifecycleStage')]: lifecycleStage || deleteField() }),
             [path('tags')]: parseContactTags(tags),
             [path('notes')]: notes.slice(0, 2000),
-            // The search echoes — see `HostContact.phone`.
+            ...suiteFields,
+            // The phone's search echo — see `HostContact.phone`.
             phone: normalizedPhone || deleteField(),
-            companyName: storedCompany || deleteField(),
             updatedAt: new Date(),
           }
           if (!link?.companies.length) {
@@ -334,6 +358,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     scope,
     seed.fromCache,
     seed.status,
+    suiteLocked,
     tags,
     user,
   ])
@@ -457,7 +482,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             onCreate={createCompany}
             email={record.email}
             fallbackName={companyName}
-            disabled={saving}
+            disabled={saving || suiteLocked}
+            helperText={suiteLocked ? crmSuiteLockedReason() : undefined}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -469,6 +495,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             onChange={(event) =>
               setLifecycleStage(event.target.value as ContactLifecycleStage | '')
             }
+            disabled={suiteLocked}
+            helperText={suiteLocked ? crmSuiteLockedReason() : undefined}
             fullWidth
           >
             <MenuItem value="">{'Not placed yet'}</MenuItem>
@@ -486,10 +514,13 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             label="Owner"
             value={ownerUid}
             onChange={(event) => setOwnerUid(event.target.value)}
+            disabled={suiteLocked}
             helperText={
-              members.ready && !members.options.length
-                ? 'The team roster could not be read, so nobody can be picked yet.'
-                : 'The team member responsible for this relationship'
+              suiteLocked
+                ? crmSuiteLockedReason()
+                : members.ready && !members.options.length
+                  ? 'The team roster could not be read, so nobody can be picked yet.'
+                  : 'The team member responsible for this relationship'
             }
             fullWidth
           >

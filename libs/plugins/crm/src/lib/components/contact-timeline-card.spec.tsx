@@ -236,6 +236,33 @@ const renderCard = () =>
     />,
   )
 
+/**
+ * On a plan without the CRM suite (AGL-2788) the history reads in full, and
+ * logging into it — or changing what was logged — is the suite's.
+ */
+describe('ContactTimelineCard on a plan without the CRM suite', () => {
+  it('locks logging and editing, and keeps every entry on screen', () => {
+    render(
+      <ContactTimelineCard
+        hostId="host-1"
+        org={{}}
+        contactId="con-1"
+        contact={contact}
+        suiteLocked
+      />,
+    )
+    const log = screen.getByRole('button', { name: 'Log activity' }) as HTMLButtonElement
+    expect(log.disabled).toBe(true)
+    fireEvent.click(log)
+    expect(screen.queryByLabelText('What happened')).toBeNull()
+    expect(screen.getByText('Called about the renewal')).toBeTruthy()
+    expect(screen.getByText('Submitted the contact form')).toBeTruthy()
+    // The author's own entry is otherwise editable (see below).
+    expect(screen.queryAllByLabelText('Edit activity')).toHaveLength(0)
+    expect(screen.queryAllByLabelText('Delete activity')).toHaveLength(0)
+  })
+})
+
 describe('ContactTimelineCard (AGL-2600)', () => {
   it('draws captured and logged entries as one newest-first stream, each saying which it is', () => {
     const { container } = renderCard()

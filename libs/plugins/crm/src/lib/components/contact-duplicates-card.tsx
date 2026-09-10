@@ -40,6 +40,7 @@ import {
   likelyDuplicateReasons,
 } from '../model/contact-duplicates'
 import type { ContactPick } from './contact-merge-dialog'
+import { CrmSuiteLockedButton } from './crm-suite-lock'
 
 export interface ContactDuplicatesCardProps {
   /** The record whose page this is. */
@@ -57,6 +58,11 @@ export interface ContactDuplicatesCardProps {
   basePath: string
   /** Opens the merge dialog with the candidate picked. */
   onMerge: (candidate: ContactPick) => void
+  /**
+   * The org's plan lacks the CRM suite (AGL-2788). Looking is a read and
+   * stays; merging is the suite's, so each candidate's merge stands locked.
+   */
+  suiteLocked?: boolean
 }
 
 interface Candidate extends ContactPick {
@@ -77,7 +83,15 @@ interface Candidate extends ContactPick {
  * PII, and most record pages are opened by somebody who did not ask it.
  */
 export function ContactDuplicatesCard(props: ContactDuplicatesCardProps) {
-  const { current, scope, consentGroup, visibleTo, basePath, onMerge } = props
+  const {
+    current,
+    scope,
+    consentGroup,
+    visibleTo,
+    basePath,
+    onMerge,
+    suiteLocked = false,
+  } = props
   const firestore = useFirestore()
   const routes = crmRoutes(basePath)
   const groupId = consentGroup.groupId
@@ -162,9 +176,13 @@ export function ContactDuplicatesCard(props: ContactDuplicatesCardProps) {
               key={candidate.id}
               disableGutters
               secondaryAction={
-                <Button size="small" onClick={() => onMerge(candidate)}>
-                  {'Merge into this record'}
-                </Button>
+                suiteLocked ? (
+                  <CrmSuiteLockedButton>{'Merge into this record'}</CrmSuiteLockedButton>
+                ) : (
+                  <Button size="small" onClick={() => onMerge(candidate)}>
+                    {'Merge into this record'}
+                  </Button>
+                )
               }
             >
               <ListItemText

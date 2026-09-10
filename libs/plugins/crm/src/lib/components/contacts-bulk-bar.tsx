@@ -107,6 +107,7 @@ import {
   countNoun,
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
+import { CrmSuiteLockedButton } from './crm-suite-lock'
 
 export interface ContactsBulkBarProps {
   /** The site the list is read under, or `null` at the organization level. */
@@ -132,6 +133,12 @@ export interface ContactsBulkBarProps {
    * format (AGL-2621).
    */
   csv?: ContactCsvOptions
+  /**
+   * The org's plan lacks the CRM suite (AGL-2788). The owner, the stage and
+   * the company are the suite's and stand locked; tags, the exports, the
+   * audience door and removing people from a site are not the suite's.
+   */
+  suiteLocked?: boolean
 }
 
 const NOUN: CrmBulkNoun = { singular: 'contact', plural: 'contacts' }
@@ -181,8 +188,17 @@ export function ContactsBulkBar(props: ContactsBulkBarProps) {
 ContactsBulkBar.displayName = 'ContactsBulkBar'
 
 function ContactsBulkBarBody(props: ContactsBulkBarProps) {
-  const { hostId, org, scope, consentGroup, rows, selected, onSelectedChange, csv } =
-    props
+  const {
+    hostId,
+    org,
+    scope,
+    consentGroup,
+    rows,
+    selected,
+    onSelectedChange,
+    csv,
+    suiteLocked = false,
+  } = props
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'contact' })
@@ -496,15 +512,29 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
       >
         {'Remove tag'}
       </Button>
-      <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
-        {'Set owner'}
-      </Button>
-      <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
-        {'Set stage'}
-      </Button>
-      <Button size="small" disabled={busy || !scope} onClick={() => openAction('company')}>
-        {'Set company'}
-      </Button>
+      {suiteLocked ? (
+        <>
+          <CrmSuiteLockedButton>{'Set owner'}</CrmSuiteLockedButton>
+          <CrmSuiteLockedButton>{'Set stage'}</CrmSuiteLockedButton>
+          <CrmSuiteLockedButton>{'Set company'}</CrmSuiteLockedButton>
+        </>
+      ) : (
+        <>
+          <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
+            {'Set owner'}
+          </Button>
+          <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
+            {'Set stage'}
+          </Button>
+          <Button
+            size="small"
+            disabled={busy || !scope}
+            onClick={() => openAction('company')}
+          >
+            {'Set company'}
+          </Button>
+        </>
+      )}
       <Button
         size="small"
         disabled={busy || !scope || !emails.length || !createHostId}

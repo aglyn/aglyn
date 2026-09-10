@@ -127,6 +127,8 @@ const confirmSpy = jest.fn(() =>
   confirmAnswer === 'proceed' ? Promise.resolve() : Promise.reject(new Error('cancel')),
 )
 jest.mock('@aglyn/shared-ui-jsx', () => ({
+  // The lock a plan without the CRM suite draws on its locked actions.
+  MdiIcon: () => null,
   useConfirmationContext: () => ({ confirm: confirmSpy }),
 }))
 jest.mock('./add-to-list-dialog', () => ({
@@ -239,6 +241,40 @@ describe('the bar and its selection', () => {
     ]) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
     }
+  })
+})
+
+/**
+ * On a plan without the CRM suite (AGL-2788) a selection's owner, stage and
+ * company are the suite's and stand locked; tagging, the exports, the
+ * audience door and removing people from the site are not, and stay.
+ */
+describe('on a plan without the CRM suite', () => {
+  it('locks the owner, the stage and the company, and keeps the rest', () => {
+    render(
+      <ContactsBulkBar
+        hostId="host-1"
+        scope={['orgs', 'org-1']}
+        consentGroup={GROUP}
+        rows={rows}
+        selected={['c1', 'c2']}
+        onSelectedChange={onSelectedChange}
+        suiteLocked
+      />,
+    )
+    for (const locked of ['Set owner', 'Set stage', 'Set company']) {
+      const control = screen.getByRole('button', { name: locked }) as HTMLButtonElement
+      expect([locked, control.disabled]).toEqual([locked, true])
+    }
+    for (const open of ['Add tag', 'Remove tag', 'Export CSV', 'Remove from this site']) {
+      const control = screen.getByRole('button', { name: open }) as HTMLButtonElement
+      expect([open, control.disabled]).toEqual([open, false])
+    }
+    expect(screen.getByRole('button', { name: 'Add to list' })).toBeTruthy()
+    // A locked act opens nothing.
+    fireEvent.click(screen.getByRole('button', { name: 'Set stage' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(ops).toEqual([])
   })
 })
 

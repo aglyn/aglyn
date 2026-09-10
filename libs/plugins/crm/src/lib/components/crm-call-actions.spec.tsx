@@ -94,6 +94,16 @@ describe('CrmCallButton', () => {
     expect(dialogProps.at(-1)).toMatchObject({ open: true, kind: 'call', link, scope })
   })
 
+  it('locks the log on a plan without the CRM suite, and still dials (AGL-2788)', () => {
+    render(<CrmCallButton hostId="host-1" link={link} phone="+15125550123" suiteLocked />)
+    // Dialing is not the suite's; logging the call is.
+    expect(anchor('Call').getAttribute('href')).toBe('tel:+15125550123')
+    const log = screen.getByRole('button', { name: 'Log a call' }) as HTMLButtonElement
+    expect(log.disabled).toBe(true)
+    fireEvent.click(log)
+    expect(screen.queryByTestId('log-activity-dialog')).toBeNull()
+  })
+
   it('offers the log even when there is nothing to dial', () => {
     render(<CrmCallButton hostId={null} link={link} phone={null} />)
     expect((screen.getByRole('button', { name: 'Call' }) as HTMLButtonElement).disabled).toBe(true)
