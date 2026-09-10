@@ -297,7 +297,7 @@ function main() {
           `for a past\n  commit. Establish it from a record of the time, then ` +
           `pass what you found:\n\n    ` +
           `--served 'vercel: console+tenant READY for <deployment-id>, <date>'\n    ` +
-          `--served 'aglyn.com served <version> on <date>, confirmed by <who/what>'\n\n  ` +
+          `--served '<apex> served <version> on <date>, confirmed by <who/what>'\n\n  ` +
           `If you cannot establish it, LEAVE THE GAP. A gap is the honest ` +
           `record of a release\n  that merged and never shipped; a tag is a ` +
           `claim that it did.`,

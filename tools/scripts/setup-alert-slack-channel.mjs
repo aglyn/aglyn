@@ -33,6 +33,16 @@
  *   node tools/scripts/setup-alert-slack-channel.mjs --dry-run
  *   node tools/scripts/setup-alert-slack-channel.mjs
  *
+ * ## The policy names are BUILT from configuration, not written here
+ *
+ * Five of the eight policies below are uptime checks, and a GCP uptime policy
+ * carries the host it watches in its own display name. Writing those hosts
+ * into this file would hand a self-host operator a script that looks for
+ * policies named after somebody else's apex — so they come from
+ * `NEXT_PUBLIC_WORKSPACE_DOMAIN`, `NEXT_PUBLIC_CONSOLE_URL` and
+ * `NEXT_PUBLIC_TENANT_DOMAIN`, read from the repo `.env` or the environment,
+ * with no fallback. See `HOST_SOURCES` (AGL-2767).
+ *
  * ## ⛔ This script does NOT create the Slack channel, deliberately
  *
  * The `slack` channel type takes an `auth_token` label — in Slack's own words a
@@ -72,13 +82,76 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import dotenv from 'dotenv'
 
 const PROJECT = process.env.GCP_PROJECT ?? 'aglyn-main'
 const DRY_RUN = process.argv.includes('--dry-run')
 const API = 'https://monitoring.googleapis.com/v3'
+
+/**
+ * Fill in whatever the shell did not already export, so this stays one command
+ * rather than a paragraph of env plumbing — the same three lines, and the same
+ * reasoning, as `audit-stripe-webhook-health.mjs` beside it.
+ *
+ * `override: false`: an exported variable always wins, so pointing the script
+ * at another deployment stays a matter of exporting one.
+ */
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const envFile = resolve(repoRoot, '.env')
+if (existsSync(envFile)) dotenv.config({ path: envFile, override: false, quiet: true })
+
+/**
+ * The hosts the five uptime policies are NAMED after, and where each is read
+ * from (AGL-2767).
+ *
+ * ⛔ No literal fallback, and the absence is the fix. Most readers of these
+ * variables carry the platform's own value as a `??` default so a deployment
+ * needs no configuration to work, and that is right for runtime code and wrong
+ * here: a policy display name is a fact about ONE monitoring project. A
+ * self-host operator's project names its checks after THEIR hosts, so a
+ * default would not quietly work for them — it would send this script hunting
+ * for policies that cannot exist there and report all five as renamed, which
+ * is a confusing way to say "you inherited someone else's apex" (AGL-2195).
+ *
+ * Unset is therefore asked once, up front, and answered with the variable to
+ * set rather than with a failure five steps later.
+ */
+const HOST_SOURCES = [
+  [
+    'NEXT_PUBLIC_WORKSPACE_DOMAIN',
+    'the workspace apex — marketing-home and tenant-health are named after it',
+  ],
+  [
+    'NEXT_PUBLIC_CONSOLE_URL',
+    'the console origin — console-health and auth-doors are named after its host',
+  ],
+  [
+    'NEXT_PUBLIC_TENANT_DOMAIN',
+    'the apex published sites are served under — customer-site is a label on it',
+  ],
+]
+
+/**
+ * A bare hostname, from either a URL or an already-bare host.
+ *
+ * The three variables are not one shape: two hold an apex and
+ * `NEXT_PUBLIC_CONSOLE_URL` holds an origin. Normalizing here means the policy
+ * names read the same either way, and a trailing slash or a port in the
+ * variable cannot silently produce a name that matches nothing.
+ */
+function hostOf(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/:\d+$/, '')
+    .toLowerCase()
+}
 
 /**
  * The policies that mean a real outage, by exact display name.
@@ -86,17 +159,52 @@ const API = 'https://monitoring.googleapis.com/v3'
  * Exact rather than a prefix or a regex: `Uptime failure:` alone would sweep
  * in `backup-state`, `journeys`, `scheduled-jobs` and `signup-volume`, which
  * are the CI-condition checks this deliberately leaves on one route.
+ *
+ * The last three name no host at all, so they are the same string on every
+ * deployment; the five uptime ones are built from `HOST_SOURCES`.
+ *
+ * `AGLYN_CANARY_SITE_HOST` / `AGLYN_TENANT_DEMO` name the published site the
+ * customer-site check fetches — the same pair
+ * `apps/tenant/app/api/health/render/canary.ts` resolves, and `demo` is that
+ * label's own default rather than a hostname.
  */
-const OUTAGE_POLICIES = [
-  'Uptime failure: marketing-home (aglyn.com)',
-  'Uptime failure: customer-site (demo.aglyn.app)',
-  'Uptime failure: console-health (app.aglyn.com/api/health)',
-  'Uptime failure: tenant-health (aglyn.com/api/health)',
-  'Uptime failure: auth-doors (app.aglyn.com/api/health/auth-doors)',
-  'Server errors: uncaught 5xx (AGL-1921)',
-  'Server errors: Vercel runtime 5xx via log drain (AGL-1921)',
-  'Billing webhook is not delivering (AGL-1924)',
-]
+function outagePolicies(env) {
+  const unset = HOST_SOURCES.filter(([name]) => !hostOf(env[name]))
+  if (unset.length > 0) return { policies: [], unset }
+
+  const workspace = hostOf(env.NEXT_PUBLIC_WORKSPACE_DOMAIN)
+  const consoleHost = hostOf(env.NEXT_PUBLIC_CONSOLE_URL)
+  const label = String(
+    env.AGLYN_CANARY_SITE_HOST || env.AGLYN_TENANT_DEMO || 'demo',
+  ).trim()
+  const site = `${label}.${hostOf(env.NEXT_PUBLIC_TENANT_DOMAIN)}`
+
+  return {
+    unset,
+    policies: [
+      `Uptime failure: marketing-home (${workspace})`,
+      `Uptime failure: customer-site (${site})`,
+      `Uptime failure: console-health (${consoleHost}/api/health)`,
+      `Uptime failure: tenant-health (${workspace}/api/health)`,
+      `Uptime failure: auth-doors (${consoleHost}/api/health/auth-doors)`,
+      'Server errors: uncaught 5xx (AGL-1921)',
+      'Server errors: Vercel runtime 5xx via log drain (AGL-1921)',
+      'Billing webhook is not delivering (AGL-1924)',
+    ],
+  }
+}
+
+/**
+ * Resolved at module scope, beside `PROJECT` and `DRY_RUN`.
+ *
+ * ⚠️ Not inside `main()`, and not by taste: reading `process` there puts a read
+ * of it before the first `await` and `process.exitCode = …` after one, which is
+ * the interleaving `require-atomic-updates` refuses. `tools/` has no type
+ * coverage, so `check:lint-tools` is the only thing that would have said so.
+ */
+const { policies: OUTAGE_POLICIES, unset: UNSET_HOSTS } = outagePolicies(
+  process.env,
+)
 
 /**
  * An access token for the Monitoring API.
@@ -158,6 +266,23 @@ async function api(token, path, init = {}) {
 }
 
 async function main() {
+  if (UNSET_HOSTS.length > 0) {
+    // Named, not counted: "configuration is missing" sends the reader to the
+    // whole file, and the whole file is not where the answer is.
+    console.error(
+      `${UNSET_HOSTS.length} host variable(s) are unset, so the outage policy names\n` +
+        'cannot be built:\n\n' +
+        UNSET_HOSTS.map(([name, why]) => `  ${name}\n      ${why}`).join('\n') +
+        '\n\nSet them in the repo `.env`, which this script reads, or export them:\n\n' +
+        UNSET_HOSTS.map(([name]) => `  export ${name}=…`).join('\n') +
+        '\n\nThey are the same variables the deployment already runs on — this\n' +
+        'script keeps no copy of them, so a self-hosted instance wires ITS own\n' +
+        'monitoring project rather than inheriting an apex it does not own.',
+    )
+    process.exitCode = 1
+    return
+  }
+
   const token = await accessToken()
 
   const channels = (
