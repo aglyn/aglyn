@@ -171,13 +171,13 @@ repo are world-readable.
 
 ## Current posture
 
-Measured 2026-09-01.
+Measured 2026-09-10.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 8 scoped bypass rules |
-| `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 3 scoped bypass rules |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 6 scoped bypass rules |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 10 scoped bypass rules |
+| `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 4 scoped bypass rules |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 7 scoped bypass rules |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
 
 ### How the console was closed, and why the order mattered
@@ -459,6 +459,65 @@ tells you that you forgot, it does not do it for you.
 only thing a challenge hides. Enumerate what fetches your **metadata** and your
 **assets**, not just your HTML — crawlers, mailbox image proxies, feed readers
 and install prompts are all non-browsers, and each one fails silently.
+
+### A DOCUMENTED endpoint ships challenged too (2026-09-10)
+
+The section above is about metadata a crawler discovers on its own. This is the
+same failure one step further out: an endpoint we **published a contract for**.
+
+`/openapi.json` went on the crawler allowlist with AGL-2716, so any agent could
+read the tenant's API description. Neither endpoint that description names was
+on it. Measured on `aglyn.com` with the default curl User-Agent:
+
+```text
+curl  /openapi.json   200  application/json
+curl  /api/host       429  challenge
+curl  /api/screen     429  challenge
+```
+
+A document that can be read but not acted on is worse than no document: it
+spends the caller's trust and then refuses them. An agent-readiness audit read
+it exactly that way — it found the `RateLimit-*` headers declared in the spec,
+could not observe one on a live response, and reported the API as
+authentication-gated. It is not gated. It was unreachable, and the RFC 9331
+headers `publicReadApiGate` has emitted since AGL-2722 had never once been
+observable from outside.
+
+Fixed with a rule of its own rather than two more entries on the crawler
+allowlist, because the justification differs: these two carry their own
+limiter. `publicReadApiGate` meters every address at 600/minute and answers 429
+with `RateLimit-*` and `Retry-After`, so removing the challenge does not remove
+the ceiling — it replaces an unanswerable JavaScript challenge with a limit a
+caller can read and pace against, which is the whole reason those headers are
+published.
+
+**Exact paths, not a prefix.** `/api/screen/nodes` and `/api/screen/not-found`
+sit directly under the same namespace, are internal to the render, and must
+stay challenged.
+
+Measured after the PATCH, default curl User-Agent:
+
+```text
+curl  /api/host               200  ratelimit-limit: 600  ratelimit-remaining: 599
+curl  /api/screen             200  ratelimit-limit: 600  ratelimit-remaining: 598
+curl  /api/screen/nodes       429  challenge   (scope held)
+curl  /api/screen/not-found   429  challenge   (scope held)
+curl  /                       429  challenge   (page protection intact)
+```
+
+**This class now has a guard.** `npm run check:agent-readiness` reads the
+`paths` of the tenant's OpenAPI document and asserts that every concrete one is
+admitted by a declared bypass whose conditions are **all** path conditions — a
+rule gated on a shared secret, or on a User-Agent, does not admit a stranger
+and must not be counted as though it did. Templated paths are skipped and
+`/search` is declared a human-facing page, both with their reasons in the
+source. Nothing touches the network: it compares two files, exactly as the
+check's first half compares `robots.txt` against the WAF.
+
+The lesson the two cases share is the uncomfortable one. AGL-2727 fixed this
+same defect on the console's `/api/v1` a day earlier, by hand, and nothing
+looked at the tenant. A fix applied by hand to one surface is not a fix for the
+class — the guard is.
 
 ## Guarding the guard
 
