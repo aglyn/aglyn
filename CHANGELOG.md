@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.110 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.109...v1.0.0-beta.110)
+
+### Fixed
+
+- **api:** 404 an unknown site, and print an address the CLI user can paste ([AGL-2724](https://linear.app/aglyn/issue/AGL-2724), [AGL-2719](https://linear.app/aglyn/issue/AGL-2719))
+
+### Documentation
+
+- **uptime:** the journeys runbook never named the checks that page ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715))
+
 ## v1.0.0-beta.109 — 2026-09-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/0049273ec...v1.0.0-beta.109)
