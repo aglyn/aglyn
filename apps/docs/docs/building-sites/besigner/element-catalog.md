@@ -304,9 +304,11 @@ itself change what the rest of the page shows — wire an
 
 ### Video
 
-Set a **Video source** and a **Poster image**, both with **Browse media**.
+Set a **Video source** with **Browse media**. A video from your media library
+arrives with a poster frame, its running time and its dimensions already filled
+in — you only need **Poster image** to override the frame the library picked.
 
-The poster is what makes the element cheap. With one set, **Preload** defaults to
+The poster is what makes the element cheap. With one, **Preload** defaults to
 fetching *nothing* — a visitor downloads the poster and not one byte of the film
 until they press play. Without a poster the element falls back to fetching the
 video's length and dimensions, because a video with neither a poster nor metadata
@@ -327,9 +329,10 @@ film full size over the page, with a close button and `Esc` to dismiss. It needs
 poster; without one the player stays in the page as usual.
 
 :::tip
-Picking a video from the media library also copies its dimensions onto the element,
-which reserves the right-shaped box before anything loads and stops the rest of the
-page shifting when it does.
+Picking a video from the media library copies its dimensions onto the element, which
+reserves the right-shaped box before anything loads and stops the rest of the page
+shifting when it does. It fills in the duration too, so the only SEO fields left to
+write are the title, the description and the date.
 :::
 
 ### Image List

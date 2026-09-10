@@ -47,38 +47,18 @@
  * none of those changes whether the page is eligible.
  */
 
+import { videoDurationIso8601 } from './media-metadata'
 import {
   MEDIA_CDN_POSTER_WIDTH,
   absoluteMediaSrc,
-  mediaVariantSrc,
+  videoPosterSrc,
 } from './media-ref'
 
 /** Component id of the Video element. Persisted in documents; never renamed. */
 export const VIDEO_COMPONENT_ID = 'video'
 
-/** Seconds in the units an ISO-8601 duration is written in. */
-const SECONDS_PER_HOUR = 3600
-const SECONDS_PER_MINUTE = 60
-
-/**
- * A running time as an ISO-8601 duration (`PT1M3S`), the only form
- * `VideoObject.duration` is read in.
- *
- * Returns `undefined` rather than `PT0S` for anything that is not a positive
- * finite number of seconds. An absent duration is simply omitted; a zero-length
- * film is a claim nobody meant to make.
- */
-export function isoDuration(seconds: unknown): string | undefined {
-  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0)
-    return undefined
-  const whole = Math.round(seconds)
-  const hours = Math.floor(whole / SECONDS_PER_HOUR)
-  const minutes = Math.floor((whole % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
-  const rest = whole % SECONDS_PER_MINUTE
-  return `PT${hours ? `${hours}H` : ''}${minutes ? `${minutes}M` : ''}${
-    rest || (!hours && !minutes) ? `${rest}S` : ''
-  }`
-}
+/** Milliseconds in a second — the unit `videoDurationIso8601` takes. */
+const MS_PER_SECOND = 1000
 
 /** A node as the composed map holds it — flat, children by id. */
 interface ComposedVideoNode {
@@ -124,9 +104,16 @@ export function videoObjectJsonLd(
   const name = text(props['title'])
   const description = text(props['description'])
   const uploadDate = text(props['uploadDate'])
+  // The SAME rule the element renders with, so the thumbnail a crawler
+  // fetches is the poster a visitor sees — including the refusal to derive a
+  // generated poster's url unless the node records that one exists, which is
+  // what keeps a 404 out of the rich result.
   const thumbnailUrl = absoluteMediaSrc(
-    mediaVariantSrc(props['poster'], {
+    videoPosterSrc({
       hostId,
+      poster: props['poster'],
+      src: props['src'],
+      generated: props['posterFromSource'],
       width: MEDIA_CDN_POSTER_WIDTH,
     }),
     { hostId, origin },
@@ -138,7 +125,16 @@ export function videoObjectJsonLd(
     typeof props['src'] === 'string' ? props['src'] : undefined,
     { hostId, origin },
   )
-  const duration = isoDuration(props['durationSeconds'])
+  // Through the DAM's own formatter, in ITS unit. The node stores seconds
+  // because that is what an author types; `videoDurationIso8601` takes
+  // milliseconds and rounds a sub-second clip UP to `PT1S` rather than to a
+  // `PT0S` that reads as "no duration" — which is why this converts rather
+  // than keeping the second implementation it used to have.
+  const seconds = Number(props['durationSeconds'])
+  const duration =
+    Number.isFinite(seconds) && seconds > 0
+      ? videoDurationIso8601(seconds * MS_PER_SECOND)
+      : undefined
   return {
     '@context': 'https://schema.org',
     '@type': 'VideoObject',

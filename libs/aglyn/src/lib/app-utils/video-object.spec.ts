@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  isoDuration,
-  pageVideoObjects,
-  videoObjectJsonLd,
-} from './video-object'
+import { pageVideoObjects, videoObjectJsonLd } from './video-object'
 
 const ORIGIN = 'https://acme.example'
 
@@ -172,18 +168,30 @@ describe('pageVideoObjects', () => {
   })
 })
 
-describe('isoDuration', () => {
-  it('writes seconds, minutes and hours the way schema.org reads them', () => {
-    expect(isoDuration(63)).toBe('PT1M3S')
-    expect(isoDuration(60)).toBe('PT1M')
-    expect(isoDuration(45)).toBe('PT45S')
-    expect(isoDuration(3600)).toBe('PT1H')
-    expect(isoDuration(3725)).toBe('PT1H2M5S')
+describe('the generated poster is used only when one is known to exist', () => {
+  const withoutAuthoredPoster = {
+    title: complete.title,
+    description: complete.description,
+    uploadDate: complete.uploadDate,
+    src: complete.src,
+  }
+
+  it('derives the thumbnail from the source when the node says there is one', () => {
+    expect(build({ ...withoutAuthoredPoster, posterFromSource: true })).toMatchObject(
+      { thumbnailUrl: `${ORIGIN}/api/media/cdn/host1/film?poster=1&w=1280` },
+    )
   })
 
-  it('declines anything that is not a positive running time', () => {
-    for (const value of [0, -5, Number.NaN, '63', null, undefined]) {
-      expect(isoDuration(value)).toBeUndefined()
-    }
+  it('publishes NOTHING when no poster is known (AGL-2749)', () => {
+    // `mediaPosterSrc` answers for any CDN reference and its url is not a
+    // promise: a video uploaded before AGL-2742 answers 404, and a rich
+    // result whose thumbnail 404s is worse than no rich result.
+    expect(build(withoutAuthoredPoster)).toBeUndefined()
+  })
+
+  it("lets an author's own poster beat the generated one", () => {
+    expect(build({ ...complete, posterFromSource: true })).toMatchObject({
+      thumbnailUrl: `${ORIGIN}/api/media/cdn/host1/still?w=1280`,
+    })
   })
 })

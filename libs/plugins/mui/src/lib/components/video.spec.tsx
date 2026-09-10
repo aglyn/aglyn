@@ -122,6 +122,46 @@ describe('Video poster resolution (AGL-1215, AGL-2741)', () => {
       false,
     )
   })
+
+  it('uses the frame the DAM generated when the node says there is one', () => {
+    // The generated poster is not a separate asset — it is `?poster=1` on the
+    // video's own reference (AGL-2749).
+    expect(
+      video(<Video src="media:h/film" posterFromSource />).getAttribute(
+        'poster',
+      ),
+    ).toBe(`${CDN}/h/film?poster=1&w=${Aglyn.MEDIA_CDN_POSTER_WIDTH}`)
+  })
+
+  it('never derives a poster the node has not vouched for', () => {
+    // `mediaPosterSrc` answers for any CDN reference and a video uploaded
+    // before AGL-2742 answers 404 — which behind `<video poster>` is a blank
+    // frame, and in an `<img>` is a broken image.
+    expect(
+      video(<Video src="media:h/film" />).hasAttribute('poster'),
+    ).toBe(false)
+  })
+
+  it("keeps an author's own poster ahead of the generated one", () => {
+    expect(
+      video(
+        <Video src="media:h/film" poster="media:h/mine" posterFromSource />,
+      ).getAttribute('poster'),
+    ).toBe(`${CDN}/h/mine?w=${Aglyn.MEDIA_CDN_POSTER_WIDTH}`)
+  })
+
+  it('builds every lightbox srcSet candidate through the same rule', () => {
+    // Pasting `?w=` onto a generated poster's url would produce
+    // `?poster=1?w=320` and 404 every candidate.
+    const img = render(
+      <Video src="media:h/film" posterFromSource lightbox />,
+    ).container.querySelector('img') as HTMLImageElement
+    expect(img.getAttribute('src')).toBe(`${CDN}/h/film?poster=1`)
+    expect(img.getAttribute('srcset')).toContain(
+      `${CDN}/h/film?poster=1&w=320 320w`,
+    )
+    expect(img.getAttribute('srcset')).not.toContain('?poster=1?w=')
+  })
 })
 
 describe('Video reserves its box before any byte arrives (AGL-2741)', () => {

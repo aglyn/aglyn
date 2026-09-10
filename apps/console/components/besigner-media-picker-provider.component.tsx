@@ -49,8 +49,8 @@ export function BesignerMediaPickerProvider(
     alt?: string
     width?: number
     height?: number
-    duration?: number
-    posterUrl?: string
+    video?: unknown
+    poster?: unknown
   }
   const pendingPick = useRef<
     ((value: string, asset?: PickedAsset) => void) | null
@@ -124,21 +124,20 @@ export function BesignerMediaPickerProvider(
           // for the pick to copy them onto the node. Handed over raw; the
           // call site decides which prop names they land under, because only
           // it knows what the element declares.
-          // A video's running time and generated poster ride the same route
-          // (AGL-2741), and are READ THROUGH A CAST on purpose:
-          // `AglynHostMedia` does not declare either, because the DAM's video
-          // pipeline is what will write them and the type is that pipeline's
-          // to widen. Reading them defensively means this provider needs no
-          // edit on the day they appear — an absent field is `undefined`,
-          // `videoMediaProps` refuses it, and nothing is written to the node.
-          const videoMeta = media as { duration?: number; posterUrl?: string }
+          // A video's measurements and its generated poster ride the same
+          // route (AGL-2749), handed over as the document's own records
+          // rather than flattened: `video.width`/`video.height` are what the
+          // uploader's browser reported and `media.width`/`media.height` are
+          // what the server read from the bytes, and the two are kept apart
+          // on the document precisely so a reader knows which it has.
+          // `videoMediaProps` at the call site decides what to store.
           if (src)
             pendingPick.current?.(src, {
               alt: media.alt,
               width: media.width,
               height: media.height,
-              duration: videoMeta.duration,
-              posterUrl: videoMeta.posterUrl,
+              video: media.video,
+              poster: media.poster,
             })
           pendingPick.current = null
           setOpen(false)

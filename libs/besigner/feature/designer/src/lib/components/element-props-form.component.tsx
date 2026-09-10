@@ -1589,19 +1589,19 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
               assetWidth: asset?.width,
               assetHeight: asset?.height,
             }),
-            // The video companions (AGL-2741): running time, which the
-            // published page's `VideoObject` needs and no render path can
-            // read, and the generated poster frame, which is what makes
-            // `preload="none"` cost a thumbnail instead of a black box.
-            // Gated on the component id inside the helper for the same
-            // reason as the pair above, and the poster is a DEFAULT — the
-            // helper refuses to overwrite one the author already chose.
+            // The video companions (AGL-2749): the running time a published
+            // page's `VideoObject` needs, the pixel pair that reserves the
+            // player's box before any byte of video arrives, and a flag
+            // saying the DAM generated a poster still. Gated on the component
+            // id inside the helper for the same reason as the pair above.
+            // Spread AFTER `intrinsicMediaSize` deliberately — a video's
+            // dimensions come from its own `video` record, and this is the
+            // one that has them.
             ...videoMediaProps({
               componentId: node?.componentId,
               propName,
-              assetDuration: asset?.duration,
-              assetPoster: asset?.posterUrl,
-              placementPoster: current?.props?.['poster'],
+              assetVideo: asset?.video,
+              assetPoster: asset?.poster,
             }),
           })
         })

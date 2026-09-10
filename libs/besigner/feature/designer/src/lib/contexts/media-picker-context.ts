@@ -48,11 +48,13 @@ export interface MediaPickerContextValue {
    * on the node costs two numbers and is read like any other prop. They are
    * best-effort at upload, so either may be absent.
    *
-   * `duration` and `posterUrl` are the video half of the same bargain
-   * (AGL-2741) and travel for the same reason. Both are written by the DAM's
-   * video pipeline; until that lands neither is ever sent, `Aglyn.videoMediaProps`
-   * returns nothing, and an author's own poster and running time are what the
-   * element uses — which is the resting state, not a degraded one.
+   * `video` and `poster` are the video half of the same bargain (AGL-2749),
+   * and they are the DOCUMENT's own records rather than anything flattened on
+   * the way here — a video's dimensions live inside `video` precisely so a
+   * reader can tell a browser's report from a server measurement, and
+   * flattening them into `width`/`height` above would throw that distinction
+   * away at the seam. `Aglyn.videoMediaProps` owns what happens to them; a
+   * host that sends neither leaves every element exactly as it was.
    */
   onPickMedia?: (
     onPick: (
@@ -61,10 +63,10 @@ export interface MediaPickerContextValue {
         alt?: string
         width?: number
         height?: number
-        /** Running time in seconds, when the asset is a video the DAM has probed. */
-        duration?: number
-        /** The poster frame the DAM generated for a video asset. */
-        posterUrl?: string
+        /** The asset's `video` record: `durationMs`, `width`, `height`. */
+        video?: unknown
+        /** The asset's generated `poster` record, when the DAM made one. */
+        poster?: unknown
       },
     ) => void,
   ) => void

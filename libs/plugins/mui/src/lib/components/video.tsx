@@ -113,8 +113,23 @@ export interface VideoProps {
   /**
    * The still shown before playback, and the element's entire first paint
    * once `preload` is `none`. A media reference or a URL, like `src`.
+   *
+   * Optional even for a poster-first placement: when the DAM captured a frame
+   * at upload, {@link posterFromSource} says so and the element derives the
+   * poster from the video's own reference.
    */
   poster?: string
+  /**
+   * The chosen asset has a poster the DAM generated (AGL-2749), served at
+   * `?poster=1` on the video's own reference.
+   *
+   * Written by the pick, never by an author, and it is a flag rather than a
+   * url on purpose: the url can be derived from `src` by anybody, but only
+   * the media document knows whether it resolves to anything. A video
+   * uploaded before AGL-2742 answers 404, and this is what keeps that 404 out
+   * of an `<img>` and out of the page's `thumbnailUrl`.
+   */
+  posterFromSource?: boolean
   /**
    * The video's title (AGL-2741). Serves three jobs at once and is deliberate
    * about it: the `<video>`'s tooltip, the accessible name a screen reader
@@ -227,6 +242,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   const {
     src: storedSrc,
     poster: storedPoster,
+    posterFromSource,
     title,
     // Structured-data-only fields. Every one of them MUST be destructured:
     // what is left in `rest` is spread onto the `<video>`, where a
@@ -269,11 +285,21 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   // understand the same value.
   const { hostId } = Aglyn.useSite()
   const src = Aglyn.resolveMediaSrc(storedSrc, { hostId })
-  const posterBase = Aglyn.resolveMediaSrc(storedPoster, { hostId })
-  const poster = Aglyn.mediaVariantSrc(storedPoster, {
-    hostId,
-    width: POSTER_REQUEST_WIDTH,
-  })
+  // Two candidates, one rule, shared with the page's `thumbnailUrl`: the
+  // author's own poster wins, and the DAM's generated frame is used only when
+  // the node records that one exists (AGL-2749).
+  const posterFor = (width?: number) =>
+    Aglyn.videoPosterSrc({
+      hostId,
+      poster: storedPoster,
+      src: storedSrc,
+      generated: posterFromSource,
+      width,
+    })
+  /** Full size — what an `<img>` wants beside a `srcSet` of widths. */
+  const posterBase = posterFor()
+  /** One width — what `<video poster>` and a `thumbnailUrl` have to take. */
+  const poster = posterFor(POSTER_REQUEST_WIDTH)
   const captions = Aglyn.resolveMediaSrc(captionsSrc, { hostId })
   /**
    * The lightbox's two pieces of state, and they are deliberately two.
@@ -434,9 +460,16 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
             // single width for every viewport.
             srcSet={
               Aglyn.isMediaCdnUrl(posterBase)
-                ? Aglyn.MEDIA_CDN_VARIANT_WIDTHS.map(
-                    (variant) => `${posterBase}?w=${variant} ${variant}w`,
-                  ).join(', ')
+                ? Aglyn.MEDIA_CDN_VARIANT_WIDTHS.map((variant) => {
+                    // Built through the same rule as the src, not by pasting
+                    // `?w=` onto it: a generated poster's url already carries
+                    // `?poster=1`, so a hand-appended query would produce
+                    // `?poster=1?w=320` and 404 every candidate.
+                    const candidate = posterFor(variant)
+                    return candidate ? `${candidate} ${variant}w` : ''
+                  })
+                    .filter(Boolean)
+                    .join(', ')
                 : undefined
             }
             sizes={Aglyn.isMediaCdnUrl(posterBase) ? '100vw' : undefined}
@@ -580,9 +613,9 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
     {
       name: 'poster',
       description:
-        'The still shown before anyone presses play. Pick one with ' +
-        '"Browse media" — with a poster set, none of the video is ' +
-        'downloaded until a visitor asks for it.',
+        'The still shown before anyone presses play. Videos from your media ' +
+        'library already have one; pick a different image here to override ' +
+        'it. A poster is what keeps the video off the wire until it is asked for.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Poster image',
     },

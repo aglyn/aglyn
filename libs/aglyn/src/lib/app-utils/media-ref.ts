@@ -130,12 +130,6 @@ export const MEDIA_CDN_ROUTE = '/api/media/cdn'
 export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
 
 /**
- * Scheme of a stored media reference. Chosen so `startsWith` is a decision:
- * no URL, path, or `{{binding}}` an author can type begins with it, and it
- * is not a registered URL scheme, so a browser handed one by mistake fails
- * loudly rather than fetching something.
- */
-/**
  * The variant width a surface asks for when it can only ask for ONE.
  *
  * An `<img>` hands the browser {@link MEDIA_CDN_VARIANT_WIDTHS} and lets it
@@ -147,6 +141,12 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280, 1920] as const
  */
 export const MEDIA_CDN_POSTER_WIDTH = 1280
 
+/**
+ * Scheme of a stored media reference. Chosen so `startsWith` is a decision:
+ * no URL, path, or `{{binding}}` an author can type begins with it, and it
+ * is not a registered URL scheme, so a browser handed one by mistake fails
+ * loudly rather than fetching something.
+ */
 export const MEDIA_REF_PREFIX = 'media:'
 
 /**
@@ -1002,4 +1002,58 @@ export function mediaRenditionSrc(
   const src = resolveMediaSrc(value, options)
   if (!derivedObjectEligible(src)) return undefined
   return withMediaCdnQuery(src, [[MEDIA_CDN_RENDITION_PARAM, key]])
+}
+
+/**
+ * The still a Video element should show, from the two places one can come
+ * from (AGL-2749).
+ *
+ * A video placement has two candidate posters and they are not equal:
+ *
+ * 1. **The author's own**, a media reference or a URL in the element's
+ *    `poster` field. It wins outright wherever it is set — an author who went
+ *    and chose a frame meant that frame, and a generated one silently
+ *    replacing it would make re-picking the SOURCE a destructive edit.
+ * 2. **The one the DAM generated at upload** ({@link mediaPosterSrc}), which
+ *    is not a separate asset at all: it is `?poster=1` on the video's own
+ *    reference.
+ *
+ * ⚠️ `generated` is REQUIRED for the second, and it is the whole reason this
+ * function exists rather than a `??` at each call site. `mediaPosterSrc`
+ * answers for any CDN-form reference and its own documentation says plainly
+ * that a URL is **not a promise a poster exists** — a video uploaded before
+ * AGL-2742, or one the uploader's browser could not decode, answers 404. That
+ * degrades harmlessly behind `<video poster>` and NOT harmlessly in an
+ * `<img>` (a broken image) or in a `thumbnailUrl` (a rich result pointing at
+ * nothing). So the caller has to have read `poster` off the media document —
+ * which the pick does, once, and carries on the node.
+ *
+ * `width` narrows both candidates to a variant, for the surfaces that take one
+ * url and no `srcset`. Omit it to get the full-size still, which is what an
+ * `<img>` wants as its `src` beside a `srcSet` of widths.
+ */
+export function videoPosterSrc(
+  options: ResolveMediaSrcOptions & {
+    /** The element's own `poster` field — a reference, a URL, or nothing. */
+    poster?: unknown
+    /** The element's `src`, which the generated poster derives from. */
+    src?: unknown
+    /** Whether the media document records a generated poster. */
+    generated?: unknown
+    /** Narrow to a variant width; omit for the full-size still. */
+    width?: number
+  },
+): string | undefined {
+  const { poster, src, generated, width, ...resolve } = options ?? {}
+  const authored = typeof poster === 'string' ? poster.trim() : ''
+  if (authored) {
+    return width
+      ? mediaVariantSrc(authored, { ...resolve, width })
+      : resolveMediaSrc(authored, resolve)
+  }
+  if (!generated) return undefined
+  return mediaPosterSrc(typeof src === 'string' ? src : undefined, {
+    ...resolve,
+    width,
+  })
 }
