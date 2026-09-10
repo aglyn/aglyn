@@ -50,8 +50,16 @@ has no removal date; if you are already reading it, keep reading it.
 
 [rfc9331]: https://www.rfc-editor.org/rfc/rfc9331
 
-The one exception is a `401` for a key we can't identify (missing or invalid) — there's
-no budget to report when we don't know whose it is.
+A `401` for a key we can't identify (missing or invalid) reports a **different**
+budget — the per-address lookup budget below, not your key's. We can't report a key's
+budget when we don't know whose it is, but you are still being metered, so the numbers
+you get back are the ones that apply to you at that moment.
+
+:::caution The `401` and the `429` before it describe the lookup budget
+`RateLimit-Limit` is **60** there, not 120. Once a call authenticates, the same headers
+switch to your key's 120/min. If you are pacing against these, read them per response
+rather than caching the first one you saw.
+:::
 
 :::caution Repeatedly sending a key we don't recognise
 Looking up a key costs us work even when it turns out not to exist, so an IP address
@@ -64,6 +72,7 @@ it. In practice you only meet this if a client is looping on a key that was revo
 mistyped. Fix the key rather than retrying, and note that while an IP is in this state
 a *valid* key sent from the same address is refused too, because identifying it is the
 work we're declining to do.
+:::
 
 When you exceed the limit, the request returns `429` with a `Retry-After` header
 (seconds to wait):
