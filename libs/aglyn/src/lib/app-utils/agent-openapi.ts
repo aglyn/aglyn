@@ -417,8 +417,8 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
           'description and dates. Gated pages — private, password-protected, ' +
           'members-only and unlisted — are omitted, so this listing never ' +
           'advertises an address a visitor cannot open. Paginate by passing ' +
-          'the previous response’s `nextPageToken`; an empty token means the ' +
-          'last page.',
+          'the previous response’s `cursor`; an empty cursor means the last ' +
+          'page.',
         tags: ['Content'],
         parameters: [
           {
@@ -431,7 +431,7 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
             schema: { type: 'string' },
           },
           {
-            name: 'nextPageToken',
+            name: 'cursor',
             in: 'query',
             required: false,
             description:
@@ -462,13 +462,13 @@ export function buildAgentOpenApi(options: AgentOpenApiOptions): Schema {
                           type: 'array',
                           items: { $ref: '#/components/schemas/PublishedPage' },
                         },
-                        nextPageToken: {
+                        cursor: {
                           type: 'string',
                           description:
                             'Cursor for the next request; empty on the last page.',
                         },
                       },
-                      required: ['screens', 'nextPageToken'],
+                      required: ['screens', 'cursor'],
                     },
                   },
                   required: ['status'],

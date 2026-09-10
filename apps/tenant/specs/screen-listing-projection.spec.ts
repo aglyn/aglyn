@@ -368,9 +368,9 @@ describe('GET /api/screen lists what the router actually serves (AGL-2719)', () 
 })
 
 /**
- * The cursor `nextPageToken` names (AGL-2716), carried across the AGL-2719
- * rewrite: the token is still the last id of the page just served, so a caller
- * holding one from before the change keeps working.
+ * The cursor (AGL-2716), carried across the AGL-2719 rewrite and renamed to
+ * `cursor` at AGL-2751: the token is still the last id of the page just
+ * served, so a caller holding one from before either change keeps working.
  */
 describe('GET /api/screen pagination (AGL-2716)', () => {
   it('orders the listing, so a cursor addresses the same set on every call', async () => {
@@ -388,10 +388,10 @@ describe('GET /api/screen pagination (AGL-2716)', () => {
   it('hands back a cursor when more remain, and none when they do not', async () => {
     const first = await callRoute('?host=demo&limit=1')
     expect(first.body.data.screens.length).toBe(1)
-    expect(first.body.data.nextPageToken).toBeTruthy()
+    expect(first.body.data.cursor).toBeTruthy()
 
     const last = await callRoute('?host=demo&limit=100')
-    expect(last.body.data.nextPageToken).toBe('')
+    expect(last.body.data.cursor).toBe('')
   })
 
   it('never hands back a cursor that returns nothing', async () => {
@@ -401,10 +401,10 @@ describe('GET /api/screen pagination (AGL-2716)', () => {
     let guard = 0
     do {
       const page: { body: any } = await callRoute(
-        `?host=demo&limit=1${token ? `&nextPageToken=${token}` : ''}`,
+        `?host=demo&limit=1${token ? `&cursor=${token}` : ''}`,
       )
       if (token) expect(page.body.data.screens.length).toBeGreaterThan(0)
-      token = page.body.data.nextPageToken
+      token = page.body.data.cursor
       guard += 1
     } while (token && guard < 20)
   })
@@ -412,7 +412,7 @@ describe('GET /api/screen pagination (AGL-2716)', () => {
   it('continues from the cursor without repeating a page', async () => {
     const first = await callRoute('?host=demo&limit=1')
     const second = await callRoute(
-      `?host=demo&limit=1&nextPageToken=${first.body.data.nextPageToken}`,
+      `?host=demo&limit=1&cursor=${first.body.data.cursor}`,
     )
     const firstIds = first.body.data.screens.map((screen: any) => screen.$id)
     const secondIds = second.body.data.screens.map((screen: any) => screen.$id)
@@ -425,16 +425,46 @@ describe('GET /api/screen pagination (AGL-2716)', () => {
     let token = ''
     for (let request = 0; request < 20; request += 1) {
       const page: { body: any } = await callRoute(
-        `?host=demo&limit=1${token ? `&nextPageToken=${token}` : ''}`,
+        `?host=demo&limit=1${token ? `&cursor=${token}` : ''}`,
       )
       for (const screen of page.body.data.screens) seen.push(screen.$id)
-      token = page.body.data.nextPageToken
+      token = page.body.data.cursor
       if (!token) break
     }
     expect(seen).toContain('screen-about')
     expect(seen).toContain('screen-careers')
     expect(seen).not.toContain('screen-investors')
     expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  /*
+    THE OLD SPELLING IS NOT A COURTESY, it is the only one already-installed
+    copies of `@aglyn/cli` send. Both halves are asserted: the request name and
+    the response field. Dropping either breaks a caller that cannot be
+    contacted, on the day it deploys.
+  */
+  it('still accepts the `nextPageToken` request spelling', async () => {
+    const first = await callRoute('?host=demo&limit=1')
+    const viaLegacy = await callRoute(
+      `?host=demo&limit=1&nextPageToken=${first.body.data.cursor}`,
+    )
+    const viaCanonical = await callRoute(
+      `?host=demo&limit=1&cursor=${first.body.data.cursor}`,
+    )
+    expect(viaLegacy.body.data.screens.map((s: any) => s.$id)).toEqual(
+      viaCanonical.body.data.screens.map((s: any) => s.$id),
+    )
+    expect(viaLegacy.body.data.screens.length).toBeGreaterThan(0)
+  })
+
+  it('still returns the `nextPageToken` response field, equal to `cursor`', async () => {
+    const mid = await callRoute('?host=demo&limit=1')
+    expect(mid.body.data.cursor).toBeTruthy()
+    expect(mid.body.data.nextPageToken).toBe(mid.body.data.cursor)
+
+    const last = await callRoute('?host=demo&limit=100')
+    expect(last.body.data.cursor).toBe('')
+    expect(last.body.data.nextPageToken).toBe('')
   })
 
   it('clamps a limit nobody should be able to ask for', async () => {

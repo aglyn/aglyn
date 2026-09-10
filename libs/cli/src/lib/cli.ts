@@ -401,7 +401,7 @@ export async function runCli(
       let token = ''
       for (let request = 0; request < 100; request += 1) {
         const query = new URLSearchParams()
-        if (token) query.set('nextPageToken', token)
+        if (token) query.set('cursor', token)
         if (args.limit) query.set('limit', String(args.limit))
         const result = await get(
           context,
@@ -415,10 +415,18 @@ export async function runCli(
         }
         const data = envelopeData(result.body) as {
           screens?: Array<Record<string, unknown>>
+          cursor?: string
           nextPageToken?: string
         } | null
         for (const screen of data?.screens ?? []) collected.push(screen)
-        token = String(data?.nextPageToken ?? '')
+        /*
+          `cursor` is the documented field (AGL-2751). The older
+          `nextPageToken` is read as a fallback so a build of this CLI keeps
+          working against a self-hosted instance that has not deployed the
+          rename — the alias costs nothing and the alternative is a client
+          that silently returns one page.
+        */
+        token = String(data?.cursor ?? data?.nextPageToken ?? '')
         if (!token) break
       }
       if (args.json) {
