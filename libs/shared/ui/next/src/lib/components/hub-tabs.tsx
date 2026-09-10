@@ -24,7 +24,7 @@ import {
   mdiLockOutline,
 } from '@aglyn/shared-ui-jsx'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
-import { Tab, Tabs, useMediaQuery, useTheme } from '@mui/material'
+import { Box, Tab, Tabs, useMediaQuery, useTheme } from '@mui/material'
 import { usePathname } from 'next/navigation'
 import {
   type ReactNode,
@@ -274,6 +274,36 @@ export function useActiveSection(
   }, [pathname, sections])
 }
 
+/**
+ * A locked section's label: its name, then a lock, as one inline run
+ * (AGL-2783).
+ *
+ * The lock lives inside the label rather than in `Tab`'s `icon` slot, because
+ * MUI lays out a tab that has an icon as a different row. A tab with both an
+ * icon and a label gets `MuiTab-labelIcon` — a 72px minimum height against a
+ * plain tab's 48px, with its own vertical padding — and an icon beside the
+ * label turns the tab from a column into a row, where the rail's
+ * `alignItems: 'start'` stops meaning left and starts meaning top. Drawn that
+ * way, a locked section is taller than its neighbors, centered in its row,
+ * and its label is pinned to the row's top edge. Inside the label, a locked
+ * tab is the same tab as an unlocked one: same classes, same height, same
+ * alignment, on the vertical rail and the stacked one alike.
+ */
+function LockedSectionLabel(props: { label: string }) {
+  return (
+    <Box
+      component="span"
+      sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+    >
+      {props.label}
+      <MdiIcon
+        path={mdiLockOutline.path}
+        aria-label="Not included in your plan"
+      />
+    </Box>
+  )
+}
+
 export function HubSections(props: HubSectionsProps) {
   const { sections, children, navHeader = 'Navigation' } = props
   const { tabsProps } = useRailLayout()
@@ -305,24 +335,18 @@ export function HubSections(props: HubSectionsProps) {
                   <Tab
                     key={section.href}
                     value={section.href}
-                    label={section.label}
+                    label={
+                      section.locked ? (
+                        <LockedSectionLabel label={section.label} />
+                      ) : (
+                        section.label
+                      )
+                    }
                     component={AppLink}
                     href={section.href}
                     aria-current={
                       section.href === activeHref ? 'page' : undefined
                     }
-                    {...(section.locked
-                      ? {
-                          icon: (
-                            <MdiIcon
-                              path={mdiLockOutline.path}
-                              size={0.7}
-                              aria-label="Not included in your plan"
-                            />
-                          ),
-                          iconPosition: 'end' as const,
-                        }
-                      : {})}
                   />
                 ))}
               </Tabs>
