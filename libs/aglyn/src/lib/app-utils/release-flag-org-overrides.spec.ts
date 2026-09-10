@@ -38,9 +38,9 @@ describe('per-org release flag overrides (AGL-1635)', () => {
       expect(
         parseOrgReleaseFlagOverrides({
           release_edit_bar: true,
-          release_contacts: false,
+          release_crm: false,
         }),
-      ).toEqual({ release_edit_bar: true, release_contacts: false })
+      ).toEqual({ release_edit_bar: true, release_crm: false })
     })
 
     it('drops keys the registry does not declare', () => {
@@ -63,7 +63,7 @@ describe('per-org release flag overrides (AGL-1635)', () => {
       expect(
         parseOrgReleaseFlagOverrides({
           release_edit_bar: 'false',
-          release_contacts: 1,
+          release_crm: 1,
           release_email: null,
           release_inbox: true,
         }),

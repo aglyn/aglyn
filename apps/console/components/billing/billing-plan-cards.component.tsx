@@ -477,7 +477,7 @@ export interface BillingPlanCardsProps {
  * and the meter disagree about one org.
  */
 function useContactsOverageBilled(): boolean | null {
-  const { released, ready } = useReleaseFlag('release_contacts')
+  const { released, ready } = useReleaseFlag('release_crm')
   return ready ? released : null
 }
 
@@ -518,23 +518,23 @@ function headlineLimits(
   /*
    * The audience band is the one row here whose rate is gated on a RELEASE
    * FLAG rather than on the plan, so `per` is wrong for it (AGL-1604/1658).
-   * `report-usage` withholds the contacts overage while `release_contacts` is
-   * off, and the flag is default-off — so a bare "(+$1/1k over)" quotes a
-   * charge that no invoice carries, on the card a customer reads to choose a
-   * tier. That is the same defect the usage caption already fixed, one surface
-   * over.
+   * `report-usage` withholds the contacts overage while `release_crm` is
+   * off for the org. The flag is on for every workspace, but a staff override
+   * can still hold one org off, and for that org a bare "(+$1/1k over)" quotes
+   * a charge no invoice carries, on the card it reads to choose a tier. That is
+   * the same defect the usage caption already fixed, one surface over.
    *
    * The rate itself STAYS. It is a real published rate — `/pricing` lists it
-   * per tier and `billing-and-plans/overview.md` tells the same customer it
-   * applies once Contacts opens — so deleting it would swap a phantom charge
-   * for a phantom wall. Only the tense is wrong, and only the tense changes.
+   * per tier and `billing-and-plans/overview.md` bills it past every paid
+   * band — so deleting it would swap a phantom charge for a phantom wall. Only the tense is wrong, and only the tense changes.
    *
    * THREE states, because "not settled yet" is not either answer. Before
-   * Remote Config activates, every flag reads its registry default and
-   * `release_contacts` is default-off — so an unguarded card would assert the
-   * unbilled wording for one paint on a staff-granted org that IS billed
-   * (AGL-1635). `null` prints no rate rather than guessing one: a billing
-   * claim is not made until the verdict that decides it has settled.
+   * Remote Config activates, every flag reads its registry default, and a
+   * default is no org's verdict — an unguarded card would assert the billed
+   * wording for one paint on an org an override holds off, or the unbilled
+   * wording on a staff-granted org that IS billed (AGL-1635). `null` prints
+   * no rate rather than guessing one: a billing claim is not made until the
+   * verdict that decides it has settled.
    */
   const contactsPer = (rate: number | null | undefined) => {
     if (rate == null || contactsOverageBilled == null) return ''
@@ -1398,7 +1398,7 @@ function PlanCardBody({
         {'Unlimited member accounts'}
       </Typography>
       {/* Audience band (AGL-890): paid tiers meter overage — but only once
-          `release_contacts` is on. Same three-state rule and same reasoning as
+          `release_crm` is on. Same three-state rule and same reasoning as
           `contactsPer` in `headlineLimits`: the rate stays, the tense follows
           what `report-usage` actually invoices, and an unsettled verdict
           prints no rate at all. */}

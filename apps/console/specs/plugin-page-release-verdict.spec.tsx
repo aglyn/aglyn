@@ -26,7 +26,7 @@
  *
  * `libs/plugins/crm/.../contacts-section.tsx` quotes a dollar
  * figure for audience overage, and AGL-1604 stopped the usage cron billing
- * that figure while `release_contacts` is off for the org. The page cannot
+ * that figure while `release_crm` is off for the org. The page cannot
  * ask the flag for itself — the release-flag hooks are `scope:app` and a
  * `scope:lib` plugin may not import them — so the answer arrives as a prop
  * from this route, and this file is the hop where it could go wrong.
@@ -55,7 +55,7 @@ import type { ReactNode } from 'react'
 
 const ORG_ID = 'org-1'
 
-/** The published Remote Config value for `release_contacts`. */
+/** The published Remote Config value for `release_crm`. */
 let mockFlagValue: ReleaseFlagValue
 /** Whether the signed-in user carries the staff claim. */
 let mockIsStaff: boolean
@@ -76,7 +76,7 @@ function mockRecordingPluginPage(props: ConsolePluginPageProps) {
 jest.mock('@aglyn/aglyn', () => ({
   ...jest.requireActual('@aglyn/aglyn'),
   // The registry lookup is real below it: `navTabId: 'nav-tab-contacts'` is
-  // what `RELEASE_FLAGS` maps to `release_contacts`, so the flag this route
+  // what `RELEASE_FLAGS` maps to `release_crm`, so the flag this route
   // resolves is chosen the shipped way.
   resolveConsolePluginPage: () => ({
     extension: {},
@@ -113,7 +113,7 @@ jest.mock('firebase/remote-config', () => ({
   },
   getValue: (_config: unknown, key: string) => ({
     asString: () =>
-      key === 'release_contacts' ? JSON.stringify(mockFlagValue) : '',
+      key === 'release_crm' ? JSON.stringify(mockFlagValue) : '',
   }),
 }))
 

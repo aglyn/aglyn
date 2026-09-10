@@ -129,7 +129,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
    */
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  const contactsFlag = useReleaseFlag('release_contacts')
+  const contactsFlag = useReleaseFlag('release_crm')
   const permissions = useOrgPermissions()
   const crmReachable =
     Boolean(orgSlug && host) &&

@@ -15,12 +15,6 @@ follows from that: the email is the identity, so the API will not let you change
 and a second create for an address already present is a conflict rather than a second
 row.
 
-:::note The API is ahead of the console
-These endpoints are live. The console's **CRM** is still
-[rolling out](/content-and-data/crm/overview), so until it opens this API is the
-way to work with the contacts your sites have already captured.
-:::
-
 ## The contact object
 
 ```json

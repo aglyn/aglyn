@@ -12,12 +12,18 @@ for the how-to.
 
 ## September 2026 — the CRM (newest)
 
+- **[The CRM is open to every workspace](content-and-data/crm/overview.md)** — the
+  **CRM** tab now reaches every organization. Contacts are on every plan; leads,
+  companies, deals, tasks, reports and custom fields are included from Starter. On a
+  paid plan, records past your band now bill as
+  [overage](workspace-and-billing/billing-and-plans/overview.md#crm-records) on the
+  monthly invoice.
 - **[AI assist past the included band](workspace-and-billing/billing-and-plans/overview.md#assist-overage)** —
   on a paid plan the assistant now keeps answering once your included credits are used,
   and the extra credits are billed at your plan's per-1,000 rate on the monthly invoice.
   A switch under **Billing → Usage → AI assist overage**, **Stop AI assist at the
   included band**, stops it there instead; it is off unless you choose it.
-- **[The CRM hub](content-and-data/crm/overview.md)** *(rolling out)* — what was
+- **[The CRM hub](content-and-data/crm/overview.md)** — what was
   the **Contacts** tab is now **CRM**: one tab, seven sections at `…/crm/<section>`.
   [Contacts](content-and-data/crm/contact-record.md) get their own record pages and
   can be added by hand; [leads](content-and-data/crm/leads.md) are worked and
@@ -32,8 +38,7 @@ for the how-to.
   every section's table selects, acts and exports as a CSV that re-imports, and
   [companies import](content-and-data/crm/companies.md#import-from-csv) too; and
   automations gain [CRM events and steps](content-and-data/crm/automations.md).
-  Links to the older `/contacts` address still open the hub. Still release-flagged: it
-  appears on its own once the rollout reaches your workspace.
+  Links to the older `/contacts` address still open the hub.
 - **[Email templates and snippets](content-and-data/crm/email-templates.md)** — the
   one-to-one email from a record picks a **Template** that fills the subject and body,
   inserts a **Snippet** at the caret, and saves the letter you just wrote as either.
@@ -194,9 +199,8 @@ for the how-to.
   your contacts CRM is priced as an included band per tier. On paid plans, growing past
   the band **never drops a record**: extra contacts will bill as small metered overage
   ($0.25–$1.00 per 1,000/month, cheaper on higher tiers). The billing page has a new
-  Contacts meter with a live estimate. **Overage is not billed yet** — the
-  [CRM page](content-and-data/crm/overview.md) is still rolling out, and
-  nobody is charged for an audience they can't open.
+  Contacts meter with a live estimate. Overage billing began when the
+  [CRM](content-and-data/crm/overview.md) opened to every workspace.
 - **Clearer seat language** — what plan cards used to call "members per host" is now
   **site collaborators**: per-site teammate seats. Member accounts were never seats.
 - **[Platform fees on the plan cards](workspace-and-billing/billing-and-plans/overview.md#platform-fees)** —
@@ -402,10 +406,9 @@ The newest round tightened every marketing, billing, and operations loop:
 
 - **[Forms & lead capture](content-and-data/forms/overview.md)** — form components, an inbox reader, and
   dataset-backed submissions.
-- **[CRM](content-and-data/crm/overview.md)** *(rolling out)* — unified ingestion from forms,
-  members, orders, and bookings, with tags, notes, CSV export, and **segments**. Capture
-  and the [REST API](/api/resources/contacts) are live; the console tab is still on its
-  way.
+- **[CRM](content-and-data/crm/overview.md)** — unified ingestion from forms,
+  members, orders, and bookings, with tags, notes, CSV export, **segments** and a
+  [REST API](/api/resources/contacts).
 - **[Email campaigns](marketing-and-automation/email-campaigns/overview.md)** — audiences, tiered send caps, and
   unsubscribe handling.
 - **[Marketing overlays](marketing-and-automation/marketing-overlays/overview.md)** — a site-wide announcement bar and

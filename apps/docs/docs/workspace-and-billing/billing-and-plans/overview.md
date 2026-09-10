@@ -216,14 +216,6 @@ warning you against the new number straight away.
 
 ## CRM records {#crm-records}
 
-:::caution Rolling out
-The **[CRM](../../content-and-data/crm/overview.md)** in the console isn't
-available yet. Contacts are still captured from your sites and readable over the
-[REST API](/api/resources/contacts), and the Free band below still applies — but while
-the page is unavailable, **paid records overage is not billed**. The rates below are
-what will apply once the CRM opens.
-:::
-
 Your **CRM** — the contacts captured from forms, member sign-ups, buyers and bookings,
 and the companies and deals your team files beside them — is priced as one **CRM
 records band**, not a hard cap. A record is a **contact, a company or a deal**; tasks,

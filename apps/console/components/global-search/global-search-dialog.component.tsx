@@ -140,7 +140,7 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
    * the leads read is host data, but it follows this same gate because the
    * hub is where a lead opens.
    */
-  const contactsFlag = useReleaseFlag('release_contacts')
+  const contactsFlag = useReleaseFlag('release_crm')
   const permissions = useOrgPermissions()
   // Primitives, so the memo below — and the query effect that depends on
   // its result — settle once rather than once per render of the provider.

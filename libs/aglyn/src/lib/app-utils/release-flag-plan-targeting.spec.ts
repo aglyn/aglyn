@@ -40,7 +40,7 @@ import type { OrgPlan } from '../foundation'
  * already published without it.
  */
 
-const KEY: ReleaseFlagKey = 'release_contacts'
+const KEY: ReleaseFlagKey = 'release_crm'
 
 /** Enough org ids to have subjects on both sides of any percentage. */
 const subjects = Array.from({ length: 400 }, (_, index) => `org_${index}`)

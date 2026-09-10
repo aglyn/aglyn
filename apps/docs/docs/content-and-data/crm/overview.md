@@ -23,17 +23,6 @@ opens at the **organization** level, over every site at once, at
 `…/contacts` address, under a site or under the organization — still opens the
 hub.
 
-:::caution Rolling out
-The **CRM** tab in the console isn't available yet — it's a release-flagged
-feature, so there's no CRM tab in your workspace and nothing to switch on under
-**Organization → Plugins**.
-
-Capture is already running, though. Contacts are ingested from forms, member
-sign-ups, orders and bookings **today**, and you can read them over the
-[REST API](/api/resources/contacts) in the meantime — nothing is lost while you
-wait. Records-band overage is **not billed** while the page is unavailable.
-:::
-
 ![The Contacts section of the CRM: the contacts table with two rows selected and the bulk bar offering Add tag, Set stage, Set owner, Add to list, Export CSV and Remove](/img/contacts/crm-contacts.png)
 
 ```mermaid
@@ -92,8 +81,7 @@ the lead joins the same contact rather than making a second one.
 
 Every tier includes a **CRM records band** — one number for contacts, companies and
 deals together. Only the Free tier's band is a hard limit; paid tiers never drop a
-record, and growth past the band meters as overage. That overage is **not billed while
-the CRM is unavailable**. See
+record, and growth past the band meters as overage on the monthly invoice. See
 [CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records)
 under Billing & plans.
 

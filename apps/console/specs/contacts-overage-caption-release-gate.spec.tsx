@@ -24,7 +24,7 @@
  * The billing page quotes what the invoice will actually carry (AGL-1658).
  *
  * AGL-1604 stopped the usage cron putting `contactsOverageUsd` into
- * `billedCents` while `release_contacts` is off for the org (`ad6117436`,
+ * `billedCents` while `release_crm` is off for the org (`ad6117436`,
  * per-org overrides in `8c2dac60a`). The console's own caption kept rendering
  * "≈$3.15 this month" with no flag check — the same defect with the sign
  * reversed, and on the page a customer reads before deciding to stay.
@@ -43,14 +43,14 @@
  *     and is not shown one. Suppressing the caption unconditionally would
  *     trade a phantom charge for a hidden real one, so the grant case fails
  *     that "fix" as loudly as the unfixed code fails the withheld case.
- *  3. A LOADING DEFAULT IS NOT A BILLING CLAIM — `release_contacts` is
- *     default-off, so before Remote Config activation an unguarded caption
- *     asserts "not billed" for one paint on an org that is billed. Until the
- *     verdict settles, no caption; the head-count meter renders throughout.
+ *  3. A LOADING DEFAULT IS NOT A BILLING CLAIM — before Remote Config
+ *     activation `release_crm` reads its registry default, which is no org's
+ *     verdict, so an unguarded caption makes a claim for one paint that the
+ *     org's published value may contradict. Until the verdict settles, no
+ *     caption; the head-count meter renders throughout.
  *
- * The withheld wording is the one published in
- * `apps/docs/docs/workspace-and-billing/billing-and-plans/overview.md`
- * (AGL-1601/1603, `1a2aed5cb`): the page is unavailable, paid audience
+ * The withheld wording is what an org held off by an override reads
+ * (AGL-1601/1603, `1a2aed5cb`): the CRM is unavailable to it, paid audience
  * overage is not billed while it is, and the rate applies once it opens.
  *
  * NO STRIPE PATH IS EXERCISED — `fetch` is mocked at the boundary and this
@@ -71,7 +71,7 @@ const ESTIMATE = '3.15'
 const ORG = { $id: ORG_ID, plan: 'pro' } as any
 const HOSTS = [{ $id: 'host-a', displayName: 'Site A' }]
 
-/** The published Remote Config value for `release_contacts`. */
+/** The published Remote Config value for `release_crm`. */
 let mockFlagValue: ReleaseFlagValue
 /** `org.releaseFlags`, exactly as staff store it from /admin/orgs. */
 let mockOrgOverrides: Record<string, unknown> | undefined
@@ -124,7 +124,7 @@ jest.mock('firebase/remote-config', () => ({
   },
   getValue: (_config: unknown, key: string) => ({
     asString: () =>
-      key === 'release_contacts' ? JSON.stringify(mockFlagValue) : '',
+      key === 'release_crm' ? JSON.stringify(mockFlagValue) : '',
   }),
 }))
 
@@ -191,7 +191,7 @@ function caption(): HTMLElement | null {
 }
 
 describe('the audience-overage caption follows what is billed', () => {
-  it('withholds the dollar estimate while `release_contacts` is off', async () => {
+  it('withholds the dollar estimate while `release_crm` is off', async () => {
     mount()
     await contactsMeter()
 
@@ -218,7 +218,7 @@ describe('the audience-overage caption follows what is billed', () => {
   it('quotes the estimate for an org staff granted Contacts early', async () => {
     // AGL-1635 grant: this org CAN open the page, so the cron bills it — and
     // the page must say so. A blanket suppression fails here.
-    mockOrgOverrides = { release_contacts: true }
+    mockOrgOverrides = { release_crm: true }
     mount()
     await contactsMeter()
 
@@ -236,7 +236,7 @@ describe('the audience-overage caption follows what is billed', () => {
     // The per-org kill switch is half of AGL-1635, and the cron honours it:
     // globally enabled, off for this org, so nothing is invoiced.
     mockFlagValue = { enabled: true }
-    mockOrgOverrides = { release_contacts: false }
+    mockOrgOverrides = { release_crm: false }
     mount()
     await contactsMeter()
 
@@ -260,9 +260,9 @@ describe('the audience-overage caption follows what is billed', () => {
   })
 
   it('makes no billing claim at all before the flag verdict settles', async () => {
-    // Activation never lands. `release_contacts` is default-off, so an
-    // unguarded caption would assert "not billed" here — on an org whose
-    // published value may well be ON.
+    // Activation never lands. The registry default is no org's verdict, so
+    // an unguarded caption would make a claim here that the org's published
+    // value may contradict.
     mockActivationSettles = false
     mockFlagValue = { enabled: true }
     mount()

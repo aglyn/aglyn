@@ -182,8 +182,8 @@ async function handler(request: Request): Promise<Response> {
     }
     const flagValues = await getServerReleaseFlagValues()
     const flagOn = isReleaseFlagOnForOrg(
-      'release_contacts',
-      flagValues['release_contacts'],
+      'release_crm',
+      flagValues['release_crm'],
       orgId,
       parseOrgReleaseFlagOverrides(org['releaseFlags']),
       resolveEffectivePlan(org as never),

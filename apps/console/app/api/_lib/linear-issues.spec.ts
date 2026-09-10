@@ -83,7 +83,7 @@ const CONTEXT: ReportContext = {
   hostId: 'host-1',
   hostName: 'Acme Storefront',
   correlationId: '11111111-2222-4333-8444-555555555555',
-  releaseFlagsOn: ['release_contacts'],
+  releaseFlagsOn: ['release_crm'],
   version: '1.0.0-beta.1',
   buildId: 'abc1234',
   contactConsent: true,
@@ -329,7 +329,7 @@ describe('AGL-2185 · untrusted text cannot forge structure', () => {
       'Acme Storefront',
       'host-1',
       '11111111-2222-4333-8444-555555555555',
-      'release\\_contacts',
+      'release\\_crm',
     ]) {
       expect(body).toContain(expected)
     }

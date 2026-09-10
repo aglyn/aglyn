@@ -144,7 +144,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual('@aglyn/tenant-data-admin/server/crm-inbound-email'),
   firebaseAdmin: { app: () => ({ firestore: () => mockFirestore }) },
   getServerReleaseFlagValues: async () => ({
-    release_contacts: mockFlagOn ? { enabled: true } : { enabled: false },
+    release_crm: mockFlagOn ? { enabled: true } : { enabled: false },
   }),
   listOrgMembers: async (orgId: string) =>
     mockChildren(`orgs/${orgId}/members`).map((path) => ({
