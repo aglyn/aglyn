@@ -1772,16 +1772,86 @@ describe('the green path', () => {
     ).toMatch(/cut short/i)
   })
 
-  it('502 when the upstream refuses', async () => {
+  it('502 when the upstream refuses, in words the reader can use', async () => {
     seedOrgs()
     mockFetch.mockResolvedValue({
       ok: false,
       status: 529,
       body: null,
-      json: async () => ({ error: { message: 'Overloaded' } }),
+      json: async () => ({ error: { type: 'overloaded_error', message: 'Overloaded' } }),
     })
     const response = await POST(post(QUESTION_BODY(FREE_ORG)))
     expect(response.status).toBe(502)
-    await expect(response.json()).resolves.toEqual({ error: 'Overloaded' })
+    await expect(response.json()).resolves.toEqual({
+      error: 'The assistant is busy right now — try again in a moment.',
+    })
+  })
+
+  /*
+   * The provider's own words describe OUR account with it — a key, a rate
+   * limit, a balance — and name the vendor to a white-label org's users. The
+   * panel renders whatever arrives here straight into the answer, so none of it
+   * may arrive (AGL-2815). The provider's payload stays in the log.
+   */
+  it('never hands the provider’s account messages to the reader (AGL-2815)', async () => {
+    seedOrgs()
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      body: null,
+      json: async () => ({
+        error: {
+          type: 'invalid_request_error',
+          message:
+            'Your credit balance is too low to access the Anthropic API. ' +
+            'Please go to Plans & Billing to upgrade or purchase credits.',
+        },
+      }),
+    })
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(502)
+    const body = await response.json()
+    expect(body).toEqual({ error: 'The assistant request failed — try again.' })
+    expect(JSON.stringify(body)).not.toMatch(/credit balance|Anthropic/)
+  })
+
+  /** A stream that opens and then carries the provider's in-stream error event. */
+  function armUpstreamStreamError(error: { type: string; message: string }): void {
+    const encoder = new TextEncoder()
+    const events = [
+      { type: 'message_start', message: { usage: { input_tokens: 900 } } },
+      { type: 'error', error },
+    ]
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const event of events) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+          }
+          controller.close()
+        },
+      }),
+    })
+  }
+
+  it.each([
+    [
+      'an overloaded provider',
+      { type: 'overloaded_error', message: 'Overloaded' },
+      'The assistant is busy right now — try again in a moment.',
+    ],
+    [
+      'a provider fault',
+      { type: 'api_error', message: 'Internal server error at the provider (request req_011CT)' },
+      'The assistant request failed — try again.',
+    ],
+  ])('relays %s mid-stream as fixed copy (AGL-2815)', async (_label, error, copy) => {
+    seedOrgs()
+    armUpstreamStreamError(error)
+    const events = await readEvents(await POST(post(QUESTION_BODY(FREE_ORG))))
+    expect(events.find((event) => event.type === 'error')?.error).toBe(copy)
+    expect(JSON.stringify(events)).not.toContain(error.message)
   })
 })
