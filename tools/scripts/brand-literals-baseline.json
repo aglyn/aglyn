@@ -20,6 +20,7 @@
   "apps/tenant/middleware.ts": 1,
   "libs/aglyn/src/lib/app-utils/email-starter-policy.ts": 2,
   "libs/aglyn/src/lib/foundation/constants/_internal.ts": 3,
+  "libs/cli/src/lib/cli.ts": 4,
   "libs/plugins/commerce/src/lib/components/console/tax-settings-card.component.tsx": 1,
   "libs/plugins/commerce/src/lib/server/billing-webhook.ts": 2,
   "libs/plugins/email/src/lib/components/sending-domains-card.tsx": 3,
