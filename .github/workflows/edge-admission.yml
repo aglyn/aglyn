@@ -22,10 +22,13 @@ name: Edge admission
 
 on:
   schedule:
-    # A request rate, not a work rate. GitHub drops most scheduled runs
-    # (AGL-2723), so this asks often and the script's own forty-five minute
-    # floor decides whether a delivered run does anything.
-    - cron: '*/10 * * * *'
+    # ⛔ Do not tune this. GitHub does not begin serving a newly added or
+    # newly changed schedule for some time, and every edit restarts that wait
+    # — measured 2026-09-10, the only two workflows in this repo that had
+    # never fired were the two edited that day (AGL-2723). The script's own
+    # forty-five minute floor decides whether a delivered run does anything,
+    # and the real trigger is Cloud Scheduler.
+    - cron: '5,35 * * * *'
   workflow_dispatch: {}
 
 # One sampler at a time. Two concurrent runs would both read the same prior

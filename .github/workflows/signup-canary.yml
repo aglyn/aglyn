@@ -13,28 +13,37 @@
 # `/api/health/journeys` reports as `signupCanary` — graded by the existing
 # First-run journeys monitor, so no new row on the uptime board.
 #
-# ## The ask rate and the work rate are set separately, on purpose
+# ## ⛔ EDITING THIS CRON IS WHAT KEEPS IT FROM RUNNING (AGL-2723)
 #
-# GitHub serves `schedule` from a best-effort queue and drops most of what it
-# is asked for, so the requested rate is not the delivered rate. Measured
-# 2026-09-10 in this repo: `uptime-probe.yml` asks every fifteen minutes and
-# fired at gaps of 1h55m to 4h38m; the whole repo went 02:31Z to 04:33Z with no
-# scheduled run of anything at all, while GitHub reported all systems
-# operational. Over those same four hours the workflows that DID get served
-# were the ones asking four and five times an hour, and this one, asking once
-# and then twice, was never served (AGL-2723).
+# GitHub does not begin serving a newly added or newly changed `schedule`
+# right away, and every edit appears to restart that wait. Measured 2026-09-10
+# across this repo: every workflow whose file was last touched before that day
+# fired on schedule — `funnel-conversion-alarm` (Sep 5), `scheduled-crons`
+# (Sep 7), `uptime-probe` and `tenant-prod-smoke` (Sep 9). Both workflows
+# edited THAT day — this one and `edge-admission.yml` — had never fired once,
+# five hours in, including at cadences six times higher than the ones being
+# served.
 #
-# Asking often is the only lever available on this side of the API, so this
-# asks every ten minutes — above the two schedules observed being served.
+# So the cadence below is not a lever and raising it was a wrong turn: what
+# starves this schedule is churn on the file, not the number in it. Leave the
+# expression alone.
 #
-# That would be reckless on its own, because every walk creates and deletes a
-# real account and org on production and sends real mail. So the WORK rate is
-# bounded independently: `MIN_WALK_INTERVAL_MS` in the script skips any run
-# whose last SUCCESSFUL walk is under forty-five minutes old, without touching
-# the marker. However many runs GitHub delivers, at most one an hour walks.
+# ## Delivery is also unreliable once it IS registered
 #
-# `SIGNUP_CANARY_STALE_AFTER_MS` is six hours, sized to the measured gaps
-# rather than to this expression.
+# Separately and independently: `uptime-probe.yml` asks every fifteen minutes
+# and fired at gaps of 1h55m to 4h38m, and the whole repo went 02:31Z to
+# 04:33Z with no scheduled run of anything while GitHub reported all systems
+# operational. `SIGNUP_CANARY_STALE_AFTER_MS` is six hours for that reason,
+# sized to the measured gaps rather than to this expression.
+#
+# ## The work rate is bounded regardless
+#
+# Every walk creates and deletes a real account and org on production and
+# sends real mail, so `MIN_WALK_INTERVAL_MS` in the script skips any delivered
+# run whose last SUCCESSFUL walk is under forty-five minutes old, without
+# touching the marker. That holds whether this cron delivers once an hour or
+# six times, and it is what makes the trigger safe to move to Cloud Scheduler
+# (`tools/scripts/setup-canary-scheduler.mjs`) without changing anything here.
 #
 # ## Why a browser, and why no bypass header
 #
@@ -66,10 +75,11 @@ name: Signup canary
 # outage on a healthy platform.
 on:
   schedule:
-    # Every ten minutes is a request rate, not a walk rate — the script's
-    # own floor decides whether a delivered run actually walks. See "The ask
-    # rate and the work rate are set separately" above.
-    - cron: '*/10 * * * *'
+    # Hourly, off the top of the hour where every other scheduled job in this
+    # repo clusters. The script's own floor decides whether a delivered run
+    # actually walks, so this number is a backstop rather than a rate — the
+    # real trigger is Cloud Scheduler. Do not tune it: see the note above.
+    - cron: '25 * * * *'
   workflow_dispatch: {}
 
 # One walk at a time. Two concurrent runs would race for the same orphan sweep
