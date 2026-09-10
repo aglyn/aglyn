@@ -165,8 +165,9 @@ Every site exports a full backup from its own settings. Take one:
   hold period — unlike deleting an organization, which has one. There is no undo and
   we keep no copy.
 
-Take one from the site's **Setup → Backup & restore**. Datasets export separately to
-CSV from **Content → Data**, so a full handover is usually both.
+Take one from the site's **Admin → Backup & template**. It includes the datasets that
+site can see — up to 50, with up to 1,000 records each — so a larger dataset also wants
+its own export from the **Data** tab (**CSV** or **JSON**), which downloads every record.
 
 ## Step 6 — Billing, and what to tell clients {#step-6-billing}
 

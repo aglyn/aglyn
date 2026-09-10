@@ -39,6 +39,7 @@ import {
   type HostVariable,
   type HostWorkflow,
   buildDatasetRecordValues,
+  datasetDisplayName,
   contactCampaignFieldPath,
   datasetIntegrityFields,
   datasetIntegrityUpdate,
@@ -456,32 +457,43 @@ async function executeAction(
             : [],
         }
         const values = buildDatasetRecordValues(appendDataset, payload)
-        if (Object.keys(values).length) {
-          const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
-          if (refusal) {
-            stepErrors.push(refusal)
-            continue
-          }
-          await datasetDoc.ref.collection('records').add({
-            values,
-            // The integrity index the console's delete check queries —
-            // carried by every write that sets `values`, or the index
-            // describes rows this one never held.
-            ...datasetIntegrityFields(
-              effectiveDatasetModel(appendDataset),
-              values,
-            ),
-            createdAt: FieldValue.serverTimestamp(),
-          })
-          // `saved to Leads` beats `saved to dataset` (AGL-2171). Same
-          // name precedence `findDatasetByName` resolves in.
-          detail = String(
-            datasetDoc.get('displayName') ??
-              datasetDoc.get('name') ??
-              step.datasetName ??
-              '',
-          ).slice(0, 60)
+        // Same name precedence `findDatasetByName` resolves in.
+        const appendLabel = (
+          datasetDisplayName({
+            displayName: datasetDoc.get('displayName'),
+            name: datasetDoc.get('name'),
+          }) ||
+          step.datasetName ||
+          ''
+        ).slice(0, 60)
+        // No event field matched a field of the dataset, so there is nothing
+        // to write. An error rather than a quiet success: a run history that
+        // says `saved to Leads` while nothing saves is how a mismatched field
+        // name goes unnoticed.
+        if (!Object.keys(values).length) {
+          stepErrors.push(
+            `no event field matches a field in dataset "${appendLabel || step.datasetId}"`,
+          )
+          continue
         }
+        const refusal = await datasetAppendRefusal(env, datasetDoc.ref)
+        if (refusal) {
+          stepErrors.push(refusal)
+          continue
+        }
+        await datasetDoc.ref.collection('records').add({
+          values,
+          // The integrity index the console's delete check queries —
+          // carried by every write that sets `values`, or the index
+          // describes rows this one never held.
+          ...datasetIntegrityFields(
+            effectiveDatasetModel(appendDataset),
+            values,
+          ),
+          createdAt: FieldValue.serverTimestamp(),
+        })
+        // `saved to Leads` beats `saved to dataset` (AGL-2171).
+        detail = appendLabel
       } else if (step.type === 'updateDataset') {
         // Update-or-append (AGL-257): matches the record whose `email`
         // field equals the payload's email; appends when nothing matches.
@@ -501,7 +513,21 @@ async function executeAction(
         }
         const updateModel = effectiveDatasetModel(updateDataset)
         const values = buildDatasetRecordValues(updateDataset, payload)
-        if (!Object.keys(values).length) continue
+        // Nothing to merge or append — an error, for the reason the append
+        // branch above gives.
+        if (!Object.keys(values).length) {
+          const updateLabel =
+            datasetDisplayName({
+              displayName: datasetDoc.get('displayName'),
+              name: datasetDoc.get('name'),
+            }) ||
+            step.datasetName ||
+            step.datasetId
+          stepErrors.push(
+            `no event field matches a field in dataset "${String(updateLabel ?? '').slice(0, 60)}"`,
+          )
+          continue
+        }
         const email = String((payload as any).email ?? '').trim()
         const existing = email
           ? await datasetDoc.ref

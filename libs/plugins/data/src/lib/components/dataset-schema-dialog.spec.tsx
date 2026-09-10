@@ -19,9 +19,17 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { doc, updateDoc } from 'firebase/firestore'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
+
+let mockOrgHosts: Array<{ $id: string; name?: string }> = []
 
 jest.mock('firebase/firestore', () => ({
   // Keep the real module (Timestamp etc. ride into @aglyn/aglyn) and only
@@ -52,7 +60,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // could return a denied doc (AGL-1145). No uid, no query — so a mock that
   // omitted this would leave the hook returning nothing for the wrong reason.
   useUser: () => ({ data: { uid: 'uid-test' } }),
-  useFirestoreCollection: () => ({ data: [] }),
+  // The org's sites, for the "Selected sites…" chips. Empty unless a case
+  // needs sites to pick.
+  useFirestoreCollection: () => ({ data: mockOrgHosts }),
   // The REAL guard (AGL-1358), not a stub. A mocked guard would let the
   // write through no matter what the dialog passed it, which is the one
   // thing these specs are here to disprove.
@@ -339,7 +349,10 @@ describe('DatasetSchemaDialog shows the stored scope (AGL-1484)', () => {
   /** The write is still gated on that comparison, and only on it. */
   it('still writes the scope only when it changed', () => {
     expect(SOURCE).toMatch(
-      /\.\.\.\(orgId && viewerOrgWide && scopeChanged\s*\n?\s*\?\s*\{ visibleTo:/,
+      /const scopeWrite =\s*orgId && viewerOrgWide && scopeChanged \?/,
+    )
+    expect(SOURCE).toMatch(
+      /\.\.\.\(scopeWrite\?\.scope \? \{ visibleTo: scopeWrite\.scope \} : \{\}\)/,
     )
   })
 
@@ -408,5 +421,92 @@ describe('DatasetSchemaDialog shows the stored scope (AGL-1484)', () => {
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
     const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
     expect(payload.visibleTo).toEqual(['org'])
+  })
+})
+
+/**
+ * A sharing choice the document cannot store is refused, never widened
+ * (AGL-2773).
+ *
+ * `normalizeVisibleTo` answers null for "Selected sites…" with no site picked,
+ * and for more sites than one `array-contains-any` can match. Substituting the
+ * org-wide token for that null saved a collection somebody was NARROWING as
+ * shared with every site — straight after the dialog had warned about the
+ * sites the change would take access from.
+ */
+describe('DatasetSchemaDialog refuses a scope it cannot store (AGL-2773)', () => {
+  const dataset = {
+    $id: 'products',
+    displayName: 'Products',
+    model: {
+      fields: { title: { name: 'Title', type: 'text' as const } },
+      order: ['title'],
+    },
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockOrgHosts = []
+  })
+  afterEach(() => {
+    mockOrgHosts = []
+  })
+
+  /**
+   * Waits past the narrowing confirmation and the seed guard, both of which
+   * resolve asynchronously, so "nothing was written" cannot pass by being
+   * asserted before the write would have landed.
+   */
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    })
+
+  it('does not save "Selected sites…" with no site picked as All sites', async () => {
+    renderDialog({ ...dataset, visibleTo: ['org'] } as never)
+
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.click(screen.getByRole('option', { name: 'Selected sites…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+    await settle()
+
+    expect(updateDoc).not.toHaveBeenCalled()
+    expect(screen.getByText(/at least one site/i)).toBeTruthy()
+  })
+
+  it('does not save more sites than a scope can hold as All sites', async () => {
+    mockOrgHosts = Array.from(
+      { length: Aglyn.MAX_SCOPE_HOSTS + 1 },
+      (_, index) => ({ $id: `h${index + 1}`, name: `Site ${index + 1}` }),
+    )
+    renderDialog({ ...dataset, visibleTo: ['host:h1'] } as never)
+
+    for (let index = 2; index <= Aglyn.MAX_SCOPE_HOSTS + 1; index += 1) {
+      fireEvent.click(screen.getByText(`Site ${index}`))
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+    await settle()
+
+    expect(updateDoc).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(
+        new RegExp(`${Aglyn.MAX_SCOPE_HOSTS} sites or fewer`, 'i'),
+      ),
+    ).toBeTruthy()
+  })
+
+  it('THE CONTROL: still saves a selection it can store', async () => {
+    mockOrgHosts = [
+      { $id: 'h1', name: 'Site 1' },
+      { $id: 'h2', name: 'Site 2' },
+    ]
+    renderDialog({ ...dataset, visibleTo: ['host:h1'] } as never)
+
+    fireEvent.click(screen.getByText('Site 2'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save schema' }))
+
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+    expect(payload.visibleTo).toEqual(['host:h1', 'host:h2'])
   })
 })

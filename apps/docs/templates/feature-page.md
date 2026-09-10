@@ -9,7 +9,7 @@ description: <One sentence — what the reader will be able to do after this pag
 <One or two sentences: what this feature is and the problem it solves for the user.>
 
 :::info Plan availability
-**<Free | Pro | Business>**. <Note any quota or add-on, e.g. "1 dataset on Free, unlimited on Pro.">
+**<Free | Pro | Business>**. <Note any quota or add-on, e.g. "3 datasets on Starter, 15 on Pro.">
 :::
 
 ## What you can do

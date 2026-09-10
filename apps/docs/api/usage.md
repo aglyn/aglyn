@@ -32,11 +32,11 @@ to contacts still needs to see the request quota that would refuse it.
   "object": "usage",
   "month": "2026-08",
   "apiRequests":   { "used": 18422, "included": 100000, "remaining": 81578, "metered": true },
-  "contacts":      { "used": 3120,  "included": 100000, "remaining": 96480, "metered": true },
-  "crmRecords":    { "used": 3520,  "included": 100000, "remaining": 96480, "metered": true },
-  "datasets":      { "used": 4,     "included": 25,     "remaining": 21,    "metered": false },
-  "dataStorageMb": { "used": 412,   "included": 10240,  "remaining": 9828,  "metered": true },
-  "campaignEmails": { "used": 1240,  "included": 50000,  "remaining": 48760, "metered": false },
+  "contacts":      { "used": 3120,  "included": 50000,  "remaining": 46480, "metered": true },
+  "crmRecords":    { "used": 3520,  "included": 50000,  "remaining": 46480, "metered": true },
+  "datasets":      { "used": 4,     "included": 100,    "remaining": 96,    "metered": false },
+  "dataStorageMb": { "used": 412,   "included": 25600,  "remaining": 25188, "metered": true },
+  "campaignEmails": { "used": 1240,  "included": 25000,  "remaining": 23760, "metered": false },
   "crm": {
     "companies":  { "used": 312, "included": null, "remaining": null, "metered": false },
     "deals":      { "used": 88,  "included": null, "remaining": null, "metered": false },
@@ -75,8 +75,10 @@ and the two answers are completely different:
 
 - **`metered: true`** — crossing the band **doesn't fail anything**. The excess bills
   as [overage](rate-limits.md#monthly-quota--overage) at your plan's rate. A bulk
-  import runs to completion; a busy month costs more. This is the case on every plan
-  that includes the API, for requests, contacts and storage.
+  import runs to completion; a busy month costs more. This is the case for requests,
+  contacts and storage on every self-serve plan that includes the API, Business
+  through Agency. Enterprise has no overage rates, so all three are `metered: false`
+  there.
 - **`metered: false`** — crossing the band is a **refusal**. Once `remaining` hits `0`
   the next write answers `403 plan_required` with the matching
   [`code`](conventions.md#plan-required).

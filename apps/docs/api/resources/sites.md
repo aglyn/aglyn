@@ -130,11 +130,12 @@ of when the cache happens to expire.
 
 You need this more often than it first looks. Writing a
 [dataset record](datasets.md) changes what a page *would* render, but a live page is
-cached: pages are rebuilt at most every 60 seconds, and that cache is
-stale-while-revalidate — the first visitor after the window still gets the old copy
-while the new one is built behind them. So without a publish, "my record is in the API
-but not on the site" is the expected behavior for up to a couple of minutes, and you
-cannot tell it apart from a write that failed.
+cached: pages are rebuilt at most once an hour, the dataset reads behind them are
+cached for an hour as well, and the page cache is stale-while-revalidate — the first
+visitor after the window still gets the old copy while the new one is built behind
+them. So without a publish, "my record is in the API but not on the site" is the
+expected behavior for an hour or more, and you cannot tell it apart from a write that
+failed.
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/sites/host_demo/publish" \
@@ -157,7 +158,7 @@ curl -X POST "https://app.aglyn.com/api/v1/sites/host_demo/publish" \
 | `published` | `true` when the site's pages were refreshed. **Check it** — see below. |
 | `reason` | `null` on success. Otherwise why not: `"not_routed"` (the site has no live pages yet), `"not-configured"`, `"tenant-{status}"`, `"error"`. |
 | `pages` | How many cached pages were dropped. |
-| `pagesDropped` | Pages **not** refreshed because the site exceeded the 250-page limit for one call. They catch up on their own within a minute. |
+| `pagesDropped` | Pages **not** refreshed because the site exceeded the 250-page limit for one call. They catch up on their own when their cached copy expires, within the hour. |
 
 A `200` does **not** always mean published. `published: false` with a `reason` is the
 honest answer for a site with nothing routed yet, or a refresh we could not complete —
@@ -176,8 +177,8 @@ rather than to the request — and minting more keys does not raise it, because 
 budget belongs to the site.
 
 Over budget returns `429 rate_limited` with a `Retry-After`. Nothing is lost when it
-does: the 60-second cache window is still underneath, so the change appears on its own
-shortly after.
+does: the hour-long cache is still underneath, so the change appears on its own — an
+hour or more later rather than now.
 
 Publish **once at the end of a batch**, not after every record. A sync that writes 500
 records and publishes once is both faster and within budget; one that publishes per

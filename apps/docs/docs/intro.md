@@ -76,10 +76,12 @@ product clicks into place.
 flowchart TD
   H[Site — your website] --> S[Screens]
   H --> L[Layouts]
-  H --> D[Data: datasets, variables, functions]
+  H --> D[Data: datasets]
+  H --> G[Logic: variables, functions]
   H --> M[Media]
   L -. wraps .-> S
   D -. binds into .-> S
+  G -. binds into .-> S
   M -. used by .-> S
   S --> P[Published site]
 ```

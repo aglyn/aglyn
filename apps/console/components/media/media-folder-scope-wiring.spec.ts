@@ -320,7 +320,10 @@ describe('AGL-1480 · the detail drawer shows what is stored', () => {
   /** The write is still gated on that comparison, and only on it. */
   it('still writes the scope only when it changed', () => {
     expect(CODE).toMatch(
-      /\.\.\.\(orgId && viewerOrgWide && scopeChanged\s*\?\s*\{ visibleTo:/,
+      /const scopeWrite =\s*orgId && viewerOrgWide && scopeChanged\s*\?/,
+    )
+    expect(CODE).toMatch(
+      /\.\.\.\(scopeWrite\?\.scope \? \{ visibleTo: scopeWrite\.scope \} : \{\}\)/,
     )
   })
 

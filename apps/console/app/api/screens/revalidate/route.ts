@@ -31,9 +31,9 @@
  *
  * BEST EFFORT, ALWAYS. A publish has already succeeded by the time this is
  * called — the pointer is written and the page is live-but-stale. Failing here
- * must never make a successful publish look failed; the old 60-second window
- * is still underneath as the backstop, so the worst outcome is the behaviour
- * we had before.
+ * must never make a successful publish look failed; the page's hour-long ISR
+ * window is still underneath as the backstop, so the worst outcome is a live
+ * page that catches up late.
  */
 
 import {

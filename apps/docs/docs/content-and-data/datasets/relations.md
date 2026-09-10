@@ -10,15 +10,16 @@ Real data is connected — posts have authors, products have categories. **Relat
 record **reference** other records.
 
 :::info Plan availability
-**Pro**.
+**Starter** and above — wherever datasets are available.
 :::
 
 ![Datasets on the data page](/img/datasets/data-page.png)
 
 ## Reference fields
 
-Add a **reference** field to a model to point at records in another dataset (or the same
-one). For example, a `post` can reference its `author`.
+Add a **reference** field to a model to point at records in another dataset — the target
+picker never offers the dataset you are editing. For example, a `post` can reference its
+`author`.
 
 ## Many-to-many
 

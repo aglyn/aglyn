@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  checkDatasetQuota,
   checkSeatQuota,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -211,12 +212,16 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         // to `?? 0`, which reads as "0 datasets used" — a confident wrong
         // number, and the one that would say you are comfortably under a
         // limit you may already have hit.
+        //
+        // Measured against the limit a create is refused at — the datasets
+        // the plan includes plus the ones the org bought, clamped to the
+        // plan's maximum — so the warning and the refusal name one number.
         ...(datasets
           ? [
               {
                 label: 'datasets',
                 used: datasets.data().count,
-                limit: entitlements.datasetsPerOrg,
+                limit: checkDatasetQuota(org, datasets.data().count).limit,
               },
             ]
           : []),

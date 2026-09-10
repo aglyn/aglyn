@@ -325,8 +325,8 @@ The line reads the asset, not your plan: a paid plan does not make a line say
 ## Who an asset is shared with
 
 Workspace media is shared across every site by default. The **Shared with** control
-narrows that, with the same three choices as datasets — **All sites**, **This site only**,
-or **Selected sites…**. You'll find it in three places:
+narrows that, with the same two choices as datasets — **All sites** or
+**Selected sites…**. You'll find it in three places:
 
 - on a single asset, in its details drawer;
 - on a **selection** — tick several files and use **Shared with…** in the toolbar;
@@ -342,8 +342,9 @@ Only workspace owners and admins can change sharing.
 A new folder starts shared with **All sites**, so it appears everywhere the moment you
 create it — or with the site you were working in, if your workspace has been set to make
 new resources site-scoped by default. That default is **Default sharing for new data and
-media**, at the top of the workspace's **Media** page; it applies to new datasets as well
-as new files, and changes nothing that already exists. If the **Shared with** dialog ever opens on
+media**, at the top of the workspace's **Media** page; it applies to new files and changes
+nothing that already exists. A dataset created on a **Data** page starts shared with
+**All sites** either way. If the **Shared with** dialog ever opens on
 "Not shared with any site", that folder or file has no sharing stored at all: it is hidden
 from every site, and any file inside it turns up under **No folder** there. Pick a value
 and save to fix it.

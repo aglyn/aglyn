@@ -1066,9 +1066,9 @@ async function handleSites(
  * 10 an hour. A publish is a human-scale event even when a machine triggers
  * it: an integration that finishes a nightly catalogue sync publishes once,
  * and one that publishes after every record write does not want this endpoint
- * at all — it wants the 60-second window it already has, which is still
- * underneath as the backstop and is why a `429` here costs correctness
- * nothing. Ten leaves room for a bad afternoon of manual retries and still
+ * at all — it wants the hour-long cache window it already has, which is still
+ * underneath as the backstop and is why a `429` here delays a change rather
+ * than losing it. Ten leaves room for a bad afternoon of manual retries and still
  * caps the worst case at 2,500 dropped pages per site per hour, against the
  * ~1.2M reads a minute the documented 120/min per-key limit would have
  * allowed on its own.
@@ -1090,8 +1090,8 @@ export const PUBLISH_WINDOW_MS = 60 * 60 * 1000
  *
  * `POST /v1/datasets/{id}/records` wrote and called nothing else. What made a
  * live site show the new data was time, and only time: `getDatasets` is cached
- * for `DATASETS_TTL_SECONDS` (60) behind `tenantDataTag(hostId)`, and the
- * tenant catch-all page is `revalidate = 60`. Time-based ISR is
+ * for `DATASETS_TTL_SECONDS` (an hour) behind `tenantDataTag(hostId)`, and the
+ * tenant catch-all page is `revalidate = 3600`. Time-based ISR is
  * stale-while-revalidate, so the visitor AFTER the window can still be served
  * the old copy and the change appears on the visit after that. An integration
  * could therefore own a site's data and never publish it — the cache expiring
@@ -1203,8 +1203,9 @@ async function handlePublish(
       reason: result.reason === 'ok' ? null : result.reason,
       pages: result.revalidated.length,
       // The tenant's own 250-path cap (AGL-1161). A site above it is refreshed
-      // in part, and the remainder catches up on the 60-second window — worth
-      // saying, because the caller is the one deciding whether to poll.
+      // in part, and the remainder catches up when its hour-long ISR window
+      // lapses — worth saying, because the caller is the one deciding whether
+      // to poll.
       pagesDropped: result.pathsDropped,
     },
     { headers: ctx.headers },
