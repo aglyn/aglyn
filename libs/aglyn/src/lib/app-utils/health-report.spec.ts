@@ -1978,10 +1978,14 @@ describe('signupCanaryHealth (AGL-2715)', () => {
     expect(check.ok).toBe(false)
   })
 
-  it('the staleness window tolerates one missed hourly run, not two', () => {
+  it('the staleness window is sized to the scheduler, not to the cron', () => {
     // Pinned to the VALUE. The cases around this one take the window
     // symbolically and so would pass at any window at all, including a week.
-    expect(SIGNUP_CANARY_STALE_AFTER_MS).toBe(2 * 60 * 60 * 1000)
+    //
+    // Six hours clears the widest gap measured between two fires of a `*/15`
+    // schedule in this repo, 4h38m. Sizing this to the cron expression
+    // instead reds the signups monitor for Actions queue depth.
+    expect(SIGNUP_CANARY_STALE_AFTER_MS).toBe(6 * 60 * 60 * 1000)
   })
 
   it('publishes counts and codes only — no uid, no email, no org', () => {
