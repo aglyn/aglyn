@@ -59,8 +59,9 @@ name: Signup canary
 on:
   schedule:
     # Hourly, off the top of the hour where every other scheduled job in this
-    # repo clusters and Actions queues are deepest. Only the attestation job
-    # runs on this — see the `walk` job's own guard.
+    # repo clusters and Actions queues are deepest. Both jobs run on it.
+    # SIGNUP_CANARY_STALE_AFTER_MS is two hours, so one missed run is
+    # tolerated and two are not.
     - cron: '25 * * * *'
   workflow_dispatch: {}
 
@@ -94,9 +95,12 @@ jobs:
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
         run: node tools/e2e/appcheck-attestation.mjs
 
-  # ⛔ Manual only until the App Check exemption lands. See the walk's docblock.
+  # Hourly. It rides the same AGLYN_PROBE_TOKEN bypass every probe in this
+  # repo rides — bot protection refuses a datacenter IP outright, so without it
+  # the walk cannot be scheduled at all. If the checkpoint appears anyway the
+  # walk reports `challenged`, which is a statement about the edge rather than
+  # about signup.
   walk:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -120,6 +124,13 @@ jobs:
         env:
           SIGNUP_CANARY_ENABLE: '1'
           SIGNUP_CANARY_ORIGIN: ${{ vars.SIGNUP_CANARY_ORIGIN }}
+          # ⚠️ An App Check bypass, allowed for this one CI script by
+          # `app-check-debug-token.spec.ts` and covered by the attestation job
+          # above — which measures whether App Check is admitting REAL people,
+          # something a token cannot fake. Without this the walk cannot attest
+          # at all: reCAPTCHA Enterprise scores headless automation as a bot.
+          FIREBASE_APPCHECK_DEBUG_TOKEN: ${{ secrets.FIREBASE_APPCHECK_DEBUG_TOKEN }}
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
           # The repo convention: an optional var with the project as the default.
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}

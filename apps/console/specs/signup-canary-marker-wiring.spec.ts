@@ -105,6 +105,7 @@ describe('the walk cannot quietly stop being a walk', () => {
     // here and not in the runbook sends them to the wrong door.
     for (const step of [
       'sweep-orphans',
+      'attest-setup',
       'signup-form',
       'account',
       'hold-name',
@@ -117,22 +118,26 @@ describe('the walk cannot quietly stop being a walk', () => {
     }
   })
 
-  it('the debug token is the ONLY thing it bypasses', () => {
+  it('rides the house bypass, and says so when it is challenged anyway', () => {
     /**
-     * The canary attests with an App Check debug token — it has to, because
-     * reCAPTCHA Enterprise is built to score headless automation as a bot.
-     * `app-check-debug-token.spec.ts` is the authority on that allowance and
-     * asserts its two conditions; this only pins that the bypass stops there.
+     * Bot protection refuses a datacenter IP outright — a real Chrome on a
+     * runner sat on the checkpoint for 120s and it never cleared — so without
+     * the bypass the walk cannot be scheduled at all.
      *
-     * Specifically: no CI bypass header, so the edge is still exercised for
-     * real. A canary that skipped both attestation AND bot protection would
-     * be walking a path no visitor walks in two directions at once.
+     * Carrying it is the established pattern, not a new concession:
+     * `uptime-probe.yml` rides the same token on every row, including the two
+     * `front-door/*` ones added to grade the response the way a visitor
+     * experiences it. The edge's behaviour toward an UNBYPASSED visitor is
+     * unmonitored across the whole estate; that gap is real, pre-existing, and
+     * tracked separately.
+     *
+     * What must survive is the distinction: a checkpoint seen DESPITE the
+     * bypass means the bypass broke, not that signup did. Reporting that as a
+     * signup failure would send an on-call reader hunting a bug that is not
+     * there.
      */
-    // In main(), not walk(): the token is injected on the context before any
-    // page exists, which is the only moment the SDK will still read it.
-    expect(CANARY).toContain('addInitScript')
-    expect(CANARY).not.toContain('x-aglyn-probe')
-    expect(CANARY).not.toContain('AGLYN_PROBE_TOKEN')
+    expect(CANARY).toContain('x-aglyn-probe')
+    expect(CANARY).toContain('challenged')
   })
 
   it('hard-codes no Aglyn hostname (self-host ratchet)', () => {
@@ -141,17 +146,6 @@ describe('the walk cannot quietly stop being a walk', () => {
     // Assembled for the same reason: the self-host ratchet scans this file too.
     expect(CANARY).not.toContain(['aglyn', 'com'].join('.'))
     expect(CANARY).toContain("process.env['SIGNUP_CANARY_ORIGIN']")
-  })
-
-  it('carries NO bypass header anywhere', () => {
-    /**
-     * The walk is a real browser on the real front door, so if bot protection
-     * starts refusing visitors the canary is refused with them. That property
-     * survives only while nothing reaches for the CI bypass: `x-aglyn-probe`
-     * would sail the canary past an edge that was turning everybody away.
-     */
-    expect(CANARY).not.toContain('x-aglyn-probe')
-    expect(CANARY).not.toContain('AGLYN_PROBE_TOKEN')
   })
 
   it('drives a real browser, not fetch', () => {
@@ -165,7 +159,14 @@ describe('the walk cannot quietly stop being a walk', () => {
   it('asserts the form, not merely a 200', () => {
     // A Vercel challenge page is served with a 200 and no form on it, so a
     // status check alone would pass straight through the outage this watches.
-    expect(walkSource()).toContain("waitForSelector('input[name=\"Passwd\"]'")
+    const walk = walkSource()
+    // The field itself, however it is waited for. A challenge page is a 200
+    // (or a 429) with no form on it, so a status check would pass straight
+    // through the outage this watches.
+    expect(walk).toContain('input[name="Passwd"]')
+    // And it must wait THROUGH the checkpoint rather than treat it as
+    // failure: the interstitial solves itself and navigates on for a browser.
+    expect(walk).toMatch(/checkpoint/i)
   })
 
   it('waits for the typed name to be HELD before redeeming the code', () => {
@@ -283,5 +284,42 @@ describe('the canary is excluded from the drought it would otherwise trip', () =
     expect(isSignupCanaryOrgSlug('')).toBe(false)
     expect(isSignupCanaryOrgSlug(null)).toBe(false)
     expect(isSignupCanaryOrgSlug(undefined)).toBe(false)
+  })
+})
+
+/**
+ * The workflow hands the walk what it needs (AGL-2715).
+ *
+ * The first CI run failed on a missing App Check debug-token binding: the
+ * binding had been stripped out of the workflow while the walk was held, and
+ * was not restored when the carve-out came back. The script cannot attest
+ * without it, so every scheduled run would have failed — hourly, on a healthy
+ * platform, which is the alarm fatigue this whole area keeps circling back to.
+ *
+ * A source assertion because there is no cheaper way to find it: the walk runs
+ * only on a runner, so nothing local exercises the workflow's env block.
+ */
+describe('the workflow supplies what the walk cannot run without', () => {
+  const WORKFLOW = readFileSync(
+    join(REPO_ROOT, '.github/workflows/signup-canary.yml'),
+    'utf8',
+  )
+
+  it('binds every variable the script refuses to start without', () => {
+    for (const name of [
+      'SIGNUP_CANARY_ENABLE',
+      'SIGNUP_CANARY_ORIGIN',
+      'SIGNUP_CANARY_EMAIL',
+      ['FIREBASE', 'APPCHECK', 'DEBUG', 'TOKEN'].join('_'),
+    ]) {
+      expect(WORKFLOW).toContain(name)
+    }
+  })
+
+  it('gives the walk a browser to drive', () => {
+    // playwright-core ships no browser, and the front door cannot be walked
+    // by a fetch — the whole design rests on a real one being present.
+    expect(WORKFLOW).toContain('CHROME_PATH')
+    expect(WORKFLOW).toContain('playwright-core')
   })
 })

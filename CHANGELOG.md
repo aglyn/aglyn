@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.108 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/7c74e81aa...v1.0.0-beta.108)
+
+### Added
+
+- **canary:** ride the house firewall bypass so the walk can be scheduled ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715))
+
+### Fixed
+
+- **canary:** grade the account, not the workspace ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715), [AGL-2714](https://linear.app/aglyn/issue/AGL-2714))
+- **canary:** restore the token binding the workflow lost, and cover it ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715))
+
+<details>
+<summary>Also in this release: 2 ci</summary>
+
+- **canary:** the walk cannot run from a GitHub runner ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715))
+- **canary:** run the signup walk hourly ([AGL-2715](https://linear.app/aglyn/issue/AGL-2715))
+
+</details>
+
 ## v1.0.0-beta.107 — 2026-09-09
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.106...v1.0.0-beta.107)
