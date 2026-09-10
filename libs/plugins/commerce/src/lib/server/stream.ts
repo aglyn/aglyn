@@ -130,8 +130,53 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
     )
     const file = product.gatedVideos?.[video]
     if (!file?.url) return res.status(404).send('No video')
+    /**
+     * The entitlement hop lands on a delivery copy, not on the master
+     * (AGL-2766).
+     *
+     * `?r=auto` asks the CDN for the best encoding it holds, answered from
+     * the media document `serveMediaCdn` already reads on that request
+     * (AGL-2753). Every other video on the platform asks; this one is the
+     * exception, and it is the audience that has already paid.
+     *
+     * The parameter can only be attached HERE, because this is the only
+     * participant that knows the target. The player never resolves a media
+     * reference — it holds a signed stream URL — and appending anything to
+     * that URL reaches nothing: the GET half reads `hostId`, `productId`,
+     * `video`, `exp` and `sig`, ignores the rest, and builds its `Location`
+     * from the product document rather than from the request.
+     *
+     * `videoDeliverySrc` is the builder the Video element uses, and it is
+     * safe on every shape stored in `gatedVideos`. The picker writes a
+     * `cdnPath` — this platform's own route — for an org with the media-CDN
+     * entitlement, and the raw Storage download URL for one without; older
+     * products can hold an author-typed hotlink. Only the first is touched:
+     * the parameter is appended to a same-origin path under
+     * {@link Aglyn.MEDIA_CDN_ROUTE} and nothing else, so a stranger's server
+     * is never handed a parameter it would not understand.
+     *
+     * `?? file.url` restores that pass-through for the one input the builder
+     * answers `undefined` for — a `media:` value that does not parse — so no
+     * stored string loses its redirect by being unimprovable.
+     *
+     * Nothing about the gate moves. The signature is verified above over a
+     * tuple this does not join and a caller cannot influence, and an asset
+     * the producer has never run for answers with the master, exactly as it
+     * did before it was asked.
+     */
+    const target = Aglyn.videoDeliverySrc(file.url, { hostId }) ?? file.url
     res.setHeader('Cache-Control', 'private, no-store')
-    return res.redirect(302, file.url)
+    /*
+     * No `Vary: Accept` on the redirect, deliberately (AGL-2766).
+     *
+     * This 302 is the same for every client: the `Location` is a function of
+     * the product document, not of the request's `Accept`. The negotiation
+     * happens on the SECOND response, and `serveMediaCdn` declares `Vary`
+     * there — on the one that actually varies. Declaring it here would
+     * advertise a variance this response does not have and split a cache key
+     * that has exactly one representation.
+     */
+    return res.redirect(302, target)
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Stream unavailable' })
