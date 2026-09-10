@@ -83,11 +83,38 @@ function utcDay(nowMs) {
   return new Date(nowMs).toISOString().slice(0, 10)
 }
 
-async function main() {
+/**
+ * Firestore, under whichever identity the host actually has.
+ *
+ * On a GitHub runner the only credential available is an explicit service
+ * account key in the environment. Inside GCP there is a better one: the
+ * runtime service account, handed over by the metadata server, which
+ * firebase-admin picks up on its own when no credential is passed. Preferring
+ * the key when it is present keeps the runner working unchanged; falling back
+ * to the ambient identity is what lets this run with NO long-lived secret at
+ * all (AGL-2758).
+ *
+ * ⛔ The absence of a key is therefore not an error here. It used to be, and
+ * treating it as one is what would force a secret back into a place that does
+ * not need it.
+ */
+function firestoreApp() {
   const sa = readServiceAccount()
-  if (!sa) throw new Error('admin credentials are not in the environment')
+  const name = `edge-${Date.now()}`
+  if (sa) return initializeApp({ credential: cert(sa) }, name)
+  const projectId =
+    process.env.FIREBASE_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT
+  if (!projectId) {
+    throw new Error(
+      'no admin credentials and no project id — set FIREBASE_* for a key, or ' +
+        'run where a runtime service account and GOOGLE_CLOUD_PROJECT exist',
+    )
+  }
+  return initializeApp({ projectId }, name)
+}
 
-  const app = initializeApp({ credential: cert(sa) }, `edge-${Date.now()}`)
+async function main() {
+  const app = firestoreApp()
   const db = getFirestore(app)
   const doc = db.collection('rateLimits').doc('edgeAdmission_production')
 
