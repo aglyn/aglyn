@@ -100,16 +100,26 @@ function reportDroppedEntry(error: unknown): void {
  * exclusion list, so a member holding a content role writes here directly.
  * `cloud/rules-tests/firestore-rules.test.mjs` pins that on both sides —
  * the roles that may append and the roles that may not.
+ *
+ * An append needs an ACTOR, and the rule that admits it needs one too:
+ * `canWriteHostContent` resolves the writer's host role out of
+ * `memberRoles[request.auth.uid]`, so a request carrying no auth matches no
+ * role and is refused. `useUser()` reports `undefined` until
+ * `onIdTokenChanged` first fires and `null` once it reports a signed-out
+ * tab, and in both states the entry has nobody to attribute — so the append
+ * is skipped rather than sent to be denied. An unattributed audit line is
+ * not a smaller version of an audit line; it records that something happened
+ * and refuses to say who did it, which is the one field the log exists for.
  */
 export function useHostActivityLogger(hostId: string | undefined) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   return useCallback(
     (action: string, target: HostActivityTarget) => {
-      if (!hostId) return
+      if (!hostId || !user) return
       void addDoc(collection(firestore, 'hosts', hostId, 'activity'), {
-        actorId: user?.uid ?? null,
-        actorEmail: user?.email ?? null,
+        actorId: user.uid,
+        actorEmail: user.email ?? null,
         action,
         target: {
           type: target.type,
