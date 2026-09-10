@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.115 — 2026-09-10
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/e0a18f449...v1.0.0-beta.115)
+
+### Fixed
+
+- **health:** the journeys route dropped the check it was handed ([AGL-2720](https://linear.app/aglyn/issue/AGL-2720))
+
 ## v1.0.0-beta.114 — 2026-09-10
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.113...v1.0.0-beta.114)
