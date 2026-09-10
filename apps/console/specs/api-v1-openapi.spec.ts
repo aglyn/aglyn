@@ -184,26 +184,68 @@ describe('the customer API description — honesty guards (AGL-2733)', () => {
     }
   })
 
-  it('closes every write body but the one the CUSTOMER defines', () => {
+  it('closes a write body only where its handler refuses an unknown member', () => {
     /*
-      A dataset record's fields come from the dataset model the customer
-      built, so closing that body would reject the very fields they defined.
-      Every other write shape is fixed by this API and closes, so a typo'd
-      field name is a 400 rather than a value that vanishes.
+      A closed body promises that a typo'd member is a 400. The dataset and
+      record writes, site creation and media uploads read only the members
+      they document and ignore the rest, so those four are described open and
+      say so in words. Every other write body closes, because its handler
+      names an unknown key in a 400.
     */
-    const open = Object.entries<any>(document.components.schemas)
-      .filter(([name]) => name.endsWith('Write'))
+    const bodies = Object.entries<any>(document.components.schemas).filter(
+      ([name]) =>
+        name.endsWith('Write') || name === 'MediaUpload' || name === 'ContactMerge',
+    )
+    const open = bodies
       .filter(([, schema]) => schema.additionalProperties !== false)
       .map(([name]) => name)
+      .sort()
 
-    expect(open).toEqual(['DatasetRecordWrite'])
-    // …and even that one refuses the server's members.
-    expect(document.components.schemas.DatasetRecordWrite.not.anyOf).toEqual([
-      { required: ['id'] },
-      { required: ['object'] },
-      { required: ['created'] },
-      { required: ['updated'] },
-    ])
+    expect(open).toEqual(['DatasetRecordWrite', 'DatasetWrite', 'MediaUpload', 'SiteWrite'])
+    for (const name of open) {
+      expect(document.components.schemas[name].description).toMatch(
+        /ignored rather than rejected/,
+      )
+    }
+    // A body with no members would close against every member at all.
+    for (const [name, schema] of bodies) {
+      expect({ name, members: Object.keys(schema.properties ?? {}).length > 0 }).toEqual({
+        name,
+        members: true,
+      })
+    }
+  })
+
+  it('describes a dataset and its records the way the API returns them', () => {
+    const { Dataset, DatasetRecord, DatasetRecordWrite, DatasetWrite } =
+      document.components.schemas
+    // `fields` is the model's field ids, not its definitions.
+    expect(Dataset.properties.fields.items).toEqual({ type: 'string' })
+    // A record's values sit under `values`, on the way in and on the way out.
+    expect(DatasetRecord.required).toContain('values')
+    expect(DatasetRecordWrite.properties.values.type).toBe('object')
+    expect(DatasetWrite.properties.model.type).toBe('object')
+  })
+
+  it('answers every delete with a receipt, never a 204', () => {
+    const deletes = [...operations()].filter(({ method }) => method === 'delete')
+    expect(deletes.length).toBeGreaterThan(5)
+    for (const { op } of deletes) {
+      expect(op.responses['204']).toBeUndefined()
+      expect(op.responses['200'].content['application/json'].schema.$ref).toBe(
+        '#/components/schemas/Deleted',
+      )
+    }
+  })
+
+  it('answers a create with 201, and its replay with 200', () => {
+    const creates = [...operations()].filter(({ op }) => op.responses['201'])
+    expect(creates.map(({ op }) => op.operationId)).toEqual(
+      expect.arrayContaining(['createDataset', 'createDatasetRecord', 'createContact']),
+    )
+    for (const { op } of creates) {
+      expect(op.responses['200'].content).toEqual(op.responses['201'].content)
+    }
   })
 
   it('says has_more is the termination signal, on every list', () => {
