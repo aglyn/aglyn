@@ -292,6 +292,37 @@ describe('runCli — pages', () => {
     expect(h.calls).toHaveLength(3)
   })
 
+  it('prints the composed PATH, not the one-segment slug (AGL-2719)', async () => {
+    /*
+      Measured against production: a page at `/use-cases/portfolios` printed
+      as `portfolios`. A listing whose left column cannot be pasted into a
+      browser is not a listing of addresses, and two sections sharing a leaf
+      name printed the same string twice.
+    */
+    const h = harness(() => ({
+      body: JSON.stringify({
+        status: 'success',
+        data: {
+          screens: [
+            { $id: 'p', path: '/use-cases/portfolios', slug: 'portfolios', displayName: 'Portfolios' },
+          ],
+          nextPageToken: '',
+        },
+      }),
+    }))
+    await runCli(['pages', 'example.com'], h.context)
+    expect(h.out()).toContain('/use-cases/portfolios')
+    expect(h.out().split('  ')[0]).not.toBe('portfolios')
+  })
+
+  it('falls back to the slug when a server does not send a path', async () => {
+    // A tenant that has not taken the AGL-2719 deploy yet still lists.
+    const h = harness(paged)
+    await runCli(['pages', 'example.com'], h.context)
+    expect(h.out()).toContain('home')
+    expect(h.out()).toContain('pricing')
+  })
+
   it('prints an aligned table by default', async () => {
     const h = harness(paged)
     await runCli(['pages', 'example.com'], h.context)

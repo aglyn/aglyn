@@ -213,7 +213,20 @@ export async function getAllScreens(
     const resolved = await getHost({ host })
     const hostDoc = resolved?.host
     if (!hostDoc?.$id) {
-      data.error = new Error(`No site is published at ${host}`)
+      /*
+        404, not the 500 an undecorated Error becomes (AGL-2724).
+        `appHandleJsonError` reads `code || statusCode` off the error and
+        falls back to 500, and a 500 tells a caller the server is broken and
+        the request is worth retrying. Neither is true here: the request was
+        well-formed and the answer will not change on a retry. An agent
+        walking a list of domains has to be able to tell "this one is not
+        ours" from "come back later", and only the status carries that.
+      */
+      const missing = Object.assign(
+        new Error(`No site is published at ${host}`),
+        { statusCode: 404 },
+      )
+      data.error = missing
       return data
     }
 

@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 2722,
+  "highest": 2724,
   "verifiedAt": "2026-09-10",
-  "verifiedBy": "Read from Linear on 2026-09-10, AGL team newest-first with includeArchived: true. The read came FIRST and returned AGL-2721 as the newest issue that existed; AGL-2722 was then created for the public-read-API versioning and rate-limit work and the ceiling raised to it. AGL-2719 (/api/screen empty), AGL-2720 (edge admission monitoring) and AGL-2721 (Main Gate sweep in series) are all real. As always the number was taken from the workspace, never from the citation a failing check just reported.",
+  "verifiedBy": "Read from Linear on 2026-09-10. AGL-2724 was created for the /api/screen 404 and the aglyn pages path column; the create returned 2724 rather than the 2723 the previous ceiling implied, because a peer session took 2723 in between. The code comments were written citing 2723 and were corrected to 2724 BEFORE the commit — the number always comes from what the workspace actually assigned, never from what the next id looked like it would be.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",

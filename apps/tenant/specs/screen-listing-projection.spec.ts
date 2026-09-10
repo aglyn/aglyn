@@ -323,6 +323,25 @@ describe('GET /api/screen lists what the router actually serves (AGL-2719)', () 
     expect(body.status).not.toBe('success')
   })
 
+  it('answers an unknown site 404, not 500 (AGL-2724)', async () => {
+    /*
+      Measured on production before this assertion existed: it returned 500.
+      A 500 says the server is broken and the request is worth retrying —
+      and an agent walking a list of domains then retries a host that will
+      never exist, and cannot tell it apart from a real outage. The request
+      was well-formed; only the status carries the difference.
+    */
+    const response = await GET(
+      new Request('https://demo.aglyn.app/api/screen?host=nobody.example'),
+    )
+    expect(response.status).toBe(404)
+
+    // And a site that DOES exist is still a 200, so the 404 is about the
+    // host and not about the shape of the request.
+    const ok = await GET(new Request('https://demo.aglyn.app/api/screen?host=demo'))
+    expect(ok.status).toBe(200)
+  })
+
   it('excludes template screens and error screens, exactly as the sitemap does', async () => {
     const { body } = await callRoute('?host=demo&limit=100')
     const ids = body.data.screens.map((screen: any) => screen.$id)
