@@ -246,35 +246,50 @@ describe('runCli — site', () => {
 })
 
 describe('runCli — pages', () => {
-  /** Three pages across two cursor hops, then an empty token. */
+  const PAGES = [
+    { $id: 'a', slug: 'home', displayName: 'Home' },
+    { $id: 'b', slug: 'pricing', displayName: 'Pricing' },
+    { $id: 'c', slug: 'about', displayName: 'About' },
+  ]
+
+  /**
+   * Three pages across two cursor hops, then an empty cursor.
+   *
+   * Models the CURRENT server (AGL-2751): it reads either spelling and returns
+   * both. A fixture that accepted only the old name passes a client that never
+   * advances, which is exactly what happened when the client moved to `cursor`
+   * and this helper did not — the run collected page one a hundred times and
+   * stopped on the request guard.
+   */
   const paged = (url: string) => {
-    const token = new URL(url).searchParams.get('nextPageToken')
-    if (!token) {
-      return {
-        body: JSON.stringify({
-          status: 'success',
-          data: {
-            screens: [{ $id: 'a', slug: 'home', displayName: 'Home' }],
-            nextPageToken: 'a',
-          },
-        }),
-      }
-    }
-    if (token === 'a') {
-      return {
-        body: JSON.stringify({
-          status: 'success',
-          data: {
-            screens: [{ $id: 'b', slug: 'pricing', displayName: 'Pricing' }],
-            nextPageToken: 'b',
-          },
-        }),
-      }
-    }
+    const params = new URL(url).searchParams
+    const token = params.get('cursor') ?? params.get('nextPageToken')
+    const index = token === 'a' ? 1 : token === 'b' ? 2 : 0
+    const next = index < PAGES.length - 1 ? PAGES[index].$id : ''
     return {
       body: JSON.stringify({
         status: 'success',
-        data: { screens: [{ $id: 'c', slug: 'about', displayName: 'About' }], nextPageToken: '' },
+        data: { screens: [PAGES[index]], cursor: next, nextPageToken: next },
+      }),
+    }
+  }
+
+  /**
+   * An instance that has NOT deployed the rename: it reads only
+   * `nextPageToken` and returns only `nextPageToken`.
+   *
+   * This is the case the client's spelling fallback exists for, and nothing
+   * exercised it. Echoing `cursor` at this server means it ignores the
+   * parameter and re-serves page one forever.
+   */
+  const legacyPaged = (url: string) => {
+    const token = new URL(url).searchParams.get('nextPageToken')
+    const index = token === 'a' ? 1 : token === 'b' ? 2 : 0
+    const next = index < PAGES.length - 1 ? PAGES[index].$id : ''
+    return {
+      body: JSON.stringify({
+        status: 'success',
+        data: { screens: [PAGES[index]], nextPageToken: next },
       }),
     }
   }
@@ -290,6 +305,28 @@ describe('runCli — pages', () => {
       'about',
     ])
     expect(h.calls).toHaveLength(3)
+  })
+
+  it('sends the cursor under the name the server itself used', async () => {
+    const modern = harness(paged)
+    expect(await runCli(['pages', 'example.com', '--json'], modern.context)).toBe(EXIT_OK)
+    expect(modern.calls[1].url).toContain('cursor=a')
+    expect(modern.calls[1].url).not.toContain('nextPageToken=')
+  })
+
+  it('walks an instance that only speaks the old spelling', async () => {
+    // Without a request-side fallback this collects page one a hundred times
+    // and exits on the loop guard, which is a silently wrong answer rather
+    // than an error.
+    const legacy = harness(legacyPaged)
+    expect(await runCli(['pages', 'example.com', '--json'], legacy.context)).toBe(EXIT_OK)
+    expect(JSON.parse(legacy.out()).map((s: { slug: string }) => s.slug)).toEqual([
+      'home',
+      'pricing',
+      'about',
+    ])
+    expect(legacy.calls).toHaveLength(3)
+    expect(legacy.calls[1].url).toContain('nextPageToken=a')
   })
 
   it('prints the composed PATH, not the one-segment slug (AGL-2719)', async () => {
