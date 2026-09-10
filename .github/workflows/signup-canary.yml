@@ -13,18 +13,28 @@
 # `/api/health/journeys` reports as `signupCanary` — graded by the existing
 # First-run journeys monitor, so no new row on the uptime board.
 #
-# ## Why the cadence asks for more than it needs
+# ## The ask rate and the work rate are set separately, on purpose
 #
 # GitHub serves `schedule` from a best-effort queue and drops most of what it
-# is asked for. Measured 2026-09-10 in this repo: `uptime-probe.yml` asks for
-# every fifteen minutes and actually fired at gaps of 1h55m to 4h38m over the
-# preceding day and a half. So the requested rate is not the delivered rate,
-# and an hourly ask would deliver something closer to every three or four
-# hours.
+# is asked for, so the requested rate is not the delivered rate. Measured
+# 2026-09-10 in this repo: `uptime-probe.yml` asks every fifteen minutes and
+# fired at gaps of 1h55m to 4h38m; the whole repo went 02:31Z to 04:33Z with no
+# scheduled run of anything at all, while GitHub reported all systems
+# operational. Over those same four hours the workflows that DID get served
+# were the ones asking four and five times an hour, and this one, asking once
+# and then twice, was never served (AGL-2723).
 #
-# Asking every thirty minutes buys landing odds, not walks — most requests are
-# dropped, so the real cost is well under two an hour. `SIGNUP_CANARY_STALE_AFTER_MS`
-# is six hours, sized to the measured gaps rather than to this expression.
+# Asking often is the only lever available on this side of the API, so this
+# asks every ten minutes — above the two schedules observed being served.
+#
+# That would be reckless on its own, because every walk creates and deletes a
+# real account and org on production and sends real mail. So the WORK rate is
+# bounded independently: `MIN_WALK_INTERVAL_MS` in the script skips any run
+# whose last SUCCESSFUL walk is under forty-five minutes old, without touching
+# the marker. However many runs GitHub delivers, at most one an hour walks.
+#
+# `SIGNUP_CANARY_STALE_AFTER_MS` is six hours, sized to the measured gaps
+# rather than to this expression.
 #
 # ## Why a browser, and why no bypass header
 #
@@ -56,11 +66,10 @@ name: Signup canary
 # outage on a healthy platform.
 on:
   schedule:
-    # Off the top of the hour, where every other scheduled job in this repo
-    # clusters and the Actions queue is deepest. Both jobs run on it. See
-    # "Why the cadence asks for more than it needs" above: this asks twice an
-    # hour to land often enough inside a six-hour staleness window.
-    - cron: '25,55 * * * *'
+    # Every ten minutes is a request rate, not a walk rate — the script's
+    # own floor decides whether a delivered run actually walks. See "The ask
+    # rate and the work rate are set separately" above.
+    - cron: '*/10 * * * *'
   workflow_dispatch: {}
 
 # One walk at a time. Two concurrent runs would race for the same orphan sweep

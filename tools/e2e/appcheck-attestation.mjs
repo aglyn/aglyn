@@ -65,9 +65,44 @@ const WINDOW_HOURS = 6
 
 const METRIC = 'firebaseappcheck.googleapis.com/services/verification_count'
 
+/**
+ * The shortest gap between two samples.
+ *
+ * The workflow's schedule asks every ten minutes to survive GitHub dropping
+ * most scheduled runs (AGL-2723), which is a request rate rather than a work
+ * rate. Re-reading a six-hour aggregate every ten minutes would return very
+ * nearly the same numbers while spending Monitoring quota to do it, so a
+ * delivered run inside this floor exits without sampling.
+ */
+const MIN_SAMPLE_INTERVAL_MS = 45 * 60 * 1000
+
 async function main() {
   const sa = readServiceAccount()
   if (!sa) throw new Error('admin credentials are not in the environment')
+
+  const app = initializeApp({ credential: cert(sa) }, `attest-${Date.now()}`)
+  const db = getFirestore(app)
+  // Fails OPEN, like the walk's floor: a marker that cannot be read samples
+  // rather than skips, so a throttle can never be what starves this check.
+  try {
+    const prior = (
+      await db
+        .collection('rateLimits')
+        .doc('appCheckAttestation_production')
+        .get()
+    ).data()
+    const ageMs =
+      typeof prior?.sampledAtMs === 'number' ? Date.now() - prior.sampledAtMs : null
+    if (ageMs !== null && ageMs < MIN_SAMPLE_INTERVAL_MS) {
+      console.log(
+        `fresh — sampled ${Math.round(ageMs / 60_000)}min ago, under the ` +
+          `${MIN_SAMPLE_INTERVAL_MS / 60_000}min floor; not sampling`,
+      )
+      process.exit(0)
+    }
+  } catch (error) {
+    console.log(`could not read the prior sample, sampling: ${String(error).slice(0, 120)}`)
+  }
 
   // `monitoring.read` rather than the default scope. Measured 2026-09-09: the
   // Firebase service account CAN read `timeSeries` — which corrects a standing
@@ -125,8 +160,6 @@ async function main() {
     })
   }
 
-  const app = initializeApp({ credential: cert(sa) }, `attest-${Date.now()}`)
-  const db = getFirestore(app)
   await db
     .collection('rateLimits')
     .doc('appCheckAttestation_production')

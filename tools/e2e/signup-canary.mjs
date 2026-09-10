@@ -129,6 +129,17 @@ const EMAIL_BASE = process.env['SIGNUP_CANARY_EMAIL'] ?? ''
 const CANARY_SLUG_PREFIX = 'signup-canary-'
 
 /**
+ * The shortest gap between two real walks.
+ *
+ * Forty-five minutes, which lands about one walk an hour once GitHub's queue
+ * is taken into account, and holds that pace even if the queue suddenly starts
+ * honoring every request. Each walk creates and deletes a real account and org
+ * on production and sends real mail, so the work rate is a cost that has to be
+ * bounded independently of how often the schedule asks.
+ */
+const MIN_WALK_INTERVAL_MS = 45 * 60 * 1000
+
+/**
  * The firewall bypass every probe in this repo already rides.
  *
  * Bot protection is `challenge`, and it refuses a datacenter IP outright: a
@@ -525,6 +536,46 @@ async function main() {
   const app = initializeApp({ credential: cert(sa) }, `canary-${Date.now()}`)
   const db = getFirestore(app)
   const auth = getAuth(app)
+
+  /**
+   * Already fresh? Then this run has nothing to prove.
+   *
+   * The schedule asks far more often than the walk needs to happen, because
+   * GitHub serves `schedule` from a best-effort queue and drops most of what
+   * it is asked for — measured 2026-09-10, the workflows that got served were
+   * the ones asking four and five times an hour, while this one asking twice
+   * went four hours untouched (AGL-2723). Asking often is the only lever this
+   * side of the API has, so the request rate buys landing odds and this throttle
+   * keeps the WORK rate sane: at most one real walk per interval, however many
+   * runs GitHub decides to deliver.
+   *
+   * Only a SUCCESSFUL recent walk skips. After a failure the next run walks
+   * immediately, because the question then is whether signup has recovered.
+   *
+   * Skipping deliberately leaves `walkedAtMs` alone. Touching it would refresh
+   * the marker the health door grades and hand back a currency no walk earned,
+   * which is the failure this whole check exists to prevent.
+   *
+   * Fails OPEN: any trouble reading the marker walks rather than skips. A
+   * throttle that silently swallowed every run would starve the marker and
+   * page for staleness, which is the exact outage it is here to avoid.
+   */
+  try {
+    const prior = (
+      await db.collection('rateLimits').doc('signupCanary_production').get()
+    ).data()
+    const priorAgeMs =
+      typeof prior?.walkedAtMs === 'number' ? Date.now() - prior.walkedAtMs : null
+    if (prior?.ok === true && priorAgeMs !== null && priorAgeMs < MIN_WALK_INTERVAL_MS) {
+      console.log(
+        `fresh — last successful walk ${Math.round(priorAgeMs / 60_000)}min ago, ` +
+          `under the ${MIN_WALK_INTERVAL_MS / 60_000}min floor; not walking`,
+      )
+      process.exit(0)
+    }
+  } catch (error) {
+    console.log(`could not read the prior marker, walking: ${String(error).slice(0, 120)}`)
+  }
 
   /**
    * Short on purpose. A workspace URL is capped at 30 characters, and the
