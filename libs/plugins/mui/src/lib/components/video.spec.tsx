@@ -326,3 +326,68 @@ describe('Video lightbox (AGL-2744)', () => {
   })
 })
 
+
+/**
+ * The element loads the delivery copy, not the master (AGL-2753).
+ *
+ * `?r=auto` is what makes an out-of-band encoding reachable from a page that
+ * was published before it existed. The element cannot name a rendition — at
+ * pick time an asset usually has none — so it asks, and the CDN answers from
+ * the media document it already reads on that request.
+ */
+describe('Video asks the CDN for a delivery copy (AGL-2753)', () => {
+  it('loads a library video through the negotiated URL', () => {
+    expect(video(<Video src="media:h/film" />).getAttribute('src')).toBe(
+      `${CDN}/h/film?r=auto`,
+    )
+  })
+
+  it('keeps the parameter on a pinned reference rather than replacing its path', () => {
+    expect(video(<Video src="media:h/film@abc123" />).getAttribute('src')).toBe(
+      `${CDN}/h/film/abc123?r=auto`,
+    )
+  })
+
+  it('⛔ leaves a hotlink exactly as authored', () => {
+    // A stranger's server has no renditions, and appending a parameter it
+    // does not understand is at best noise in someone else's logs.
+    expect(
+      video(<Video src="https://videos.example.com/film.mp4" />).getAttribute(
+        'src',
+      ),
+    ).toBe('https://videos.example.com/film.mp4')
+  })
+
+  it('still shows the placeholder for an empty src', () => {
+    // The negotiated builder passes an unusable value straight through, so
+    // the empty check above it goes on meaning what it meant.
+    const { getByText } = render(<Video src="" />)
+    expect(getByText(/set a source URL/i)).toBeTruthy()
+  })
+
+  it('hands the lightbox the same delivery URL the inline player uses', () => {
+    // One asset, one URL, whichever way it is played — otherwise opening the
+    // dialog would fetch the master after the page had already paid for a
+    // rendition.
+    const { container } = render(
+      <Video src="media:h/film" poster="media:h/p" lightbox />,
+    )
+    expect(container.querySelector('video')).toBeNull()
+    expect(
+      Aglyn.videoDeliverySrc('media:h/film', { hostId: undefined }),
+    ).toBe(`${CDN}/h/film?r=auto`)
+  })
+
+  it('⛔ never negotiates the poster, which is an image and edge-cached', () => {
+    expect(
+      video(<Video src="media:h/film" posterFromSource />).getAttribute(
+        'poster',
+      ),
+    ).toContain('poster=1')
+    expect(
+      video(<Video src="media:h/film" posterFromSource />).getAttribute(
+        'poster',
+      ),
+    ).not.toContain('r=auto')
+  })
+})

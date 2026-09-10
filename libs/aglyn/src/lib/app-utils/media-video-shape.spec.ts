@@ -45,12 +45,14 @@ import {
 } from './media-metadata'
 import {
   isMediaRenditionKey,
+  MEDIA_CDN_RENDITION_AUTO,
   mediaPosterObjectPath,
   mediaPosterSrc,
   mediaRenditionObjectPath,
   mediaRenditionSrc,
   parseMediaRendition,
   parseMediaRenditions,
+  videoDeliverySrc,
 } from './media-ref'
 
 const GOOD = { durationMs: 60_000, width: 1920, height: 1080 }
@@ -244,6 +246,49 @@ describe('poster and rendition URLs', () => {
     // An empty `src` makes a browser re-request the PAGE, which is far more
     // expensive than a missing `<source>` element.
     expect(mediaRenditionSrc(REF, '../x')).toBeUndefined()
+  })
+
+  /*
+   * The URL a player actually loads (AGL-2753). It asks for the best encoding
+   * rather than naming one, which is the only way a page can reach a file
+   * produced after it was published: renditions are made out of band and no
+   * tenant render path reads a media document.
+   */
+  it('asks for the best encoding rather than naming one', () => {
+    expect(videoDeliverySrc(REF)).toBe('/api/media/cdn/org:acme/v1?r=auto')
+    expect(videoDeliverySrc(REF, { hostId: 'site9' })).toBe(
+      '/api/media/cdn/org:acme:site9/v1?r=auto',
+    )
+    expect(videoDeliverySrc('media:org:acme/v1@abc123')).toBe(
+      '/api/media/cdn/org:acme/v1/abc123?r=auto',
+    )
+  })
+
+  it('⛔ passes a value it cannot improve through, rather than dropping it', () => {
+    // The difference from `mediaPosterSrc`, which answers undefined: a poster
+    // with no URL renders without one, but a VIDEO with no URL is a dead
+    // player. A hotlink is not this platform's object and has no encodings to
+    // ask for, so it comes back exactly as `resolveMediaSrc` left it.
+    const hotlink = 'https://videos.example.com/film.mp4'
+    expect(videoDeliverySrc(hotlink)).toBe(hotlink)
+    expect(videoDeliverySrc(undefined)).toBeUndefined()
+    expect(videoDeliverySrc('')).toBeUndefined()
+  })
+
+  it('⛔ keeps the sentinel out of the key space it shares', () => {
+    // `auto` fits the key grammar, so a producer could mint one — and a
+    // stored entry named `auto` would shadow the request every page makes.
+    expect(isMediaRenditionKey(MEDIA_CDN_RENDITION_AUTO)).toBe(true)
+    expect(
+      parseMediaRendition({
+        key: MEDIA_CDN_RENDITION_AUTO,
+        ext: 'mp4',
+        contentType: 'video/mp4',
+        width: 1280,
+        height: 720,
+        sizeBytes: 1,
+      }),
+    ).toBeNull()
   })
 })
 

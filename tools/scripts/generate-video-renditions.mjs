@@ -100,9 +100,15 @@ const mediaArg = process.argv.indexOf('--media')
 const ONLY = mediaArg > -1 ? String(process.argv[mediaArg + 1] ?? '') : ''
 
 /**
- * The profiles produced, in the order a renderer should emit `<source>`
- * elements — a browser takes the first it can decode, so the most efficient
- * codec goes first.
+ * The profiles produced, most efficient first.
+ *
+ * The order is stored and it is load-bearing: `selectAutoRendition` walks the
+ * list in this order and takes the first entry whose type the client NAMED,
+ * so putting the smallest encoding first is what makes a browser that asks
+ * for WebM get the WebM (AGL-2753). It is not a ranking the CDN obeys
+ * blindly — an entry no client named falls through to the MP4 baseline
+ * below, because a single negotiated URL cannot offer a fallback the way a
+ * list of `<source>` elements can.
  *
  * H.264 High at CRF 26 is the baseline every browser and every set-top box
  * has decoded for a decade, and `+faststart` is not optional: it relocates the

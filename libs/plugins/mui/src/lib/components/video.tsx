@@ -284,7 +284,23 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   // whichever attribute asked for it, so every field it can write to has to
   // understand the same value.
   const { hostId } = Aglyn.useSite()
-  const src = Aglyn.resolveMediaSrc(storedSrc, { hostId })
+  /**
+   * The delivery copy, not the master (AGL-2753).
+   *
+   * `videoDeliverySrc` is `resolveMediaSrc` plus `?r=auto`, which asks the CDN
+   * for the best encoding it holds instead of naming one. The element cannot
+   * name one: renditions are produced out of band by
+   * `tools/scripts/generate-video-renditions.mjs`, minutes or days after the
+   * upload, so at pick time an asset usually has none and a copied list would
+   * be empty for exactly the videos it exists to serve. Asking rather than
+   * naming is what lets an encoding made tomorrow reach a video placed today,
+   * with no re-pick and nothing rewritten in a published document.
+   *
+   * Nothing here is conditional on the asset having renditions, because the
+   * URL degrades to the master by construction — which is the file this
+   * served before, so a page cannot get worse by adopting it.
+   */
+  const src = Aglyn.videoDeliverySrc(storedSrc, { hostId })
   // Two candidates, one rule, shared with the page's `thumbnailUrl`: the
   // author's own poster wins, and the DAM's generated frame is used only when
   // the node records that one exists (AGL-2749).

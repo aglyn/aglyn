@@ -317,3 +317,133 @@ describe('AGL-2743 · the master is unchanged by any of this', () => {
     expect(variant.getHeader('cache-control')).toBe(MEDIA_CDN_STABLE_CACHE_CONTROL)
   })
 })
+
+/**
+ * The consumption half (AGL-2753): `?r=auto`, the form a published page emits.
+ *
+ * A page cannot name a rendition. Encodings are produced out of band by
+ * `tools/scripts/generate-video-renditions.mjs`, minutes or days after the
+ * upload, and no tenant render path reads a media document — so a placement
+ * made today could never address a file made tomorrow, and every encoding the
+ * producer wrote would sit in the bucket unserved.
+ *
+ * `auto` moves the choice to the participant already holding the document.
+ * What is asserted below is that it is a CONSERVATIVE choice: an explicit
+ * type wins, a wildcard takes the universally decodable baseline, and every
+ * path that cannot improve on the master serves the master.
+ */
+describe('AGL-2753 · ?r=auto serves an encoding the page could not name', () => {
+  /** The producer's `--webm` output, most-efficient-first as it writes it. */
+  const WITH_WEBM = {
+    ...VIDEO_DOC,
+    videoRenditions: [
+      {
+        key: '720p-vp9',
+        ext: 'webm',
+        contentType: 'video/webm',
+        width: 1280,
+        height: 720,
+        sizeBytes: 8_388_608,
+      },
+      ...VIDEO_DOC.videoRenditions,
+    ],
+  }
+
+  it('serves the rendition without the page knowing it exists', async () => {
+    const res = await serve({ r: 'auto' })
+    expect(lastRequested()).toBe('orgs/acme/media/Film/v1__r720p.mp4')
+    expect(res.getHeader('content-type')).toBe('video/mp4')
+    // Still `private`. Negotiation changes WHICH bytes, never the tier —
+    // AGL-1515 is untouched and a rendition remains off the shared edge.
+    expect(res.getHeader('cache-control')).toBe(
+      MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL,
+    )
+  })
+
+  it('serves the master when the producer has not run for this asset', async () => {
+    mockState.doc = { ...VIDEO_DOC, videoRenditions: [] }
+    const res = await serve({ r: 'auto' })
+    // The property that lets the element emit this URL unconditionally: an
+    // asset with no encodings answers exactly as it did before AGL-2753, so
+    // adopting the parameter cannot regress a page.
+    expect(lastRequested()).toBe('orgs/acme/media/Film/v1')
+    expect(res.getHeader('content-type')).toBe('video/mp4')
+  })
+
+  it('⛔ takes the MP4 baseline for a wildcard Accept, not the smallest file', async () => {
+    mockState.doc = WITH_WEBM
+    // Chrome and Safari send `*/*` for a media element's request. A wildcard
+    // is a client declining to answer, NOT a claim that every container
+    // decodes — reading it as one is how a Safari 13 is handed a WebM and
+    // shown a black player. The stored order is right for `<source>`, where
+    // the browser picks; it is not a ranking a single URL may simply obey.
+    const res = await serve({ r: 'auto' }, { accept: '*/*' })
+    expect(lastRequested()).toBe('orgs/acme/media/Film/v1__r720p.mp4')
+    expect(res.getHeader('content-type')).toBe('video/mp4')
+  })
+
+  it('takes the smaller WebM only when the client names that container', async () => {
+    mockState.doc = WITH_WEBM
+    const res = await serve(
+      { r: 'auto' },
+      { accept: 'video/webm,video/ogg,video/*;q=0.9,*/*;q=0.5' },
+    )
+    expect(lastRequested()).toBe('orgs/acme/media/Film/v1__r720p-vp9.webm')
+    expect(res.getHeader('content-type')).toBe('video/webm')
+  })
+
+  it('honors q=0 as the refusal it is, falling back to the master', async () => {
+    await serve({ r: 'auto' }, { accept: 'video/mp4;q=0' })
+    expect(lastRequested()).toBe('orgs/acme/media/Film/v1')
+  })
+
+  it('declares Vary: Accept so no cache treats the URL as the whole key', async () => {
+    const res = await serve({ r: 'auto' }, { accept: '*/*' })
+    expect(res.getHeader('vary')).toBe('Accept')
+    // Not declared where nothing was negotiated: an explicit key and the
+    // master identify their bytes by URL alone.
+    expect((await serve({ r: '720p' })).getHeader('vary')).toBeUndefined()
+    expect((await serve()).getHeader('vary')).toBeUndefined()
+  })
+
+  it('validates the chosen encoding, not the request — two Accepts, two ETags', async () => {
+    mockState.doc = WITH_WEBM
+    const webm = await serve({ r: 'auto' }, { accept: 'video/webm' })
+    const mp4 = await serve({ r: 'auto' }, { accept: '*/*' })
+    // One URL now has two representations, so they must not share a
+    // validator: a browser holding the WebM ETag that revalidated and was
+    // answered 304 would replay MP4 bytes under WebM headers.
+    expect(webm.getHeader('etag')).toContain('-r720p-vp9')
+    expect(mp4.getHeader('etag')).toContain('-r720p')
+    expect(webm.getHeader('etag')).not.toBe(mp4.getHeader('etag'))
+  })
+
+  it('⛔ never negotiates a poster away — ?poster=1 still wins outright', async () => {
+    const res = await serve({ poster: '1', r: 'auto' })
+    expect(lastRequested()).toBe('orgs/acme/media/Film/v1__poster.webp')
+    expect(res.getHeader('content-type')).toBe('image/webp')
+    expect(res.getHeader('vary')).toBeUndefined()
+  })
+
+  it('⛔ refuses a stored entry that claims the sentinel as its key', async () => {
+    mockState.doc = {
+      ...VIDEO_DOC,
+      videoRenditions: [
+        {
+          key: 'auto',
+          ext: 'mp4',
+          contentType: 'video/mp4',
+          width: 1280,
+          height: 720,
+          sizeBytes: 1,
+        },
+      ],
+    }
+    // `auto` fits the key grammar, so a producer could mint one. Left
+    // reachable it would shadow the request every page makes and pin the
+    // negotiated form to whichever encoding took the name. `parseMediaRendition`
+    // drops it, so the list is empty and the master answers.
+    await serve({ r: 'auto' })
+    expect(lastRequested()).toBe('orgs/acme/media/Film/v1')
+  })
+})

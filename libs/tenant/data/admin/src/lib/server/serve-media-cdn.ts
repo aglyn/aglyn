@@ -20,11 +20,13 @@ import {
   isOrgWideScope,
   type LockdownState,
   MEDIA_CDN_POSTER_PARAM,
+  MEDIA_CDN_RENDITION_AUTO,
   MEDIA_CDN_RENDITION_PARAM,
   MEDIA_CDN_ROUTE,
   MEDIA_POSTER_OBJECT_SUFFIX,
   mediaPosterObjectPath,
   mediaRenditionObjectPath,
+  type MediaVideoRendition,
   normalizeHostLockdown,
   normalizeOrgLockdown,
   parseMediaRenditions,
@@ -693,6 +695,100 @@ export function mediaCdnWantsPoster(value: unknown): boolean {
   return wantsMediaDownload(value)
 }
 
+/**
+ * The container every browser has decoded for a decade, and the encoding the
+ * producer always emits (`720p`, H.264 High in MP4). WebM/VP9 is opt-in there
+ * and is the only entry a client has to earn.
+ */
+const MEDIA_CDN_BASELINE_RENDITION_TYPE = 'video/mp4'
+
+/**
+ * What a client said about media types, split into the two answers that
+ * matter: types it NAMED, and types it explicitly refused with `q=0`.
+ *
+ * Wildcards are deliberately dropped rather than expanded. `video/*` and
+ * `*\/*` are a client declining to answer the question, and the browsers that
+ * matter mostly decline: Chrome and Safari send `*\/*` for a media element's
+ * request and only Firefox enumerates containers. Reading `*\/*` as "every
+ * container decodes here" is how a Safari 13 gets handed a WebM.
+ */
+function parseAcceptedTypes(header: unknown): {
+  named: Set<string>
+  refused: Set<string>
+} {
+  const raw = Array.isArray(header) ? header[0] : header
+  const named = new Set<string>()
+  const refused = new Set<string>()
+  for (const part of String(raw ?? '').split(',')) {
+    const [type, ...params] = part.split(';')
+    const name = type.trim().toLowerCase()
+    if (!name || name.includes('*')) continue
+    // `q=0` is a refusal in RFC 9110, so it removes an entry rather than
+    // selecting it — the one case where naming a type argues against it.
+    const isRefusal = params.some(
+      (param) => /^\s*q\s*=/i.test(param) && Number(param.split('=')[1]) === 0,
+    )
+    if (isRefusal) refused.add(name)
+    else named.add(name)
+  }
+  return { named, refused }
+}
+
+/**
+ * Which rendition `?r=auto` resolves to, or undefined for "serve the master"
+ * (AGL-2753).
+ *
+ * ## Why the CDN chooses at all
+ *
+ * Because it is the only participant holding the media document. A page
+ * cannot name a rendition — the encodings are produced out of band, after the
+ * placement, and no tenant render path reads a media document (AGL-2486). The
+ * alternatives were a node backfill that rewrites published screens nobody
+ * edited, or a Firestore read per video on the hottest ISR-cached path. This
+ * costs neither: the document is already in hand on this request.
+ *
+ * ## Why the stored order is not simply obeyed
+ *
+ * The producer writes most-efficient-codec first, which is the right order for
+ * `<source>` elements — there the BROWSER picks, using what it actually knows
+ * about its own decoders. A single negotiated URL has no such luxury, so
+ * taking the head of the list would hand a WebM to anything that could not
+ * decode one and turn a saving into a black player.
+ *
+ * So an entry is selected on an EXPLICIT type match, and everything else falls
+ * to the MP4 baseline the producer always emits. A client that names
+ * `video/webm` gets the 30%-smaller file; a client that says `*\/*` gets the
+ * universally decodable one; a client that refused every candidate gets the
+ * master. Every outcome is a video that plays.
+ *
+ * ## Why negotiating here is safe under a cache
+ *
+ * A rendition response is `video/*`, so `mediaCdnEdgeCacheable` is false and
+ * it is served `private` (AGL-1515) — no shared cache stores it, which is the
+ * invariant `serve-media-cdn.video.spec.ts` pins. The only cache that can hold
+ * one is the requesting browser's own, and a browser's `Accept` for media does
+ * not change between the first request and the Range requests that follow it.
+ * That matters more than it looks: negotiation on a RANGEABLE resource that
+ * could flip mid-playback would stitch byte ranges from two different files
+ * together, which is the AGL-1515 corruption reached by a new road.
+ */
+export function selectAutoRendition(
+  renditions: readonly MediaVideoRendition[],
+  acceptHeader: unknown,
+): MediaVideoRendition | undefined {
+  if (renditions.length === 0) return undefined
+  const { named, refused } = parseAcceptedTypes(acceptHeader)
+  const typeOf = (entry: MediaVideoRendition) => entry.contentType.toLowerCase()
+  return (
+    renditions.find((entry) => named.has(typeOf(entry))) ??
+    renditions.find(
+      (entry) =>
+        typeOf(entry) === MEDIA_CDN_BASELINE_RENDITION_TYPE &&
+        !refused.has(MEDIA_CDN_BASELINE_RENDITION_TYPE),
+    )
+  )
+}
+
 /** Anything that cannot appear literally in an HTTP field-value. */
 const NON_ASCII_FIELD_VALUE = /[^\x20-\x7e]/g
 /** ...and what additionally cannot appear inside a quoted-string. */
@@ -1111,14 +1207,40 @@ export async function serveMediaCdn(
     }
     const usePoster = wantsPoster
     const usePosterVariant = usePoster && Boolean(width) && posterVariants.includes(width)
-    const renditionKey = req.query[MEDIA_CDN_RENDITION_PARAM]
+    const renditionParam = req.query[MEDIA_CDN_RENDITION_PARAM]
+    const renditionKey = String(
+      Array.isArray(renditionParam) ? renditionParam[0] : (renditionParam ?? ''),
+    )
+    /*
+     * `?r=auto` is the form a PAGE emits (AGL-2753), because a page cannot
+     * know which encodings an asset has — they are produced out of band, long
+     * after the placement. `selectAutoRendition` answers from the document
+     * already read above, so serving the encodings costs no extra read
+     * anywhere and a rendition made today reaches a video placed last month.
+     *
+     * An explicit key stays exact and stays supported: the producer's report
+     * and the specs address one encoding by name, and a debugging request for
+     * `?r=720p-vp9` should get that file or the master, never a negotiation.
+     */
+    const negotiated = !usePoster && renditionKey === MEDIA_CDN_RENDITION_AUTO
+    const availableRenditions = usePoster
+      ? []
+      : parseMediaRenditions(snapshot.get('videoRenditions'))
     const rendition = usePoster
       ? undefined
-      : parseMediaRenditions(snapshot.get('videoRenditions')).find(
-          (entry) =>
-            entry.key ===
-            String(Array.isArray(renditionKey) ? renditionKey[0] : (renditionKey ?? '')),
-        )
+      : negotiated
+        ? selectAutoRendition(availableRenditions, req.headers['accept'])
+        : availableRenditions.find((entry) => entry.key === renditionKey)
+    if (negotiated) {
+      // Declared for correctness rather than as the thing keeping this safe.
+      // What keeps it safe is `private` (AGL-1515): a video response is never
+      // held by a shared cache, so there is no entry for a second client's
+      // `Accept` to be answered from. This tells the BROWSER's own cache — and
+      // any intermediary that ignored `private` — that the URL alone does not
+      // identify the bytes. Set before the 304 exit below, because a validator
+      // handed out without it would be reused across representations.
+      res.setHeader('Vary', 'Accept')
+    }
     const useVariant =
       !usePoster && !rendition && Boolean(width) && variants.includes(width)
     /**

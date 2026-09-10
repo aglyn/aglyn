@@ -775,6 +775,30 @@ export const MEDIA_CDN_POSTER_PARAM = 'poster'
 export const MEDIA_CDN_RENDITION_PARAM = 'r'
 
 /**
+ * The `?r=` value meaning "the best delivery copy you have" (AGL-2753).
+ *
+ * A key names ONE encoding, which a caller can only ask for if it knows the
+ * asset has it. Nothing that renders a page knows that: renditions are
+ * produced out of band by `tools/scripts/generate-video-renditions.mjs`,
+ * minutes or days after the upload, and no tenant render path reads a media
+ * document — the pick copies facts onto the node instead (AGL-2486,
+ * AGL-2749). So a placement made today can never name a rendition made
+ * tomorrow, and the encodings would be produced and never served.
+ *
+ * This sentinel moves the choice to the one place that already holds the
+ * document: `serveMediaCdn` reads it on every asset request anyway. The page
+ * emits one URL that says what it WANTS rather than what exists, and an asset
+ * with no renditions answers it with the master — the same degradation an
+ * unknown `?r=` has always had, reached deliberately instead of by accident.
+ *
+ * ⚠️ Sentinel and key share a namespace, so {@link parseMediaRendition}
+ * refuses a stored entry keyed `auto`. Without that refusal a producer could
+ * mint one and make the sentinel unreachable — the negotiated form silently
+ * pinned to whichever encoding happened to claim the name.
+ */
+export const MEDIA_CDN_RENDITION_AUTO = 'auto'
+
+/**
  * Object-path suffix for a video's poster still. The width variants sit
  * under it as `{objectPath}__poster__w{n}.webp`, which is exactly what
  * `generateMediaVariants` produces when handed `{objectPath}__poster` — the
@@ -851,6 +875,10 @@ export function parseMediaRendition(value: unknown): MediaVideoRendition | null 
   const ext = entry['ext']
   const contentType = entry['contentType']
   if (!isMediaRenditionKey(key)) return null
+  // The negotiation sentinel is not a name an encoding may take: it is
+  // resolved before the by-key lookup, so an entry claiming it would be
+  // unreachable AND would shadow the request every page makes (AGL-2753).
+  if (key === MEDIA_CDN_RENDITION_AUTO) return null
   if (typeof ext !== 'string' || !RENDITION_EXT.test(ext)) return null
   if (typeof contentType !== 'string' || !/^video\/[\w.+-]{1,64}$/.test(contentType)) {
     return null
@@ -1002,6 +1030,38 @@ export function mediaRenditionSrc(
   const src = resolveMediaSrc(value, options)
   if (!derivedObjectEligible(src)) return undefined
   return withMediaCdnQuery(src, [[MEDIA_CDN_RENDITION_PARAM, key]])
+}
+
+/**
+ * The URL a player should actually load for a video (AGL-2753).
+ *
+ * This is {@link resolveMediaSrc} plus one query parameter, and the parameter
+ * is the entire feature: it asks the CDN for the best delivery copy it has
+ * rather than naming one, so a rendition encoded LONG after the video was
+ * placed on a page reaches that page with no re-pick, no node backfill and no
+ * document read on the render path. See {@link MEDIA_CDN_RENDITION_AUTO} for
+ * why the choice has to live at the CDN.
+ *
+ * ⚠️ Unlike {@link mediaPosterSrc} this NEVER returns undefined for a value
+ * that resolved. A poster may legitimately have no URL — the element simply
+ * renders without one — but a video with no URL is a dead player, so anything
+ * this cannot improve is passed through exactly as `resolveMediaSrc` left it.
+ * An author-typed hotlink and a raw Storage URL therefore come back untouched:
+ * they are not this platform's objects and have no renditions to ask for.
+ *
+ * Safe on an asset that has none. `?r=` degrades to the master by design —
+ * "the same video in more bytes" — which is precisely what every video served
+ * before this existed, so a page that adopts this URL cannot regress.
+ */
+export function videoDeliverySrc(
+  value: string | undefined | null,
+  options?: ResolveMediaSrcOptions,
+): string | undefined {
+  const src = resolveMediaSrc(value, options)
+  if (!derivedObjectEligible(src)) return src
+  return withMediaCdnQuery(src, [
+    [MEDIA_CDN_RENDITION_PARAM, MEDIA_CDN_RENDITION_AUTO],
+  ])
 }
 
 /**
