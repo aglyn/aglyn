@@ -200,14 +200,33 @@ describe('AGL-2743 · a poster is an image, so it takes the shared edge policy',
     expect(res.getHeader('content-type')).toBe('image/webp')
   })
 
-  it('serves the MASTER when the document records no poster', async () => {
+  it('⛔ 404s when the document records no poster — never the film instead', async () => {
     mockState.doc = { ...VIDEO_DOC, poster: undefined }
     const res = await serve({ poster: '1' })
-    // A renderer may advertise `?poster=1` without reading the document, so
-    // the absence of one has to degrade rather than 404 — the same rule `?w=`
-    // has had since AGL-175.
-    expect(lastRequested()).toBe('orgs/acme/media/Film/v1')
-    expect(res.getHeader('content-type')).toBe('video/mp4')
+    // The one representation that must refuse rather than degrade. `?w=`
+    // falls back to the original because both answers are images; falling
+    // back HERE would answer a request for a 40 KB still with 60 MB of
+    // `video/mp4` — the whole cost this feature removes, re-delivered by the
+    // feature. A `<video>` whose `poster` 404s behaves exactly like one with
+    // no `poster` at all, which is what every video did before AGL-2742.
+    expect(res.statusCode).toBe(404)
+    expect(mockState.requested).toEqual([])
+    expect(res.getHeader('cache-control')).toBe('private, no-store')
+  })
+
+  it('404s a poster on an asset that never had one, without reading Storage', async () => {
+    mockState.doc = {
+      fileName: 'logo.png',
+      contentType: 'image/png',
+      sizeBytes: 8,
+      storagePath: 'orgs/acme/media/logo',
+      cdnPath: '/api/media/cdn/org:acme/logo',
+      contentHash: 'abc0123456789def',
+      variants: [320],
+      visibleTo: ['org'],
+    }
+    const res = await serve({ poster: '1' })
+    expect(res.statusCode).toBe(404)
   })
 
   it('gives the poster its own validator, so no cache can swap it for the film', async () => {

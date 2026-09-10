@@ -904,11 +904,17 @@ function derivedObjectEligible(src: string | undefined): src is string {
  * consulting the document.
  *
  * ⚠️ Returning a URL is NOT a promise that a poster exists. Nothing here can
- * read a media document, and a video uploaded before AGL-2742, or by a
- * browser that could not decode it, has none — that request 404s. A renderer
- * that cannot tolerate a 404 should read `poster` off the document it
- * already holds; a `<video poster>` tolerates it natively, which is why this
- * is allowed to answer without knowing.
+ * read a media document, and a video uploaded before AGL-2742 — or by a
+ * browser that could not decode it — has none.
+ *
+ * That case answers **404**, deliberately and not as a gap: `serveMediaCdn`
+ * refuses a poster it does not have rather than falling back to the master,
+ * because answering a request for a 40 KB still with 60 MB of `video/mp4` is
+ * the exact cost this exists to remove. So a `<video poster>` built from this
+ * degrades to a `<video>` with no poster, which is what every video on the
+ * platform did before AGL-2742 — which is why this is allowed to answer
+ * without knowing. A caller putting the URL somewhere a 404 is NOT free (an
+ * `<img>`, an `og:image`) must read `poster` off the document first.
  */
 export function mediaPosterSrc(
   value: string | undefined | null,

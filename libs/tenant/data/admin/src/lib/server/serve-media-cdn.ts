@@ -1078,21 +1078,38 @@ export async function serveMediaCdn(
      * because the parameters are a REQUEST for a representation and the only
      * useful answer to an incoherent one is the safest coherent one.
      *
-     * ⛔ A representation the DOCUMENT does not list falls back to the master
-     * rather than 404ing — an asset with no poster, a width nothing was
-     * generated at, a rendition key that has been removed. That is the
-     * degradation `?w=` has always had, and it is what lets a renderer
-     * advertise a representation without first reading the document.
+     * ## Falling back to the master is right for a WIDTH and wrong for a POSTER
      *
-     * It is NOT a promise that a listed representation always answers: a
-     * document naming an object Storage no longer holds still 404s below,
-     * exactly as a deleted `__w320.webp` does today. The fallback covers
-     * absence in the record, not divergence between the record and the
-     * bucket.
+     * `?w=` on an asset with no such variant serves the original, and that has
+     * always been safe because both answers are the same KIND of thing: an
+     * image, larger than asked for. A rendition inherits it for the same
+     * reason — an unknown `?r=` serves the master, which is the same video in
+     * more bytes.
+     *
+     * `?poster=1` cannot. The caller asked for a still and the master is a
+     * film, so the fallback would answer a `<video poster>` with 60 MB of
+     * `video/mp4` — a request for 40 KB satisfied with the entire asset,
+     * which is the precise cost this feature exists to remove, delivered by
+     * the feature itself. So a poster that does not exist is a **404**, and
+     * that is the better answer in the browser too: a `<video>` whose
+     * `poster` 404s behaves exactly like a `<video>` with no `poster`, which
+     * is what every video did before AGL-2742. It also lets a renderer emit
+     * the attribute without first reading the document — the property the
+     * fallback was supposed to buy, bought honestly.
      */
     const poster = snapshot.get('poster')
     const posterVariants: number[] = poster?.variants ?? []
-    const usePoster = mediaCdnWantsPoster(req.query[MEDIA_CDN_POSTER_PARAM]) && Boolean(poster)
+    const wantsPoster = mediaCdnWantsPoster(req.query[MEDIA_CDN_POSTER_PARAM])
+    if (wantsPoster && !poster) {
+      // See above: a still is not a film, so this is the one representation
+      // that must refuse rather than degrade. `no-store` because the answer
+      // is about a DOCUMENT field that a poster backfill can change at any
+      // time, and a cached 404 would outlive the fix.
+      setCacheControl('private, no-store')
+      res.status(404).json({ error: 'No poster' })
+      return
+    }
+    const usePoster = wantsPoster
     const usePosterVariant = usePoster && Boolean(width) && posterVariants.includes(width)
     const renditionKey = req.query[MEDIA_CDN_RENDITION_PARAM]
     const rendition = usePoster
