@@ -122,6 +122,12 @@ jobs:
         env:
           SIGNUP_CANARY_ENABLE: '1'
           SIGNUP_CANARY_ORIGIN: ${{ vars.SIGNUP_CANARY_ORIGIN }}
+          # ⚠️ An App Check bypass, allowed for this one CI script by
+          # `app-check-debug-token.spec.ts` and covered by the attestation job
+          # above — which measures whether App Check is admitting REAL people,
+          # something a token cannot fake. Without this the walk cannot attest
+          # at all: reCAPTCHA Enterprise scores headless automation as a bot.
+          FIREBASE_APPCHECK_DEBUG_TOKEN: ${{ secrets.FIREBASE_APPCHECK_DEBUG_TOKEN }}
           # The repo convention: an optional var with the project as the default.
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}

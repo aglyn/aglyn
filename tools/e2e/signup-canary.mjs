@@ -466,6 +466,7 @@ async function main() {
      * every visitor. One canary request an hour against roughly a thousand a
      * day cannot hold that green.
      */
+    begin('attest-setup')
     const debugToken = process.env['FIREBASE_APPCHECK_DEBUG_TOKEN'] ?? ''
     if (!debugToken) {
       throw new Error('FIREBASE_APPCHECK_DEBUG_TOKEN is not set')
@@ -479,6 +480,7 @@ async function main() {
       self.FIREBASE_APPCHECK_DEBUG_TOKEN = token
     }, debugToken)
     const page = await context.newPage()
+    done()
 
     await walk(page, db, auth, identity, created)
   } catch (error) {

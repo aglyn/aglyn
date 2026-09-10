@@ -105,6 +105,7 @@ describe('the walk cannot quietly stop being a walk', () => {
     // here and not in the runbook sends them to the wrong door.
     for (const step of [
       'sweep-orphans',
+      'attest-setup',
       'signup-form',
       'account',
       'hold-name',
@@ -283,5 +284,42 @@ describe('the canary is excluded from the drought it would otherwise trip', () =
     expect(isSignupCanaryOrgSlug('')).toBe(false)
     expect(isSignupCanaryOrgSlug(null)).toBe(false)
     expect(isSignupCanaryOrgSlug(undefined)).toBe(false)
+  })
+})
+
+/**
+ * The workflow hands the walk what it needs (AGL-2715).
+ *
+ * The first CI run failed on a missing `FIREBASE_APPCHECK_DEBUG_TOKEN`: the
+ * binding had been stripped out of the workflow while the walk was held, and
+ * was not restored when the carve-out came back. The script cannot attest
+ * without it, so every scheduled run would have failed — hourly, on a healthy
+ * platform, which is the alarm fatigue this whole area keeps circling back to.
+ *
+ * A source assertion because there is no cheaper way to find it: the walk runs
+ * only on a runner, so nothing local exercises the workflow's env block.
+ */
+describe('the workflow supplies what the walk cannot run without', () => {
+  const WORKFLOW = readFileSync(
+    join(REPO_ROOT, '.github/workflows/signup-canary.yml'),
+    'utf8',
+  )
+
+  it('binds every variable the script refuses to start without', () => {
+    for (const name of [
+      'SIGNUP_CANARY_ENABLE',
+      'SIGNUP_CANARY_ORIGIN',
+      'SIGNUP_CANARY_EMAIL',
+      ['FIREBASE', 'APPCHECK', 'DEBUG', 'TOKEN'].join('_'),
+    ]) {
+      expect(WORKFLOW).toContain(name)
+    }
+  })
+
+  it('gives the walk a browser to drive', () => {
+    // playwright-core ships no browser, and the front door cannot be walked
+    // by a fetch — the whole design rests on a real one being present.
+    expect(WORKFLOW).toContain('CHROME_PATH')
+    expect(WORKFLOW).toContain('playwright-core')
   })
 })
