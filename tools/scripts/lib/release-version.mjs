@@ -423,6 +423,81 @@ export function mainVersionVerdict({ tagVersion, mainVersion }) {
 }
 
 // ---------------------------------------------------------------------------
+// Is the version ahead of the release that precedes it?
+// ---------------------------------------------------------------------------
+
+/** The newest version in `versions` by semver precedence; null when empty. */
+export function newestVersion(versions) {
+  let newest = null
+  for (const candidate of versions) {
+    if (candidate === null || candidate === undefined) continue
+    if (newest === null || compareVersions(candidate, newest) > 0) {
+      newest =
+        typeof candidate === 'string' ? candidate : formatVersion(candidate)
+    }
+  }
+  return newest
+}
+
+/**
+ * The verdict behind release:tag's second guard: nothing may be released at a
+ * version that is not ahead of the release before it.
+ *
+ * The guard exists to catch one real mistake — promoting a batch that did not
+ * include the `chore(release)` commit, so `production` still carries the old
+ * version and the "new" tag would name the same tree as the last release.
+ * What makes that mistake visible is the comparison against the release that
+ * PRECEDES this one, and `reachableVersions` is how the caller expresses which
+ * releases those are.
+ *
+ * For an ordinary release the caller passes every release tag in the repo:
+ * the commit being tagged is the tip of `production`, so every existing tag
+ * precedes it and the newest of them is the previous release.
+ *
+ * For a BACKFILL of a release that was served but never tagged, that list is
+ * the wrong one — the newest tag in the repo comes AFTER the commit being
+ * tagged, and comparing against it would refuse a tag that is perfectly
+ * correct. The caller passes only the tags REACHABLE FROM the commit, which
+ * for a commit on `production` is exactly the releases that shipped before it.
+ * The duplicate-tree check the guard exists for is unchanged; only the set of
+ * releases it calls "before" is, and narrowing it to ancestors is what makes
+ * it mean the same thing in both directions.
+ *
+ * Returns `{ ok, predecessor, lines }`. `predecessor` is null for the very
+ * first release, which is the one case with nothing to be ahead of.
+ */
+export function predecessorVerdict({ version, reachableVersions = [] } = {}) {
+  const predecessor = newestVersion(reachableVersions)
+
+  if (predecessor === null) {
+    return {
+      ok: true,
+      predecessor: null,
+      lines: [
+        '  NOTE: no release tag precedes this commit — treating it as the',
+        '  first release in the series. (The two 2021 `*-0.0.1` tags are a dead',
+        '  per-library scheme and are ignored.)',
+      ],
+    }
+  }
+
+  if (compareVersions(version, predecessor) > 0) {
+    return { ok: true, predecessor, lines: [] }
+  }
+
+  return {
+    ok: false,
+    predecessor,
+    lines: [
+      `carries version ${formatVersion(parseVersion(version))}, which is not ahead of ` +
+        `${tagForVersion(predecessor)} — the newest release tag that precedes it.`,
+      'That almost always means the promotion did not include the ' +
+        '`chore(release)` commit, so two deployed trees would share one number.',
+    ],
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Changelog
 // ---------------------------------------------------------------------------
 

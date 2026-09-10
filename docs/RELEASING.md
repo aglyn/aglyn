@@ -263,9 +263,79 @@ is merged. Tagging after the fact means a tag asserts something stronger:
 That is what makes "what shipped in v1.0.0-beta.3?" answerable a year later.
 
 `release:tag` refuses unless the tag is new, the version at that commit is ahead
-of the newest existing tag, and `CHANGELOG.md` there documents it. The second
-guard catches the commonest real mistake — promoting a batch that did not
+of the release that precedes it, and `CHANGELOG.md` there documents it. The
+second guard catches the commonest real mistake — promoting a batch that did not
 include the `chore(release)` commit.
+
+#### Backfilling a tag that was missed
+
+Because this step is run by hand, it is also the step that gets skipped. On
+2026-09-10 `v1.0.0-beta.114` and `v1.0.0-beta.115` were both cut, promoted and
+served, and neither was tagged — which breaks "what shipped in
+`v1.0.0-beta.115`?" for exactly those releases while leaving the series looking
+merely gappy.
+
+```bash
+npm run release:tag -- --at <sha>                  # report only
+npm run release:tag -- --at <sha> --write --push
+```
+
+On top of the three ordinary guards, `--at` requires the commit to be an
+**ancestor of `origin/production`** (so it was merged there), to sit on that
+branch's **first-parent line** (so it is a promotion, not a branch merge that a
+promotion swallowed), to be a **merge commit**, and to carry **no other release
+tag**. The "version is ahead" guard compares against the newest tag **reachable
+from that commit** rather than the newest tag in the repo — otherwise a correct
+backfill would be refused for sitting behind a release cut after it.
+
+##### Merged is not served, and git cannot tell them apart
+
+Those guards prove the commit was **promoted**. They do not prove the tag's
+actual claim, which is that the tree was *built and served* — and the difference
+is the entire hazard of backfilling.
+
+`v1.0.0-beta.5` is the worked example. It merged to `production` as `f2bac3cd1`
+and is **deliberately untagged**: both `console:build:production` and
+`tenant:build:production` errored on Vercel after the merge, so the aliases kept
+serving the previous READY build and that tree never reached a user.
+`v1.0.0-beta.6` carries the fix and is tagged. Every guard above passes on
+`f2bac3cd1` and the tag would still be false.
+
+So **a gap is not automatically a defect to close.** Back-filling one to make the
+sequence look continuous would make every tag mean merely "merged", which is the
+weaker claim the scheme exists to avoid.
+
+On the forward path you settle this by running `verify-production-aliases.mjs`
+against the live aliases at tag time. That tool reads *current* state, so it can
+say nothing about a historical commit. `--write` under `--at` therefore refuses
+without an explicit attestation, which is recorded in the annotation rather than
+assumed:
+
+```bash
+npm run release:tag -- --at <sha> --write \
+  --served 'vercel: console+tenant READY for <deployment-id>, <date>'
+```
+
+If you cannot establish that it served, **leave the gap**.
+
+**Most gaps in the tag series are not missed tags.** A version cut on `main`
+whose promotion was superseded by the next batch never reached production, so no
+commit carries it and there is nothing to tag — the gap is the honest record. To
+tell the two apart, ask whether any commit on `production` carries the version:
+
+```bash
+git log origin/production --first-parent --format='%H' \
+  | while read -r sha; do
+      printf '%s %s\n' "$(git show "$sha:package.json" | sed -n 's/.*"version": "\([^"]*\)".*/\1/p' | head -1)" "$sha"
+    done
+```
+
+One shape `--at` will not decide for you: before the monotonic guard existed a
+promotion could reach production without the bump, so the same version shipped
+as more than one tree — `1.0.0-beta.18` was served by PRs #920, #921 and #922.
+Every guard passes on all three and tagging one makes the others refuse. Which
+tree deserves the number is a judgment about history, not something a guard can
+read off the graph.
 
 ### 3.5 — Read the ledger of what this batch owes
 
