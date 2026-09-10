@@ -205,8 +205,10 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
   // AGL-1860. The flag closes the console PANEL and the chat ROUTE together
-  // (a released-off feature 404s), so the one page about it is a page about
-  // something nobody can open yet — the admonition treatment, whole-file.
+  // (a released-off feature 404s), and the one page about it is ABOUT the
+  // feature — the admonition treatment, whole-file. While
+  // PUBLISHED_ON_IN_PRODUCTION declares the flag ON, the spec reads this entry
+  // the other way: the admonition must be absent.
   release_assist: [
     {
       path: 'docs/getting-started/aglyn-assist.md',
@@ -223,6 +225,61 @@ export const FLAG_DOC_PAGES: Partial<
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
 export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {}
+
+/**
+ * Where a published-ON verdict was read, and why it holds. Every field is
+ * something a reviewer can check against the Firebase console, so none of
+ * them is optional.
+ */
+export interface PublishedOnEvidence {
+  /** The production Remote Config template version that publishes the flag. */
+  readonly templateVersion: number
+  /** When that version was published, as `YYYY-MM-DD`. */
+  readonly publishedAt: string
+  /**
+   * The parameter value that version publishes, verbatim. The spec parses it
+   * with the gate's own parser and requires it to turn the flag on for every
+   * workspace on every plan: a percentage or a tier list is still a rollout,
+   * and a page about a rollout still owes the reader its disclosure.
+   */
+  readonly publishedValue: string
+  /** Why the in-repo default and the template seed stay OFF regardless. */
+  readonly defaultStaysOff: string
+  /** What had to be true before production could publish the flag ON. */
+  readonly precondition: string
+}
+
+/**
+ * Flags production publishes ON while their in-repo default stays OFF
+ * (AGL-2784).
+ *
+ * `defaultEnabled` is only the fallback for an unreachable Remote Config, and
+ * the template seeds the same value, so neither says whether a customer can
+ * open the feature. Usually that gap never matters, because shipping a flag
+ * means flipping its default. A flag whose default is kept OFF on purpose —
+ * so that a code change can never be what releases it — ships by publishing
+ * Remote Config instead, and without a declaration here the spec reads the
+ * default and requires that flag's pages to say it is still rolling out.
+ *
+ * A key here counts as ON for disclosure: its pages must carry no rolling-out
+ * disclosure, and none is required of them. Its FLAG_DOC_PAGES entry stays,
+ * because that entry is what points the stale-marker half at those pages.
+ * Only a registry key that is OFF by default belongs here; the spec refuses
+ * any other.
+ */
+export const PUBLISHED_ON_IN_PRODUCTION: Partial<
+  Record<ReleaseFlagKey, PublishedOnEvidence>
+> = {
+  release_assist: {
+    templateVersion: 8,
+    publishedAt: '2026-08-23',
+    publishedValue: '{"enabled":true,"rolloutPercent":0}',
+    defaultStaysOff:
+      'Flipping the default in code has to be a failing test rather than a quiet deploy: assist-anthropic-subprocessor-gate.spec.ts pins both defaultEnabled and the template seed to false, so the flag can only be released by publishing Remote Config.',
+    precondition:
+      'AGL-1909: Anthropic has to be a published subprocessor before Assist sends it customer content. aglyn.com/legal/subprocessors lists Anthropic for the Aglyn Assist helper.',
+  },
+}
 
 /** Every flag whose in-repo default (and seeded Remote Config value) is OFF. */
 export const OFF_BY_DEFAULT_FLAG_KEYS: readonly ReleaseFlagKey[] =
