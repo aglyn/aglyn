@@ -49,7 +49,7 @@ const RECOVERED_AFTER_SECONDS = 5
  * The `MediaError` codes a fresh link can cure: `MEDIA_ERR_NETWORK` (2), which
  * a refused byte-range request raises mid-play, and
  * `MEDIA_ERR_SRC_NOT_SUPPORTED` (4), which a refused first request raises.
- * An abort (1) is the page or the viewer cancelling, and a decode error (3) is
+ * An abort (1) is the page or the viewer stopping the load, and a decode error (3) is
  * a broken file that no new link can fix.
  */
 const RECOVERABLE_MEDIA_ERRORS = new Set([2, 4])
