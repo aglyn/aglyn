@@ -997,6 +997,38 @@ service cloud.firestore {
           .affectedKeys().hasAny(['visibleTo']);
       }
       /**
+       * The one update a client may still make to a contact (AGL-2804): a
+       * holder letting the person go.
+       *
+       * A contact keeps each holder's records in `facets.{groupId}`, and no
+       * rule can look inside that map for one holder. The holder is a
+       * dynamic key; a dotted write to any field of a facet reads in the
+       * document's diff as `facets` changing; and a diff of the map itself
+       * names the holder, never the field. So a rule cannot tell a lifecycle
+       * stage from a phone number, and a plan check on the CRM suite's fields
+       * would be a check on nothing. Every edit to a facet is therefore the
+       * server's — `crm/contact-update` and `crm/contact-stage`, which ask the
+       * plan about the fields a save carries — and what is left to a client
+       * is the detach "Remove from this site" performs:
+       *
+       *  - the keys it touches are the ones a detach touches — a holder's
+       *    facet, its consent entries, its scope token and its capture
+       *    attribution — and nothing a capture, a merge or a save writes;
+       *  - `facets` only LOSES holders: no facet is added, and none that
+       *    stays is changed in the same write.
+       *
+       * Deleting the document outright is the delete rule's question.
+       */
+      function contactUpdateOnlyLetsGo() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'facets', 'marketingConsentByHost', 'visibleTo', 'capturedByHostIds',
+            'updatedAt']) &&
+          request.resource.data.get('facets', {}).diff(resource.data.get('facets', {}))
+            .addedKeys().size() == 0 &&
+          request.resource.data.get('facets', {}).diff(resource.data.get('facets', {}))
+            .changedKeys().size() == 0;
+      }
+      /**
        * Create-time twin of `canReadScoped` — it reads `request.resource`
        * because `resource` does not exist yet. Stops a scoped member
        * creating a resource they would immediately be unable to see, or
@@ -1104,13 +1136,21 @@ service cloud.firestore {
        * destroyed by a caller who is the last thing holding it, and every
        * other case has to be an update. A privacy ERASURE is not this path
        * and goes through the Admin SDK, which these rules do not gate.
+       *
+       * AN UPDATE ONLY LETS A HOLDER GO (AGL-2804). Each holder's records
+       * live in a facet no rule can look inside for one holder, so the
+       * profile, the owner, the stage, the company, the custom values, the
+       * files, the tags and the campaign filing are written by the CRM's
+       * routes, which ask the plan about the fields a save carries; a client
+       * update may only drop a holder's half. See `contactUpdateOnlyLetsGo()`.
        */
       match /contacts/{contactId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
           (canWriteOrgData() && canCreateScoped());
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+           contactUpdateOnlyLetsGo());
         allow delete: if isStaff() ||
           (canWriteScopedOrgData() &&
            resource.data.visibleTo.hasOnly(

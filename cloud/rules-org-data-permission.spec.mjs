@@ -42,7 +42,7 @@ import {
   assertSucceeds,
   assertFails,
 } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { deleteDoc, deleteField, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 
 const ORG = 'org-data-permission-test'
 const DATASET = 'ds-shared'
@@ -92,6 +92,8 @@ await env.withSecurityRulesDisabled(async (context) => {
   await setDoc(doc(db, 'orgs', ORG, 'contacts', CONTACT), {
     email: 'someone@example.com',
     visibleTo: ['org'],
+    // One holder's half, which the contact control below lets go of.
+    facets: { 'host-control': { sources: {}, interactions: [] } },
   })
   await setDoc(doc(db, 'orgs', ORG, 'media', MEDIA), {
     name: 'photo.png',
@@ -146,9 +148,10 @@ for (const principal of principals) {
 // ── Controls: what `data.manage` must NOT have taken away ───────────────────
 // `data.manage` is scoped to datasets — "Create, edit, and delete organization
 // datasets". Folding it into `canWriteOrgData` would have applied it to the
-// media library and the CRM as well, where no server route asks for it, and
-// refused members those routes permit. That is the same disagreement this file
-// closes, pointed the other way.
+// media library, and to the one contact update a client still makes — letting
+// a holder go (AGL-2804) — which no server route stands in front of, and
+// refused members the product permits there. That is the same disagreement
+// this file closes, pointed the other way.
 
 await check('CONTROL — the revoked editor may still update org MEDIA', () =>
   assertSucceeds(
@@ -157,10 +160,10 @@ await check('CONTROL — the revoked editor may still update org MEDIA', () =>
     }),
   ),
 )
-await check('CONTROL — the revoked editor may still update a CONTACT', () =>
+await check('CONTROL — the revoked editor may still let a holder go from a CONTACT', () =>
   assertSucceeds(
     updateDoc(doc(as('uid-editor-revoked'), 'orgs', ORG, 'contacts', CONTACT), {
-      email: 'moved@example.com',
+      'facets.host-control': deleteField(),
     }),
   ),
 )

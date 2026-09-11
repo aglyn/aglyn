@@ -60,7 +60,10 @@ const mockUpdate = jest.fn()
 const mockEmit = jest.fn()
 
 jest.mock('firebase-admin/firestore', () => ({
-  FieldValue: { serverTimestamp: () => ({ __serverTimestamp: true }) },
+  FieldValue: {
+    serverTimestamp: () => ({ __serverTimestamp: true }),
+    delete: () => ({ __delete: true }),
+  },
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
@@ -246,6 +249,62 @@ describe('the plan (AGL-2787)', () => {
     expect(status).toBe(200)
     expect(payload.changed).toBe(true)
     expect(mockUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a Free workspace a CLEARED stage too — clearing is setting it to none', async () => {
+    mockOrg = { plan: 'free' }
+    const { status, payload } = await post({ ...MOVE, lifecycleStage: null })
+    expect(status).toBe(403)
+    expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A CLEARED STAGE (AGL-2804). The record page's "Not placed yet" was a
+ * client-direct facet write; a facet is the server's to write now, so the
+ * clear comes through the route that owns the stage. There is no event for
+ * "no stage", so a clear announces nothing.
+ */
+describe('a cleared stage', () => {
+  it("removes the stage from this site's facet on an explicit null, and announces nothing", async () => {
+    const { status, payload } = await post({ ...MOVE, lifecycleStage: null })
+    expect(status).toBe(200)
+    expect(payload).toEqual({
+      ok: true,
+      changed: true,
+      lifecycleStage: '',
+      previousStage: 'lead',
+    })
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+    expect(mockUpdate).toHaveBeenCalledWith('con-1', {
+      'facets.host-1.lifecycleStage': { __delete: true },
+      updatedAt: { __serverTimestamp: true },
+    })
+    expect(mockEmit).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing for a clear of a contact this site never placed', async () => {
+    mockContacts['con-2'] = {
+      email: 'bea@example.test',
+      visibleTo: [`host:${HOST}`],
+      facets: { [HOST]: { sources: {}, interactions: [] } },
+    }
+    const { status, payload } = await post({
+      hostId: HOST,
+      contactId: 'con-2',
+      lifecycleStage: null,
+    })
+    expect(status).toBe(200)
+    expect(payload).toEqual({ ok: true, changed: false, lifecycleStage: '', previousStage: '' })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('still refuses an empty string, which names no stage and asks for no clear', async () => {
+    const { status, payload } = await post({ ...MOVE, lifecycleStage: '' })
+    expect(status).toBe(400)
+    expect(payload).toEqual({ error: 'Pick a lifecycle stage' })
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })
 

@@ -16,23 +16,21 @@
  */
 
 /**
- * Deleting a company DETACHES it from every contact first, bounded, and
- * never leaves a link behind (AGL-2597).
+ * Deleting a company from its page (AGL-2597, AGL-2804).
  *
- * Firestore does not cascade. A bare `deleteDoc` would leave every contact
- * at the company naming a record that no longer exists — their page linking
- * to nothing, and the `companyIds` mirror still matching a ghost in every
- * query. So the delete is a detach pass and then a delete, and the pass is
- * bounded by what one batch can hold.
+ * The delete unlinks every contact at the company before the company goes,
+ * and the unlink clears each holder's facet that named it — which is the
+ * server's to write. So the page's Delete is one post to
+ * `crm/company-delete`, whose own spec pins the detach and its bound; what
+ * the page must hold is what it says for each answer:
  *
- * Two contracts:
+ *  1. DELETED: the sentence names how many contacts were unlinked, and the
+ *     page leaves the record it removed.
+ *  2. MORE REMAIN: the company stands, the page stays, and the reader is
+ *     told to delete again.
+ *  3. REFUSED: the route's own sentence, and nothing moves.
  *
- *  1. UNDER THE BOUND, every linked contact is updated in one batch — the
- *     id leaves the mirror and the facet that named it is cleared — and
- *     only then is the document deleted.
- *  2. PAST THE BOUND, the pass detaches what a batch can hold, the document
- *     is NOT deleted, and the person is told more remain. A company is never
- *     deleted while a contact still points at it.
+ * In none of them does the browser write a contact or delete the company.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -41,31 +39,19 @@ import CompanyDetailPage from './company-detail-page'
 
 const COMPANY_ID = 'c-acme'
 
-/** How many contacts the fake collection holds for this run. */
-let linkedContacts = 0
-const batchUpdates: Array<{ path: string; update: Record<string, unknown> }> = []
-const committed: number[] = []
-const deleted: string[] = []
+/** Every client-direct write the store received — which must stay empty. */
+const writes: Array<{ kind: string; path: string }> = []
 const notices: Array<{ message: string; variant?: string }> = []
 const pushes: string[] = []
-/** The probe query's `limit`, so the bound is asserted rather than assumed. */
-let probeLimit: number | null = null
 
-const contactSnapshot = (index: number) => ({
-  id: `con-${index}`,
-  ref: { path: `orgs/org-1/contacts/con-${index}` },
-  data: () => ({
-    email: `person-${index}@acme.com`,
-    companyIds: [COMPANY_ID],
-    facets: { 'host-1': { sources: {}, interactions: [], companyId: COMPANY_ID } },
-  }),
-})
+/** The CRM routes the page posted to, and what the delete route answers. */
+let posted: Array<{ route: string; payload: Record<string, any> }> = []
+let deleteAnswer: Record<string, unknown> = {}
+let deleteRefusal: string | null = null
 
 /*
  * The page composes the deals, tasks and activity cards beside the one under
- * test. Each opens its own listeners against the scope; none is what this
- * suite asks about, so they render nothing here and the deletion path is the
- * only thing the Firestore double has to answer.
+ * test. Each opens its own listeners; none is what this suite asks about.
  */
 jest.mock('./company-deals-card', () => ({ __esModule: true, default: () => null, CompanyDealsCard: () => null }))
 jest.mock('./record-tasks-card', () => ({ __esModule: true, default: () => null, RecordTasksCard: () => null }))
@@ -73,35 +59,18 @@ jest.mock('./record-activity-card', () => ({ __esModule: true, default: () => nu
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
-  query: (base: { path: string }, ...clauses: Array<{ kind: string; value?: number }>) => ({
-    ...base,
-    limit: clauses.find((clause) => clause.kind === 'limit')?.value ?? null,
-  }),
+  query: (base: { path: string }) => base,
   where: () => ({ kind: 'where' }),
   orderBy: () => ({ kind: 'orderBy' }),
   limit: (value: number) => ({ kind: 'limit', value }),
-  getDocs: async (spec: { path: string; limit: number | null }) => {
-    probeLimit = spec.limit
-    const count = Math.min(linkedContacts, spec.limit ?? linkedContacts)
-    return { docs: Array.from({ length: count }, (_, index) => contactSnapshot(index)) }
-  },
-  getCountFromServer: async () => ({ data: () => ({ count: linkedContacts }) }),
-  writeBatch: () => {
-    const pending: typeof batchUpdates = []
-    return {
-      update: (ref: { path: string }, update: Record<string, unknown>) => {
-        pending.push({ path: ref.path, update })
-      },
-      commit: async () => {
-        batchUpdates.push(...pending)
-        committed.push(pending.length)
-      },
-    }
-  },
-  deleteDoc: async (ref: { path: string }) => {
-    deleted.push(ref.path)
-  },
-  updateDoc: jest.fn(),
+  getDocs: async () => ({ docs: [] }),
+  getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
+  writeBatch: () => ({
+    update: (ref: { path: string }) => void writes.push({ kind: 'update', path: ref.path }),
+    commit: async () => undefined,
+  }),
+  deleteDoc: async (ref: { path: string }) => void writes.push({ kind: 'delete', path: ref.path }),
+  updateDoc: async (ref: { path: string }) => void writes.push({ kind: 'update', path: ref.path }),
   setDoc: jest.fn(),
   arrayRemove: (...values: unknown[]) => ({ op: 'arrayRemove', values }),
   arrayUnion: (...values: unknown[]) => ({ op: 'arrayUnion', values }),
@@ -143,6 +112,18 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     .writeGuardedBySeed,
 }))
 
+jest.mock('./use-crm-api', () => ({
+  useCrmApi: () => async (route: string, payload: Record<string, any>) => {
+    posted.push({ route, payload })
+    if (route === 'company-delete' && deleteRefusal) {
+      return { response: { ok: false, status: 403 }, payload: { error: deleteRefusal } }
+    }
+    return {
+      response: { ok: true, status: 200 },
+      payload: route === 'company-delete' ? { ok: true, ...deleteAnswer } : { ok: true },
+    }
+  },
+}))
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async () => ({ ok: true, json: async () => ({ members: [] }) }),
 }))
@@ -209,65 +190,63 @@ const clickDelete = async () => {
   })
 }
 
+const deletes = () =>
+  posted.filter((call) => call.route === 'company-delete').map((call) => call.payload)
+
 beforeEach(() => {
-  linkedContacts = 0
-  batchUpdates.length = 0
-  committed.length = 0
-  deleted.length = 0
+  writes.length = 0
   notices.length = 0
   pushes.length = 0
-  probeLimit = null
+  posted = []
+  deleteAnswer = { deleted: true, detached: 0, moreRemain: false }
+  deleteRefusal = null
 })
 
-describe('deleting a company detaches it from its contacts (AGL-2597)', () => {
-  it('unlinks every contact in one batch, then deletes the document', async () => {
-    linkedContacts = 3
+describe('deleting a company from its page (AGL-2804)', () => {
+  it('deletes through crm/company-delete, says how many were unlinked, and leaves the record', async () => {
+    deleteAnswer = { deleted: true, detached: 3, moreRemain: false }
     mount()
 
     await clickDelete()
 
-    await waitFor(() => expect(deleted).toEqual([`orgs/org-1/companies/${COMPANY_ID}`]))
-    // The probe asks for one past the bound, so "more remain" is a fact.
-    expect(probeLimit).toBe(501)
-    expect(committed).toEqual([3])
-    expect(batchUpdates.map((entry) => entry.path)).toEqual([
-      'orgs/org-1/contacts/con-0',
-      'orgs/org-1/contacts/con-1',
-      'orgs/org-1/contacts/con-2',
-    ])
-    // The mirror loses the id AND the facet that named it is cleared —
-    // half of that is a link that still renders on the contact's page.
-    expect(batchUpdates[0].update).toEqual({
-      companyIds: { op: 'arrayRemove', values: [COMPANY_ID] },
-      'facets.host-1.companyId': { op: 'delete' },
-      updatedAt: { op: 'serverTimestamp' },
-    })
-    // And the page leaves the record it just removed.
-    expect(pushes).toEqual([`${BASE_PATH}/companies`])
-  })
-
-  it('deletes a company nobody is linked to without a batch', async () => {
-    linkedContacts = 0
-    mount()
-
-    await clickDelete()
-
-    await waitFor(() => expect(deleted).toHaveLength(1))
-    expect(committed).toEqual([])
-  })
-
-  it('past the bound: detaches 500, keeps the company, and says more remain', async () => {
-    linkedContacts = 750
-    mount()
-
-    await clickDelete()
-
-    await waitFor(() => expect(committed).toEqual([500]))
-    expect(deleted).toEqual([])
-    expect(pushes).toEqual([])
+    await waitFor(() => expect(pushes).toEqual([`${BASE_PATH}/companies`]))
+    expect(deletes()).toEqual([{ companyId: COMPANY_ID }])
     expect(notices).toContainEqual({
-      message: expect.stringMatching(/500 contacts were unlinked .* more remain/),
-      variant: 'warning',
+      message: 'Company deleted and unlinked from 3 contacts',
+      variant: 'success',
     })
+    // The unlink is the server's: the browser writes no contact and deletes no company.
+    expect(writes).toEqual([])
+  })
+
+  it('says more remain when a pass hit its bound, and stays on the company', async () => {
+    deleteAnswer = { deleted: false, detached: 500, moreRemain: true }
+    mount()
+
+    await clickDelete()
+
+    await waitFor(() =>
+      expect(notices).toContainEqual({
+        message: expect.stringMatching(/500 contacts were unlinked .* more remain/),
+        variant: 'warning',
+      }),
+    )
+    expect(pushes).toEqual([])
+    expect(writes).toEqual([])
+  })
+
+  it("shows the route's refusal in its own words, and nothing moves", async () => {
+    deleteRefusal =
+      'Your access is limited to specific sites, so the contacts at this company ' +
+      'could not be read to unlink them. Ask an organization administrator to delete it.'
+    mount()
+
+    await clickDelete()
+
+    await waitFor(() =>
+      expect(notices).toContainEqual({ message: deleteRefusal as string, variant: 'error' }),
+    )
+    expect(pushes).toEqual([])
+    expect(writes).toEqual([])
   })
 })

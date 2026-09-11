@@ -188,34 +188,40 @@ export interface CrmBulkAnswer {
  * own order. A row the answer does not mention was not written — a route
  * that dropped it silently would otherwise read as success — and is refused
  * by name. A request refused WHOLE (no session, no reach over the org) is
- * every row refused with the route's one sentence, which is what the same
- * selection through {@link runCrmBulkCalls} would have said N times.
+ * every row it carried refused with the route's one sentence, which is what
+ * the same selection through {@link runCrmBulkCalls} would have said N times.
+ *
+ * A route that caps how many rows one request names takes the selection in
+ * pieces of `chunkSize`, one request after another; by default the whole
+ * selection is one request.
  */
 export async function runCrmBulkBatch<T>(
   items: readonly T[],
   idOf: (item: T) => string,
   labelOf: (item: T) => string,
   call: (items: readonly T[]) => Promise<readonly CrmBulkAnswer[]>,
+  chunkSize: number = Number.POSITIVE_INFINITY,
 ): Promise<CrmBulkOutcome> {
   const outcome: CrmBulkOutcome = { done: 0, refused: [] }
-  if (!items.length) return outcome
-  let answers: readonly CrmBulkAnswer[]
-  try {
-    answers = await call(items)
-  } catch (error) {
-    const reason = bulkRefusalReason(error)
-    for (const item of items) outcome.refused.push({ label: labelOf(item), error: reason })
-    return outcome
-  }
-  const byId = new Map(answers.map((answer) => [answer.id, answer]))
-  for (const item of items) {
-    const answer = byId.get(idOf(item))
-    if (answer?.ok) outcome.done += 1
-    else {
-      outcome.refused.push({
-        label: labelOf(item),
-        error: answer?.error || 'the write failed',
-      })
+  for (const piece of chunked(items, chunkSize)) {
+    let answers: readonly CrmBulkAnswer[]
+    try {
+      answers = await call(piece)
+    } catch (error) {
+      const reason = bulkRefusalReason(error)
+      for (const item of piece) outcome.refused.push({ label: labelOf(item), error: reason })
+      continue
+    }
+    const byId = new Map(answers.map((answer) => [answer.id, answer]))
+    for (const item of piece) {
+      const answer = byId.get(idOf(item))
+      if (answer?.ok) outcome.done += 1
+      else {
+        outcome.refused.push({
+          label: labelOf(item),
+          error: answer?.error || 'the write failed',
+        })
+      }
     }
   }
   return outcome

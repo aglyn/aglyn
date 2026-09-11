@@ -28,6 +28,8 @@ import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 export type CrmApiRoute =
   | 'contacts-create'
   | 'contact-email-history'
+  | 'contact-update'
+  | 'company-delete'
   | 'contacts-merge'
   | 'email-send'
   | 'erase-person'

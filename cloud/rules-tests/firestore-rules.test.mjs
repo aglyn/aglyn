@@ -33,6 +33,8 @@ import {
 } from '@firebase/rules-unit-testing'
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   deleteField,
@@ -9511,6 +9513,163 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
       updateDoc(lead(EDITOR, 'lead-new'), { status: 'contacted' }),
     )
     await mustAllow('an editor deleting a lead on Pro', deleteDoc(lead(EDITOR, 'lead-new')))
+  })
+})
+
+/**
+ * A CONTACT'S FACETS ARE THE SERVER'S TO WRITE (AGL-2804).
+ *
+ * A contact keeps each holder's records under `facets.{groupId}`, and a rule
+ * cannot address that key: a dotted write to one field of one facet reads,
+ * in the document's diff, as `facets` changing, and a map diff of `facets`
+ * names the holder and never the field. So the rules cannot tell an owner
+ * from a phone number inside a facet, and a plan check on the suite's fields
+ * would check nothing. Every facet edit the console makes goes through
+ * `crm/contact-update` or `crm/contact-stage`, where the plan is asked about
+ * the fields a save carries, and a client update may do the one thing left:
+ * let a holder go.
+ *
+ * Asserted on Free AND on Starter, because the refusal is not a plan
+ * question: a client does not write a facet on any plan.
+ */
+describe("a contact's facets are the server's to write (AGL-2804)", () => {
+  const SHARED = 'shared-profile'
+  const contact = (uid, id = SHARED) => doc(authed(uid), 'orgs', ORG, 'contacts', id)
+  /** Merged onto the seeded org, which starts on Pro. */
+  const setOrg = (fields) =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG), fields, { merge: true })
+    })
+  /** Site B's half of the shared contact, as a capture on it would leave it. */
+  const seedSiteB = () =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'orgs', ORG, 'contacts', SHARED),
+        {
+          visibleTo: ['org', `host:${HOST}`, 'host:host-b'],
+          capturedByHostIds: [HOST, 'host-b'],
+          marketingConsentByHost: { 'host-b': { marketingConsent: true } },
+          facets: { 'host-b': { sources: { form: true }, interactions: [], ownerUid: EDITOR } },
+        },
+        { merge: true },
+      )
+    })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', SHARED), {
+        email: 'shared@acme.test',
+        companyIds: ['co-1'],
+        companyName: 'Acme',
+        phone: '+15125550100',
+        marketingConsentByHost: { [HOST]: { marketingConsent: true } },
+        facets: {
+          [HOST]: {
+            sources: { form: true },
+            interactions: [],
+            tags: ['vip'],
+            notes: 'Met at the fair',
+            phone: '+15125550100',
+            ownerUid: OWNER,
+            lifecycleStage: 'lead',
+            custom: { tier: 'gold' },
+            companyId: 'co-1',
+            companyName: 'Acme',
+            mediaIds: ['m-1'],
+          },
+        },
+      })
+    })
+    await seedSiteB()
+  })
+
+  /** Every write of a field the CRM suite owns, as the client SDK would send it. */
+  const SUITE_WRITES = [
+    ['an owner', { [`facets.${HOST}.ownerUid`]: EDITOR }],
+    ['a lifecycle stage', { [`facets.${HOST}.lifecycleStage`]: 'customer' }],
+    ['a cleared lifecycle stage', { [`facets.${HOST}.lifecycleStage`]: deleteField() }],
+    ['a custom value', { [`facets.${HOST}.custom.tier`]: 'platinum' }],
+    [
+      'a company link and its mirror',
+      { [`facets.${HOST}.companyId`]: 'co-2', companyIds: ['co-2'] },
+    ],
+    ['a file', { [`facets.${HOST}.mediaIds`]: ['m-1', 'm-2'] }],
+    ["another holder's owner", { 'facets.host-b.ownerUid': OWNER }],
+    ['a new holder carrying an owner', { 'facets.host-c': { ownerUid: OWNER } }],
+    ['the company mirror alone', { companyIds: ['co-1', 'co-9'] }],
+    ["the company label's search echo", { companyName: 'Globex' }],
+  ]
+
+  for (const plan of ['free', 'starter']) {
+    it(`refuses a client update that sets a suite field, on ${plan}`, async () => {
+      await setOrg({ plan })
+      for (const [label, patch] of SUITE_WRITES) {
+        await mustDeny(`the owner writing ${label} on ${plan}`, updateDoc(contact(OWNER), patch))
+      }
+    })
+  }
+
+  it('refuses the fields Free keeps as well — the server writes those on every plan', async () => {
+    await setOrg({ plan: 'free' })
+    for (const [label, patch] of [
+      [
+        'a phone number and its search echo',
+        { [`facets.${HOST}.phone`]: '+15125550199', phone: '+15125550199' },
+      ],
+      ['a tag', { [`facets.${HOST}.tags`]: arrayUnion('wholesale') }],
+      ['notes', { [`facets.${HOST}.notes`]: 'Called twice' }],
+      ['a name override', { [`facets.${HOST}.name`]: 'Ada' }],
+      ['a campaign filing', { [`facets.${HOST}.campaignIds`]: ['spring'] }],
+    ]) {
+      await mustDeny(`the owner writing ${label} client-direct`, updateDoc(contact(OWNER), patch))
+    }
+  })
+
+  /**
+   * THE CONTROL: the one update a client still makes. Every refusal above
+   * would pass against a rule that denied contact updates outright, which
+   * would take "Remove from this site" away from every workspace.
+   */
+  it('lets a holder go, on Free and on Starter', async () => {
+    for (const plan of ['free', 'starter']) {
+      await setOrg({ plan })
+      await mustAllow(
+        `the owner removing site B's half of a shared contact on ${plan}`,
+        updateDoc(contact(OWNER), {
+          'facets.host-b': deleteField(),
+          'marketingConsentByHost.host-b': deleteField(),
+          visibleTo: arrayRemove('host:host-b'),
+          capturedByHostIds: arrayRemove('host-b'),
+          updatedAt: serverTimestamp(),
+        }),
+      )
+      await seedSiteB()
+    }
+  })
+
+  it('refuses a holder going in the same write as an edit to a holder that stays', async () => {
+    await mustDeny(
+      "the owner removing site B while moving this site's owner",
+      updateDoc(contact(OWNER), {
+        'facets.host-b': deleteField(),
+        [`facets.${HOST}.ownerUid`]: EDITOR,
+      }),
+    )
+  })
+
+  it("keeps the last holder's delete open on Free", async () => {
+    await setOrg({ plan: 'free' })
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'only-mine'), {
+        email: 'only-mine@acme.test',
+        visibleTo: [`host:${HOST}`],
+        facets: { [HOST]: { sources: {}, interactions: [], ownerUid: EDITOR } },
+      })
+    })
+    await mustAllow(
+      'a site editor deleting a contact only their site holds, on Free',
+      deleteDoc(contact(EDITOR, 'only-mine')),
+    )
   })
 })
 

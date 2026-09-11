@@ -17,42 +17,29 @@
 
 /**
  * Companies (AGL-2597): the rules every surface that writes a company, or
- * links a contact to one, has to agree on.
+ * suggests one for a contact, has to agree on.
  *
- * The console has three writers of the same association — the company page
- * linking a person, the contact page choosing a company, and the delete that
- * takes a company away from everybody — and they touch two fields that must
- * stay in step. Each rule lives here once, as a function of the document and
- * nothing else, so the three writers cannot drift and a spec can pin the rule
- * without mounting a card.
+ * A contact's link to a company is the server's to write (AGL-2804): the
+ * link lives in a holder's facet, `crm/contact-update` plans it with
+ * `planContactCompanyLink`, and `crm/company-delete` unlinks a company being
+ * deleted. What stays here is the company's own document — the draft a form
+ * holds, what it is stored as, and the company an address suggests — each
+ * rule once, as a function of the document and nothing else, so a spec can
+ * pin it without mounting a card.
  */
 
 import {
   type AglynPostalAddress,
-  COMPANY_CONTACTS_COUNT_FIELD,
   CONTACT_COMPANY_IDS_FIELD,
-  CONTACT_FACETS_FIELD,
-  type ContactCompanyLinkPlan,
-  type ContactCompanyLinkState,
   type CrmCompany,
   companyDomainForEmail,
-  contactFacetPath,
   isBlankAddress,
   nameSearchFields,
   normalizeAddress,
   normalizeCompanyDomain,
   normalizeCompanyWebsite,
   normalizePhone,
-  planContactCompanyLink,
-  readContactCompanyLink,
 } from '@aglyn/aglyn'
-import {
-  arrayRemove,
-  arrayUnion,
-  deleteField,
-  increment,
-  serverTimestamp,
-} from 'firebase/firestore'
 
 /*
  * The mirror field lives with the planner in `@aglyn/aglyn` now, because the
@@ -61,15 +48,12 @@ import {
  */
 export { CONTACT_COMPANY_IDS_FIELD }
 
-/**
- * How many contacts one delete pass detaches.
- *
- * A Firestore batch holds 500 writes, and the detach is one update per
- * contact. A company past this many links is detached in passes rather than
- * silently left with dangling references, and the surface says how many are
- * left rather than pretending the delete finished.
+/*
+ * The delete pass's bound lives with `crm/company-delete`'s contract, which
+ * the route and the console both import; re-exported here for the surfaces
+ * that say it.
  */
-export const COMPANY_DETACH_LIMIT = 500
+export { COMPANY_DETACH_LIMIT } from './company-delete-route'
 
 /** One company as a picker or a suggestion needs it. */
 export interface CompanyOption {
@@ -257,147 +241,4 @@ export function companyDraftFields(draft: CompanyDraft): CompanyDraftResult {
   else cleared.push('notes')
 
   return { ok: true, set, cleared }
-}
-
-/** Every group whose facet names this company, in no order. */
-function groupsNaming(
-  contact: Record<string, unknown> | null | undefined,
-  companyId: string,
-): string[] {
-  const facets = (contact ?? {})[CONTACT_FACETS_FIELD]
-  if (!facets || typeof facets !== 'object' || Array.isArray(facets)) return []
-  return Object.entries(facets as Record<string, unknown>)
-    .filter(([, facet]) => {
-      const value =
-        facet && typeof facet === 'object' && !Array.isArray(facet)
-          ? (facet as Record<string, unknown>)['companyId']
-          : undefined
-      return value === companyId
-    })
-    .map(([groupId]) => groupId)
-}
-
-/**
- * A link plan as the client SDK writes it: the contact's facet by dotted
- * path, the mirror by the sentinel the plan chose, and — when the caller
- * hands one in — the company name echoed where the row and the global search
- * read it, so a person linked to Acme reads "Acme" in the list column whether
- * the link was made here or the name typed before a company existed.
- *
- * Dotted paths into the facet, never a nested object — a nested write would
- * replace the whole facet map and take every other holder's records with it.
- */
-function contactLinkPatch(
-  plan: ContactCompanyLinkPlan,
-  groupId: string,
-  companyName: string | null | undefined,
-): Record<string, unknown> {
-  const update: Record<string, unknown> = {
-    [contactFacetPath(groupId, 'companyId')]: plan.companyId ?? deleteField(),
-    updatedAt: serverTimestamp(),
-  }
-  if (plan.mirror?.op === 'union') {
-    update[CONTACT_COMPANY_IDS_FIELD] = arrayUnion(plan.mirror.companyId)
-  } else if (plan.mirror?.op === 'remove') {
-    update[CONTACT_COMPANY_IDS_FIELD] = arrayRemove(plan.mirror.companyId)
-  } else if (plan.mirror?.op === 'set') {
-    update[CONTACT_COMPANY_IDS_FIELD] = plan.mirror.companyIds
-  }
-  if (companyName !== undefined) {
-    const stored = plan.companyId ? String(companyName ?? '').trim().slice(0, 120) : ''
-    update[contactFacetPath(groupId, 'companyName')] = stored || deleteField()
-    // The search echo — see `HostContact.companyName`.
-    update['companyName'] = stored || deleteField()
-  }
-  return update
-}
-
-/**
- * The update that links a contact to a company FOR ONE HOLDER — or unlinks
- * them, with `null` — keeping the facet and its mirror in step. `null` when
- * the document already says what was asked.
- *
- * The decision is {@link planContactCompanyLink}'s; this applies it with the
- * client SDK's sentinels. The company's contacts count is NOT in this
- * update, because it lives on another document: a caller that can batch
- * takes {@link contactCompanyLinkWrites} instead, and this stays for the
- * caller that only has the contact in hand.
- */
-export function contactCompanyLinkUpdate(
-  contact: Record<string, unknown> | null | undefined,
-  groupId: string,
-  companyId: string | null,
-): Record<string, unknown> | null {
-  const plan = planContactCompanyLink(
-    readContactCompanyLink(contact, groupId),
-    companyId,
-  )
-  return plan ? contactLinkPatch(plan, groupId, undefined) : null
-}
-
-/** Everything one link change writes: the contact, and each company it moves the count of. */
-export interface ContactCompanyLinkWrites {
-  /** The contact document's update, by dotted path. */
-  contact: Record<string, unknown>
-  /** One update per company whose contacts count moves, `increment`ed. */
-  companies: Array<{ id: string; update: Record<string, unknown> }>
-  /** The same moves as bare numbers, for a caller that sums them across rows. */
-  counts: ContactCompanyLinkPlan['counts']
-}
-
-/**
- * The link change as a SET of writes, for a caller that commits a batch: the
- * contact's patch and the `increment` on each company whose count moves.
- *
- * Takes the link STATE rather than the document, because the surfaces that
- * link — the properties card, the bulk bar — hold the projected row, which
- * carries `companyLink` for exactly this; a caller with the raw document
- * reads the state off it with `readContactCompanyLink`.
- *
- * `companyName` is the picked company's name, or `null` to clear the label
- * on an unlink; a caller that does not know the name leaves it `undefined`
- * and the stored label is left alone. In one batch because the count is a
- * derived figure of the mirror, and a mirror that changed while the count
- * did not is a company page that says "3 contacts" over a list of four.
- */
-export function contactCompanyLinkWrites(
-  link: ContactCompanyLinkState,
-  groupId: string,
-  companyId: string | null,
-  companyName?: string | null,
-): ContactCompanyLinkWrites | null {
-  const plan = planContactCompanyLink(link, companyId)
-  if (!plan) return null
-  return {
-    contact: contactLinkPatch(plan, groupId, companyName),
-    companies: plan.counts.map((count) => ({
-      id: count.companyId,
-      update: { [COMPANY_CONTACTS_COUNT_FIELD]: increment(count.delta) },
-    })),
-    counts: plan.counts,
-  }
-}
-
-/**
- * The update that takes a company that is being DELETED off a contact, for
- * every holder at once.
- *
- * Unlike {@link contactCompanyLinkUpdate} this clears every facet naming
- * the id, not only the caller's. The record is about to stop existing, so a
- * facet still naming it is a link to nothing, and the holder it belongs to
- * has no surface on which they would ever learn that. Nothing else about
- * another holder's facet is read or written.
- */
-export function companyDetachUpdate(
-  contact: Record<string, unknown> | null | undefined,
-  companyId: string,
-): Record<string, unknown> {
-  const update: Record<string, unknown> = {
-    [CONTACT_COMPANY_IDS_FIELD]: arrayRemove(companyId),
-    updatedAt: serverTimestamp(),
-  }
-  for (const groupId of groupsNaming(contact, companyId)) {
-    update[contactFacetPath(groupId, 'companyId')] = deleteField()
-  }
-  return update
 }

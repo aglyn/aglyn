@@ -132,6 +132,16 @@ const ORG_REFUSAL =
   'Editing tasks at the organization level requires the "Manage data" ' +
   'permission across the whole workspace.'
 
+export interface CrmWriterOptions {
+  /**
+   * The act a plan without the CRM suite is refused for, named the way
+   * `crmSuiteRefusalMessage` takes it. `null` for a route that asks the plan
+   * itself, once it knows what the request writes — a contact's tags are on
+   * every plan and its owner is the suite's. Tasks when unsaid.
+   */
+  suiteAct?: string | null
+}
+
 /**
  * Who is asking, and whether they may write this CRM at all.
  *
@@ -145,7 +155,9 @@ const ORG_REFUSAL =
 export async function authorizeCrmWriter(
   req: PluginApiRequest,
   scope: CrmRouteScope,
+  options: CrmWriterOptions = {},
 ): Promise<Writer | Refusal> {
+  const suiteAct = options.suiteAct === undefined ? TASKS_ACT : options.suiteAct
   if (scope.level === 'org') {
     const caller = await authorizeOrgCaller(req, scope.orgId, {
       needs: 'data.manage',
@@ -153,7 +165,7 @@ export async function authorizeCrmWriter(
     })
     if (caller.ok === false) return refuse(caller.status, caller.error)
     // The plan after the person (AGL-2787): see `suite-gate.ts`.
-    const suite = crmSuiteRefusal(caller.org, TASKS_ACT)
+    const suite = suiteAct ? crmSuiteRefusal(caller.org, suiteAct) : null
     if (suite) return { ok: false, status: suite.status, body: suite.body }
     return {
       ok: true,
@@ -204,7 +216,7 @@ export async function authorizeCrmWriter(
       )
     }
   }
-  const suite = crmSuiteRefusal(org, TASKS_ACT)
+  const suite = suiteAct ? crmSuiteRefusal(org, suiteAct) : null
   if (suite) return { ok: false, status: suite.status, body: suite.body }
   return {
     ok: true,

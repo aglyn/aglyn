@@ -257,6 +257,22 @@ describe('the CRM server entry', () => {
     expect(headers['Allow']).toBe('POST')
   })
 
+  /**
+   * The writer of a contact's facets and the company delete that unlinks
+   * them (AGL-2804): a facet is the server's to write, so a console save the
+   * register function forgot would have nowhere to go.
+   */
+  it('registers the contact update and company delete routes, POST only (AGL-2804)', async () => {
+    registerCrmConsoleApi()
+    expect(CRM_API_ROUTES.contactUpdate).toBe('crm/contact-update')
+    expect(CRM_API_ROUTES.companyDelete).toBe('crm/company-delete')
+    for (const route of [CRM_API_ROUTES.contactUpdate, CRM_API_ROUTES.companyDelete]) {
+      const { status, headers } = await call(route, 'GET')
+      expect(status).toBe(405)
+      expect(headers['Allow']).toBe('POST')
+    }
+  })
+
   it('registers the recipe routes under their client-safe constants, POST only (AGL-2639)', async () => {
     registerCrmConsoleApi()
     expect(CRM_API_ROUTES.recipeInstall).toBe('crm/recipe-install')

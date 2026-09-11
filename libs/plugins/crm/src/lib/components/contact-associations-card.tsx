@@ -40,8 +40,9 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Chip, Divider, Stack, Typography } from '@mui/material'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useContactUpdate } from '../hooks/use-contact-update'
 import type { ContactRecord } from '../model/contact-record'
 import { crmRoutes } from '../model/crm-routes'
 
@@ -57,8 +58,6 @@ export interface ContactAssociationsCardProps {
   /** The document as read, for the consent fields the projection leaves out. */
   row: Record<string, unknown>
   consentGroup: ConsentGroup
-  /** `['orgs', orgId]` — where the contact document lives. */
-  scope: readonly [string, string]
   /** The listener's verdict on the row, for the stale-seed guard. */
   seed: { status: 'loading' | 'success' | 'error'; fromCache: boolean }
   /** The hub's own path, for the link to this person's lead. */
@@ -92,7 +91,10 @@ export interface ContactAssociationsCardProps {
  *
  * The filing is the one editable thing here and has its own Save, through
  * the same stale-seed guard the properties card uses: a campaign membership
- * written over a cached read could revert somebody else's filing.
+ * written over a cached read could revert somebody else's filing. The save
+ * goes to `crm/contact-update` (AGL-2804), because the filing is this
+ * holder's facet and a facet is the server's to write; filing is not the CRM
+ * suite's, so it saves on every plan.
  *
  * ## The lead (AGL-2612)
  *
@@ -108,9 +110,10 @@ export interface ContactAssociationsCardProps {
  * chip is simply not there.
  */
 export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
-  const { hostId, record, row, consentGroup, scope, seed, basePath, bookingsHref } = props
+  const { hostId, record, row, consentGroup, seed, basePath, bookingsHref } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const contactUpdate = useContactUpdate(hostId)
   const routes = crmRoutes(basePath)
 
   const [leadKey, setLeadKey] = useState<string | null>(null)
@@ -160,19 +163,13 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           unreadable: seed.status === 'error',
           fromCache: seed.fromCache,
         },
-        async () => {
-          await updateDoc(
-            doc(firestore, scope[0], scope[1], 'contacts', record.$id),
-            {
-              // An empty selection is written as an empty array rather than
-              // removed, so "filed under no campaign" has one shape here and
-              // in the pass that detaches a deleted campaign.
-              [Aglyn.contactCampaignFieldPath(consentGroup.groupId)]:
-                Aglyn.campaignMembershipValue(campaigns),
-              updatedAt: new Date(),
-            },
-          )
-        },
+        // An empty selection is sent as an empty list rather than left out,
+        // so "filed under no campaign" has one shape here and in the pass
+        // that detaches a deleted campaign.
+        () =>
+          contactUpdate.updateOne(record.$id, {
+            campaignIds: Aglyn.campaignMembershipValue(campaigns),
+          }),
       )
       if (!verdict.ok) {
         return void enqueueSnackbar(verdict.message, {
@@ -183,23 +180,14 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
       enqueueSnackbar('Filing saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
+      enqueueSnackbar(
+        error instanceof Error && error.message ? error.message : 'An error has occurred',
+        { variant: 'error', allowDuplicate: true },
+      )
     } finally {
       setSaving(false)
     }
-  }, [
-    campaigns,
-    consentGroup.groupId,
-    enqueueSnackbar,
-    firestore,
-    record.$id,
-    scope,
-    seed.fromCache,
-    seed.status,
-  ])
+  }, [campaigns, contactUpdate, enqueueSnackbar, record.$id, seed.fromCache, seed.status])
 
   const sources = Object.keys(record.sources ?? {}) as ContactSource[]
   const consentDetail = [

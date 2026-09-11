@@ -16,12 +16,14 @@
  */
 
 /**
- * THE BULK BAR OVER THE CONTACTS TABLE (AGL-2603).
+ * THE BULK BAR OVER THE CONTACTS TABLE (AGL-2603, AGL-2804).
  *
- * What it must hold: it exists only for a selection and says how many; a tag
- * or a stage set on the selection lands as one facet patch per row, batched;
- * a row the store refuses is named by address on screen; removing rows is
- * the drawer's detach per row, behind the confirm.
+ * What it must hold: it exists only for a selection and says how many; a
+ * tag, an owner or a company set on the selection is ONE post to
+ * `crm/contact-update` — a facet is the server's to write — and a stage is
+ * moved through `crm/contact-stage` row by row, so every move is announced;
+ * a row the server refuses is named by address on screen; and removing rows
+ * is the record page's detach per row, behind the confirm, client-direct.
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -30,17 +32,8 @@ import { soloConsentGroup } from '@aglyn/aglyn'
 import { CrmOrgMountProvider } from '../hooks/use-crm-org-mount'
 import { ContactsBulkBar } from './contacts-bulk-bar'
 
-/** Every write the store received, in order. */
+/** Every client-direct write the store received, in order. */
 let ops: Array<{ via: 'batch' | 'single'; kind: string; path: string; data?: any }>
-/** Whether the next batch commit is refused wholesale. */
-let batchFails: boolean
-/** Ids a single write is refused for. */
-let refuseSingle: Set<string>
-
-const refuse = () =>
-  Object.assign(new Error('Missing or insufficient permissions.'), {
-    code: 'permission-denied',
-  })
 
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
@@ -61,22 +54,13 @@ jest.mock('firebase/firestore', () => ({
         void staged.push({ via: 'batch', kind: 'update', path: ref.path, data }),
       delete: (ref: { path: string }) =>
         void staged.push({ via: 'batch', kind: 'delete', path: ref.path }),
-      commit: async () => {
-        if (batchFails) throw refuse()
-        ops.push(...staged)
-      },
+      commit: async () => void ops.push(...staged),
     }
   },
-  updateDoc: async (ref: { path: string }, data: unknown) => {
-    const id = ref.path.split('/').pop() ?? ''
-    if (refuseSingle.has(id)) throw refuse()
-    ops.push({ via: 'single', kind: 'update', path: ref.path, data })
-  },
-  deleteDoc: async (ref: { path: string }) => {
-    const id = ref.path.split('/').pop() ?? ''
-    if (refuseSingle.has(id)) throw refuse()
-    ops.push({ via: 'single', kind: 'delete', path: ref.path })
-  },
+  updateDoc: async (ref: { path: string }, data: unknown) =>
+    void ops.push({ via: 'single', kind: 'update', path: ref.path, data }),
+  deleteDoc: async (ref: { path: string }) =>
+    void ops.push({ via: 'single', kind: 'delete', path: ref.path }),
 }))
 
 const FIRESTORE = {}
@@ -112,12 +96,43 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   }),
 }))
 
-/** What the bar posted to the org feed's door (AGL-2634), in order. */
-let posted: Array<{ route: string; payload: Record<string, unknown> }>
+/** Every post the bar made to a CRM route, in order. */
+let posted: Array<{ route: string; payload: Record<string, any> }>
+/** Contacts the profile route refuses, by id. */
+let refuseRoute: Set<string>
 jest.mock('../components/use-crm-api', () => ({
-  useCrmApi: () => async (route: string, payload: Record<string, unknown>) => {
+  useCrmApi: () => async (route: string, payload: Record<string, any>) => {
     posted.push({ route, payload })
-    return { response: { ok: true }, payload: { ok: true } }
+    if (route !== 'contact-update') {
+      return { response: { ok: true, status: 200 }, payload: { ok: true } }
+    }
+    return {
+      response: { ok: true, status: 200 },
+      payload: {
+        ok: true,
+        results: (payload['contactIds'] as string[]).map((contactId) =>
+          refuseRoute.has(contactId)
+            ? { contactId, ok: false, error: 'not permitted' }
+            : { contactId, ok: true },
+        ),
+      },
+    }
+  },
+}))
+
+/** Every stage move the bar asked for, and the rows the stage route refuses. */
+const stageCalls = jest.fn()
+let refuseStage: Set<string>
+jest.mock('../model/crm-api', () => ({
+  setContactStage: async (
+    user: unknown,
+    hostId: string,
+    contactId: string,
+    stage: string | null,
+  ) => {
+    stageCalls(user, hostId, contactId, stage)
+    if (refuseStage.has(contactId)) throw new Error('Not a site admin or editor')
+    return { ok: true, changed: true, lifecycleStage: stage ?? '', previousStage: '' }
   },
 }))
 
@@ -161,7 +176,7 @@ const rows = [
     name: 'Cy',
     tags: [],
     visibleTo: ['host:host-1'],
-    // Already at Globex: setting Acme MOVES Cy, and the counts follow.
+    // Already at Globex: setting Acme MOVES Cy.
     companyLink: { companyId: 'c-globex', companyIds: ['c-globex'], heldElsewhere: [] },
   },
 ]
@@ -181,10 +196,15 @@ function Harness(props: { initial: string[]; children?: ReactNode }) {
 const onSelectedChange = jest.fn()
 
 /**
- * The same bar beneath the organization hub (AGL-2630): no viewing site,
- * so each row is written through the holder it was flattened by.
+ * The same bar beneath the organization hub (AGL-2630): no viewing site, so
+ * each row is written through the holder it was flattened by, and moved on
+ * that holder's site.
  */
-const heldRows = rows.map((row) => ({ ...row, groupId: GROUP.groupId }))
+const heldRows = rows.map((row) => ({
+  ...row,
+  groupId: GROUP.groupId,
+  holderHostId: 'host-1',
+}))
 function OrgHarness(props: { initial: string[] }) {
   return (
     <CrmOrgMountProvider
@@ -207,18 +227,21 @@ function OrgHarness(props: { initial: string[] }) {
   )
 }
 
+/** What the bar sent to the profile route, request by request. */
+const updates = () =>
+  posted.filter((call) => call.route === 'contact-update').map((call) => call.payload)
+
 beforeEach(() => {
   ops = []
   notices = []
   posted = []
-  batchFails = false
-  refuseSingle = new Set()
+  refuseRoute = new Set()
+  refuseStage = new Set()
+  stageCalls.mockClear()
   confirmAnswer = 'proceed'
   confirmSpy.mockClear()
   onSelectedChange.mockClear()
 })
-
-const facetPath = (field: string) => `facets.${GROUP.groupId}.${field}`
 
 describe('the bar and its selection', () => {
   it('renders nothing when nothing is selected', () => {
@@ -275,17 +298,16 @@ describe('on a plan without the CRM suite', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Set stage' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(ops).toEqual([])
+    expect(posted).toEqual([])
   })
 })
 
 /**
- * Filing the selection under a company (AGL-2613): the record page's own
- * link write per row, and the company counts moved in the SAME batch, summed
- * — one increment on Acme for the two people who joined it, one decrement on
- * Globex for the one who left.
+ * Filing the selection under a company (AGL-2613): one request for the
+ * selection, and the server plans each row's link, mirror and count.
  */
 describe('setting the company', () => {
-  it('links every selected row to the picked company and moves the counts in one batch', async () => {
+  it('files the selection under the picked company in one request, writing nothing client-direct', async () => {
     render(<Harness initial={['c1', 'c3']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Set company' }))
     // Focused before typing, as a person's input is: the picker resets an
@@ -298,58 +320,31 @@ describe('setting the company', () => {
     expect(screen.queryByText('Globex')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 
-    await waitFor(() => expect(notices.length).toBeGreaterThan(0))
-    expect(ops.map((op) => op.path)).toEqual([
-      'orgs/org-1/contacts/c1',
-      'orgs/org-1/contacts/c3',
-      'orgs/org-1/companies/c-acme',
-      'orgs/org-1/companies/c-globex',
-    ])
-    expect(ops.every((op) => op.via === 'batch')).toBe(true)
-    expect(ops[0].data[facetPath('companyId')]).toBe('c-acme')
-    expect(ops[0].data[facetPath('companyName')]).toBe('Acme')
-    expect(ops[0].data.companyName).toBe('Acme')
-    expect(ops[0].data.companyIds).toEqual({ op: 'union', values: ['c-acme'] })
-    // Cy moves: the mirror is rewritten rather than unioned.
-    expect(ops[1].data.companyIds).toEqual(['c-acme'])
-    expect(ops[2].data).toEqual({ contactsCount: { op: 'increment', by: 2 } })
-    expect(ops[3].data).toEqual({ contactsCount: { op: 'increment', by: -1 } })
-    expect(notices).toContain('Company set on 2 contacts')
+    await waitFor(() => expect(notices).toContain('Company set on 2 contacts'))
+    expect(updates()).toEqual([{ contactIds: ['c1', 'c3'], set: { companyId: 'c-acme' } }])
+    expect(ops).toEqual([])
   })
 
-  it('unlinks the selection when the picker is left empty', async () => {
+  it('unlinks the selection when the picker is left empty, leaving alone a row with no company', async () => {
     render(<Harness initial={['c1', 'c3']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Set company' }))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 
     await waitFor(() => expect(notices.length).toBeGreaterThan(0))
-    // Ada had no company and is left alone; Cy is unlinked from Globex.
-    expect(ops.map((op) => op.path)).toEqual([
-      'orgs/org-1/contacts/c3',
-      'orgs/org-1/companies/c-globex',
-    ])
-    expect(ops[0].data[facetPath('companyId')]).toEqual({ op: 'delete' })
-    expect(ops[0].data.companyIds).toEqual({ op: 'remove', values: ['c-globex'] })
-    expect(ops[1].data).toEqual({ contactsCount: { op: 'increment', by: -1 } })
+    expect(updates()).toEqual([{ contactIds: ['c3'], set: { companyId: null } }])
+    expect(ops).toEqual([])
   })
 })
 
 describe('tagging the selection', () => {
-  it('unions the tag into each selected row’s facet, in one batch', async () => {
+  it('adds the tag to every selected row in one request', async () => {
     render(<Harness initial={['c1', 'c2']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Add tag' }))
     fireEvent.change(screen.getByLabelText('Tag'), { target: { value: ' Wholesale ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-    await waitFor(() => expect(ops).toHaveLength(2))
-    expect(ops.map((op) => op.path)).toEqual([
-      'orgs/org-1/contacts/c1',
-      'orgs/org-1/contacts/c2',
-    ])
-    expect(ops[0].via).toBe('batch')
-    expect(ops[0].data[facetPath('tags')]).toEqual({ op: 'union', values: ['wholesale'] })
-    // A nested `facets` object would replace every other holder's records.
-    expect(ops[0].data.facets).toBeUndefined()
-    expect(notices).toContain('Tagged 2 contacts')
+    await waitFor(() => expect(notices).toContain('Tagged 2 contacts'))
+    expect(updates()).toEqual([{ contactIds: ['c1', 'c2'], set: { addTag: 'wholesale' } }])
+    expect(ops).toEqual([])
   })
 
   it('removes a tag only from the rows that carry it', async () => {
@@ -358,65 +353,63 @@ describe('tagging the selection', () => {
     fireEvent.change(screen.getByLabelText('Tag'), { target: { value: 'vip' } })
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(notices.length).toBeGreaterThan(0))
-    expect(ops.map((op) => op.path)).toEqual(['orgs/org-1/contacts/c2'])
-    expect(ops[0].data[facetPath('tags')]).toEqual({ op: 'remove', values: ['vip'] })
+    expect(updates()).toEqual([{ contactIds: ['c2'], set: { removeTag: 'vip' } }])
+    expect(ops).toEqual([])
   })
 })
 
 describe('setting the stage and the owner', () => {
-  it('writes the stage into each facet', async () => {
+  it('moves each row through crm/contact-stage, one at a time, so every move is announced', async () => {
     render(<Harness initial={['c1', 'c3']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Set stage' }))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Lifecycle stage' }))
     fireEvent.click(within(screen.getByRole('listbox')).getByText('Customer'))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-    await waitFor(() => expect(ops).toHaveLength(2))
-    expect(ops.map((op) => op.data[facetPath('lifecycleStage')])).toEqual([
-      'customer',
-      'customer',
+    await waitFor(() => expect(notices).toContain('Stage set on 2 contacts'))
+    expect(stageCalls.mock.calls).toEqual([
+      [expect.objectContaining({ uid: 'uid-me' }), 'host-1', 'c1', 'customer'],
+      [expect.objectContaining({ uid: 'uid-me' }), 'host-1', 'c3', 'customer'],
     ])
-    expect(notices).toContain('Stage set on 2 contacts')
+    expect(updates()).toEqual([])
+    expect(ops).toEqual([])
   })
 
-  it('offers the team as owners and writes the chosen uid', async () => {
+  it('offers the team as owners and sends the chosen uid in one request', async () => {
     render(<Harness initial={['c1']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Set owner' }))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Owner' }))
     fireEvent.click(within(screen.getByRole('listbox')).getByText('Ada Lovelace'))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-    await waitFor(() => expect(ops).toHaveLength(1))
-    expect(ops[0].data[facetPath('ownerUid')]).toBe('uid-a')
+    await waitFor(() => expect(notices).toContain('Owner set on 1 contact'))
+    expect(updates()).toEqual([{ contactIds: ['c1'], set: { ownerUid: 'uid-a' } }])
+    expect(ops).toEqual([])
   })
 })
 
 describe('a refused row', () => {
-  it('fails the batch, and the rows that can be written still are — one at a time', async () => {
-    batchFails = true
-    refuseSingle = new Set(['c3'])
+  it('names the row the route refused by address, and the rest are saved', async () => {
+    refuseRoute = new Set(['c3'])
     render(<Harness initial={['c1', 'c2', 'c3']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Add tag' }))
-    // c2 already carries `vip`, so the plan is c1 and c3; c3 is refused.
+    // c2 already carries `vip`, so the request names c1 and c3; c3 is refused.
     fireEvent.change(screen.getByLabelText('Tag'), { target: { value: 'vip' } })
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-    await waitFor(() => expect(notices.length).toBeGreaterThan(0))
-    expect(ops).toEqual([
-      expect.objectContaining({ via: 'single', path: 'orgs/org-1/contacts/c1' }),
-    ])
+    expect(await screen.findByText(/c@example\.com — not permitted/)).toBeTruthy()
+    expect(updates()).toEqual([{ contactIds: ['c1', 'c3'], set: { addTag: 'vip' } }])
     expect(notices).toContain('Tagged 1 contact')
   })
 
-  it('reports the refused address rather than a count', async () => {
-    batchFails = true
-    refuseSingle = new Set(['c3'])
+  it("names a stage move the route refused, in the route's own sentence", async () => {
+    refuseStage = new Set(['c3'])
     render(<Harness initial={['c1', 'c3']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Set stage' }))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Lifecycle stage' }))
     fireEvent.click(within(screen.getByRole('listbox')).getByText('Lead'))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-    const line = await screen.findByText(/c@example\.com — not permitted/)
-    expect(line).toBeTruthy()
+    expect(
+      await screen.findByText(/c@example\.com — Not a site admin or editor/),
+    ).toBeTruthy()
     expect(screen.getByText('One contact was not changed:')).toBeTruthy()
-    expect(ops.map((op) => op.path)).toEqual(['orgs/org-1/contacts/c1'])
     expect(notices).toContain('Stage set on 1 contact')
   })
 })
@@ -434,11 +427,13 @@ describe('removing the selection from this site', () => {
     )
     expect(ops[0]).toMatchObject({ kind: 'delete', path: 'orgs/org-1/contacts/c1' })
     expect(ops[1]).toMatchObject({ kind: 'update', path: 'orgs/org-1/contacts/c2' })
+    // Letting a holder go is the one facet change left to the client.
     expect(ops[1].data[`facets.${GROUP.groupId}`]).toEqual({ op: 'delete' })
     expect(ops[1].data.visibleTo).toEqual({ op: 'remove', values: ['host:host-1'] })
     // The rows are gone from the table, so the selection lets go of them.
     expect(onSelectedChange).toHaveBeenLastCalledWith([])
     expect(notices).toContain('2 contacts removed from this site')
+    expect(updates()).toEqual([])
   })
 
   it('writes nothing when the confirm is cancelled', async () => {
@@ -462,19 +457,19 @@ describe('the audience door', () => {
 })
 
 describe('beneath the organization hub', () => {
-  it('writes each row through its own holder, then posts the sentence once as the org feed’s contact line', async () => {
+  it("moves each row on its own holder's site, then posts the sentence once as the org feed's contact line", async () => {
     render(<OrgHarness initial={['c1', 'c3']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Set stage' }))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Lifecycle stage' }))
     fireEvent.click(within(screen.getByRole('listbox')).getByText('Customer'))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
-    await waitFor(() => expect(ops).toHaveLength(2))
-    expect(ops.map((op) => op.data[facetPath('lifecycleStage')])).toEqual([
-      'customer',
-      'customer',
+    await waitFor(() => expect(stageCalls).toHaveBeenCalledTimes(2))
+    expect(stageCalls.mock.calls.map((call) => [call[1], call[2], call[3]])).toEqual([
+      ['host-1', 'c1', 'customer'],
+      ['host-1', 'c3', 'customer'],
     ])
     await waitFor(() =>
-      expect(posted).toEqual([
+      expect(posted.filter((call) => call.route === 'org-activity')).toEqual([
         {
           route: 'org-activity',
           payload: { action: 'Stage set on 2 contacts', target: { type: 'contact' } },
@@ -490,6 +485,6 @@ describe('beneath the organization hub', () => {
     fireEvent.click(within(screen.getByRole('listbox')).getByText('Customer'))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(notices).toContain('Stage set on 2 contacts'))
-    expect(posted).toEqual([])
+    expect(posted.filter((call) => call.route === 'org-activity')).toEqual([])
   })
 })

@@ -47,6 +47,13 @@ export interface ContactRecord {
    * only the flat record can still address the holder's own fields.
    */
   groupId: string
+  /**
+   * A site of that holder's group — the viewing site under a site, and at
+   * the organization level the site the primary holder was resolved from —
+   * which is where a stage move for this row is made and announced. `''` for
+   * a row no site holds.
+   */
+  holderHostId: string
   /** Every site that has captured this person, sorted — the org-level "Known by". */
   capturedByHostIds: string[]
   /** The shared identity and the dedupe key. */
@@ -120,6 +127,7 @@ export function contactRecordFromDoc(
   return {
     $id: String(row['$id'] ?? ''),
     groupId: group.groupId,
+    holderHostId: group.hostId,
     capturedByHostIds: Aglyn.contactCaptureHostIds(row),
     email: typeof row['email'] === 'string' ? row['email'] : '',
     alternateEmails: Array.isArray(row[Aglyn.CONTACT_ALTERNATE_EMAILS_FIELD])

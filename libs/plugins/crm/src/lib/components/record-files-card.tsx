@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  contactFacetPath,
   CRM_MEDIA_IDS_FIELD,
   CRM_MEDIA_IDS_MAX,
   formatMediaRef,
@@ -41,6 +40,7 @@ import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useSnackbar } from 'notistack'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useContactUpdate } from '../hooks/use-contact-update'
 
 /** What one attached file is known by once its media document has been read. */
 interface AttachedFile {
@@ -64,11 +64,19 @@ export interface RecordFilesCardProps {
    *
    * A contact's fields live per holder — an agency running two client brands
    * has one contact document between them, and a contract one client filed
-   * is not the other's to see — so the write is a facet path. `null` for a
-   * company or a deal, whose fields are the organization's and sit at the
-   * top of the document.
+   * is not the other's to see — so the field is a facet's, and a facet is the
+   * server's to write (AGL-2804): a contact's files are saved through
+   * `crm/contact-update`, which writes the holder's facet and refuses a plan
+   * without the CRM suite. `null` for a company or a deal, whose fields are
+   * the organization's, sit at the top of the document and are written here.
    */
   facetGroupId?: string | null
+  /**
+   * The site a contact's files are saved as: the mounted site, or `null` at
+   * the organization level, where the route writes each contact through its
+   * own holder. Read only for a contact.
+   */
+  hostId?: string | null
   /** The ids the record currently carries. */
   mediaIds: readonly string[] | undefined
   /**
@@ -108,10 +116,11 @@ export interface RecordFilesCardProps {
  * silently vanished is worse than one that says it is gone.
  */
 export function RecordFilesCard(props: RecordFilesCardProps) {
-  const { scope, collection, recordId, facetGroupId, mediaIds, topic } = props
+  const { scope, collection, recordId, facetGroupId, hostId, mediaIds, topic } = props
   const firestore = useFirestore()
   const { pickMedia } = useMediaPicker()
   const { enqueueSnackbar } = useSnackbar()
+  const contactUpdate = useContactUpdate(hostId ?? null)
   const [busy, setBusy] = useState(false)
   const [files, setFiles] = useState<AttachedFile[] | null>(null)
 
@@ -161,16 +170,16 @@ export function RecordFilesCard(props: RecordFilesCardProps) {
   const write = useCallback(
     async (next: string[]) => {
       if (!scope) return
-      const reference = doc(firestore, scope[0], scope[1], collection, recordId)
-      const field = facetGroupId
-        ? contactFacetPath(facetGroupId, CRM_MEDIA_IDS_FIELD)
-        : CRM_MEDIA_IDS_FIELD
-      await updateDoc(reference, {
-        [field]: next,
+      if (facetGroupId) {
+        await contactUpdate.updateOne(recordId, { mediaIds: next })
+        return
+      }
+      await updateDoc(doc(firestore, scope[0], scope[1], collection, recordId), {
+        [CRM_MEDIA_IDS_FIELD]: next,
         updatedAt: serverTimestamp(),
       })
     },
-    [firestore, scope, collection, recordId, facetGroupId],
+    [firestore, scope, collection, recordId, facetGroupId, contactUpdate],
   )
 
   const handleAttach = useCallback(async () => {

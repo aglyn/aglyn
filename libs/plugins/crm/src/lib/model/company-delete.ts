@@ -16,102 +16,56 @@
  */
 
 /**
- * DELETING A COMPANY IS A DETACH PASS AND THEN A DELETE (AGL-2597; shared
+ * DELETING A COMPANY IS ONE REQUEST (AGL-2597; a route since AGL-2804, shared
  * by the record page and the bulk bar since AGL-2621).
  *
- * Firestore does not cascade. A bare `deleteDoc` would leave every contact
- * at the company naming a record that no longer exists: their page would
- * render a link to nothing, and the `companyIds` mirror the company list
- * queries would keep matching a ghost. So the delete reads the contacts
- * that name this company, takes it off each of them in one batch, and
- * removes the document only when nobody is left pointing at it.
- *
- * Bounded at {@link COMPANY_DETACH_LIMIT} per pass — a batch holds that many
- * writes — and honest past it: the pass detaches what it can, reports that
- * more remain, and leaves the company standing so the next delete continues
- * from where this one stopped. A company is never deleted with a link still
- * on a contact.
+ * Firestore does not cascade, so a delete unlinks every contact at the
+ * company before the company goes — and the unlink clears each holder's
+ * facet that named it, which is the server's to write. `crm/company-delete`
+ * runs the pass, bounded and honest past the bound; this module is the
+ * console's side of it.
  */
 
-import { CRM_COLLECTIONS } from '@aglyn/aglyn'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  type Firestore,
-  getDocs,
-  limit,
-  query,
-  where,
-  writeBatch,
-} from 'firebase/firestore'
-import {
-  COMPANY_DETACH_LIMIT,
-  CONTACT_COMPANY_IDS_FIELD,
-  companyDetachUpdate,
-} from './companies'
+import type { CrmApiResult, CrmApiRoute } from '../components/use-crm-api'
+import type { CompanyDeleteOutcome } from './company-delete-route'
 
-export interface CompanyDeleteOutcome {
-  /** The document is gone. False when a pass detached and more remain. */
-  deleted: boolean
-  /** How many contacts this pass unlinked. */
-  detached: number
-  /** The pass hit its bound; the company stands until the next delete. */
-  moreRemain: boolean
-}
+export { COMPANY_DETACH_LIMIT, type CompanyDeleteOutcome } from './company-delete-route'
 
-/** One company: unlink the contacts a batch can hold, then delete if nobody is left. */
-export async function deleteCompanyDetaching(
-  firestore: Firestore,
-  scope: readonly [string, string],
+/** The CRM API caller a surface already holds — `useCrmApi`'s. */
+export type CrmApiCall = (
+  route: CrmApiRoute,
+  payload: Record<string, unknown>,
+) => Promise<CrmApiResult>
+
+/**
+ * Delete one company through the route: the contacts unlinked, then the
+ * company — or, past the bound, a pass's worth unlinked and the company left
+ * standing. A refusal throws with the route's own sentence.
+ */
+export async function deleteCompanyThroughRoute(
+  call: CrmApiCall,
   companyId: string,
 ): Promise<CompanyDeleteOutcome> {
-  /*
-   * One over the limit, so "more remain" is a fact from the probe row and
-   * not a guess from a full page — the same reason the paged lists
-   * over-fetch by one.
-   */
-  const probe = await getDocs(
-    query(
-      collection(firestore, scope[0], scope[1], 'contacts'),
-      where(CONTACT_COMPANY_IDS_FIELD, 'array-contains', companyId),
-      limit(COMPANY_DETACH_LIMIT + 1),
-    ),
-  )
-  const linked = probe.docs.slice(0, COMPANY_DETACH_LIMIT)
-  const moreRemain = probe.docs.length > COMPANY_DETACH_LIMIT
-  if (linked.length) {
-    const batch = writeBatch(firestore)
-    for (const snapshot of linked) {
-      batch.update(snapshot.ref, companyDetachUpdate(snapshot.data(), companyId))
-    }
-    await batch.commit()
+  const { response, payload } = await call('company-delete', { companyId })
+  if (!response.ok) {
+    const error = payload['error']
+    throw new Error(
+      typeof error === 'string' && error
+        ? error
+        : `The company could not be deleted (${response.status}).`,
+    )
   }
-  if (moreRemain) {
-    return { deleted: false, detached: linked.length, moreRemain }
+  return {
+    deleted: payload['deleted'] === true,
+    detached: Number(payload['detached'] ?? 0),
+    moreRemain: payload['moreRemain'] === true,
   }
-  await deleteDoc(
-    doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, companyId),
-  )
-  return { deleted: true, detached: linked.length, moreRemain: false }
 }
 
 /**
- * What a failed delete says.
- *
- * The contact read runs without a scope predicate — it cannot carry one
- * beside the `array-contains` on the mirror — so the rules admit it only to
- * an org-wide member. A site-scoped member's delete stops there, and is
- * told why rather than shown a generic failure.
+ * What a failed delete says: the route's own sentence, which names the
+ * reason — a member scoped to particular sites is told why they cannot.
  */
 export function companyDeleteFailureMessage(error: unknown): string {
-  const denied =
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: string }).code === 'permission-denied'
-  return denied
-    ? 'Your access is limited to specific sites, so the contacts at ' +
-        'this company could not be read to unlink them. Ask an ' +
-        'organization administrator to delete it.'
-    : 'An error has occurred'
+  return error instanceof Error && error.message ? error.message : 'An error has occurred'
 }

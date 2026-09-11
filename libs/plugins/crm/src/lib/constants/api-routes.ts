@@ -26,8 +26,21 @@ import type { CrmActionRecipeId } from '@aglyn/aglyn'
  */
 export const CRM_API_ROUTES = {
   ping: 'crm/ping',
-  /** `POST` — moves one contact to a lifecycle stage; see `server.ts`. */
+  /**
+   * `POST` — moves one contact to a lifecycle stage, or clears it; see
+   * `server.ts`.
+   */
   contactStage: 'crm/contact-stage',
+  /**
+   * `POST` — one holder's profile fields on one or more contacts (AGL-2804):
+   * every facet write the console makes; see `server/contact-update.ts`.
+   */
+  contactUpdate: 'crm/contact-update',
+  /**
+   * `POST` — unlinks the contacts that name a company, then deletes it
+   * (AGL-2804); see `server/company-delete.ts`.
+   */
+  companyDelete: 'crm/company-delete',
   /** `POST` — one email to one person from a record; see `server/email-send.ts`. */
   emailSend: 'crm/email-send',
   /**
