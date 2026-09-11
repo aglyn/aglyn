@@ -218,8 +218,8 @@ describe('the shipped exemption list', () => {
   // good direction) and left this at five, so `Main Gate` ran red on `main`
   // for every scheduled sweep until AGL-2486. Moving the number IS the
   // review; do not replace it with `UNTESTED_PROJECTS.length`.
-  it('names four projects, each with a reason', () => {
-    assert.equal(UNTESTED_PROJECTS.length, 4)
+  it('names three projects, each with a reason', () => {
+    assert.equal(UNTESTED_PROJECTS.length, 3)
     for (const entry of UNTESTED_PROJECTS) {
       assert.ok(entry.project, 'every entry needs a project name')
       assert.ok(entry.dir.startsWith('libs/'), `${entry.project} needs a dir`)
