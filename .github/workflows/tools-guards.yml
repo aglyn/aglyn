@@ -432,6 +432,16 @@ jobs:
       # decisions honest. Pure node and git, no network.
       - run: npm run test:prepush
 
+      # test:emulated-env  What a `serve:*:emulated` dev server may hold
+      # (AGL-2828). `serve-emulated.mjs` starts `next dev` with every
+      # credential for a service the emulators do not stand in for set empty,
+      # and the DAM spec's preflight refuses a server that still holds one.
+      # Both rest on this suite's decisions: which names are such credentials,
+      # which env files nx would have loaded, and how a process's environment
+      # reads under `ps`. Neither runs in CI, so a regression in those
+      # decisions surfaces here or nowhere. Pure node, no network.
+      - run: npm run test:emulated-env
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs

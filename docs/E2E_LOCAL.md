@@ -47,6 +47,24 @@ named in `.env.development.local`, with the real service account beside it.
 Start the emulators with `storage` in `--only`, as above, or media calls fail
 with a refused connection, which is the failure you want.
 
+No production credentials either (AGL-2828). The scripts do not serve through
+`nx serve`: its task runner loads the env files through dotenv-expand, which
+reads an empty variable as unset and writes the file's value over it, so a key
+blanked in the script or in your shell still reaches the server. They run
+`tools/scripts/serve-emulated.mjs <app>` instead. It loads the env files nx
+would (the app's, then the workspace root's), sets every credential for a
+service the emulators do not stand in for to an empty value, runs the
+`clean-next-cache` prune, and starts `next dev` with that environment. That
+covers Stripe, Vercel, Resend and the GA4 API secret, and by default any new
+`*_API_KEY`, `*_TOKEN` or `*_SECRET`. Next never replaces an inherited
+variable, even an empty one, so a flow that reaches billing, email or domains
+fails closed instead of calling the real service. The startup line names what
+was blanked. What stays, and why, is `KEPT_CREDENTIALS` in
+`tools/scripts/lib/emulated-env.mjs`: the Firebase service account (the Admin
+SDK does not start without it) and the secrets the app uses only to sign and
+verify its own requests. A port passes through as before:
+`npm run serve:console:emulated -- --port 4210`.
+
 ## The CRM specs (AGL-2610)
 
 Eight browser-driven scripts under `tools/e2e/crm-*.e2e.mjs`: seven, one per
@@ -113,12 +131,30 @@ Escape and the close button; focus returned), a replace of every family
 through the card menu followed to every reference on the page, the old
 content-hashed URL's redirect, and the storage band at signed-replace mint.
 
-⛔ It refuses to upload anything until both servers have served an object that
+⛔ Before it writes anything, even to the emulator, it refuses a server that
+holds a credential for Stripe, Vercel, Resend or any other service the
+emulators do not stand in for (AGL-2828). It finds the process listening on each port and reads its
+environment with `ps eww`, printing names only. Next's dev server retitles
+itself, which hides its environment from `ps`, so that is read from the
+`next dev` parent that forked it. Every such credential an env file defines has
+to be present and empty there. Absent does not pass, because a server fills an
+undefined variable from its env files after `ps` has looked. A server started
+with `nx serve` or with a bare `next dev` fails this preflight.
+
+⛔ It then refuses to upload anything until both servers have served an object that
 exists ONLY in the Storage emulator. A server started without
 `FIREBASE_STORAGE_EMULATOR_HOST` fails that preflight instead of writing test
 files into a real bucket. The two films it uploads are committed under
 `tools/e2e/fixtures/`; every other fixture is generated per run, and every
 name carries the run id, so it is re-runnable without a re-seed.
+
+Video uploads ship paused behind `release_video_uploads` (AGL-2830), so the
+films are accepted only for an org holding that flag's per-org override.
+`seed:e2e` grants it to the primary e2e org and to no other
+(`tools/scripts/lib/e2e-release-flags.mjs`). An emulator seeded without the
+grant refuses both films with `403 video_uploads_paused`: re-run the seed, and
+allow a running console up to a minute, which is how long its server caches an
+org's overrides.
 
 The lightbox's player draws its own controls (AGL-2802), because Chrome's
 native ones keep Escape from the page: from inside them no key event reaches it
@@ -287,7 +323,7 @@ ever see that redirect locally, check what owns 4500 before anything else.
 
 ```bash
 # emulators + seed as above, then:
-npm run serve:tenant:emulated      # nx serve tenant --port 4500 + emulator flags
+npm run serve:tenant:emulated      # next dev on 4500 + emulator flags, no outbound credentials
 ```
 
 What to assert (all against `http://localhost:4500`):
@@ -327,18 +363,21 @@ somebody had already got wrong:
   sign-in page, which reads like bad credentials rather than a missing file.
 - `tsconfig.next.json` is generated, not committed.
 
-**Serve with `nx serve`, not `next dev`.** Only the nx target carries the cache prune
-(`docs/BUILD_PERFORMANCE.md`), and a bare `npx next dev` is how the last worktree quietly grew a
-6 GB cache nothing was ever going to clean. The script prints the right command when it finishes.
+**Serve with `nx serve` or a `serve:*:emulated` script, never a bare `next dev`.** Both carry the
+cache prune (`docs/BUILD_PERFORMANCE.md`), and a bare `npx next dev` is how the last worktree
+quietly grew a 6 GB cache nothing was ever going to clean. The script prints the right commands
+when it finishes.
 
-When `nx serve` refuses a second instance (one is already serving the main checkout), the
-fallback is `npx next dev apps/console -p 4210` with the same emulator env vars
-`serve:console:emulated` sets — and **on turbopack, not `--webpack`**: the webpack build follows
-`instrumentation.ts`'s deferred import into the edge bundle and dies on `import 'crypto'`, so every
-page 500s with `Module not found: Can't resolve 'crypto'`. Turbopack, in turn, refuses a
-`node_modules` that is a symlink out of the project root (`Symlink [project]/node_modules is
-invalid`), which is the clone rule above with an error message attached. Delete the `.next` it
-grew when you are done.
+Against the emulators, serve from the worktree with
+`npm run serve:console:emulated -- --port 4210`. It starts `next dev` itself rather than through
+nx, so the second-instance refusal `nx serve` gives while the main checkout is serving does not
+apply, and it holds no production credential. A bare `npx next dev apps/console -p 4210` holds
+every key the env files carry, and the DAM spec refuses it. The script runs on **turbopack, not
+`--webpack`**, the only bundler that works here: the webpack build follows `instrumentation.ts`'s
+deferred import into the edge bundle and dies on `import 'crypto'`, so every page 500s with
+`Module not found: Can't resolve 'crypto'`. Turbopack, in turn, refuses a `node_modules` that is a
+symlink out of the project root (`Symlink [project]/node_modules is invalid`), which is the clone
+rule above with an error message attached.
 
 Tear down with `git worktree remove --force <path>` — worktrees are cheap to recreate and a
 stale one keeps a whole `node_modules` and `.next` on disk.
