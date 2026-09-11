@@ -227,15 +227,15 @@ range):
 | 2 | no verdict | Main Gate has not graded the tip at all, normally a race with a very recent push. Warns |
 | 3 | **unexamined** | the tip passed `main-gate/fast` only, and no full sweep has ever run on it, so nobody has run its tests. Warns |
 
-An absent `full` never blocks, and that is deliberate: it runs on a cron GitHub
-delivers a fraction of the time, so most shas legitimately carry `fast` and no
-`full`, and demanding both would refuse nearly every promotion for a reason
-that says nothing about the code. It used to print identically to a passing
-sweep, which is how `d1cbc338f` shipped a three-spec tests regression under a
-green tick on 2026-09-03 (AGL-2564). Exit 3 gives that case its own words. It
-also names the newest commit in the range a sweep did pass on, so you can see
-how much of what you are shipping is unexamined — decide knowingly, or run the
-full gate yourself first.
+An absent `full` never blocks, and that is deliberate: the sweep grades the
+newest push, so a tip that landed while a sweep ran, or whose own sweep is still
+in flight, legitimately carries `fast` and no `full` (AGL-2836), and demanding
+both would stall a promotion on queue timing rather than on the code. It used to
+print identically to a passing sweep, which is how `d1cbc338f` shipped a
+three-spec tests regression under a green tick on 2026-09-03 (AGL-2564). Exit 3
+gives that case its own words. It also names the newest commit in the range a
+sweep did pass on, so you can see how much of what you are shipping is
+unexamined — decide knowingly, or wait for the sweep on the tip to finish.
 
 #### Is `tools/gate.sh` still required?
 
@@ -612,8 +612,14 @@ and the wrong one for a release.
 
 ## `main` is gated continuously
 
-`.github/workflows/main-gate.yml` gates `main` on a timer — typecheck plus every
-guard every 15 minutes, and the full sweep including production builds hourly.
+`.github/workflows/main-gate.yml` gates every push to `main`. The fast half
+(typecheck, `docs:typecheck` and every guard) grades each pushed commit. The
+full sweep (`main-gate-full.yml`: lint, the tests in four shards and the three
+production builds) grades the newest commit: one sweep runs at a time, and a
+push that lands while it runs waits, with only the newest waiting push kept.
+Replayed over the pushes from 2026-09-04 to 2026-09-11, that puts a push a
+median 12 and at most 22 minutes from a sweep covering it, where the hourly
+debounce it replaced measured a median 53 and a p90 of 189 (AGL-2836).
 
 The verdict lands as a **commit status on the SHA that was gated**, so a red
 belongs to the commit that caused it and shows beside that commit in the branch
@@ -644,10 +650,10 @@ and `tools-guards.yml` moved their push trigger from `main` to `production` on
 2026-08-20 because with many agents landing continuously they ran dozens of
 times an hour and every red became noise.
 
-A timer is the way out of that trade rather than around it — N commits collapse
-into one run and one verdict, so the notification rate follows the cadence
-instead of the commit rate. It does not replace this gate. It keeps `main` in a
-state where running this gate is uneventful.
+The fast half alerts once per distinct failing set on each pushed sha, and the
+full sweep grades the newest push, so a burst of commits costs one sweep and one
+full verdict. It does not replace this gate. It keeps `main` in a state where
+running this gate is uneventful.
 
 ## The changelog range
 

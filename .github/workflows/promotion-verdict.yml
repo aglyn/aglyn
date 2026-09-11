@@ -33,10 +33,11 @@
 # exactly that shape - three broken console specs under a green tick - and it
 # graded the same as a fully swept commit until this state existed.
 #
-# It does not block, for the reason above: `full` is cron-driven and absent
-# from most shas, so refusing on it would refuse nearly every promotion for a
-# reason that says nothing about the code. It warns in its OWN words instead,
-# so a human reads "nobody ran the tests on this" rather than a bare green.
+# It does not block. `full` grades the newest push, so a sha that landed while a
+# sweep was running, or whose own sweep is still in flight, carries no `full`
+# (AGL-2836). Refusing on that would stall a promotion on queue timing rather
+# than on the code. It warns in its OWN words instead, so a human reads "nobody
+# ran the tests on this" rather than a bare green.
 name: Promotion verdict
 
 on:

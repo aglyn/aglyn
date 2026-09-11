@@ -190,7 +190,7 @@ describe('report-lint-verdict.mjs', () => {
 describe('the workflows grade their lint step (AGL-2829)', () => {
   // Asserted from outside both workflows, so deleting the step cannot delete
   // the check on the deletion.
-  for (const name of ['main-gate.yml', 'nx-ci.yml']) {
+  for (const name of ['main-gate-full.yml', 'nx-ci.yml']) {
     it(`${name} lints with --quiet and grades the log`, () => {
       const yaml = readFileSync(join(repoRoot, '.github', 'workflows', name), 'utf8')
       assert.match(yaml, /nx (?:run-many|affected) -t lint [^\n]*--exclude=cloud-functions[^\n]*--quiet/)
