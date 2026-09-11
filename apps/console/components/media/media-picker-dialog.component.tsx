@@ -42,8 +42,18 @@ export interface MediaPickerDialogProps {
   orgId?: string
   open: boolean
   onClose: () => void
-  /** Receives the chosen media (use `media.url`/`media.cdnPath` for src). */
-  onPick: (media: Aglyn.AglynHostMedia) => void
+  /**
+   * Accept a private asset instead of refusing it (AGL-2814), for a caller
+   * that delivers the file through a signed link rather than placing it on a
+   * page — a product's members video.
+   */
+  allowPrivate?: boolean
+  /**
+   * Receives the chosen media (use `media.url`/`media.cdnPath` for src) and
+   * the CDN scope segment of the library it was chosen from. The scope is the
+   * only way to name a private asset, which carries no `cdnPath`.
+   */
+  onPick: (media: Aglyn.AglynHostMedia, context: { cdnScope: string }) => void
 }
 
 /**
@@ -58,7 +68,7 @@ export interface MediaPickerDialogProps {
  * host — the org Media page — it shows everything the viewer may see.
  */
 export function MediaPickerDialog(props: MediaPickerDialogProps) {
-  const { hostId, orgId, open, onClose, onPick } = props
+  const { hostId, orgId, open, onClose, onPick, allowPrivate } = props
   const derivedOrgId = useHostOrgId(hostId)
   const orgScope = orgId ?? derivedOrgId
   const showTabs = Boolean(hostId) && Boolean(orgScope)
@@ -66,7 +76,7 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
 
   const { enqueueSnackbar } = useSnackbar()
 
-  const pick = (media: Aglyn.AglynHostMedia) => {
+  const pick = (media: Aglyn.AglynHostMedia, cdnScope: string) => {
     /**
      * A private asset can never be placed into page content (AGL-1051).
      * It has no `cdnPath`, so picking one would put an empty `src` on the
@@ -75,9 +85,11 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
      * rule people can follow and a mystery they file a ticket about.
      *
      * This is a usability guard, not the boundary: the boundary is that
-     * the bytes need a signature, which no page node carries.
+     * the bytes need a signature, which no page node carries. A caller that
+     * mints that signature itself (`allowPrivate`, AGL-2814) is the one
+     * caller for which a private asset is the right answer.
      */
-    if (media.private) {
+    if (media.private && !allowPrivate) {
       enqueueSnackbar(
         'That file is private, so it cannot be placed on a page. ' +
           'Turn off Private in the media library to use it here.',
@@ -91,7 +103,10 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
     // doc cannot store a URL that works for all of them. A no-op for
     // org-wide assets, which is every asset unless someone restricted one.
     const qualified = hostQualifiedCdnPath(media.cdnPath, media.visibleTo, hostId)
-    onPick(qualified === media.cdnPath ? media : { ...media, cdnPath: qualified })
+    onPick(
+      qualified === media.cdnPath ? media : { ...media, cdnPath: qualified },
+      { cdnScope },
+    )
     onClose()
   }
 
@@ -170,7 +185,10 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
           </Tabs>
         ) : null}
         {showSite && hostId ? (
-          <MediaLibraryComponent hostId={hostId} onSelect={pick} />
+          <MediaLibraryComponent
+            hostId={hostId}
+            onSelect={(media) => pick(media, hostId)}
+          />
         ) : null}
         {showOrg && orgScope ? (
           <MediaLibraryComponent
@@ -180,7 +198,7 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
             // building a client's page cannot find — let alone place — an
             // asset restricted to the agency's internal sites.
             forHostId={hostId}
-            onSelect={pick}
+            onSelect={(media) => pick(media, `org:${orgScope}`)}
           />
         ) : null}
       </DialogContent>

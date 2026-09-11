@@ -39,6 +39,10 @@ import {
   isFolderScopePreviewRequest,
 } from '../../../../utils/server/media-scope'
 import { moveAssetsWithinBudget } from '../../../../utils/server/media-move'
+import {
+  findPaidMediaUses,
+  paidMediaPublishRefusal,
+} from '../../../../utils/server/paid-media-uses'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
@@ -502,6 +506,31 @@ async function handler(request: Request): Promise<Response> {
       const snapshot = await mediaRef.doc(mediaId).get()
       if (!snapshot.exists || snapshot.get('deletedAt')) {
         return Response.json({ error: 'Unknown media' }, { status: 404 })
+      }
+      /**
+       * A file a product still sells as a members video stays private
+       * (AGL-2814).
+       *
+       * Publishing hands the asset back its permanent CDN URL, and that URL
+       * names the same asset as every signed session link a buyer was ever
+       * given: strip `exp` and `sig` off one and it would play for anyone,
+       * forever. So the publish is refused while a product sells the file,
+       * and refused as well when the scan could not read every product —
+       * "we did not find one" is not "there is none".
+       */
+      if (!makePrivate) {
+        const sold = await findPaidMediaUses({
+          firestore: firebaseAdmin.app().firestore(),
+          base: scope.base,
+          mediaId,
+          bucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+        })
+        if (sold.uses.length || !sold.complete) {
+          return Response.json(
+            { error: paidMediaPublishRefusal(sold), products: sold.uses },
+            { status: 409 },
+          )
+        }
       }
       // Resolved through `mediaObjectPath`, never off the raw field: the
       // recorded key is client data handed to `bucket.file()` on the Admin

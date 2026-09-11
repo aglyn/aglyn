@@ -63,6 +63,25 @@ export interface PickedMedia {
    * because an id alone cannot be turned back into a URL.
    */
   mediaScope?: string
+  /**
+   * Whether the chosen asset is PRIVATE (AGL-2814): fetchable only through a
+   * signed, expiring link, so {@link url} holds its media reference rather
+   * than an address a browser could load. Only a caller that opened the
+   * picker with `allowPrivate` ever receives one.
+   */
+  private?: boolean
+}
+
+/** How a caller wants the picker to behave. */
+export interface PickMediaOptions {
+  /**
+   * Accept a PRIVATE asset instead of refusing it (AGL-2814).
+   *
+   * For a caller that delivers the file through a signed link it mints per
+   * request — a product's members video — and never places it on a page,
+   * which a private asset cannot be.
+   */
+  allowPrivate?: boolean
 }
 
 /**
@@ -74,7 +93,7 @@ export interface PickedMedia {
  * fall back to a plain URL input.
  */
 export interface MediaPickerContextValue {
-  pickMedia?: () => Promise<PickedMedia | null>
+  pickMedia?: (options?: PickMediaOptions) => Promise<PickedMedia | null>
 }
 
 export const MediaPickerContext = createContext<MediaPickerContextValue>({})

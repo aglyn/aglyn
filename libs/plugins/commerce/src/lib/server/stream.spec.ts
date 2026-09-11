@@ -16,8 +16,8 @@
  */
 
 /**
- * The gated stream's redirect (AGL-315), and the delivery copy it lands on
- * (AGL-2766).
+ * The gated stream's redirect (AGL-315), the delivery copy it lands on
+ * (AGL-2766), and the expiry of what it lands on (AGL-2814).
  *
  * ## Why the round trip is minted rather than hand-signed
  *
@@ -29,20 +29,33 @@
  * parameter were folded into the signed payload, or if the payload quietly
  * grew a field. Minting makes the handler prove that contract on every case.
  *
+ * ## Why the media signatures are checked with the real verifier
+ *
+ * The delivery resolver and the media-signing module are the real ones, not
+ * doubles: only Firestore and the bucket are faked. An assertion that the
+ * `Location` expires is therefore checked with the same `verifyMediaAccess`
+ * the CDN runs, at the instant before and the instant of expiry.
+ *
  * ## Why the URL shapes are enumerated
  *
  * `gatedVideos[].url` is written by the console media picker, which stores
- * the media-CDN path for an org with the `mediaCdn` entitlement and the raw
- * Storage download URL for one without — and older products predate the
- * picker entirely. So a redirect target is not reliably a CDN URL, and the
- * assertions here say what each shape does rather than assuming the good one.
+ * a media reference or the media-CDN path for an org with the `mediaCdn`
+ * entitlement and the raw Storage download URL for one without — and older
+ * products predate the picker entirely. So a redirect target is not reliably
+ * a CDN URL, and the assertions here say what each shape does rather than
+ * assuming the good one.
  */
 
 process.env.TOKEN_SIGNING_SECRET = 'stream-spec-secret'
 
-import { MEDIA_CDN_ROUTE, videoDeliverySrc } from '@aglyn/aglyn/server'
+import { MEDIA_CDN_ROUTE, parsePaidMediaSource } from '@aglyn/aglyn/server'
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { streamHandler } from './stream'
+
+const {
+  GATED_VIDEO_SESSION_TTL_MS,
+  verifyMediaAccess,
+} = jest.requireActual('@aglyn/tenant-data-admin/server/media-signing')
 
 const docs = new Map<string, Record<string, any>>()
 
@@ -73,9 +86,43 @@ function makeCollectionRef(path: string) {
 
 const fakeFirestore = { collection: (name: string) => makeCollectionRef(name) }
 
-jest.mock('@aglyn/tenant-data-admin', () => ({
-  firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
-}))
+const BUCKET = 'aglyn-test.appspot.com'
+
+/** Every V4 read the handler asked the bucket to sign. */
+const signedReads: { path: string; expires: number }[] = []
+
+const fakeBucket = {
+  name: BUCKET,
+  file: (path: string) => ({
+    getSignedUrl: async ({ expires }: { expires: number }) => {
+      signedReads.push({ path, expires })
+      return [
+        `https://storage.googleapis.com/${BUCKET}/${path}` +
+          '?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Signature=v4',
+      ]
+    },
+  }),
+}
+
+jest.mock('@aglyn/tenant-data-admin', () => {
+  const delivery = jest.requireActual(
+    '@aglyn/tenant-data-admin/server/paid-media-delivery',
+  )
+  const signing = jest.requireActual(
+    '@aglyn/tenant-data-admin/server/media-signing',
+  )
+  return {
+    firebaseAdmin: {
+      app: () => ({
+        firestore: () => fakeFirestore,
+        storage: () => ({ bucket: () => fakeBucket }),
+      }),
+    },
+    createPaidMediaDeliveryIo: delivery.createPaidMediaDeliveryIo,
+    resolvePaidMediaDelivery: delivery.resolvePaidMediaDelivery,
+    GATED_VIDEO_SESSION_TTL_MS: signing.GATED_VIDEO_SESSION_TTL_MS,
+  }
+})
 
 /**
  * The gate is stubbed OPEN so the redirect is reachable, and that is the only
@@ -105,27 +152,46 @@ jest.mock('./gate', () => ({
 }))
 
 const HOST = 'host-1'
+const ORG = 'acme'
 const PRODUCT = 'prod-course'
+
+/** The scope a delivered org asset is signed under: qualified with this site. */
+const DELIVERY_SCOPE = `org:${ORG}:${HOST}`
+const DELIVERED_PATH = `${MEDIA_CDN_ROUTE}/${DELIVERY_SCOPE}/med-film`
 
 /**
  * The shapes `gatedVideos[].url` actually holds, and where each comes from.
  *
  * Built from {@link MEDIA_CDN_ROUTE} rather than typed out, so a route that
  * moved would take the fixture with it instead of leaving a string that no
- * longer names this platform's own door — a fixture drifting out of shape is
- * exactly how the assertions below would stay green while proving nothing.
+ * longer names this platform's own door.
  */
 /** The picker's `cdnPath`: an org with the paid `mediaCdn` entitlement. */
-const CDN_VIDEO = `${MEDIA_CDN_ROUTE}/org:acme/med-film`
+const CDN_VIDEO = `${MEDIA_CDN_ROUTE}/org:${ORG}/med-film`
 /** The same, pinned to a content hash — the route's immutable form. */
-const CDN_VIDEO_PINNED = `${MEDIA_CDN_ROUTE}/org:acme/med-film/abc123def456`
+const CDN_VIDEO_PINNED = `${MEDIA_CDN_ROUTE}/org:${ORG}/med-film/abc123def456`
 /** An org asset restricted to sites, host-qualified by the picker dialog. */
-const CDN_VIDEO_QUALIFIED = `${MEDIA_CDN_ROUTE}/org:acme:${HOST}/med-film`
+const CDN_VIDEO_QUALIFIED = `${MEDIA_CDN_ROUTE}/org:${ORG}:${HOST}/med-film`
+/** What the paid-media picker stores: a reference, which names the asset. */
+const MEDIA_REF_VIDEO = `media:org:${ORG}/med-film`
 /** No `mediaCdn` entitlement, or a legacy upload: the raw download URL. */
 const RAW_STORAGE_VIDEO =
-  'https://firebasestorage.googleapis.com/v0/b/x/o/film.mp4?alt=media&token=t'
+  `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/` +
+  `${encodeURIComponent(`orgs/${ORG}/media/Films/med-film`)}` +
+  '?alt=media&token=long-lived-token'
+/** A raw download URL for an object no media document owns. */
+const RAW_STORAGE_LEGACY =
+  `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/` +
+  `${encodeURIComponent(`hosts/${HOST}/media/week-1.mp4`)}` +
+  '?alt=media&token=long-lived-token'
+/** A raw download URL from another Firebase project's bucket. */
+const FOREIGN_STORAGE_VIDEO =
+  'https://firebasestorage.googleapis.com/v0/b/someone-else.appspot.com/o/' +
+  'week-1.mp4?alt=media&token=long-lived-token'
 /** An author-typed hotlink, which the demo catalog still seeds. */
 const HOTLINK_VIDEO = 'https://videos.example.com/w1.m3u8'
+/** Another org's private film, named from this site's product. */
+const RIVAL_VIDEO = 'media:org:rival/med-film'
 
 function makeResponse() {
   const result = {
@@ -209,6 +275,17 @@ async function play(video = 0) {
   return redeem(redeemable(minted.body.url))
 }
 
+/** A delivered CDN location, taken apart the way the CDN reads it. */
+function delivered(location: string) {
+  const url = new URL(location, 'https://shop.example')
+  return {
+    path: url.pathname,
+    r: url.searchParams.get('r'),
+    exp: Number(url.searchParams.get('exp')),
+    sig: String(url.searchParams.get('sig') ?? ''),
+  }
+}
+
 function seed(gatedVideos: { url: string; title?: string }[]) {
   docs.set(`hosts/${HOST}/products/${PRODUCT}`, {
     name: 'Training program',
@@ -220,10 +297,32 @@ function seed(gatedVideos: { url: string; title?: string }[]) {
   })
 }
 
+/** The operator's log line for a video the handler would not deliver. */
+let consoleError: jest.SpyInstance
+
 beforeEach(() => {
+  consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined)
   docs.clear()
+  signedReads.length = 0
   mockEntitled = true
+  docs.set(`hostIndex/${HOST}`, { orgId: ORG })
+  docs.set(`orgs/${ORG}/media/med-film`, {
+    fileName: 'week-1.mp4',
+    contentType: 'video/mp4',
+    storagePath: `orgs/${ORG}/media/Films/med-film`,
+    visibleTo: ['org'],
+    private: true,
+  })
+  docs.set('orgs/rival/media/med-film', {
+    contentType: 'video/mp4',
+    visibleTo: ['org'],
+    private: true,
+  })
   seed([{ url: CDN_VIDEO, title: 'Week 1' }])
+})
+
+afterEach(() => {
+  consoleError.mockRestore()
 })
 
 // ---------------------------------------------------------------------------
@@ -231,25 +330,38 @@ beforeEach(() => {
 /**
  * The fixtures, measured before anything is concluded from them.
  *
- * Every assertion in this file reads "the redirect carries `?r=auto`" or "the
- * redirect is untouched", and a CDN fixture that had drifted out of the
- * route's shape would satisfy BOTH by falling down the pass-through branch.
- * The suite would stay green and prove nothing. So the eligibility of each
- * shape is asserted directly, once, against the builder itself.
+ * A CDN fixture that had drifted out of the route's shape would fall down a
+ * different branch of the resolver and could satisfy a refusal for the wrong
+ * reason. So each shape's classification is asserted directly, once, against
+ * the real parser.
  */
 describe('the URL shapes this redirect can be handed', () => {
-  it('treats the three CDN forms as this platform’s own', () => {
-    for (const stored of [CDN_VIDEO, CDN_VIDEO_PINNED, CDN_VIDEO_QUALIFIED]) {
-      expect(stored.startsWith(`${MEDIA_CDN_ROUTE}/`)).toBe(true)
-      expect(videoDeliverySrc(stored)).toBe(`${stored}?r=auto`)
+  it('reads the four library forms as this platform’s own asset', () => {
+    for (const stored of [
+      CDN_VIDEO,
+      CDN_VIDEO_PINNED,
+      CDN_VIDEO_QUALIFIED,
+      MEDIA_REF_VIDEO,
+    ]) {
+      expect(parsePaidMediaSource(stored)).toMatchObject({
+        kind: 'asset',
+        mediaId: 'med-film',
+      })
     }
   })
 
-  it('⛔ treats a raw Storage URL and a hotlink as somebody else’s', () => {
-    // Neither has renditions to ask for, and the Storage URL already carries
-    // a query — the case that would show a builder appending blindly.
-    expect(videoDeliverySrc(RAW_STORAGE_VIDEO)).toBe(RAW_STORAGE_VIDEO)
-    expect(videoDeliverySrc(HOTLINK_VIDEO)).toBe(HOTLINK_VIDEO)
+  it('reads a download URL as a Storage object and a hotlink as somebody else’s', () => {
+    expect(parsePaidMediaSource(RAW_STORAGE_VIDEO)).toMatchObject({
+      kind: 'storage-object',
+      bucket: BUCKET,
+    })
+    expect(parsePaidMediaSource(RAW_STORAGE_LEGACY)).toMatchObject({
+      kind: 'storage-object',
+      bucket: BUCKET,
+    })
+    expect(parsePaidMediaSource(HOTLINK_VIDEO)).toMatchObject({
+      kind: 'external',
+    })
   })
 })
 
@@ -287,61 +399,130 @@ describe('the gate still decides who gets a link (AGL-315)', () => {
 })
 
 /**
- * AGL-2766. AGL-2753 gave the Video element `?r=auto` — "the best encoding
- * you hold" — and this player never went through that path, so the audience
- * that has already paid was the one still being sent the master.
- *
- * The parameter belongs at the redirect because nothing upstream can put it
- * there: the player holds a signed URL, not a media reference, and the
- * `Location` is built from the product document rather than from the request.
+ * AGL-2814. The stream link expired in fifteen minutes and redirected to the
+ * asset's permanent public URL, so the redirect was the only thing that
+ * expired. Whoever read the `Location` kept the film.
  */
-describe('AGL-2766 · the entitlement hop lands on a delivery copy', () => {
-  it('asks the CDN for the best encoding it holds', async () => {
+describe('AGL-2814 · the redirect lands on a link that expires', () => {
+  it('signs the delivery URL for the viewing session, and it dies at the end of it', async () => {
+    const before = Date.now()
     const played = await play()
+    const after = Date.now()
     expect(played.status).toBe(302)
-    expect(played.redirectedTo).toBe(`${CDN_VIDEO}?r=auto`)
+    const location = delivered(played.redirectedTo)
+    expect(location.path).toBe(DELIVERED_PATH)
+    expect(location.exp).toBeGreaterThanOrEqual(before + GATED_VIDEO_SESSION_TTL_MS)
+    expect(location.exp).toBeLessThanOrEqual(after + GATED_VIDEO_SESSION_TTL_MS)
+    // The CDN's own verifier, at the last moment and at the moment of expiry.
+    expect(
+      verifyMediaAccess(DELIVERY_SCOPE, 'med-film', location, location.exp - 1),
+    ).toBe(true)
+    expect(
+      verifyMediaAccess(DELIVERY_SCOPE, 'med-film', location, location.exp),
+    ).toBe(false)
   })
 
-  it('merges the parameter onto a pinned path rather than replacing it', async () => {
-    // The immutable form is a year in the browser and the newest half of the
-    // corpus; losing the hash segment would drop it back to a minute.
-    seed([{ url: CDN_VIDEO_PINNED }])
-    expect((await play()).redirectedTo).toBe(`${CDN_VIDEO_PINNED}?r=auto`)
+  it('⛔ never redirects to the bare, unsigned path', async () => {
+    const played = await play()
+    expect(played.redirectedTo).not.toBe(CDN_VIDEO)
+    expect(played.redirectedTo).not.toBe(`${CDN_VIDEO}?r=auto`)
+    expect(played.redirectedTo).toMatch(/[?&]exp=\d+/)
+    expect(played.redirectedTo).toMatch(/[?&]sig=[0-9a-f]{32}(&|$)/)
   })
 
-  it('keeps a host-qualified org scope intact', async () => {
-    // The qualified scope is what serves an org asset restricted to sites;
-    // an unqualified one would 404 for exactly the assets that need it.
-    seed([{ url: CDN_VIDEO_QUALIFIED }])
-    expect((await play()).redirectedTo).toBe(`${CDN_VIDEO_QUALIFIED}?r=auto`)
+  it('asks the CDN for the best delivery copy inside the signed URL (AGL-2766)', async () => {
+    expect(delivered((await play()).redirectedTo).r).toBe('auto')
   })
 
-  it('⛔ hands a raw Storage URL back exactly as stored', async () => {
-    // A free-tier org has no `cdnPath`, so this is what its products hold.
-    // It is not our route, it has no renditions, and its query must survive.
-    seed([{ url: RAW_STORAGE_VIDEO }])
-    expect((await play()).redirectedTo).toBe(RAW_STORAGE_VIDEO)
+  it('signs every stored library form as the one asset, qualified with this site', async () => {
+    // The pinned form drops its hash: the immutable year is withheld from a
+    // private asset anyway, and a stale pin would only add a hop.
+    for (const url of [CDN_VIDEO_PINNED, CDN_VIDEO_QUALIFIED, MEDIA_REF_VIDEO]) {
+      seed([{ url }])
+      expect(delivered((await play()).redirectedTo).path).toBe(DELIVERED_PATH)
+    }
   })
 
-  it('⛔ hands an author-typed hotlink back exactly as stored', async () => {
+  it('⛔ refuses a video whose asset is still public, with no Location at all', async () => {
+    docs.set(`orgs/${ORG}/media/med-film`, {
+      contentType: 'video/mp4',
+      visibleTo: ['org'],
+    })
+    const played = await play()
+    expect(played.status).toBe(409)
+    expect(played.redirectedTo).toBe('')
+    expect(played.headers['Cache-Control']).toBe('private, no-store')
+    // Named for the operator, who has to find the product and fix its video.
+    expect(consoleError).toHaveBeenCalledWith(
+      '[commerce/stream] gated video not delivered',
+      JSON.stringify({
+        hostId: HOST,
+        productId: PRODUCT,
+        video: 0,
+        refusal: 'not-private',
+      }),
+    )
+  })
+
+  it('⛔ signs nothing from another org’s library', async () => {
+    seed([{ url: RIVAL_VIDEO }])
+    const played = await play()
+    expect(played.status).toBe(404)
+    expect(played.redirectedTo).toBe('')
+  })
+
+  describe('the free-tier path never hands out a token URL', () => {
+    it('signs the library asset a raw download URL belongs to', async () => {
+      seed([{ url: RAW_STORAGE_VIDEO }])
+      const played = await play()
+      expect(played.status).toBe(302)
+      expect(played.redirectedTo).not.toContain('token=')
+      expect(played.redirectedTo).not.toContain('firebasestorage')
+      expect(delivered(played.redirectedTo).path).toBe(DELIVERED_PATH)
+    })
+
+    it('gives an object no document owns a V4 read that expires with the session', async () => {
+      seed([{ url: RAW_STORAGE_LEGACY }])
+      const before = Date.now()
+      const played = await play()
+      expect(played.status).toBe(302)
+      expect(played.redirectedTo).not.toContain('token=')
+      expect(played.redirectedTo).toContain('X-Goog-Signature=')
+      expect(signedReads).toHaveLength(1)
+      expect(signedReads[0].path).toBe(`hosts/${HOST}/media/week-1.mp4`)
+      expect(signedReads[0].expires).toBeGreaterThanOrEqual(
+        before + GATED_VIDEO_SESSION_TTL_MS,
+      )
+      expect(signedReads[0].expires).toBeLessThanOrEqual(
+        Date.now() + GATED_VIDEO_SESSION_TTL_MS,
+      )
+    })
+
+    it('⛔ refuses a download URL from a bucket this platform does not serve', async () => {
+      seed([{ url: FOREIGN_STORAGE_VIDEO }])
+      const played = await play()
+      expect(played.status).toBe(404)
+      expect(played.redirectedTo).toBe('')
+      expect(signedReads).toHaveLength(0)
+    })
+  })
+
+  it('hands an author-typed hotlink back exactly as stored', async () => {
     seed([{ url: HOTLINK_VIDEO }])
     expect((await play()).redirectedTo).toBe(HOTLINK_VIDEO)
   })
 
-  it('⛔ still redirects a value the builder cannot resolve', async () => {
-    // `videoDeliverySrc` answers undefined for a `media:` value that does not
-    // parse, and a redirect to `undefined` is worse than the broken URL it
-    // replaced. The fallback keeps this handler's contract: a stored string
-    // never loses its redirect by being unimprovable.
+  it('⛔ refuses a value it cannot resolve rather than redirecting to it', async () => {
+    // A redirect to `media:junk` was never playable; a 404 says so.
     seed([{ url: 'media:not a reference' }])
     const played = await play()
-    expect(played.status).toBe(302)
-    expect(played.redirectedTo).toBe('media:not a reference')
+    expect(played.status).toBe(404)
+    expect(played.redirectedTo).toBe('')
   })
 
   it('serves the video the link was minted for, not the first one', async () => {
     seed([{ url: HOTLINK_VIDEO }, { url: CDN_VIDEO }])
-    expect((await play(1)).redirectedTo).toBe(`${CDN_VIDEO}?r=auto`)
+    expect(delivered((await play(1)).redirectedTo).path).toBe(DELIVERED_PATH)
   })
 
   it('⛔ 404s a video index the product does not have', async () => {
@@ -351,14 +532,16 @@ describe('AGL-2766 · the entitlement hop lands on a delivery copy', () => {
   })
 
   it('⛔ takes no rendition instruction from the caller', async () => {
-    // The signature covers `(hostId, productId, video, exp)`. An `r` on the
-    // stream URL is outside it, so honoring one would let anyone holding a
-    // link for a video they ARE entitled to name an object path the mint
+    // The stream signature covers `(hostId, productId, video, exp)`. An `r` on
+    // the stream URL is outside it, so honoring one would let anyone holding
+    // a link for a video they ARE entitled to name an object path the mint
     // never authorized. It is ignored, and the redirect is unchanged.
     const query = redeemable((await mint()).body.url)
     const played = await redeem({ ...query, r: '../../etc/passwd' })
     expect(played.status).toBe(302)
-    expect(played.redirectedTo).toBe(`${CDN_VIDEO}?r=auto`)
+    const location = delivered(played.redirectedTo)
+    expect(location.path).toBe(DELIVERED_PATH)
+    expect(location.r).toBe('auto')
   })
 })
 
@@ -369,9 +552,7 @@ describe('AGL-2766 · the entitlement hop lands on a delivery copy', () => {
  * one whose bytes actually depend on `Accept` — and `serveMediaCdn` declares
  * it there (pinned by `serve-media-cdn.video.spec.ts`). This asserts the
  * corollary so that nobody later "completes" the feature by adding it to the
- * redirect: the `Location` is a function of the product document alone, and
- * declaring a variance this response does not have splits a cache key that
- * has exactly one representation.
+ * redirect.
  */
 describe('AGL-2766 · the redirect does not claim to vary', () => {
   it('⛔ declares no Vary on the 302, whatever the client accepts', async () => {
@@ -382,8 +563,8 @@ describe('AGL-2766 · the redirect does not claim to vary', () => {
   })
 
   it('keeps the redirect itself out of every cache', async () => {
-    // The signed URL expires in 15 minutes and is per-member; a stored 302
-    // would outlive the entitlement that produced it.
+    // The Location carries a per-session signature; a stored 302 would hand
+    // one buyer's session to the next request for the same stream URL.
     expect((await play()).headers['Cache-Control']).toBe('private, no-store')
   })
 })

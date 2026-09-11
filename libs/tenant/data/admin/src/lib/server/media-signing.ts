@@ -55,6 +55,43 @@ export function tokenSigningSecret(): string {
 export const MEDIA_SIGNATURE_TTL_MS = 15 * 60 * 1000
 
 /**
+ * How long one viewing session of a purchased, gated video stays playable
+ * (AGL-2814): four hours.
+ *
+ * The console's fifteen minutes is the wrong number for playback, because a
+ * video is not fetched once. Every seek, every resume after a pause and every
+ * buffer refill is another byte-range request under the same URL, so the
+ * signature has to outlive the sitting rather than the first request. Four
+ * hours covers a feature-length recording plus the breaks people take inside
+ * one sitting.
+ *
+ * It stays hours, not days, because the URL is a bearer capability. Anyone who
+ * copies it out of a buyer's network panel holds the whole film until it
+ * expires, and past four hours a pause is long enough that asking the stream
+ * endpoint again is the right answer anyway: that endpoint re-checks the
+ * entitlement before it signs another session, and the gated player asks it
+ * again on its own when a request under an expired URL fails.
+ */
+export const GATED_VIDEO_SESSION_TTL_MS = 4 * 60 * 60 * 1000
+
+/**
+ * The longest lifetime any signature may claim, enforced by the VERIFIER as
+ * well as the minter.
+ *
+ * `exp` is inside the signed payload, so nobody without the secret can stretch
+ * it. What this bounds is the platform's own mistakes: a minter that one day
+ * passes a day where it meant an hour would otherwise hand out links nothing
+ * downstream ever questions.
+ */
+export const MEDIA_SIGNATURE_MAX_TTL_MS = GATED_VIDEO_SESSION_TTL_MS
+
+/**
+ * Allowance for the minting and verifying instances disagreeing about the
+ * time. The console signs and the tenant app verifies, on different machines.
+ */
+const MEDIA_SIGNATURE_CLOCK_SKEW_MS = 60 * 1000
+
+/**
  * The signature over one asset at one expiry.
  *
  * `scope` is inside the payload, not just alongside it. Without it a
@@ -96,6 +133,11 @@ export function verifyMediaAccess(
   const exp = Number(presented?.exp ?? 0)
   const sig = String(presented?.sig ?? '')
   if (!Number.isFinite(exp) || exp <= nowMs) return false
+  // Refused whatever the signature says: no minter issues a lifetime this
+  // long, so a link that claims one was never meant to exist.
+  if (exp - nowMs > MEDIA_SIGNATURE_MAX_TTL_MS + MEDIA_SIGNATURE_CLOCK_SKEW_MS) {
+    return false
+  }
   let expected: string
   try {
     expected = signMediaAccess(scope, mediaId, exp)
@@ -111,12 +153,36 @@ export function mediaSignatureQuery(signature: MediaSignature): string {
   return `exp=${signature.exp}&sig=${encodeURIComponent(signature.sig)}`
 }
 
-/** Mints a signature valid for {@link MEDIA_SIGNATURE_TTL_MS} from now. */
+/**
+ * Throws unless `ttlMs` is a lifetime the platform issues: positive, and no
+ * longer than {@link MEDIA_SIGNATURE_MAX_TTL_MS}.
+ *
+ * It THROWS rather than clamping. The verifier refuses a longer link, so
+ * minting one would hand out a URL that is dead on arrival, and a quiet clamp
+ * would hide the caller asking for the wrong thing. Exported for the minters
+ * that sign something other than a CDN URL, such as a Storage read, so every
+ * expiring link the platform hands out obeys the same bound.
+ */
+export function assertMediaSignatureTtl(ttlMs: number): void {
+  if (!(ttlMs > 0) || ttlMs > MEDIA_SIGNATURE_MAX_TTL_MS) {
+    throw new RangeError(
+      `A media link lifetime must be between 1 ms and ${MEDIA_SIGNATURE_MAX_TTL_MS} ms`,
+    )
+  }
+}
+
+/**
+ * Mints a signature valid for `ttlMs` from now — {@link MEDIA_SIGNATURE_TTL_MS}
+ * unless the caller names a longer window, bounded by
+ * {@link assertMediaSignatureTtl}.
+ */
 export function mintMediaSignature(
   scope: string,
   mediaId: string,
   nowMs: number = Date.now(),
+  ttlMs: number = MEDIA_SIGNATURE_TTL_MS,
 ): MediaSignature {
-  const exp = nowMs + MEDIA_SIGNATURE_TTL_MS
+  assertMediaSignatureTtl(ttlMs)
+  const exp = nowMs + ttlMs
   return { exp, sig: signMediaAccess(scope, mediaId, exp) }
 }

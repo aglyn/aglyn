@@ -380,7 +380,9 @@ A private file:
   working too. That is the part people expect and the part that is easy to get wrong:
   a switch that only stopped *new* links would leave the one already in circulation
   serving the file forever,
-- **cannot be placed on a page**; the picker refuses it and says why,
+- **cannot be placed on a page**; the picker refuses it and says why. The one place a
+  private file can be added is a product's
+  [members videos](#members-videos-are-private),
 - is viewable and downloadable in the console by people who can already see it, through a
   **temporary link that stops working after about fifteen minutes**.
 
@@ -413,6 +415,28 @@ One thing none of this reaches: **bytes somebody already downloaded.** Revoking 
 stops the file being fetched again; it cannot recall a copy that is already on someone's
 disk, in a browser cache or in a web archive. Nothing anyone sells can, and a product that
 implied otherwise would be the more dangerous thing to trust.
+
+### Members videos are private files {#members-videos-are-private}
+
+A video you add to a product as a **members video** is a private file, because a private
+file is the only kind whose links can expire:
+
+- **Adding a video makes it private.** If the file is public, Aglyn asks first and lists
+  anywhere else it is used, such as a trailer on a public page. Making it private stops it
+  showing there, and any public link to it that was already shared stops working.
+- **Buyers get links that expire.** When a buyer presses play, the store checks the purchase
+  and gives the player a link that works for **four hours**. If a long sitting outlives the
+  link, the player asks for a new one, which checks the purchase again, and carries on from
+  the same second. A buyer who has lost access sees the sign-in prompt instead.
+- **A public members video does not play.** If the file is public, because it was published
+  again or added some other way, buyers cannot play it. The product editor marks it
+  **Public** and offers **Make private**.
+- **A file a product still sells cannot be published.** **Publish file** refuses while any
+  product lists the file as a members video, and names the product. Remove the video from the
+  product first.
+
+A members video added as a link to another site is served by that site, so Aglyn cannot make
+its links expire. The product editor marks it **Hosted elsewhere**.
 
 ## Approved image hosts {#approved-image-hosts}
 

@@ -116,10 +116,42 @@ const mockDocHandle = (path: string): any => {
   return handle
 }
 
+/** The org's sites, for the members-video scan a publish runs (AGL-2814). */
+let mockHosts: string[] = []
+/** Each site's products, by host id. */
+let mockProducts: Record<string, { id: string; data: Record<string, unknown> }[]> = {}
+
+/** A query over whatever the collection at `prefix` currently holds. */
+const mockQuery = (prefix: string): any => {
+  const docs = () => {
+    if (prefix === 'hosts') {
+      return mockHosts.map((id) => ({ id, get: () => undefined }))
+    }
+    const products = /^hosts\/([^/]+)\/products$/.exec(prefix)
+    return products
+      ? (mockProducts[products[1]] ?? []).map(({ id, data }) => ({
+          id,
+          get: (field: string) => data[field],
+        }))
+      : []
+  }
+  const query: any = {
+    where: () => query,
+    select: () => query,
+    limit: () => query,
+    get: async () => {
+      const all = docs()
+      return { size: all.length, docs: all }
+    },
+  }
+  return query
+}
+
 const mockCollectionHandle = (prefix: string): any => ({
   doc: (id: string) => mockDocHandle(`${prefix}/${id}`),
-  where: () => ({ get: async () => ({ docs: [] }) }),
-  limit: () => ({ get: async () => ({ docs: [] }) }),
+  where: () => mockQuery(prefix),
+  select: () => mockQuery(prefix),
+  limit: () => mockQuery(prefix),
 })
 
 const mockFirestore = { collection: mockCollectionHandle }
@@ -259,6 +291,8 @@ beforeEach(() => {
   mockMetadataWrites = []
   mockStorageThrows = false
   mockOrgWide = true
+  mockHosts = []
+  mockProducts = {}
 })
 
 describe('set-private revokes the raw download URL (AGL-1881)', () => {
@@ -380,5 +414,69 @@ describe('the gate around it is unchanged', () => {
     expect(response.status).toBe(403)
     expect(tokenOf()).toBe(PUBLISHED_TOKEN)
     expect(mockMetadataWrites).toEqual([])
+  })
+})
+
+/**
+ * AGL-2814. A members video is private, and publishing it would hand back the
+ * permanent CDN URL that every signed session link a buyer received names.
+ */
+describe('a file a product still sells stays private (AGL-2814)', () => {
+  beforeEach(() => {
+    mockStore[MEDIA_DOC] = {
+      fileName: 'week-1.mp4',
+      storagePath: OBJECT_PATH,
+      private: true,
+    }
+    mockHosts = ['host-1']
+  })
+
+  const sellingIt = (url: string) => ({
+    'host-1': [
+      {
+        id: 'prod-course',
+        data: { name: 'Training program', gatedVideos: [{ url }] },
+      },
+    ],
+  })
+
+  it('refuses to publish it, naming the product, and writes nothing', async () => {
+    mockProducts = sellingIt(`media:org:${ORG}/${MEDIA}`)
+    const response = await setPrivate(false)
+    expect(response.status).toBe(409)
+    const payload = await response.json()
+    expect(payload.error).toContain('“Training program”')
+    expect(payload.products).toEqual([
+      { hostId: 'host-1', productId: 'prod-course', productName: 'Training program' },
+    ])
+    expect(doc()['private']).toBe(true)
+    expect(doc()['cdnPath']).toBeUndefined()
+    expect(doc()['url']).toBeUndefined()
+    expect(mockMetadataWrites).toEqual([])
+  })
+
+  it('recognizes the older stored forms of the same film', async () => {
+    for (const url of [
+      `/api/media/cdn/org:${ORG}:host-1/${MEDIA}`,
+      publishedUrl(PUBLISHED_TOKEN),
+    ]) {
+      mockProducts = sellingIt(url)
+      expect((await setPrivate(false)).status).toBe(409)
+    }
+  })
+
+  it('publishes once no product sells it', async () => {
+    mockProducts = sellingIt(`media:org:${ORG}/another-film`)
+    const response = await setPrivate(false)
+    expect(response.status).toBe(200)
+    expect(doc()['private']).toBe(false)
+  })
+
+  it('still lets a members video be made private', async () => {
+    mockStore[MEDIA_DOC] = { ...mockStore[MEDIA_DOC], private: false }
+    mockProducts = sellingIt(`media:org:${ORG}/${MEDIA}`)
+    const response = await setPrivate(true)
+    expect(response.status).toBe(200)
+    expect(doc()['private']).toBe(true)
   })
 })

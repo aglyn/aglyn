@@ -20,12 +20,39 @@ import { mdiPlayCircleOutline } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useEffect, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'gated-video'
+
+/**
+ * How many fresh links the player asks for in a row, with no playback in
+ * between, before it stops and asks the viewer to reload (AGL-2814).
+ *
+ * Two covers the two links that can expire under a playing video: the stream
+ * link itself, for a browser that re-requests the element's own `src`, and the
+ * signed media session behind it. A third failure with nothing played means
+ * the problem is not an expiry, and asking again would only loop.
+ */
+const MAX_SILENT_RECOVERIES = 2
+
+/**
+ * Seconds of playback on a fresh link that prove it works. Past this the
+ * budget above resets, so an expiry hours later recovers as quietly as the
+ * first one did.
+ */
+const RECOVERED_AFTER_SECONDS = 5
+
+/**
+ * The `MediaError` codes a fresh link can cure: `MEDIA_ERR_NETWORK` (2), which
+ * a refused byte-range request raises mid-play, and
+ * `MEDIA_ERR_SRC_NOT_SUPPORTED` (4), which a refused first request raises.
+ * An abort (1) is the page or the viewer cancelling, and a decode error (3) is
+ * a broken file that no new link can fix.
+ */
+const RECOVERABLE_MEDIA_ERRORS = new Set([2, 4])
 
 export interface GatedVideoProps {
   /** Product whose gatedVideos list this plays from. */
@@ -39,6 +66,12 @@ export interface GatedVideoProps {
  * Gated video block (AGL-315): entitled members get a short-TTL signed
  * stream URL from the server (the gate is the mint step); playback
  * resumes from the last position. SiteC's training-program player.
+ *
+ * Every link behind the player expires (AGL-2814), so a long sitting outlives
+ * the one it started with. When a request under an expired link fails, the
+ * player asks the stream endpoint for a new one, which re-checks the member's
+ * entitlement, and resumes at the second it stopped. A member who has lost
+ * the entitlement gets the locked state instead.
  */
 const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
   (props, ref) => {
@@ -48,38 +81,125 @@ const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
     const { hostId } = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const [src, setSrc] = useState<string | null>(null)
-    const [state, setState] = useState<'loading' | 'locked' | 'ready'>(
-      'loading',
-    )
+    const [state, setState] = useState<
+      'loading' | 'locked' | 'ready' | 'stalled'
+    >('loading')
     const videoRef = useRef<HTMLVideoElement | null>(null)
+    /**
+     * Where a recovery stands. A ref, not state: the media events that read
+     * and write it fire many times a second, and none of it is rendered.
+     */
+    const recovery = useRef({
+      attempts: 0,
+      resumeAt: 0,
+      resume: false,
+      playing: false,
+      playedFrom: 0,
+    })
     const resumeKey = `aglyn_video_${hostId}_${productId}_${videoIndex ?? 0}`
+
+    /** One POST to the stream endpoint: a link, or why there is none. */
+    const requestLink = useCallback(async (): Promise<string | 'locked' | 'failed'> => {
+      try {
+        const response = await siteFetch('/api/commerce/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostId,
+            productId,
+            video: videoIndex ?? 0,
+          }),
+        })
+        if (response.status === 401 || response.status === 403) return 'locked'
+        if (!response.ok) return 'failed'
+        const payload = await response.json()
+        return typeof payload?.url === 'string' && payload.url
+          ? payload.url
+          : 'failed'
+      } catch {
+        return 'failed'
+      }
+    }, [hostId, productId, videoIndex, siteFetch])
 
     useEffect(() => {
       if (!hostId || !productId) return
       let active = true
-      void siteFetch('/api/commerce/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hostId,
-          productId,
-          video: videoIndex ?? 0,
-        }),
+      recovery.current = {
+        attempts: 0,
+        resumeAt: 0,
+        resume: false,
+        playing: false,
+        playedFrom: 0,
+      }
+      void requestLink().then((link) => {
+        if (!active) return
+        // Before anything has played, every refusal reads as the lock: the
+        // viewer's next step is to sign in or to buy.
+        if (link === 'locked' || link === 'failed') return setState('locked')
+        setSrc(link)
+        setState('ready')
       })
-        .then(async (response) => {
-          if (!active) return
-          if (!response.ok) return setState('locked')
-          const payload = await response.json()
-          setSrc(payload.url)
-          setState('ready')
-        })
-        .catch(() => {
-          if (active) setState('locked')
-        })
       return () => {
         active = false
       }
-    }, [hostId, productId, videoIndex, siteFetch])
+    }, [hostId, productId, requestLink])
+
+    const handleError = () => {
+      const element = videoRef.current
+      if (!element || !RECOVERABLE_MEDIA_ERRORS.has(Number(element.error?.code))) {
+        return
+      }
+      const progress = recovery.current
+      if (progress.attempts >= MAX_SILENT_RECOVERIES) {
+        setState('stalled')
+        return
+      }
+      progress.attempts += 1
+      progress.resumeAt = element.currentTime || progress.resumeAt
+      progress.resume = progress.playing || !element.paused
+      void requestLink().then((link) => {
+        if (link === 'locked') return setState('locked')
+        if (link === 'failed') return setState('stalled')
+        setSrc(link)
+      })
+    }
+
+    const handleLoadedMetadata = () => {
+      const element = videoRef.current
+      if (!element) return
+      const progress = recovery.current
+      const saved = Number(window.localStorage.getItem(resumeKey) ?? 0)
+      const target =
+        progress.resumeAt > 0 ? progress.resumeAt : saved > 5 ? saved : 0
+      if (target > 0) element.currentTime = target
+      progress.playedFrom = target
+      if (progress.resume) {
+        progress.resume = false
+        try {
+          void Promise.resolve(element.play()).catch(() => undefined)
+        } catch {
+          // A refused autoplay leaves the video paused at the right second,
+          // which is the useful half of a resume.
+        }
+      }
+    }
+
+    const handleTimeUpdate = () => {
+      const element = videoRef.current
+      if (!element) return
+      window.localStorage.setItem(
+        resumeKey,
+        String(Math.floor(element.currentTime)),
+      )
+      const progress = recovery.current
+      if (
+        progress.attempts &&
+        element.currentTime - progress.playedFrom >= RECOVERED_AFTER_SECONDS
+      ) {
+        progress.attempts = 0
+        progress.resumeAt = 0
+      }
+    }
 
     if (!hostId) {
       return (
@@ -106,6 +226,40 @@ const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
       )
     }
     if (state === 'loading') return <Box ref={ref} {...rest} />
+    if (state === 'stalled') {
+      return (
+        <Box
+          ref={ref}
+          {...rest}
+          sx={[
+            {
+              aspectRatio: '16 / 9',
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              px: 2,
+              textAlign: 'center',
+            },
+            ...nodeSx,
+          ]}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {'Playback stopped. Reload the page to keep watching.'}
+          </Typography>
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => window.location.reload()}
+          >
+            {'Reload'}
+          </Button>
+        </Box>
+      )
+    }
     if (state === 'locked' || !src) {
       return (
         <Box
@@ -142,19 +296,15 @@ const GatedVideo = forwardRef<HTMLDivElement, GatedVideoProps>(
           controls
           controlsList="nodownload"
           style={{ width: '100%', borderRadius: 8 }}
-          onLoadedMetadata={() => {
-            const saved = Number(window.localStorage.getItem(resumeKey) ?? 0)
-            if (videoRef.current && saved > 5) {
-              videoRef.current.currentTime = saved
-            }
+          onLoadedMetadata={handleLoadedMetadata}
+          onTimeUpdate={handleTimeUpdate}
+          onPlay={() => {
+            recovery.current.playing = true
           }}
-          onTimeUpdate={() => {
-            if (!videoRef.current) return
-            window.localStorage.setItem(
-              resumeKey,
-              String(Math.floor(videoRef.current.currentTime)),
-            )
+          onPause={() => {
+            recovery.current.playing = false
           }}
+          onError={handleError}
         />
       </Box>
     )
