@@ -16,9 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { applyMediaAssetFacts } from '@aglyn/aglyn/app-utils/media-asset-facts'
 import { render } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
-import Image, { leadImageNodeIds, schema } from './image'
+import Image, { type ImageProps, leadImageNodeIds, schema } from './image'
 
 describe('Image element (AGL-579 SSR hardening)', () => {
   it('is flagged self-closing so renderers never pass it children', () => {
@@ -539,5 +540,36 @@ describe('Image intrinsic dimensions (AGL-2486)', () => {
     const element = img(<Image src="https://example.com/a.png" alt="a" />)
     expect(element.getAttribute('width')).toBeNull()
     expect(element.getAttribute('height')).toBeNull()
+  })
+})
+
+/**
+ * A replaced image reserves the replacement's box (AGL-2833).
+ *
+ * The composition lays the asset's current pair over the node before the page
+ * renders, so what reaches the `<img>` is the replacement's ratio rather than
+ * the one the pick copied.
+ */
+describe('Image composed from a replaced asset (AGL-2833)', () => {
+  it("renders the replacement's pair where the node stored the pick's", () => {
+    const nodes = applyMediaAssetFacts(
+      {
+        photo: {
+          componentId: 'image',
+          props: {
+            src: 'media:site1/photo',
+            alt: 'a',
+            intrinsicWidth: 1200,
+            intrinsicHeight: 630,
+          },
+        },
+      },
+      new Map([['site1/photo', { width: 480, height: 480 }]]),
+    )
+    const element = render(
+      <Image {...(nodes.photo.props as ImageProps)} />,
+    ).container.querySelector('img') as HTMLImageElement
+    expect(element.getAttribute('width')).toBe('480')
+    expect(element.getAttribute('height')).toBe('480')
   })
 })
