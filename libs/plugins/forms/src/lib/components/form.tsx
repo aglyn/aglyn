@@ -91,6 +91,13 @@ export interface FormProps {
    * is set; kept so persisted nodes keep working.
    */
   datasetName?: string
+  /**
+   * The dataset binding above, signed by the compose that rendered this form
+   * (AGL-2773). The submit route writes a record only where this says, so the
+   * page, not the request, decides which dataset a submission reaches. Present
+   * on the published site only; the canvas and Preview never submit.
+   */
+  datasetBindingToken?: string
   submitLabel?: string
   successMessage?: string
   /**
@@ -202,8 +209,11 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   const {
     formId,
     formName,
-    datasetId,
-    datasetName,
+    // Read by compose, which signs them into `datasetBindingToken`; taken out
+    // here only so they never reach the DOM through `rest`.
+    datasetId: _datasetId,
+    datasetName: _datasetName,
+    datasetBindingToken,
     submitLabel,
     successMessage,
     afterSubmit,
@@ -286,7 +296,6 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       if (!hostId || status === 'sending') return
       const data = new FormData(event.currentTarget)
       const fields: Record<string, string> = {}
-      const fieldMap: Record<string, string> = {}
       let website = ''
       for (const [key, value] of data.entries()) {
         if (typeof value !== 'string') continue
@@ -294,15 +303,9 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           website = value
           continue
         }
-        // Field → dataset schema-field mappings (AGL-556), published by
-        // each FormField as a hidden input.
-        if (key.startsWith(FIELD_MAP_INPUT_PREFIX)) {
-          const submittedKey = key.slice(FIELD_MAP_INPUT_PREFIX.length)
-          if (submittedKey && value) fieldMap[submittedKey] = value
-          continue
-        }
-        // `__`-prefixed inputs are internal controls (e.g. the rating
-        // field's star radios) and never submit (AGL-544).
+        // `__`-prefixed inputs are internal controls — the rating field's
+        // star radios (AGL-544) and each field's dataset-mapping input — and
+        // never submit.
         if (key.startsWith('__')) continue
         // Checkbox groups emit one entry per ticked box; join them under
         // the field name instead of letting the last one win (AGL-544).
@@ -323,11 +326,12 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             // been adopted yet, and no phase of the migration removes it.
             ...(formId ? { formId } : {}),
             formName: formName || 'Form',
-            // Id-first dataset binding (AGL-556); the name rides along for
-            // the server's legacy fallback.
-            ...(datasetId ? { datasetId } : {}),
-            ...(datasetName ? { dataset: datasetName } : {}),
-            ...(Object.keys(fieldMap).length ? { fieldMap } : {}),
+            // The page's signed dataset binding (AGL-2773). The server writes
+            // a record only where it says, so nothing this request names
+            // chooses a dataset or a field.
+            ...(datasetBindingToken
+              ? { datasetBinding: datasetBindingToken }
+              : {}),
             path: window.location.pathname,
             fields,
             website,
@@ -436,8 +440,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       status,
       formId,
       formName,
-      datasetId,
-      datasetName,
+      datasetBindingToken,
       afterSubmit,
       redirectScreenHref,
       redirectUrl,
