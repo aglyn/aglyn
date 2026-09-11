@@ -17,7 +17,6 @@
 
 import {
   isLockdownActive,
-  isOrgWideScope,
   type LockdownState,
   MEDIA_CDN_POSTER_PARAM,
   MEDIA_CDN_RENDITION_AUTO,
@@ -30,8 +29,14 @@ import {
   normalizeHostLockdown,
   normalizeOrgLockdown,
   parseMediaRenditions,
-  visibleToHost,
 } from '@aglyn/aglyn/server'
+// By path, and out of every barrel: see the module note in `media-cdn-scope`.
+import {
+  MEDIA_CDN_SEGMENT,
+  type MediaCdnScope,
+  mediaCdnScopeRefusal,
+  parseMediaCdnScope,
+} from '@aglyn/aglyn/app-utils/media-cdn-scope'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
@@ -49,7 +54,23 @@ import { mediaStoragePathInScope } from './media-storage-path'
  */
 export { MEDIA_CDN_VARIANT_WIDTHS } from '@aglyn/aglyn/server'
 
-const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
+/**
+ * The scope grammar and the refusal this handler enforces (AGL-1043).
+ *
+ * Re-exported, not defined: the pure rule lives in `@aglyn/aglyn`'s
+ * `media-cdn-scope`, so the readers that must reach this handler's verdict —
+ * the composition's video facts and the besigner canvas — call the functions
+ * it calls.
+ */
+export {
+  mediaCdnAllows,
+  type MediaCdnScope,
+  type MediaCdnScopeRefusal,
+  mediaCdnScopeRefusal,
+  parseMediaCdnScope,
+} from '@aglyn/aglyn/app-utils/media-cdn-scope'
+
+const SEGMENT = MEDIA_CDN_SEGMENT
 
 /**
  * The query string to carry onto the stable URL when a stale content pin
@@ -309,95 +330,6 @@ export function mediaCdnContentSecurityPolicy(contentType: string): string {
   return MEDIA_CDN_ACTIVE_DOCUMENT_TYPES.has(type)
     ? MEDIA_CDN_ACTIVE_DOCUMENT_CSP
     : MEDIA_CDN_BASE_CSP
-}
-
-/**
- * The parsed CDN scope segment (AGL-1043). Shapes:
- *
- * - `{hostId}` — that host's own library
- * - `org:{orgId}` — the org library, ORG-WIDE assets only
- * - `org:{orgId}:{hostId}` — an org asset in one site's context
- *
- * The host is in the URL rather than sniffed from the `Host` header on
- * purpose. A header is the requester's CHOICE: anyone holding a restricted
- * asset's id could fetch it through a domain that IS permitted and get the
- * bytes, so header-based enforcement stops accidents while looking like a
- * boundary. Here the decision is a pure function of (URL, doc), and since
- * the cache key IS the URL, one host's answer can never reach another.
- */
-export interface MediaCdnScope {
-  isOrg: boolean
-  scopeId: string
-  /** Only on the `org:{orgId}:{hostId}` form. */
-  contextHostId?: string
-}
-
-export function parseMediaCdnScope(
-  scopeSegment: string,
-): MediaCdnScope | null {
-  if (!scopeSegment.startsWith('org:')) {
-    return SEGMENT.test(scopeSegment)
-      ? { isOrg: false, scopeId: scopeSegment }
-      : null
-  }
-  const parts = scopeSegment.slice('org:'.length).split(':')
-  if (parts.length > 2) return null
-  const [scopeId, contextHostId] = parts
-  if (!SEGMENT.test(scopeId ?? '')) return null
-  if (contextHostId !== undefined && !SEGMENT.test(contextHostId)) return null
-  return {
-    isOrg: true,
-    scopeId,
-    ...(contextHostId ? { contextHostId } : {}),
-  }
-}
-
-/**
- * The three ways an org asset can be refused under a CDN URL.
- *
- * They are one 404 on the wire — whether a restricted asset exists is not
- * something an anonymous caller has standing to learn — and three different
- * faults to whoever is looking at the broken page:
- *
- * - `restricted` — the asset carries a scope and this URL is not in it. The
- *   URL is what is wrong: a restricted asset has to be requested through the
- *   form that names the site (`hostQualifiedCdnPath`), and the same asset
- *   serves normally from the site it is shared with.
- * - `unscoped` — no `visibleTo` at all, so the asset is undeliverable under
- *   EVERY URL form there is. The document is what is wrong, and it means a
- *   creation path wrote it without a scope: `newResourceScopeFields` is what
- *   stops that at compile time, and the scope backfill is what repairs the
- *   documents already written (`docs/SCOPE_DRIFT.md`).
- * - `no-sites` — a stored empty array: somebody chose nobody. Equally
- *   undeliverable, and NOT repairable by the backfill, which leaves an empty
- *   array alone rather than widening a resource nobody asked to widen — so
- *   this one needs a person either way.
- */
-export type MediaCdnScopeRefusal = 'restricted' | 'unscoped' | 'no-sites'
-
-/** Why the asset is refused under this URL; `null` when it is not. */
-export function mediaCdnScopeRefusal(
-  scope: MediaCdnScope,
-  visibleTo: unknown,
-): MediaCdnScopeRefusal | null {
-  // Host-library assets are private by construction and carry no
-  // `visibleTo`, so only the org branch is scoped at all.
-  if (!scope.isOrg) return null
-  if (!Array.isArray(visibleTo)) return 'unscoped'
-  if (!visibleTo.length) return 'no-sites'
-  const scoped = visibleTo as string[]
-  const allowed = scope.contextHostId
-    ? visibleToHost(scoped, scope.contextHostId)
-    : isOrgWideScope(scoped)
-  return allowed ? null : 'restricted'
-}
-
-/** Whether the asset may be served under this URL. */
-export function mediaCdnAllows(
-  scope: MediaCdnScope,
-  visibleTo: unknown,
-): boolean {
-  return mediaCdnScopeRefusal(scope, visibleTo) === null
 }
 
 /**

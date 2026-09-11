@@ -37,18 +37,23 @@
  *
  * ## The rule
  *
- * The tenant's composition reads each placed film's document
- * (`libs/tenant/runtime/src/lib/get-video-asset-facts.ts`) and lays what it
- * records over the node here:
+ * Two surfaces read each placed film's document and lay what it records over
+ * the node here: the tenant's composition, for the page a visitor gets
+ * (`libs/tenant/runtime/src/lib/get-video-asset-facts.ts`), and the besigner
+ * canvas, for the page an author edits (AGL-2838, the console's
+ * `BesignerVideoAssetFactsProvider`). Both decide what a document answers
+ * through {@link videoAssetFactsFromDocument} and apply the answer through
+ * {@link applyVideoAssetFacts}, so the editor cannot show a film differently
+ * from the page:
  *
  * - **The asset answered.** Its facts win, including their ABSENCE. A film the
  *   replace left with no `video` record has no known shape, so a stored pair
  *   describing the previous film is dropped rather than published, and a
  *   poster flag the document no longer backs is dropped with it.
- * - **The asset could not be answered for** — a failed read, a missing or
- *   deleted document, a film the CDN would not serve under this page's URL.
- *   The node keeps what the pick stored, which is the render every page had
- *   before this and never a worse one.
+ * - **The asset could not be answered for** — a failed or pending read, a
+ *   missing or deleted document, a film the CDN would not serve under this
+ *   page's URL. The node keeps what the pick stored, which is the render every
+ *   page had before this and never a worse one.
  *
  * One stored value survives an answered read: a running time the AUTHOR typed
  * for a film the DAM has no running time for. The pick only ever writes the
@@ -58,12 +63,14 @@
  * standing beside a pair is a copy of a film that may no longer be the one in
  * the bucket.
  *
- * Server-only, beside `video-object.ts`: the composition is the only caller,
- * and nothing here has a reason to reach a published page's bundle.
+ * Out of every barrel: `@aglyn/aglyn` re-exports `app-utils/server` into
+ * published pages, and nothing here has a reason to reach one, so the
+ * composition and the console both import this module by path.
  */
 
+import { mediaCdnScopeRefusal, parseMediaCdnScope } from './media-cdn-scope'
 import { videoMediaProps } from './media-metadata'
-import { type MediaRef, parseMediaRef } from './media-ref'
+import { hostQualifiedScope, type MediaRef, parseMediaRef } from './media-ref'
 import { VIDEO_COMPONENT_ID } from './video-object'
 
 /**
@@ -79,6 +86,25 @@ export interface VideoAssetFacts {
   /** The document's generated `poster` record, when it has one. */
   poster?: unknown
 }
+
+/**
+ * Every field a film's facts are decided from, and the projection a reader
+ * asks Firestore for — ONE list. `video` and `poster` are the facts. The other
+ * three are the gates `serveMediaCdn` applies before it serves a film at all,
+ * so no surface shows the length or shape of a film the page's URL refuses.
+ */
+export const VIDEO_ASSET_FACT_FIELDS = [
+  'video',
+  'poster',
+  'deletedAt',
+  'private',
+  'visibleTo',
+] as const
+
+/** A film's media document, as far as {@link VIDEO_ASSET_FACT_FIELDS} reach. */
+export type VideoAssetDocument = Partial<
+  Record<(typeof VIDEO_ASSET_FACT_FIELDS)[number], unknown>
+>
 
 /** A node as the composed map holds it — flat, children by id. */
 interface ComposedVideoNode {
@@ -98,6 +124,44 @@ export function videoAssetFactsKey(
   ref: Pick<MediaRef, 'scope' | 'mediaId'>,
 ): string {
   return `${ref.scope}/${ref.mediaId}`
+}
+
+/**
+ * Where a film's media document lives: under the scope's OWNER — `orgs/` for
+ * the org library, `hosts/` for a site's own — whichever site places it.
+ * `null` for a scope the CDN would not parse, which no read can answer for.
+ */
+export function videoAssetDocumentPath(
+  ref: Pick<MediaRef, 'scope' | 'mediaId'>,
+): string | null {
+  const scope = parseMediaCdnScope(ref.scope)
+  if (!scope) return null
+  return `${scope.isOrg ? 'orgs' : 'hosts'}/${scope.scopeId}/media/${ref.mediaId}`
+}
+
+/**
+ * The facts one read of a film's document yields for a placement rendered on
+ * `hostId`'s pages, or `undefined` when the placement keeps its stored props.
+ *
+ * An answer exists only for a document that was read, is live, is not
+ * private, and is visible to that site under the host-qualified scope the page
+ * renders — the verdict the CDN reaches when the player asks for the bytes.
+ * The URL a page renders names the site doing the rendering
+ * (`resolveMediaSrc`), so visibility is asked of THAT scope, not of the scope
+ * the reference was stored with.
+ */
+export function videoAssetFactsFromDocument(
+  document: VideoAssetDocument | null | undefined,
+  ref: Pick<MediaRef, 'scope'>,
+  hostId: string,
+): VideoAssetFacts | undefined {
+  if (!document) return undefined
+  if (document.deletedAt || document.private === true) return undefined
+  const served = parseMediaCdnScope(hostQualifiedScope(ref.scope, hostId))
+  if (!served || mediaCdnScopeRefusal(served, document.visibleTo)) {
+    return undefined
+  }
+  return { video: document.video, poster: document.poster }
 }
 
 /** The library film a node plays, or null for anything else. */

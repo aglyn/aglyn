@@ -22,6 +22,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { doc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
+import BesignerVideoAssetFactsProvider from './besigner-video-asset-facts-provider.component'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface BesignerMediaPickerProviderProps {
@@ -82,7 +83,12 @@ export function BesignerMediaPickerProvider(
 
   return (
     <MediaPickerContext.Provider value={value}>
-      {children}
+      {/* The canvas's films answer from their DAM documents (AGL-2838).
+          Mounted here because every besigner surface mounts this provider
+          with its site, and the designer's media reads already come from it. */}
+      <BesignerVideoAssetFactsProvider hostId={hostId}>
+        {children}
+      </BesignerVideoAssetFactsProvider>
       <MediaPickerDialog
         hostId={hostId}
         open={open}

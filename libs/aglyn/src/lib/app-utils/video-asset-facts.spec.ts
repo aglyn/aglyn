@@ -24,9 +24,12 @@
  * node — `VideoObject` and the player's box — follow the asset.
  */
 
+import { hostScopeToken } from './scope-tokens'
 import {
   applyVideoAssetFacts,
   type VideoAssetFacts,
+  videoAssetDocumentPath,
+  videoAssetFactsFromDocument,
   videoAssetFactsKey,
   videoAssetRefs,
 } from './video-asset-facts'
@@ -203,5 +206,91 @@ describe('videoAssetRefs', () => {
   it('is empty for a page with no library film, and for no page at all', () => {
     expect(videoAssetRefs({ a: { componentId: 'text', props: {} } })).toEqual([])
     expect(videoAssetRefs(null)).toEqual([])
+  })
+})
+
+/**
+ * The composition and the besigner canvas read a film's document through
+ * these two, so they are what keeps the editor and the page agreeing about
+ * which films answer (AGL-2838).
+ */
+describe('where a film is read from, and what the read answers', () => {
+  const RECORDS = { video: REPLACED.video, poster: REPLACED.poster }
+
+  it("reads an org film from the org library and a site film from the site's own", () => {
+    expect(videoAssetDocumentPath({ scope: 'org:acme', mediaId: 'film' })).toBe(
+      'orgs/acme/media/film',
+    )
+    expect(
+      videoAssetDocumentPath({ scope: 'org:acme:site9', mediaId: 'film' }),
+    ).toBe('orgs/acme/media/film')
+    expect(videoAssetDocumentPath({ scope: 'site1', mediaId: 'film' })).toBe(
+      'hosts/site1/media/film',
+    )
+  })
+
+  it('reads nothing for a scope the CDN would not parse', () => {
+    expect(
+      videoAssetDocumentPath({ scope: 'not a scope', mediaId: 'film' }),
+    ).toBeNull()
+    expect(
+      videoAssetDocumentPath({ scope: 'org:acme:site1:extra', mediaId: 'film' }),
+    ).toBeNull()
+  })
+
+  it("answers with the document's records for a film this site may be shown", () => {
+    expect(
+      videoAssetFactsFromDocument(
+        { ...RECORDS, visibleTo: ['org'] },
+        { scope: 'org:acme' },
+        'site1',
+      ),
+    ).toEqual(RECORDS)
+    expect(
+      videoAssetFactsFromDocument(RECORDS, { scope: 'site1' }, 'site1'),
+    ).toEqual(RECORDS)
+  })
+
+  it('answers nothing for a film that is gone, deleted or private', () => {
+    expect(
+      videoAssetFactsFromDocument(undefined, { scope: 'site1' }, 'site1'),
+    ).toBeUndefined()
+    expect(
+      videoAssetFactsFromDocument(
+        { ...RECORDS, deletedAt: 1 },
+        { scope: 'site1' },
+        'site1',
+      ),
+    ).toBeUndefined()
+    expect(
+      videoAssetFactsFromDocument(
+        { ...RECORDS, private: true },
+        { scope: 'site1' },
+        'site1',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('asks visibility of the site rendering the film, not the scope it was stored with', () => {
+    const restricted = { ...RECORDS, visibleTo: [hostScopeToken('site9')] }
+    expect(
+      videoAssetFactsFromDocument(restricted, { scope: 'org:acme:site9' }, 'site1'),
+    ).toBeUndefined()
+    expect(
+      videoAssetFactsFromDocument(restricted, { scope: 'org:acme' }, 'site9'),
+    ).toEqual(RECORDS)
+  })
+
+  it('refuses an org film with no scope, or shared with no site, as the CDN does', () => {
+    expect(
+      videoAssetFactsFromDocument(RECORDS, { scope: 'org:acme' }, 'site1'),
+    ).toBeUndefined()
+    expect(
+      videoAssetFactsFromDocument(
+        { ...RECORDS, visibleTo: [] },
+        { scope: 'org:acme' },
+        'site1',
+      ),
+    ).toBeUndefined()
   })
 })

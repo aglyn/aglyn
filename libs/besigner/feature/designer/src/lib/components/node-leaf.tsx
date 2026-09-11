@@ -46,6 +46,7 @@ import CanvasRevealContext, {
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
+import { useNodeWithVideoAssetFacts } from '../hooks/use-video-asset-facts-overlay'
 import {
   isNodeHiddenOnSite,
   isNodeRevealedOnCanvas,
@@ -55,19 +56,35 @@ import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
 
 /**
+ * The plain `Leaf`, drawing a placed film with its DAM asset's current facts
+ * (AGL-2838).
+ *
+ * For the nodes the canvas renders that are not canvas nodes — a component
+ * instance's definition, a placed form's design, the layout chrome — and so
+ * never reach `NodeLeaf`. A film inside one of them still has to show the
+ * shape and poster the published page gives it.
+ */
+export const VideoFactsLeaf = forwardRef<any, LeafProps>((props, ref) => {
+  const { node, ...rest } = props
+  const shown = useNodeWithVideoAssetFacts(node)
+  return <Leaf ref={ref} node={shown} {...rest} />
+})
+VideoFactsLeaf.displayName = 'VideoFactsLeaf'
+
+/**
  * Renderer overrides for the inside of a component instance (AGL-1251).
  *
- * The plain `Leaf`, deliberately, where the canvas otherwise uses `NodeLeaf`:
- * the definition's nodes are NOT in the canvas, so anything that made them
- * draggable, selectable or droppable would be reaching for canvas state that
- * has no entry for them. Rendering them inert is not a restriction bolted on
- * afterwards — it is the only thing these nodes can be.
+ * The plain `Leaf` (through `VideoFactsLeaf`), deliberately, where the canvas
+ * otherwise uses `NodeLeaf`: the definition's nodes are NOT in the canvas, so
+ * anything that made them draggable, selectable or droppable would be reaching
+ * for canvas state that has no entry for them. Rendering them inert is not a
+ * restriction bolted on afterwards — it is the only thing these nodes can be.
  */
 const INERT_RENDERER = {
   TrunkComponent: Trunk,
   StemComponent: Stem,
   BranchComponent: Branch,
-  LeafComponent: Leaf,
+  LeafComponent: VideoFactsLeaf,
 }
 
 /**
@@ -282,6 +299,13 @@ export const NodeLeaf = observer(
       [renderNode, node, mutedClasses],
     )
 
+    // A placed film's length, shape and poster as its DAM asset records them
+    // NOW (AGL-2838). The published page lays the asset over the node when it
+    // is composed, so the canvas lays it over the same render copy: a replace
+    // shows here as it shows to a visitor, while selection, the panels and
+    // every save keep reading the node's stored props.
+    const shownNode = useNodeWithVideoAssetFacts(renderNodeUnclassed)
+
     // A component instance renders its definition (AGL-1251) instead of the
     // named dashed box. Authors placed a hero and saw a grey rectangle, so
     // the props they filled in were invisible until Preview.
@@ -426,7 +450,7 @@ export const NodeLeaf = observer(
       >
         <Leaf
           ref={registerElement}
-          node={renderNodeUnclassed as typeof node}
+          node={shownNode as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
           // Present while the selection lives in this node's subtree (the
           // node itself or any descendant). Canvas-aware components (nav
