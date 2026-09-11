@@ -3644,7 +3644,9 @@ describe('org-shared data (AGL-237)', () => {
       deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
     )
     await assertFails(deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1')))
-    await assertSucceeds(
+    // A contact is created by the server, never by a client role (AGL-2819):
+    // the capture doors and the create route judge the band and dedupe.
+    await assertFails(
       setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
     )
     await assertFails(
@@ -9673,6 +9675,69 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
   })
 })
 
+/**
+ * A CONTACT IS BROUGHT INTO BEING BY THE SERVER (AGL-2819).
+ *
+ * Every door that creates a contact is a server path — the capture doors,
+ * the create route, the imports and lead conversion — and each one judges the
+ * audience band, dedupes on the address and asks the plan for a person added
+ * by hand. A client create skipped all of that, and could carry any facet or
+ * consent entry it liked. Staff keep the create, for support.
+ */
+describe('a contact is created by the server, never by the client (AGL-2819)', () => {
+  const setOrg = (fields) =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG), fields, { merge: true })
+    })
+
+  it('refuses a client create of a contact to every role, on every plan', async () => {
+    for (const plan of ['free', 'pro']) {
+      await setOrg({ plan })
+      await mustDeny(
+        `the owner creating a bare contact on ${plan}`,
+        setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', `bare-${plan}`), {
+          email: `bare-${plan}@acme.test`,
+          visibleTo: ['org'],
+        }),
+      )
+      await mustDeny(
+        `the owner creating a contact carrying an owner, a stage and consent on ${plan}`,
+        setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', `loaded-${plan}`), {
+          email: `loaded-${plan}@acme.test`,
+          visibleTo: ['org'],
+          facets: {
+            [HOST]: {
+              sources: {},
+              interactions: [],
+              ownerUid: OWNER,
+              lifecycleStage: 'customer',
+              custom: { tier: 'gold' },
+            },
+          },
+          marketingConsentByHost: { [HOST]: { marketingConsent: true } },
+        }),
+      )
+      await mustDeny(
+        `a site editor creating a contact on its own site on ${plan}`,
+        setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', `editor-${plan}`), {
+          email: `editor-${plan}@acme.test`,
+          visibleTo: [`host:${HOST}`],
+        }),
+      )
+    }
+  })
+
+  it('keeps the create for staff — the control', async () => {
+    await mustAllow(
+      "staff creating a contact on a workspace's behalf",
+      setDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', 'by-staff'), {
+        email: 'by-staff@acme.test',
+        visibleTo: ['org'],
+      }),
+    )
+  })
+})
+
 describe('a publish outbox entry may only be written for a host you can publish to (AGL-2575)', () => {
   const OUTBOX = 'publishOutbox'
   /** An entry shaped exactly as `stagePublishOutboxEntry` writes one. */
@@ -9871,7 +9936,10 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'c-seeded'), {
         email: 'buyer@acme.test',
-        visibleTo: ['org'],
+        visibleTo: ['org', `host:${HOST}`],
+        // One site's half, which a member lets go of: the one contact write
+        // a client still makes (AGL-2804, AGL-2819).
+        facets: { [HOST]: { sources: {}, interactions: [] } },
       })
     })
   })
@@ -9888,9 +9956,9 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
       ),
     )
     await mustAllow(
-      'a verified owner adding a contact to the audience',
-      setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c-verified'), {
-        email: 'buyer@acme.test', visibleTo: ['org'],
+      'a verified owner letting a site go from a contact in the audience',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c-seeded'), {
+        [`facets.${HOST}`]: deleteField(),
       }),
     )
     await mustAllow(
@@ -9931,9 +9999,9 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
 
   it('refuses the AUDIENCE — contacts, segments, topics, lists and datasets', async () => {
     await mustDeny(
-      'an unverified owner adding a contact',
-      setDoc(doc(unverified(OWNER), 'orgs', ORG, 'contacts', 'c-new'), {
-        email: 'someone@acme.test', visibleTo: ['org'],
+      'an unverified owner letting a site go from a contact',
+      updateDoc(doc(unverified(OWNER), 'orgs', ORG, 'contacts', 'c-seeded'), {
+        [`facets.${HOST}`]: deleteField(),
       }),
     )
     await mustDeny(

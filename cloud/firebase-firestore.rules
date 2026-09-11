@@ -1137,6 +1137,12 @@ service cloud.firestore {
        * other case has to be an update. A privacy ERASURE is not this path
        * and goes through the Admin SDK, which these rules do not gate.
        *
+       * A CONTACT IS CREATED BY THE SERVER (AGL-2819). Every door that brings
+       * a person in — a capture, the create route, an import, a lead's
+       * conversion — is an Admin-SDK path that judges the audience band,
+       * dedupes on the address and asks the plan for a person added by hand,
+       * so a client create is refused. Staff keep theirs, for support.
+       *
        * AN UPDATE ONLY LETS A HOLDER GO (AGL-2804). Each holder's records
        * live in a facet no rule can look inside for one holder, so the
        * profile, the owner, the stage, the company, the custom values, the
@@ -1146,8 +1152,7 @@ service cloud.firestore {
        */
       match /contacts/{contactId} {
         allow read: if isStaff() || canReadScopedPeople();
-        allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped());
+        allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
            contactUpdateOnlyLetsGo());
