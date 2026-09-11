@@ -128,15 +128,15 @@ const INTRINSIC_SIZE_COMPONENT_IDS = new Set(['image'])
  * The intrinsic `width`/`height` to copy onto a node when an author picks a
  * library asset for it (AGL-2486).
  *
- * ## Why the copy happens at pick time
+ * ## Why the copy happens at pick time, and why it is not the last word
  *
- * No tenant render path reads an image's media document — the loaders walk
- * screens, versions, components, layouts and datasets, and the only
- * server-side read of an image's document runs on the ASSET request, long
- * after the HTML is emitted. So the dimensions can reach an `<img>` in one of
- * two ways: a Firestore read per image added to the hottest ISR-cached path,
- * or two numbers carried on the node like every other prop. This is the
- * second. A placed film is the exception — see `video-asset-facts.ts`.
+ * The pair rides on the node like every other prop, so the editor canvas, and
+ * any page whose asset cannot be read, still reserve a box. It is not the last
+ * word. A replace rewrites the asset's `width`/`height` and cannot reach the
+ * nodes that copied them, so the tenant composition reads every placed
+ * image's document, in one projected batch per page, and lays its current
+ * pair over this one (`media-asset-facts.ts`, AGL-2833). What is written here
+ * is what a page shows when that read cannot answer.
  *
  * ## Why it matters
  *
@@ -189,12 +189,12 @@ const VIDEO_COMPONENT_ID = 'video'
  * node when an author picks a video asset (AGL-2741, rewritten against the
  * real document shape in AGL-2749).
  *
- * Same route as the image dimensions, and not the last word the way theirs
- * is. A replace rewrites the asset's `video` and `poster` records and cannot
- * reach the nodes that copied them, so the tenant composition reads each
- * placed film's document and lays its current records over these
- * (`video-asset-facts.ts`, AGL-2807). What is written here is what a page
- * shows when that read cannot answer.
+ * Same route as the image dimensions, and like theirs not the last word. A
+ * replace rewrites the asset's `video` and `poster` records and cannot reach
+ * the nodes that copied them, so the tenant composition reads each placed
+ * film's document, in the same batch as the images', and lays its current
+ * records over these (`media-asset-facts.ts`, AGL-2807). What is written here
+ * is what a page shows when that read cannot answer.
  *
  * ## Why a video does not simply use {@link intrinsicMediaSize}
  *
