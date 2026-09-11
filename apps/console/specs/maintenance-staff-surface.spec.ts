@@ -31,8 +31,11 @@
  *
  * 1. **A staff ID token authorizes**, and the cron secret still does — the
  *    scheduler has no user and must keep working.
- * 2. **A non-staff token does not**, and neither does no credential, an
- *    unverifiable token, or an unverified email. Fails closed at every step.
+ * 2. **A non-staff token does not**, and neither does no credential, a token
+ *    Firebase refuses, or an unverified email. Fails closed at every step —
+ *    and a token that could not be CHECKED at all is a 500, never a refusal,
+ *    so an outage pages instead of telling staff their sign-in is bad
+ *    (AGL-2816).
  * 3. **A staff REAL run is refused without a reason**, on all three.
  * 4. **A staff REAL run on a DESTRUCTIVE job is refused without the exact
  *    typed phrase** — the control that makes a one-click irreversible sweep
@@ -293,12 +296,41 @@ describe('staff maintenance surface (AGL-1949)', () => {
           expect(response.status).toBe(401)
         })
 
-        it('refuses a token that will not verify', async () => {
-          mockVerifyIdToken.mockRejectedValue(new Error('expired'))
+        it('refuses a token Firebase refuses', async () => {
+          mockVerifyIdToken.mockRejectedValue(
+            Object.assign(new Error('Firebase ID token has expired.'), {
+              code: 'auth/id-token-expired',
+            }),
+          )
           const response = await load(route.module).GET(
             req(route.path, 'GET', STAFF),
           )
           expect(response.status).toBe(401)
+        })
+
+        it('answers 500, never 401, when the token could not be checked', async () => {
+          // firebase-admin reports its own certificate fetch failing under the
+          // code a forged token gets; only the message tells them apart.
+          mockVerifyIdToken.mockRejectedValue(
+            Object.assign(
+              new Error(
+                'Error fetching public keys for Google certs: connect ETIMEDOUT',
+              ),
+              { code: 'auth/argument-error' },
+            ),
+          )
+          const logged = jest
+            .spyOn(console, 'error')
+            .mockImplementation(() => undefined)
+          try {
+            const response = await load(route.module).GET(
+              req(route.path, 'GET', STAFF),
+            )
+            expect(response.status).toBe(500)
+            expect(didWork()).toBe(false)
+          } finally {
+            logged.mockRestore()
+          }
         })
 
         it('ACCEPTS a staff token for a dry run', async () => {

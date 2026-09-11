@@ -98,7 +98,15 @@ async function handler(request: Request): Promise<Response> {
   // Staff, or the scheduler (AGL-1949). This route was cron-secret-only, so
   // the artifacts bucket — already invisible to the Firebase console — could
   // only be inspected from a shell holding the production secret.
-  const actor = await authorizeMaintenanceActor(headers)
+  let actor: Awaited<ReturnType<typeof authorizeMaintenanceActor>>
+  try {
+    actor = await authorizeMaintenanceActor(headers)
+  } catch (error) {
+    // A staff token that could not be checked at all: an outage, not a
+    // refusal, so it answers 500 rather than 401 (AGL-2816).
+    console.error('[admin/reap-plugin-artifacts] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
+  }
   if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }

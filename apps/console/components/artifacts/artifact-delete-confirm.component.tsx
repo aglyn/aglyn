@@ -63,6 +63,30 @@ export function ArtifactDeleteConfirmDescription(
   props: ArtifactDeleteConfirmProps,
 ) {
   const { kind, name, scan } = props
+  return (
+    <>
+      <span>{deleteConfirmationLead(kind, name)}</span>
+      <ArtifactUsageNote kind={kind} scan={scan} />
+    </>
+  )
+}
+ArtifactDeleteConfirmDescription.displayName =
+  'ArtifactDeleteConfirmDescription'
+
+/**
+ * The where-used sentence alone, filled in when the scan lands (AGL-703).
+ *
+ * Apart from the lead so a dialog that already names what it deletes in its
+ * own words — the collection delete, whose lead names the address that goes
+ * with it (AGL-2806) — carries the same usage warning a screen delete does
+ * rather than a second copy of it. Inline, for the `<p>` reason above.
+ */
+export function ArtifactUsageNote(props: {
+  kind: ArtifactUsageKind
+  /** The usage scan, already in flight — see {@link ArtifactDeleteConfirmProps}. */
+  scan: Promise<ArtifactUsageScan | null>
+}) {
+  const { kind, scan } = props
   const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
@@ -83,17 +107,11 @@ export function ArtifactDeleteConfirmDescription(
     }
   }, [scan, kind])
 
-  return (
-    <>
-      <span>{deleteConfirmationLead(kind, name)}</span>
-      {/* Announced when it lands: a sighted author sees the sentence appear,
-          and this is the equivalent for one who does not. */}
-      <span aria-live="polite">{note ?? SCAN_PENDING_NOTE}</span>
-    </>
-  )
+  // Announced when it lands: a sighted author sees the sentence appear, and
+  // this is the equivalent for one who does not.
+  return <span aria-live="polite">{note ?? SCAN_PENDING_NOTE}</span>
 }
-ArtifactDeleteConfirmDescription.displayName =
-  'ArtifactDeleteConfirmDescription'
+ArtifactUsageNote.displayName = 'ArtifactUsageNote'
 
 /**
  * Starts the where-used scan for a delete confirmation.

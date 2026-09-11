@@ -167,6 +167,16 @@ describe('invalidIdTokenResponse — something broke on OUR side (AGL-1993)', ()
  * being correct and unreferenced is the shape this repo keeps finding (written
  * but never read), so the wiring is pinned rather than assumed.
  *
+ * ## Helpers a route awaits are swept too
+ *
+ * A route that hands its Authorization header to a helper never calls
+ * `.verifyIdToken(` itself, so a sweep of route files alone never reads the
+ * catch that decides the answer. That catch is where
+ * `authorizeMaintenanceActor` and `requirePasskeyEligibleUser` folded every
+ * throw into a refusal, so a Google certificate outage answered 401 on six
+ * doors and paged nobody (AGL-2816). Every console source file that verifies a
+ * token is therefore held to the same two checks as a route.
+ *
  * ## Why it reads the catch, not only the file
  *
  * "The file calls the helper" passes a route with two verifications and one
@@ -183,9 +193,10 @@ describe('invalidIdTokenResponse — something broke on OUR side (AGL-1993)', ()
  * cannot hide a regression: the route must still verify a token, and the catch
  * around its verification must be unable to answer 5xx at all.
  */
-describe('every console route that verifies a token uses it (AGL-1993, AGL-2796)', () => {
+describe('every console route, and every helper verifying for one, uses it (AGL-1993, AGL-2796, AGL-2816)', () => {
   const REPO_ROOT = resolve(__dirname, '../../..')
   const CALLS_HELPER = /\binvalidIdTokenResponse\(/
+  const ROUTE_FILE = /\/route\.tsx?$/
 
   const DELIBERATE_EXCEPTIONS: Readonly<Record<string, string>> = {
     'apps/console/app/api/[...pluginApi]/route.ts':
@@ -199,14 +210,21 @@ describe('every console route that verifies a token uses it (AGL-1993, AGL-2796)
 
   const read = (file: string) => readFileSync(join(REPO_ROOT, file), 'utf8')
 
-  const verifying = execFileSync(
-    'git',
-    ['ls-files', '--', 'apps/console/app/api'],
-    { cwd: REPO_ROOT, encoding: 'utf8' },
-  )
+  /** Every tracked console source file that verifies a token, specs aside. */
+  const verifying = execFileSync('git', ['ls-files', '--', 'apps/console'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  })
     .split('\n')
-    .filter((file) => /\/route\.tsx?$/.test(file))
+    .filter((file) => /\.tsx?$/.test(file))
+    .filter(
+      (file) =>
+        !/\.spec\.tsx?$/.test(file) && !file.startsWith('apps/console/specs/'),
+    )
     .filter((file) => /\.verifyIdToken\(/.test(read(file)))
+
+  /** Of those, the ones a route awaits for its verdict rather than a route. */
+  const helpers = verifying.filter((file) => !ROUTE_FILE.test(file))
 
   const parse = (file: string) =>
     ts.createSourceFile(
@@ -260,12 +278,25 @@ describe('every console route that verifies a token uses it (AGL-1993, AGL-2796)
   it('sweeps admin and non-admin routes alike', () => {
     // Anti-vacuity: a sweep that reads nothing passes everything, and a
     // silently-empty guard is the thing that lets a regression through.
-    expect(verifying.length).toBeGreaterThan(130)
-    expect(verifying).toContain('apps/console/app/api/admin/users/route.ts')
-    expect(verifying).toContain('apps/console/app/api/hosts/delete/route.ts')
+    const routes = verifying.filter((file) => ROUTE_FILE.test(file))
+    expect(routes.length).toBeGreaterThan(130)
+    expect(routes).toContain('apps/console/app/api/admin/users/route.ts')
+    expect(routes).toContain('apps/console/app/api/hosts/delete/route.ts')
   })
 
-  it('leaves no route that never consults it', () => {
+  it('sweeps the helpers that verify on a route’s behalf, not only route files', () => {
+    // Six routes reach a token through these two and never call
+    // `.verifyIdToken(` themselves, so a sweep that missed them would pass
+    // every one of those routes without reading the catch that answers.
+    expect(helpers).toEqual(
+      expect.arrayContaining([
+        'apps/console/app/api/auth/passkeys/_lib/passkey-auth.ts',
+        'apps/console/utils/server/maintenance-actor.ts',
+      ]),
+    )
+  })
+
+  it('leaves no route or helper that never consults it', () => {
     const missing = verifying.filter(
       (file) => !(file in DELIBERATE_EXCEPTIONS) && !CALLS_HELPER.test(read(file)),
     )

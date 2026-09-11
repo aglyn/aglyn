@@ -40,6 +40,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../app/api/_lib/invalid-id-token-response'
 import { isCronAuthorized } from '../cron-auth'
 import type { MaintenanceJobDescriptor } from '../maintenance-jobs'
 
@@ -51,10 +52,15 @@ export interface MaintenanceActor {
 /**
  * The scheduler, a staff member, or nobody.
  *
- * FAILS CLOSED at every step: an unreadable token, an unverified email and a
- * token with no `staff` claim all return null, and so does any throw. AGL-1993
+ * FAILS CLOSED at every step: a missing token, a token Firebase refuses, an
+ * unverified email and a token with no `staff` claim all return null. AGL-1993
  * found the staff claim is minted correctly and was being read wrong on the
  * client, so this keys on the decoded claim and nothing else.
+ *
+ * THROWS when a staff token could not be checked at all — a Google certificate
+ * outage, or a failure that carries no auth code (AGL-2816). That is not a
+ * refusal: read as one, it answers 401 during an outage, tells staff their
+ * sign-in is bad, and pages nobody. Callers catch it into a 500.
  */
 export async function authorizeMaintenanceActor(
   headers: Partial<Record<string, string>>,
@@ -70,8 +76,11 @@ export async function authorizeMaintenanceActor(
     if (!decoded.email_verified && !isImpersonationSession(decoded)) return null
     if (!decoded['staff']) return null
     return { uid: decoded.uid, kind: 'staff' }
-  } catch {
-    return null
+  } catch (error) {
+    // The same classification every console route answers with (AGL-1993):
+    // a refused credential is no actor, and anything else is thrown on.
+    if (invalidIdTokenResponse(error)) return null
+    throw error
   }
 }
 
