@@ -9676,6 +9676,68 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
 })
 
 /**
+ * A CONTACT'S CONSENT IS NOT A CLIENT'S TO GRANT (AGL-2821).
+ *
+ * `marketingConsentByHost` is the stored basis list enrollment carries across
+ * as the person's own opt-in (`assignmentBasis`). A client that could add or
+ * change an entry could mint an opt-in nobody gave. Letting a holder go
+ * removes that holder's entries, and removing is all a client may do.
+ */
+describe("a contact's consent entries only shrink from the client (AGL-2821)", () => {
+  const PERSON = 'consent-person'
+  const contact = (uid) => doc(authed(uid), 'orgs', ORG, 'contacts', PERSON)
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', PERSON), {
+        email: 'person@acme.test',
+        visibleTo: ['org', `host:${HOST}`, 'host:host-b'],
+        capturedByHostIds: [HOST, 'host-b'],
+        marketingConsentByHost: {
+          [HOST]: { marketingConsent: false, marketingConsentAtMs: 1 },
+          'host-b': { marketingConsent: true, marketingConsentAtMs: 1 },
+        },
+        facets: {
+          [HOST]: { sources: { form: true }, interactions: [] },
+          'host-b': { sources: { form: true }, interactions: [] },
+        },
+      })
+    })
+  })
+
+  it('refuses a client adding, changing or replacing a consent entry', async () => {
+    await mustDeny(
+      'the owner granting consent for a site that recorded none',
+      updateDoc(contact(OWNER), {
+        'marketingConsentByHost.host-c': { marketingConsent: true, marketingConsentAtMs: 2 },
+      }),
+    )
+    await mustDeny(
+      'the owner turning a recorded refusal into a grant',
+      updateDoc(contact(OWNER), { [`marketingConsentByHost.${HOST}.marketingConsent`]: true }),
+    )
+    await mustDeny(
+      'the owner replacing the whole map',
+      updateDoc(contact(OWNER), {
+        marketingConsentByHost: { [HOST]: { marketingConsent: true, marketingConsentAtMs: 2 } },
+      }),
+    )
+  })
+
+  it('lets a holder go with its consent entries — the control', async () => {
+    await mustAllow(
+      "the owner removing site B's half, consent included",
+      updateDoc(contact(OWNER), {
+        'facets.host-b': deleteField(),
+        'marketingConsentByHost.host-b': deleteField(),
+        visibleTo: arrayRemove('host:host-b'),
+        capturedByHostIds: arrayRemove('host-b'),
+      }),
+    )
+  })
+})
+
+/**
  * A CONTACT IS BROUGHT INTO BEING BY THE SERVER (AGL-2819).
  *
  * Every door that creates a contact is a server path — the capture doors,

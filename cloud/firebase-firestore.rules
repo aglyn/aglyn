@@ -1015,7 +1015,11 @@ service cloud.firestore {
        *    facet, its consent entries, its scope token and its capture
        *    attribution — and nothing a capture, a merge or a save writes;
        *  - `facets` only LOSES holders: no facet is added, and none that
-       *    stays is changed in the same write.
+       *    stays is changed in the same write;
+       *  - `marketingConsentByHost` only LOSES entries (AGL-2821). An entry
+       *    is the stored basis list enrollment carries across as the
+       *    person's own opt-in, and a client that could add or change one
+       *    could mint an opt-in nobody gave.
        *
        * Deleting the document outright is the delete rule's question.
        */
@@ -1026,7 +1030,11 @@ service cloud.firestore {
           request.resource.data.get('facets', {}).diff(resource.data.get('facets', {}))
             .addedKeys().size() == 0 &&
           request.resource.data.get('facets', {}).diff(resource.data.get('facets', {}))
-            .changedKeys().size() == 0;
+            .changedKeys().size() == 0 &&
+          request.resource.data.get('marketingConsentByHost', {})
+            .diff(resource.data.get('marketingConsentByHost', {})).addedKeys().size() == 0 &&
+          request.resource.data.get('marketingConsentByHost', {})
+            .diff(resource.data.get('marketingConsentByHost', {})).changedKeys().size() == 0;
       }
       /**
        * Create-time twin of `canReadScoped` — it reads `request.resource`
