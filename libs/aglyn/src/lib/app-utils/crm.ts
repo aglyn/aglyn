@@ -1613,6 +1613,35 @@ export function readContactCompanyLink(
 }
 
 /**
+ * Every holder whose facet names this company, in no order.
+ *
+ * What a company's DELETION clears. Unlike a link change, which is one
+ * holder's, a deletion takes the record away from every holder at once: a
+ * facet still naming it would be a link to nothing, on a surface its holder
+ * has no reason to revisit. Nothing else about another holder's facet is
+ * read.
+ */
+export function contactGroupsNamingCompany(
+  contact: Record<string, unknown> | null | undefined,
+  companyId: string,
+): string[] {
+  const facets = (contact ?? {})[CONTACT_FACETS_FIELD]
+  if (!companyId || !facets || typeof facets !== 'object' || Array.isArray(facets)) {
+    return []
+  }
+  return Object.entries(facets as Record<string, unknown>)
+    .filter(([, facet]) =>
+      Boolean(
+        facet &&
+          typeof facet === 'object' &&
+          !Array.isArray(facet) &&
+          (facet as Record<string, unknown>)['companyId'] === companyId,
+      ),
+    )
+    .map(([groupId]) => groupId)
+}
+
+/**
  * How the mirror changes. Three shapes because Firestore takes ONE transform
  * per field per write: an `arrayUnion` and an `arrayRemove` on the same
  * field cannot share an update, so a move rewrites the array whole.

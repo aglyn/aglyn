@@ -33,6 +33,8 @@ import {
 } from '@firebase/rules-unit-testing'
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   deleteField,
@@ -3642,7 +3644,9 @@ describe('org-shared data (AGL-237)', () => {
       deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1', 'members', 'm1')),
     )
     await assertFails(deleteDoc(doc(authed(OWNER), 'orgs', ORG, 'lists', 'l1')))
-    await assertSucceeds(
+    // A contact is created by the server, never by a client role (AGL-2819):
+    // the capture doors and the create route judge the band and dedupe.
+    await assertFails(
       setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
     )
     await assertFails(
@@ -9514,6 +9518,288 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
   })
 })
 
+/**
+ * A CONTACT'S FACETS ARE THE SERVER'S TO WRITE (AGL-2804).
+ *
+ * A contact keeps each holder's records under `facets.{groupId}`, and a rule
+ * cannot address that key: a dotted write to one field of one facet reads,
+ * in the document's diff, as `facets` changing, and a map diff of `facets`
+ * names the holder and never the field. So the rules cannot tell an owner
+ * from a phone number inside a facet, and a plan check on the suite's fields
+ * would check nothing. Every facet edit the console makes goes through
+ * `crm/contact-update` or `crm/contact-stage`, where the plan is asked about
+ * the fields a save carries, and a client update may do the one thing left:
+ * let a holder go.
+ *
+ * Asserted on Free AND on Starter, because the refusal is not a plan
+ * question: a client does not write a facet on any plan.
+ */
+describe("a contact's facets are the server's to write (AGL-2804)", () => {
+  const SHARED = 'shared-profile'
+  const contact = (uid, id = SHARED) => doc(authed(uid), 'orgs', ORG, 'contacts', id)
+  /** Merged onto the seeded org, which starts on Pro. */
+  const setOrg = (fields) =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG), fields, { merge: true })
+    })
+  /** Site B's half of the shared contact, as a capture on it would leave it. */
+  const seedSiteB = () =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'orgs', ORG, 'contacts', SHARED),
+        {
+          visibleTo: ['org', `host:${HOST}`, 'host:host-b'],
+          capturedByHostIds: [HOST, 'host-b'],
+          marketingConsentByHost: { 'host-b': { marketingConsent: true } },
+          facets: { 'host-b': { sources: { form: true }, interactions: [], ownerUid: EDITOR } },
+        },
+        { merge: true },
+      )
+    })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', SHARED), {
+        email: 'shared@acme.test',
+        companyIds: ['co-1'],
+        companyName: 'Acme',
+        phone: '+15125550100',
+        marketingConsentByHost: { [HOST]: { marketingConsent: true } },
+        facets: {
+          [HOST]: {
+            sources: { form: true },
+            interactions: [],
+            tags: ['vip'],
+            notes: 'Met at the fair',
+            phone: '+15125550100',
+            ownerUid: OWNER,
+            lifecycleStage: 'lead',
+            custom: { tier: 'gold' },
+            companyId: 'co-1',
+            companyName: 'Acme',
+            mediaIds: ['m-1'],
+          },
+        },
+      })
+    })
+    await seedSiteB()
+  })
+
+  /** Every write of a field the CRM suite owns, as the client SDK would send it. */
+  const SUITE_WRITES = [
+    ['an owner', { [`facets.${HOST}.ownerUid`]: EDITOR }],
+    ['a lifecycle stage', { [`facets.${HOST}.lifecycleStage`]: 'customer' }],
+    ['a cleared lifecycle stage', { [`facets.${HOST}.lifecycleStage`]: deleteField() }],
+    ['a custom value', { [`facets.${HOST}.custom.tier`]: 'platinum' }],
+    [
+      'a company link and its mirror',
+      { [`facets.${HOST}.companyId`]: 'co-2', companyIds: ['co-2'] },
+    ],
+    ['a file', { [`facets.${HOST}.mediaIds`]: ['m-1', 'm-2'] }],
+    ["another holder's owner", { 'facets.host-b.ownerUid': OWNER }],
+    ['a new holder carrying an owner', { 'facets.host-c': { ownerUid: OWNER } }],
+    ['the company mirror alone', { companyIds: ['co-1', 'co-9'] }],
+    ["the company label's search echo", { companyName: 'Globex' }],
+  ]
+
+  for (const plan of ['free', 'starter']) {
+    it(`refuses a client update that sets a suite field, on ${plan}`, async () => {
+      await setOrg({ plan })
+      for (const [label, patch] of SUITE_WRITES) {
+        await mustDeny(`the owner writing ${label} on ${plan}`, updateDoc(contact(OWNER), patch))
+      }
+    })
+  }
+
+  it('refuses the fields Free keeps as well — the server writes those on every plan', async () => {
+    await setOrg({ plan: 'free' })
+    for (const [label, patch] of [
+      [
+        'a phone number and its search echo',
+        { [`facets.${HOST}.phone`]: '+15125550199', phone: '+15125550199' },
+      ],
+      ['a tag', { [`facets.${HOST}.tags`]: arrayUnion('wholesale') }],
+      ['notes', { [`facets.${HOST}.notes`]: 'Called twice' }],
+      ['a name override', { [`facets.${HOST}.name`]: 'Ada' }],
+      ['a campaign filing', { [`facets.${HOST}.campaignIds`]: ['spring'] }],
+    ]) {
+      await mustDeny(`the owner writing ${label} client-direct`, updateDoc(contact(OWNER), patch))
+    }
+  })
+
+  /**
+   * THE CONTROL: the one update a client still makes. Every refusal above
+   * would pass against a rule that denied contact updates outright, which
+   * would take "Remove from this site" away from every workspace.
+   */
+  it('lets a holder go, on Free and on Starter', async () => {
+    for (const plan of ['free', 'starter']) {
+      await setOrg({ plan })
+      await mustAllow(
+        `the owner removing site B's half of a shared contact on ${plan}`,
+        updateDoc(contact(OWNER), {
+          'facets.host-b': deleteField(),
+          'marketingConsentByHost.host-b': deleteField(),
+          visibleTo: arrayRemove('host:host-b'),
+          capturedByHostIds: arrayRemove('host-b'),
+          updatedAt: serverTimestamp(),
+        }),
+      )
+      await seedSiteB()
+    }
+  })
+
+  it('refuses a holder going in the same write as an edit to a holder that stays', async () => {
+    await mustDeny(
+      "the owner removing site B while moving this site's owner",
+      updateDoc(contact(OWNER), {
+        'facets.host-b': deleteField(),
+        [`facets.${HOST}.ownerUid`]: EDITOR,
+      }),
+    )
+  })
+
+  it("keeps the last holder's delete open on Free", async () => {
+    await setOrg({ plan: 'free' })
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'only-mine'), {
+        email: 'only-mine@acme.test',
+        visibleTo: [`host:${HOST}`],
+        facets: { [HOST]: { sources: {}, interactions: [], ownerUid: EDITOR } },
+      })
+    })
+    await mustAllow(
+      'a site editor deleting a contact only their site holds, on Free',
+      deleteDoc(contact(EDITOR, 'only-mine')),
+    )
+  })
+})
+
+/**
+ * A CONTACT'S CONSENT IS NOT A CLIENT'S TO GRANT (AGL-2821).
+ *
+ * `marketingConsentByHost` is the stored basis list enrollment carries across
+ * as the person's own opt-in (`assignmentBasis`). A client that could add or
+ * change an entry could mint an opt-in nobody gave. Letting a holder go
+ * removes that holder's entries, and removing is all a client may do.
+ */
+describe("a contact's consent entries only shrink from the client (AGL-2821)", () => {
+  const PERSON = 'consent-person'
+  const contact = (uid) => doc(authed(uid), 'orgs', ORG, 'contacts', PERSON)
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', PERSON), {
+        email: 'person@acme.test',
+        visibleTo: ['org', `host:${HOST}`, 'host:host-b'],
+        capturedByHostIds: [HOST, 'host-b'],
+        marketingConsentByHost: {
+          [HOST]: { marketingConsent: false, marketingConsentAtMs: 1 },
+          'host-b': { marketingConsent: true, marketingConsentAtMs: 1 },
+        },
+        facets: {
+          [HOST]: { sources: { form: true }, interactions: [] },
+          'host-b': { sources: { form: true }, interactions: [] },
+        },
+      })
+    })
+  })
+
+  it('refuses a client adding, changing or replacing a consent entry', async () => {
+    await mustDeny(
+      'the owner granting consent for a site that recorded none',
+      updateDoc(contact(OWNER), {
+        'marketingConsentByHost.host-c': { marketingConsent: true, marketingConsentAtMs: 2 },
+      }),
+    )
+    await mustDeny(
+      'the owner turning a recorded refusal into a grant',
+      updateDoc(contact(OWNER), { [`marketingConsentByHost.${HOST}.marketingConsent`]: true }),
+    )
+    await mustDeny(
+      'the owner replacing the whole map',
+      updateDoc(contact(OWNER), {
+        marketingConsentByHost: { [HOST]: { marketingConsent: true, marketingConsentAtMs: 2 } },
+      }),
+    )
+  })
+
+  it('lets a holder go with its consent entries — the control', async () => {
+    await mustAllow(
+      "the owner removing site B's half, consent included",
+      updateDoc(contact(OWNER), {
+        'facets.host-b': deleteField(),
+        'marketingConsentByHost.host-b': deleteField(),
+        visibleTo: arrayRemove('host:host-b'),
+        capturedByHostIds: arrayRemove('host-b'),
+      }),
+    )
+  })
+})
+
+/**
+ * A CONTACT IS BROUGHT INTO BEING BY THE SERVER (AGL-2819).
+ *
+ * Every door that creates a contact is a server path — the capture doors,
+ * the create route, the imports and lead conversion — and each one judges the
+ * audience band, dedupes on the address and asks the plan for a person added
+ * by hand. A client create skipped all of that, and could carry any facet or
+ * consent entry it liked. Staff keep the create, for support.
+ */
+describe('a contact is created by the server, never by the client (AGL-2819)', () => {
+  const setOrg = (fields) =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG), fields, { merge: true })
+    })
+
+  it('refuses a client create of a contact to every role, on every plan', async () => {
+    for (const plan of ['free', 'pro']) {
+      await setOrg({ plan })
+      await mustDeny(
+        `the owner creating a bare contact on ${plan}`,
+        setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', `bare-${plan}`), {
+          email: `bare-${plan}@acme.test`,
+          visibleTo: ['org'],
+        }),
+      )
+      await mustDeny(
+        `the owner creating a contact carrying an owner, a stage and consent on ${plan}`,
+        setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', `loaded-${plan}`), {
+          email: `loaded-${plan}@acme.test`,
+          visibleTo: ['org'],
+          facets: {
+            [HOST]: {
+              sources: {},
+              interactions: [],
+              ownerUid: OWNER,
+              lifecycleStage: 'customer',
+              custom: { tier: 'gold' },
+            },
+          },
+          marketingConsentByHost: { [HOST]: { marketingConsent: true } },
+        }),
+      )
+      await mustDeny(
+        `a site editor creating a contact on its own site on ${plan}`,
+        setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', `editor-${plan}`), {
+          email: `editor-${plan}@acme.test`,
+          visibleTo: [`host:${HOST}`],
+        }),
+      )
+    }
+  })
+
+  it('keeps the create for staff — the control', async () => {
+    await mustAllow(
+      "staff creating a contact on a workspace's behalf",
+      setDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'contacts', 'by-staff'), {
+        email: 'by-staff@acme.test',
+        visibleTo: ['org'],
+      }),
+    )
+  })
+})
+
 describe('a publish outbox entry may only be written for a host you can publish to (AGL-2575)', () => {
   const OUTBOX = 'publishOutbox'
   /** An entry shaped exactly as `stagePublishOutboxEntry` writes one. */
@@ -9712,7 +9998,10 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), 'orgs', ORG, 'contacts', 'c-seeded'), {
         email: 'buyer@acme.test',
-        visibleTo: ['org'],
+        visibleTo: ['org', `host:${HOST}`],
+        // One site's half, which a member lets go of: the one contact write
+        // a client still makes (AGL-2804, AGL-2819).
+        facets: { [HOST]: { sources: {}, interactions: [] } },
       })
     })
   })
@@ -9729,9 +10018,9 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
       ),
     )
     await mustAllow(
-      'a verified owner adding a contact to the audience',
-      setDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c-verified'), {
-        email: 'buyer@acme.test', visibleTo: ['org'],
+      'a verified owner letting a site go from a contact in the audience',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'c-seeded'), {
+        [`facets.${HOST}`]: deleteField(),
       }),
     )
     await mustAllow(
@@ -9772,9 +10061,9 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
 
   it('refuses the AUDIENCE — contacts, segments, topics, lists and datasets', async () => {
     await mustDeny(
-      'an unverified owner adding a contact',
-      setDoc(doc(unverified(OWNER), 'orgs', ORG, 'contacts', 'c-new'), {
-        email: 'someone@acme.test', visibleTo: ['org'],
+      'an unverified owner letting a site go from a contact',
+      updateDoc(doc(unverified(OWNER), 'orgs', ORG, 'contacts', 'c-seeded'), {
+        [`facets.${HOST}`]: deleteField(),
       }),
     )
     await mustDeny(

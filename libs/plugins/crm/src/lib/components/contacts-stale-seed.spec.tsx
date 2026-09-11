@@ -123,6 +123,28 @@ const enqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
+/*
+ * The CRM's routes, as the page's API hook reaches them. A contact's facet
+ * is the server's to write (AGL-2804), so a save the guard admits is a post
+ * to `crm/contact-update` — and a save it refuses is no post at all.
+ */
+let posted: Array<{ route: string; payload: Record<string, any> }> = []
+jest.mock('./use-crm-api', () => ({
+  useCrmApi: () => async (route: string, payload: Record<string, any>) => {
+    posted.push({ route, payload })
+    return {
+      response: { ok: true, status: 200 },
+      payload: {
+        ok: true,
+        results: (payload['contactIds'] ?? []).map((contactId: string) => ({
+          contactId,
+          ok: true,
+        })),
+      },
+    }
+  },
+}))
+const profileSaves = () => posted.filter((call) => call.route === 'contact-update')
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({
     children,
@@ -180,6 +202,7 @@ jest.mock('./use-contact-campaign-emails', () => ({
 
 beforeEach(() => {
   jest.clearAllMocks()
+  posted = []
   listener.fromCache = false
   listener.status = 'success'
 })
@@ -214,6 +237,7 @@ describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
     // Settled, so this cannot pass merely by asserting too early.
     await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
     expect(updateDoc).not.toHaveBeenCalled()
+    expect(profileSaves()).toEqual([])
     const [message] = enqueueSnackbar.mock.calls[0]
     expect(message).toEqual(expect.stringContaining('contact'))
     expect(message).toEqual(expect.stringMatching(/reload/i))
@@ -228,19 +252,16 @@ describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
 
     editNotesAndSave()
 
-    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
-    const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
-    // Written into THIS holder's facet by dotted path, so no other holder's
-    // notes are replaced by the save.
-    expect(payload['facets.host-1.notes']).toBe('Prefers a phone call')
+    await waitFor(() => expect(profileSaves()).toHaveLength(1))
+    const { payload } = profileSaves()[0]
+    expect(payload['contactIds']).toEqual(['con-1'])
+    // The server writes it into THIS holder's facet; the browser writes nothing.
+    expect(updateDoc).not.toHaveBeenCalled()
+    expect(payload['set']['notes']).toBe('Prefers a phone call')
     // The tags ride along untouched — which is exactly why the guard is here.
-    expect(payload['facets.host-1.tags']).toEqual(['vip', 'newsletter'])
-    // The phone the record already had is re-written as it was, and echoed
-    // to the top of the document for the search.
-    expect(payload['facets.host-1.phone']).toBe('+15125550107')
-    expect(payload['phone']).toBe('+15125550107')
-    // Never a nested `facets` object: that would replace every holder's map.
-    expect(payload).not.toHaveProperty('facets')
+    expect(payload['set']['tags']).toEqual(['vip', 'newsletter'])
+    // The phone the record already had is sent back as it was.
+    expect(payload['set']['phone']).toBe('+15125550107')
   })
 
   it('REFUSES when the contact read failed, and says so differently', async () => {
@@ -251,6 +272,7 @@ describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
 
     await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
     expect(updateDoc).not.toHaveBeenCalled()
+    expect(profileSaves()).toEqual([])
     expect(enqueueSnackbar.mock.calls[0][0]).toEqual(
       expect.stringMatching(/could not be loaded/i),
     )

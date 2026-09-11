@@ -25,7 +25,6 @@ import {
 import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Button, Link, Stack, Typography } from '@mui/material'
 import { type ReactNode, useCallback, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
@@ -35,13 +34,14 @@ import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { COMPANY_DETACH_LIMIT } from '../model/companies'
 import {
   companyDeleteFailureMessage,
-  deleteCompanyDetaching,
+  deleteCompanyThroughRoute,
 } from '../model/company-delete'
 import type { CrmRoutes } from '../model/crm-routes'
 import CompanyEditDrawer from './company-edit-drawer'
 import { formatContactCustomValue } from './contact-custom-columns'
 import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
+import { useCrmApi } from './use-crm-api'
 
 export interface CompanyPropertiesCardProps {
   company: Partial<CrmCompany> & { $id: string }
@@ -84,12 +84,13 @@ function formatAddress(address: AglynPostalAddress | null | undefined): string {
  *
  * ## Delete is a DETACH first
  *
- * `deleteCompanyDetaching` — the pass the bulk bar runs per row as well —
+ * `crm/company-delete` — the route the bulk bar calls per row as well —
  * unlinks the contacts that name this company before removing it, bounded
  * at {@link COMPANY_DETACH_LIMIT} per pass and honest past it: the company
- * stands, and the person is told more remain. What this card adds is the
- * confirm, the sentence for each outcome, and leaving the page once the
- * record is gone.
+ * stands, and the person is told more remain. The unlink clears each
+ * holder's facet that named the company, which is the server's to write
+ * (AGL-2804). What this card adds is the confirm, the sentence for each
+ * outcome, and leaving the page once the record is gone.
  */
 export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
   const {
@@ -103,7 +104,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     onDeleted,
   } = props
   const { scope } = crmScope
-  const firestore = useFirestore()
+  const callCrm = useCrmApi(hostId)
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
   // The feed the act is logged in, decided by the level it was performed
@@ -136,7 +137,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     if (!accepted) return
     setDeleting(true)
     try {
-      const outcome = await deleteCompanyDetaching(firestore, scope, company.$id)
+      const outcome = await deleteCompanyThroughRoute(callCrm, company.$id)
       if (!outcome.deleted) {
         enqueueSnackbar(
           `${COMPANY_DETACH_LIMIT.toLocaleString()} contacts were unlinked ` +
@@ -166,7 +167,7 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     } finally {
       setDeleting(false)
     }
-  }, [scope, deleting, company, confirm, firestore, logActivity, enqueueSnackbar, onDeleted])
+  }, [scope, deleting, company, confirm, callCrm, logActivity, enqueueSnackbar, onDeleted])
 
   const address = formatAddress(company.address)
   // The domain, the industry and the owner read on the header — the

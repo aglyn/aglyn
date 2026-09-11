@@ -481,7 +481,6 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             org={org}
             record={record}
             consentGroup={consentGroup}
-            scope={scope}
             seed={{ status, fromCache }}
             members={members}
             suiteLocked={!suiteIncluded}
@@ -491,7 +490,6 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             record={record}
             row={row}
             consentGroup={consentGroup}
-            scope={scope}
             seed={{ status, fromCache }}
             basePath={basePath}
             bookingsHref={bookingsHref}
@@ -531,6 +529,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 scope={scope}
                 collection="contacts"
                 recordId={id}
+                hostId={hostId}
                 facetGroupId={consentGroup.groupId}
                 mediaIds={record.mediaIds}
                 topic="contactRecord"

@@ -58,6 +58,7 @@ import {
   orgAutoCreatesCompanies,
   planContactCompanyLink,
   readContactCompanyLink,
+  contactGroupsNamingCompany,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   advanceContactLifecycleStage,
   contactLifecycleStageAfterPurchase,
@@ -376,6 +377,24 @@ describe('readContactCompanyLink', () => {
       companyIds: [],
       heldElsewhere: [],
     })
+  })
+})
+
+describe('contactGroupsNamingCompany', () => {
+  it('names every holder whose facet links the company, and no other', () => {
+    const contact: Record<string, unknown> = {
+      companyIds: ['c-acme', 'c-globex'],
+      facets: {
+        'g-1': { sources: {}, interactions: [], companyId: 'c-acme' },
+        'g-2': { sources: {}, interactions: [], companyId: 'c-acme' },
+        'g-3': { sources: {}, interactions: [], companyId: 'c-globex' },
+        'g-4': 'not a facet',
+      },
+    }
+    expect(contactGroupsNamingCompany(contact, 'c-acme').sort()).toEqual(['g-1', 'g-2'])
+    expect(contactGroupsNamingCompany(contact, 'c-initech')).toEqual([])
+    expect(contactGroupsNamingCompany({}, 'c-acme')).toEqual([])
+    expect(contactGroupsNamingCompany(contact, '')).toEqual([])
   })
 })
 

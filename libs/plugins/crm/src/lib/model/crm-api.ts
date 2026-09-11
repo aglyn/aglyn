@@ -29,7 +29,8 @@ import { crmApiUrl } from '../constants/api-routes'
  * Firestore write, and the reason is the event: `contactStageChanged` can
  * only be emitted by a server path that performed the write, so a record
  * page that wrote the facet itself would move the person and tell no
- * automation. This is the one function a stage control calls.
+ * automation. A CLEAR comes the same way (AGL-2804), because a facet is the
+ * server's to write. This is the one function a stage control calls.
  */
 
 /** What `crm/contact-stage` answers. */
@@ -37,13 +38,15 @@ export interface ContactStageResult {
   ok: true
   /** False when the contact was already in that stage — nothing moved. */
   changed: boolean
-  lifecycleStage: ContactLifecycleStage
+  /** The stage the contact now holds, `''` after a clear. */
+  lifecycleStage: ContactLifecycleStage | ''
   /** The stage before the move, `''` when the contact had none. */
   previousStage: string
 }
 
 /**
- * Moves one contact to a lifecycle stage, as the signed-in user.
+ * Moves one contact to a lifecycle stage — or, with `null`, clears it — as
+ * the signed-in user.
  *
  * Throws with the route's own message on a refusal, so a control can show
  * "Not a site admin or editor" rather than a generic failure; a network
@@ -53,7 +56,7 @@ export async function setContactStage(
   user: MaybeTokenSource,
   hostId: string,
   contactId: string,
-  stage: ContactLifecycleStage,
+  stage: ContactLifecycleStage | null,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<ContactStageResult> {
   const response = await authorizedFetch(

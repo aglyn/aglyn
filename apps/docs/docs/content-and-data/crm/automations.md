@@ -19,7 +19,7 @@ announces nothing; what each event carries is in
 | In the trigger picker | Fires when | Read more |
 | --- | --- | --- |
 | **Contact created** | A capture on your site made a **new** contact. A repeat visit by somebody already on the list is an interaction, not a new contact. The event carries the `lifecycleStage` the capture set — `lead` for a form or a booking request, `subscriber` for a sign-up or a newsletter opt-in, `customer` for an order — so a filter can pick the form captures out of the sign-ups — and `formId` when the capture came through a form, so a condition can pick one form's people out of every other door's. | [CRM events](../../marketing-and-automation/workflows-and-actions/actions-builder.md#crm-events) |
-| **Contact changed stage** | A contact's lifecycle stage was moved — from the contact's page, or by another automation. Setting the stage a contact already has fires nothing. | [Lifecycle stages](./contact-record.md#lifecycle-stages) |
+| **Contact changed stage** | A contact's lifecycle stage was moved — from the contact's page, from **Set stage** on the contacts table, or by another automation. Setting the stage a contact already has fires nothing. | [Lifecycle stages](./contact-record.md#lifecycle-stages) |
 | **Deal moved** | A deal moved between open stages, or was reopened. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
 | **Deal won** | A deal was marked won. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
 | **Deal lost** | A deal was marked lost; the reason given travels with the event. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |

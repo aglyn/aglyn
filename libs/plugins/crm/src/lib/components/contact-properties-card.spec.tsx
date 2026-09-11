@@ -16,13 +16,14 @@
  */
 
 /**
- * THE PROPERTIES CARD'S ONE SAVE (AGL-2610).
+ * THE PROPERTIES CARD'S ONE SAVE (AGL-2610, AGL-2804).
  *
- * What it must hold: a stage MOVE is left out of the facet write and sent to
- * `crm/contact-stage`, the one path that announces `contactStageChanged`; a
- * save that does not move the stage never calls the route; a cleared stage
- * stays a client-direct `deleteField`; and a route refusal is reported as
- * its own sentence after the fields that did save.
+ * What it must hold: the profile goes to `crm/contact-update` — a facet is
+ * the server's to write, so nothing is written client-direct; a stage MOVE or
+ * CLEAR goes to `crm/contact-stage` once the profile has landed, and a save
+ * that leaves the stage alone never calls it; a refused stage is reported in
+ * the route's own sentence after the fields that did save; and on a plan
+ * without the CRM suite the owner, the stage and the company are not sent.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -31,8 +32,10 @@ import { soloConsentGroup } from '@aglyn/aglyn'
 import type { ContactRecord } from '../model/contact-record'
 import { ContactPropertiesCard } from './contact-properties-card'
 
-/** Every facet write the store received, in order. */
+/** Every client-direct write the store received — a save must leave this empty. */
 let writes: Array<{ path: string; data: Record<string, unknown> }>
+/** The order the two routes were reached in. */
+let order: string[]
 
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
@@ -40,6 +43,11 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: async (ref: { path: string }, data: Record<string, unknown>) => {
     writes.push({ path: ref.path, data })
   },
+  writeBatch: () => ({
+    update: (ref: { path: string }, data: Record<string, unknown>) =>
+      void writes.push({ path: ref.path, data }),
+    commit: async () => undefined,
+  }),
 }))
 
 const FIRESTORE = {}
@@ -55,7 +63,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 /*
  * The Company field is the picker's, and the picker keeps a listen on the
  * companies collection with a spec of its own; here it is a field that
- * holds nothing, so the card's write is the only Firestore traffic.
+ * holds nothing, so the card's save is the only traffic.
  */
 jest.mock('./company-picker', () => ({
   CompanyPicker: () => null,
@@ -66,7 +74,34 @@ jest.mock('./company-picker', () => ({
 /** Every call the card made to the stage route, and what it should answer. */
 const setContactStage = jest.fn()
 jest.mock('../model/crm-api', () => ({
-  setContactStage: (...args: unknown[]) => setContactStage(...args),
+  setContactStage: (...args: unknown[]) => {
+    order.push('stage')
+    return setContactStage(...args)
+  },
+}))
+
+/** Every post to a CRM route, as the card's API hook sent it. */
+let posted: Array<{ route: string; payload: Record<string, any> }>
+/** The sentence the profile route refuses the next save with, or `null`. */
+let refuseSave: string | null
+jest.mock('./use-crm-api', () => ({
+  useCrmApi: () => async (route: string, payload: Record<string, any>) => {
+    posted.push({ route, payload })
+    if (route === 'contact-update') order.push('profile')
+    if (refuseSave) {
+      return { response: { ok: false, status: 403 }, payload: { error: refuseSave } }
+    }
+    return {
+      response: { ok: true, status: 200 },
+      payload: {
+        ok: true,
+        results: (payload['contactIds'] ?? []).map((contactId: string) => ({
+          contactId,
+          ok: true,
+        })),
+      },
+    }
+  },
 }))
 
 let notices: Array<{ message: string; variant?: string }>
@@ -93,9 +128,6 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 const GROUP = soloConsentGroup('host-1')
-// Dotted, as the document path is; handed to `toHaveProperty` as a one-element
-// array so the matcher reads it as one key rather than as a path of three.
-const facetPath = (field: string) => `facets.${GROUP.groupId}.${field}`
 
 const record: ContactRecord = {
   $id: 'c1',
@@ -123,20 +155,22 @@ const record: ContactRecord = {
   updatedAt: undefined,
 } as unknown as ContactRecord
 
-function renderCard(seeded: Partial<ContactRecord> = {}) {
+const members = {
+  options: [],
+  ready: true,
+  memberName: (uid: string) => uid,
+  memberEmail: (uid: string) => uid,
+}
+
+function renderCard(seeded: Partial<ContactRecord> = {}, suiteLocked = false) {
   return render(
     <ContactPropertiesCard
       hostId="host-1"
       record={{ ...record, ...seeded }}
       consentGroup={GROUP}
-      scope={['orgs', 'org-1']}
       seed={{ status: 'success', fromCache: false }}
-      members={{
-        options: [],
-        ready: true,
-        memberName: (uid) => uid,
-        memberEmail: (uid) => uid,
-      }}
+      members={members}
+      suiteLocked={suiteLocked}
     />,
   )
 }
@@ -145,11 +179,17 @@ const pickStage = (label: string) => {
   fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Lifecycle stage' }))
   fireEvent.click(screen.getByRole('option', { name: label }))
 }
+const typeJobTitle = (value: string) =>
+  fireEvent.change(screen.getByLabelText('Job title'), { target: { value } })
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+const profileSaves = () => posted.filter((call) => call.route === 'contact-update')
 
 beforeEach(() => {
   writes = []
+  order = []
   notices = []
+  posted = []
+  refuseSave = null
   setContactStage.mockReset()
   setContactStage.mockResolvedValue({
     ok: true,
@@ -159,34 +199,72 @@ beforeEach(() => {
   })
 })
 
+describe('the profile', () => {
+  it('is saved through crm/contact-update, with nothing written client-direct', async () => {
+    renderCard()
+    typeJobTitle('Head roaster')
+    save()
+    await waitFor(() =>
+      expect(notices).toContainEqual({ message: 'Contact saved', variant: 'success' }),
+    )
+    expect(writes).toEqual([])
+    expect(profileSaves()).toHaveLength(1)
+    const { payload } = profileSaves()[0]
+    expect(payload['contactIds']).toEqual(['c1'])
+    expect(payload['set']).toMatchObject({
+      name: '',
+      phone: '',
+      jobTitle: 'Head roaster',
+      tags: ['wholesale'],
+      notes: '',
+      ownerUid: '',
+      companyId: null,
+      companyName: '',
+    })
+    // The stage is the stage route's to write, never the profile route's.
+    expect(payload['set']).not.toHaveProperty('lifecycleStage')
+    expect(setContactStage).not.toHaveBeenCalled()
+  })
+
+  it("shows the route's own sentence when the save is refused, and keeps what was typed", async () => {
+    refuseSave = 'Your organization role does not allow editing the CRM.'
+    renderCard()
+    typeJobTitle('Head roaster')
+    save()
+    await waitFor(() =>
+      expect(notices.map((notice) => notice.message)).toContain(
+        'Your organization role does not allow editing the CRM.',
+      ),
+    )
+    expect((screen.getByLabelText('Job title') as HTMLInputElement).value).toBe('Head roaster')
+    expect(notices.map((notice) => notice.message)).not.toContain('Contact saved')
+    expect(setContactStage).not.toHaveBeenCalled()
+  })
+})
+
 describe('a stage move', () => {
-  it('goes through crm/contact-stage and stays out of the facet write', async () => {
+  it('goes through crm/contact-stage once the profile has landed', async () => {
     renderCard()
     pickStage('Customer')
     save()
     await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
     expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', 'customer')
-    expect(writes).toHaveLength(1)
-    // The route reads the stage the facet still holds to name `previousStage`
-    // — a write that carried the new one first would leave it announcing
-    // nothing.
-    expect(writes[0].data).not.toHaveProperty([facetPath('lifecycleStage')])
-    expect(writes[0].data).toHaveProperty([facetPath('jobTitle')], 'Owner')
+    expect(order).toEqual(['profile', 'stage'])
+    expect(profileSaves()[0].payload['set']).not.toHaveProperty('lifecycleStage')
+    expect(writes).toEqual([])
     await waitFor(() =>
       expect(notices).toContainEqual({ message: 'Contact saved', variant: 'success' }),
     )
   })
 
-  it('is written after the profile, so a refused move leaves the profile saved', async () => {
+  it('reports a refused move on its own, after the profile it did not undo', async () => {
     setContactStage.mockRejectedValue(new Error('Not a site admin or editor'))
     renderCard()
-    fireEvent.change(screen.getByLabelText('Job title'), {
-      target: { value: 'Head roaster' },
-    })
+    typeJobTitle('Head roaster')
     pickStage('Customer')
     save()
     await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
-    expect(writes[0].data).toHaveProperty([facetPath('jobTitle')], 'Head roaster')
+    expect(profileSaves()[0].payload['set']).toMatchObject({ jobTitle: 'Head roaster' })
     await waitFor(() =>
       expect(notices).toContainEqual({
         message: 'Saved, but the stage could not be changed: Not a site admin or editor',
@@ -197,32 +275,26 @@ describe('a stage move', () => {
   })
 })
 
+describe('a cleared stage', () => {
+  it('goes through crm/contact-stage as a null — the facet is not the browser’s to write', async () => {
+    renderCard()
+    pickStage('Not placed yet')
+    save()
+    await waitFor(() => expect(setContactStage).toHaveBeenCalledTimes(1))
+    expect(setContactStage).toHaveBeenCalledWith(USER, 'host-1', 'c1', null)
+    expect(order).toEqual(['profile', 'stage'])
+    expect(writes).toEqual([])
+  })
+})
+
 /**
  * On a plan without the CRM suite (AGL-2788) the owner, the stage and the
- * company are the suite's: shown locked, and left out of the save — while
- * the rest of the profile, the tags and the notes save as on every plan.
+ * company are the suite's: shown locked, and not sent — while the rest of
+ * the profile, the tags and the notes save as on every plan.
  */
 describe('on a plan without the CRM suite', () => {
-  const renderLocked = () =>
-    render(
-      <ContactPropertiesCard
-        hostId="host-1"
-        record={{ ...record, ownerUid: 'uid-7' }}
-        consentGroup={GROUP}
-        scope={['orgs', 'org-1']}
-        seed={{ status: 'success', fromCache: false }}
-        members={{
-          options: [],
-          ready: true,
-          memberName: (uid) => uid,
-          memberEmail: (uid) => uid,
-        }}
-        suiteLocked
-      />,
-    )
-
   it('locks the owner and the stage, and says which plan includes them', () => {
-    renderLocked()
+    renderCard({ ownerUid: 'uid-7' }, true)
     expect(
       screen.getByRole('combobox', { name: 'Lifecycle stage' }).getAttribute('aria-disabled'),
     ).toBe('true')
@@ -232,42 +304,31 @@ describe('on a plan without the CRM suite', () => {
     expect(screen.getAllByText('Part of the CRM suite, included from Starter')).toHaveLength(2)
   })
 
-  it('saves the profile and leaves the owner, the stage and the company out of the write', async () => {
-    renderLocked()
-    fireEvent.change(screen.getByLabelText('Job title'), {
-      target: { value: 'Head roaster' },
-    })
+  it('saves the profile and sends neither the owner, the stage nor the company', async () => {
+    renderCard({ ownerUid: 'uid-7' }, true)
+    typeJobTitle('Head roaster')
     save()
-    await waitFor(() => expect(writes).toHaveLength(1))
-    const data = writes[0].data
-    expect(data).toHaveProperty([facetPath('jobTitle')], 'Head roaster')
-    expect(data).toHaveProperty([facetPath('tags')], ['wholesale'])
-    expect(data).not.toHaveProperty([facetPath('ownerUid')])
-    expect(data).not.toHaveProperty([facetPath('lifecycleStage')])
-    expect(data).not.toHaveProperty([facetPath('companyName')])
-    expect(data).not.toHaveProperty('companyName')
+    await waitFor(() => expect(profileSaves()).toHaveLength(1))
+    const set = profileSaves()[0].payload['set']
+    expect(set).toMatchObject({ jobTitle: 'Head roaster', tags: ['wholesale'] })
+    expect(set).not.toHaveProperty('ownerUid')
+    expect(set).not.toHaveProperty('companyId')
+    expect(set).not.toHaveProperty('companyName')
+    expect(set).not.toHaveProperty('lifecycleStage')
     expect(setContactStage).not.toHaveBeenCalled()
+    expect(writes).toEqual([])
   })
 })
 
-describe('a save that moves nothing', () => {
-  it('never calls the route, and keeps the stage it has in the write', async () => {
+describe('a save that leaves the stage alone', () => {
+  it('never calls the stage route', async () => {
     renderCard()
-    fireEvent.change(screen.getByLabelText('Job title'), {
-      target: { value: 'Head roaster' },
-    })
+    typeJobTitle('Head roaster')
     save()
-    await waitFor(() => expect(writes).toHaveLength(1))
+    await waitFor(() => expect(profileSaves()).toHaveLength(1))
+    await waitFor(() =>
+      expect(notices).toContainEqual({ message: 'Contact saved', variant: 'success' }),
+    )
     expect(setContactStage).not.toHaveBeenCalled()
-    expect(writes[0].data).toHaveProperty([facetPath('lifecycleStage')], 'lead')
-  })
-
-  it('clears a stage client-direct — there is no event for "no stage"', async () => {
-    renderCard()
-    pickStage('Not placed yet')
-    save()
-    await waitFor(() => expect(writes).toHaveLength(1))
-    expect(setContactStage).not.toHaveBeenCalled()
-    expect(writes[0].data).toHaveProperty([facetPath('lifecycleStage')], { op: 'delete' })
   })
 })

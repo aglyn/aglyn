@@ -141,6 +141,10 @@ const REPO_WIDE = new Set([
   'check:tenant-page-weight',
   'check:page-view-rate',
   'check:monaco-dompurify',
+  // Reads a fixed list of mutation modules across apps/ and libs/. The commit
+  // that moves a write between libraries touches no guard source, yet leaves
+  // the list naming a file that no longer logs (AGL-2823).
+  'check:activity-coverage',
   // Assert against the workflow files and the package.json script table,
   // which belong to no nx project.
   'check:standalone-installs',

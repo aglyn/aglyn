@@ -2758,6 +2758,42 @@ function readContactInput(
 }
 
 /**
+ * The half of the CRM profile that is the CRM SUITE's (AGL-2822): an owner, a
+ * lifecycle stage, a company and files, beside `custom`. `phone`, `jobTitle`
+ * and `address` are the profile a capture writes, saved on every plan as the
+ * console saves them.
+ */
+const CONTACT_SUITE_CRM_FIELDS = ['ownerUid', 'lifecycleStage', 'companyId', 'mediaIds'] as const
+
+/**
+ * The refusal a contact write gets when it carries a field of the CRM suite
+ * on a plan without the suite — the console's `crm/contact-update` answer,
+ * in the REST shape the suite's own resources are refused in. `null` when
+ * the plan carries the suite or the body writes none of its fields.
+ *
+ * Asked once the body has parsed and before any document is read, so a
+ * malformed body still names its fields and a refused one spends nothing.
+ * Every plan that carries `apiAccess` carries the suite; this answers the
+ * org whose entitlements an override split.
+ */
+function contactSuiteRefusal(
+  ctx: ApiV1Context,
+  values: { crm: ContactCrmInput; custom?: Record<string, unknown> },
+): Response | null {
+  const writesSuite =
+    values.custom !== undefined ||
+    CONTACT_SUITE_CRM_FIELDS.some((field) => values.crm[field] !== undefined)
+  if (!writesSuite || checkEntitlement(ctx.org, 'crm')) return null
+  return ApiErrors.planRequired({
+    message:
+      "A contact's owner, lifecycle stage, company, files and custom fields are " +
+      'part of the CRM suite, which is not included in this organization’s plan',
+    code: 'crm',
+    headers: ctx.headers,
+  })
+}
+
+/**
  * The two references a contact's CRM profile can carry, checked for
  * existence — the SAME checks a deal or a task makes on its own `ownerUid`
  * and `companyId`, so a contact cannot point at a company `/v1/deals` would
@@ -2949,6 +2985,8 @@ async function createContact(
       headers: ctx.headers,
     })
   }
+  const suite = contactSuiteRefusal(ctx, parsed.values)
+  if (suite) return suite
   const { email, name, tags, notes, marketingConsent, consentSiteId, crm } =
     parsed.values
   if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
@@ -3122,6 +3160,8 @@ async function updateContact(
       headers: ctx.headers,
     })
   }
+  const suite = contactSuiteRefusal(ctx, parsed.values)
+  if (suite) return suite
   const snap = await contactRef.get()
   if (!snap.exists) {
     return ApiErrors.notFound({
