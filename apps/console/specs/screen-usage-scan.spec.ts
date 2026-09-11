@@ -190,4 +190,42 @@ describe('scanScreenUsage (AGL-703)', () => {
       }),
     ).toEqual([])
   })
+
+  /*
+   * A component's Link property DEFAULT (AGL-2846).
+   *
+   * Picked in the component properties dialog and stored on the definition
+   * document beside its tree, not inside it: the tree holds only the
+   * `{{prop.link}}` token. Every instance that leaves the property unset
+   * renders the default, so a scan of the tree alone reads those links as
+   * pointing nowhere.
+   */
+  it('finds a component whose Link property defaults to the screen', () => {
+    const found = scanScreenUsage('pricing', {
+      ...empty,
+      components: [
+        screen('cta', {
+          nodes: linkNode('{{prop.link}}') as never,
+          props: [{ name: 'link', type: 'href', defaultValue: 'screen:pricing' }],
+        }),
+      ],
+    })
+    expect(found).toEqual([
+      expect.objectContaining({ id: 'cta', type: 'component', relation: 'link' }),
+    ])
+  })
+
+  it('does not count a Link property default that names another screen', () => {
+    expect(
+      scanScreenUsage('pricing', {
+        ...empty,
+        components: [
+          screen('cta', {
+            nodes: linkNode('{{prop.link}}') as never,
+            props: [{ name: 'link', type: 'href', defaultValue: 'screen:about' }],
+          }),
+        ],
+      }),
+    ).toEqual([])
+  })
 })

@@ -20,6 +20,7 @@ import {
   nodesReferenceComponent,
   nodesReferenceScreen,
   nodesRenderCollection,
+  type ReusableComponentProp,
 } from '@aglyn/aglyn/server'
 
 export interface UsageDependent {
@@ -60,6 +61,12 @@ export interface UsageCandidate {
   layoutId?: string
   /** Screens only: the screen they nest under, which is part of their path. */
   parentId?: string
+  /**
+   * Components only: the properties the definition declares (AGL-1247). A
+   * Link property's default renders as a link wherever an instance leaves the
+   * property unset, and it is stored here, not in `nodes` (AGL-2846).
+   */
+  props?: ReadonlyArray<ReusableComponentProp | null | undefined> | null
 }
 
 /** `displayName`, falling back to a legacy `name`, then the raw id. */
@@ -68,6 +75,24 @@ function labelFor(candidate: UsageCandidate): string {
 }
 
 const isLive = (candidate: UsageCandidate) => !candidate.deletedAt
+
+/**
+ * Whether a document links to `target` — a screen id, or a collection
+ * listing's `collection:<id>` key — anywhere a link value is stored.
+ *
+ * Two places, and the second is one a tree walk cannot reach: the node tree,
+ * and a component's Link property defaults, which the definition stores beside
+ * its tree while the tree holds only the `{{prop.<name>}}` token (AGL-2846).
+ * Both are read by `nodesReferenceScreen`, so a default matches by exactly the
+ * rules a link prop does.
+ */
+function linksTo(candidate: UsageCandidate, target: string): boolean {
+  if (nodesReferenceScreen(candidate.nodes as never, target)) return true
+  const linkDefaults = (candidate.props ?? [])
+    .filter((prop) => prop?.type === 'href')
+    .map((prop) => prop?.defaultValue)
+  return nodesReferenceScreen({ linkDefaults: { props: linkDefaults } }, target)
+}
 
 /**
  * Everything that references a reusable component (AGL-703).
@@ -259,7 +284,7 @@ export function scanScreenUsage(
   ) => {
     for (const candidate of candidates) {
       if (!isLive(candidate) || candidate.id === screenId) continue
-      if (!nodesReferenceScreen(candidate.nodes as never, screenId)) continue
+      if (!linksTo(candidate, screenId)) continue
       add({
         type,
         id: candidate.id,
