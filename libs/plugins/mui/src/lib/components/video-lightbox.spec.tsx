@@ -68,7 +68,16 @@ describe('VideoLightbox playback', () => {
     const video = open().querySelector('video') as HTMLVideoElement
     expect(video.getAttribute('preload')).toBe('auto')
     expect(video.hasAttribute('autoplay')).toBe(true)
-    expect(video.hasAttribute('controls')).toBe(true)
+  })
+
+  it("draws its own controls rather than the browser's (AGL-2802)", () => {
+    // The browser's controls swallow Escape before the page hears it, so the
+    // dialog could not be dismissed from them. Its own are real buttons.
+    const base = open()
+    expect(
+      (base.querySelector('video') as HTMLVideoElement).hasAttribute('controls'),
+    ).toBe(false)
+    expect(base.querySelector('button[aria-label="Play"]')).toBeTruthy()
   })
 
   it('carries the poster through so the frame is not blank on open', () => {

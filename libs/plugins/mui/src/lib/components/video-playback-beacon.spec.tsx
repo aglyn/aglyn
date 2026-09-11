@@ -33,7 +33,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { act, fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, getByRole, render } from '@testing-library/react'
 import Video from './video'
 import { VideoLightbox } from './video-lightbox'
 
@@ -214,6 +214,55 @@ describe('the lightbox player counts a play (AGL-2781)', () => {
     act(() => rerender(view(true)))
     fireEvent.play(baseElement.querySelector('video') as HTMLVideoElement)
     expect(events()).toEqual(['play', 'play'])
+  })
+
+  it("reports a play from the player's own play control, then its quartiles and completion (AGL-2802)", () => {
+    // jsdom implements no playback: `play()` and `pause()` here do what a
+    // browser's do as far as the page can see, which is flip `paused` and
+    // fire the event.
+    jest
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockImplementation(function (this: HTMLMediaElement) {
+        Object.defineProperty(this, 'paused', { configurable: true, value: false })
+        this.dispatchEvent(new Event('play'))
+        return Promise.resolve()
+      })
+    jest
+      .spyOn(HTMLMediaElement.prototype, 'pause')
+      .mockImplementation(function (this: HTMLMediaElement) {
+        Object.defineProperty(this, 'paused', { configurable: true, value: true })
+        this.dispatchEvent(new Event('pause'))
+      })
+    try {
+      const { baseElement } = render(
+        <VideoLightbox
+          open
+          onClose={() => undefined}
+          src="/api/media/cdn/host-1/film?r=auto"
+          playback={playback}
+        />,
+      )
+      const video = baseElement.querySelector('video') as HTMLVideoElement
+      const to = scrubbable(video, 100)
+      const control = getByRole(baseElement, 'button', { name: 'Play' })
+      fireEvent.click(control)
+      // Paused and resumed from the same control: still one viewing.
+      fireEvent.click(control)
+      fireEvent.click(control)
+      to(26)
+      to(51)
+      to(76)
+      fireEvent.ended(video)
+      expect(events()).toEqual([
+        'play',
+        'progress25',
+        'progress50',
+        'progress75',
+        'complete',
+      ])
+    } finally {
+      jest.restoreAllMocks()
+    }
   })
 
   it('reports nothing when the element says the surface is an editor', () => {
