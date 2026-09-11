@@ -317,8 +317,9 @@ const featureGroups = (
       // The CRM SUITE (AGL-2611, AGL-2790) — contacts and everything built on
       // them, and working the leads a site captures. Free reads its leads and
       // nothing else, so the row names what the step up adds rather than
-      // ticking "CRM" against a plan that already shows a Leads section.
-      { key: 'crm', label: 'CRM suite: contacts, companies, deals, tasks & working leads' },
+      // ticking "CRM" against a plan that already shows a Leads section. The
+      // wording is the published compare table's suite row, word for word.
+      { key: 'crm', label: 'CRM suite: contacts, companies, deals & tasks' },
       { key: 'marketingOverlays', label: 'Announcement bar & popups' },
       { key: 'customSendingDomain', label: 'Send email from your own domain' },
       { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
