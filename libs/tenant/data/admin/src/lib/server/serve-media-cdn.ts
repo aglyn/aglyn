@@ -740,12 +740,15 @@ function parseAcceptedTypes(header: unknown): {
  *
  * ## Why the CDN chooses at all
  *
- * Because it is the only participant holding the media document. A page
- * cannot name a rendition — the encodings are produced out of band, after the
- * placement, and no tenant render path reads a media document (AGL-2486). The
+ * Because it is the only participant holding the media document when the
+ * bytes are asked for. A page cannot name a rendition — the encodings are
+ * produced out of band, after the placement, and the page is ISR-cached HTML
+ * that neither regenerates when one lands nor varies on a visitor's `Accept`.
+ * The composition does read a placed film's document for its length and
+ * shape (AGL-2807), but that answer is frozen into the cached page. The
  * alternatives were a node backfill that rewrites published screens nobody
- * edited, or a Firestore read per video on the hottest ISR-cached path. This
- * costs neither: the document is already in hand on this request.
+ * edited, or naming encodings in that same frozen page. This costs neither:
+ * the document is already in hand on this request.
  *
  * ## Why the stored order is not simply obeyed
  *

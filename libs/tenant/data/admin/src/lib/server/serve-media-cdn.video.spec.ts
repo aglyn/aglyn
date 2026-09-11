@@ -323,9 +323,9 @@ describe('AGL-2743 · the master is unchanged by any of this', () => {
  *
  * A page cannot name a rendition. Encodings are produced out of band by
  * `tools/scripts/generate-video-renditions.mjs`, minutes or days after the
- * upload, and no tenant render path reads a media document — so a placement
- * made today could never address a file made tomorrow, and every encoding the
- * producer wrote would sit in the bucket unserved.
+ * upload and after the page's HTML was cached — so a placement made today
+ * could never address a file made tomorrow, and every encoding the producer
+ * wrote would sit in the bucket unserved.
  *
  * `auto` moves the choice to the participant already holding the document.
  * What is asserted below is that it is a CONSERVATIVE choice: an explicit

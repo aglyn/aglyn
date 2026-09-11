@@ -861,6 +861,30 @@ await apiStep('every reference on the published page now resolves to the new byt
   )
 })
 
+const FOLLOWS_DURATION = "the page publishes the replaced film's running time, not the picked one (AGL-2807)"
+await apiStep(FOLLOWS_DURATION, async () => {
+  // The tour node still stores what a pick of the FIRST film copied: 2 s at
+  // 640x360. The replacement runs 3 s, and the page has to say so.
+  const [block] = videoObjects(attr(await pageHtml(pageSlug)))
+  tally.check(
+    FOLLOWS_DURATION,
+    Math.abs(Number(after.film?.video?.durationMs) - 3000) <= 150 && block?.duration === 'PT3S',
+    `asset durationMs=${after.film?.video?.durationMs} VideoObject.duration=${block?.duration}`,
+  )
+})
+
+const FOLLOWS_SHAPE = 'the player takes its shape from the asset, not from the pick (AGL-2807)'
+await apiStep(FOLLOWS_SHAPE, async () => {
+  // Both fixture films are 640x360, so a replace alone cannot show a change of
+  // shape. A square frame recorded on the asset can: the node still stores the
+  // pick's 640x360, and the page has to follow the asset.
+  await media().doc(ids.film).update({ 'video.width': 480, 'video.height': 480 })
+  const html = attr(await pageHtml(pageSlug))
+  const square = /aspect-ratio:\s*480\s*\/\s*480/.test(html)
+  const picked = /aspect-ratio:\s*640\s*\/\s*360/.test(html)
+  tally.check(FOLLOWS_SHAPE, square && !picked, `480/480 present=${square}, 640/360 still present=${picked}`)
+})
+
 await apiStep('a replace across families is refused', async () => {
   const response = await callConsole('POST', '/api/media/replace', {
     hostId: HOST_ID,

@@ -153,8 +153,10 @@ export interface VideoProps {
   uploadDate?: string
   /**
    * Running time in seconds. Copied off the media document when the DAM's
-   * video pipeline publishes one (`Aglyn.videoMediaProps`), typed by the
-   * author otherwise, and omitted from the schema when neither happened.
+   * video pipeline publishes one (`Aglyn.videoMediaProps`) and read from the
+   * asset again when the page is composed, so a replace reaches it
+   * (AGL-2807); typed by the author otherwise, and omitted from the schema
+   * when neither happened.
    */
   durationSeconds?: number
   /**
@@ -193,7 +195,9 @@ export interface VideoProps {
   /**
    * The asset's own pixel dimensions, copied off the media document when the
    * video was picked (AGL-2741) — the same pair, by the same route and for
-   * the same reason, as `image.tsx`.
+   * the same reason, as `image.tsx` — and read from the asset again when the
+   * page is composed, so a replace with a different shape resizes the player
+   * (AGL-2807).
    *
    * NOT author controls, which is why neither appears in the schema below.
    * They describe the file; the CSS `width`/`height` above describe the

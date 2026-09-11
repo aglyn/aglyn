@@ -783,9 +783,9 @@ export const MEDIA_CDN_RENDITION_PARAM = 'r'
  * A key names ONE encoding, which a caller can only ask for if it knows the
  * asset has it. Nothing that renders a page knows that: renditions are
  * produced out of band by `tools/scripts/generate-video-renditions.mjs`,
- * minutes or days after the upload, and no tenant render path reads a media
- * document — the pick copies facts onto the node instead (AGL-2486,
- * AGL-2749). So a placement made today can never name a rendition made
+ * minutes or days after the upload, and a published page is cached HTML that
+ * neither regenerates when an encoding lands nor varies on a visitor's
+ * `Accept`. So a placement made today can never name a rendition made
  * tomorrow, and the encodings would be produced and never served.
  *
  * This sentinel moves the choice to the one place that already holds the

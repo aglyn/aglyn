@@ -251,8 +251,8 @@ describe('poster and rendition URLs', () => {
   /*
    * The URL a player actually loads (AGL-2753). It asks for the best encoding
    * rather than naming one, which is the only way a page can reach a file
-   * produced after it was published: renditions are made out of band and no
-   * tenant render path reads a media document.
+   * produced after it was published: renditions are made out of band, after
+   * the page's HTML was cached.
    */
   it('asks for the best encoding rather than naming one', () => {
     expect(videoDeliverySrc(REF)).toBe('/api/media/cdn/org:acme/v1?r=auto')
