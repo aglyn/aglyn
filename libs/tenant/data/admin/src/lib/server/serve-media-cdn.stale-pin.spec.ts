@@ -19,11 +19,12 @@
  * A stale content pin redirects instead of 404ing (AGL-2685), driven through
  * the real `serveMediaCdn`.
  *
- * This exit is what makes `media:{scope}/{id}@{hash}` safe to write into a
- * published document at all. Before it, the first **replace** of an asset
- * turned every screen holding the old hash into a broken image; the whole
- * pin design rests on the claim that a stale one is slower and never wrong,
- * and this file is where that claim is checked.
+ * This exit keeps a content-hashed URL that is already out in the world
+ * working after its asset is **replaced**: it lands on the current bytes
+ * instead of a broken image. It is not what makes a replace reach a page. An
+ * edge or a browser holding the immutable response never asks this handler
+ * again, which is why no page names that form
+ * (`serve-media-cdn.published-reference.spec.ts`, AGL-2798).
  *
  * Firestore and Storage are stubbed (no emulator), so this runs in the
  * default sweep. The private-asset half — that the redirect stays

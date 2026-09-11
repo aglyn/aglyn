@@ -474,9 +474,9 @@ describe('Video asks the CDN for a delivery copy (AGL-2753)', () => {
     )
   })
 
-  it('keeps the parameter on a pinned reference rather than replacing its path', () => {
+  it('loads a pinned reference through the stable URL a replace reaches (AGL-2798)', () => {
     expect(video(<Video src="media:h/film@abc123" />).getAttribute('src')).toBe(
-      `${CDN}/h/film/abc123?r=auto`,
+      `${CDN}/h/film?r=auto`,
     )
   })
 
