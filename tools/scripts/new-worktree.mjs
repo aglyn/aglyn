@@ -127,6 +127,8 @@ const ENV_FILES = [
   '.env',
   'apps/console/.env.local',
   'apps/console/.env.development.local',
+  // The tenant's Firebase web config and service account live here.
+  'apps/tenant/.env',
   'apps/tenant/.env.local',
 ]
 let copied = 0
