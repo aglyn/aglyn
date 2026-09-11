@@ -301,7 +301,7 @@ describe('on a plan without the CRM suite', () => {
     expect(screen.getByRole('combobox', { name: 'Owner' }).getAttribute('aria-disabled')).toBe(
       'true',
     )
-    expect(screen.getAllByText('Part of the CRM suite, included from Starter')).toHaveLength(2)
+    expect(screen.getAllByText('Part of the CRM, included from Starter')).toHaveLength(2)
   })
 
   it('saves the profile and sends neither the owner, the stage nor the company', async () => {

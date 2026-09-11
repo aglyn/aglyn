@@ -396,7 +396,7 @@ describe('the plan (AGL-2787)', () => {
     const { status, payload } = await post(GOOD)
     expect(status).toBe(403)
     expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(payload.error).toMatch(/part of the CRM suite/)
+    expect(payload.error).toMatch(/part of the CRM/)
     expect(payload.error).toMatch(/Included from Starter/)
     expect(mockUpsert).not.toHaveBeenCalled()
     expect(mockUpdate).not.toHaveBeenCalled()
@@ -410,7 +410,7 @@ describe('the plan (AGL-2787)', () => {
     const { status, payload } = await post(GOOD)
     expect(status).toBe(403)
     expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(payload.error).toMatch(/part of the CRM suite/)
+    expect(payload.error).toMatch(/part of the CRM/)
     expect(mockUpsert).not.toHaveBeenCalled()
   })
 

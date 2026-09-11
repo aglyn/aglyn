@@ -441,7 +441,7 @@ describe('the plan', () => {
     const { status, payload } = await post(onSite(set))
     expect(status).toBe(403)
     expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(payload.error.startsWith(`${act} is part of the CRM suite`)).toBe(true)
+    expect(payload.error.startsWith(`${act} is part of the CRM`)).toBe(true)
     expect(payload.error).toMatch(/Included from Starter/)
     expect(readContacts).not.toHaveBeenCalled()
     expect(contactWrites).toEqual([])
@@ -452,7 +452,7 @@ describe('the plan', () => {
     org = { plan: 'free' }
     const { status, payload } = await post(onSite({ notes: 'A note', ownerUid: 'editor-uid' }))
     expect(status).toBe(403)
-    expect(payload.error.startsWith("Editing a contact's notes is part of the CRM suite")).toBe(true)
+    expect(payload.error.startsWith("Editing a contact's notes is part of the CRM")).toBe(true)
     expect(contactWrites).toEqual([])
     expect(facetOf('ada').notes).toBeUndefined()
   })

@@ -560,7 +560,7 @@ describe('the plan (AGL-2787)', () => {
     const out = await importRows([{ email: 'dana@example.com', status: 'working' }])
     expect(out.code).toBe(403)
     expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(out.body.error).toMatch(/part of the CRM suite/)
+    expect(out.body.error).toMatch(/part of the CRM/)
     expect(out.body.error).toMatch(/Included from Starter/)
     expect(leadPaths()).toEqual([])
   })

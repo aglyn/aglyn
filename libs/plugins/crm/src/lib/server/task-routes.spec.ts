@@ -984,7 +984,7 @@ describe('the plan (AGL-2787)', () => {
   const expectRefused = (answer: { status: number; body: any }) => {
     expect(answer.status).toBe(403)
     expect(answer.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(answer.body.error).toMatch(/part of the CRM suite/)
+    expect(answer.body.error).toMatch(/part of the CRM/)
     expect(answer.body.error).toMatch(/Included from Starter/)
   }
   /** A support engineer's token, with no membership in the workspace. */

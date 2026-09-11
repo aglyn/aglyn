@@ -201,7 +201,7 @@ beforeEach(() => {
 describe('the contact record on Free', () => {
   it('carries the notice naming what is locked and the plan that includes it', () => {
     renderPage({ plan: 'free' })
-    expect(screen.getByText(/is part of the CRM suite\. Included from Starter\./)).toBeTruthy()
+    expect(screen.getByText(/is part of the CRM\. Included from Starter\./)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'View plans' }).getAttribute('href')).toBe(
       '/acme/billing',
     )
@@ -213,7 +213,7 @@ describe('the contact record on Free', () => {
     expect(handed['send-email']).toMatchObject({ suiteLocked: true })
     const merge = screen.getByText('Merge into…')
     expect(merge.getAttribute('data-disabled')).toBe('true')
-    expect(merge.getAttribute('title')).toBe('Part of the CRM suite, included from Starter')
+    expect(merge.getAttribute('title')).toBe('Part of the CRM, included from Starter')
     expect(screen.getByText('Delete contact').getAttribute('data-disabled')).toBe('false')
   })
 
@@ -233,7 +233,7 @@ describe('the contact record on Free', () => {
 describe('the contact record on Starter', () => {
   it('locks nothing, draws every card and no notice', () => {
     renderPage({ plan: 'starter' })
-    expect(screen.queryByText(/part of the CRM suite/)).toBeNull()
+    expect(screen.queryByText(/part of the CRM/)).toBeNull()
     expect(handed['properties']).toMatchObject({ suiteLocked: false })
     expect(handed['timeline']).toMatchObject({ suiteLocked: false })
     expect(handed['call']).toMatchObject({ suiteLocked: false })

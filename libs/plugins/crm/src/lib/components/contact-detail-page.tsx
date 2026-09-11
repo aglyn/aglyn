@@ -126,12 +126,12 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
   const mount = useCrmOrgMount()
   const merge = useContactMergeDialog()
   /*
-   * THE CRM SUITE (AGL-2788). Reading this person is on every plan, and so
-   * are their tags, notes, deletion and erasure. Working them — owner, stage
+   * THE CRM (AGL-2788). This page is the CRM's, and the shell mounts no CRM
+   * page for a plan without it (AGL-2851). What locks below — owner, stage
    * and company; tasks, deals, files and custom fields; a logged call or
-   * activity; one-to-one email; a merge — is the suite's. The shell mounted
-   * this page once the org had settled, so this is the plan, not a paint of
-   * the org still loading.
+   * activity; one-to-one email; a merge — draws only for an org whose plan
+   * lacks the CRM. The shell mounted this page once the org had settled, so
+   * this is the plan, not a paint of the org still loading.
    */
   const suiteIncluded = crmSuiteIncluded(org)
 
@@ -465,8 +465,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             <CrmSuiteNotice>
               {'Working this contact — the owner, stage and company, tasks, ' +
                 'deals, files and custom fields, logging a call or an activity, ' +
-                'one-to-one email and merging duplicates — is part of the CRM ' +
-                'suite.'}
+                'one-to-one email and merging duplicates — is part of the CRM.'}
             </CrmSuiteNotice>
           )}
           {/*
@@ -495,9 +494,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             bookingsHref={bookingsHref}
           />
           {/*
-            The suite's own cards — custom fields, deals, tasks, files — are
-            named in the notice above on a plan without the suite, rather than
-            drawn as four upsells in a row.
+            On a plan without the CRM, the cards that only work a record —
+            custom fields, deals, tasks, files — are named in the notice above
+            rather than drawn as four upsells in a row.
           */}
           {suiteIncluded ? (
             <ContactCustomFieldsCard hostId={hostId} org={org} contactId={id} basePath={basePath} />

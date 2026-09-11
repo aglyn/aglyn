@@ -117,6 +117,41 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
 
+/**
+ * THE PLAN (AGL-2851). The line records an act of the organization's CRM,
+ * and the CRM is included from Starter: an org whose plan does not carry it
+ * is refused `plan_required` / `crm` once the caller is known, staff
+ * included, and nothing is logged.
+ */
+describe('crm/org-activity and the plan', () => {
+  const refusedForPlan = (answer: { status: number; answer: any }) =>
+    answer.status === 403 &&
+    answer.answer?.reason === 'plan_required' &&
+    answer.answer?.code === 'crm'
+
+  it('refuses a Free workspace, staff included, and logs nothing', async () => {
+    orgs = { [ORG]: { $id: ORG, plan: 'free' } }
+    expect(refusedForPlan(await call(good))).toBe(true)
+    mockDecoded = { ...mockDecoded, staff: true }
+    expect(refusedForPlan(await call(good))).toBe(true)
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('answers authorization before the plan', async () => {
+    orgs = { [ORG]: { $id: ORG, plan: 'free' } }
+    mockPermissions = { ...mockPermissions, orgWide: false }
+    const scoped = await call(good)
+    expect(scoped.status).toBe(403)
+    expect(scoped.answer.reason).toBeUndefined()
+  })
+
+  it('CONTROL: admits Starter', async () => {
+    orgs = { [ORG]: { $id: ORG, plan: 'starter', subscription: { status: 'active' } } }
+    expect((await call(good)).status).toBe(200)
+    expect(mockLogOrgActivity).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('crm/org-activity', () => {
   it('is registered under the name the client posts to', () => {
     expect(CRM_ORG_ACTIVITY_ROUTE).toBe('crm/org-activity')

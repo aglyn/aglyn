@@ -32,7 +32,9 @@
  *     company is untouched — and only then is the document deleted.
  *  3. PAST THE BOUND. A pass detaches a batch's worth, keeps the company and
  *     says more remain.
- *  4. EVERY PLAN. Removing a workspace's own record is not the CRM suite's.
+ *  4. THE PLAN (AGL-2851). Companies are the CRM's, included from Starter: a
+ *     plan without it is refused once the writer is known, staff included,
+ *     and nothing is unlinked.
  */
 
 const verifyIdToken = jest.fn()
@@ -317,6 +319,50 @@ describe('the gate', () => {
   })
 })
 
+/**
+ * THE PLAN (AGL-2851). Companies are the CRM's, and the CRM is included from
+ * Starter: a workspace whose plan does not carry it deletes no company here,
+ * staff included, and nothing is unlinked. Asked once the caller is known, so
+ * a viewer on Free still hears about their role.
+ */
+describe('the plan', () => {
+  const refusedForPlan = (answer: { status: number; payload: any }) =>
+    answer.status === 403 &&
+    answer.payload?.reason === 'plan_required' &&
+    answer.payload?.code === 'crm'
+
+  it('refuses a Free workspace, staff included, and unlinks nothing', async () => {
+    seedLinked(1)
+    org = { plan: 'free' }
+    expect(refusedForPlan(await post(DELETE_ACME))).toBe(true)
+    caller = { uid: 'staff-uid', staff: true }
+    expect(refusedForPlan(await post(DELETE_ACME))).toBe(true)
+    expect(store[`${COMPANIES}/co-acme`]).toBeDefined()
+    expect(store[`${CONTACTS}/linked-0`].companyIds).toEqual(['co-acme'])
+  })
+
+  it('reads a paid plan whose subscription died as Free', async () => {
+    org = { plan: 'pro', billingStatus: 'canceled' }
+    expect(refusedForPlan(await post(DELETE_ACME))).toBe(true)
+    expect(store[`${COMPANIES}/co-acme`]).toBeDefined()
+  })
+
+  it('answers authorization before the plan', async () => {
+    org = { plan: 'free' }
+    expect((await post(DELETE_ACME, { token: null })).status).toBe(401)
+    caller = { uid: 'viewer-uid' }
+    const viewer = await post(DELETE_ACME)
+    expect(viewer.status).toBe(403)
+    expect(viewer.payload.reason).toBeUndefined()
+  })
+
+  it('CONTROL: admits Starter', async () => {
+    org = { plan: 'starter', subscription: { status: 'active' } }
+    expect((await post(DELETE_ACME)).status).toBe(200)
+    expect(store[`${COMPANIES}/co-acme`]).toBeUndefined()
+  })
+})
+
 describe('the detach', () => {
   it('unlinks every contact — the mirror and every facet naming it — then deletes the company', async () => {
     store[`${CONTACTS}/shared`] = {
@@ -372,15 +418,7 @@ describe('the detach', () => {
   })
 })
 
-describe('every plan', () => {
-  it("deletes on Free — removing a workspace's own record is not the suite's", async () => {
-    org = { plan: 'free' }
-    seedLinked(1)
-    const { status, payload } = await post(DELETE_ACME)
-    expect(status).toBe(200)
-    expect(payload.deleted).toBe(true)
-  })
-
+describe('the organization level', () => {
   it('deletes from the organization level', async () => {
     const { status, payload } = await post({ orgId: ORG_ID, companyId: 'co-acme' })
     expect(status).toBe(200)

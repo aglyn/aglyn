@@ -154,7 +154,7 @@ describe('saving custom values', () => {
 
   it("shows a refusal in the route's own words, and keeps the draft", async () => {
     refusal =
-      "Editing a contact's custom fields is part of the CRM suite, which is not " +
+      "Editing a contact's custom fields is part of the CRM, which is not " +
       'included in your current plan.'
     renderCard()
     editTier('platinum')

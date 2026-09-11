@@ -332,7 +332,7 @@ describe('the plan (AGL-2787)', () => {
     const out = await importRows([{ title: 'Acme renewal', stage: 'Proposal sent' }])
     expect(out.code).toBe(403)
     expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(out.body.error).toMatch(/part of the CRM suite/)
+    expect(out.body.error).toMatch(/part of the CRM/)
     expect(out.body.error).toMatch(/Included from Starter/)
     expect(stored()).toEqual([])
     expect(pipelineReads).toBe(0)

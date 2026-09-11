@@ -47,10 +47,12 @@
  * could not read them in the browser either, and the route does not unlink
  * people on behalf of someone who may not see them.
  *
- * ## Every plan
+ * ## The plan
  *
- * Deleting is not the CRM suite's. A workspace removes its own records on
- * any plan, as the rules let it (AGL-2801), so no plan is asked here.
+ * Companies are the CRM's, and the CRM is included from Starter (AGL-2851):
+ * a workspace whose plan does not carry it is refused once the writer is
+ * known, staff included, before anything is read or unlinked
+ * (`suite-gate.ts`).
  */
 
 import {
@@ -110,7 +112,7 @@ export const crmCompanyDeleteHandler: PluginApiHandler = async (req, res) => {
   }
 
   try {
-    const writer = await authorizeCrmWriter(req, scope, { suiteAct: null })
+    const writer = await authorizeCrmWriter(req, scope, { suiteAct: 'Deleting a company' })
     if (writer.ok === false) {
       res.status(writer.status).json(writer.body)
       return

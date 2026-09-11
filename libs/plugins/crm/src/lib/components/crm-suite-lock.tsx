@@ -30,28 +30,24 @@ import { useParams } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 /**
- * THE CRM SUITE, AS A SURFACE'S OWN ACTS DRAW IT (AGL-2788, AGL-2790).
+ * THE CRM'S LOCK AND NOTICE, AS A SURFACE'S OWN CONTROLS DRAW THEM (AGL-2788).
  *
- * The shell locks the suite's SECTIONS on a plan without `features.crm`
- * (AGL-2611): the rail draws a lock beside each, and a locked section's body
- * is the upgrade notice. That is every section but Leads (AGL-2790), which
- * such a plan reads and does not work — and most of what can be done TO a
- * person anywhere in the CRM is the suite: adding one by hand, importing a
- * file, a saved view, an owner, a stage, a company, a task, a logged call, an
- * email, a merge. This module draws those acts on such a plan in the shell's
- * own terms: the lock the rail draws, on a control that stays where it is
- * and cannot be pressed, and the notice and link the shell ends a locked
- * section with.
+ * The CRM is included from Starter (AGL-2851), and the shell refuses all of
+ * it on a plan without `features.crm`: every section is drawn locked beside
+ * the upgrade notice, and no CRM page mounts. These are a page's second
+ * answer, not its first. When a CRM surface renders for an org whose plan
+ * lacks the CRM, its acts — adding a person by hand, importing a file, a
+ * saved view, an owner, a stage, a company, a task, a logged call, an email,
+ * a merge — are drawn in the shell's own terms: the lock the rail draws, on a
+ * control that stays where it is and cannot be pressed, and the notice and
+ * link the shell ends a locked section with.
  *
- * ## Not hidden, and not pressable — except where a surface is for reading
+ * ## Not hidden, and not pressable
  *
- * On a working surface, a control that vanished would hide the feature from
- * the plan that is being asked to buy it, and one that opened and then failed
- * would spend the reader's work on a refusal. The routes behind these acts
- * refuse the same plans either way (`server/suite-gate.ts`). The Leads
- * section and a lead's page are the other shape: on a plan without the suite
- * they are for reading, so they draw no working act at all and say why once,
- * with {@link CrmSuiteNotice}.
+ * A control that vanished would hide the CRM from the plan being asked to buy
+ * it, and one that opened and then failed would spend the reader's work on a
+ * refusal. The routes behind these acts refuse the same plans either way
+ * (`server/suite-gate.ts`).
  *
  * ## An answer, not a loading state
  *
@@ -76,8 +72,8 @@ export function crmSuiteIncluded(org: unknown): boolean {
 export function crmSuiteLockedReason(): string {
   const plan = planLabelGrantingFeature(CRM_SUITE_FEATURE)
   return plan
-    ? `Part of the CRM suite, included from ${plan}`
-    : 'Part of the CRM suite, which your plan does not include'
+    ? `Part of the CRM, included from ${plan}`
+    : 'Part of the CRM, which your plan does not include'
 }
 
 /**

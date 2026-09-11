@@ -16,15 +16,24 @@
  */
 
 /**
- * THE CRM SUITE'S PLAN GATE, for the routes the console calls (AGL-2787).
+ * THE CRM'S PLAN GATE, for the routes the console calls (AGL-2787, AGL-2851).
  *
- * The CRM suite is included from Starter: `features.crm` is false on Free,
- * where the CRM opens on its Leads, read-only (AGL-2790). Two doors onto the suite's
- * records already ask the plan: the shell draws the suite's sections locked
- * and refuses their bodies, and the `/v1` dispatcher refuses the `crm:*`
- * resources. These routes are the third door. A lock drawn on a page is
- * advice to a script holding a member's token, so the same question is
- * asked where the write happens.
+ * The CRM is included from Starter: `features.crm` is false on Free, and a
+ * Free workspace has none of it — no section, no read and no write. Three
+ * other doors onto the CRM's records ask the same question: the shell draws
+ * every CRM section locked and refuses its body, the `/v1` dispatcher refuses
+ * the CRM's resources, and the Firestore rules refuse a client's CRM writes.
+ * These routes are the fourth door, and every `crm/*` read and write asks it.
+ * A lock drawn on a page is advice to a script holding a member's token, so
+ * the same question is asked where the read or the write happens.
+ *
+ * ## What is never asked
+ *
+ * Capture — a form, a sign-up, a booking, an order — does not come through
+ * these routes, and records what it records on every plan. The compliance
+ * doors are every plan's too: `crm/erase-person`, and the contacts and leads
+ * files of `/api/crm/export`, because exporting and erasing the people a
+ * workspace holds are obligations rather than CRM features.
  *
  * ## After authorization, never before
  *
@@ -74,7 +83,7 @@ export interface CrmSuiteRefusal {
 export function crmSuiteRefusalMessage(act: string): string {
   const plan = planLabelGrantingFeature(CRM_SUITE_FEATURE)
   return (
-    `${act} is part of the CRM suite, which is not included in your current ` +
+    `${act} is part of the CRM, which is not included in your current ` +
     'plan. Manage your plan and add-ons from Billing.' +
     (plan ? ` Included from ${plan}.` : '')
   )

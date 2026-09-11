@@ -427,7 +427,7 @@ describe('the plan (AGL-2787)', () => {
     const out = await importRows([{ name: 'Globex' }, { name: 'Acme', industry: 'Software' }])
     expect(out.code).toBe(403)
     expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(out.body.error).toMatch(/part of the CRM suite/)
+    expect(out.body.error).toMatch(/part of the CRM/)
     expect(out.body.error).toMatch(/Included from Starter/)
     expect(stored()).toHaveLength(1)
     expect(updates).toEqual([])

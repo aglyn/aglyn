@@ -125,17 +125,17 @@ describe('CrmSuiteLockedButton', () => {
     // The reason opens on the wrapper, since a disabled button fires nothing.
     fireEvent.mouseOver(button.parentElement as HTMLElement)
     expect(
-      await screen.findByText('Part of the CRM suite, included from Starter'),
+      await screen.findByText('Part of the CRM, included from Starter'),
     ).toBeTruthy()
-    expect(crmSuiteLockedReason()).toBe('Part of the CRM suite, included from Starter')
+    expect(crmSuiteLockedReason()).toBe('Part of the CRM, included from Starter')
   })
 })
 
 describe('CrmSuiteNotice', () => {
   it('names the plan that includes the suite and links to the plans', () => {
-    render(<CrmSuiteNotice>{'Importing a CSV is part of the CRM suite.'}</CrmSuiteNotice>)
+    render(<CrmSuiteNotice>{'Importing a CSV is part of the CRM.'}</CrmSuiteNotice>)
     expect(
-      screen.getByText('Importing a CSV is part of the CRM suite. Included from Starter.'),
+      screen.getByText('Importing a CSV is part of the CRM. Included from Starter.'),
     ).toBeTruthy()
     expect(screen.getByRole('link', { name: 'View plans' }).getAttribute('href')).toBe(
       '/acme/billing',

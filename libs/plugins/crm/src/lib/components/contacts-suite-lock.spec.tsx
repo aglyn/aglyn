@@ -156,7 +156,7 @@ describe('the Contacts list on Free', () => {
 
   it("carries the shell's notice: the plan that includes the suite, and the way to it", () => {
     mount(FREE)
-    expect(screen.getByText(/part of the CRM suite\. Included from Starter\./)).toBeTruthy()
+    expect(screen.getByText(/part of the CRM\. Included from Starter\./)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'View plans' }).getAttribute('href')).toBe(
       '/acme/billing',
     )
@@ -167,7 +167,7 @@ describe('the Contacts list on Free', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View: All contacts' }))
     const saveAs = screen.getByRole('menuitem', { name: /Save as view/ })
     expect(saveAs.getAttribute('aria-disabled')).toBe('true')
-    expect(within(saveAs).getByText('Part of the CRM suite, included from Starter')).toBeTruthy()
+    expect(within(saveAs).getByText('Part of the CRM, included from Starter')).toBeTruthy()
     expect(
       screen.getByRole('menuitem', { name: 'All contacts' }).getAttribute('aria-disabled'),
     ).toBeNull()
@@ -197,7 +197,7 @@ describe('the Contacts list on Starter', () => {
     mount(STARTER)
     expect(button('New contact').disabled).toBe(false)
     expect(button('Import CSV').disabled).toBe(false)
-    expect(screen.queryByText(/part of the CRM suite/)).toBeNull()
+    expect(screen.queryByText(/part of the CRM/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'View: All contacts' }))
     expect(
       screen.getByRole('menuitem', { name: /Save as view/ }).getAttribute('aria-disabled'),

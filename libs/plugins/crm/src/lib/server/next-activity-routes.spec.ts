@@ -164,7 +164,7 @@ describe('the plan (AGL-2787)', () => {
   const expectRefused = ({ status, body }: { status: number; body: Record<string, unknown> }) => {
     expect(status).toBe(403)
     expect(body).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(body['error']).toMatch(/part of the CRM suite/)
+    expect(body['error']).toMatch(/part of the CRM/)
     expect(body['error']).toMatch(/Included from Starter/)
   }
 
