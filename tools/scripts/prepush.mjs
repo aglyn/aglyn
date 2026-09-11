@@ -162,11 +162,20 @@ function citationsCheck(ranges) {
     forgiven: raw.historicalCitations?.commits ?? [],
   })
   if (!above.length) return { name, state: 'PASS', ms: Date.now() - begun }
+  // An id far above the ceiling cannot be one Linear has assigned since, so it
+  // fails here as CI's check would. A nearer one may be a real new issue, and
+  // only CI can ask Linear, so it warns.
+  const implausible = above.filter((one) => one.implausible)
   return {
     name,
-    state: 'WARN',
+    state: implausible.length ? 'FAIL' : 'WARN',
     ms: Date.now() - begun,
     output: [
+      ...(implausible.length
+        ? [
+            `${implausible.map((one) => one.id).join(', ')} cannot exist: too far above the checked-in ceiling AGL-${read.ceiling.highest} for any issue filed since. A synthetic id in a guard's own self-test belongs in NOT_A_CITATION in tools/scripts/lib/linear-ids.mjs; anything else is a typo.`,
+          ]
+        : []),
       `${above.map((one) => one.id).join(', ')} ${above.length === 1 ? 'is' : 'are'} above the checked-in ceiling AGL-${read.ceiling.highest}.`,
       "CI's check:linear-ids asks Linear and refuses an id it has not assigned: cite only an issue that already exists.",
       ...above.map((one) => `  ${one.id}  ${one.where.slice(0, 3).join(', ')}`),

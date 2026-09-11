@@ -171,16 +171,28 @@ export function commitsOf(logText) {
 }
 
 /**
+ * How far above the checked-in ceiling an id has to be before it cannot be an
+ * issue Linear assigned since the ceiling was last raised. The ceiling lags the
+ * workspace by days and the workspace grows by tens of issues a day, so a gap
+ * this large is a fixture or a typo: a four-nines placeholder in a test, or a
+ * real id typed with an extra digit.
+ */
+export const IMPLAUSIBLE_MARGIN = 1000
+
+/**
  * Every issue id a push cites above `ceiling`, in its commit messages and in
- * the lines it adds, with where each appears. The same exemptions as
- * `check:linear-ids`: the historical commits the ceiling file forgives, and the
- * files that write about ids rather than cite them.
+ * the lines it adds, with where each appears and whether it is `implausible`.
+ * The same exemptions as `check:linear-ids`: the historical commits the ceiling
+ * file forgives, and the files that write about ids rather than cite them.
  */
 export function citationsAboveCeiling({ commits, addedLines, ceiling, forgiven = [] }) {
   const above = new Map()
   const note = (citation, where) => {
     if (classifyCitation(citation, ceiling) !== FABRICATED) return
-    if (!above.has(citation.id)) above.set(citation.id, { ...citation, where: [] })
+    if (!above.has(citation.id)) {
+      const implausible = citation.number <= 0 || citation.number - ceiling >= IMPLAUSIBLE_MARGIN
+      above.set(citation.id, { ...citation, implausible, where: [] })
+    }
     above.get(citation.id).where.push(where)
   }
   for (const { sha, message } of commits) {

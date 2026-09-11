@@ -124,6 +124,7 @@ export const NOT_A_CITATION = Object.freeze([
   // Synthetic fixtures in the sibling guards' self-tests.
   'tools/scripts/lib/decision-log.test.mjs',
   'tools/scripts/lib/dependency-egress.test.mjs',
+  'tools/scripts/lib/prepush.test.mjs',
   'tools/scripts/lib/shipped-not-closed.test.mjs',
 ])
 

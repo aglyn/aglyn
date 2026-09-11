@@ -160,6 +160,31 @@ describe('citationsAboveCeiling', () => {
   })
 })
 
+describe('implausible citations', () => {
+  it('marks an id 1000 or more above the ceiling implausible: a fixture, not a lagging ceiling', () => {
+    const [one] = citationsAboveCeiling({
+      commits: [],
+      addedLines: [{ path: 'tools/scripts/lib/new.test.mjs', line: 1, text: "const id = 'AGL-9999'" }],
+      ceiling: 2842,
+    })
+    assert.equal(one.implausible, true)
+  })
+
+  it('leaves an id just above the ceiling plausible, because Linear may have assigned it', () => {
+    const [one] = citationsAboveCeiling({
+      commits: [{ sha: 'aaaaaaaaa', message: 'fix: x (AGL-2900)' }],
+      addedLines: [],
+      ceiling: 2842,
+    })
+    assert.equal(one.implausible, false)
+  })
+
+  it('treats AGL-0 as implausible outright', () => {
+    const [one] = citationsAboveCeiling({ commits: [{ sha: 'b', message: 'x (AGL-0)' }], addedLines: [], ceiling: 2842 })
+    assert.equal(one.implausible, true)
+  })
+})
+
 describe('prepush.mjs and its hook', () => {
   it('checks nothing for an empty range', () => {
     const out = execFileSync(process.execPath, [join(repoRoot, 'tools', 'scripts', 'prepush.mjs'), '--base', 'HEAD'], {
