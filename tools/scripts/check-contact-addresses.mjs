@@ -71,6 +71,7 @@ import {
   STATUTORY_INTAKE_ADDRESSES,
   UNVERIFIED_PROVISIONING,
 } from './lib/contact-addresses.mjs'
+import { inScope, scopeFromArgv, scopeNote } from './lib/guard-scope.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -120,8 +121,16 @@ function read(path) {
   }
 }
 
+let scope
+try {
+  scope = scopeFromArgv(args)
+} catch (error) {
+  console.error(error.message)
+  process.exit(2)
+}
+
 const files = []
-for (const path of trackedFiles()) {
+for (const path of trackedFiles().filter((one) => inScope(scope, one))) {
   const text = read(path)
   if (text !== null) files.push({ path, text })
 }
@@ -162,7 +171,7 @@ if (UNVERIFIED_PROVISIONING.length) {
   console.log('')
 }
 
-console.log(`Scanned ${files.length} tracked files.`)
+console.log(`Scanned ${files.length} tracked files.${scope ? ` ${scopeNote(scope)}.` : ''}`)
 
 if (!findings.length) {
   console.log('✅ Every @aglyn.com address published in the repo is provisioned.')

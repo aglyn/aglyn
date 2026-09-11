@@ -2,12 +2,13 @@
 
 ## Verify in the cheapest tier that can see the mistake
 
-Three tiers exist. They are not interchangeable, and collapsing them is the
+Four tiers exist. They are not interchangeable, and collapsing them is the
 single largest source of first-run CI reds (AGL-2752).
 
 | tier | command | measured | when |
 | -- | -- | -- | -- |
 | targeted | `npx eslint <staged tools files>`, `npm run typecheck:changed` | seconds | before every push |
+| pre-push | `.husky/pre-push` runs `tools/scripts/prepush.mjs` by itself (AGL-2837) | 2.3s for 8 files, 2.6s for 217 | every `git push` |
 | guards | `node tools/scripts/run-guards.mjs --concurrency 8` | 102 guards, 146s | once, before opening a promotion PR |
 | gate | `bash tools/gate.sh` | 25-90 min | never locally — the PR runs it |
 

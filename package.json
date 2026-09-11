@@ -109,6 +109,8 @@
     "test:runbook-commands": "node tools/scripts/check-runbook-commands.mjs --self-test",
     "test:ci-test-digest": "node --test tools/scripts/lib/ci-test-digest.test.mjs",
     "test:lint-verdict": "node --test tools/scripts/lib/lint-verdict.test.mjs",
+    "prepush": "node tools/scripts/prepush.mjs --base origin/main",
+    "test:prepush": "node --test tools/scripts/lib/prepush.test.mjs tools/scripts/lib/stale-literals.test.mjs tools/scripts/lib/guard-scope.test.mjs",
     "test:deploy-guard": "node --test tools/scripts/lib/clean-deploy-source.test.mjs",
     "test:gate-script": "bash tools/gate.sh --self-test",
     "test:vercel-ignore-build": "node --test tools/scripts/lib/vercel-ignore-build.test.mjs",

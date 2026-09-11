@@ -90,6 +90,8 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { inScope, scopeFromArgv, scopeNote } from './lib/guard-scope.mjs'
+
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 /**
@@ -229,7 +231,14 @@ function trackedFiles() {
 }
 
 function main() {
-  const files = trackedFiles()
+  let scope
+  try {
+    scope = scopeFromArgv(process.argv.slice(2))
+  } catch (error) {
+    console.error(error.message)
+    return 2
+  }
+  const files = trackedFiles().filter((file) => inScope(scope, file))
   const violations = []
   let scanned = 0
   for (const file of files) {
@@ -249,7 +258,8 @@ function main() {
 
   if (!violations.length) {
     console.log(
-      `check-personal-identifiers: OK — no personal identifier in ${scanned} tracked files.`,
+      `check-personal-identifiers: OK — no personal identifier in ${scanned} tracked files.` +
+        (scope ? ` ${scopeNote(scope)}.` : ''),
     )
     return 0
   }

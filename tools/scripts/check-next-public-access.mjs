@@ -56,9 +56,11 @@
  * bracket.
  */
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { scopeFromArgv, scopeNote } from './lib/guard-scope.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const SWEEP_ROOTS = ['apps', 'libs', 'cloud']
@@ -109,7 +111,21 @@ function sweptFiles(dir, found = []) {
   return found
 }
 
-const files = SWEEP_ROOTS.flatMap((root) => sweptFiles(join(REPO_ROOT, root)))
+let scope
+try {
+  scope = scopeFromArgv(process.argv.slice(2))
+} catch (error) {
+  console.error(error.message)
+  process.exit(2)
+}
+
+// A scope names its files, so the walk that would find them is skipped.
+const files = scope
+  ? [...scope]
+      .filter((path) => SWEEP_ROOTS.some((root) => path.startsWith(`${root}/`)) && SWEPT.test(path))
+      .map((path) => join(REPO_ROOT, path))
+      .filter((file) => existsSync(file))
+  : SWEEP_ROOTS.flatMap((root) => sweptFiles(join(REPO_ROOT, root)))
 const offences = []
 
 for (const file of files) {
@@ -126,12 +142,14 @@ for (const file of files) {
 
 console.log(
   `NEXT_PUBLIC access form · ${files.length} files swept · ` +
-    `${offences.length} bracket read(s) outside server-only paths`,
+    `${offences.length} bracket read(s) outside server-only paths` +
+    (scope ? ` · ${scopeNote(scope)}` : ''),
 )
 
 // Guard the premise: a walk that reached nothing would report zero offences
-// and read as a pass, which is the failure this repo keeps rediscovering.
-if (files.length < 3000) {
+// and read as a pass, which is the failure this repo keeps rediscovering. A
+// scope is small on purpose, so the premise is about the walk alone.
+if (!scope && files.length < 3000) {
   console.error(
     `\nFAIL: swept only ${files.length} files — the walk is not reaching the ` +
       'corpus, so a clean verdict would be meaningless.',

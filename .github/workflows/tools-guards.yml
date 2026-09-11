@@ -423,6 +423,15 @@ jobs:
       # that never arrived. Pure node, no network.
       - run: npm run test:lint-verdict
 
+      # test:prepush  The pre-push checks (AGL-2837): which checks a pushed
+      # path trips, citations above the Linear ceiling, the stale-literal
+      # finder replayed against a throwaway repository in the 551bdd32f shape,
+      # and the `--files-from` scope of the five file-content guards, including
+      # the refusal to write a ratchet baseline from a partial sweep. A hook
+      # runs on one machine and gates nothing, so this suite is what keeps its
+      # decisions honest. Pure node and git, no network.
+      - run: npm run test:prepush
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
