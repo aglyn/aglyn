@@ -93,7 +93,9 @@ import {
 } from '../../../../../../../../../../constants/route-links'
 import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useOpenPreview from '../../../../../../../../../../hooks/use-open-preview'
-import useScreenLinkRoutes from '../../../../../../../../../../hooks/use-screen-link-routes'
+import useScreenLinkRoutes, {
+  screenLinkLabels,
+} from '../../../../../../../../../../hooks/use-screen-link-routes'
 import {
   useHostId,
   useHostSubdomain,
@@ -189,17 +191,14 @@ function LayoutBesignerPage(props) {
   const screenLinks = useMemo(
     () => ({
       screens: linkableRoutes,
-      labels: Object.fromEntries(
-        (screenDocs ?? []).map((screen: any) => [
-          screen.$id,
-          screen.displayName ?? screen.$id,
-        ]),
-      ),
+      labels: screenLinkLabels(screenDocs, {
+        listingTargets: collectionTemplates.listingTargets,
+      }),
       suppressNavigation: true,
       // Static canvas: interactions inert, menus/drawers show editor affordance (AGL-830).
       editorInert: true,
     }),
-    [linkableRoutes, screenDocs],
+    [linkableRoutes, screenDocs, collectionTemplates.listingTargets],
   )
   const { doc: result } = useLayoutVersion({
     hostId,

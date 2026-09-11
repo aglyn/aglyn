@@ -60,6 +60,7 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   ScreenLinkContext,
+  screenLinkTargetOptions,
   subscribeKnownPluginInstalls,
   unresolvedScreenOption,
 } from '@aglyn/aglyn'
@@ -1184,16 +1185,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
       return (rawAttributes ?? []).map(withAttributeHelp).map((field) => {
         if (field.component === FieldComponentType.SCREEN_SELECT) {
+          // The host's screens by path, then its collection listings
+          // (AGL-2799) — built by the function the `Link`-typed prop picker
+          // uses too, so neither can offer a target the other does not.
           const options = [
             { value: '', label: 'None (use external URL)' },
-            ...Object.entries(screens ?? {})
-              .sort(([, a], [, b]) => a.localeCompare(b))
-              .map(([screenId, path]) => ({
-                value: screenId,
-                label: `${labels?.[screenId] ?? screenId} (${
-                  path === '/' ? '/' : `/${path}`
-                })`,
-              })),
+            ...screenLinkTargetOptions(screens, labels, 'path').map(
+              ({ value, label }) => ({ value, label }),
+            ),
           ]
           // A stored target the host no longer has renders as a BLANK
           // picker, which reads as "no link set" while the element still

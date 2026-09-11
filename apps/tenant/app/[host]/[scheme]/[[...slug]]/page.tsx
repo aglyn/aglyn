@@ -1217,6 +1217,7 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
     screenRoutes = Aglyn.linkableScreenRoutes(routedHost.screens, {
       routedElsewhere: routing.listRoutes,
       unrouted: routing.templateScreenIds,
+      collectionListings: routing.collectionListings,
     })
   }
   // A new object again, never a mutated one — `result.props` belongs to the

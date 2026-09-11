@@ -19,11 +19,15 @@ import {
   BROKEN_SCREEN_LINK_ATTR,
   BROKEN_SCREEN_LINK_MESSAGE,
   brokenScreenLinkProps,
+  formatCollectionLinkValue,
   formatScreenLinkValue,
   isScreenLinkBroken,
   nodesReferenceScreen,
+  parseCollectionLinkValue,
   parseScreenLinkValue,
   resolveScreenHref,
+  screenLinkTargetOptions,
+  screenRoutesAnswerFor,
   splitLinkValue,
   unresolvedScreenOption,
 } from './screen-link-context'
@@ -268,5 +272,197 @@ describe('nodesReferenceScreen (AGL-703)', () => {
   it('is false for empty inputs rather than throwing', () => {
     expect(nodesReferenceScreen(null, 'about')).toBe(false)
     expect(nodesReferenceScreen(nodes({ screenId: 'about' }), '')).toBe(false)
+  })
+})
+
+/**
+ * A content collection's LISTING page as a link target (AGL-2799).
+ *
+ * The pickers offered screens and nothing else, so aglyn.com's drawer could
+ * not point at `/blog` and linked it as a typed address — one that follows no
+ * rename and that no broken-link check can see. A listing link stores the
+ * collection's id and resolves through the same routing map a screen does.
+ */
+describe('a collection listing as a link target (AGL-2799)', () => {
+  const ROUTES = {
+    ...SCREENS,
+    'collection:blog': 'blog',
+    'collection:yQuEudFcgR': 'newsroom',
+  }
+  const LABELS = {
+    home: 'Home',
+    pricing: 'Pricing',
+    about: 'About',
+    'collection:blog': 'Blog',
+    'collection:yQuEudFcgR': 'Press',
+  }
+
+  describe('the stored value', () => {
+    it('names the collection by id and round-trips', () => {
+      expect(formatCollectionLinkValue('blog')).toBe('collection:blog')
+      expect(parseCollectionLinkValue('collection:blog')).toBe('blog')
+      expect(parseCollectionLinkValue(' collection: yQuEudFcgR ')).toBe(
+        'yQuEudFcgR',
+      )
+    })
+
+    it('is stored as the listing key itself, never as a screen reference', () => {
+      // `screen:collection:blog` would be a reference to a screen that does
+      // not exist, and would read as one everywhere a screen id is compared.
+      expect(formatScreenLinkValue('collection:blog')).toBe('collection:blog')
+      expect(parseScreenLinkValue('collection:blog')).toBe('collection:blog')
+    })
+
+    it('reads nothing else as a listing', () => {
+      expect(parseCollectionLinkValue('collection:')).toBeUndefined()
+      expect(parseCollectionLinkValue('/blog')).toBeUndefined()
+      expect(parseCollectionLinkValue('screen:blog')).toBeUndefined()
+      expect(parseCollectionLinkValue('blog')).toBeUndefined()
+      expect(parseCollectionLinkValue(undefined)).toBeUndefined()
+    })
+
+    it('arrives as a target from either slot, and beats a typed address', () => {
+      expect(splitLinkValue('collection:blog', undefined)).toEqual({
+        screenId: 'collection:blog',
+      })
+      // The slot a `Link`-typed component prop can land it in (AGL-1335).
+      expect(splitLinkValue(undefined, 'collection:blog')).toEqual({
+        screenId: 'collection:blog',
+      })
+      expect(splitLinkValue('collection:blog', '/blog')).toEqual({
+        screenId: 'collection:blog',
+      })
+    })
+
+    it('leaves every existing shape meaning what it meant', () => {
+      expect(formatScreenLinkValue('pricing')).toBe('screen:pricing')
+      expect(parseScreenLinkValue('screen:pricing')).toBe('pricing')
+      expect(parseScreenLinkValue('/blog')).toBeUndefined()
+      expect(splitLinkValue('pricing', undefined)).toEqual({
+        screenId: 'pricing',
+      })
+      expect(splitLinkValue(undefined, '/blog')).toEqual({ href: '/blog' })
+      expect(splitLinkValue(undefined, 'https://aglyn.com/blog')).toEqual({
+        href: 'https://aglyn.com/blog',
+      })
+    })
+  })
+
+  describe('resolution', () => {
+    it('resolves a listing to its address', () => {
+      expect(resolveScreenHref(ROUTES, 'collection:blog')).toBe('/blog')
+      expect(resolveScreenHref(ROUTES, 'collection:yQuEudFcgR')).toBe(
+        '/newsroom',
+      )
+    })
+
+    it('follows a renamed slug, because the value names the collection', () => {
+      expect(
+        resolveScreenHref(
+          { ...ROUTES, 'collection:blog': 'articles' },
+          'collection:blog',
+        ),
+      ).toBe('/articles')
+    })
+  })
+
+  describe('a collection that is gone', () => {
+    it('is a broken link, as an unpublished screen is', () => {
+      expect(resolveScreenHref(ROUTES, 'collection:gone')).toBeUndefined()
+      expect(isScreenLinkBroken(ROUTES, 'collection:gone')).toBe(true)
+      expect(isScreenLinkBroken(ROUTES, 'collection:blog')).toBe(false)
+    })
+
+    it('is named in the picker as a listing, with the stored value kept', () => {
+      expect(unresolvedScreenOption('collection:gone', ROUTES)).toEqual({
+        value: 'collection:gone',
+        label:
+          '⚠ Unavailable collection listing (gone) — deleted or has no slug',
+      })
+      expect(unresolvedScreenOption('collection:blog', ROUTES)).toBeUndefined()
+    })
+  })
+
+  describe('a map that has heard of only one kind of target', () => {
+    it('does not condemn a screen link before the screens arrive', () => {
+      const listingsOnly = { 'collection:blog': 'blog' }
+      expect(screenRoutesAnswerFor(listingsOnly, 'pricing')).toBe(false)
+      expect(isScreenLinkBroken(listingsOnly, 'screen:pricing')).toBe(false)
+      expect(unresolvedScreenOption('pricing', listingsOnly)?.label).toBe(
+        'pricing',
+      )
+    })
+
+    it('does not condemn a listing link before the collections arrive', () => {
+      expect(screenRoutesAnswerFor(SCREENS, 'collection:blog')).toBe(false)
+      expect(isScreenLinkBroken(SCREENS, 'collection:blog')).toBe(false)
+      expect(unresolvedScreenOption('collection:blog', SCREENS)?.label).toBe(
+        'collection:blog',
+      )
+    })
+
+    it('judges each kind once its own half is there', () => {
+      expect(screenRoutesAnswerFor(ROUTES, 'r_RYOXo-98')).toBe(true)
+      expect(screenRoutesAnswerFor(ROUTES, 'collection:gone')).toBe(true)
+      expect(isScreenLinkBroken(ROUTES, 'r_RYOXo-98')).toBe(true)
+    })
+  })
+
+  describe('screenLinkTargetOptions — what both pickers offer', () => {
+    it('offers each listing by its collection’s name and address, marked as a listing', () => {
+      const options = screenLinkTargetOptions(ROUTES, LABELS)
+      expect(options).toContainEqual({
+        value: 'collection:blog',
+        label: 'Blog (/blog) — collection listing',
+        kind: 'collection-listing',
+      })
+      expect(options).toContainEqual({
+        value: 'collection:yQuEudFcgR',
+        label: 'Press (/newsroom) — collection listing',
+        kind: 'collection-listing',
+      })
+    })
+
+    it('offers the screens exactly as the pickers already labeled them', () => {
+      const options = screenLinkTargetOptions(ROUTES, LABELS)
+      expect(options).toContainEqual({
+        value: 'home',
+        label: 'Home (/)',
+        kind: 'screen',
+      })
+      expect(options).toContainEqual({
+        value: 'about',
+        label: 'About (/company/about)',
+        kind: 'screen',
+      })
+      expect(screenLinkTargetOptions({ pricing: 'pricing' }, undefined)).toEqual(
+        [{ value: 'pricing', label: 'pricing (/pricing)', kind: 'screen' }],
+      )
+    })
+
+    it('lists the screens first, in each picker’s own order, then the listings', () => {
+      expect(
+        screenLinkTargetOptions(ROUTES, LABELS, 'path').map((o) => o.value),
+      ).toEqual(['home', 'about', 'pricing', 'collection:blog', 'collection:yQuEudFcgR'])
+      expect(
+        screenLinkTargetOptions(ROUTES, LABELS, 'label').map((o) => o.value),
+      ).toEqual(['about', 'home', 'pricing', 'collection:blog', 'collection:yQuEudFcgR'])
+    })
+
+    it('names an unlabeled listing by its collection id, never by the raw key', () => {
+      expect(
+        screenLinkTargetOptions({ 'collection:blog': 'blog' }, undefined),
+      ).toEqual([
+        {
+          value: 'collection:blog',
+          label: 'blog (/blog) — collection listing',
+          kind: 'collection-listing',
+        },
+      ])
+    })
+
+    it('offers nothing before a map has arrived', () => {
+      expect(screenLinkTargetOptions(undefined, LABELS)).toEqual([])
+    })
   })
 })

@@ -20,6 +20,8 @@ import {
   formatScreenLinkValue,
   parseScreenLinkValue,
   ScreenLinkContext,
+  screenLinkTargetOptions,
+  screenRoutesAnswerFor,
   unavailableScreenLabel,
 } from '@aglyn/aglyn'
 import {
@@ -120,14 +122,10 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
     else if (literal) setExternal(true)
   }, [screenId, literal])
 
+  // Screens by name, then the site's collection listings (AGL-2799) — built by
+  // the same function as the attributes panel's Screen picker.
   const options = useMemo(
-    () =>
-      Object.entries(screens ?? {})
-        .map(([id, path]) => ({
-          id,
-          label: `${labels?.[id] ?? id} (${path === '/' ? '/' : `/${path}`})`,
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
+    () => screenLinkTargetOptions(screens, labels, 'label'),
     [screens, labels],
   )
 
@@ -211,12 +209,12 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
                 select re-wraps it through `formatScreenLinkValue`. */}
             {unavailableScreenLabel(
               unknownScreen,
-              !!screens && Object.keys(screens).length > 0,
+              screenRoutesAnswerFor(screens, unknownScreen),
             )}
           </MenuItem>
         ) : null}
         {options.map((option) => (
-          <MenuItem key={option.id} value={option.id}>
+          <MenuItem key={option.value} value={option.value}>
             {option.label}
           </MenuItem>
         ))}
