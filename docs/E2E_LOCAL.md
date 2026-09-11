@@ -49,13 +49,13 @@ with a refused connection, which is the failure you want.
 
 ## The CRM specs (AGL-2610)
 
-Seven browser-driven scripts under `tools/e2e/crm-*.e2e.mjs`, one per surface
-the v2 arc shipped, each signing in through `/signin`, driving the console
-as a person does, and asserting on the page AND on the document behind it
-through the emulator-side Admin SDK:
+Eight browser-driven scripts under `tools/e2e/crm-*.e2e.mjs`: seven, one per
+surface the v2 arc shipped, and one for the plan gate on a Free workspace. Each
+signs in through `/signin`, drives the console as a person does, and asserts on
+the page AND on the document behind it through the emulator-side Admin SDK:
 
 ```bash
-E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all seven, in order
+E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all eight, in order
 npm run e2e:crm:bulk-bar        # tick two rows → tag, stage, owner, audience, CSV, remove
 npm run e2e:crm:reports         # /crm/reports (dashes until read) + the two dashboard cards
 npm run e2e:crm:leads           # status, owner, convert from the row menu, already-converted, unqualify (+ Convert… disabled), Inbox → CRM
@@ -64,6 +64,16 @@ npm run e2e:crm:contact-record  # custom field, audience, Properties save, phone
 npm run e2e:crm:deals           # board → move → won (the contact floored at customer) → table; Pipelines dialog, switcher, line items, forecast
 npm run e2e:crm:org-hub         # /{org}/contacts → /{org}/crm/contacts, bare /crm, Known by, a create stamped with the picked site, the lead-surfaces note grouped by site, a lead's site address, a deal moved from the org board + its org activity line, an organization task (no site) filed and completed, the two CRM cards on the org's sites page, a recipe installed from org Settings → stamped on the site, refused twice, shown on the site's Actions page
 ```
+
+```bash
+npm run e2e:crm:free-plan       # a Free workspace: the seven suite sections locked on both hubs (rail and body), New contact and Import CSV locked, crm/contacts-create 403 plan_required for the owner and for staff, client-direct suite writes refused by the rules; the list, a record, Export CSV and erasure still open
+```
+
+The seven surface specs drive the primary org, which is on Business, so the
+whole suite is open to them and none of them can see the gate (AGL-2787,
+AGL-2788, AGL-2801). `crm-free-plan` signs in as the non-staff owner of a
+second workspace that is always on Free, and its rules step runs again on
+Starter as the control: the same write, allowed.
 
 They share `tools/e2e/lib/console-session.mjs` (Chrome, the UI sign-in, the
 three-verdict tally, MUI gestures) and re-seed their own fixtures first, so
@@ -235,6 +245,13 @@ emulator-host env vars** so it can never touch production):
   merge, because the CRM specs mutate these and re-seed them; the owner's
   legal acceptance (`users/{uid}/legalAcceptances/v1`) is seeded beside them
   so no page opens under the re-acceptance banner.
+- A workspace on Free (AGL-2809), from
+  `tools/scripts/lib/crm-free-plan-fixtures.mjs`: auth user
+  `e2e-free-owner@aglyn.test` / `E2e-Password-1` (uid `e2e-free-owner`,
+  **no** `staff` claim), org `e2e-free-owner` (slug `e2e-free`,
+  `plan: 'free'`, no subscription), site `free-demo`, three captured contacts
+  and one company. Written with plain `set` and re-written by
+  `crm-free-plan.e2e.mjs`, which also withdraws the erasure request it files.
 
 ## Env knobs (all optional)
 

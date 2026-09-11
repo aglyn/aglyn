@@ -60,6 +60,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { chromium } from 'playwright-core'
 import sharp from 'sharp'
+import { putMediaDocument } from '../scripts/lib/media-counter.mjs'
 import {
   adminFirestore,
   BASE_URL,
@@ -244,15 +245,23 @@ const PREFLIGHT_ID = `e2e-dam-preflight`
   const path = `hosts/${HOST_ID}/media/${PREFLIGHT_ID}`
   const bytes = await solidPng(20, 160, 90)
   await bucket.file(path).save(bytes, { contentType: 'image/png' })
-  await media().doc(PREFLIGHT_ID).set({
-    fileName: 'e2e-dam-preflight.png',
-    contentType: 'image/png',
-    sizeBytes: bytes.length,
-    storagePath: path,
-    contentHash: sha(bytes).slice(0, 16),
-    cdnPath: cdnPath(PREFLIGHT_ID),
-    variants: [],
-    createdAt: FieldValue.serverTimestamp(),
+  // Through the shared writer, so the site's `counters/media` moves with the
+  // document it counts, as it does for every other media document a script
+  // mints (AGL-1488).
+  await putMediaDocument({
+    firestore,
+    scopeRef: firestore.collection('hosts').doc(HOST_ID),
+    mediaId: PREFLIGHT_ID,
+    data: {
+      fileName: 'e2e-dam-preflight.png',
+      contentType: 'image/png',
+      sizeBytes: bytes.length,
+      storagePath: path,
+      contentHash: sha(bytes).slice(0, 16),
+      cdnPath: cdnPath(PREFLIGHT_ID),
+      variants: [],
+      createdAt: FieldValue.serverTimestamp(),
+    },
   })
   for (const [label, origin] of [
     ['console', BASE_URL],
@@ -562,14 +571,13 @@ await apiStep('a recorded rendition is served by key and negotiated for r=auto',
   // master and an entry on the document. Distinct bytes, so the answer shows
   // which file was served.
   await bucket.file(`${before.film.storagePath}__r720p.mp4`).save(renditionBytes, { contentType: 'video/mp4' })
-  await media().doc(ids.film).set(
-    {
-      videoRenditions: [
-        { key: '720p', ext: 'mp4', contentType: 'video/mp4', width: 1280, height: 720, sizeBytes: renditionBytes.length },
-      ],
-    },
-    { merge: true },
-  )
+  // A patch of the uploaded film's document: `update`, which cannot mint a
+  // media document, so a film that never arrived fails here instead.
+  await media().doc(ids.film).update({
+    videoRenditions: [
+      { key: '720p', ext: 'mp4', contentType: 'video/mp4', width: 1280, height: 720, sizeBytes: renditionBytes.length },
+    ],
+  })
   const byKey = await get(tenantCdn(ids.film, '?r=720p'))
   const wildcard = await get(tenantCdn(ids.film, '?r=auto'), { accept: '*/*' })
   const webm = await get(tenantCdn(ids.film, '?r=auto'), { accept: 'video/webm' })
