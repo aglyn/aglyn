@@ -22,7 +22,8 @@ flowchart LR
 
 :::info Plan availability
 **Free** with storage quotas. **CDN delivery** with WebP variants is on **every
-plan**, free included; large video uploads and higher storage are gated by plan.
+plan**, free included; document uploads and higher storage are gated by plan. Video
+uploads are paused on every plan for now — see [Upload](#upload).
 :::
 
 ## Organize
@@ -145,19 +146,25 @@ same thing. The exact caps are in
 
 ## Upload
 
-- Upload **images**, **video** (MP4, WebM, QuickTime), **PDFs**, **ZIP archives** and
-  **documents** (Word, Excel, PowerPoint, CSV, RTF, plain text, Markdown and JSON).
-  Click **Upload media**, or **drag files straight from your desktop onto the library**
-  — dropped files land in the folder you have open.
+- Upload **images**, **PDFs**, **ZIP archives** and **documents** (Word, Excel,
+  PowerPoint, CSV, RTF, plain text, Markdown and JSON). Click **Upload media**, or
+  **drag files straight from your desktop onto the library** — dropped files land in
+  the folder you have open.
+- **Video uploads are paused.** New MP4, WebM and QuickTime files are not accepted on
+  any plan for now, from the console or the API, and a video's file cannot be
+  replaced. Videos already in your library keep playing, and the **Video** element can
+  still use them. While the pause lasts, the library shows a **Video uploads paused**
+  chip beside **Upload media**.
 - Documents and archives are stored and served exactly as you uploaded them — nothing
   is opened, extracted or converted. Macro-enabled Office files (`.docm`, `.xlsm`,
   `.pptm`) are not accepted.
 - Rename, **replace the file** behind an asset, and edit images in place. Replace works
-  for images, video, PDFs, archives and documents alike — it is available from the
-  asset's details drawer and straight from the card's overflow menu, and it keeps the
-  asset's link, folder, tags, alt text, custom fields and sharing exactly as they were.
-  Swapping one kind of file for another is not allowed: upload that as a new file.
-  Cropping, rotating and resizing stay images-only, for the obvious reason.
+  for images, PDFs, archives and documents alike, and for video once video uploads
+  resume — it is available from the asset's details drawer and straight from the card's
+  overflow menu, and it keeps the asset's link, folder, tags, alt text, custom fields
+  and sharing exactly as they were. Swapping one kind of file for another is not
+  allowed: upload that as a new file. Cropping, rotating and resizing stay images-only,
+  for the obvious reason.
 
 ### Size and plan limits
 
@@ -168,7 +175,7 @@ same thing. The exact caps are in
 | Documents (Word, Excel, CSV, RTF, text, Markdown, JSON) | 25 MB per file | **Pro and above** |
 | Presentations (PowerPoint) | 50 MB per file | **Pro and above** |
 | ZIP archives | 50 MB per file | **Pro and above** |
-| Video | 200 MB per file | **Pro and above** |
+| Video | 200 MB per file | **Paused** on every plan |
 
 Any file over 3 MB automatically uses **signed-URL uploads**, so big files go straight to
 storage without tying up the console. Folders nest up to **5 levels** deep.
@@ -485,7 +492,7 @@ and both URL forms. See [the Media API resource](/api/resources/media), includin
 ## Components
 
 - **Image** — place and bind images from the library.
-- **Video** — embed uploaded video.
+- **Video** — embed a video that is already in your library.
 - **Favicon picker** — choose the site favicon from your media.
 - **App icon picker** — choose the square mark your site installs with.
 

@@ -31,8 +31,9 @@
  * **outside the repo**: the marketing pricing table is besigner-published
  * content, served from Firestore, and no build step can read it. So the
  * numbers below are a TRANSCRIPTION of what the public page serves — first
- * fetched **2026-08-19**, and re-transcribed row by row from the republish of
- * **2026-09-07** (screen `v0clP6xQl-`, version `zj-21jtrPG`) — and their
+ * fetched **2026-08-19**, re-transcribed row by row from the republish of
+ * **2026-09-07** (screen `v0clP6xQl-`, version `zj-21jtrPG`), and with the
+ * CRM rows taken from version `uMk4E9o739` of **2026-09-10** — and their
  * whole job is to be a fixed point that does NOT move when the constants do.
  * Deriving them from `PLAN_ENTITLEMENTS` would make the file assert `x === x`
  * and prove nothing at all.
@@ -65,6 +66,7 @@ import { METERED_MARKUP, METERED_UNIT_RATES_USD } from '../utils/usage-metering'
 import {
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  RELEASE_FLAGS,
   SELF_SERVE_PLANS,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -435,15 +437,19 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * TWO ROWS THE PAGE GAINED ON 2026-09-07, with the CRM launch.
+     * THE CRM ROWS BELOW THE RECORDS BAND: leads, the suite, one-to-one email.
      *
-     * The suite — leads, companies, deals and tasks — is included from
+     * The suite (contacts, companies, deals and tasks) is included from
      * Starter rather than Pro: the field prices a CRM seat at $14–25 a month,
      * so Starter with the suite included is the competitive entry, and gating
      * a tier higher hands the small-business buyer to a free CRM elsewhere.
-     * Free keeps the Contacts section, which is the capture projection its
-     * email audiences read, and sees the rest locked. The Starter card sells
-     * this where it used to sell 500 campaign emails.
+     * The Starter card sells this where it used to sell 500 campaign emails.
+     *
+     * A Free workspace's CRM opens on Leads, view-only (2026-09-10, AGL-2790):
+     * the people its site forms captured, which it can list, open, export and
+     * erase but not edit. Contacts are the managed record a team works, so
+     * they belong to the suite. The page carries this as a row of its own,
+     * transcribed from screen `v0clP6xQl-` version `uMk4E9o739` (AGL-2831).
      *
      * One-to-one email is a hard daily pace per organization with no overage
      * rate on any tier — `checkCrmEmailQuota` refuses the send past it — set
@@ -451,7 +457,32 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * annual price with the whole day spent (`tier-margin-floor.spec.ts`),
      * not at a usability figure.
      */
-    it('CRM suite: leads, companies, deals & tasks — ✓ from Starter', () => {
+    describe("Leads from your site's forms — View-only · ✓ from Starter", () => {
+      const PUBLISHED = ['View-only', '✓', '✓', '✓', '✓', '✓', '✓']
+
+      it('reads View-only on exactly the plans without the suite', () => {
+        // The row has no entitlement key of its own. Leads are the part of
+        // the CRM a plan without `features.crm` still opens, so the column is
+        // the suite flag read as "View-only" or "✓", and a plan that gains or
+        // loses the suite moves this row with it.
+        expect(
+          flagColumn('crm').map((suite) => (suite ? '✓' : 'View-only')),
+        ).toEqual(PUBLISHED)
+        expect(PLAN_ENTITLEMENTS.enterprise.features.crm).toBe(true)
+      })
+
+      it('names a cell on Free only because the CRM opens for every workspace', () => {
+        // With the CRM's release flag off by default, a Free workspace would
+        // reach no CRM at all and its cell would have to read a dash
+        // (AGL-2772).
+        expect(
+          RELEASE_FLAGS.find((flag) => flag.key === 'release_crm')
+            ?.defaultEnabled,
+        ).toBe(true)
+      })
+    })
+
+    it('CRM suite: contacts, companies, deals & tasks — ✓ from Starter', () => {
       expect(flagColumn('crm')).toEqual([
         false,
         true,

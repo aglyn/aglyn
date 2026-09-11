@@ -16,7 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { render } from '@testing-library/react'
+import { visitorConsentStorageKey } from '@aglyn/aglyn/app-utils/visitor-consent'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
 import Video, { resolveVideoPreload, schema } from './video'
 
@@ -326,6 +327,137 @@ describe('Video lightbox (AGL-2744)', () => {
   })
 })
 
+/**
+ * A Wistia video (AGL-2826). The element's promise is what it does NOT load,
+ * so most of these assert an absence before the press and a presence after.
+ */
+describe('Video plays Wistia only after a press (AGL-2826)', () => {
+  const LINK = 'https://aglyn.wistia.com/medias/e4a27b971d'
+  const PLAYER = 'https://fast.wistia.net/embed/iframe/e4a27b971d'
+
+  const onSite = (element: JSX.Element) => (
+    <Aglyn.SiteContext.Provider value={{ hostId: 'host1' }}>
+      {element}
+    </Aglyn.SiteContext.Provider>
+  )
+  const press = (container: HTMLElement) =>
+    fireEvent.click(container.querySelector('button') as HTMLButtonElement)
+  const frameUrl = (root: ParentNode) =>
+    new URL((root.querySelector('iframe') as HTMLIFrameElement).src)
+  const recordConsent = (status: string) =>
+    window.localStorage.setItem(
+      visitorConsentStorageKey('host1'),
+      JSON.stringify({ v: 1, at: 1, status }),
+    )
+
+  afterEach(() => window.localStorage.clear())
+
+  it('renders the poster as a play button and nothing from Wistia', () => {
+    const { container, baseElement } = render(
+      <Video src={LINK} poster="media:h/p" title="Tour" />,
+    )
+    const button = container.querySelector('button') as HTMLButtonElement
+    expect(button.getAttribute('aria-label')).toBe('Play video: Tour')
+    expect(container.querySelector('video')).toBeNull()
+    expect(baseElement.querySelector('iframe')).toBeNull()
+    // Not even the address: the link stays in the node and out of the markup.
+    expect(baseElement.innerHTML).not.toContain('wistia')
+  })
+
+  it('server-renders no frame and no Wistia address, either way', () => {
+    for (const lightbox of [false, true]) {
+      const html = renderToString(
+        <Video src={LINK} poster="media:h/p" lightbox={lightbox} title="T" />,
+      )
+      expect(html).not.toContain('<iframe')
+      expect(html).not.toContain('wistia')
+    }
+  })
+
+  it('plays in place of the poster when the lightbox is off', () => {
+    const { container } = render(
+      <Video src={LINK} poster="media:h/p" title="Tour" />,
+    )
+    press(container)
+    expect(container.querySelector('button')).toBeNull()
+    const url = frameUrl(container)
+    expect(`${url.origin}${url.pathname}`).toBe(PLAYER)
+    expect(url.searchParams.get('autoPlay')).toBe('true')
+    expect(container.querySelector('iframe')?.getAttribute('title')).toBe(
+      'Tour',
+    )
+    // The pressed button is gone, so focus follows the film into the player.
+    expect(document.activeElement).toBe(container.querySelector('iframe'))
+  })
+
+  it('opens the player in the dialog when the lightbox is on', async () => {
+    const { container } = render(
+      <Video src={LINK} poster="media:h/p" lightbox title="Tour" />,
+    )
+    press(container)
+    const dialog = await screen.findByRole('dialog')
+    const url = frameUrl(dialog)
+    expect(`${url.origin}${url.pathname}`).toBe(PLAYER)
+    expect(dialog.querySelector('video')).toBeNull()
+  })
+
+  it('tells Wistia not to track a visitor with no consent on record', () => {
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" />),
+    )
+    press(container)
+    expect(frameUrl(container).searchParams.get('doNotTrack')).toBe('true')
+  })
+
+  it('keeps refusing tracking to a visitor who declined', () => {
+    recordConsent('declined')
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" />),
+    )
+    press(container)
+    expect(frameUrl(container).searchParams.get('doNotTrack')).toBe('true')
+  })
+
+  it('lets Wistia count the viewing once analytics consent is on record', () => {
+    recordConsent('implied')
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" />),
+    )
+    press(container)
+    expect(frameUrl(container).searchParams.has('doNotTrack')).toBe(false)
+  })
+
+  it('loads nothing into the besigner canvas, where a click selects the node', () => {
+    const { container } = render(
+      <Aglyn.ScreenLinkContext.Provider
+        value={{ suppressNavigation: true, editorInert: true }}
+      >
+        <Video src={LINK} poster="media:h/p" lightbox title="Tour" />
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    // What the author sees is still the button a visitor gets.
+    expect(container.querySelector('button')).toBeTruthy()
+    press(container)
+    expect(document.body.querySelector('iframe')).toBeNull()
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('asks for a poster rather than loading the player up front', () => {
+    const { container, getByText } = render(<Video src={LINK} title="Tour" />)
+    expect(getByText(/add a poster image/i)).toBeTruthy()
+    expect(container.querySelector('iframe')).toBeNull()
+    expect(container.querySelector('video')).toBeNull()
+  })
+
+  it('treats a look-alike host as an ordinary hotlink', () => {
+    const { container } = render(
+      <Video src="https://notwistia.com/medias/e4a27b971d" poster="media:h/p" />,
+    )
+    expect(container.querySelector('video')).toBeTruthy()
+    expect(container.querySelector('button')).toBeNull()
+  })
+})
+
 
 /**
  * The element loads the delivery copy, not the master (AGL-2753).
@@ -342,9 +474,9 @@ describe('Video asks the CDN for a delivery copy (AGL-2753)', () => {
     )
   })
 
-  it('keeps the parameter on a pinned reference rather than replacing its path', () => {
+  it('loads a pinned reference through the stable URL a replace reaches (AGL-2798)', () => {
     expect(video(<Video src="media:h/film@abc123" />).getAttribute('src')).toBe(
-      `${CDN}/h/film/abc123?r=auto`,
+      `${CDN}/h/film?r=auto`,
     )
   })
 

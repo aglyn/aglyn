@@ -126,15 +126,19 @@ import {
   directUploadMaxBytes,
   isAllowedUploadType,
   isImageUploadType,
+  isVideoUploadType,
   normalizeUploadContentType,
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
+  VIDEO_UPLOADS_PAUSED_CODE,
+  VIDEO_UPLOADS_PAUSED_MESSAGE,
 } from './media-upload-limits'
 import {
   isSvgUploadType,
   sanitizeSvgBuffer,
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
 import { resolveOrgMediaBand } from './server/media-storage-band'
+import { videoUploadsOpenForOrg } from './server/video-uploads'
 import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
 import {
   claimHostForOrg,
@@ -2056,6 +2060,21 @@ async function createMedia(
     return ApiErrors.unsupportedMediaType({
       message: UPLOAD_TYPES_MESSAGE,
       code: 'unsupported_media_type',
+      headers: ctx.headers,
+    })
+  }
+
+  // Video ingress is behind a release flag (AGL-2830). Above the idempotency
+  // claim with the other refusals about the file itself, so a key sent with a
+  // refused video is still unused when the flag opens, and before the body is
+  // decoded, so a refused video costs no inspection or digest.
+  if (
+    isVideoUploadType(contentType) &&
+    !(await videoUploadsOpenForOrg(ctx.orgId))
+  ) {
+    return ApiErrors.forbidden({
+      message: VIDEO_UPLOADS_PAUSED_MESSAGE,
+      code: VIDEO_UPLOADS_PAUSED_CODE,
       headers: ctx.headers,
     })
   }

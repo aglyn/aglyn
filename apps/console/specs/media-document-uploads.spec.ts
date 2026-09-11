@@ -167,6 +167,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Image-only, and never reached for a document — asserted below.
   generateMediaVariants: jest.fn(async () => ({ variants: [], error: undefined })),
   isImpersonationSession: () => false,
+  // The release-flag verdict the video gate reads (AGL-2830), declared with
+  // the cases that close it at the bottom of the file.
+  isServerReleaseFlagOnForOrg: async (key: string, orgId: unknown) => {
+    mockVideoUploads.calls.push([key, orgId])
+    return mockVideoUploads.open
+  },
   // Nothing is taken down in these fixtures (AGL-1613). The routes now
   // consult the deny list before they write, so the mock has to answer —
   // `null` is "not quarantined", which is what every case here assumes.
@@ -477,5 +483,74 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
       // past ~3 MB. A type accepted without a ceiling is the bug, not a gap.
       expect(signedUploadMaxBytes(contentType)).toBeGreaterThan(0)
     })
+  })
+})
+
+/**
+ * The direct route with video ingress paused (AGL-2830), which is the state
+ * this flag ships in. Every refusal is paired with an image and a document on
+ * the same closed flag, so a route that refused every file could not pass.
+ */
+const mockVideoUploads: { open: boolean; calls: Array<[string, unknown]> } = {
+  open: false,
+  calls: [],
+}
+
+describe('/api/media/upload refuses a video while uploads are paused (AGL-2830)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    state.org = { plan: 'pro' }
+    state.usedBytes = 0
+    delete process.env.BILL_ORG_LIBRARY_STORAGE_FROM
+    mockVideoUploads.open = false
+    mockVideoUploads.calls = []
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
+  })
+
+  it.each([
+    ['video/mp4', 'launch.mp4'],
+    ['video/webm', 'launch.webm'],
+    ['video/quicktime', 'launch.mov'],
+  ])('refuses %s with 403 video_uploads_paused and stores nothing', async (contentType, fileName) => {
+    const response = await upload(contentType, fileName, 4096)
+    expect(response.status).toBe(403)
+    const body = await response.json()
+    expect(body.code).toBe('video_uploads_paused')
+    expect(String(body.error)).toMatch(/^Video uploads are paused\./)
+    expect(mockFileSave).not.toHaveBeenCalled()
+    expect(mockMediaSet).not.toHaveBeenCalled()
+    expect(mockCounterSet).not.toHaveBeenCalled()
+  })
+
+  it('asks the video flag for the org the upload belongs to', async () => {
+    await upload('video/mp4', 'launch.mp4')
+    expect(mockVideoUploads.calls).toEqual([['release_video_uploads', 'org-1']])
+  })
+
+  it('names the pause on a plan without file uploads too, rather than selling an upgrade', async () => {
+    // No plan lifts the pause, so an upsell here would promise something an
+    // upgrade cannot deliver.
+    state.org = { plan: 'free' }
+    const response = await upload('video/mp4', 'launch.mp4')
+    expect(response.status).toBe(403)
+    expect((await response.json()).code).toBe('video_uploads_paused')
+  })
+
+  it('still uploads an image while video is paused, without reading the flag', async () => {
+    expect((await upload('image/png', 'photo.png')).status).toBe(200)
+    expect(mockFileSave).toHaveBeenCalled()
+    expect(mockVideoUploads.calls).toEqual([])
+  })
+
+  it('still uploads a document while video is paused', async () => {
+    expect((await upload(DOCUMENT_TYPES[0][0], 'contract.docx', 3072)).status).toBe(200)
+    expect(incrementedBytes()).toBe(3072)
+  })
+
+  it('uploads the video once the flag opens for the org', async () => {
+    mockVideoUploads.open = true
+    const response = await upload('video/mp4', 'launch.mp4', 4096)
+    expect(response.status).toBe(200)
+    expect(incrementedBytes()).toBe(4096)
   })
 })

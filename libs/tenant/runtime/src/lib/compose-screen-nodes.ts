@@ -16,10 +16,18 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+// By path: the overlay is server-only, and every `@aglyn/aglyn` barrel
+// re-exports `app-utils/server` into published pages.
+import {
+  applyVideoAssetFacts,
+  videoAssetFactsKey,
+  videoAssetRefs,
+} from '@aglyn/aglyn/app-utils/video-asset-facts'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
 import getForms from './get-forms'
+import getVideoAssetFacts from './get-video-asset-facts'
 import {
   getPublishedCollectionSource,
   type PublishedCollectionSource,
@@ -454,6 +462,15 @@ export async function composeNodesWithChrome(options: {
   const screenFormsPromise = Aglyn.placesFormEntity(screenNodes)
     ? getForms({ hostId })
     : undefined
+  // The library films the SCREEN places (AGL-2807), read beside the chrome
+  // reads for the reason the datasets and forms reads are: most pages place
+  // none, and one that does usually says so on its own document. Not the
+  // correctness gate — a film can arrive from a layout, a component or a
+  // binding — so the composed tree is asked again at the end.
+  const screenVideoRefs = videoAssetRefs(screenNodes)
+  const screenVideoFactsPromise = screenVideoRefs.length
+    ? getVideoAssetFacts({ hostId, refs: screenVideoRefs })
+    : undefined
   // Issued HERE, beside the datasets read and before the chrome bundle is
   // awaited, so the collection read overlaps it instead of trailing it.
   const prefetchedSources = prefetchCollectionSources(
@@ -594,7 +611,26 @@ export async function composeNodesWithChrome(options: {
   // after every stage that rewrites props, so nothing changes what the
   // signature covers.
   const withFormBindings = stampFormDatasetBindings(withLandmark, hostId)
-  return Aglyn.canvas.processNodesToDenormalized(withFormBindings as any)
+  const denormalized = Aglyn.canvas.processNodesToDenormalized(
+    withFormBindings as any,
+  )
+  // A placed film's length, shape and poster come from its DAM asset as it is
+  // NOW, not as it was when it was picked (AGL-2807). LAST, on the tree the
+  // page ships, because a film can arrive from any stage above; only a film
+  // the screen's own read did not already cover costs a second one.
+  const videoRefs = videoAssetRefs(denormalized)
+  if (!videoRefs.length) return denormalized
+  const prefetched = new Set(screenVideoRefs.map(videoAssetFactsKey))
+  const unread = videoRefs.filter(
+    (ref) => !prefetched.has(videoAssetFactsKey(ref)),
+  )
+  const [screenFacts, laterFacts] = await Promise.all([
+    screenVideoFactsPromise,
+    unread.length ? getVideoAssetFacts({ hostId, refs: unread }) : undefined,
+  ])
+  const facts = new Map(screenFacts)
+  laterFacts?.forEach((value, key) => facts.set(key, value))
+  return applyVideoAssetFacts(denormalized, facts)
 }
 
 /**

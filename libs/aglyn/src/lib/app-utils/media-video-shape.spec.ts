@@ -217,9 +217,9 @@ describe('poster and rendition URLs', () => {
     )
   })
 
-  it('merges onto a pinned reference rather than replacing its query', () => {
+  it('asks a pinned reference for its poster at the stable URL (AGL-2798)', () => {
     expect(mediaPosterSrc('media:org:acme/v1@abc123')).toBe(
-      '/api/media/cdn/org:acme/v1/abc123?poster=1',
+      '/api/media/cdn/org:acme/v1?poster=1',
     )
   })
 
@@ -251,16 +251,17 @@ describe('poster and rendition URLs', () => {
   /*
    * The URL a player actually loads (AGL-2753). It asks for the best encoding
    * rather than naming one, which is the only way a page can reach a file
-   * produced after it was published: renditions are made out of band and no
-   * tenant render path reads a media document.
+   * produced after it was published: renditions are made out of band, after
+   * the page's HTML was cached.
    */
   it('asks for the best encoding rather than naming one', () => {
     expect(videoDeliverySrc(REF)).toBe('/api/media/cdn/org:acme/v1?r=auto')
     expect(videoDeliverySrc(REF, { hostId: 'site9' })).toBe(
       '/api/media/cdn/org:acme:site9/v1?r=auto',
     )
+    // A pinned reference asks at the stable URL too (AGL-2798).
     expect(videoDeliverySrc('media:org:acme/v1@abc123')).toBe(
-      '/api/media/cdn/org:acme/v1/abc123?r=auto',
+      '/api/media/cdn/org:acme/v1?r=auto',
     )
   })
 

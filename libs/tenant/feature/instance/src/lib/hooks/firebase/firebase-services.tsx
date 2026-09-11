@@ -68,7 +68,7 @@ import {
   type AuthPersistenceClass,
   createAuthInstance,
 } from './auth-persistence'
-import { localCacheFor } from './firestore-cache'
+import { localCacheFor, pruneSharedClientStateFor } from './firestore-cache'
 
 /**
  * Drop-in replacement for reactfire's `ObservableStatus<T>` — reactfire is
@@ -441,6 +441,11 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
         )
         if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
           connectFirestoreEmulator(getFirestore(app), 'localhost', 8082)
+        } else {
+          // The SDK never sweeps the multi-tab records the durable cache
+          // strands in localStorage, and a full localStorage fails the whole
+          // Firestore client — see `firestore-shared-client-state.ts`.
+          void pruneSharedClientStateFor(authPersistence, app)
         }
       } catch {
         // already initialized (e.g. HMR reset the module flag) — getFirestore() returns the existing instance

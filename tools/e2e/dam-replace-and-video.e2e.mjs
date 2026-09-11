@@ -38,9 +38,10 @@
 //    Escape closes it from every stop of its own player, each stop draws a
 //    focus ring, and the player's keys work in the browser (AGL-2802).
 // 5. Replace keeps the asset id and swaps the bytes behind every reference
-//    for every family; the old content-hashed URL redirects instead of 404ing;
-//    the video's poster is regenerated and its stale rendition is dropped
-//    (AGL-2732, AGL-2685).
+//    for every family; a pinned reference publishes the stable URL, so the
+//    page names nothing a replace cannot reach (AGL-2798); the old
+//    content-hashed URL redirects instead of 404ing; the video's poster is
+//    regenerated and its stale rendition is dropped (AGL-2732, AGL-2685).
 // 6. The storage band refuses a signed replace when it is MINTED, and still
 //    mints one that fits (AGL-2732).
 // 7. The collector counts one play per play beacon, and nothing else.
@@ -413,8 +414,9 @@ if (ids.film && ids.image && ids.pdf && ids.sheet) {
     inline: {
       componentId: 'video',
       props: {
-        // PINNED to the upload's hash, so the replace below has a stale pin
-        // to redirect.
+        // PINNED to the upload's hash. The page must still name the stable
+        // URL for it: the content-hashed one is what an edge keeps for a
+        // year (AGL-2798).
         src: `media:${HOST_ID}/${ids.film}@${before.film.contentHash}`,
         posterFromSource: true,
         title: 'E2E inline film',
@@ -465,13 +467,15 @@ const attr = (html) => html.replace(/&amp;/g, '&')
 await apiStep('the published page ships a poster-only trigger, an idle inline player and the document links', async () => {
   const raw = await pageHtml(pageSlug)
   const html = attr(raw)
-  const pinned = cdnPath(ids.film, `/${before.film.contentHash}`)
   const inlineVideo = html.match(/<video[^>]*>/)?.[0] ?? ''
   const checks = {
     image: html.includes(`src="${cdnPath(ids.image)}"`),
     trigger: html.includes(`aria-label="${TRIGGER_LABEL}"`),
     triggerPoster: html.includes(`src="${cdnPath(ids.film)}?poster=1"`),
-    inlinePinnedSrc: inlineVideo.includes(`src="${pinned}?r=auto"`),
+    // The pinned inline film publishes the stable URL, and the page names the
+    // content-hashed one nowhere (AGL-2798).
+    inlinePinnedRendersStable: inlineVideo.includes(`src="${cdnPath(ids.film)}?r=auto"`),
+    noContentHashedUrl: !html.includes(cdnPath(ids.film, `/${before.film.contentHash}`)),
     inlinePreloadNone: inlineVideo.includes('preload="none"'),
     pdfLink: html.includes(`href="${cdnPath(ids.pdf)}"`),
     csvLink: html.includes(`href="${cdnPath(ids.sheet)}"`),
@@ -996,11 +1000,12 @@ await apiStep('every reference on the published page now resolves to the new byt
   const inlinePoster = inlineVideo.match(/ poster="([^"]+)"/)?.[1] ?? ''
   const posterObject = await objectBytes(`${after.film.storagePath}__poster.webp`)
   const follow = async (path) => get(`${TENANT_URL}${path}`, {}, 'follow')
-  const pinnedHop = await get(`${TENANT_URL}${inlineSrc}`)
   const results = {
     image: sha((await follow(cdnPath(ids.image))).body) === files.image.b.sha,
     lightboxPoster: sha((await follow(`${cdnPath(ids.film)}?poster=1`)).body) === sha(posterObject),
-    inlinePinnedHop: pinnedHop.status === 302 && pinnedHop.headers.get('location') === `${cdnPath(ids.film)}?r=auto`,
+    // The pinned inline film's URL did not change with the replace, and needs
+    // no hop to reach the new film (AGL-2798).
+    inlineStableSrc: inlineSrc === `${cdnPath(ids.film)}?r=auto`,
     inlineFilm: sha((await follow(inlineSrc)).body) === files.film.b.sha,
     inlinePoster: (await follow(inlinePoster)).headers.get('content-type') === 'image/webp',
     pdf: sha((await follow(html.match(new RegExp(`href="(${cdnPath(ids.pdf)})"`))?.[1] ?? '/missing')).body) === files.pdf.b.sha,
@@ -1011,6 +1016,30 @@ await apiStep('every reference on the published page now resolves to the new byt
     Object.values(results).every(Boolean),
     JSON.stringify(results),
   )
+})
+
+const FOLLOWS_DURATION = "the page publishes the replaced film's running time, not the picked one (AGL-2807)"
+await apiStep(FOLLOWS_DURATION, async () => {
+  // The tour node still stores what a pick of the FIRST film copied: 2 s at
+  // 640x360. The replacement runs 3 s, and the page has to say so.
+  const [block] = videoObjects(attr(await pageHtml(pageSlug)))
+  tally.check(
+    FOLLOWS_DURATION,
+    Math.abs(Number(after.film?.video?.durationMs) - 3000) <= 150 && block?.duration === 'PT3S',
+    `asset durationMs=${after.film?.video?.durationMs} VideoObject.duration=${block?.duration}`,
+  )
+})
+
+const FOLLOWS_SHAPE = 'the player takes its shape from the asset, not from the pick (AGL-2807)'
+await apiStep(FOLLOWS_SHAPE, async () => {
+  // Both fixture films are 640x360, so a replace alone cannot show a change of
+  // shape. A square frame recorded on the asset can: the node still stores the
+  // pick's 640x360, and the page has to follow the asset.
+  await media().doc(ids.film).update({ 'video.width': 480, 'video.height': 480 })
+  const html = attr(await pageHtml(pageSlug))
+  const square = /aspect-ratio:\s*480\s*\/\s*480/.test(html)
+  const picked = /aspect-ratio:\s*640\s*\/\s*360/.test(html)
+  tally.check(FOLLOWS_SHAPE, square && !picked, `480/480 present=${square}, 640/360 still present=${picked}`)
 })
 
 await apiStep('a replace across families is refused', async () => {

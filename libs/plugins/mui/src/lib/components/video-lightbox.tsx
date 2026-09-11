@@ -70,6 +70,7 @@ import {
   useVideoPlaybackBeacon,
   type VideoPlaybackBeaconOptions,
 } from './video-playback-beacon'
+import { VideoPlayerFrame } from './video-player-frame'
 
 export interface VideoLightboxProps {
   open: boolean
@@ -92,6 +93,11 @@ export interface VideoLightboxProps {
    * viewing to `open`.
    */
   playback?: Omit<VideoPlaybackBeaconOptions, 'viewingKey'>
+  /**
+   * A hosted player's frame address (AGL-2826). When set, the dialog frames
+   * that player and never plays `src` itself.
+   */
+  embedSrc?: string
 }
 
 /** What a dialog is called when the author gave the video no title. */
@@ -119,6 +125,7 @@ export function VideoLightbox(props: VideoLightboxProps) {
     muted,
     captions,
     playback,
+    embedSrc,
   } = props
   const playbackHandlers = useVideoPlaybackBeacon({
     ...playback,
@@ -232,44 +239,60 @@ export function VideoLightbox(props: VideoLightboxProps) {
         >
           <MdiIcon path={mdiClose.path} fontSize="small" />
         </IconButton>
-        <Box
-          component="video"
-          ref={videoRef}
-          src={src}
-          poster={poster || undefined}
-          title={title || undefined}
-          autoPlay
-          playsInline
-          loop={Boolean(loop)}
-          muted={Boolean(muted)}
-          // The one place in this element where fetching eagerly is right:
-          // the visitor has asked for the film and is looking at the player.
-          preload="auto"
-          // A click on the picture plays and pauses, as it does on the
-          // browser's own player.
-          onClick={() => {
-            if (videoRef.current) togglePlayback(videoRef.current)
-          }}
-          onPlay={playbackHandlers.onPlay}
-          onTimeUpdate={playbackHandlers.onTimeUpdate}
-          onEnded={playbackHandlers.onEnded}
-          sx={{
-            display: 'block',
-            width: '100%',
-            height: 'auto',
-            flex: '1 1 auto',
-            minHeight: 0,
-            objectFit: 'contain',
-            aspectRatio,
-          }}
-        >
-          {captions}
-        </Box>
-        <VideoLightboxControls
-          videoRef={videoRef}
-          playerRef={playerRef}
-          captions={Boolean(captions)}
-        />
+        {embedSrc ? (
+          // A hosted player draws its own controls inside its frame, so the
+          // dialog adds none, and its shortcuts find no film to act on.
+          // Closing unmounts the frame with the rest of the dialog, which
+          // stops the player exactly as it stops the `<video>`, and the frame
+          // gives way on a short screen for the reason the film does.
+          <VideoPlayerFrame
+            src={embedSrc}
+            title={title}
+            aspectRatio={aspectRatio}
+            style={{ flexGrow: 1, flexShrink: 1, minHeight: 0 }}
+          />
+        ) : (
+          <>
+            <Box
+              component="video"
+              ref={videoRef}
+              src={src}
+              poster={poster || undefined}
+              title={title || undefined}
+              autoPlay
+              playsInline
+              loop={Boolean(loop)}
+              muted={Boolean(muted)}
+              // The one place in this element where fetching eagerly is right:
+              // the visitor has asked for the film and is looking at the player.
+              preload="auto"
+              // A click on the picture plays and pauses, as it does on the
+              // browser's own player.
+              onClick={() => {
+                if (videoRef.current) togglePlayback(videoRef.current)
+              }}
+              onPlay={playbackHandlers.onPlay}
+              onTimeUpdate={playbackHandlers.onTimeUpdate}
+              onEnded={playbackHandlers.onEnded}
+              sx={{
+                display: 'block',
+                width: '100%',
+                height: 'auto',
+                flex: '1 1 auto',
+                minHeight: 0,
+                objectFit: 'contain',
+                aspectRatio,
+              }}
+            >
+              {captions}
+            </Box>
+            <VideoLightboxControls
+              videoRef={videoRef}
+              playerRef={playerRef}
+              captions={Boolean(captions)}
+            />
+          </>
+        )}
       </Box>
     </Dialog>
   )

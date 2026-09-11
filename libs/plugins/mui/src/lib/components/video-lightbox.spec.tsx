@@ -103,7 +103,64 @@ describe('VideoLightbox playback', () => {
     expect(style.minHeight).toMatch(/^0(px)?$/)
     expect(style.flexShrink).toBe('1')
   })
+})
 
+describe('VideoLightbox with a hosted player (AGL-2826)', () => {
+  const EMBED = 'https://fast.wistia.net/embed/iframe/e4a27b971d'
+
+  it('adds no controls around a player that draws its own', () => {
+    const base = open({ embedSrc: EMBED })
+    expect(base.querySelector('button[aria-label="Play"]')).toBeNull()
+    expect(base.querySelector('button[aria-label="Close video"]')).toBeTruthy()
+  })
+
+  it('lets the player give way on a short screen, as the film does', () => {
+    // The same AGL-2827 geometry: a frame that could not shrink below its
+    // aspect-ratio height would lose its bottom edge, where Wistia draws its
+    // controls.
+    const style = getComputedStyle(
+      open({ embedSrc: EMBED }).querySelector('iframe') as HTMLIFrameElement,
+    )
+    expect(style.minHeight).toMatch(/^0(px)?$/)
+    expect(style.flexShrink).toBe('1')
+  })
+
+  it('frames a hosted player instead of playing a file', () => {
+    const embedSrc =
+      'https://fast.wistia.net/embed/iframe/e4a27b971d?autoPlay=true'
+    const base = open({ embedSrc })
+    const frame = base.querySelector('iframe') as HTMLIFrameElement
+    expect(frame.getAttribute('src')).toBe(embedSrc)
+    // The dialog's name and the frame's name are the same sentence, so a
+    // screen reader entering the player knows which film it is in.
+    expect(frame.getAttribute('title')).toBe('The 60-second tour')
+    expect(frame.getAttribute('allow')).toContain('autoplay')
+    // Never both: a `<video>` beside the frame would fetch `src` as well.
+    expect(base.querySelector('video')).toBeNull()
+  })
+
+  it('never lets the hosted player navigate the page', () => {
+    const sandbox = (
+      open({
+        embedSrc: 'https://fast.wistia.net/embed/iframe/e4a27b971d',
+      }).querySelector('iframe') as HTMLIFrameElement
+    ).getAttribute('sandbox') as string
+    expect(sandbox).toContain('allow-scripts')
+    expect(sandbox).not.toContain('allow-top-navigation')
+    expect(sandbox).not.toContain('allow-forms')
+  })
+
+  it('leaves focus on the dialog, where Escape can still close it', () => {
+    // A cross-origin frame keeps every key pressed inside it, so a player that
+    // took focus on open would swallow the Escape that closes the dialog.
+    const base = open({
+      embedSrc: 'https://fast.wistia.net/embed/iframe/e4a27b971d',
+    })
+    expect(document.activeElement).not.toBe(base.querySelector('iframe'))
+  })
+})
+
+describe('VideoLightbox while closed', () => {
   it('renders nothing at all while closed', () => {
     // Unmounting is what actually stops the download; a paused `<video>` left
     // in the tree keeps whatever it has buffered.

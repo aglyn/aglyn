@@ -130,12 +130,13 @@ const INTRINSIC_SIZE_COMPONENT_IDS = new Set(['image'])
  *
  * ## Why the copy happens at pick time
  *
- * No tenant render path reads a media document — the loaders walk screens,
- * versions, components, layouts and datasets, and the only server-side media
- * read runs on the ASSET request, long after the HTML is emitted. So the
- * dimensions can reach an `<img>` in one of two ways: a Firestore read per
- * image added to the hottest ISR-cached path, or two numbers carried on the
- * node like every other prop. This is the second.
+ * No tenant render path reads an image's media document — the loaders walk
+ * screens, versions, components, layouts and datasets, and the only
+ * server-side read of an image's document runs on the ASSET request, long
+ * after the HTML is emitted. So the dimensions can reach an `<img>` in one of
+ * two ways: a Firestore read per image added to the hottest ISR-cached path,
+ * or two numbers carried on the node like every other prop. This is the
+ * second. A placed film is the exception — see `video-asset-facts.ts`.
  *
  * ## Why it matters
  *
@@ -188,9 +189,12 @@ const VIDEO_COMPONENT_ID = 'video'
  * node when an author picks a video asset (AGL-2741, rewritten against the
  * real document shape in AGL-2749).
  *
- * Same route and same reasoning as the image dimensions: no tenant render path
- * reads a media document, so anything a published page needs to know about an
- * asset has to ride on the node like any other prop.
+ * Same route as the image dimensions, and not the last word the way theirs
+ * is. A replace rewrites the asset's `video` and `poster` records and cannot
+ * reach the nodes that copied them, so the tenant composition reads each
+ * placed film's document and lays its current records over these
+ * (`video-asset-facts.ts`, AGL-2807). What is written here is what a page
+ * shows when that read cannot answer.
  *
  * ## Why a video does not simply use {@link intrinsicMediaSize}
  *

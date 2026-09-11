@@ -31,12 +31,12 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { CustomFieldType } from '@aglyn/aglyn'
 import {
   registerCustomFieldType,
   validateDocument,
   type DatasetModel,
 } from '@aglyn/aglyn/server'
-import { RATING_FIELD } from '@aglyn/plugins-marketplace/model/rating-field'
 
 const mockEnsureAll = jest.fn()
 
@@ -47,7 +47,27 @@ jest.mock('../utils/server-plugin-loader', () => ({
   },
 }))
 
-/** A dataset with one field of the marketplace's `rating` type. */
+/**
+ * A custom field type shaped like the marketplace's `rating`, its reference
+ * adopter. The console may not import an add-on library (module boundaries
+ * keep `scope:app` off `aglyn:addons`), and the helper under test is
+ * plugin-agnostic: it only has to make whatever a plugin registered run.
+ */
+const RATING_FIELD: CustomFieldType = {
+  name: 'rating',
+  pluginId: 'marketplace',
+  label: 'Rating (0–5)',
+  baseType: 'int32',
+  description: 'Whole-number rating between 0 and 5.',
+  validate: (value) => {
+    const rating = Number(value)
+    return Number.isInteger(rating) && rating >= 0 && rating <= 5
+      ? null
+      : 'must be a whole number from 0 to 5'
+  },
+}
+
+/** A dataset with one field of the `rating` type. */
 const RATED: DatasetModel = {
   order: ['stars'],
   fields: { stars: { name: 'Stars', type: 'int32', customType: 'rating' } },
