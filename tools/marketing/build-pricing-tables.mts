@@ -176,6 +176,16 @@ const custom =
   (p: Plan): string =>
     p === 'enterprise' ? CUSTOM_LABEL : fn(p)
 
+/**
+ * A CRM row: the plan's own figure where it carries `features.crm`, a dash
+ * where it does not. The CRM is paid-only, so a plan without it names no CRM
+ * figure, whatever band it still holds in code.
+ */
+const crm =
+  (fn: (p: Plan) => string) =>
+  (p: Plan): string =>
+    F(p).crm ? fn(p) : NO
+
 const GROUPS: Array<{ title: string; rows: Row[] }> = [
   {
     title: 'Sites & publishing',
@@ -249,11 +259,23 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
        * below, which is tiered and metered.
        */
       {
-        label: 'Form submissions / mo',
+        label: 'Form submissions / mo, per site',
         value: talk((p) => num(E(p).formSubmissionsPerMonth)),
       },
-      { label: 'Contacts included', value: talk((p) => num(E(p).contactsPerHost)) },
-      { label: 'Email sends / mo', value: talk((p) => num(E(p).emailSendsPerMonth)) },
+      // The CRM is paid-only (2026-09-11, AGL-2851): a plan without
+      // `features.crm` opens no part of it, so both CRM rows print a dash for
+      // it. Free still holds a 100-record band in `contactsPerHost`, which
+      // still counts the people a Free site's forms capture; the dash says the
+      // plan names no CRM figure, not that the band is zero.
+      {
+        label: 'CRM records included (contacts, companies & deals)',
+        value: talk(crm((p) => num(E(p).contactsPerHost))),
+      },
+      { label: 'CRM: contacts, leads, companies, deals & tasks', value: crm(() => YES) },
+      // Free's dash here is the cap itself: `crmEmailsPerDay` is 0 and
+      // `checkCrmEmailQuota` refuses every send at it.
+      { label: 'One-to-one emails / day', value: talk((p) => num(E(p).crmEmailsPerDay)) },
+      { label: 'Campaign emails / mo', value: talk((p) => num(E(p).emailSendsPerMonth)) },
       // Beside the send band rather than beside "Custom domain & SSL", which
       // is the site's public web address and authorizes nothing about mail.
       // What this row answers is where a campaign's reputation lives, so it
@@ -277,16 +299,7 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       // and a bare "POS registers" beside them reads as org-wide by contrast.
       // Ground truth: `resolveHostRegisterCap(org, hostId)` = this cap plus
       // that site's allocated seats.
-      {
-        label: 'POS registers per site',
-        // The frame still says the pre-AGL-1775 "POS registers"; the rename is
-        // ours and deliberate. Declared rather than left to surface as a
-        // missing row plus an extra row, which is what a rename looks like to
-        // the reconciler and is indistinguishable from a genuinely dropped
-        // row.
-        frameLabel: 'POS registers',
-        value: talk((p) => num(E(p).posRegisters)),
-      },
+      { label: 'POS registers per site', value: talk((p) => num(E(p).posRegisters)) },
       // A fee only means something if you can sell. Free carries
       // `transactionFeeDigitalPct: 0` but `commerce: false`, so printing "0%"
       // would read as "sell for free on the Free plan" — the opposite of
@@ -344,24 +357,15 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
 
 // ---------------------------------------------------------------- usage
 
+/*
+ * A rate as the page and every breakpoint print it: bare, with the unit in the
+ * row's label ("per month", "per GB-month", "per 1,000"). Cells are compared
+ * as whole strings and rows are found by label, so a row that changed unit
+ * arrives as a missing row plus an extra one rather than as a cell whose
+ * digits happen to match, which on a per-1,000 rate would be a 1000x error.
+ */
 const money = (v: number | null): string =>
   v == null ? NO : v < 1 ? `$${v.toFixed(2)}` : `$${v}`
-
-/*
- * The same rate wearing the frame's decoration.
- *
- * The number is the code's; the leading `+`, the unit and the spacing are the
- * design's, and they are not uniform — the storage row is written flat where
- * the four monthly rows carry a `+`. Rendering our value the frame's way is
- * what lets the two be compared as whole strings. A comparison that stripped
- * the decoration and matched digits would pass a row that had silently
- * changed unit, which on a per-1,000 rate is a 1000x error.
- */
-const perMo = (v: number | null): string => (v == null ? NO : `+${money(v)}/mo`)
-const perThousand = (v: number | null): string =>
-  v == null ? NO : `+${money(v)} / 1k`
-const perGbMonth = (v: number | null): string =>
-  v == null ? NO : `${money(v)} / GB-mo`
 
 /**
  * A `PLAN_PRICING` field that states an add-on or overage rate.
@@ -376,65 +380,48 @@ type RateKey = {
 }[keyof (typeof PLAN_PRICING)['pro']]
 
 interface UsageRow {
+  /** The row's label on the page, which every breakpoint also carries. */
   label: string
-  /** The frame's label for this row; it is the shorter one throughout. */
-  frameLabel: string
   /**
    * The `PLAN_PRICING` field this row publishes.
    *
-   * Structural, not an annotation. Both renderings below are derived from it,
+   * Structural, not an annotation. The published cell is derived from it,
    * so a row cannot claim to publish one rate while printing another — and
    * `UNPUBLISHED_RATES` enumerates the same keys off `PLAN_PRICING` itself to
    * find the ones NO row publishes, which is how the email-send and assist
    * rates came to be billed against a page that stated neither.
    */
   rate: RateKey
-  /** The unit decoration the frame writes this rate with. */
-  decorate: (v: number | null) => string
 }
 
 const USAGE_ROWS: UsageRow[] = [
   {
     label: 'Extra site, per month',
-    frameLabel: 'Extra site / host',
     rate: 'extraHostMonthlyUsd',
-    decorate: perMo,
   },
   {
     label: 'Extra team seat, per month',
-    frameLabel: 'Extra team seat',
     rate: 'extraSeatMonthlyUsd',
-    decorate: perMo,
   },
   {
     label: 'Extra site collaborator, per month',
-    frameLabel: 'Extra site collaborator',
     rate: 'extraCollaboratorMonthlyUsd',
-    decorate: perMo,
   },
   {
     label: 'Extra dataset, per month',
-    frameLabel: 'Extra dataset',
     rate: 'extraDatasetMonthlyUsd',
-    decorate: perMo,
   },
   {
-    label: 'Extra data storage, per GB-month',
-    frameLabel: 'Extra data storage',
+    label: 'Extra dataset storage, per GB-month',
     rate: 'extraDataGbMonthlyUsd',
-    decorate: perGbMonth,
   },
   {
     label: 'API requests, per 1,000 over limit',
-    frameLabel: 'API requests over limit',
     rate: 'extraApiRequestsUsdPer1k',
-    decorate: perThousand,
   },
   {
-    label: 'Contacts, per 1,000 over the included band',
-    frameLabel: 'Contacts over included band',
+    label: 'CRM records, per 1,000 over the included band',
     rate: 'extraContactsUsdPer1k',
-    decorate: perThousand,
   },
   /*
    * EMAIL SENDS AND ASSIST — billed everywhere, published nowhere until now.
@@ -443,7 +430,7 @@ const USAGE_ROWS: UsageRow[] = [
    * `extraEmailSendsUsdPer1k` and `report-usage` puts the result on the
    * invoice; `priceAssistCreditOverage` reads `extraAssistCreditsUsdPer1k` the
    * same way. Neither had a row on this table, so `/pricing` stated an email
-   * ALLOWANCE ("Email sends / mo") and an assist CAPABILITY ("AI assist ✓")
+   * ALLOWANCE ("Campaign emails / mo") and an assist CAPABILITY ("AI assist ✓")
    * while stating the price of exceeding either nowhere at all.
    *
    * The rates are published exactly as the code carries them. No price moves
@@ -459,9 +446,7 @@ const USAGE_ROWS: UsageRow[] = [
    */
   {
     label: 'Email sends, per 1,000 over the included band',
-    frameLabel: 'Email sends over included band',
     rate: 'extraEmailSendsUsdPer1k',
-    decorate: perThousand,
   },
   {
     /*
@@ -477,17 +462,12 @@ const USAGE_ROWS: UsageRow[] = [
      * unbounded absorbed spend. Same-looking cell, different fact.
      */
     label: 'AI assist, per 1,000 credits over the included band',
-    frameLabel: 'Assist credits over included band',
     rate: 'extraAssistCreditsUsdPer1k',
-    decorate: perThousand,
   },
 ]
 
-/** The bare rate, as the compare-style tables print it. */
+/** The rate as the page and every breakpoint print it. */
 const rowValue = (r: UsageRow, p: Plan): string => money(PLAN_PRICING[p][r.rate])
-/** The same rate wearing the frame's unit decoration. */
-const rowFrameValue = (r: UsageRow, p: Plan): string =>
-  r.decorate(PLAN_PRICING[p][r.rate])
 
 /**
  * Rates `PLAN_PRICING` carries that NO row above publishes.
@@ -738,12 +718,14 @@ const SPEC: Record<string, (e: (typeof PLAN_ENTITLEMENTS)[Plan]) => string> = {
     e.recordsPerDataset === UNLIMITED && e.variablesPerHost === UNLIMITED
       ? 'unlimited records & variables'
       : `${num(e.recordsPerDataset)} records · ${num(e.variablesPerHost)} variables`,
+  campaignEmails: (e) => `${num(e.emailSendsPerMonth)} campaign emails/mo`,
 }
 
 /**
- * Which facts each tier leads with, in the frame's order. Kept to six items
- * per row like the design — a longer line is not more informative, it just
- * wraps. `lit` entries are prose the frame wrote that has no code equivalent.
+ * Which facts each tier leads with, in the frame's order: six capacity facts,
+ * then the campaign email band each card closes on. A longer line is not more
+ * informative, it just wraps. `lit` entries are prose the frame wrote that has
+ * no code equivalent.
  */
 const TIER_SPEC: Partial<
   Record<Plan, { blurb: string; specs: Array<keyof typeof SPEC | { lit: string }> }>
@@ -751,7 +733,15 @@ const TIER_SPEC: Partial<
   scale: {
     blurb:
       'For high-growth stores and multi-site teams that have outgrown Business.',
-    specs: ['sites', 'collaborators', 'fees', 'api', 'products', 'bandwidth'],
+    specs: [
+      'sites',
+      'collaborators',
+      'fees',
+      'api',
+      'products',
+      'bandwidth',
+      'campaignEmails',
+    ],
   },
   advanced: {
     blurb: 'For high-volume organizations that need headroom on every limit.',
@@ -762,6 +752,7 @@ const TIER_SPEC: Partial<
       'api',
       'products',
       { lit: 'priority scale & limits' },
+      'campaignEmails',
     ],
   },
   agency: {
@@ -774,6 +765,7 @@ const TIER_SPEC: Partial<
       'api',
       'recordsAndVars',
       'registers',
+      'campaignEmails',
     ],
   },
 }
@@ -855,8 +847,10 @@ const tiers = {
     blurb:
       'For large organizations with bespoke requirements — volume pricing available.',
     specs: [
-      'Unlimited scale',
-      `${pct(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct)} platform fees`,
+      // Not "Unlimited scale": since AGL-2654 an Enterprise contract falls back
+      // to finite bands on every axis it does not name.
+      'Scale as you grow',
+      `${pct(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct)} transaction fees`,
       'white-label',
       'SSO',
       // Was `'SLA & dedicated support'` (AGL-2194 P4). Dedicated support is
@@ -871,6 +865,7 @@ const tiers = {
       // it back.
       'dedicated support',
       'custom contracts',
+      'campaign email volume by agreement',
     ],
     cta: 'CONTACT SALES',
     // Deliberately no signup href and no cadence: Enterprise is quoted, not
@@ -1198,17 +1193,7 @@ const frameMetered = frame.sections
 const FRAME_STALE_METERED: Record<
   string,
   { ourCost: string; youPay: string; why: string }
-> = {
-  'Page views (bandwidth + reads)': {
-    ourCost: '$0.10 / 1k views',
-    youPay: '$0.13 / 1k views',
-    why:
-      'the 2026-09-09 re-peg (AGL-2711) moved `perPageView` from $0.0001 to ' +
-      '$0.00016153846, so the published figure is $0.21 / 1k views. The four ' +
-      'Figma frames still draw the rate the meter carried while it was ' +
-      'calibrated against a 627 KB page. Redraw them and this entry comes out.',
-  },
-}
+> = {}
 
 for (const [label, [ourCost, youPay]] of injected('--declare-stale-metered', 3)) {
   FRAME_STALE_METERED[label] = { ourCost, youPay, why: INJECTED_WHY }
@@ -1552,16 +1537,7 @@ columns.finish()
  * writes them as a single ` · `-joined string, which is why the count can
  * disagree as well as the contents.
  *=========================================*/
-const TIERS_STALE: Record<string, Divergence> = {
-  'Agency · spec 6': {
-    frame: '20 POS registers',
-    why: 'AGL-1775 made `posRegisters` the PER-SITE cap, so an org running five locations needs five; the rename is ours and the frame still carries the org-wide phrasing, exactly as the compare table\'s `frameLabel` records for the same row',
-  },
-  'Enterprise · spec 5': {
-    frame: 'SLA & dedicated support',
-    why: 'AGL-2411 took the uptime-SLA claim off the live page and the page\'s own FAQ now denies one during public beta; dedicated support is real and stays, the SLA half is not and the frame is the last artifact still selling it',
-  },
-}
+const TIERS_STALE: Record<string, Divergence> = {}
 
 const tierStrip = reconciler('scale strip', TIERS_STALE)
 const TIER_CARDS = [...tiers.rows, tiers.enterprise]
@@ -1643,7 +1619,7 @@ const USAGE_STALE: Record<string, Divergence> = {}
  * The two rates the product BILLS and the page has never stated.
  *
  * Not a design opinion and not a stale cell — there is no cell. Every
- * breakpoint's add-on table runs Extra site → Contacts and stops, so both rows
+ * breakpoint's add-on table runs Extra site → CRM records and stops, so both rows
  * below are compared against nothing until the page carries them. Declared so
  * the gap is a recorded fact with an owner rather than a red the next person
  * silences, and so it fails the moment the page catches up, at which point the
@@ -1658,9 +1634,9 @@ const USAGE_STALE: Record<string, Divergence> = {}
  * reasons instead of listing two labels.
  */
 const USAGE_EXPECTED_ABSENT: Record<string, string> = {
-  'Email sends over included band':
-    'the page states an email ALLOWANCE ("Email sends / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
-  'Assist credits over included band':
+  'Email sends, per 1,000 over the included band':
+    'the page states an email ALLOWANCE ("Campaign emails / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
+  'AI assist, per 1,000 credits over the included band':
     'the page states an assist CAPABILITY ("AI assist ✓" in the compare grid) and no overage rate, while `priceAssistCreditOverage` bills `extraAssistCreditsUsdPer1k` from Pro up. Resolves when `/pricing` carries the row',
 }
 
@@ -1669,7 +1645,7 @@ const addOnRates = reconciler(
   USAGE_STALE,
   USAGE_EXPECTED_ABSENT,
 )
-const usageByFrameLabel = new Map(USAGE_ROWS.map((r) => [r.frameLabel, r] as const))
+const usageByLabel = new Map(USAGE_ROWS.map((r) => [r.label, r] as const))
 
 // A declaration keyed at a row we do not emit excuses nothing while reading as
 // a considered decision — the same both-directions rule `EXPECTED_MISSING` is
@@ -1678,7 +1654,7 @@ const usageByFrameLabel = new Map(USAGE_ROWS.map((r) => [r.frameLabel, r] as con
 fail(
   'add-on capacity: declared absent but there is no such add-on row — delete the declaration',
   Object.keys(USAGE_EXPECTED_ABSENT).filter(
-    (label) => !usageByFrameLabel.has(label),
+    (label) => !usageByLabel.has(label),
   ),
 )
 
@@ -1711,7 +1687,7 @@ fail(
 
 /** What a plan's cell should say, Enterprise's "Custom" included. */
 const usageCell = (row: UsageRow, p: Plan) =>
-  p === 'enterprise' ? CUSTOM_LABEL : rowFrameValue(row, p)
+  p === 'enterprise' ? CUSTOM_LABEL : rowValue(row, p)
 
 for (const v of frames) {
   const wide = records(v, 'Usage pricing', 'Metered table')
@@ -1726,9 +1702,9 @@ for (const v of frames) {
     }
     const order = header.cells.slice(1).map((l) => planByLabel.get(l) ?? null)
     for (const row of USAGE_ROWS) {
-      const rec = wide.find((r) => r.cells[0] === row.frameLabel)
+      const rec = wide.find((r) => r.cells[0] === row.label)
       if (!rec) {
-        addOnRates.absentRow(row.frameLabel, v.name)
+        addOnRates.absentRow(row.label, v.name)
         continue
       }
       order.forEach((p, i) => {
@@ -1737,7 +1713,7 @@ for (const v of frames) {
           return
         }
         addOnRates.cell(
-          `${row.frameLabel} · ${PLAN_LABELS[p]}`,
+          `${row.label} · ${PLAN_LABELS[p]}`,
           usageCell(row, p),
           rec.cells[i + 1],
           v.name,
@@ -1762,14 +1738,14 @@ for (const v of frames) {
   }
   const carried = new Set<string>()
   for (const rec of narrow.slice(1)) {
-    const row = usageByFrameLabel.get(rec.cells[0])
+    const row = usageByLabel.get(rec.cells[0])
     if (!row) {
       addOnRates.absent(`an add-on row we do not emit: "${rec.cells[0]}"`, v.name)
       continue
     }
-    carried.add(row.frameLabel)
+    carried.add(row.label)
     addOnRates.cell(
-      `${row.frameLabel} · ${PLAN_LABELS[selected]}`,
+      `${row.label} · ${PLAN_LABELS[selected]}`,
       usageCell(row, selected),
       rec.cells[1],
       v.name,
@@ -1786,7 +1762,7 @@ for (const v of frames) {
    * whose shape differs most, so it is the likeliest one to fall behind.
    */
   for (const row of USAGE_ROWS) {
-    if (!carried.has(row.frameLabel)) addOnRates.absentRow(row.frameLabel, v.name)
+    if (!carried.has(row.label)) addOnRates.absentRow(row.label, v.name)
   }
 }
 
@@ -1807,7 +1783,7 @@ for (const v of frames) {
   if (note === undefined) continue
   const stated = /billed separately at (.+)\.\s*$/.exec(note)?.[1] ?? '(no rate stated)'
   addOnRates.cell(
-    'Extra data storage · pass-through note',
+    'Extra dataset storage · pass-through note',
     datasetRate,
     stated,
     v.name,
@@ -1903,13 +1879,12 @@ const ADDONS_STALE: Record<string, Divergence> = {}
 
 const addonCards = reconciler('add-on cards', ADDONS_STALE)
 /**
- * What each card is called on the frame. Two names for the register card
- * because the breakpoints disagree with each other — "POS Pro register" on the
- * wide frames, "Extra POS register" on mobile.
+ * What each card is called on the frame. Every breakpoint carries the page's
+ * name for both cards, so each has exactly one.
  */
 const ADDON_FRAME_LABELS: Record<string, string[]> = {
-  'Event Calendar': ['Event Calendar (add-on)'],
-  'Extra POS register': ['POS Pro register', 'Extra POS register'],
+  'Event Calendar': ['Event Calendar'],
+  'Extra POS register': ['Extra POS register'],
 }
 
 for (const v of frames) {
