@@ -1042,6 +1042,17 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
 
+      # AGL-118, AGL-2823. Every path that creates, destroys or transfers a
+      # durable customer object writes an activity entry, or is classified
+      # with the reason it does not. The listed modules live under apps/ and
+      # libs/, which the push trigger above already watches, and a write that
+      # moves from one module to another leaves the list naming a file that no
+      # longer logs. The self-test runs first: it points the detector at one
+      # path known to log and one known not to, so a detector that stopped
+      # matching cannot report perfect coverage over nothing.
+      - run: npm run test:activity-coverage
+      - run: npm run check:activity-coverage
+
       # AGL-1489. The four deploy scripts all SHIP SOMETHING when they run, and
       # three of them read a single flag with `process.argv.includes(...)` and
       # discarded everything else — so `deploy-firestore-rules.mjs --help`
