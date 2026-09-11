@@ -51,7 +51,6 @@ describe('isOutboundCredential', () => {
       'VERCEL_TOKEN',
       'VERCEL_OIDC_TOKEN',
       'RESEND_API_KEY',
-      'RESEND_DOMAINS_API_KEY',
       'RESEND_READ_API_KEY',
       'RESEND_WEBHOOK_SECRET',
       'GA4_API_SECRET',
