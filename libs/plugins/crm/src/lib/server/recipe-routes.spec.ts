@@ -124,10 +124,21 @@ const mockResolveOrgPermissions = jest.fn(async () => mockPermissions)
 const mockLogHostActivity = jest.fn(async () => undefined)
 const mockLogOrgActivity = jest.fn(async () => undefined)
 
+/** What the resolver double last answered: the membership the case describes. */
+let mockLastMembership: any = null
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
-  resolveOrgPermissions: (...args: unknown[]) => (mockResolveOrgPermissions as any)(...args),
+  resolveOrgPermissions: async (...args: unknown[]) =>
+    (mockLastMembership = await (mockResolveOrgPermissions as any)(...args)),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // `data.manage` is the permission catalog's answer (AGL-2843), read off the
+  // membership the resolver double just answered, so a case states it once.
+  resolveOrgMembership: async (uid: string, orgId: string) =>
+    mockLastMembership?.orgId === orgId
+      ? { orgId, member: { $id: uid, role: mockLastMembership.role } }
+      : null,
+  memberHasOrgPermission: async (_orgId: string, _member: unknown, permission: string) =>
+    mockLastMembership?.permissions?.[permission] === true,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: (...args: unknown[]) => (mockVerifyIdToken as any)(...args) }),

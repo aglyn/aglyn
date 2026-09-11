@@ -458,8 +458,9 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
   const ORG = { orgId: 'org-1', dealId: 'd1' }
 
   it('moves a deal another site captured, emits for the deal’s own site, and logs the org line', async () => {
-    // No site role at all — the org variant does not consult one.
-    state.member = null
+    // An org-wide member, and no site role consulted: the org variant asks
+    // the membership and the permission catalog, never a site role.
+    state.member = { role: 'owner' }
     const { status, body } = await call({ ...ORG, stageId: 'negotiation' })
     expect(status).toBe(200)
     expect(body).toMatchObject({ ok: true, stageId: 'negotiation', event: 'dealStageChanged' })
@@ -494,8 +495,10 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
     state.orgPermissions = {
       ...state.orgPermissions,
       orgWide: true,
-      permissions: { 'data.manage': false },
+      permissions: {},
     }
+    // The permission catalog is what answers `data.manage` (AGL-2843).
+    state.permitted = false
     expect((await call({ ...ORG, stageId: 'negotiation' })).status).toBe(403)
     expect(state.updates).toEqual([])
     expect(emitted).toEqual([])
@@ -513,7 +516,7 @@ describe('the deal-stage route at the organization level (AGL-2634)', () => {
   })
 
   it('floors the contact in the deal’s own site’s facet on an org-level win, and the line says so', async () => {
-    state.member = null
+    state.member = { role: 'owner' }
     const { body } = await call({ ...ORG, status: 'won' })
     expect(state.contactUpdates).toEqual([
       { id: 'c1', patch: { 'facets.shop.lifecycleStage': 'customer', updatedAt: '__now' } },

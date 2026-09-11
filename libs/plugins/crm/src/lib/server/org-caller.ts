@@ -31,16 +31,21 @@
  * the server admits cannot drift.
  *
  * A ROLE IS NOT A REACH. A site collaborator is a real member document
- * carrying `role: 'editor'`, and `resolveOrgPermissions` hands them
- * `data.manage` for their site — so a gate that read the permission alone
- * would admit a contractor on one microsite to act over every site in the
- * agency. `orgWide` is checked first and separately, and no permission
- * grant restores it; this is the boundary the host variants get for free
- * from the site role, spelled out for the variant that has no site.
+ * carrying `role: 'editor'`, and that role holds `data.manage` — so a gate
+ * that read the permission alone would admit a contractor on one microsite
+ * to act over every site in the agency. `orgWide` is checked first and
+ * separately, and no permission grant restores it; this is the boundary the
+ * host variants get for free from the site role, spelled out for the variant
+ * that has no site.
  */
 
 import { type AglynOrganization, canManageOrg, type PluginApiRequest } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgDoc } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgDoc,
+  memberHasOrgPermission,
+  resolveOrgMembership,
+} from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 /**
@@ -70,6 +75,32 @@ export function readCrmRouteScope(
   if (orgId) return { level: 'org', hostId, orgId }
   if (hostId) return { level: 'site', hostId, orgId: '' }
   return null
+}
+
+/**
+ * Whether `uid` holds `data.manage` in `orgId`, as the permission catalog
+ * resolves it: the member's role, a custom role and per-member overrides
+ * (AGL-2843).
+ *
+ * Asked of `memberHasOrgPermission`, never of the `permissions` map
+ * `resolveOrgPermissions` returns. That map is the legacy six keys plus the
+ * keys plugins register (`ResolvedOrgPermissionSet`), and `data.manage` is a
+ * catalog key, so it is never in it: a gate that read it there would refuse
+ * everyone but staff. A lookup that fails answers `false`.
+ */
+export async function holdsDataManage(
+  orgId: string | null | undefined,
+  uid: string,
+): Promise<boolean> {
+  if (!orgId) return false
+  try {
+    const membership = await resolveOrgMembership(uid, orgId)
+    const member = membership?.member ?? null
+    if (!member) return false
+    return (await memberHasOrgPermission(orgId, member, 'data.manage')) === true
+  } catch {
+    return false
+  }
 }
 
 export interface OrgCaller {
@@ -130,7 +161,7 @@ export async function authorizeOrgCaller(
   const orgWide = Boolean(membership?.orgWide) && membership?.orgId === orgId
   const admitted =
     options.needs === 'data.manage'
-      ? staff || (orgWide && membership?.permissions['data.manage'] === true)
+      ? staff || (orgWide && (await holdsDataManage(orgId, decoded.uid)))
       : orgWide && canManageOrg(membership?.role ?? null)
   if (!admitted) return { ok: false, status: 403, error: options.refusal }
   const org = await getOrgDoc(orgId).catch(() => null)

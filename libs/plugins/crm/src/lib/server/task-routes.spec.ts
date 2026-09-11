@@ -698,8 +698,10 @@ describe('crm/task-save at the organization level (AGL-2637)', () => {
       orgId: ORG_ID,
       orgWide: true,
       role: 'admin',
-      permissions: { 'data.manage': false },
+      permissions: {},
     })
+    // The permission catalog is what answers `data.manage` (AGL-2843).
+    memberHasOrgPermission.mockResolvedValue(false)
     const revoked = await call(crmTaskSaveHandler, { body: { orgId: ORG_ID, task: task() } })
     expect(revoked.status).toBe(403)
     expect(stored()).toEqual([])
@@ -731,9 +733,10 @@ describe('crm/task-save at the organization level (AGL-2637)', () => {
   })
 
   it("files a task from a site named beside the org, stamped as that site's console would", async () => {
-    // No membership on the roster at all: the org variant reads the org
-    // gate, not a site role.
-    roster = { [TEAMMATE]: { role: 'editor' } }
+    // No site role on the roster: the org variant reads the org gate — the
+    // caller's org-wide membership and the permission catalog — never a
+    // site role.
+    roster = { [WRITER]: { role: 'admin', allHosts: true }, [TEAMMATE]: { role: 'editor' } }
     const { status } = await call(crmTaskSaveHandler, {
       body: { orgId: ORG_ID, hostId: HOST_ID, task: task({ assigneeUid: TEAMMATE }) },
     })
@@ -833,8 +836,12 @@ describe('crm/task-save at the organization level (AGL-2637)', () => {
       })
       expect(store[`${TASKS}/t-1`].assigneeUid).toBe('third-uid')
       expect(store[`${TASKS}/t-org`].assigneeUid).toBe('third-uid')
-      // One roster question for one assignee across three tasks.
-      expect(resolveOrgMembership).toHaveBeenCalledTimes(1)
+      // One roster question for one assignee across three tasks, beside the
+      // org gate's one for the caller's own `data.manage` (AGL-2843).
+      expect(
+        resolveOrgMembership.mock.calls.filter(([uid]) => uid === 'third-uid'),
+      ).toHaveLength(1)
+      expect(resolveOrgMembership).toHaveBeenCalledTimes(2)
       expect(notifyUsers).toHaveBeenCalledTimes(2)
     })
 

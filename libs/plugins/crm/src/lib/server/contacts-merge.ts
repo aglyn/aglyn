@@ -63,7 +63,7 @@ import {
   mergeContacts,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { authorizeOrgCaller, readCrmRouteScope } from './org-caller'
+import { authorizeOrgCaller, holdsDataManage, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 
 export const CONTACTS_MERGE_ROUTE = 'crm/contacts-merge'
@@ -155,7 +155,7 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
       const membership = await resolveOrgPermissions(decoded.uid, { hostId })
       if (
         !staff &&
-        !(membership.orgWide && membership.permissions['data.manage'] === true)
+        !(membership.orgWide && (await holdsDataManage(membership.orgId, decoded.uid)))
       ) {
         res.status(403).json({ error: refusal })
         return

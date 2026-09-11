@@ -47,6 +47,7 @@ import {
   convertHostLead,
 } from '@aglyn/tenant-runtime/convert-host-lead'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { holdsDataManage } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 
 // The stage picker moved to the runtime with the writes; re-exported so the
@@ -211,17 +212,17 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const staff = decoded['staff'] === true
     /*
-     * The console's own gate on the CRM is `data.manage`; the route asks the
-     * same question of the same resolver the shell's server twin uses, and
-     * additionally that the caller has a role on THIS site — an org member
-     * scoped to a sibling site holds the key but not the host, and a lead is
-     * the host's record. `resolveOrgPermissions` fails closed on a lookup
-     * error when a host is named, so an absent membership refuses.
+     * The console's own gate on the CRM is `data.manage`, asked of the
+     * permission catalog (`holdsDataManage`), and additionally that the
+     * caller has a role on THIS site — an org member scoped to a sibling site
+     * holds the key but not the host, and a lead is the host's record.
+     * `resolveOrgPermissions` answers the site role and fails closed on a
+     * lookup error when a host is named, so an absent membership refuses.
      */
     const membership = await resolveOrgPermissions(decoded.uid, { hostId })
     if (
       !staff &&
-      !(membership.hostRole && membership.permissions['data.manage'] === true)
+      !(membership.hostRole && (await holdsDataManage(membership.orgId, decoded.uid)))
     ) {
       res
         .status(403)
