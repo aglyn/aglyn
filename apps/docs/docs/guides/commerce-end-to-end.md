@@ -61,6 +61,9 @@ editor dialog covers everything the
 - **Digital delivery** (digital products) — attach files from the media
   library, optionally versioned, with a per-order **Download limit**. Buyers
   always download the current files; uploading a new version re-delivers.
+  An attached file is made private, and each download hands the buyer a link
+  that works for one hour; see
+  [Members videos are private files](../content-and-data/media/overview.md#members-videos-are-private).
 
 ![The product editor dialog with the Billing select open, showing One-time purchase, Monthly subscription, Yearly subscription, and Both — buyer chooses](/img/guides/commerce-product-editor-billing.png)
 

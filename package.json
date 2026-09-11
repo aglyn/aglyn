@@ -133,6 +133,7 @@
     "test:test-wiring": "node --test tools/scripts/lib/test-wiring.test.mjs",
     "test:backfill-core": "node --test tools/scripts/backfills/lib/backfill-core.test.mjs",
     "test:crm-lifecycle-backfill": "node --test tools/scripts/lib/crm-lifecycle-backfill.test.mjs",
+    "test:gated-media-backfill": "node --test tools/scripts/lib/gated-media-backfill.test.mjs",
     "test:pricing-drift": "node --test tools/scripts/lib/pricing-drift.test.mjs",
     "test:decision-log": "node --test tools/scripts/lib/decision-log.test.mjs",
     "test:legal-drift": "node --test tools/scripts/lib/legal-doc-diff.test.mjs",

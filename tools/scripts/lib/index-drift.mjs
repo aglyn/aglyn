@@ -381,15 +381,27 @@ export function describeOverride(entry) {
  */
 
 /**
- * The `fields.patch` document id for a field path. Firestore escapes any path
- * that is not a bare identifier with backticks; every override this repo ships
- * is a bare identifier, so this is a guard against a future one that is not,
- * rather than a transformation that fires today.
+ * The `fields.patch` document id for a field path, in Firestore's field-path
+ * syntax: dots separate map keys, and only a SEGMENT that is not a bare
+ * identifier is wrapped in backticks.
+ *
+ * ⚠️ Never quote the whole path. `values.email` is the `email` key inside the
+ * `values` map; the same text in backticks is a top-level field whose name
+ * contains a dot. Firestore configures the two separately, so patching the
+ * quoted form succeeds and leaves the map key's indexing exactly as it was. A
+ * path that already carries backticks is taken as written.
  */
 export function fieldResourceId(fieldPath) {
   const path = String(fieldPath ?? '')
-  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(path)) return path
-  return `\`${path.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\``
+  if (path.includes('`')) return path
+  return path
+    .split('.')
+    .map((segment) =>
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(segment)
+        ? segment
+        : `\`${segment.replace(/\\/g, '\\\\')}\``,
+    )
+    .join('.')
 }
 
 /**

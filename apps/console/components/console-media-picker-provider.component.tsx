@@ -17,10 +17,12 @@
 'use client'
 
 import {
+  formatMediaRef,
   MediaPickerContext,
   mediaRefFromCdnPath,
   parseMediaRef,
   type PickedMedia,
+  type PickMediaOptions,
 } from '@aglyn/aglyn'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import MediaPickerDialog from './media/media-picker-dialog.component'
@@ -51,6 +53,10 @@ export function ConsoleMediaPickerProvider(
 ) {
   const { hostId, orgId, children } = props
   const [open, setOpen] = useState(false)
+  // Per open, not per mount: one page can hold a picker for page content and
+  // one for a product's paid media, and only the second may return a private
+  // asset.
+  const [allowPrivate, setAllowPrivate] = useState(false)
   const resolver = useRef<((media: PickedMedia | null) => void) | null>(null)
 
   const settle = useCallback((media: PickedMedia | null) => {
@@ -60,11 +66,12 @@ export function ConsoleMediaPickerProvider(
   }, [])
 
   const pickMedia = useCallback(
-    () =>
+    (options?: PickMediaOptions) =>
       new Promise<PickedMedia | null>((resolve) => {
         // A second open before the first settled cancels the first.
         resolver.current?.(null)
         resolver.current = resolve
+        setAllowPrivate(options?.allowPrivate === true)
         setOpen(true)
       }),
     [],
@@ -79,8 +86,9 @@ export function ConsoleMediaPickerProvider(
         hostId={hostId}
         orgId={orgId}
         open={open}
+        allowPrivate={allowPrivate}
         onClose={() => settle(null)}
-        onPick={(media) => {
+        onPick={(media, context) => {
           const picked = media as {
             $id?: string
             url?: string
@@ -88,11 +96,24 @@ export function ConsoleMediaPickerProvider(
             fileName?: string
             contentType?: string
             alt?: string
+            private?: boolean
           }
+          // The scope the id resolves under. Read off `cdnPath` when there is
+          // one, so a host-qualified pick keeps its qualification, and off the
+          // library it was chosen from when there is not: a free-tier asset
+          // and a private one carry no `cdnPath` at all.
+          const mediaScope =
+            parseMediaRef(mediaRefFromCdnPath(picked.cdnPath))?.scope ??
+            context?.cdnScope
+          const isPrivate = picked.private === true
           // Same precedence as the besigner picker (AGL-1215): the stable
           // media-id-keyed CDN path first, the raw storage URL only when
-          // there is no CDN path (free tier, legacy uploads).
-          const src = picked.cdnPath || picked.url
+          // there is no CDN path (free tier, legacy uploads). A private asset
+          // has neither, and its reference is the one handle a caller that
+          // signs its own links can store (AGL-2814).
+          const src = isPrivate
+            ? formatMediaRef(mediaScope, picked.$id)
+            : picked.cdnPath || picked.url
           settle(
             src
               ? {
@@ -109,7 +130,8 @@ export function ConsoleMediaPickerProvider(
                   // caller that stores a REFERENCE rather than a placement
                   // (AGL-2662) — the CRM's record attachments.
                   mediaId: picked.$id,
-                  mediaScope: parseMediaRef(mediaRefFromCdnPath(picked.cdnPath))?.scope,
+                  mediaScope,
+                  ...(isPrivate ? { private: true } : {}),
                 }
               : null,
           )

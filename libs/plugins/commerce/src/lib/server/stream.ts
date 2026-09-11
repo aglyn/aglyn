@@ -15,10 +15,18 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import * as Aglyn from '@aglyn/aglyn/server'
+import {
+  MEDIA_CDN_RENDITION_AUTO,
+  MEDIA_CDN_RENDITION_PARAM,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  createPaidMediaDeliveryIo,
+  firebaseAdmin,
+  GATED_VIDEO_SESSION_TTL_MS,
+  resolvePaidMediaDelivery,
+} from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { requireActiveMember } from './membership'
 import { checkMemberEntitlement } from './gate'
@@ -65,9 +73,10 @@ function signatureMatches(presented: string, expected: string): boolean {
 
 /**
  * Gated video streaming (AGL-315). POST (member session) checks the
- * entitlement and mints a short-TTL signed URL; GET with a valid
- * signature redirects to the media — shared links die within 15
- * minutes, and the mint step is the server-enforced gate.
+ * entitlement and mints a short-TTL signed URL; GET with a valid signature
+ * redirects to a media URL that itself expires (AGL-2814). The mint step is
+ * the server-enforced gate, a shared stream link dies within 15 minutes, and
+ * the media URL behind it dies with the viewing session.
  */
 export const streamHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(
@@ -117,8 +126,8 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
     ) {
       return res.status(403).send('Link expired — reload the page')
     }
-    const productSnapshot = await firebaseAdmin
-      .app()
+    const app = firebaseAdmin.app()
+    const productSnapshot = await app
       .firestore()
       .collection('hosts')
       .doc(hostId)
@@ -131,52 +140,68 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
     const file = product.gatedVideos?.[video]
     if (!file?.url) return res.status(404).send('No video')
     /**
-     * The entitlement hop lands on a delivery copy, not on the master
-     * (AGL-2766).
+     * The redirect lands on a link that expires (AGL-2814).
      *
-     * `?r=auto` asks the CDN for the best encoding it holds, answered from
-     * the media document `serveMediaCdn` already reads on that request
-     * (AGL-2753). Every other video on the platform asks; this one is the
-     * exception, and it is the audience that has already paid.
+     * Everything above only guards the 302. What the 302 points at is what
+     * the buyer, and anyone who copies the `Location` out of the buyer's
+     * network panel, keeps. So `resolvePaidMediaDelivery` hands back one of
+     * three things and never a permanent URL:
      *
-     * The parameter can only be attached HERE, because this is the only
-     * participant that knows the target. The player never resolves a media
-     * reference — it holds a signed stream URL — and appending anything to
-     * that URL reaches nothing: the GET half reads `hostId`, `productId`,
-     * `video`, `exp` and `sig`, ignores the rest, and builds its `Location`
-     * from the product document rather than from the request.
+     * - a CDN URL signed for {@link GATED_VIDEO_SESSION_TTL_MS}, when the video
+     *   is a PRIVATE asset in this site's library or its org's. The CDN refuses
+     *   a private asset on every path without an unexpired signature.
+     * - a V4 signed Storage read with the same lifetime, for an object in those
+     *   libraries that no media document owns. A raw download URL's token lives
+     *   as long as the object, so it is never the redirect.
+     * - an author-typed hotlink, unchanged, because nothing of ours runs there.
      *
-     * `videoDeliverySrc` is the builder the Video element uses, and it is
-     * safe on every shape stored in `gatedVideos`. The picker writes a
-     * `cdnPath` — this platform's own route — for an org with the media-CDN
-     * entitlement, and the raw Storage download URL for one without; older
-     * products can hold an author-typed hotlink. Only the first is touched:
-     * the parameter is appended to a same-origin path under
-     * {@link Aglyn.MEDIA_CDN_ROUTE} and nothing else, so a stranger's server
-     * is never handed a parameter it would not understand.
+     * A video whose asset is still PUBLIC is refused rather than delivered:
+     * its URL already works for anyone, so redirecting a buyer to it is the
+     * leak. The 409 is what the gated player reports to the viewer, and the
+     * log line is what tells the operator which product needs its video made
+     * private.
      *
-     * `?? file.url` restores that pass-through for the one input the builder
-     * answers `undefined` for — a `media:` value that does not parse — so no
-     * stored string loses its redirect by being unimprovable.
-     *
-     * Nothing about the gate moves. The signature is verified above over a
-     * tuple this does not join and a caller cannot influence, and an asset
-     * the producer has never run for answers with the master, exactly as it
-     * did before it was asked.
+     * `?r=auto` rides inside the signed URL (AGL-2766). The signature covers
+     * `(scope, mediaId, exp)` and not the parameter, so it asks the CDN for the
+     * best delivery copy of the one asset the signature names and can reach no
+     * other. Nothing the caller sends reaches this `Location`: the GET half
+     * reads `hostId`, `productId`, `video`, `exp` and `sig`, and builds the
+     * target from the product document.
      */
-    const target = Aglyn.videoDeliverySrc(file.url, { hostId }) ?? file.url
+    const delivery = await resolvePaidMediaDelivery({
+      stored: file.url,
+      hostId,
+      ttlMs: GATED_VIDEO_SESSION_TTL_MS,
+      cdnParams: [[MEDIA_CDN_RENDITION_PARAM, MEDIA_CDN_RENDITION_AUTO]],
+      io: createPaidMediaDeliveryIo({
+        firestore: app.firestore(),
+        bucket: app
+          .storage()
+          .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET']),
+      }),
+    })
+    // Per-member and time-boxed, whichever way it goes: no cache may keep the
+    // redirect past the session it opens, nor a refusal past the fix.
     res.setHeader('Cache-Control', 'private, no-store')
+    if (delivery.ok === false) {
+      console.error(
+        '[commerce/stream] gated video not delivered',
+        JSON.stringify({ hostId, productId, video, refusal: delivery.refusal }),
+      )
+      return delivery.refusal === 'not-private'
+        ? res.status(409).send('This video is not ready to play yet')
+        : res.status(404).send('No video')
+    }
     /*
      * No `Vary: Accept` on the redirect, deliberately (AGL-2766).
      *
      * This 302 is the same for every client: the `Location` is a function of
-     * the product document, not of the request's `Accept`. The negotiation
-     * happens on the SECOND response, and `serveMediaCdn` declares `Vary`
-     * there — on the one that actually varies. Declaring it here would
-     * advertise a variance this response does not have and split a cache key
-     * that has exactly one representation.
+     * the product document and the clock, not of the request's `Accept`. The
+     * negotiation happens on the SECOND response, and `serveMediaCdn` declares
+     * `Vary` there — on the one that actually varies. Declaring it here would
+     * advertise a variance this response does not have.
      */
-    return res.redirect(302, target)
+    return res.redirect(302, delivery.location)
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Stream unavailable' })

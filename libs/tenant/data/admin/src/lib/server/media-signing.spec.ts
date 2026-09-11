@@ -20,8 +20,11 @@
  */
 
 import {
+  GATED_VIDEO_SESSION_TTL_MS,
+  MEDIA_SIGNATURE_MAX_TTL_MS,
   MEDIA_SIGNATURE_TTL_MS,
   mintMediaSignature,
+  PAID_DOWNLOAD_LINK_TTL_MS,
   signMediaAccess,
   verifyMediaAccess,
 } from './media-signing'
@@ -120,6 +123,84 @@ describe('private media signatures (AGL-1051)', () => {
       .digest('hex')
       .slice(0, 32)
     expect(media).not.toBe(streamShaped)
+  })
+
+  describe('a gated-video session (AGL-2814)', () => {
+    it('lasts exactly its window and not a millisecond more', () => {
+      const signature = mintMediaSignature(
+        SCOPE,
+        MEDIA,
+        NOW,
+        GATED_VIDEO_SESSION_TTL_MS,
+      )
+      expect(signature.exp).toBe(NOW + GATED_VIDEO_SESSION_TTL_MS)
+      expect(
+        verifyMediaAccess(
+          SCOPE,
+          MEDIA,
+          signature,
+          NOW + GATED_VIDEO_SESSION_TTL_MS - 1,
+        ),
+      ).toBe(true)
+      expect(
+        verifyMediaAccess(SCOPE, MEDIA, signature, NOW + GATED_VIDEO_SESSION_TTL_MS),
+      ).toBe(false)
+    })
+
+    it('is measured in hours, not days', () => {
+      expect(GATED_VIDEO_SESSION_TTL_MS).toBeGreaterThanOrEqual(60 * 60 * 1000)
+      expect(GATED_VIDEO_SESSION_TTL_MS).toBeLessThan(24 * 60 * 60 * 1000)
+    })
+
+    it('⛔ refuses a correctly signed link whose lifetime no minter issues', () => {
+      // Signed with the real secret, so only the lifetime bound can refuse it.
+      const exp = NOW + MEDIA_SIGNATURE_MAX_TTL_MS + 2 * 60 * 1000
+      const sig = signMediaAccess(SCOPE, MEDIA, exp)
+      expect(verifyMediaAccess(SCOPE, MEDIA, { exp, sig }, NOW)).toBe(false)
+      // The same link is honored once its remaining life is within the bound.
+      expect(
+        verifyMediaAccess(
+          SCOPE,
+          MEDIA,
+          { exp, sig },
+          exp - MEDIA_SIGNATURE_MAX_TTL_MS,
+        ),
+      ).toBe(true)
+    })
+
+    it('⛔ refuses to mint a lifetime the verifier would refuse', () => {
+      expect(() =>
+        mintMediaSignature(SCOPE, MEDIA, NOW, MEDIA_SIGNATURE_MAX_TTL_MS + 1),
+      ).toThrow(RangeError)
+      expect(() => mintMediaSignature(SCOPE, MEDIA, NOW, 0)).toThrow(RangeError)
+    })
+  })
+
+  describe('a paid download link (AGL-2847)', () => {
+    it('lasts an hour, inside the lifetime every verifier accepts', () => {
+      expect(PAID_DOWNLOAD_LINK_TTL_MS).toBe(60 * 60 * 1000)
+      expect(PAID_DOWNLOAD_LINK_TTL_MS).toBeGreaterThan(MEDIA_SIGNATURE_TTL_MS)
+      expect(PAID_DOWNLOAD_LINK_TTL_MS).toBeLessThanOrEqual(
+        MEDIA_SIGNATURE_MAX_TTL_MS,
+      )
+      const signature = mintMediaSignature(
+        SCOPE,
+        MEDIA,
+        NOW,
+        PAID_DOWNLOAD_LINK_TTL_MS,
+      )
+      expect(
+        verifyMediaAccess(
+          SCOPE,
+          MEDIA,
+          signature,
+          NOW + PAID_DOWNLOAD_LINK_TTL_MS - 1,
+        ),
+      ).toBe(true)
+      expect(
+        verifyMediaAccess(SCOPE, MEDIA, signature, NOW + PAID_DOWNLOAD_LINK_TTL_MS),
+      ).toBe(false)
+    })
   })
 
   it('fails closed when the secret is missing, rather than serving bytes', () => {

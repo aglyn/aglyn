@@ -529,6 +529,10 @@ async function executeAction(
           continue
         }
         const email = String((payload as any).email ?? '').trim()
+        // `records.values` is exempt from indexing, so this lookup is served
+        // only by the `values.email` field override in
+        // cloud/firebase-firestore.indexes.json. Without that override
+        // production refuses the query and neither leg below runs.
         const existing = email
           ? await datasetDoc.ref
               .collection('records')

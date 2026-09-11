@@ -944,6 +944,13 @@ jobs:
       # the tree no longer says what the script assumes.
       - run: npm run test:crm-lifecycle-backfill
 
+      # AGL-2814. The members-video backfill's decisions: which files become
+      # private, which download tokens are rotated, which stored links are
+      # rewritten, and the public file used elsewhere that is listed and left
+      # alone. A dry run that finds nothing reads the same as one that looked
+      # at nothing, so the finding itself is what is proved.
+      - run: npm run test:gated-media-backfill
+
       # AGL-2586. The uptime probe's Slack notifier — who is told when a
       # journey check goes red. It has to be provable without an outage, and
       # both of a notifier's failure modes are here: sending nothing during a

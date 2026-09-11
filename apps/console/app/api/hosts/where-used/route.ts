@@ -29,6 +29,7 @@ import {
   lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import {
+  scanCollectionUsage,
   scanComponentUsage,
   scanLayoutUsage,
   scanScreenUsage,
@@ -47,7 +48,10 @@ export interface WhereUsedDependent {
   via: BindingRefVia[]
   /** Published version scanned (screens/layouts) — deep-link target. */
   versionId?: string
-  /** Screens only: link, child, or collection-template binding (AGL-703). */
+  /**
+   * Screens: link, child, or collection-template binding (AGL-703).
+   * Collection listings: always link (AGL-2806).
+   */
   relation?: 'link' | 'child' | 'template'
 }
 
@@ -59,6 +63,7 @@ const SCANNABLE_KINDS = [
   'component',
   'layout',
   'screen',
+  'collection',
 ] as const
 
 /**
@@ -83,6 +88,10 @@ const SCANNABLE_KINDS = [
  *   and on layouts NESTED inside it, which AGL-703 made possible. Both are
  *   scanned: a nested layout is a real dependent, because deleting the outer
  *   layout unwraps every screen underneath the inner one too.
+ *
+ * A COLLECTION is referenced, for this endpoint, by links to its listing page:
+ * the `collection:<id>` value AGL-2799 lets any link slot store, searched in
+ * the same published trees a screen link is (AGL-2806).
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -221,7 +230,12 @@ async function handler(request: Request): Promise<Response> {
      */
     let truncated = false
 
-    if (kind === 'component' || kind === 'layout' || kind === 'screen') {
+    if (
+      kind === 'component' ||
+      kind === 'layout' ||
+      kind === 'screen' ||
+      kind === 'collection'
+    ) {
       /**
        * Documents plus, for screens/layouts, their published nodes.
        *
@@ -302,6 +316,19 @@ async function handler(request: Request): Promise<Response> {
           readCandidates('layouts', false),
         ])
         dependents.push(...scanLayoutUsage(refId, screens, layouts))
+      } else if (kind === 'collection') {
+        // Links to the collection's listing page (AGL-2806), in the three
+        // corpora a screen link lives in. Its entries and template screens are
+        // not read: `collectionDeleteDenial` refuses a delete while either
+        // exists, so neither is a warning to give.
+        const [screens, layouts, components] = await Promise.all([
+          readCandidates('screens', true),
+          readCandidates('layouts', true),
+          readCandidates('components', true),
+        ])
+        dependents.push(
+          ...scanCollectionUsage(refId, { screens, layouts, components }),
+        )
       } else {
         const [screens, layouts, components] = await Promise.all([
           readCandidates('screens', true),

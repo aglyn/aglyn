@@ -341,10 +341,14 @@ element outranks the stylesheet a text LCP is waiting on.
 Same page, same run: the shared hero components rendered `{{prop.mockup}}` with
 no intrinsic `width`/`height`, so the hero was 0 px tall until it decoded and
 the section beneath it jumped by the full image height (CLS 0.114, all of it on
-that one section). That is a document fix, not a code fix — the dimensions ride
-on the node (`intrinsicWidth` / `intrinsicHeight`, see `media-metadata.ts`),
-and components authored before AGL-2486 started copying them off the media
-document have none until someone writes them.
+that one section). The pick copies the dimensions onto the node
+(`intrinsicWidth` / `intrinsicHeight`, see `media-metadata.ts`), and a component
+authored before AGL-2486 started copying them carries none. Since AGL-2833 the
+composition reads every placed library image's media document and lays its pair
+over the node (`media-asset-facts.ts`), so an image whose source resolves to a
+`media:` reference is sized from its asset whether or not the node carries a
+pair. A hotlinked image, and an asset the upload could not measure (an SVG),
+still reserve only what the node carries.
 
 ### What attribution you can and cannot trust in this stack
 

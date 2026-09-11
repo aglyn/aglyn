@@ -246,11 +246,14 @@ every link to its listing follows, just as a screen link follows its screen. It 
 difference whether the collection has a list template screen: without one, the link opens the
 built-in listing.
 
-If the collection is deleted or its slug is cleared, the link stops navigating, the canvas
-flags it as a broken link, and the picker shows **⚠ Unavailable collection listing (…)** — the
-same treatment an unpublished screen gets. Pick the listing again or clear the link. A typed
-`/blog` in **External URL** gets none of this: it never follows a rename, and nothing warns you
-when it stops working.
+Deleting the collection warns you first: [its delete dialog](../site-templates/build-a-blog.md#delete-a-collection)
+names the published screens, layouts and components that link to its listing, so you can point
+those links elsewhere. If the collection is deleted anyway, or its slug is cleared, the link
+stops navigating, the canvas flags it as a broken link, and the picker shows **⚠ Unavailable
+collection listing (…)** — the same treatment an unpublished screen gets. Pick the listing
+again or clear the link. A typed `/blog` in **External URL** gets none of this: it never
+follows a rename, nothing warns you when it stops working, and the delete dialog does not
+count it.
 
 The same entries appear everywhere the Screen picker does — **Button**, **Image**, **Link
 Container**, **Tabs** links, an **Accordion Summary**'s header link, a form's redirect, and a
