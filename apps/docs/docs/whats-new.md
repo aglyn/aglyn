@@ -13,8 +13,10 @@ for the how-to.
 ## September 2026 — the CRM (newest)
 
 - **[The CRM is open to every workspace](content-and-data/crm/overview.md)** — the
-  **CRM** tab now reaches every organization. Contacts are on every plan; leads,
-  companies, deals, tasks, reports and custom fields are included from Starter. On a
+  **CRM** tab now reaches every organization. On Free it opens on
+  [Leads](content-and-data/crm/leads.md), read-only: every form on your site files a
+  lead there to read, export or erase. Contacts, companies, deals, tasks, reports and
+  custom fields, and working a lead, are included from Starter. On a
   paid plan, records past your band now bill as
   [overage](workspace-and-billing/billing-and-plans/overview.md#crm-records) on the
   monthly invoice.

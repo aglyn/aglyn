@@ -97,8 +97,8 @@ Open the record — a contact's page under **CRM › Contacts**, a company's und
 **Log activity**. The activity is filed against that record; there is no picker,
 because what you are looking at is what the activity is about.
 
-Logging an activity is part of the **CRM suite**, included from **Starter**. On Free a
-contact's timeline still reads in full, and **Log activity** is shown locked.
+Logging an activity is part of the **CRM suite**, included from **Starter**. On Free
+Contacts is locked, and a lead's page shows its activity log with no **Log activity**.
 
 | Field | What it is |
 | --- | --- |
@@ -145,8 +145,8 @@ already set to **Call** and the record already bound, so logging what was
 said is one button and one sentence. It is there whether or not the record
 has a number: a call placed from your own mobile is still a call to log.
 The kind is a starting point, not a lock — change it in the dialog if the
-conversation turned out to be something else. On Free, **Call** dials as on every
-plan and **Log a call** is shown locked.
+conversation turned out to be something else. On Free a lead's page is read-only: its
+phone number still dials, and there is no **Call** or **Log a call**.
 
 ## Sending an email
 
@@ -154,8 +154,8 @@ A contact's, a lead's and a deal's page each carry **Send email**: one message,
 from you, to the person the record is about. It is a letter, not a campaign —
 there is no audience, no designed layout and no unsubscribe footer — and it is
 logged on the timeline the moment it leaves, with its delivery state following.
-One-to-one email is part of the **CRM suite**, included from **Starter**; on Free
-**Send email** is shown locked.
+One-to-one email is part of the **CRM suite**, included from **Starter**; on Free a
+lead's page carries no **Send email**.
 
 | Field | What it is |
 | --- | --- |

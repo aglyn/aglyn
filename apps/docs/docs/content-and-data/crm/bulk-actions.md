@@ -15,10 +15,9 @@ section's bar offers what that record can do; every bar has **Export CSV**,
 **Export all…** and **Clear**.
 
 :::info Plan availability
-On Free the Contacts bar keeps **Add tag**, **Remove tag**, **Add to list**, both exports
-and **Remove from this site**. **Set owner**, **Set stage** and **Set company** are part
-of the **CRM suite**, included from **Starter**, and are shown locked; the other bars
-belong to sections Free sees locked. See
+On Free the one bar is the Leads bar, and it keeps **Export CSV**, **Export all…** and
+**Clear**. Every other act, and the Contacts, Companies, Deals and Tasks bars, belong to
+the **CRM suite**, included from **Starter**, whose sections Free sees locked. See
 [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 

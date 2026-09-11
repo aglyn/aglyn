@@ -16,8 +16,9 @@ The address is `…/hosts/{site}/crm/contacts`. Importing needs the same
 **Manage data** permission as editing a contact.
 
 :::info Plan availability
-Importing is part of the **CRM suite**, included from **Starter**; on Free **Import CSV**
-is shown locked. See [What each plan includes](./overview.md#what-each-plan-includes).
+Importing is part of the **CRM suite**, included from **Starter**; on Free the Contacts
+section is shown locked and the read-only Leads section offers no **Import CSV**. See
+[What each plan includes](./overview.md#what-each-plan-includes).
 :::
 
 ## Three steps

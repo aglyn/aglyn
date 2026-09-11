@@ -92,6 +92,23 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-10 — On Free, the CRM opens on Leads, read-only; Contacts join the suite from Starter
+
+- **Decided by:** the account owner, 2026-09-10, answering AGL-2790 — on a plan without the CRM suite the people a site captures are leads to read rather than contacts to edit; asked to choose, Leads view-only with Contacts locked, and beta.118 held until it ships. Supersedes the 2026-09-05 line that Free keeps the contacts list.
+- **Scope:** pricing
+- **Evidence:** `CRM_CONSOLE_SECTIONS` in `libs/plugins/crm/src/lib/components/crm-console-sections.ts` (Contacts declares `featureFlag: 'crm'`, Leads none) with the rail-by-plan cases in `apps/console/specs/plugin-hub-sections.spec.ts`; the read-only Leads section, lead page, bulk bar and activity log in `leads-section.tsx`, `lead-properties-card.tsx`, `lead-detail-page.tsx`, `leads-bulk-bar.tsx` and `record-activity-card.tsx`, with their specs; `crm/contact-update` refusing every field in `libs/plugins/crm/src/lib/server/contact-update.ts` (`contact-update.spec.ts`) and `/v1/contacts` creates, updates and merges in `apps/console/utils/api-v1-resources.ts` (`api-v1-contact-crm-fields.spec.ts`, `api-v1-contact-merge.spec.ts`); the leads block of `cloud/firebase-firestore.rules`, where create, update and delete ask for the suite (`cloud/rules-tests/firestore-rules.test.mjs`); `submissionFilesLead` in `libs/aglyn/src/lib/app-utils/form-lead-routing.ts` (`apps/tenant/specs/form-submit-free-plan-leads.spec.ts`); `tools/e2e/crm-free-plan.e2e.mjs`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2790.
+
+**No price, band or cap moves.** What moves is what a Free workspace reaches in the CRM.
+Leads is the one section it opens: the list, a lead's page, export and erasure, and no
+edit of any kind. Contacts, Companies, Deals, Tasks, Reports, Fields and Settings are
+locked, and every contact edit and every lead write is refused by the routes and the
+rules. Every live form on a plan without the suite is a lead surface, asked at capture
+time of the org's effective plan, so what a Free site captures lands where Free can see
+it; paid plans keep per-form lead routing. Free's hard 100-record band, the records
+overage, the one-to-one email caps, and export and erasure on every plan are unchanged.
+
+---
+
 ## 2026-09-10 — The CRM opens to every workspace, and its release flag is renamed `release_crm`
 
 - **Decided by:** the account owner, 2026-09-10 — release the CRM in this promotion, and name its flag for the whole hub rather than its first section. Lifts the 2026-09-07 hold on the flag; AGL-2680, the precondition this log attached to the flip, was settled 2026-09-08.

@@ -14,8 +14,8 @@ when you come back.
 
 :::info Plan availability
 Saved views are part of the **CRM suite**, included from **Starter**. On Free the views
-menu on the Contacts list still offers your [segments](./overview.md#segments) and
-**Save as segment…**, and every act on a view is shown locked.
+menu on the Leads list shows every act on a view locked, and the Contacts list, with its
+[segments](./overview.md#segments), is locked with the rest of the suite.
 :::
 
 ## The views control

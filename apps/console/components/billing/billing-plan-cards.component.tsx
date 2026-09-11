@@ -301,12 +301,11 @@ const featureGroups = (
       { key: 'actions', label: 'Actions builder' },
       { key: 'dataStore', label: 'Datasets & dynamic data' },
       { key: 'bookings', label: 'Appointment bookings' },
-      // The CRM SUITE (AGL-2611) — everything built on the contacts list,
-      // which itself ships on every plan through the records band above.
-      // Named for what it adds, so a Free reader comparing cards sees the
-      // sales hub as the step up rather than "CRM" ticked against a plan
-      // that already shows them a Contacts section.
-      { key: 'crm', label: 'CRM suite: leads, companies, deals & tasks' },
+      // The CRM SUITE (AGL-2611, AGL-2790) — contacts and everything built on
+      // them, and working the leads a site captures. Free reads its leads and
+      // nothing else, so the row names what the step up adds rather than
+      // ticking "CRM" against a plan that already shows a Leads section.
+      { key: 'crm', label: 'CRM suite: contacts, companies, deals, tasks & working leads' },
       { key: 'marketingOverlays', label: 'Announcement bar & popups' },
       { key: 'customSendingDomain', label: 'Send email from your own domain' },
       { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },

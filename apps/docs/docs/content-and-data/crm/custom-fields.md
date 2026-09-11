@@ -21,7 +21,7 @@ records on a contact are that site's own view of the person.
 
 :::info Plan availability
 Custom fields are part of the **CRM suite**, included from **Starter**; on Free the
-Fields section is shown locked and a contact's page carries no Custom fields card. See
+Fields section is shown locked, as Contacts is. See
 [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 

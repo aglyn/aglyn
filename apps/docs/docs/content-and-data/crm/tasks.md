@@ -21,7 +21,7 @@ also the one CRM record that can belong to **no site at all** — see
 
 :::info Plan availability
 Tasks are part of the **CRM suite**, included from **Starter**; on Free the section is
-shown locked and a contact's page carries no Tasks card. See
+shown locked, as Contacts is. See
 [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 

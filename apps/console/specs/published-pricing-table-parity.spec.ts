@@ -441,9 +441,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * Starter rather than Pro: the field prices a CRM seat at $14–25 a month,
      * so Starter with the suite included is the competitive entry, and gating
      * a tier higher hands the small-business buyer to a free CRM elsewhere.
-     * Free keeps the Contacts section, which is the capture projection its
-     * email audiences read, and sees the rest locked. The Starter card sells
-     * this where it used to sell 500 campaign emails.
+     * Free reads its Leads and sees the rest locked, Contacts among it
+     * (AGL-2790). The Starter card sells this where it used to sell 500
+     * campaign emails.
      *
      * One-to-one email is a hard daily pace per organization with no overage
      * rate on any tier — `checkCrmEmailQuota` refuses the send past it — set

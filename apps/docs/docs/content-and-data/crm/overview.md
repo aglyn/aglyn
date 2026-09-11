@@ -89,14 +89,15 @@ under Billing & plans.
 
 | | Free | Starter and above |
 | --- | --- | --- |
-| **Contacts** — the list and its filters, tags and notes, segments, CSV export, a contact's name, phone, job title and address, removing a contact from a site and erasing a person | Yes, banded at 100 records | Yes, banded by tier and metered past the band |
-| **The CRM suite** — Leads, Companies, Deals, Tasks, Reports and Fields; on Contacts, **New contact**, **Import CSV**, saved views, and a contact's owner, lifecycle stage, company, custom fields, tasks, deals, files, logged calls and activities and merges, one record at a time or from the bulk bar; the two CRM dashboard cards; the CRM automation steps; the `crm:*` REST resources | The sections are shown in the rail with a lock, and the suite's actions on Contacts are shown locked; each names the plan that includes it | Yes |
+| **Leads** — the people your sites' forms, member sign-ups and bookings captured: the list, a lead's page, CSV export and erasing a person | Yes, read-only; every form on your site files a lead | Yes, and worked: status, owner, notes, conversion and import |
+| **The CRM suite** — Contacts, Companies, Deals, Tasks, Reports, Fields and Settings; working a lead; on Contacts, **New contact**, **Import CSV**, saved views, and every edit to a contact — profile, tags, notes, owner, lifecycle stage, company, custom fields, tasks, deals, files, logged calls and activities and merges — one record at a time or from the bulk bar; the two CRM dashboard cards; the CRM automation steps; the `crm:*` REST resources | The sections are shown in the rail with a lock, each naming the plan that includes it; Leads shows none of the suite's acts | Yes |
 | **One-to-one email** from a record | None | A daily cap by tier — see [One-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email) |
 
-The contacts list is on every plan because it is the audience your email campaigns
-read. On Free, contacts arrive on their own from your forms, member sign-ups, orders and
-bookings; working them by hand is the suite, which is what a sales team builds on that
-list. A record's **activity log**
+On Free the CRM opens on **Leads**. There is no lead routing to switch on: every form on
+your site files a lead from each submission that carries an email address, as a member
+sign-up does, so the people your site brings in are listed there to read, export and
+erase — and still count against Free's 100-record band. Working them, and everything
+built on the contacts list, is the suite. A record's **activity log**
 is bounded on every plan at **5,000 logged activities per record** — a call a day for
 fourteen years — after which the log dialog, the automation step and the API refuse
 another entry on that record with a message saying so.
@@ -121,9 +122,9 @@ you:
   site; see [Bulk actions](./bulk-actions.md).
 - **Export to CSV**, and **Import CSV** — see below.
 
-On Free, **New contact**, **Import CSV**, saved views, logging an activity, and a
-contact's owner, stage and company stay on the page, shown locked: they are the
-[CRM suite](#what-each-plan-includes), included from Starter.
+The Contacts section is part of the [CRM suite](#what-each-plan-includes), included
+from Starter. On Free it is shown locked in the rail, and the people your site captures
+are listed in [Leads](./leads.md), read-only.
 
 Under the list, a **Recent activity** feed shows the newest calls, emails,
 meetings and notes anyone on the team has logged against any record.

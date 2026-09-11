@@ -12,11 +12,12 @@ under, and what the site recorded about them. You can add a person by hand,
 and edit every part of that profile from their own page.
 
 :::info Plan availability
-Reading a contact's record, their tags and notes, correcting their name, phone, job
-title and address, and removing or erasing them are on every plan. Adding a contact by
-hand, the owner, lifecycle stage and company, custom fields, tasks, deals, files, logged
-calls and activities, one-to-one email and merging two records are part of the **CRM
-suite**, included from **Starter**; on Free they are shown locked. See
+The contact record is part of the **CRM suite**, included from **Starter**: reading a
+contact, adding one by hand, and every edit to one — their name, phone, job title and
+address, tags and notes, owner, lifecycle stage and company, custom fields, tasks,
+deals, files, logged calls and activities, one-to-one email and merging two records.
+On Free the Contacts section is shown locked, and the people your site captures are
+listed in [Leads](./leads.md), where they can be read, exported and erased. See
 [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 
@@ -45,8 +46,8 @@ typed **merges** into the existing record and the page tells you so. On a plan
 whose records band is a hard limit, a full band refuses the new record with the
 same wording the list shows.
 
-On Free, **New contact** is shown locked: contacts arrive from your forms, member
-sign-ups, orders and bookings, and adding one by hand is part of the CRM suite.
+Adding a contact by hand is part of the CRM suite. On Free the Contacts section is
+locked, and the people your site captures arrive in [Leads](./leads.md) instead.
 
 ## The record page
 

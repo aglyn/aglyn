@@ -339,11 +339,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: false,
       videoMedia: false,
       bookings: false,
-      // The CRM suite starts at Starter (AGL-2611). Free keeps the Contacts
-      // section — the capture projection every plan's email audiences read
-      // — banded at 100 records; what it does not get is the sales hub
-      // built on that list: leads, companies, deals, tasks, reports,
-      // fields, the CRM automation steps and the `crm:*` REST resources.
+      // The CRM suite starts at Starter (AGL-2611). Free reads the leads its
+      // site captured and works nothing (AGL-2790): contacts, companies,
+      // deals, tasks, reports, fields, working a lead, the CRM automation
+      // steps and the `crm:*` REST resources are the suite, and what Free
+      // captures still counts against its 100-record band.
       // The Drive pricing decision of 2026-09-05 records why Starter and
       // not Pro: the field prices a CRM seat at $14–25 a month, so Starter
       // with the suite included is the competitive entry, and gating a

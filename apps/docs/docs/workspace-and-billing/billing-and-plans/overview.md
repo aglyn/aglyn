@@ -243,22 +243,21 @@ logged activities, pipelines and custom fields are not counted.
 
 ### The CRM suite {#the-crm-suite}
 
-The **Contacts** section — the list and its filters, tags and notes, segments, CSV
-export, and removing or erasing a person — is on every plan including Free, because it
-is the audience your
-[email campaigns](../../marketing-and-automation/email-campaigns/overview.md) read. On
-Free, contacts arrive on their own from your forms, member sign-ups, orders and
-bookings.
+On every plan including Free, the CRM has a **Leads** section: the people your sites'
+forms, member sign-ups and bookings captured. On Free the CRM opens on it, and it is
+**read-only** — the list, a lead's page, CSV export and erasing a person — while every
+form on your site files a lead, so what your site captures is listed there.
 
-Everything built on that list is the **CRM suite**, included from **Starter**: Leads,
-Companies, Deals, Tasks, Reports and Fields; on the Contacts section itself, adding a
-contact by hand, importing a CSV, saved views, and a contact's owner, lifecycle stage,
-company, custom fields, tasks, deals, files, logged calls and activities, one-to-one
-email and merges; the two CRM cards on the site dashboard; the CRM steps in
-automations; and the `crm:*` resources of the REST API. On Free those sections still
-appear in the CRM rail with a lock, and the suite's actions stay on the Contacts pages,
-shown locked; each shows which plan includes it and a link to your plans. Records
-already held stay readable in Contacts whatever the plan.
+Everything else is the **CRM suite**, included from **Starter**: Contacts, Companies,
+Deals, Tasks, Reports, Fields and Settings; working a lead — its status, owner and
+notes, converting it and importing leads; adding a contact by hand, importing a CSV,
+saved views, and every edit to a contact — profile, tags and notes, owner, lifecycle
+stage, company, custom fields, tasks, deals, files, logged calls and activities,
+one-to-one email and merges; the two CRM cards on the site dashboard; the CRM steps in
+automations; and the `crm:*` resources of the REST API. On Free those sections appear
+in the CRM rail with a lock, each showing which plan includes it and a link to your
+plans. Records already held — people captured earlier, or kept from a paid plan — stay
+stored, count against the band, and open again with the suite.
 
 ### One-to-one email {#one-to-one-email}
 
