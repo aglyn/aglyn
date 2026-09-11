@@ -18,7 +18,8 @@ in — you only need **Poster image** to override the frame the library picked.
 
 :::note Video uploads are paused
 New video files cannot be uploaded to the media library for now. The **Video** element
-can still use any video that is already in your library.
+can still use any video that is already in your library, or
+[a video hosted on Wistia](#video-wistia).
 :::
 
 :::tip
