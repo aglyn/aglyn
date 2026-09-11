@@ -194,7 +194,20 @@ export function VideoLightbox(props: VideoLightboxProps) {
         onPlay={playbackHandlers.onPlay}
         onTimeUpdate={playbackHandlers.onTimeUpdate}
         onEnded={playbackHandlers.onEnded}
-        sx={{ display: 'block', width: '100%', height: 'auto', aspectRatio }}
+        sx={{
+          display: 'block',
+          width: '100%',
+          height: 'auto',
+          // The paper stops growing at the viewport, less its margins, and
+          // hides what overflows. A flex item's automatic minimum height is its
+          // content height, so a film held at its aspect-ratio height lost its
+          // bottom edge on a short screen, which is where the player's controls
+          // are drawn. Allowed to shrink, it gives way, letterboxed, instead.
+          flex: '1 1 auto',
+          minHeight: 0,
+          objectFit: 'contain',
+          aspectRatio,
+        }}
       >
         {captions}
       </Box>

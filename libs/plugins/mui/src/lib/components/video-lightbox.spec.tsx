@@ -85,6 +85,16 @@ describe('VideoLightbox playback', () => {
     expect(track.getAttribute('src')).toBe('/c.vtt')
   })
 
+  it('lets the film give way on a short screen rather than lose its bottom edge (AGL-2827)', () => {
+    // The paper stops at the viewport, less its margins, and hides what
+    // overflows. A flex item's automatic minimum height is its content
+    // height, so a film that could not shrink below its aspect-ratio height
+    // lost its bottom edge on a short screen, and the controls with it.
+    const style = getComputedStyle(open().querySelector('video') as HTMLVideoElement)
+    expect(style.minHeight).toMatch(/^0(px)?$/)
+    expect(style.flexShrink).toBe('1')
+  })
+
   it('renders nothing at all while closed', () => {
     // Unmounting is what actually stops the download; a paused `<video>` left
     // in the tree keeps whatever it has buffered.
