@@ -156,12 +156,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyHostManagers: async () => undefined,
   orgDataCollectionForHost: async () => mockCollectionHandle('orgs/org-1/datasets'),
   upsertHostContact: async () => undefined,
-  // The org these cases submit on is Free, where every live form files a lead
-  // (AGL-2790). Listed for the reason `resolveCampaignTouch` is: a name this
-  // mock left out would be `undefined`, and the route would throw at the lead
-  // rather than reach the dataset leg under test. The real writer never
-  // throws — it answers false — so neither does this.
-  addHostLead: async () => true,
   visitorWriteRefusal: async () => null,
 }))
 
