@@ -189,10 +189,30 @@ describe('POST /api/auth/session tombstone handling (AGL-1142)', () => {
     // The whole safety of this change. A token that does not verify must
     // leave the tombstone exactly where it is, or "clear the tombstone"
     // becomes "un-sign-out anyone who sends junk".
-    mockVerifyIdToken.mockRejectedValue(new Error('bad token'))
+    mockVerifyIdToken.mockRejectedValue(
+      Object.assign(new Error('Firebase ID token has invalid signature.'), {
+        code: 'auth/argument-error',
+      }),
+    )
     const response = await post({ cookie: TOMBSTONE, token: 'garbage' })
     expect(response.status).toBe(401)
     expect(clearsSession(response)).toBe(false)
+  })
+
+  it('CONTROL — a verification that could not run clears nothing either (AGL-2796)', async () => {
+    // A Google cert outage is not a refusal, so it answers 500 rather than 401
+    // — and it proves nothing about the caller, so the tombstone stays put.
+    const silenced = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockVerifyIdToken.mockRejectedValue(
+      Object.assign(
+        new Error('Error fetching public keys for Google certs: connect ETIMEDOUT'),
+        { code: 'auth/argument-error' },
+      ),
+    )
+    const response = await post({ cookie: TOMBSTONE, token: 'any' })
+    expect(response.status).toBe(500)
+    expect(clearsSession(response)).toBe(false)
+    silenced.mockRestore()
   })
 
   it('CONTROL — no Authorization header clears nothing', async () => {

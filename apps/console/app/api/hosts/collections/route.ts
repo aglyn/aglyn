@@ -33,6 +33,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collection-templates'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
 // `author` (AGL-2334) manages the collection's SHAPE — creating one, naming
@@ -475,6 +476,10 @@ async function handler(request: Request): Promise<Response> {
     )
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Collection save failed' }, { status: 500 })
   }

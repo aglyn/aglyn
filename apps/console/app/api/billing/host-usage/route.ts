@@ -22,6 +22,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — read feeding the self-serve billing page; kept whole under a billing
 // lock so members can see and fix what they owe (see billing/checkout).
@@ -94,6 +95,10 @@ async function handler(request: Request): Promise<Response> {
       { status: 200 },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Usage lookup failed' }, { status: 500 })
   }

@@ -41,6 +41,7 @@ import {
   findSubdomainConflict,
 } from '../../../../utils/server/provision-host'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Creates a host (user request 2026-07-07 — the hosts page had no create
@@ -270,6 +271,10 @@ async function handler(request: Request): Promise<Response> {
       { status: 200 },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     // AGL-2265. This route can create a workspace on the way to creating a
     // site (`ensureOrgForUser` for an account that holds none), so the
     // free-workspace ceiling is reachable from here too. Answering with the

@@ -41,6 +41,7 @@ import {
   sendPasswordChangedNotice,
   validateNewPassword,
 } from '../../../_lib/password-admin'
+import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 /**
  * Password help for a team member (AGL-913): an org admin gets a teammate
@@ -93,7 +94,19 @@ async function handler(request: Request): Promise<Response> {
   try {
     const auth = firebaseAdmin.app().auth()
     const firestore = firebaseAdmin.app().firestore()
-    const decoded = await auth.verifyIdToken(idToken)
+    // The 401 mapping is scoped to the CALLER's verification (AGL-2796).
+    // `invalidIdTokenResponse` reads `auth/user-not-found` as "this token's
+    // account is gone", which is false of the teammate `updateUser` and
+    // `revokeRefreshTokens` act on below: their account vanishing mid-request
+    // keeps the 500 rather than telling the admin their own sign-in has ended.
+    let decoded: Awaited<ReturnType<typeof auth.verifyIdToken>>
+    try {
+      decoded = await auth.verifyIdToken(idToken)
+    } catch (error) {
+      const unauthenticated = invalidIdTokenResponse(error)
+      if (unauthenticated) return unauthenticated
+      throw error
+    }
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }

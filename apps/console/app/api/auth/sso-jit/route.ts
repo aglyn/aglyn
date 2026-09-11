@@ -35,6 +35,7 @@ import {
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Just-in-time org mapping for SSO sign-ins (AGL-1101). After a user completes
@@ -272,6 +273,10 @@ async function handler(request: Request): Promise<Response> {
     })
     return Response.json({ ok: true, orgId, orgSlug: orgData?.slug ?? null, role }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     // A refused sign-in is the right answer and not a harsh one: the
     // alternative is provisioning a member the org is over its cap for and
     // discovering it on the invoice. The message names the ceiling so an

@@ -38,6 +38,7 @@ import {
 } from '../../../../utils/internal-traffic'
 import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
 import { meteredPriceId } from '../../../../utils/server/billing-addons'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay
 // its way out (AGL-1501 keeps those sessions for exactly this). That exemption is about
@@ -749,12 +750,15 @@ async function handler(request: Request): Promise<Response> {
     await claim.record(200, payload)
     return Response.json(payload, { status: 200 })
   } catch (error) {
-    console.error(error)
+    // A refused credential is a 401, not a fault of ours (AGL-1993); null for
+    // anything else, which is logged and keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (!unauthenticated) console.error(error)
     // Release on the way out so a transient failure does not strand the key
     // (AGL-1691's rule): no local writes happened, and a session Stripe did
     // create replays under the re-derived digest.
     await claim?.release()
-    return Response.json({ error: 'Checkout failed' }, { status: 500 })
+    return unauthenticated ?? Response.json({ error: 'Checkout failed' }, { status: 500 })
   }
 }
 

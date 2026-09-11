@@ -65,7 +65,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       auth: () => ({
         verifyIdToken: async (token: string) => {
-          if (token !== 'good-token') throw new Error('bad token')
+          // What firebase-admin throws for a token that does not verify.
+          if (token !== 'good-token') {
+            throw Object.assign(new Error('Firebase ID token has invalid signature.'), {
+              code: 'auth/argument-error',
+            })
+          }
           return mockDecodedToken
         },
       }),

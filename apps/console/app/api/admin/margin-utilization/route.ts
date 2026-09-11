@@ -117,8 +117,13 @@ async function handler(request: Request): Promise<Response> {
       .app()
       .auth()
       .verifyIdToken(idToken)) as unknown as Record<string, unknown>
-  } catch {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  } catch (error) {
+    // A refused credential is a 401 (AGL-1993). A check that could not run is
+    // ours, so it is a 500 like the Firestore failure below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error('[admin/margin-utilization] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
   }
 
   try {

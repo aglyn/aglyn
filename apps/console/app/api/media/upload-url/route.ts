@@ -60,6 +60,7 @@ import {
   SIGNED_UPLOAD_TYPES_MESSAGE,
   storageContentHash,
 } from '../../../../utils/media-upload-limits'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000
 
@@ -712,6 +713,10 @@ async function handler(request: Request): Promise<Response> {
     )
     return Response.json({ mediaId, url }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Signed upload failed' }, { status: 500 })
   }

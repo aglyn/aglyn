@@ -26,6 +26,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { platformPaymentsConfigured } from '../../../../utils/server/payments-platform'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — this IS the recovery path. A billing-locked, past-due or
 // dunning-cancelled org is precisely the org that needs to pay, and precisely the org
@@ -285,6 +286,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[billing/pay-invoice]', error)
     return Response.json({ error: 'Invoice payment failed' }, { status: 500 })
   }

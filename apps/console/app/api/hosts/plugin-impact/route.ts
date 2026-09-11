@@ -28,6 +28,7 @@ import {
   scanPluginPlacements,
   type PluginPlacement,
 } from '../../../../utils/server/scan-artifact-usage'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** What uninstalling would do to one site. */
 export interface PluginImpactSite {
@@ -188,6 +189,10 @@ async function handler(request: Request): Promise<Response> {
       { status: 200 },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Impact check failed' }, { status: 500 })
   }

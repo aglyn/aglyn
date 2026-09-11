@@ -259,4 +259,62 @@ describe('it will not let a stolen token drive a revocation', () => {
     expect(mockRevoked).toEqual([])
     expect(mockStore['dev-1']).not.toHaveProperty('revokedAt')
   })
+
+  /*
+   * `checkRevoked` hands the lookup to firebase-admin itself, which raises
+   * `auth/user-not-found` for a deleted account and `auth/user-disabled` for a
+   * disabled one (AGL-2796). Every Admin Auth call behind this route acts on
+   * the VERIFIED uid, so both are statements about this caller — the same
+   * refusal as a revoked token, not the 500 this route used to answer.
+   */
+  it.each([
+    [
+      'a deleted account',
+      'auth/user-not-found',
+      'There is no user record corresponding to the provided identifier.',
+    ],
+    ['a disabled account', 'auth/user-disabled', 'The user record is disabled.'],
+  ])('401s %s and revokes nothing', async (_label, code, message) => {
+    mockVerifyResult = Object.assign(new Error(message), { code })
+
+    const response = await post({ deviceId: 'dev-1' })
+
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ error: 'Unauthenticated' })
+    expect(mockRevoked).toEqual([])
+    expect(mockStore['dev-1']).not.toHaveProperty('revokedAt')
+  })
+
+  describe('a verification that could not run is not a refusal', () => {
+    beforeEach(() => {
+      jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+      jest.restoreAllMocks()
+    })
+
+    it('keeps the 500 when the Google cert endpoint is unreachable', async () => {
+      // firebase-admin reports its own key fetch failing under the SAME code
+      // as a forged token; only the message tells an outage from a refusal.
+      mockVerifyResult = Object.assign(
+        new Error('Error fetching public keys for Google certs: connect ETIMEDOUT'),
+        { code: 'auth/argument-error' },
+      )
+
+      const response = await post({ deviceId: 'dev-1' })
+
+      expect(response.status).toBe(500)
+      expect(mockRevoked).toEqual([])
+    })
+
+    it('keeps the 500 for a failure that carries no auth code', async () => {
+      mockVerifyResult = new Error('14 UNAVAILABLE: No connection established')
+
+      const response = await post({ deviceId: 'dev-1' })
+
+      expect(response.status).toBe(500)
+      expect(mockRevoked).toEqual([])
+    })
+  })
 })

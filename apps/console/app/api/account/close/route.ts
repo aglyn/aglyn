@@ -23,6 +23,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Close your own account (AGL-1140).
@@ -147,6 +148,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ ok: true, deleted: result.deleted }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[account/close] failed', error)
     return Response.json({ error: 'Closing the account failed' }, { status: 500 })
   }

@@ -70,7 +70,8 @@ const MAX_PENDING_LISTED = 50
  *
  * A staff ID token is accepted alongside the cron secret rather than instead of
  * it: the scheduler has no user and must keep working. Returns the actor for
- * the audit row, or null when neither credential checks out.
+ * the audit row, or null when neither credential checks out. Throws when a
+ * staff token could not be checked at all, which is not a refusal.
  */
 async function authorizeActor(
   headers: Partial<Record<string, string>>,
@@ -86,8 +87,12 @@ async function authorizeActor(
     if (!decoded.email_verified && !isImpersonationSession(decoded)) return null
     if (!decoded['staff']) return null
     return { uid: decoded.uid, kind: 'staff' }
-  } catch {
-    return null
+  } catch (error) {
+    // A refused credential is no actor, and the handler answers 401
+    // (AGL-1993). A check that could not run is thrown on, so the handler
+    // answers 500 instead of telling staff their sign-in is bad.
+    if (invalidIdTokenResponse(error)) return null
+    throw error
   }
 }
 
@@ -101,7 +106,13 @@ async function handler(request: Request): Promise<Response> {
   if (!cronSecret) {
     return Response.json({ error: 'Erasure runner is not configured (CRON_SECRET).' }, { status: 501 })
   }
-  const actor = await authorizeActor(headers)
+  let actor: Awaited<ReturnType<typeof authorizeActor>>
+  try {
+    actor = await authorizeActor(headers)
+  } catch (error) {
+    console.error('[admin/run-erasures] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
+  }
   if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }

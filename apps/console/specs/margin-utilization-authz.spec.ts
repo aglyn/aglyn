@@ -218,10 +218,31 @@ describe('the staff gate', () => {
   })
 
   it('401s a token that cannot be verified', async () => {
-    mockVerifyIdToken.mockRejectedValueOnce(new Error('bad token'))
+    // What firebase-admin throws for a token that does not verify.
+    mockVerifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error('Firebase ID token has invalid signature.'), {
+        code: 'auth/argument-error',
+      }),
+    )
     const response = await call({ token: 'nope' })
     expect(response.status).toBe(401)
     expect(mockFetched).toEqual([])
+  })
+
+  it('500s, and still reads nothing, when the check itself could not run (AGL-2796)', async () => {
+    // firebase-admin reports its Google cert fetch failing under the same code
+    // as a forged token; that outage is ours, not a bad credential.
+    const silenced = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockVerifyIdToken.mockRejectedValueOnce(
+      Object.assign(
+        new Error('Error fetching public keys for Google certs: connect ETIMEDOUT'),
+        { code: 'auth/argument-error' },
+      ),
+    )
+    const response = await call({ token: 'any' })
+    expect(response.status).toBe(500)
+    expect(mockFetched).toEqual([])
+    silenced.mockRestore()
   })
 
   it('403s a verified NON-staff token — the claim is the only gate', async () => {

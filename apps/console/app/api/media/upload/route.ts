@@ -57,6 +57,7 @@ import {
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
 } from '../../../../utils/media-upload-limits'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the
 // platform rejects request bodies over 4.5MB with a 413 before this
@@ -472,6 +473,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ mediaId, url }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Upload failed' }, { status: 500 })
   }

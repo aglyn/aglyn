@@ -23,6 +23,7 @@ import {
   restoreMediaFromTombstone,
 } from '@aglyn/tenant-data-admin'
 import { resolveMediaScope } from '../../../../utils/server/media-scope'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Put back a media asset the caller just deleted (AGL-1467).
@@ -123,6 +124,10 @@ async function handler(request: Request): Promise<Response> {
       { status: result.status },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Restore failed' }, { status: 500 })
   }

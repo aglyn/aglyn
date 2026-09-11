@@ -32,6 +32,7 @@ import {
 // Shared with the AGL-2010 completer cron so there is exactly one
 // implementation of the edge redirect. Moved out of this file unchanged.
 import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Attaches a verified custom domain to the tenant deployment so SSL provisions
@@ -310,6 +311,10 @@ async function handler(request: Request): Promise<Response> {
       conflicts: status.conflicts,
     }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Attach failed' }, { status: 500 })
   }
