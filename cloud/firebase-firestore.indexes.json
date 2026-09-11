@@ -2459,6 +2459,16 @@
       "indexes": []
     },
     {
+      "collectionGroup": "records",
+      "fieldPath": "values.email",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "restockAlerts",
       "fieldPath": "notifiedAtMs",
       "indexes": [
