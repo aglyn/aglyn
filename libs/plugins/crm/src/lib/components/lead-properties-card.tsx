@@ -45,6 +45,7 @@ import { crmRoutes } from '../model/crm-routes'
 import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
+import { CrmSuiteNotice } from './crm-suite-lock'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
@@ -56,6 +57,14 @@ const NOTES_MAX = 4000
  * sentence shape the overflow's items carry, so the two read as one state.
  */
 export const CONVERT_PENDING_ERASURE_REASON = 'An erasure is pending for this person'
+
+/**
+ * What a lead's page says on a plan without the CRM suite (AGL-2790), before
+ * the notice's plan sentence and its way to the plans.
+ */
+export const LEAD_READ_ONLY_NOTICE =
+  'This lead is read-only on your plan. Changing its status, owner or notes, ' +
+  'converting it, and calling, emailing or booking from it are part of the CRM suite.'
 
 /** A label over a value — the record page's one row shape. */
 function Fact(props: { label: string; children: React.ReactNode }) {
@@ -103,6 +112,14 @@ export interface LeadPropertiesCardProps {
    * logged call reads the activity scope it belongs in (AGL-2661).
    */
   org?: Partial<AglynOrgBilling> | null
+  /**
+   * The org's plan does not carry the CRM suite (AGL-2790): the lead is shown
+   * and not worked. No Convert, no call, email or booking, no Unqualify, and
+   * no status, owner or notes to change — those are drawn as facts, beneath
+   * the suite's notice. The overflow keeps what the page adds to it, because
+   * erasing a person is every plan's.
+   */
+  readOnly?: boolean
 }
 
 /**
@@ -117,7 +134,8 @@ export interface LeadPropertiesCardProps {
  * older one plus a sentence.
  *
  * Converted leads are read-only here. Their status is the conversion, and
- * the actions become links to what the conversion made.
+ * the actions become links to what the conversion made. On a plan without
+ * the CRM suite every lead is read-only (`readOnly`).
  */
 export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const {
@@ -134,6 +152,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     banner,
     erasurePending = false,
     org,
+    readOnly = false,
   } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
@@ -208,41 +227,43 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       // The booking door (AGL-2660), while the lead is still the record
       // being worked: once converted, the contact is where a meeting is
       // booked from, and the links below lead there.
-      booking={converted ? undefined : { hostId, org, kind: 'lead', recordId: leadId }}
+      booking={converted || readOnly ? undefined : { hostId, org, kind: 'lead', recordId: leadId }}
       actions={
-        <>
-          {converted ? null : erasurePending ? (
-            <Tooltip title={CONVERT_PENDING_ERASURE_REASON}>
-              {/* A disabled button receives no pointer events, so the
-                  tooltip anchors on the span around it. */}
-              <span>
-                <Button size="small" variant="contained" disabled>
-                  {'Convert'}
-                </Button>
-              </span>
-            </Tooltip>
-          ) : (
-            <Button size="small" variant="contained" onClick={onConvert}>
-              {'Convert'}
-            </Button>
-          )}
-          {/* Dial the number the capture carried, and log the call (AGL-2661). */}
-          <CrmCallButton
-            hostId={hostId}
-            org={org}
-            link={{ leadId }}
-            phone={leadPhone}
-          />
-          <CrmSendEmailButton
-            hostId={hostId}
-            leadId={leadId}
-            email={String(lead['email'] ?? '')}
-            name={String(lead['name'] ?? '')}
-          />
-        </>
+        readOnly ? undefined : (
+          <>
+            {converted ? null : erasurePending ? (
+              <Tooltip title={CONVERT_PENDING_ERASURE_REASON}>
+                {/* A disabled button receives no pointer events, so the
+                    tooltip anchors on the span around it. */}
+                <span>
+                  <Button size="small" variant="contained" disabled>
+                    {'Convert'}
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : (
+              <Button size="small" variant="contained" onClick={onConvert}>
+                {'Convert'}
+              </Button>
+            )}
+            {/* Dial the number the capture carried, and log the call (AGL-2661). */}
+            <CrmCallButton
+              hostId={hostId}
+              org={org}
+              link={{ leadId }}
+              phone={leadPhone}
+            />
+            <CrmSendEmailButton
+              hostId={hostId}
+              leadId={leadId}
+              email={String(lead['email'] ?? '')}
+              name={String(lead['name'] ?? '')}
+            />
+          </>
+        )
       }
       menuItems={[
-        ...(open
+        ...(open && !readOnly
           ? [
               {
                 key: 'unqualify',
@@ -267,6 +288,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     >
       <Stack spacing={3}>
         {banner}
+        {readOnly ? <CrmSuiteNotice>{LEAD_READ_ONLY_NOTICE}</CrmSuiteNotice> : null}
         {/*
           Only when the capture carried one (AGL-2661): the sign-up and
           booking doors write no phone, so a row for every lead would be a
@@ -289,6 +311,10 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                     : 'Converted'}
                 </Typography>
               </Stack>
+            </Fact>
+          ) : readOnly ? (
+            <Fact label="Status">
+              <LeadStatusChip lead={lead} />
             </Fact>
           ) : (
             <FormControl size="small" sx={{ minWidth: 200 }}>
@@ -322,19 +348,25 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
               </Select>
             </FormControl>
           )}
-          <LeadOwnerSelect
-            value={lead.ownerUid}
-            roster={roster}
-            fullWidth={false}
-            onChange={(uid) =>
-              void write({ ownerUid: uid || deleteField() }, uid ? 'Owner assigned' : 'Owner cleared')
-            }
-          />
+          {readOnly ? (
+            <Fact label="Owner">
+              {lead.ownerUid ? roster.labelFor(lead.ownerUid) : 'Unassigned'}
+            </Fact>
+          ) : (
+            <LeadOwnerSelect
+              value={lead.ownerUid}
+              roster={roster}
+              fullWidth={false}
+              onChange={(uid) =>
+                void write({ ownerUid: uid || deleteField() }, uid ? 'Owner assigned' : 'Owner cleared')
+              }
+            />
+          )}
         </Stack>
         {status === 'unqualified' && lead.unqualifiedReason ? (
           <Alert severity="info">{`Unqualified: ${lead.unqualifiedReason}`}</Alert>
         ) : null}
-        {converted ? (
+        {converted && !readOnly ? (
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <Button
               component={AppLink as any}
@@ -369,31 +401,37 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             ) : null}
           </Stack>
         ) : null}
-        <Stack spacing={1}>
-          <TextField
-            size="small"
-            label="Notes"
-            value={notes}
-            onChange={(event) => {
-              setNotes(event.target.value)
-              setNotesDirty(true)
-            }}
-            multiline
-            minRows={3}
-            fullWidth
-            slotProps={{ htmlInput: { maxLength: NOTES_MAX } }}
-          />
-          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
-            <Button
+        {readOnly ? (
+          lead.notes ? (
+            <Fact label="Notes">{String(lead.notes)}</Fact>
+          ) : null
+        ) : (
+          <Stack spacing={1}>
+            <TextField
               size="small"
-              variant="contained"
-              onClick={() => void saveNotes()}
-              disabled={!notesDirty || savingNotes}
-            >
-              {'Save notes'}
-            </Button>
+              label="Notes"
+              value={notes}
+              onChange={(event) => {
+                setNotes(event.target.value)
+                setNotesDirty(true)
+              }}
+              multiline
+              minRows={3}
+              fullWidth
+              slotProps={{ htmlInput: { maxLength: NOTES_MAX } }}
+            />
+            <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => void saveNotes()}
+                disabled={!notesDirty || savingNotes}
+              >
+                {'Save notes'}
+              </Button>
+            </Stack>
           </Stack>
-        </Stack>
+        )}
       </Stack>
     </CrmRecordHeader>
   )

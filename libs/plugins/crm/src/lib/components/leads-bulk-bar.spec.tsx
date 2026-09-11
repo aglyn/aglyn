@@ -142,6 +142,27 @@ describe('the bar and its selection', () => {
   })
 })
 
+describe('on a plan without the CRM suite (AGL-2790)', () => {
+  it('offers the exports and nothing that works a lead', () => {
+    render(
+      <LeadsBulkBar
+        rows={rows}
+        selected={ALL.slice(0, 2)}
+        onSelectedChange={jest.fn()}
+        roster={roster}
+        suiteIncluded={false}
+      />,
+    )
+    expect(screen.getByText('2 selected')).toBeTruthy()
+    for (const name of ['Set owner', 'Set status', 'Unqualify']) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
+    }
+    for (const name of ['Export CSV', 'Clear']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy()
+    }
+  })
+})
+
 describe('the owner', () => {
   it('writes the chosen owner to every row, each under its own site, in one batch', async () => {
     mount(ALL.slice(0, 2))

@@ -187,6 +187,16 @@ describe('RecordActivityCard (AGL-2600)', () => {
   })
 })
 
+describe('a read-only log (AGL-2790)', () => {
+  it('offers no Log activity and no edit or delete on any row, the author’s included', () => {
+    render(<RecordActivityCard hostId="host-1" org={{}} leadId="lead-1" readOnly />)
+    expect(screen.getByText('Call act-1')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Log activity' })).toBeNull()
+    expect(screen.queryAllByLabelText('Edit activity')).toHaveLength(0)
+    expect(screen.queryAllByLabelText('Delete activity')).toHaveLength(0)
+  })
+})
+
 describe('a sent email on the log (AGL-2615)', () => {
   const renderWith = (rows: unknown[]) => {
     mockPaged.mockReturnValue({

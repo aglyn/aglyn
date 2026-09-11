@@ -87,8 +87,10 @@ describe('crm plugin', () => {
       'fields',
       'settings',
     ])
-    // The bare `/contacts` lands on the first section, so the people list
-    // has to be first: it is the v1 page every existing link points at.
+    // The bare `/contacts` lands on the first section a reader may open, so
+    // on a plan with the suite the people list has to be first: it is the v1
+    // page every existing link points at. Without the suite Contacts is
+    // locked and the landing moves on to Leads (AGL-2790).
     expect(sections?.[0]?.label).toBe('Contacts')
     // Settings is where a settings entry sits in every hub — after the work
     // (AGL-2613). The rail decides where a bare `/crm` lands, so a settings
@@ -100,17 +102,18 @@ describe('crm plugin', () => {
   })
 
   /**
-   * The plan splits the rail (AGL-2611): contacts on every plan, the suite
-   * from Starter. Declared per SECTION and not on the extension, because an
-   * extension flag would lock the contacts list with the rest.
+   * The plan splits the rail (AGL-2611, AGL-2790): Leads on every plan —
+   * read-only without the suite — and every other section, Contacts among
+   * them, from Starter. Declared per SECTION and not on the extension,
+   * because an extension flag would lock Leads with the rest.
    */
-  it('gates every section but contacts on the CRM suite, and the extension on nothing', () => {
+  it('gates every section but leads on the CRM suite, and the extension on nothing', () => {
     registerCrmConsole()
     const extension = registered()
     expect(extension?.featureFlag).toBeUndefined()
     const sections = extension?.navItems?.[0]?.sections ?? []
-    expect(sections.find((section) => section.id === 'contacts')?.featureFlag).toBeUndefined()
-    for (const section of sections.filter((entry) => entry.id !== 'contacts')) {
+    expect(sections.find((section) => section.id === 'leads')?.featureFlag).toBeUndefined()
+    for (const section of sections.filter((entry) => entry.id !== 'leads')) {
       expect(`${section.id}: ${section.featureFlag}`).toBe(`${section.id}: crm`)
     }
     // …and the flag really splits the plans the way the decision says.

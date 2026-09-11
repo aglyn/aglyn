@@ -44,25 +44,28 @@ export type CrmConsoleSectionId =
  * `release_crm` gate — no `navTabId` on any of them. A section that
  * later needs its own schedule declares one, which can only narrow.
  *
- * The PLAN is the other axis (AGL-2611), and it splits the rail in two.
- * Contacts declares no flag: the list, its tags, notes, segments and export
- * are the capture projection every plan's email audiences read, banded by
- * `contactsPerHost` and on Free. Every other section is the CRM SUITE —
- * `features.crm`, included from Starter — so each names the flag, the shell
- * draws it locked on a plan without it and refuses its body with the
- * upgrade notice, and a bare `/crm` on Free lands on the one section Free
- * has. Declared per section rather than on the extension because the
- * extension's flag would take the contacts list with it.
+ * The PLAN is the other axis (AGL-2611, AGL-2790), and it splits the rail in
+ * two. Leads declares no flag: the people a site's forms, sign-ups and
+ * bookings captured are readable on every plan, and on a plan without the
+ * CRM suite the section and a lead's page draw them read-only, asking the
+ * plan themselves for every act. Every other section is the CRM SUITE —
+ * `features.crm`, included from Starter — Contacts among them, so each names
+ * the flag, the shell draws it locked on a plan without it and refuses its
+ * body (and every record beneath it) with the upgrade notice, and a bare
+ * `/crm` on such a plan lands on Leads, the one section it has. Declared per
+ * section rather than on the extension because the extension's flag would
+ * take Leads with it.
  *
  * Rail ORDER decides where a bare `/crm` lands: the shell redirects it to
- * the first section this reader may open. There is deliberately no separate
- * default constant. Settings is LAST (AGL-2613): it is the section a reader
- * visits once and the records are what the rail is for, so it sits where a
+ * the first section this reader may open — Contacts on a plan with the
+ * suite, Leads on one without. There is deliberately no separate default
+ * constant. Settings is LAST (AGL-2613): it is the section a reader visits
+ * once and the records are what the rail is for, so it sits where a
  * settings entry sits in every hub — after the work, before nothing.
  */
 export const CRM_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
-  { id: 'contacts', label: 'Contacts' },
-  { id: 'leads', label: 'Leads', featureFlag: 'crm' },
+  { id: 'contacts', label: 'Contacts', featureFlag: 'crm' },
+  { id: 'leads', label: 'Leads' },
   { id: 'companies', label: 'Companies', featureFlag: 'crm' },
   { id: 'deals', label: 'Deals', featureFlag: 'crm' },
   { id: 'tasks', label: 'Tasks', featureFlag: 'crm' },

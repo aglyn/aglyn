@@ -40,6 +40,13 @@
  * menu and the inline select do. A lead already closed is not unqualified
  * twice. A lead already at the asked status is skipped rather than rewritten
  * so "Nothing to change" means what it says.
+ *
+ * ## Without the CRM suite, the exports alone
+ *
+ * Working a lead — its owner, its status, unqualifying it — is the CRM
+ * suite's (AGL-2790). A plan without it reads its leads and takes them into
+ * a spreadsheet, so the bar offers the two exports and nothing else; the
+ * rules refuse the writes on such a plan whatever a page offers.
  */
 
 import {
@@ -96,6 +103,12 @@ export interface LeadsBulkBarProps {
    * where the complete export spans every site (AGL-2662).
    */
   hostId?: string | null
+  /**
+   * Whether the org's plan carries the CRM suite. Without it the bar offers
+   * the exports alone (AGL-2790). Absent reads as carried, the bar's shape
+   * before plans split it.
+   */
+  suiteIncluded?: boolean
 }
 
 const NOUN: CrmBulkNoun = { singular: 'lead', plural: 'leads' }
@@ -125,6 +138,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
   const { rows, selected, onSelectedChange, roster, csv } = props
   const orgId = props.orgId ?? null
   const hostId = props.hostId ?? null
+  const suiteIncluded = props.suiteIncluded ?? true
   const firestore = useFirestore()
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'lead' })
 
@@ -254,58 +268,64 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       report={report}
       onDismissReport={dismissReport}
       extras={
-        <CrmBulkValueDialog
-          open={pending !== null}
-          title={pending ? ACTION_TITLES[pending] : ''}
-          count={selected.length}
-          noun={NOUN}
-          busy={busy}
-          canApply={canApply}
-          applyLabel={pending === 'unqualify' ? 'Unqualify' : undefined}
-          onClose={() => setPending(null)}
-          onApply={() => void handleApply()}
-        >
-          {pending === 'owner' ? (
-            <LeadOwnerSelect value={value} onChange={setValue} roster={roster} size="medium" />
-          ) : pending === 'status' ? (
-            <TextField
-              select
-              size="small"
-              label="Status"
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              helperText="Closing a lead goes through Unqualify, which asks why."
-            >
-              {SETTABLE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {CRM_LEAD_STATUS_LABELS[status]}
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : pending === 'unqualify' ? (
-            <TextField
-              label="Reason"
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              multiline
-              minRows={2}
-              autoFocus
-              helperText="One reason for every selected lead, kept on each so it can be counted later."
-              slotProps={{ htmlInput: { maxLength: UNQUALIFY_REASON_MAX } }}
-            />
-          ) : null}
-        </CrmBulkValueDialog>
+        suiteIncluded ? (
+          <CrmBulkValueDialog
+            open={pending !== null}
+            title={pending ? ACTION_TITLES[pending] : ''}
+            count={selected.length}
+            noun={NOUN}
+            busy={busy}
+            canApply={canApply}
+            applyLabel={pending === 'unqualify' ? 'Unqualify' : undefined}
+            onClose={() => setPending(null)}
+            onApply={() => void handleApply()}
+          >
+            {pending === 'owner' ? (
+              <LeadOwnerSelect value={value} onChange={setValue} roster={roster} size="medium" />
+            ) : pending === 'status' ? (
+              <TextField
+                select
+                size="small"
+                label="Status"
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                helperText="Closing a lead goes through Unqualify, which asks why."
+              >
+                {SETTABLE_STATUSES.map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {CRM_LEAD_STATUS_LABELS[status]}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : pending === 'unqualify' ? (
+              <TextField
+                label="Reason"
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                multiline
+                minRows={2}
+                autoFocus
+                helperText="One reason for every selected lead, kept on each so it can be counted later."
+                slotProps={{ htmlInput: { maxLength: UNQUALIFY_REASON_MAX } }}
+              />
+            ) : null}
+          </CrmBulkValueDialog>
+        ) : null
       }
     >
-      <Button size="small" disabled={busy} onClick={() => openAction('owner')}>
-        {'Set owner'}
-      </Button>
-      <Button size="small" disabled={busy} onClick={() => openAction('status')}>
-        {'Set status'}
-      </Button>
-      <Button size="small" disabled={busy} onClick={() => openAction('unqualify')}>
-        {'Unqualify'}
-      </Button>
+      {suiteIncluded ? (
+        <>
+          <Button size="small" disabled={busy} onClick={() => openAction('owner')}>
+            {'Set owner'}
+          </Button>
+          <Button size="small" disabled={busy} onClick={() => openAction('status')}>
+            {'Set status'}
+          </Button>
+          <Button size="small" disabled={busy} onClick={() => openAction('unqualify')}>
+            {'Unqualify'}
+          </Button>
+        </>
+      ) : null}
       <Button size="small" disabled={busy} onClick={handleExport}>
         {'Export CSV'}
       </Button>

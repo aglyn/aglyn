@@ -118,6 +118,14 @@ describe('LeadSurfacesNote', () => {
     )
   })
 
+  it('says every form files a lead on a plan without the CRM suite, and offers no switch (AGL-2790)', () => {
+    render(<LeadSurfacesNote hostId="host-1" suiteIncluded={false} />)
+    expect(screen.getByText(/^Every form on this site files a lead from each submission/)).toBeTruthy()
+    expect(screen.queryByText(/forms with lead routing on/)).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Contact' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Turn on lead routing' })).toBeNull()
+  })
+
   it('refuses the form that records no consent, with the reason as the tooltip', () => {
     render(<LeadSurfacesNote hostId="host-1" />)
     const reason = screen.getByLabelText(LEAD_ROUTING_NEEDS_CONSENT_FIELD)

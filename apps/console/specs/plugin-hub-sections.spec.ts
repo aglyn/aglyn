@@ -28,6 +28,7 @@
  */
 
 import type { ConsoleNavSection, ReleaseFlagKey } from '@aglyn/aglyn'
+import { CRM_CONSOLE_SECTIONS } from '@aglyn/plugins-crm/components/crm-console-sections'
 import {
   hubLandingHref,
   releaseFlagForNavTab,
@@ -36,12 +37,13 @@ import {
 
 /** An org on the Free plan: nothing under `features` is granted. */
 const FREE_ORG = { $id: 'org-1', features: {} }
-/** An org holding the CRM suite. */
-const CRM_ORG = { $id: 'org-1', features: { crm: true } }
+/** An org holding the CRM suite: Starter, the lowest plan that carries it. */
+const CRM_ORG = { $id: 'org-1', plan: 'starter', subscription: { status: 'active' } }
 
+/** The CRM's shape (AGL-2790): Leads on every plan, Contacts and Deals the suite's. */
 const SECTIONS: readonly ConsoleNavSection[] = [
-  { id: 'contacts', label: 'Contacts' },
-  { id: 'leads', label: 'Leads', featureFlag: 'crm' },
+  { id: 'contacts', label: 'Contacts', featureFlag: 'crm' },
+  { id: 'leads', label: 'Leads' },
   { id: 'deals', label: 'Deals', featureFlag: 'crm' },
 ]
 
@@ -88,7 +90,7 @@ describe('resolveHubSections', () => {
       org: FREE_ORG,
       orgReady: true,
     })
-    expect(settled?.map((section) => section.locked)).toEqual([false, true, true])
+    expect(settled?.map((section) => section.locked)).toEqual([true, false, true])
     // An unsettled org draws no lock: a lock is a claim about the plan.
     const pending = resolveHubSections(SECTIONS, '/acme/crm', {
       flags: flags(),
@@ -144,7 +146,7 @@ describe('hubLandingHref', () => {
       { flags: flags(), isStaff: false, org: FREE_ORG, orgReady: true },
     )
     expect(rail?.[0]).toMatchObject({ id: 'deals', locked: true })
-    expect(hubLandingHref(rail)).toBe('/acme/crm/contacts')
+    expect(hubLandingHref(rail)).toBe('/acme/crm/leads')
   })
 
   it('skips a hidden first section rather than landing on a coming-soon notice', () => {
@@ -165,5 +167,66 @@ describe('hubLandingHref', () => {
     )
     expect(hubLandingHref(rail)).toBeUndefined()
     expect(hubLandingHref(undefined)).toBeUndefined()
+  })
+})
+
+/**
+ * THE CRM RAIL AS IT SHIPS, BY PLAN (AGL-2790).
+ *
+ * The cases above run a fixture; these run `CRM_CONSOLE_SECTIONS` itself,
+ * the list both shells mount. On a plan without the CRM suite Contacts is
+ * locked with the rest of the suite, Leads is the one section open, and a
+ * bare `/crm` lands there; on Starter nothing is locked and the landing is
+ * Contacts, as it always was. The plan read is the effective one, so a dead
+ * subscription reads as Free and a per-org grant as the suite.
+ */
+describe('the CRM rail as it ships, by plan (AGL-2790)', () => {
+  const rail = (org: unknown, isStaff = false) =>
+    resolveHubSections(CRM_CONSOLE_SECTIONS, '/acme/crm', {
+      flags: flags(),
+      isStaff,
+      org,
+      orgReady: true,
+    })
+  const lockedIds = (sections: ReturnType<typeof rail>) =>
+    (sections ?? []).filter((section) => section.locked).map((section) => section.id)
+
+  it('locks Contacts with the rest of the suite on Free, opens Leads, and lands there', () => {
+    const free = rail({ $id: 'org-1', plan: 'free' })
+    expect(lockedIds(free)).toEqual([
+      'contacts',
+      'companies',
+      'deals',
+      'tasks',
+      'reports',
+      'fields',
+      'settings',
+    ])
+    expect(free?.find((section) => section.id === 'leads')).toMatchObject({
+      visible: true,
+      locked: false,
+    })
+    expect(hubLandingHref(free)).toBe('/acme/crm/leads')
+  })
+
+  it('locks the same sections for staff inside a Free workspace', () => {
+    const staff = rail({ $id: 'org-1', plan: 'free' }, true)
+    expect(lockedIds(staff)).toContain('contacts')
+    expect(hubLandingHref(staff)).toBe('/acme/crm/leads')
+  })
+
+  it('opens every section on Starter and lands a bare /crm on Contacts', () => {
+    const starter = rail({ $id: 'org-1', plan: 'starter', subscription: { status: 'active' } })
+    expect(lockedIds(starter)).toEqual([])
+    expect(hubLandingHref(starter)).toBe('/acme/crm/contacts')
+  })
+
+  it('reads a dead subscription as Free and a per-org grant on Free as the suite', () => {
+    expect(hubLandingHref(rail({ plan: 'pro', billingStatus: 'canceled' }))).toBe(
+      '/acme/crm/leads',
+    )
+    expect(
+      hubLandingHref(rail({ plan: 'free', entitlements: { features: { crm: true } } })),
+    ).toBe('/acme/crm/contacts')
   })
 })

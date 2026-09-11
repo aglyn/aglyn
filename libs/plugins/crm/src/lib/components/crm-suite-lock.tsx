@@ -30,25 +30,28 @@ import { useParams } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 /**
- * THE CRM SUITE, AS THE CONTACTS SECTION DRAWS IT (AGL-2788).
+ * THE CRM SUITE, AS A SURFACE'S OWN ACTS DRAW IT (AGL-2788, AGL-2790).
  *
  * The shell locks the suite's SECTIONS on a plan without `features.crm`
  * (AGL-2611): the rail draws a lock beside each, and a locked section's body
- * is the upgrade notice. The Contacts section stays open on every plan,
- * because the list is the capture projection the email audiences read — but
- * most of what can be done TO a person on it is the suite: adding one by
- * hand, importing a file, a saved view, an owner, a stage, a company, a
- * task, a logged call, an email, a merge. This module draws those acts on
- * such a plan in the shell's own terms: the lock the rail draws, on a
- * control that stays where it is and cannot be pressed, and the notice and
- * link the shell ends a locked section with.
+ * is the upgrade notice. That is every section but Leads (AGL-2790), which
+ * such a plan reads and does not work — and most of what can be done TO a
+ * person anywhere in the CRM is the suite: adding one by hand, importing a
+ * file, a saved view, an owner, a stage, a company, a task, a logged call, an
+ * email, a merge. This module draws those acts on such a plan in the shell's
+ * own terms: the lock the rail draws, on a control that stays where it is
+ * and cannot be pressed, and the notice and link the shell ends a locked
+ * section with.
  *
- * ## Not hidden, and not pressable
+ * ## Not hidden, and not pressable — except where a surface is for reading
  *
- * A control that vanished on Free would hide the feature from the plan that
- * is being asked to buy it, and one that opened and then failed would spend
- * the reader's work on a refusal. The routes behind these acts refuse the
- * same plans either way (`server/suite-gate.ts`).
+ * On a working surface, a control that vanished would hide the feature from
+ * the plan that is being asked to buy it, and one that opened and then failed
+ * would spend the reader's work on a refusal. The routes behind these acts
+ * refuse the same plans either way (`server/suite-gate.ts`). The Leads
+ * section and a lead's page are the other shape: on a plan without the suite
+ * they are for reading, so they draw no working act at all and say why once,
+ * with {@link CrmSuiteNotice}.
  *
  * ## An answer, not a loading state
  *

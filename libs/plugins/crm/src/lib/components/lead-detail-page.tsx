@@ -33,6 +33,7 @@ import { useState } from 'react'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import { CrmRecordHeader } from './crm-record-header'
+import { crmSuiteIncluded } from './crm-suite-lock'
 import { useErasePersonAction } from './erase-person-action'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { LeadHistoryCard } from './lead-history-card'
@@ -51,6 +52,10 @@ type LeadDocument = Record<string, unknown> & CrmLeadFields
  * is host-scoped by path, so there is no `visibleTo` to filter — and one
  * roster request for the owner picker; the convert dialog's reads open only
  * when it does.
+ *
+ * On a plan without the CRM suite the page is READ-ONLY (AGL-2790): the
+ * lead, its history and its activity are shown, and the one act left is the
+ * privacy erasure, which is every plan's.
  */
 export function LeadDetailPage(props: CrmDetailPageProps) {
   const { id, hostId, org, basePath } = props
@@ -68,6 +73,8 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
   const roster = useOrgMemberOptions(orgId)
   const [converting, setConverting] = useState(false)
   const [unqualifying, setUnqualifying] = useState(false)
+  // A plan without the suite reads a lead and works none (AGL-2790).
+  const readOnly = !crmSuiteIncluded(org)
   // The privacy erasure (AGL-2623), offered from the lead as from the
   // contact: the same request, filed by the lead's address.
   const leadEmail = lead ? normalizeContactEmail(lead['email']) : null
@@ -130,28 +137,33 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           banner={erase.banner}
           erasurePending={erase.pendingSinceMs !== null}
           org={org}
+          readOnly={readOnly}
         />
         <LeadHistoryCard hostId={hostId} leadId={id} lead={lead} />
-        <RecordActivityCard hostId={hostId} org={org} leadId={id} />
+        <RecordActivityCard hostId={hostId} org={org} leadId={id} readOnly={readOnly} />
       </Stack>
-      <LeadConvertDialog
-        open={converting}
-        onClose={() => setConverting(false)}
-        hostId={hostId}
-        orgId={orgId}
-        org={org as Record<string, unknown> | undefined}
-        leadId={id}
-        lead={lead}
-        basePath={basePath}
-        roster={roster}
-      />
-      <LeadUnqualifyDialog
-        open={unqualifying}
-        onClose={() => setUnqualifying(false)}
-        hostId={hostId}
-        leadId={id}
-        leadLabel={label ?? id}
-      />
+      {readOnly ? null : (
+        <>
+          <LeadConvertDialog
+            open={converting}
+            onClose={() => setConverting(false)}
+            hostId={hostId}
+            orgId={orgId}
+            org={org as Record<string, unknown> | undefined}
+            leadId={id}
+            lead={lead}
+            basePath={basePath}
+            roster={roster}
+          />
+          <LeadUnqualifyDialog
+            open={unqualifying}
+            onClose={() => setUnqualifying(false)}
+            hostId={hostId}
+            leadId={id}
+            leadLabel={label ?? id}
+          />
+        </>
+      )}
       {erase.dialog}
     </>
   )

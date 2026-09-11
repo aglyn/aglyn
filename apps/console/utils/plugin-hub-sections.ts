@@ -86,9 +86,10 @@ export function resolveHubSections(
  * released, and on the plan (AGL-2501, AGL-2611).
  *
  * Skipping past a flagged-off or locked first section is the rule: a bare
- * `/crm` on a plan without the sales suite lands on the contacts list it
- * does have rather than on an upgrade notice, and a redirect into a section
- * the gate would refuse answers the nav tab with a "coming soon" notice.
+ * `/crm` on a plan without the CRM suite lands on the Leads it can read
+ * rather than on the upgrade notice Contacts draws there, and a redirect into
+ * a section the gate would refuse answers the nav tab with a "coming soon"
+ * notice.
  * `undefined` when nothing is open to this reader, which the shell renders
  * as the hub itself rather than looping.
  */
