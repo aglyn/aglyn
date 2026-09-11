@@ -33,7 +33,7 @@
  * numbers below are a TRANSCRIPTION of what the public page serves — first
  * fetched **2026-08-19**, re-transcribed row by row from the republish of
  * **2026-09-07** (screen `v0clP6xQl-`, version `zj-21jtrPG`), and with the
- * CRM rows taken from version `uMk4E9o739` of **2026-09-10** — and their
+ * CRM rows taken from version `uMk4E9o739` of **2026-09-11** — and their
  * whole job is to be a fixed point that does NOT move when the constants do.
  * Deriving them from `PLAN_ENTITLEMENTS` would make the file assert `x === x`
  * and prove nothing at all.
@@ -111,6 +111,22 @@ function flagColumn(flag: string): boolean[] {
   return PUBLISHED_COLUMNS.map(
     (plan) =>
       (PLAN_ENTITLEMENTS[plan].features as Record<string, boolean>)[flag],
+  )
+}
+
+/**
+ * `—` on a CRM row. A plan without `features.crm` opens no part of the CRM
+ * (2026-09-11, AGL-2851), so the page names no CRM figure for it, whatever
+ * band the plan still carries. Unlike `NONE`, this dash is not a zero.
+ */
+const NO_CRM = '—'
+
+/** A CRM row: the plan's figure where it carries the CRM, a dash where not. */
+function crmColumn(key: string): Array<number | typeof NO_CRM> {
+  return PUBLISHED_COLUMNS.map((plan) =>
+    PLAN_ENTITLEMENTS[plan].features.crm
+      ? (PLAN_ENTITLEMENTS[plan] as unknown as Record<string, number>)[key]
+      : NO_CRM,
   )
 }
 
@@ -428,28 +444,41 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `prices` block below. That rate is what makes the bound METER rather
      * than wall: without it `checkCrmRecordsQuota` refuses past the band.
      */
-    it('CRM records included — 100 · 1k · 10k · 50k · 100k · 150k · 500k', () => {
-      const PUBLISHED: Row = [100, 1000, 10000, 50000, 100000, 150000, 500000]
-      expect(quotaColumn('contactsPerHost')).toEqual(PUBLISHED)
-      // Every self-serve cell is finite, which is the property the cost model
-      // needs; only Enterprise's "Talk to us" is unbounded.
-      for (const value of PUBLISHED) expect(Number.isFinite(value)).toBe(true)
+    it('CRM records included — — · 1k · 10k · 50k · 100k · 150k · 500k', () => {
+      const PUBLISHED = [NO_CRM, 1000, 10000, 50000, 100000, 150000, 500000]
+      expect(crmColumn('contactsPerHost')).toEqual(PUBLISHED)
+      // Every band is finite, the one Free keeps included, which is the
+      // property the cost model needs; only Enterprise's "Talk to us" is
+      // unbounded.
+      for (const value of quotaColumn('contactsPerHost')) {
+        expect(Number.isFinite(value)).toBe(true)
+      }
+    })
+
+    it("Free's records cell is the CRM it cannot open, not a band of zero", () => {
+      // The page dashes the cell because Free opens no CRM for the band to
+      // fill. The band itself still holds: people a Free site's forms capture
+      // count against a hard 100-record wall with no rate past it. Reading
+      // the dash as a zero and "fixing" the entitlement to match would move
+      // enforcement that no pricing decision moved.
+      expect(PLAN_ENTITLEMENTS.free.features.crm).toBe(false)
+      expect(PLAN_ENTITLEMENTS.free.contactsPerHost).toBe(100)
+      expect(PLAN_PRICING.free.extraContactsUsdPer1k).toBeNull()
     })
 
     /**
-     * THE CRM ROWS BELOW THE RECORDS BAND: leads, the suite, one-to-one email.
+     * THE CRM ROW AND ONE-TO-ONE EMAIL, BELOW THE RECORDS BAND.
      *
-     * The suite (contacts, companies, deals and tasks) is included from
+     * The CRM (contacts, leads, companies, deals and tasks) is included from
      * Starter rather than Pro: the field prices a CRM seat at $14–25 a month,
-     * so Starter with the suite included is the competitive entry, and gating
+     * so Starter with the CRM included is the competitive entry, and gating
      * a tier higher hands the small-business buyer to a free CRM elsewhere.
      * The Starter card sells this where it used to sell 500 campaign emails.
      *
-     * A Free workspace's CRM opens on Leads, view-only (2026-09-10, AGL-2790):
-     * the people its site forms captured, which it can list, open, export and
-     * erase but not edit. Contacts are the managed record a team works, so
-     * they belong to the suite. The page carries this as a row of its own,
-     * transcribed from screen `v0clP6xQl-` version `uMk4E9o739` (AGL-2831).
+     * The CRM is paid-only (2026-09-11, AGL-2851): a Free workspace opens no
+     * part of it, Leads included. So the page carries one CRM row, with a
+     * dash for Free there and on the records band above it, transcribed from
+     * screen `v0clP6xQl-` version `uMk4E9o739` (AGL-2831).
      *
      * One-to-one email is a hard daily pace per organization with no overage
      * rate on any tier — `checkCrmEmailQuota` refuses the send past it — set
@@ -457,42 +486,33 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * annual price with the whole day spent (`tier-margin-floor.spec.ts`),
      * not at a usability figure.
      */
-    describe("Leads from your site's forms — View-only · ✓ from Starter", () => {
-      const PUBLISHED = ['View-only', '✓', '✓', '✓', '✓', '✓', '✓']
+    describe('CRM: contacts, leads, companies, deals & tasks — — · ✓ from Starter', () => {
+      const PUBLISHED = [NO_CRM, '✓', '✓', '✓', '✓', '✓', '✓']
 
-      it('reads View-only on exactly the plans without the suite', () => {
-        // The row has no entitlement key of its own. Leads are the part of
-        // the CRM a plan without `features.crm` still opens, so the column is
-        // the suite flag read as "View-only" or "✓", and a plan that gains or
-        // loses the suite moves this row with it.
-        expect(
-          flagColumn('crm').map((suite) => (suite ? '✓' : 'View-only')),
-        ).toEqual(PUBLISHED)
+      it('ticks exactly the plans that carry `features.crm`', () => {
+        expect(flagColumn('crm').map((crm) => (crm ? '✓' : NO_CRM))).toEqual(
+          PUBLISHED,
+        )
         expect(PLAN_ENTITLEMENTS.enterprise.features.crm).toBe(true)
       })
 
-      it('names a cell on Free only because the CRM opens for every workspace', () => {
-        // With the CRM's release flag off by default, a Free workspace would
-        // reach no CRM at all and its cell would have to read a dash
-        // (AGL-2772).
+      it('dashes both CRM rows on the same plans', () => {
+        // One rule renders the two rows: a plan without `features.crm` names
+        // no CRM figure. A plan that gains or loses the CRM moves both.
+        expect(crmColumn('contactsPerHost').map((cell) => cell === NO_CRM)).toEqual(
+          flagColumn('crm').map((crm) => !crm),
+        )
+      })
+
+      it('ticks a CRM a paying workspace can open, because the CRM is released', () => {
+        // With the CRM's release flag off by default, no workspace would
+        // reach the CRM and every tick in this row would promise a locked
+        // section (AGL-2772).
         expect(
           RELEASE_FLAGS.find((flag) => flag.key === 'release_crm')
             ?.defaultEnabled,
         ).toBe(true)
       })
-    })
-
-    it('CRM suite: contacts, companies, deals & tasks — ✓ from Starter', () => {
-      expect(flagColumn('crm')).toEqual([
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-      ] satisfies TickRow)
-      expect(PLAN_ENTITLEMENTS.enterprise.features.crm).toBe(true)
     })
 
     it('One-to-one emails / day — — · 50 · 150 · 200 · 300 · 500 · 1,000', () => {
