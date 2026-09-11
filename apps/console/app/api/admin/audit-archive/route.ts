@@ -75,7 +75,15 @@ async function handler(request: Request): Promise<Response> {
   // Staff, or the scheduler (AGL-1949). This route was cron-secret-only, so
   // the console could not reach it at all and the only way to run or preview
   // an archival was a shell holding the production secret.
-  const actor = await authorizeMaintenanceActor(headers)
+  let actor: Awaited<ReturnType<typeof authorizeMaintenanceActor>>
+  try {
+    actor = await authorizeMaintenanceActor(headers)
+  } catch (error) {
+    // A staff token that could not be checked at all: an outage, not a
+    // refusal, so it answers 500 rather than 401 (AGL-2816).
+    console.error('[admin/audit-archive] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
+  }
   if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
