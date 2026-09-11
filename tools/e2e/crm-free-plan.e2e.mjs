@@ -15,39 +15,38 @@
  * limitations under the License.
  */
 
-// THE CRM ON A FREE WORKSPACE, end to end (AGL-2809, AGL-2790).
+// THE CRM ON A FREE WORKSPACE, end to end (AGL-2809, AGL-2851, AGL-2839).
 //
-// On a plan without the CRM suite the CRM opens on Leads, read-only
-// (AGL-2790): the shell locks Contacts with Companies, Deals, Tasks, Reports,
-// Fields and Settings; the Leads section and a lead's page draw no working
-// act; the `crm/*` routes refuse every contact edit and every lead write; and
-// the rules refuse a lead's change and its removal. Every other CRM spec
-// drives the primary e2e org, which is on Business, so none of them can see
-// any of it. This one signs in as the non-staff owner of a workspace that is
-// always on Free (`tools/scripts/lib/crm-free-plan-fixtures.mjs`) and proves,
-// in order:
+// The CRM is included from Starter and a Free workspace has none of it
+// (AGL-2851): the shell draws every CRM section locked beside the upgrade
+// notice and mounts no CRM page, the `crm/*` routes refuse every read and
+// write, and the rules refuse a client's CRM writes — while the workspace
+// still exports and erases the people it holds from Settings → Privacy
+// (AGL-2839). Every other CRM spec drives the primary e2e org, which is on
+// Business, so none of them can see any of it. This one signs in as the
+// non-staff owner of a workspace that is always on Free
+// (`tools/scripts/lib/crm-free-plan-fixtures.mjs`) and proves, in order:
 //
-// 1. A bare `/crm` lands on Leads, and the list reads every lead.
-// 2. The rail draws Contacts, Companies, Deals, Tasks, Reports, Fields and
-//    Settings with the lock, named to assistive technology, and Leads without.
-// 3. Leads is read-only under the suite notice and its way to the plans: no
-//    Import CSV, no status select on a row, and Open lead alone on its menu.
-// 4. Export CSV downloads every lead, and a ticked row's bar offers the
-//    exports alone.
-// 5. Each locked section's body is the shell's upgrade notice — Contacts
-//    included, and a contact's record beneath it.
-// 6. The organization's hub lands a bare `/crm` on Leads and draws the same.
-// 7. A lead's page is read-only, and an erasure is filed from it.
-// 8. `POST /api/crm/contacts-create` answers 403 `plan_required` / `crm` to
-//    the owner and to staff, and writes nothing.
-// 9. `crm/contact-update` refuses a name, notes and a tag, and
-//    `crm/lead-convert` refuses a conversion, writing nothing.
-// 10. The rules refuse a client-direct lead status change and a lead's delete,
-//     and a company create and update, and still serve both reads.
-// 11. THE CONTROL. The same workspace moved to Starter admits the same writes —
-//     the lead's conversion among them — lands `/crm` on Contacts with New
-//     contact open, and offers Import CSV on Leads. A refusal above that this
-//     step does not turn into an admission is not the plan's refusal.
+// 1. A bare `/crm` under a site stays where it is and draws the CRM notice
+//    beside a rail with every section locked, Leads included, and no person
+//    the workspace holds.
+// 2. Each section, a lead's page and a contact's page answer with the same
+//    notice and draw none of the workspace's people.
+// 3. The organization's hub draws the same.
+// 4. A `crm/*` read (`crm/contact-email-history`) and `crm/*` writes
+//    (`crm/contacts-create`, `crm/lead-convert`) answer 403 `plan_required` /
+//    `crm` to the owner — the create to staff too — and write nothing, and
+//    `/api/crm/export` refuses the companies file the same way.
+// 5. The rules refuse a lead's status change and a company's create and
+//    update, and still serve both reads.
+// 6. THE COMPLIANCE DOOR. Settings → Privacy downloads every contact and
+//    every lead, and files an erasure by address for a contact who has no
+//    lead.
+// 7. THE CONTROL. The same workspace moved to Starter admits the same acts:
+//    `/crm` lands on Contacts with the rail open, Leads lists its people, the
+//    read and the writes answer, the rules admit the writes, and the companies
+//    file downloads. A refusal above that this step does not turn into an
+//    admission is not the plan's refusal.
 //
 // Prerequisites (docs/E2E_LOCAL.md): the Auth and Firestore emulators and a
 // console dev server (E2E_BASE_URL). The spec writes its own workspace before
@@ -79,9 +78,10 @@ import {
   waitFor,
 } from './lib/console-session.mjs'
 
-/** The suite's sections, in the rail's order (`crm-console-sections.ts`). */
-const SUITE_SECTIONS = [
+/** Every CRM section, in the rail's order (`crm-console-sections.ts`). */
+const CRM_SECTIONS = [
   { id: 'contacts', label: 'Contacts' },
+  { id: 'leads', label: 'Leads' },
   { id: 'companies', label: 'Companies' },
   { id: 'deals', label: 'Deals' },
   { id: 'tasks', label: 'Tasks' },
@@ -91,11 +91,10 @@ const SUITE_SECTIONS = [
 ]
 /** What the lock on a rail tab is named (`hub-tabs.tsx`, AGL-2794). */
 const LOCK_NAME = 'Not included in your plan'
-/** How every refusal on Free ends: the plan that includes the suite. */
+/** The shell's notice for the CRM on a plan without it (`blockedExtensionNotice`). */
+const NOTICE = 'CRM is not included in your current plan.'
+/** How the notice ends: the plan that includes the CRM. */
 const PLAN_SENTENCE = 'Included from Starter.'
-/** What the Leads section and a lead's page say on Free (`leads-section.tsx`, `lead-properties-card.tsx`). */
-const LEADS_READ_ONLY = 'Leads are read-only on your plan.'
-const LEAD_READ_ONLY = 'This lead is read-only on your plan.'
 const RUN = Date.now().toString(36)
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'aglyn-main'
 
@@ -107,25 +106,46 @@ const orgRef = firestore.collection('orgs').doc(FREE.orgId)
 const leadsRef = firestore.collection('hosts').doc(FREE.hostId).collection('leads')
 const sitePath = (path) => `/${FREE.orgSlug}/hosts/${FREE.hostId}${path}`
 const siteUrl = (path) => `${BASE_URL}${sitePath(path)}`
-const orgUrl = (path) => `${BASE_URL}/${FREE.orgSlug}${path}`
+const orgPath = (path) => `/${FREE.orgSlug}${path}`
+const orgUrl = (path) => `${BASE_URL}${orgPath(path)}`
 const billingPath = `/${FREE.orgSlug}/billing`
 const leads = Object.values(FREE.leads)
+const contacts = Object.values(FREE.contacts)
+/** Everyone the workspace holds, by the name a page would draw. */
+const people = [...new Set([...leads, ...contacts].map((person) => person.name))]
 const rosa = FREE.leads.rosa
 const priya = FREE.leads.priya
 const rosaLeadId = leadIdFor(rosa.email)
 const priyaLeadId = leadIdFor(priya.email)
 const ben = FREE.contacts.ben
+const lena = FREE.contacts.lena
 const contactsAt = async (email) =>
   (await orgRef.collection('contacts').where('email', '==', email).get()).size
 
 /** A `plan_required` / `crm` refusal, in the console routes' flat shape. */
 const refusedForPlan = (answer) =>
-  answer.status === 403 && answer.body.reason === 'plan_required' && answer.body.code === 'crm'
+  answer.status === 403 && answer.body?.reason === 'plan_required' && answer.body?.code === 'crm'
+
+/** `GET /api/crm/export` as a user: the status, and the body as JSON when it is JSON. */
+async function exportAs(uid, resource) {
+  const response = await fetch(
+    `${BASE_URL}/api/crm/export?orgId=${encodeURIComponent(FREE.orgId)}&resource=${resource}`,
+    { headers: { Authorization: `Bearer ${await idTokenFor(uid)}` } },
+  )
+  const text = await response.text()
+  let body = {}
+  try {
+    body = JSON.parse(text)
+  } catch {
+    // A CSV file.
+  }
+  return { status: response.status, body }
+}
 
 /*==========================================
  * CLIENT-DIRECT WRITES
  *
- * The browser SDK writes a lead's working state and the suite's records
+ * The browser SDK writes a lead's working state and the CRM's records
  * straight to Firestore, so the rules are the gate there. The emulator's REST
  * surface evaluates the same rules against the same ID token, which lets the
  * spec make the write a member's browser would make without reaching into the
@@ -188,7 +208,7 @@ const lockedTab = (label) =>
   rail().getByRole('tab', { name: new RegExp(`^${label}\\s*${LOCK_NAME}$`) })
 const openTab = (label) => rail().getByRole('tab', { name: label, exact: true })
 const button = (name) => page.getByRole('button', { name, exact: true })
-const rowOf = (email) => page.getByRole('row').filter({ hasText: email }).first()
+const goto = (url) => page.goto(url, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
 /**
  * Where a notice's View plans goes. Found as the anchor rather than by role:
  * the button-styled link the shell draws carries `role="button"`, and the
@@ -196,323 +216,226 @@ const rowOf = (email) => page.getByRole('row').filter({ hasText: email }).first(
  */
 const plansHref = (notice) =>
   notice.locator('a', { hasText: 'View plans' }).first().getAttribute('href', { timeout: TIMEOUT_MS })
+/** The shell's CRM notice with the plan that includes it. */
+const crmNotice = () =>
+  page.getByRole('alert').filter({ hasText: NOTICE }).filter({ hasText: PLAN_SENTENCE }).first()
 
-/** Which suite sections the rail locks, and whether Leads stands open. */
-async function readRail() {
-  // The lock is drawn once the org has settled, so wait for one before counting.
-  await lockedTab('Contacts').waitFor({ timeout: TIMEOUT_MS })
+/** Which sections the rail locks and which it leaves open, once the org has settled. */
+async function readRail({ expectLocks }) {
+  await (expectLocks ? lockedTab('Leads') : openTab('Leads')).waitFor({ timeout: TIMEOUT_MS })
   const locked = []
-  for (const { label } of SUITE_SECTIONS) {
+  const open = []
+  for (const { label } of CRM_SECTIONS) {
     if ((await lockedTab(label).count()) === 1) locked.push(label)
+    else if ((await openTab(label).count()) === 1) open.push(label)
   }
-  const leadsTab = openTab('Leads')
-  const leadsOpen =
-    (await leadsTab.count()) === 1 &&
-    (await leadsTab.getByRole('img', { name: LOCK_NAME }).count()) === 0
-  return { locked, leadsOpen }
+  return { locked, open }
 }
 
-/** A row's menu, opened, read and closed again. */
-async function rowMenuItems(email) {
-  await page
-    .getByRole('button', { name: `More actions for ${email}`, exact: true })
-    .click({ timeout: TIMEOUT_MS })
-  await page.getByRole('menuitem').first().waitFor({ timeout: TIMEOUT_MS })
-  const items = (await page.getByRole('menuitem').allTextContents()).map((item) => item.trim())
-  await page.keyboard.press('Escape')
-  return items
+/** How many of the workspace's people the page draws by name. */
+async function peopleDrawn() {
+  let drawn = 0
+  for (const name of people) drawn += await page.getByText(name, { exact: true }).count()
+  return drawn
 }
 
 /*==========================================
  * ON FREE
  *=========================================*/
 
-await step(tally, page, 'a bare /crm lands on Leads, and the list reads every lead', async () => {
-  await page.goto(siteUrl('/crm'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await page.waitForURL((url) => url.pathname === sitePath('/crm/leads'), { timeout: TIMEOUT_MS })
-  for (const lead of leads) {
-    await page.getByText(lead.name, { exact: true }).first().waitFor({ timeout: TIMEOUT_MS })
-  }
+await step(tally, page, 'a bare /crm stays put and draws the CRM notice beside a rail with every section locked, and no person', async () => {
+  await goto(siteUrl('/crm'))
+  const notice = crmNotice()
+  await notice.waitFor({ timeout: TIMEOUT_MS })
+  const { locked, open } = await readRail({ expectLocks: true })
+  const plans = await plansHref(notice)
+  const path = new URL(page.url()).pathname
+  const drawn = await peopleDrawn()
   const plan = (await orgRef.get()).get('plan')
   tally.check(
-    'a bare /crm lands on Leads, and the list reads every lead',
-    plan === 'free',
-    `/crm → /crm/leads · ${leads.map((lead) => lead.name).join(' · ')} · plan ${plan}`,
+    'a bare /crm stays put and draws the CRM notice beside a rail with every section locked, and no person',
+    plan === 'free' &&
+      path === sitePath('/crm') &&
+      locked.length === CRM_SECTIONS.length &&
+      open.length === 0 &&
+      Boolean(plans?.startsWith(billingPath)) &&
+      drawn === 0,
+    `plan ${plan} · at ${path} · locked ${locked.join(' · ')} · open ${open.join(' · ') || 'none'} · ` +
+      `View plans → ${plans} · people drawn ${drawn}`,
   )
+  await shot(page, 'crm-free-plan-locked-hub')
 })
 
-await step(tally, page, 'the rail locks Contacts and the six other suite sections and leaves Leads open', async () => {
-  const { locked, leadsOpen } = await readRail()
-  tally.check(
-    'the rail locks Contacts and the six other suite sections and leaves Leads open',
-    locked.length === SUITE_SECTIONS.length && leadsOpen,
-    `locked ${locked.join(' · ')} · Leads open ${leadsOpen}`,
-  )
-})
-
-await step(tally, page, 'Leads is read-only under the suite notice', async () => {
-  const notice = page
-    .getByRole('alert')
-    .filter({ hasText: LEADS_READ_ONLY })
-    .filter({ hasText: `part of the CRM suite. ${PLAN_SENTENCE}` })
-    .first()
-  await notice.waitFor({ timeout: TIMEOUT_MS })
-  const plans = await plansHref(notice)
-  const importCsv = await button('Import CSV').count()
-  await rowOf(rosa.email).waitFor({ timeout: TIMEOUT_MS })
-  // A worked lead's status is where the inline select would be.
-  const statusSelects = await rowOf(priya.email).getByRole('combobox').count()
-  const items = await rowMenuItems(rosa.email)
-  tally.check(
-    'Leads is read-only under the suite notice',
-    Boolean(plans?.startsWith(billingPath)) &&
-      importCsv === 0 &&
-      statusSelects === 0 &&
-      items.length === 1 &&
-      items[0] === 'Open lead',
-    `View plans → ${plans} · Import CSV ${importCsv} · status selects ${statusSelects} · menu ${JSON.stringify(items)}`,
-  )
-  await shot(page, 'crm-free-plan-leads')
-})
-
-await step(tally, page, 'Export CSV downloads every lead, and a ticked row offers the exports alone', async () => {
-  const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: TIMEOUT_MS }),
-    button('Export CSV').first().click({ timeout: TIMEOUT_MS }),
-  ])
-  const csv = readFileSync(await download.path(), 'utf8')
-  const missing = leads.filter((lead) => !csv.includes(lead.email))
-  await rowOf(rosa.email).getByRole('checkbox').check({ timeout: TIMEOUT_MS })
-  await page.getByText('1 selected', { exact: true }).waitFor({ timeout: TIMEOUT_MS })
-  const bar = {
-    setOwner: await button('Set owner').count(),
-    setStatus: await button('Set status').count(),
-    unqualify: await button('Unqualify').count(),
-    exportCsv: await button('Export CSV').count(),
-    exportAll: await button('Export all…').count(),
+await step(tally, page, 'every section, a lead and a contact answer with the same notice, and draw no person', async () => {
+  const answered = []
+  for (const { id, label } of CRM_SECTIONS) {
+    await goto(siteUrl(`/crm/${id}`))
+    await crmNotice().waitFor({ timeout: TIMEOUT_MS })
+    const drawn = await peopleDrawn()
+    answered.push(`${label} ${drawn}`)
   }
-  await button('Clear').click({ timeout: TIMEOUT_MS })
-  tally.check(
-    'Export CSV downloads every lead, and a ticked row offers the exports alone',
-    missing.length === 0 &&
-      bar.setOwner === 0 &&
-      bar.setStatus === 0 &&
-      bar.unqualify === 0 &&
-      // The toolbar's and the bar's.
-      bar.exportCsv === 2 &&
-      bar.exportAll === 1,
-    `${download.suggestedFilename()} — ${csv.trim().split('\n').length} lines` +
-      (missing.length ? ` · missing ${missing.map((lead) => lead.email).join(', ')}` : '') +
-      ` · bar ${JSON.stringify(bar)}`,
-  )
-})
-
-await step(tally, page, "each locked section's body is the shell's upgrade notice, Contacts and a contact's record included", async () => {
-  const refused = []
-  for (const { id, label } of SUITE_SECTIONS) {
-    await page.goto(siteUrl(`/crm/${id}`), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-    const notice = page
-      .getByRole('alert')
-      .filter({ hasText: `${label} is not included in your current plan.` })
-      .first()
-    await notice.waitFor({ timeout: TIMEOUT_MS })
-    const text = (await notice.textContent()) ?? ''
-    const plans = await plansHref(notice)
-    if (text.includes(PLAN_SENTENCE) && plans?.startsWith(billingPath)) refused.push(label)
-    if (id === 'contacts') await shot(page, 'crm-free-plan-locked-section')
+  const records = []
+  for (const [kind, path] of [
+    ['lead', `/crm/leads/${rosaLeadId}`],
+    ['contact', `/crm/contacts/${FREE.contacts.rosa.id}`],
+  ]) {
+    await goto(siteUrl(path))
+    await crmNotice().waitFor({ timeout: TIMEOUT_MS })
+    records.push(`${kind} ${await peopleDrawn()}`)
   }
-  // A record beneath a locked section is refused with it.
-  await page.goto(siteUrl(`/crm/contacts/${FREE.contacts.rosa.id}`), {
-    waitUntil: 'domcontentloaded',
-    timeout: TIMEOUT_MS,
-  })
-  await page
-    .getByRole('alert')
-    .filter({ hasText: 'Contacts is not included in your current plan.' })
-    .first()
-    .waitFor({ timeout: TIMEOUT_MS })
-  const recordHeading = await page.getByRole('heading', { name: FREE.contacts.rosa.name }).count()
   tally.check(
-    "each locked section's body is the shell's upgrade notice, Contacts and a contact's record included",
-    refused.length === SUITE_SECTIONS.length && recordHeading === 0,
-    `${refused.join(' · ')} · contact record refused (heading ${recordHeading})`,
+    'every section, a lead and a contact answer with the same notice, and draw no person',
+    answered.length === CRM_SECTIONS.length &&
+      [...answered, ...records].every((entry) => entry.endsWith(' 0')),
+    `people drawn per page: ${[...answered, ...records].join(' · ')}`,
   )
 })
 
-await step(tally, page, "the organization's hub lands a bare /crm on Leads and draws the same", async () => {
-  await page.goto(orgUrl('/crm'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await page.waitForURL((url) => url.pathname === `/${FREE.orgSlug}/crm/leads`, {
-    timeout: TIMEOUT_MS,
-  })
-  await page.getByText(rosa.name, { exact: true }).first().waitFor({ timeout: TIMEOUT_MS })
-  const { locked, leadsOpen } = await readRail()
-  await page
-    .getByRole('alert')
-    .filter({ hasText: LEADS_READ_ONLY })
-    .first()
-    .waitFor({ timeout: TIMEOUT_MS })
-  const importCsv = await button('Import CSV').count()
-  await page.goto(orgUrl('/crm/contacts'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  await page
-    .getByRole('alert')
-    .filter({ hasText: 'Contacts is not included in your current plan.' })
-    .filter({ hasText: PLAN_SENTENCE })
-    .first()
-    .waitFor({ timeout: TIMEOUT_MS })
+await step(tally, page, "the organization's hub draws the same", async () => {
+  await goto(orgUrl('/crm'))
+  await crmNotice().waitFor({ timeout: TIMEOUT_MS })
+  const { locked, open } = await readRail({ expectLocks: true })
+  const path = new URL(page.url()).pathname
+  const drawn = await peopleDrawn()
+  await goto(orgUrl('/crm/leads'))
+  await crmNotice().waitFor({ timeout: TIMEOUT_MS })
+  const leadsDrawn = await peopleDrawn()
   tally.check(
-    "the organization's hub lands a bare /crm on Leads and draws the same",
-    locked.length === SUITE_SECTIONS.length && leadsOpen && importCsv === 0,
-    `/crm → /crm/leads · locked ${locked.length} · Leads open ${leadsOpen} · Import CSV ${importCsv} · Contacts refused`,
+    "the organization's hub draws the same",
+    path === orgPath('/crm') &&
+      locked.length === CRM_SECTIONS.length &&
+      open.length === 0 &&
+      drawn === 0 &&
+      leadsDrawn === 0,
+    `at ${path} · locked ${locked.length} · open ${open.length} · people drawn ${drawn} · on Leads ${leadsDrawn}`,
   )
 })
 
-await step(tally, page, "a lead's page is read-only, and an erasure is filed from it", async () => {
-  await page.goto(siteUrl(`/crm/leads/${rosaLeadId}`), {
-    waitUntil: 'domcontentloaded',
-    timeout: TIMEOUT_MS,
+await step(tally, page, 'a crm/* read and crm/* writes answer 403 plan_required, staff included, writing nothing', async () => {
+  const read = await postAsUser(FREE.ownerUid, '/api/crm/contact-email-history', {
+    hostId: FREE.hostId,
+    contactId: lena.id,
   })
-  await page.getByRole('heading', { name: rosa.name }).first().waitFor({ timeout: TIMEOUT_MS })
-  await page
-    .getByRole('alert')
-    .filter({ hasText: LEAD_READ_ONLY })
-    .first()
-    .waitFor({ timeout: TIMEOUT_MS })
-  const acts = {
-    convert: await button('Convert').count(),
-    saveNotes: await button('Save notes').count(),
-    status: await page.getByRole('combobox', { name: 'Status' }).count(),
-    logActivity: await button('Log activity').count(),
-    sendEmail: await button('Send email').count(),
-  }
-  await page
-    .getByRole('button', { name: `More actions for ${rosa.name}`, exact: true })
-    .click({ timeout: TIMEOUT_MS })
-  const items = (await page.getByRole('menuitem').allTextContents()).map((item) => item.trim())
-  await page.getByRole('menuitem', { name: 'Erase this person' }).click({ timeout: TIMEOUT_MS })
-  const dialog = page.getByRole('dialog', { name: `Erase ${rosa.email} from this workspace?` })
-  await dialog.getByLabel('Type the email address to confirm').fill(rosa.email)
-  await dialog.getByRole('button', { name: 'Erase permanently' }).click({ timeout: TIMEOUT_MS })
-  await expectSnackbar(page, 'Erasure requested')
-  // By what it says: the Alert's `data-testid` does not reach the DOM.
-  await page
-    .getByRole('alert')
-    .filter({ hasText: 'Erasure pending.' })
-    .first()
-    .waitFor({ timeout: TIMEOUT_MS })
-  const marker = await waitFor(
-    async () => (await leadsRef.doc(rosaLeadId).get()).get('erasureRequestedAtMs'),
-    (value) => typeof value === 'number' && value > 0,
-  )
-  const pending = await firestore
-    .collection('personErasures')
-    .where('orgId', '==', FREE.orgId)
-    .where('status', '==', 'pending')
-    .get()
-  tally.check(
-    "a lead's page is read-only, and an erasure is filed from it",
-    Object.values(acts).every((count) => count === 0) &&
-      !items.includes('Unqualify') &&
-      pending.size === 1 &&
-      pending.docs[0].get('email') === rosa.email,
-    `${JSON.stringify(acts)} · menu ${JSON.stringify(items)} · marker ${marker} · ${pending.size} pending request(s)`,
-  )
-})
-
-await step(tally, page, 'crm/contacts-create answers 403 plan_required to the owner and writes nothing', async () => {
   const email = `walk-in-${RUN}@example.com`
-  const answer = await postAsUser(FREE.ownerUid, '/api/crm/contacts-create', {
+  const staffEmail = `staff-walk-in-${RUN}@example.com`
+  const create = await postAsUser(FREE.ownerUid, '/api/crm/contacts-create', {
     hostId: FREE.hostId,
     email,
     name: 'Walk-in Customer',
   })
-  const rows = await contactsAt(email)
-  // The same read, for an address that IS on file, so "no rows" cannot be a
-  // query that matches nothing.
-  const seeded = await contactsAt(ben.email)
-  tally.check(
-    'crm/contacts-create answers 403 plan_required to the owner and writes nothing',
-    refusedForPlan(answer) && rows === 0 && seeded === 1,
-    `${answer.status} ${JSON.stringify(answer.body)} · rows ${rows} (seeded address ${seeded})`,
-  )
-})
-
-await step(tally, page, 'crm/contacts-create refuses staff on Free too', async () => {
-  const email = `staff-walk-in-${RUN}@example.com`
-  const answer = await postAsUser(OWNER_UID, '/api/crm/contacts-create', {
+  const staffCreate = await postAsUser(OWNER_UID, '/api/crm/contacts-create', {
     hostId: FREE.hostId,
-    email,
+    email: staffEmail,
     name: 'Staff Walk-in',
   })
-  const rows = await contactsAt(email)
-  tally.check(
-    'crm/contacts-create refuses staff on Free too',
-    refusedForPlan(answer) && rows === 0,
-    `${answer.status} ${answer.body.reason}/${answer.body.code} · rows ${rows}`,
-  )
-})
-
-await step(tally, page, 'crm/contact-update refuses a name, notes and a tag, and crm/lead-convert refuses a conversion', async () => {
-  const sets = [{ name: 'Ben O.' }, { notes: `Noted on Free ${RUN}` }, { addTag: 'wholesale' }]
-  const answers = []
-  for (const set of sets) {
-    answers.push(
-      await postAsUser(FREE.ownerUid, '/api/crm/contact-update', {
-        hostId: FREE.hostId,
-        contactIds: [ben.id],
-        set,
-      }),
-    )
-  }
-  const facet = (await orgRef.collection('contacts').doc(ben.id).get()).get('facets')?.[FREE.hostId] ?? {}
   const convert = await postAsUser(FREE.ownerUid, '/api/crm/lead-convert', {
     hostId: FREE.hostId,
     leadId: priyaLeadId,
   })
+  const companiesFile = await exportAs(FREE.ownerUid, 'companies')
+  const rows = (await contactsAt(email)) + (await contactsAt(staffEmail))
+  // The same read, for an address that IS on file, so "no rows" cannot be a
+  // query that matches nothing.
+  const seeded = await contactsAt(ben.email)
   const converted = (await leadsRef.doc(priyaLeadId).get()).get('convertedContactId')
+  const refusal = (answer) => `${answer.status} ${answer.body?.reason}/${answer.body?.code}`
   tally.check(
-    'crm/contact-update refuses a name, notes and a tag, and crm/lead-convert refuses a conversion',
-    answers.every(refusedForPlan) &&
-      facet.name === undefined &&
-      facet.notes === undefined &&
-      !(facet.tags ?? []).includes('wholesale') &&
+    'a crm/* read and crm/* writes answer 403 plan_required, staff included, writing nothing',
+    refusedForPlan(read) &&
+      refusedForPlan(create) &&
+      refusedForPlan(staffCreate) &&
       refusedForPlan(convert) &&
+      refusedForPlan(companiesFile) &&
+      rows === 0 &&
+      seeded === 1 &&
       !converted,
-    `contact-update ${answers.map((answer) => answer.status).join(' · ')} · facet untouched · ` +
-      `lead-convert ${convert.status} ${convert.body.reason}/${convert.body.code}`,
+    `contact-email-history ${refusal(read)} · contacts-create ${refusal(create)} · staff ${refusal(staffCreate)} · ` +
+      `lead-convert ${refusal(convert)} · export companies ${refusal(companiesFile)} · rows ${rows} (seeded address ${seeded})`,
   )
 })
 
-await step(tally, page, "the rules refuse a lead's status change and its delete, and a company's create and update, and serve the reads", async () => {
+await step(tally, page, "the rules refuse a lead's status change and a company's create and update, and serve the reads", async () => {
   const status = await setLeadStatus(priyaLeadId, 'unqualified')
-  const removal = await deleteLead(priyaLeadId)
   const leadRead = await readLead(priyaLeadId)
   const create = await createCompany(`rules-probe-free-${RUN}`)
   const update = await updateCompany(`Noted on Free ${RUN}`)
   const read = await readCompany()
   const still = (await leadsRef.doc(priyaLeadId).get()).get('status')
   tally.check(
-    "the rules refuse a lead's status change and its delete, and a company's create and update, and serve the reads",
+    "the rules refuse a lead's status change and a company's create and update, and serve the reads",
     status.startsWith('403') &&
-      removal.startsWith('403') &&
       leadRead === '200' &&
       still === 'working' &&
       create.startsWith('403') &&
       update.startsWith('403') &&
       read === '200',
-    `lead status ${status} · lead delete ${removal} · lead read ${leadRead} (status ${still}) · ` +
+    `lead status ${status} · lead read ${leadRead} (status ${still}) · ` +
       `company create ${create} · update ${update} · read ${read}`,
   )
+})
+
+await step(tally, page, 'Settings → Privacy downloads every contact and every lead, and erases a contact with no lead by address', async () => {
+  await goto(orgUrl('/settings/privacy'))
+  const downloadOf = async (label) => {
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: TIMEOUT_MS }),
+      button(label).click({ timeout: TIMEOUT_MS }),
+    ])
+    return { name: download.suggestedFilename(), csv: readFileSync(await download.path(), 'utf8') }
+  }
+  const contactsFile = await downloadOf('Export contacts')
+  const leadsFile = await downloadOf('Export leads')
+  const missing = [
+    ...contacts.filter((person) => !contactsFile.csv.includes(person.email)),
+    ...leads.filter((lead) => !leadsFile.csv.includes(lead.email)),
+  ].map((person) => person.email)
+  // Ben arrived by the newsletter: a contact the workspace holds with no lead,
+  // who no page on Free shows (AGL-2839).
+  const benHasLead = (await leadsRef.doc(leadIdFor(ben.email)).get()).exists
+  await page.getByLabel('Email address', { exact: true }).fill(ben.email)
+  await page.getByLabel('Type the email address again', { exact: true }).fill(ben.email)
+  await button('Erase permanently').click({ timeout: TIMEOUT_MS })
+  await expectSnackbar(page, 'Erasure requested')
+  const pending = await waitFor(
+    async () =>
+      (
+        await firestore
+          .collection('personErasures')
+          .where('orgId', '==', FREE.orgId)
+          .where('status', '==', 'pending')
+          .get()
+      ).docs.map((doc) => doc.get('email')),
+    (emails) => Array.isArray(emails) && emails.includes(ben.email),
+  )
+  const marker = (await orgRef.collection('contacts').doc(ben.id).get()).get('erasureRequestedAtMs')
+  const lines = (file) => file.csv.trim().split('\n').length
+  tally.check(
+    'Settings → Privacy downloads every contact and every lead, and erases a contact with no lead by address',
+    missing.length === 0 &&
+      !benHasLead &&
+      Array.isArray(pending) &&
+      pending.includes(ben.email) &&
+      typeof marker === 'number',
+    `${contactsFile.name} ${lines(contactsFile)} lines · ${leadsFile.name} ${lines(leadsFile)} lines` +
+      (missing.length ? ` · missing ${missing.join(', ')}` : '') +
+      ` · Ben has a lead ${benHasLead} · pending ${JSON.stringify(pending)} · contact marker ${marker}`,
+  )
+  await shot(page, 'crm-free-plan-privacy')
 })
 
 /*==========================================
  * THE CONTROL — the same workspace on Starter
  *=========================================*/
 
-await step(tally, page, 'control: on Starter the same writes are admitted, and the CRM opens on Contacts', async () => {
+await step(tally, page, 'control: on Starter the same acts are admitted, and the CRM opens on Contacts', async () => {
   await orgRef.update({ plan: 'starter', subscription: { status: 'active' } })
   const status = await setLeadStatus(priyaLeadId, 'new')
   const create = await createCompany(`rules-probe-starter-${RUN}`)
   const update = await updateCompany(`Noted on Starter ${RUN}`)
+  const read = await postAsUser(FREE.ownerUid, '/api/crm/contact-email-history', {
+    hostId: FREE.hostId,
+    contactId: lena.id,
+  })
   const email = `starter-walk-in-${RUN}@example.com`
   const answer = await postAsUser(FREE.ownerUid, '/api/crm/contacts-create', {
     hostId: FREE.hostId,
@@ -520,11 +443,6 @@ await step(tally, page, 'control: on Starter the same writes are admitted, and t
     name: 'Starter Walk-in',
   })
   const rows = await contactsAt(email)
-  const profile = await postAsUser(FREE.ownerUid, '/api/crm/contact-update', {
-    hostId: FREE.hostId,
-    contactIds: [ben.id],
-    set: { name: 'Ben O.' },
-  })
   const convert = await postAsUser(FREE.ownerUid, '/api/crm/lead-convert', {
     hostId: FREE.hostId,
     leadId: priyaLeadId,
@@ -533,37 +451,40 @@ await step(tally, page, 'control: on Starter the same writes are admitted, and t
     async () => (await leadsRef.doc(priyaLeadId).get()).get('convertedContactId'),
     Boolean,
   )
-  await page.goto(siteUrl('/crm'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  const companiesFile = await exportAs(FREE.ownerUid, 'companies')
+  await goto(siteUrl('/crm'))
   await page.waitForURL((url) => url.pathname === sitePath('/crm/contacts'), { timeout: TIMEOUT_MS })
+  const { locked, open } = await readRail({ expectLocks: false })
   const newContactOpen = await waitFor(
     () => button('New contact').first().isEnabled().catch(() => false),
     Boolean,
   )
-  await page.goto(siteUrl('/crm/leads'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
-  const importShown = await waitFor(
-    () => button('Import CSV').count(),
-    (count) => count > 0,
-  )
+  await goto(siteUrl('/crm/leads'))
+  await page.getByText(rosa.name, { exact: true }).first().waitFor({ timeout: TIMEOUT_MS })
+  const notices = await page.getByRole('alert').filter({ hasText: NOTICE }).count()
   // Last, because the re-seed below is what puts the lead back.
   const removal = await deleteLead(priyaLeadId)
   tally.check(
-    'control: on Starter the same writes are admitted, and the CRM opens on Contacts',
+    'control: on Starter the same acts are admitted, and the CRM opens on Contacts',
     status === '200' &&
       create === '200' &&
       update === '200' &&
+      read.status === 200 &&
       answer.status < 300 &&
-      Boolean(answer.body.contactId) &&
+      Boolean(answer.body?.contactId) &&
       rows === 1 &&
-      profile.status === 200 &&
       convert.status === 200 &&
       Boolean(converted) &&
+      companiesFile.status === 200 &&
+      locked.length === 0 &&
+      open.length === CRM_SECTIONS.length &&
       Boolean(newContactOpen) &&
-      importShown > 0 &&
+      notices === 0 &&
       removal === '200',
-    `lead status ${status} · company create ${create} · update ${update} · contacts-create ${answer.status} rows ${rows} · ` +
-      `contact-update ${profile.status} · lead-convert ${convert.status} (contact ${converted}) · ` +
-      `/crm → /crm/contacts, New contact enabled ${newContactOpen} · ` +
-      `Import CSV on Leads ${importShown} · lead delete ${removal}`,
+    `lead status ${status} · company create ${create} · update ${update} · contact-email-history ${read.status} · ` +
+      `contacts-create ${answer.status} rows ${rows} · lead-convert ${convert.status} (contact ${converted}) · ` +
+      `export companies ${companiesFile.status} · /crm → /crm/contacts, open ${open.length}, locked ${locked.length}, ` +
+      `New contact enabled ${newContactOpen} · Leads notices ${notices} · lead delete ${removal}`,
   )
 })
 

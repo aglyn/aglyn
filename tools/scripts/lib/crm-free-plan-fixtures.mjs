@@ -38,20 +38,21 @@
 // ## The people arrived on their own
 //
 // A form, a newsletter sign-up and an order: the capture doors that fill a
-// workspace's contacts without the suite. Each is written the way
+// workspace's contacts on every plan. Each is written the way
 // `crm-fixtures.mjs` writes a person — the shared identity on top, the site's
 // profile in its facet, the site's token in `visibleTo` — and the company the
 // way it writes a company, because a workspace that left a paid plan keeps the
-// records it made there.
+// records it made there. Ben, from the newsletter, has no lead: the person a
+// Free workspace can only reach from Settings → Privacy (AGL-2839).
 //
-// ## The leads are what Free reads
+// ## The leads Free holds and cannot open
 //
-// On a plan without the suite the CRM opens on Leads, read-only (AGL-2790), and
-// every form files one. Two are seeded the way `addHostLead` writes them, keyed
-// by the person key — the id an erasure marks a site's lead by: Rosa, whose
-// catering inquiry also made her a contact, and Priya, worked while the
-// workspace was on a paid plan, so Free reads a status, an owner and notes it
-// cannot change.
+// The CRM is included from Starter and Free has none of it (AGL-2851), so the
+// spec asserts no page draws these people while Settings → Privacy still
+// exports and erases them. Two leads are seeded the way `addHostLead` writes
+// them, keyed by the person key — the id an erasure marks a site's lead by:
+// Rosa, whose catering inquiry also made her a contact, and Priya, worked while
+// the workspace was on a paid plan, with a status, an owner and notes.
 //
 // ## Plain `set`, and what a run leaves behind
 //
