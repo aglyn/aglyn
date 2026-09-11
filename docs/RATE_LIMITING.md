@@ -44,9 +44,11 @@ the firewall bypasses it on purpose: link-preview crawlers and Gmail's image
 proxy cannot solve a challenge. Both middlewares exclude `/api/*`, so the limit
 lives inside `serveMediaCdn`, in `lib/server/media-cdn-rate-limit.ts`.
 
-- **What is counted:** a GET about to read the file out of Storage, after every
-  access gate and the 304 exit. Refusals, 304s and HEADs send no file and are
-  not counted.
+- **What is counted:** a GET that gets past every access gate and the 304
+  exit, which is where the Storage reads begin. The gates' refusals, 304s and
+  HEADs send no file and are not counted. The count starts beside the metadata
+  read, so a request that then finds no object, or an unsatisfiable range, is
+  counted too.
 - **Two budgets per caller, split on `mediaCdnEdgeCacheable`:** 600 image
   deliveries a minute, and 180 of everything else. The edge holds images, so
   only a miss reaches the function. Everything else is `private`, so every

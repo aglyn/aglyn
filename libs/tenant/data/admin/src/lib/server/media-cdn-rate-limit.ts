@@ -34,11 +34,14 @@ import { consumeRateLimit } from './rate-limit-store'
  *
  * ## What is counted
  *
- * A GET that is about to read bytes out of Storage: past every access gate,
- * past the lockdown and quarantine refusals, and past the 304 exit. A refusal,
- * a 304 and a HEAD send no file, so a revalidating browser, a crawler's HEAD
- * and a probe for a deleted id spend nothing. The counter's Firestore write is
- * paid only where the delivery it guards is about to cost more.
+ * A GET that gets past every access gate, the lockdown and quarantine
+ * refusals and the 304 exit, which is where the Storage reads begin. Those
+ * refusals, a 304 and a HEAD send no file, so a revalidating browser, a
+ * crawler's HEAD and a probe for a deleted id spend nothing. The counter's
+ * Firestore write is paid only where the delivery it guards is about to cost
+ * more. The count starts beside the metadata read, so a request that then
+ * finds no object in Storage, or asks for an unsatisfiable range, has been
+ * counted too.
  *
  * ## Two budgets, split where the edge splits them
  *

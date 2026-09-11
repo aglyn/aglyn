@@ -1414,10 +1414,9 @@ export async function serveMediaCdn(
           : basePath
     const file = bucket.file(objectPath)
     // The caller's count (AGL-2812), asked here and nowhere earlier: past every
-    // gate and the 304 exit, so only a GET about to read the file is counted.
-    // It starts before the metadata read and is awaited after it, so the two
-    // run together. It never rejects, and answers `null` whenever it could not
-    // count.
+    // gate and the 304 exit, where the Storage reads begin. It starts before the
+    // metadata read and is awaited after it, so the two run together. It never
+    // rejects, and answers `null` whenever it could not count.
     const callerCount =
       req.method === 'GET'
         ? mediaCdnRateLimitRefusal({
