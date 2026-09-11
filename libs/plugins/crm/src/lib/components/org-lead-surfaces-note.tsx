@@ -25,7 +25,6 @@ import { type CrmOrgMount, useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import type { LeadSurfaceForm } from '../model/lead-surfaces'
 import {
   LEAD_SURFACES_CONTACTS_TOO,
-  LEAD_SURFACES_EVERY_FORM_ON_EVERY_SITE,
   LEAD_SURFACES_INTRO,
   type LeadRoutingTarget,
   LeadSurfaceFormList,
@@ -70,29 +69,12 @@ export const ORG_LEAD_SURFACES_OPEN_SITES = 3
  * Rendered only beneath the org mount — under a site the hook answers
  * `null` and so does the note, which keeps the section's one-line choice
  * between the two notes honest.
- *
- * ## Without the CRM suite
- *
- * Every form on every site is a lead surface there (`submissionFilesLead`,
- * AGL-2790), so the note is one sentence: no site group mounts, no forms
- * are read, and no switch is offered, because there is no routing to
- * describe.
  */
-export function OrgLeadSurfacesNote(props: {
-  /** Whether the org's plan carries the CRM suite; absent reads as carried. */
-  suiteIncluded?: boolean
-}) {
+export function OrgLeadSurfacesNote() {
   const mount = useCrmOrgMount()
   const { turningOn, turnOn } = useTurnOnLeadRouting()
   const [opened, setOpened] = useState(false)
   if (!mount) return null
-  if (props.suiteIncluded === false) {
-    return (
-      <Typography variant="body2" color="text.secondary">
-        {LEAD_SURFACES_EVERY_FORM_ON_EVERY_SITE}
-      </Typography>
-    )
-  }
   const { hosts, hostsReady } = mount
   const shown = opened ? hosts : hosts.slice(0, ORG_LEAD_SURFACES_OPEN_SITES)
   const folded = hosts.length - shown.length

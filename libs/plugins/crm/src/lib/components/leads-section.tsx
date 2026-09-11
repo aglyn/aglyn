@@ -37,11 +37,8 @@ import { useCrmScope } from '../hooks/use-crm-scope'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { useOrgLeads } from '../hooks/use-org-leads'
-import { CrmSuiteNotice, crmSuiteIncluded } from './crm-suite-lock'
 import CrmViewsControl from './crm-views-control'
-import RowActionsMenu, {
-  type RowActionsMenuItem,
-} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -122,14 +119,6 @@ import OrgLeadSurfacesNote from './org-lead-surfaces-note'
 const LEADS_WINDOW = 200
 
 /**
- * What the section says on a plan without the CRM suite (AGL-2790), before
- * the notice's plan sentence and its way to the plans.
- */
-export const LEADS_READ_ONLY_NOTICE =
-  'Leads are read-only on your plan. Setting a status or an owner, keeping notes, ' +
-  'converting and importing leads are part of the CRM suite.'
-
-/**
  * One row of the list. `$id` keys the grid — the document id under a site,
  * `{hostId}/{leadId}` at the organization level, where a lead's id is a
  * person key the same on every site that met the person — and `leadId`
@@ -147,24 +136,14 @@ type LeadRow = Record<string, unknown> &
  * still to work, and it converts into a contact, a company and a deal when
  * it is real. Reads `hosts/{hostId}/leads`, host-scoped by path, so there is
  * no `visibleTo` filter; the Firestore rules admit any member of the site to
- * read it and, on a plan with the CRM suite, an admin, editor or author to
- * update it, which is what makes the inline status and owner changes
- * client-direct writes.
+ * read it and an admin, editor or author to update it, which is what makes
+ * the inline status and owner changes client-direct writes.
  *
  * At the ORGANIZATION level (AGL-2630) there is no one site to read: the
  * section opens the same query under every site the org has (`useOrgLeads`)
  * and lists the merged window with a Site column, every row naming the site
  * its writes and its link go to. The per-site notes — which of a site's
  * forms file a lead — belong to a site's own hub and are not drawn here.
- *
- * ## Without the CRM suite, read-only
- *
- * Leads is the one section of the CRM a plan without the suite opens
- * (AGL-2790), and it is for reading: the list, a lead's page and the exports
- * stay; there is no status select, no row act but Open lead, no import, and
- * nothing on the bulk bar but the exports, beneath the suite's notice. The
- * rules refuse the same writes on such a plan (AGL-2801), so nothing drawn
- * here is the gate.
  */
 export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath } = props
@@ -175,7 +154,6 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const mount = useCrmOrgMount()
   const roster = useOrgMemberOptions(orgId)
   const routes = crmRoutes(basePath ?? '')
-  const suiteIncluded = crmSuiteIncluded(org)
 
   // Under a site: the site's own window, rows keyed by document id.
   const site = useFirestoreCollection<Record<string, unknown> & CrmLeadFields & { $id: string }>(
@@ -327,33 +305,27 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         flex: 0.9,
         minWidth: 150,
         valueGetter: (_value, row: LeadRow) => Aglyn.crmLeadStatus(row),
-        // Without the suite the status is shown, not changed (AGL-2790).
-        renderCell: ({ row }: { row: LeadRow }) =>
-          suiteIncluded ? (
-            <InlineStatus
-              lead={row}
-              onChange={(next) => {
-                if (next === 'unqualified') {
-                  setUnqualifying(row)
-                  return
-                }
-                void writeLead(
-                  row,
-                  {
-                    status: next,
-                    ...(Aglyn.crmLeadStatus(row) === 'unqualified'
-                      ? { unqualifiedReason: deleteField() }
-                      : {}),
-                  },
-                  'Status updated',
-                )
-              }}
-            />
-          ) : (
-            <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-              <LeadStatusChip lead={row} />
-            </Box>
-          ),
+        renderCell: ({ row }: { row: LeadRow }) => (
+          <InlineStatus
+            lead={row}
+            onChange={(next) => {
+              if (next === 'unqualified') {
+                setUnqualifying(row)
+                return
+              }
+              void writeLead(
+                row,
+                {
+                  status: next,
+                  ...(Aglyn.crmLeadStatus(row) === 'unqualified'
+                    ? { unqualifiedReason: deleteField() }
+                    : {}),
+                },
+                'Status updated',
+              )
+            }}
+          />
+        ),
       },
       {
         field: 'ownerUid',
@@ -415,53 +387,52 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
               : erasurePending
                 ? CONVERT_PENDING_ERASURE_REASON
                 : null
-          const open: RowActionsMenuItem = {
-            key: 'open',
-            label: 'Open lead',
-            icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
-            href: routes.lead(row.leadId, hostId ? null : row.hostId),
-          }
-          // Working the lead is the suite's; opening it is every plan's (AGL-2790).
-          const work: RowActionsMenuItem[] = suiteIncluded
-            ? [
-                {
-                  key: 'convert',
-                  label: 'Convert…',
-                  icon: <MdiIcon path={mdiAccountConvertOutline.path} size={0.8} />,
-                  onClick: () => setConverting(row),
-                  disabled: convertRefusal !== null,
-                  disabledReason: convertRefusal ?? undefined,
-                },
-                {
-                  key: 'assign',
-                  label: 'Assign owner',
-                  icon: <MdiIcon path={mdiAccountTieOutline.path} size={0.8} />,
-                  onClick: () => setAssigning(row),
-                },
-                {
-                  key: 'unqualify',
-                  label: 'Unqualify',
-                  icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
-                  onClick: () => setUnqualifying(row),
-                  disabled: !Aglyn.isCrmLeadOpen(row) || Boolean(row.convertedContactId),
-                  disabledReason: row.convertedContactId
-                    ? 'This lead was converted'
-                    : 'This lead is already closed',
-                },
-              ]
-            : []
           return (
             <Box
               onClick={(event) => event.stopPropagation()}
               sx={{ display: 'flex', alignItems: 'center', height: '100%' }}
             >
-              <RowActionsMenu label={String(row['email'] ?? row.$id)} items={[open, ...work]} />
+              <RowActionsMenu
+                label={String(row['email'] ?? row.$id)}
+                items={[
+                  {
+                    key: 'open',
+                    label: 'Open lead',
+                    icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
+                    href: routes.lead(row.leadId, hostId ? null : row.hostId),
+                  },
+                  {
+                    key: 'convert',
+                    label: 'Convert…',
+                    icon: <MdiIcon path={mdiAccountConvertOutline.path} size={0.8} />,
+                    onClick: () => setConverting(row),
+                    disabled: convertRefusal !== null,
+                    disabledReason: convertRefusal ?? undefined,
+                  },
+                  {
+                    key: 'assign',
+                    label: 'Assign owner',
+                    icon: <MdiIcon path={mdiAccountTieOutline.path} size={0.8} />,
+                    onClick: () => setAssigning(row),
+                  },
+                  {
+                    key: 'unqualify',
+                    label: 'Unqualify',
+                    icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
+                    onClick: () => setUnqualifying(row),
+                    disabled: !Aglyn.isCrmLeadOpen(row) || Boolean(row.convertedContactId),
+                    disabledReason: row.convertedContactId
+                      ? 'This lead was converted'
+                      : 'This lead is already closed',
+                  },
+                ]}
+              />
             </Box>
           )
         },
       },
     ],
-    [roster, routes, writeLead, hostId, mount, suiteIncluded],
+    [roster, routes, writeLead, hostId, mount],
   )
   /* The column and sort models are the view's (AGL-2617). */
   const grid = useCrmViewGrid(views, columns)
@@ -490,7 +461,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 ))}
               </Select>
             </FormControl>
-            {suiteIncluded ? <LeadImportButton hostId={hostId} /> : null}
+            <LeadImportButton hostId={hostId} />
             <Button size="small" onClick={handleExport} disabled={!rows.length}>
               {'Export CSV'}
             </Button>
@@ -500,22 +471,12 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         contentGutterY
       >
         <Stack spacing={2}>
-          {/* A plan without the suite reads its leads and works none of them (AGL-2790). */}
-          {suiteIncluded ? null : <CrmSuiteNotice>{LEADS_READ_ONLY_NOTICE}</CrmSuiteNotice>}
           {/* Which surfaces file a lead, by name (AGL-2612) — under a site its own, at the org level every site's (AGL-2638). */}
-          {hostId ? (
-            <LeadSurfacesNote hostId={hostId} suiteIncluded={suiteIncluded} />
-          ) : (
-            <OrgLeadSurfacesNote suiteIncluded={suiteIncluded} />
-          )}
+          {hostId ? <LeadSurfacesNote hostId={hostId} /> : <OrgLeadSurfacesNote />}
           {status === 'success' && window.length === 0 ? (
             <EmptyStateComponent
               label={'No leads yet'}
-              description={
-                suiteIncluded
-                  ? 'Sign-ups, bookings and form submissions on your site become leads on their own — or bring a list in with Import CSV.'
-                  : 'Sign-ups, bookings and form submissions on your site become leads on their own.'
-              }
+              description={'Sign-ups, bookings and form submissions on your site become leads on their own — or bring a list in with Import CSV.'}
             />
           ) : status === 'success' && rows.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
@@ -532,7 +493,6 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 csv={csvOptions}
                 orgId={orgId}
                 hostId={hostId}
-                suiteIncluded={suiteIncluded}
               />
               <CrmColumnOrderProvider value={grid.columnOrder}>
                 <ListTable
@@ -572,45 +532,41 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           ) : null}
         </Stack>
       </CardDisplay>
-      {suiteIncluded ? (
-        <>
-          <AssignOwnerDialog
-            lead={assigning}
-            roster={roster}
-            onClose={() => setAssigning(null)}
-            onAssign={(uid) => {
-              if (!assigning) return
-              void writeLead(
-                assigning,
-                { ownerUid: uid || deleteField() },
-                uid ? 'Owner assigned' : 'Owner cleared',
-              )
-              setAssigning(null)
-            }}
-          />
-          <LeadUnqualifyDialog
-            open={Boolean(unqualifying)}
-            onClose={() => setUnqualifying(null)}
-            hostId={unqualifying?.hostId ?? hostId ?? ''}
-            leadId={unqualifying?.leadId ?? ''}
-            leadLabel={String(unqualifying?.['name'] || unqualifying?.['email'] || '')}
-          />
-          {/* The row's site, not the mounted one: at the organization level a
-              lead is its own site's record, and the conversion is that site's
-              capture (AGL-2641). Under a site the two are the same. */}
-          <LeadConvertDialog
-            open={Boolean(converting)}
-            onClose={() => setConverting(null)}
-            hostId={converting?.hostId ?? hostId ?? ''}
-            orgId={orgId}
-            org={org as Record<string, unknown> | undefined}
-            leadId={converting?.leadId ?? ''}
-            lead={converting ?? {}}
-            basePath={basePath ?? ''}
-            roster={roster}
-          />
-        </>
-      ) : null}
+      <AssignOwnerDialog
+        lead={assigning}
+        roster={roster}
+        onClose={() => setAssigning(null)}
+        onAssign={(uid) => {
+          if (!assigning) return
+          void writeLead(
+            assigning,
+            { ownerUid: uid || deleteField() },
+            uid ? 'Owner assigned' : 'Owner cleared',
+          )
+          setAssigning(null)
+        }}
+      />
+      <LeadUnqualifyDialog
+        open={Boolean(unqualifying)}
+        onClose={() => setUnqualifying(null)}
+        hostId={unqualifying?.hostId ?? hostId ?? ''}
+        leadId={unqualifying?.leadId ?? ''}
+        leadLabel={String(unqualifying?.['name'] || unqualifying?.['email'] || '')}
+      />
+      {/* The row's site, not the mounted one: at the organization level a
+          lead is its own site's record, and the conversion is that site's
+          capture (AGL-2641). Under a site the two are the same. */}
+      <LeadConvertDialog
+        open={Boolean(converting)}
+        onClose={() => setConverting(null)}
+        hostId={converting?.hostId ?? hostId ?? ''}
+        orgId={orgId}
+        org={org as Record<string, unknown> | undefined}
+        leadId={converting?.leadId ?? ''}
+        lead={converting ?? {}}
+        basePath={basePath ?? ''}
+        roster={roster}
+      />
     </>
   )
 }

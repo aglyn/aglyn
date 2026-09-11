@@ -24,14 +24,9 @@
  * reaches the capture door only to be refused there. The button has to stay
  * where it is — an absent button and an inapplicable one look alike — say
  * why, and never open the dialog.
- *
- * READ-ONLY WITHOUT THE CRM SUITE (AGL-2790). On a plan without the suite the
- * card shows the lead and works none of it: no Convert, no status or owner to
- * change, no notes to save and no Unqualify, beneath the suite's notice —
- * while the erasure the page adds to the overflow stays.
  */
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps, ReactNode } from 'react'
 import { LeadPropertiesCard } from './lead-properties-card'
 
@@ -48,36 +43,16 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: () => undefined }),
 }))
-// The suite notice links to the org's plans, which it reads off the route.
-jest.mock('next/navigation', () => ({
-  useParams: () => ({ orgSlug: 'acme' }),
-  usePathname: () => '/',
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
-  useSearchParams: () => new URLSearchParams(),
-}))
 /*
  * The header is the record's chrome — the trail, the help affordance, the
  * overflow — with a spec of its own; here it is the slot the actions render
- * into, and the overflow's items as a plain list. The send-email button and
- * the owner picker each open reads this spec has no interest in.
+ * into. The send-email button and the owner picker each open reads this
+ * spec has no interest in.
  */
 jest.mock('./crm-record-header', () => ({
-  CrmRecordHeader: ({
-    actions,
-    children,
-    menuItems,
-  }: {
-    actions?: ReactNode
-    children?: ReactNode
-    menuItems?: Array<{ key: string; label: string }>
-  }) => (
+  CrmRecordHeader: ({ actions, children }: { actions?: ReactNode; children?: ReactNode }) => (
     <div>
       {actions}
-      <ul aria-label="More actions">
-        {(menuItems ?? []).map((item) => (
-          <li key={item.key}>{item.label}</li>
-        ))}
-      </ul>
       {children}
     </div>
   ),
@@ -133,8 +108,6 @@ function renderCard(props: Partial<ComponentProps<typeof LeadPropertiesCard>> = 
 }
 
 const convert = () => screen.getByRole('button', { name: 'Convert' }) as HTMLButtonElement
-const overflow = () => within(screen.getByRole('list', { name: 'More actions' }))
-const ERASE = { key: 'erase', label: 'Erase this person', onClick: () => undefined }
 
 describe('Convert on the lead page', () => {
   it('opens the dialog on an open lead', () => {
@@ -152,41 +125,5 @@ describe('Convert on the lead page', () => {
     expect(screen.getByLabelText(PENDING_REASON)).not.toBeNull()
     fireEvent.click(convert())
     expect(onConvert).not.toHaveBeenCalled()
-  })
-})
-
-describe('the lead page on a plan without the CRM suite (AGL-2790)', () => {
-  it('shows the lead and works none of it, beneath the suite notice', () => {
-    renderCard({ readOnly: true, lead: { ...lead, notes: 'Called back Tuesday' } })
-    expect(screen.queryByRole('button', { name: 'Convert' })).toBeNull()
-    expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
-    expect(screen.queryByRole('textbox', { name: 'Notes' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Save notes' })).toBeNull()
-    // What those controls would change, as facts.
-    expect(screen.getByText('Unassigned')).toBeTruthy()
-    expect(screen.getByText('Called back Tuesday')).toBeTruthy()
-    const notice = screen.getByRole('alert')
-    expect(notice.textContent).toContain('This lead is read-only on your plan.')
-    expect(notice.textContent).toContain('part of the CRM suite. Included from Starter.')
-    // The way to the plans is a link styled, and announced, as a button.
-    expect(
-      within(notice).getByRole('button', { name: 'View plans' }).getAttribute('href'),
-    ).toMatch(/^\/acme\/billing/)
-  })
-
-  it('keeps the erasure on the overflow and drops Unqualify', () => {
-    renderCard({ readOnly: true, extraMenuItems: [ERASE] })
-    expect(overflow().getByText('Erase this person')).toBeTruthy()
-    expect(overflow().queryByText('Unqualify')).toBeNull()
-  })
-
-  it('CONTROL: with the suite the same lead offers Convert, its status, its notes and Unqualify', () => {
-    renderCard({ extraMenuItems: [ERASE] })
-    expect(convert().disabled).toBe(false)
-    expect(screen.getByRole('combobox', { name: 'Status' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Save notes' })).toBeTruthy()
-    expect(overflow().getByText('Unqualify')).toBeTruthy()
-    expect(overflow().getByText('Erase this person')).toBeTruthy()
-    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

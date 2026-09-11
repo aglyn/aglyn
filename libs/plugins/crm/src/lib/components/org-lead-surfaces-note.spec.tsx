@@ -147,16 +147,6 @@ describe('OrgLeadSurfacesNote', () => {
     expect(b.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('says every form on every site files a lead on a plan without the CRM suite, reading no forms (AGL-2790)', () => {
-    render(<OrgLeadSurfacesNote suiteIncluded={false} />, { wrapper: mountWith(HOSTS) })
-    expect(
-      screen.getByText(/^Every form on every site files a lead from each submission/),
-    ).toBeTruthy()
-    expect(screen.queryByText('Site A')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Turn on lead routing' })).toBeNull()
-    expect(listened.size).toBe(0)
-  })
-
   it("writes the switch to that site's form and names the site in the toast", async () => {
     render(<OrgLeadSurfacesNote />, { wrapper: mountWith(HOSTS) })
     const switches = screen.getAllByRole('button', { name: 'Turn on lead routing' })

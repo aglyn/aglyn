@@ -30,18 +30,12 @@
  *  3. AT THE ORGANIZATION LEVEL the dialog is fed the ROW'S site, not the
  *     mounted one (there is none): a lead is its own site's record.
  *
- * And a fourth (AGL-2790): ON A PLAN WITHOUT THE CRM SUITE the section is
- * read-only. The row menu offers Open lead alone, a row's status is a chip
- * with no select behind it, there is no import, and the suite's notice says
- * why with the way to the plans — while the same rows on a plan with the
- * suite keep every act.
- *
- * The grid is a plain list that renders the status and actions cells; the
- * row menu is real, the dialog a stub that records what it was opened for.
+ * The grid is a plain list that renders the actions cell; the row menu is
+ * real, the dialog a stub that records what it was opened for.
  */
 
 import { CONTACT_ERASURE_REQUESTED_FIELD } from '@aglyn/aglyn'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { CrmLeadsSection } from './leads-section'
 
@@ -110,10 +104,6 @@ jest.mock('./lead-history-card', () => ({
   leadSourceLabel: (source: string) => source,
   leadTimeLabel: () => '',
 }))
-// The import drawer opens reads of its own; here it is the button that is or is not drawn.
-jest.mock('./lead-import-drawer', () => ({
-  LeadImportButton: () => <button type="button">{'Import CSV'}</button>,
-}))
 jest.mock('./lead-unqualify-dialog', () => ({
   LeadUnqualifyDialog: () => null,
 }))
@@ -144,8 +134,6 @@ jest.mock('next/navigation', () => ({
   // The menu's Open lead item is a real link, which reads where it is.
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
-  // The suite notice links to the org's plans, which it reads off the route.
-  useParams: () => ({ orgSlug: 'acme' }),
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
@@ -158,9 +146,6 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     </div>
   ),
   MdiIcon: () => null,
-  AppLink: ({ children, href }: { children: ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
-  ),
 }))
 jest.mock('@aglyn/shared-ui-jsx/components/list-pagination.component', () => ({
   ListPagination: () => null,
@@ -170,9 +155,9 @@ jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => ({
   default: ({ label }: { label: string }) => <p>{label}</p>,
 }))
 /*
- * The grid, as a list: one item per row carrying the STATUS and ACTIONS
- * cells, which is where what is under test lives. Everything else about the
- * grid is MUI's.
+ * The grid, as a list: one item per row carrying the ACTIONS cell, which is
+ * where the menu under test lives. Everything else about the grid is
+ * MUI's.
  */
 jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
   ListTable: ({
@@ -182,14 +167,13 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
     rows: Array<{ $id: string; email: string }>
     columns: Array<{ field: string; renderCell?: (params: { row: unknown }) => ReactNode }>
   }) => {
-    const cell = (field: string) => columns.find((column) => column.field === field)
+    const actions = columns.find((column) => column.field === 'actions')
     return (
       <ul>
         {rows.map((row) => (
           <li key={row.$id}>
             {row.email}
-            <span data-testid={`status-${row.$id}`}>{cell('status')?.renderCell?.({ row })}</span>
-            {cell('actions')?.renderCell?.({ row })}
+            {actions?.renderCell?.({ row })}
           </li>
         ))}
       </ul>
@@ -199,7 +183,6 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
 
 const BASE_PATH = '/acme/hosts/shop/crm'
 const ORG = { $id: 'org-1', plan: 'pro' } as any
-const FREE_ORG = { $id: 'org-1', plan: 'free' } as any
 
 const lead = (id: string, email: string, fields: Record<string, unknown> = {}) => ({
   $id: id,
@@ -222,9 +205,9 @@ const LEADS = [
   lead('l-erasure', 'sam@example.com', { [CONTACT_ERASURE_REQUESTED_FIELD]: 1_700_000_000_000 }),
 ]
 
-const renderSite = (org = ORG) =>
+const renderSite = () =>
   render(
-    <CrmLeadsSection hostId="site-1" entitled org={org} basePath={BASE_PATH} releaseFlag={{} as any} />,
+    <CrmLeadsSection hostId="site-1" entitled org={ORG} basePath={BASE_PATH} releaseFlag={{} as any} />,
   )
 
 /** Opens a row's menu and answers its Convert… item. */
@@ -312,40 +295,5 @@ describe('Convert… on the Leads row menu (AGL-2641)', () => {
       orgId: 'org-1',
       basePath: '/acme/crm',
     })
-  })
-})
-
-describe('the Leads section on a plan without the CRM suite (AGL-2790)', () => {
-  it('offers Open lead alone on the row menu', async () => {
-    renderSite(FREE_ORG)
-    fireEvent.click(screen.getByRole('button', { name: 'More actions for maya@example.com' }))
-    const labels = (await screen.findAllByRole('menuitem')).map((item) => item.textContent)
-    expect(labels).toEqual(['Open lead'])
-  })
-
-  it('draws each status as a chip, with no select to change it', () => {
-    renderSite(FREE_ORG)
-    for (const id of ['l-open', 'l-unqualified', 'l-erasure']) {
-      expect(within(screen.getByTestId(`status-${id}`)).queryByRole('combobox')).toBeNull()
-    }
-  })
-
-  it('offers no import, keeps the export, and says why under the notice with the way to the plans', () => {
-    renderSite(FREE_ORG)
-    expect(screen.queryByRole('button', { name: 'Import CSV' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeTruthy()
-    const notice = screen.getByRole('alert')
-    expect(notice.textContent).toContain('Leads are read-only on your plan.')
-    expect(notice.textContent).toContain('part of the CRM suite. Included from Starter.')
-    expect(
-      within(notice).getByRole('link', { name: 'View plans' }).getAttribute('href'),
-    ).toMatch(/^\/acme\/billing/)
-  })
-
-  it('CONTROL: with the suite the same rows carry a status select and the import, and no notice', () => {
-    renderSite()
-    expect(within(screen.getByTestId('status-l-open')).getByRole('combobox')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Import CSV' })).toBeTruthy()
-    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

@@ -34,12 +34,6 @@ export type RecordActivityCardProps = ActivityRecordLink & {
   /** The site the record is read under, or `null` at the organization level. */
   hostId: string | null
   org: CrmOrg
-  /**
-   * The log is shown and not added to: no Log activity, and no row's edit or
-   * delete. A lead's page passes it on a plan without the CRM suite
-   * (AGL-2790), where logging an activity is the suite's.
-   */
-  readOnly?: boolean
 }
 
 /**
@@ -58,7 +52,7 @@ export type RecordActivityCardProps = ActivityRecordLink & {
  * stream; see `contact-timeline-card.tsx`, which is this card's superset.
  */
 export function RecordActivityCard(props: RecordActivityCardProps) {
-  const { hostId, org, contactId, companyId, dealId, leadId, readOnly = false } = props
+  const { hostId, org, contactId, companyId, dealId, leadId } = props
   const scope = useActivityScope(hostId, org)
   /*
    * Memoized because the link is a listener dependency by value inside
@@ -83,24 +77,22 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
   }, [])
   const close = useCallback(() => setDialogOpen(false), [])
 
-  const logButton = readOnly ? undefined : (
-    <Button
-      size="small"
-      variant="contained"
-      color="primary"
-      onClick={openNew}
-      disabled={!activities.ready}
-    >
-      {'Log activity'}
-    </Button>
-  )
-
   return (
     <>
       <CardDisplay
         header={'Activity'}
         help={pluginDocsHelp('contactActivities', { anchor: '#logging-an-activity' })}
-        actions={logButton}
+        actions={
+          <Button
+            size="small"
+            variant="contained"
+            color="primary"
+            onClick={openNew}
+            disabled={!activities.ready}
+          >
+            {'Log activity'}
+          </Button>
+        }
         contentGutterX
         contentGutterY
       >
@@ -112,24 +104,31 @@ export function RecordActivityCard(props: RecordActivityCardProps) {
           <ActivityList
             rows={activities.rows}
             scope={scope}
-            onEdit={readOnly ? undefined : openEdit}
-            readOnly={readOnly}
+            onEdit={openEdit}
             hasMore={activities.hasMore}
             onShowMore={activities.showMore}
             emptyText="A call, an email, a meeting or a note about this record goes here."
-            emptyAction={logButton}
+            emptyAction={
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={openNew}
+                disabled={!activities.ready}
+              >
+                {'Log activity'}
+              </Button>
+            }
           />
         )}
       </CardDisplay>
-      {readOnly ? null : (
-        <LogActivityDialog
-          open={dialogOpen}
-          onClose={close}
-          scope={scope}
-          link={link}
-          activity={editing}
-        />
-      )}
+      <LogActivityDialog
+        open={dialogOpen}
+        onClose={close}
+        scope={scope}
+        link={link}
+        activity={editing}
+      />
     </>
   )
 }

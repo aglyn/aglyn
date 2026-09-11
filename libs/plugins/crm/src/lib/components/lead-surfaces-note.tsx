@@ -44,12 +44,6 @@ import {
 
 export interface LeadSurfacesNoteProps {
   hostId: string
-  /**
-   * Whether the org's plan carries the CRM suite. Without it every form is a
-   * lead surface and there is no routing to describe (AGL-2790). Absent reads
-   * as carried.
-   */
-  suiteIncluded?: boolean
 }
 
 /** The always-on surfaces, named once wherever the note is drawn. */
@@ -58,17 +52,6 @@ export const LEAD_SURFACES_INTRO =
 /** What every capture does whether or not it files a lead. */
 export const LEAD_SURFACES_CONTACTS_TOO =
   'Every submission with an email address also updates the contact in Contacts at stage Lead.'
-/**
- * What files a lead on a plan without the CRM suite, under one site
- * (AGL-2790): every form, so there is no switch to offer.
- */
-export const LEAD_SURFACES_EVERY_FORM =
-  'Every form on this site files a lead from each submission that carries an email ' +
-  'address, and so does a member sign-up.'
-/** The same, at the organization level, where the note speaks for every site. */
-export const LEAD_SURFACES_EVERY_FORM_ON_EVERY_SITE =
-  'Every form on every site files a lead from each submission that carries an email ' +
-  'address, and so does a member sign-up.'
 
 /** One site's forms, sorted into the two answers the note gives. */
 export interface LeadSurfaceFormsResult {
@@ -290,10 +273,6 @@ UnroutedLeadSurfaces.displayName = 'UnroutedLeadSurfaces'
  * form's people were in it and another's were not. This says so, by name,
  * and offers the switch here for the forms that could carry it.
  *
- * On a plan without the CRM suite every form is a lead surface
- * (`submissionFilesLead`, AGL-2790), so the note says that in one sentence,
- * reads no forms and offers no switch: there is no routing to describe.
- *
  * The reader, the switch and the two rows are shared with the
  * organization-level note (`OrgLeadSurfacesNote`), which draws them once
  * per site; this is the one-site composition. The form links resolve the
@@ -301,20 +280,6 @@ UnroutedLeadSurfaces.displayName = 'UnroutedLeadSurfaces'
  * the only address the note is handed.
  */
 export function LeadSurfacesNote(props: LeadSurfacesNoteProps) {
-  const { hostId, suiteIncluded = true } = props
-  if (!suiteIncluded) {
-    return (
-      <Typography variant="body2" color="text.secondary">
-        {LEAD_SURFACES_EVERY_FORM}
-      </Typography>
-    )
-  }
-  return <RoutedLeadSurfacesNote hostId={hostId} />
-}
-LeadSurfacesNote.displayName = 'LeadSurfacesNote'
-
-/** The note on a plan with the suite: the routed forms by name, and the switch. */
-function RoutedLeadSurfacesNote(props: { hostId: string }) {
   const { hostId } = props
   const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
   const { routed, unrouted, truncated, status } = useLeadSurfaceForms(hostId)
@@ -357,6 +322,6 @@ function RoutedLeadSurfacesNote(props: { hostId: string }) {
     </Stack>
   )
 }
-RoutedLeadSurfacesNote.displayName = 'RoutedLeadSurfacesNote'
+LeadSurfacesNote.displayName = 'LeadSurfacesNote'
 
 export default LeadSurfacesNote
