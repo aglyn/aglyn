@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { pipeline } from 'node:stream/promises'
 import {
   isLockdownActive,
   type LockdownState,
@@ -41,6 +42,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { getPlatformLockdown } from './lockdown'
+import { mediaCdnRateLimitRefusal } from './media-cdn-rate-limit'
 import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
@@ -839,6 +841,55 @@ export function parseMediaCdnRange(
 }
 
 /**
+ * Whether a delivery ended early only because its client stopped reading
+ * (AGL-2810).
+ *
+ * A `<video>` element abandons its opening request once it has buffered
+ * enough, and abandons another on every seek, so this is the ordinary way a
+ * streamed response ends early — and it is not a delivery failure, so it is
+ * neither logged nor answered.
+ *
+ * `pipeline` reports it as a premature close, and reports a Storage read that
+ * closed early the same way. The response tells them apart: a client that
+ * canceled destroyed it without an error, while a failed read makes
+ * `pipeline` destroy it WITH the read's error.
+ */
+function mediaCdnClientWentAway(
+  error: unknown,
+  res: { errored?: Error | null },
+): boolean {
+  return (
+    (error as { code?: unknown } | null)?.code === 'ERR_STREAM_PREMATURE_CLOSE' &&
+    !res.errored
+  )
+}
+
+/**
+ * The headers that describe the file, removed from an answer that will not
+ * carry it.
+ *
+ * A failure found after the representation was chosen would otherwise go out
+ * under the file's own headers: a `Content-Length` of the whole object on a
+ * short JSON body leaves the client waiting for bytes that never come, a
+ * `video/mp4` type misdescribes the body outright, and the validator would
+ * attach the file's identity to an error. `no-store` because the answer is
+ * about this request, not the URL.
+ */
+function clearMediaCdnRepresentation(res: NextApiResponse): void {
+  for (const header of [
+    'Content-Type',
+    'Content-Length',
+    'Content-Range',
+    'Content-Disposition',
+    'Accept-Ranges',
+    'ETag',
+  ]) {
+    res.removeHeader(header)
+  }
+  res.setHeader('Cache-Control', 'no-store')
+}
+
+/**
  * CDN media delivery (AGL-175 / AGL-829). Two URL shapes resolve the same
  * asset by `mediaId`, so delivery never depends on the object's storage
  * location (folder moves don't change the URL):
@@ -869,6 +920,11 @@ export function parseMediaCdnRange(
  * `firebasestorage.googleapis.com` URLs (S8): a `<video>` seek is a Range
  * request, and a server that ignores it forces the player to re-download
  * the whole file.
+ *
+ * The body streams (AGL-2810): each chunk leaves as Storage produces it, so no
+ * file is held whole in function memory. A GET that will read the file is
+ * first counted against its caller (AGL-2812); see
+ * {@link mediaCdnRateLimitRefusal}.
  */
 export async function serveMediaCdn(
   req: NextApiRequest,
@@ -1289,9 +1345,32 @@ export async function serveMediaCdn(
           ? `${basePath}__w${width}.webp`
           : basePath
     const file = bucket.file(objectPath)
+    // The caller's count (AGL-2812), asked here and nowhere earlier: past every
+    // gate and the 304 exit, where the Storage reads begin. It starts before the
+    // metadata read and is awaited after it, so the two run together. It never
+    // rejects, and answers `null` whenever it could not count.
+    const callerCount =
+      req.method === 'GET'
+        ? mediaCdnRateLimitRefusal({
+            headers: req.headers,
+            remoteAddress: req.socket?.remoteAddress,
+            rateClass: mediaCdnEdgeCacheable(docServedType) ? 'image' : 'non-image',
+          })
+        : null
     const [metadata] = await file.getMetadata().catch(() => [null as any])
     if (!metadata) {
       res.status(404).json({ error: 'Not found' })
+      return
+    }
+    const refused = await callerCount
+    if (refused) {
+      // The file's validator and cache policy are already set. A refusal is
+      // about this caller rather than the URL, so no cache may keep it: an
+      // edge holding a 429 would refuse every visitor to that image for an
+      // hour.
+      clearMediaCdnRepresentation(res)
+      res.setHeader('Retry-After', String(refused.retryAfterSeconds))
+      res.status(429).json({ error: 'Too many requests' })
       return
     }
 
@@ -1424,6 +1503,10 @@ export async function serveMediaCdn(
     // serves, not user-facing totals (billing accuracy is AGL-41's job).
     // Hot-doc note: a single day-doc caps at ~1 write/sec sustained;
     // acceptable at current traffic, shard or sample if an asset gets hot.
+    //
+    // Written before the first byte, so `bytes` is what this request asked
+    // the origin to send. A client that abandons the stream receives less;
+    // the figure is the ceiling on what left, not a count of what arrived.
     const day = new Date().toISOString().slice(0, 10)
     void firestore
       .collection(isOrg ? 'orgs' : 'hosts')
@@ -1453,16 +1536,28 @@ export async function serveMediaCdn(
     // `start`/`end` are inclusive in `createReadStream`, matching the parsed
     // range — GCS is asked for exactly the requested bytes and nothing is
     // over-read from Storage on a partial serve.
-    await new Promise<void>((resolve, reject) => {
-      file
-        .createReadStream(partial ? { start: range.start, end: range.end } : {})
-        .on('error', reject)
-        .on('end', resolve)
-        .pipe(res)
-    })
+    //
+    // The response streams (AGL-2810): each chunk leaves as Storage produces
+    // it, and the next is read only once the client has taken the last, so a
+    // file is never held in function memory whatever its size. `pipeline`
+    // rather than `pipe` because streaming needs teardown in both directions,
+    // which `pipe` does not give — a failed Storage read must fail the
+    // response, and a client that stops reading must stop the Storage read.
+    await pipeline(
+      file.createReadStream(partial ? { start: range.start, end: range.end } : {}),
+      res,
+    )
   } catch (error) {
+    if (mediaCdnClientWentAway(error, res)) return
     console.error('serveMediaCdn failed', scopeSegment, mediaId, error)
-    if (!res.headersSent) res.status(500).json({ error: 'Delivery failed' })
-    else res.end()
+    if (!res.headersSent) {
+      clearMediaCdnRepresentation(res)
+      res.status(500).json({ error: 'Delivery failed' })
+    } else {
+      // The status line has already left, so the body is the only place the
+      // failure can surface. A destroyed response is a broken transfer to the
+      // client; ending it would pass a truncated file off as a whole one.
+      res.destroy(error instanceof Error ? error : new Error(String(error)))
+    }
   }
 }

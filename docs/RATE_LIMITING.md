@@ -31,10 +31,52 @@ Firestore counter, so the cap is global.
 | `POST /api/orgs/create` | 3 / hour per uid AND 10 / hour per IP | Scripted org minting (AGL-1534). The AGL-1523 signup grace admits a brand-new unverified account, so each fresh account can create one org; the uid key catches a stuck or scripted client, the IP key catches a farm rotating accounts. A real person creates at most 2–3 workspaces in a burst, so 3/h/uid clears every human while an office NAT signing up a team still fits under 10/h/IP. |
 | `/api/v1/*` (customer REST API) | 120 / min per API key | The limit is **published** (AGL-1679). Not a secret to protect — a number customers plan against. See below. |
 | `/api/*` plugin dispatcher, **writes** | 120 / min per (site, IP) | Unbounded document creation in the *merchant's* Firestore (AGL-1770). See below. |
+| `GET /api/media/cdn/*`, **deliveries** | 600 / min per IP for images, 180 / min per IP for everything else | Egress on anonymous public delivery, which the firewall deliberately does not challenge (AGL-2812). See below. |
 
 Keys are compound on purpose. Unlock is keyed per *(screen, IP)* so a shared
 office NAT can't be locked out of a whole site by one person, while one IP
 still can't get a fresh budget for every screen it attacks.
+
+## The media CDN's per-caller limit (AGL-2812)
+
+`/api/media/cdn/*` serves every public image, poster, film and document, and
+the firewall bypasses it on purpose: link-preview crawlers and Gmail's image
+proxy cannot solve a challenge. Both middlewares exclude `/api/*`, so the limit
+lives inside `serveMediaCdn`, in `lib/server/media-cdn-rate-limit.ts`.
+
+- **What is counted:** a GET that gets past every access gate and the 304
+  exit, which is where the Storage reads begin. The gates' refusals, 304s and
+  HEADs send no file and are not counted. The count starts beside the metadata
+  read, so a request that then finds no object, or an unsatisfiable range, is
+  counted too.
+- **Two budgets per caller, split on `mediaCdnEdgeCacheable`:** 600 image
+  deliveries a minute, and 180 of everything else. The edge holds images, so
+  only a miss reaches the function. Everything else is `private`, so every
+  request reaches it, and a single video master is up to 200 MB.
+- **The thresholds come from production request logs read on 2026-09-11**:
+  the tenant's last 7 days, and the 16 hours the console retains. The busiest
+  minute across the whole route was 98 image deliveries, 31 other deliveries
+  and 32 crawler requests, and each of those minutes was a single browser
+  session. Each ceiling is at least five times its peak, so no single address
+  reaches it with traffic the route has actually served.
+- **Keyed on the caller alone**, not the site, the asset or the query string.
+  Cycling ids or cache-busting a URL buys nothing, and both mounts share one
+  counter. IPv6 counts by its `/64`. A request with no readable address is not
+  counted, because one shared bucket would refuse all of those callers at once.
+- **It fails open**, where the limiters above fail soft. Only a durable count
+  past the ceiling refuses. A contended count, a count that misses its 1 s
+  budget, a degraded store and anything thrown all admit. The counter and the
+  media document share one Firestore, so while the counter cannot answer the
+  delivery is usually failing already, and refusing would add a second outage
+  to the first.
+- **A refusal** is a `429` with `Retry-After` and `Cache-Control: no-store`, and
+  none of the file's headers. An edge holding a 429 would refuse every visitor
+  to that image.
+- **Not bounded here:** the bytes in one request, a caller spread across many
+  addresses, and an org's total delivery. A WAF rule, signed or
+  referrer-checked public URLs and a per-org byte cap are the controls for
+  those, and each changes what an `og:image`, a mailed image or an embed can
+  fetch.
 
 ## The visitor-write limiter on the plugin dispatcher (AGL-1770)
 

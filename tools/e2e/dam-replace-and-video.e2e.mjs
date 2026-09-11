@@ -51,7 +51,8 @@
 // tenant dev server on :4500 (E2E_TENANT_URL), both carrying
 // FIREBASE_STORAGE_EMULATOR_HOST. E2E_STORAGE_BUCKET names the bucket the two
 // servers use. Nothing is uploaded until the script has proved that both
-// servers read that bucket from the emulator.
+// servers read that bucket from the emulator, and that neither holds a
+// Stripe, Vercel or Resend key, which only `serve:*:emulated` guarantees.
 //
 //   npm run e2e:dam
 
@@ -63,6 +64,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { chromium } from 'playwright-core'
 import sharp from 'sharp'
+import { serversHoldNoCredential } from '../scripts/lib/emulated-env.mjs'
 import { putMediaDocument } from '../scripts/lib/media-counter.mjs'
 import {
   adminFirestore,
@@ -242,6 +244,18 @@ const files = {
  * 0. PREFLIGHT — refuse to upload anything to a server that is not reading
  *    Storage from the emulator.
  *=========================================*/
+
+// Credentials first, before anything is written even to the emulator: a
+// server holding a Stripe, Vercel or Resend key turns a step that reaches
+// billing, email or domains into a call to the real service (AGL-2828).
+{
+  const credentials = serversHoldNoCredential({ console: BASE_URL, tenant: TENANT_URL }, { repoRoot })
+  if (!credentials.ok) {
+    console.error(`REFUSED — ${credentials.detail}`)
+    process.exit(2)
+  }
+  tally.pass('neither server holds a credential the emulators do not stand in for', credentials.detail)
+}
 
 const PREFLIGHT_ID = `e2e-dam-preflight`
 {
