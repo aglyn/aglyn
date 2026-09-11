@@ -86,7 +86,10 @@ import RowActionsMenu, {
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
+import { fetchArtifactUsage } from '../artifacts/artifact-delete-confirm.component'
+import type { ArtifactUsageScan } from '../artifacts/artifact-usage-copy'
 import CreateArtifactDrawer from '../create-artifact-drawer.component'
+import CollectionDeleteDialog from './collection-delete-dialog.component'
 import {
   AVATAR_HINT,
   SOCIAL_IMAGE_HINT,
@@ -585,6 +588,15 @@ export function CollectionEntriesPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
+  /**
+   * What links to the collection's listing page (AGL-2806): the where-used
+   * scan, started by the click that opens the dialog so both begin on the same
+   * tick. Held as the promise and never awaited here — the dialog fills in the
+   * answer when it lands.
+   */
+  const [deleteScan, setDeleteScan] = useState<Promise<
+    ArtifactUsageScan | null
+  > | null>(null)
   /**
    * The same rule the route enforces, run here for fast feedback — so the
    * dialog can NAME what still depends on the collection instead of arming a
@@ -1506,6 +1518,17 @@ export function CollectionEntriesPage() {
                                       color="error"
                                       onClick={() => {
                                         setDeleteConfirm('')
+                                        // Started beside the open and never
+                                        // awaited, so the dialog does not
+                                        // wait on the scan (AGL-2806).
+                                        setDeleteScan(
+                                          fetchArtifactUsage({
+                                            hostId,
+                                            kind: 'collection',
+                                            id: selected.$id,
+                                            user,
+                                          }),
+                                        )
                                         setDeleteOpen(true)
                                       }}
                                       sx={{
@@ -2085,55 +2108,20 @@ export function CollectionEntriesPage() {
         includeDescription={false}
         extraFields={collectionCreateFields}
       />
-      {/* Delete collection (AGL-1324). Type-the-name confirmation, matching the
-          site delete. Refuses while a template screen still renders it or
-          entries still live under it — naming which — because deleting a
-          collection must never be the act that removes a published page. */}
-      <Dialog
+      {/* Delete collection (AGL-1324): refuses while a template screen or an
+          entry still depends on the collection, and names what links to its
+          listing page before the author confirms (AGL-2806). */}
+      <CollectionDeleteDialog
         open={deleteOpen}
-        onClose={() => (deleteBusy ? undefined : setDeleteOpen(false))}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>{`Delete "${selected?.displayName ?? ''}"?`}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {deleteDenial ? (
-              <Alert severity="warning">{deleteDenial.error}</Alert>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                {`The collection and its /${selected?.slug ?? ''} route are ` +
-                  'permanently deleted. This cannot be undone.'}
-              </Typography>
-            )}
-            <TextField
-              label={`Type "${selected?.displayName ?? ''}" to confirm`}
-              value={deleteConfirm}
-              disabled={deleteBusy || deleteDenial !== null}
-              onChange={(event) => setDeleteConfirm(event.target.value)}
-              size="small"
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={deleteBusy} onClick={() => setDeleteOpen(false)}>
-            {'Cancel'}
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            disabled={
-              deleteBusy ||
-              deleteDenial !== null ||
-              deleteConfirm.trim() !== (selected?.displayName ?? '')
-            }
-            onClick={() => void handleDeleteCollection()}
-          >
-            {'Delete collection'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        collection={selected}
+        denial={deleteDenial}
+        scan={deleteScan}
+        confirmText={deleteConfirm}
+        onConfirmTextChange={setDeleteConfirm}
+        busy={deleteBusy}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => void handleDeleteCollection()}
+      />
       {/* Author editor (AGL-2486). The Person/Organization Select is a real
           branch: the fields below it change with it, because `jobTitle` and
           `worksFor` are not defined on `schema.org/Organization` and a form

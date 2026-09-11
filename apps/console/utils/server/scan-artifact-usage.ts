@@ -16,6 +16,7 @@
  */
 
 import {
+  formatCollectionLinkValue,
   nodesPlaceForm,
   nodesReferenceComponent,
   nodesReferenceScreen,
@@ -30,14 +31,15 @@ export interface UsageDependent {
   via: Array<'id' | 'name'>
   versionId?: string
   /**
-   * HOW the dependent references the artifact — screens only, for now
-   * (AGL-703).
+   * HOW the dependent references the artifact — screens and collection
+   * listings (AGL-703, AGL-2806).
    *
    * A component or a layout has exactly one kind of dependent and the noun
    * says everything: an instance, or a binding. A screen has three, and they
    * break in three different ways — a link goes dead, a child moves, a
    * collection loses the page it renders through. Copy that could not tell
-   * them apart would have to describe the worst case every time.
+   * them apart would have to describe the worst case every time. A collection
+   * listing's dependents are all links, and say so.
    */
   relation?: 'link' | 'child' | 'template'
 }
@@ -320,6 +322,62 @@ export function scanScreenUsage(
   }
 
   return [...found.values()]
+}
+
+/**
+ * Everything that links to a content collection's LISTING page (AGL-2806).
+ *
+ * A Screen Link, Button, Image, Link Container, Tabs link, Accordion header,
+ * form redirect or Link-typed component property can point at `/{slug}` by
+ * storing `collection:<collectionId>` (AGL-2799): the key the linkable routing
+ * map holds the listing under, resolved through the same lookup a screen link
+ * is. Deleting the collection takes that key out of the map, and every such
+ * link renders with no address (AGL-1893). So a listing link is found the way
+ * a screen link is — in published screens, published layouts and component
+ * definitions, by {@link linksTo}.
+ *
+ * Links are the only dependents reported. A collection's entries and template
+ * screens depend on it too, but `collectionDeleteDenial` refuses the delete
+ * while either exists, so neither is a warning to give here.
+ *
+ * Not searched: a Markdown body. markdown-lite keeps only site-relative and
+ * http(s) link targets, so a `collection:` target typed there renders as its
+ * words with no link, and a delete has nothing to break.
+ */
+export function scanCollectionUsage(
+  collectionId: string,
+  sources: {
+    screens: UsageCandidate[]
+    layouts: UsageCandidate[]
+    components: UsageCandidate[]
+  },
+): UsageDependent[] {
+  if (!collectionId.trim()) return []
+  const listing = formatCollectionLinkValue(collectionId)
+  const dependents: UsageDependent[] = []
+  const collect = (
+    candidates: UsageCandidate[],
+    type: 'screen' | 'layout' | 'component',
+  ) => {
+    for (const candidate of candidates) {
+      if (!isLive(candidate)) continue
+      if (!linksTo(candidate, listing)) continue
+      dependents.push({
+        type,
+        id: candidate.id,
+        name: labelFor(candidate),
+        // The value names the collection by id, so a slug rename cannot break
+        // it — only a delete.
+        via: ['id'],
+        relation: 'link',
+        ...(candidate.versionId ? { versionId: candidate.versionId } : {}),
+      })
+    }
+  }
+  collect(sources.screens, 'screen')
+  collect(sources.layouts, 'layout')
+  collect(sources.components, 'component')
+  return dependents
 }
 
 /**
