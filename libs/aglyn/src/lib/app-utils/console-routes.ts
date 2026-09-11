@@ -190,6 +190,11 @@ export enum Route {
   ORG_SETTINGS_BRANDING = '/[orgSlug]/settings/branding',
   ORG_SETTINGS_SSO = '/[orgSlug]/settings/sso',
   ORG_SETTINGS_OWNERSHIP = '/[orgSlug]/settings/ownership',
+  /**
+   * Export the people a workspace holds and file a person's erasure
+   * (AGL-2839) — outside the CRM, so it is there on every plan.
+   */
+  ORG_SETTINGS_PRIVACY = '/[orgSlug]/settings/privacy',
   ORG_SETTINGS_DELETE = '/[orgSlug]/settings/delete',
   /**
    * Billing, section by section (AGL-2501).

@@ -166,6 +166,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/csv-import'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm-csv'),
+  // The REAL plan tables, so the CRM's plan gate answers as it does live.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   pluginRequestFromWeb: async (request: Request) => {
     const url = new URL(request.url)
     return {
@@ -301,6 +303,56 @@ describe('what the export refuses', () => {
   it('honors a lockdown refusal', async () => {
     mockLocked = Response.json({ error: 'Locked' }, { status: 423 })
     expect((await callExport({ resource: 'companies' })).status).toBe(423)
+  })
+})
+
+/**
+ * THE PEOPLE FILES ON EVERY PLAN, THE CRM'S RECORDS FROM STARTER
+ * (AGL-2839, AGL-2851).
+ *
+ * Exporting the contacts and leads a workspace holds is an obligation, so a
+ * Free workspace takes both, and neither asks the release flag. Companies,
+ * deals and tasks are the CRM's: refused `plan_required` / `crm` on a plan
+ * without it, staff included, after the caller is known.
+ */
+describe('the plan and the people files', () => {
+  const refusedForPlan = async (response: Response) =>
+    response.status === 403 &&
+    (await response.json().then((body: any) => body.reason === 'plan_required' && body.code === 'crm'))
+
+  it('refuses the CRM’s own records on Free, staff included', async () => {
+    mockOrg = { plan: 'free' }
+    seedCompanies(2)
+    for (const resource of ['companies', 'deals', 'tasks']) {
+      expect([resource, await refusedForPlan(await callExport({ resource }))]).toEqual([resource, true])
+    }
+    mockDecoded = { uid: 'staff-1', email_verified: true, staff: true }
+    expect(await refusedForPlan(await callExport({ resource: 'companies' }))).toBe(true)
+  })
+
+  it('writes the contacts and leads files on Free', async () => {
+    mockOrg = { plan: 'free' }
+    expect((await callExport({ resource: 'contacts' })).status).toBe(200)
+    expect((await callExport({ resource: 'leads' })).status).toBe(200)
+  })
+
+  it('writes the people files whatever the release flag says, and keeps the flag on the rest', async () => {
+    mockReleaseFlag = false
+    expect((await callExport({ resource: 'contacts' })).status).toBe(200)
+    expect((await callExport({ resource: 'leads' })).status).toBe(200)
+    expect((await callExport({ resource: 'companies' })).status).toBe(404)
+  })
+
+  it('answers authorization before the plan', async () => {
+    mockOrg = { plan: 'free' }
+    mockPermission = false
+    expect((await callExport({ resource: 'companies' })).status).toBe(404)
+  })
+
+  it('CONTROL: admits the CRM’s records on Starter', async () => {
+    mockOrg = { plan: 'starter', subscription: { status: 'active' } }
+    seedCompanies(2)
+    expect((await callExport({ resource: 'companies' })).status).toBe(200)
   })
 })
 

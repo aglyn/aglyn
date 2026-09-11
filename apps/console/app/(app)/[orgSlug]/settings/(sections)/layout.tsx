@@ -76,6 +76,9 @@ export default function SettingsSectionsLayout({
     // that setup is self-serve once there. Hiding it would leave
     // "can I do SSO?" unanswerable from inside the product.
     section(Route.ORG_SETTINGS_SSO, 'Single sign-on', canManage),
+    // The workspace's privacy obligations (AGL-2839): exporting the people
+    // it holds and erasing one. Outside the CRM, so every plan has them.
+    section(Route.ORG_SETTINGS_PRIVACY, 'Privacy', canManage),
     section(Route.ORG_SETTINGS_OWNERSHIP, 'Ownership', isOwner),
     section(Route.ORG_SETTINGS_DELETE, 'Delete', isOwner),
   ]
