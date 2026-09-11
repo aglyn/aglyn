@@ -109,8 +109,8 @@ export function useSlotWidgets(slots: readonly string[]): {
     listConsoleWidgets(slot, enabledPluginIds).map(({ extension, widget }) => ({
       // The extension's flag AND the widget's own (AGL-2611), exactly as
       // the permission below composes: a card gated narrower than its
-      // extension — the CRM's dashboard cards, on a plan that has the
-      // contacts list and not the suite — is absent, without an upsell.
+      // extension, on a plan that has the extension and not the card's
+      // entitlement, is absent, without an upsell.
       entitlement: composeExtensionEntitlements(
         resolveExtensionEntitlement(extension.featureFlag, org, orgReady),
         resolveExtensionEntitlement(widget.featureFlag, org, orgReady),

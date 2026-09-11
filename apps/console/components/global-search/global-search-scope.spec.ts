@@ -52,10 +52,13 @@ const RICH = {
   productsPerHost: 100,
   redirectsPerHost: 10,
   servicesPerHost: 3,
+  crm: true,
 }
 
 /** The free plan, as `PLAN_ENTITLEMENTS.free` actually shapes it. */
 const FREE = {
+  // The CRM is included from Starter (AGL-2851); the dialog flattens it here.
+  crm: false,
   reusableComponents: false,
   workflows: false,
   commerce: false,
@@ -129,17 +132,27 @@ describe('where the caller is standing', () => {
     ).not.toContain('contacts')
   })
 
-  it('offers contacts whatever the plan — every tier has an audience band', () => {
-    expect(
-      ids(scopeAt({ entitlements: FREE, orgDataTokens: ['org', 'host:host-1'] })),
-    ).toContain('contacts')
+  /**
+   * The CRM is included from Starter and a Free workspace has none of it
+   * (AGL-2851), so no CRM group is read on a plan without it — not under a
+   * site with the viewer's tokens, and not at the org hub for an org-wide
+   * member. The site's own groups are not the CRM's, and stay.
+   */
+  it('offers no CRM group on a plan without the CRM (AGL-2851)', () => {
+    const onSite = ids(scopeAt({ entitlements: FREE, orgDataTokens: ['org', 'host:host-1'] }))
+    const atOrg = ids(scopeAt({ entitlements: FREE, hostId: null, crmOrgWide: true }))
+    for (const group of ['contacts', 'leads', 'companies', 'deals', 'tasks', 'activities']) {
+      expect(onSite).not.toContain(group)
+      expect(atOrg).not.toContain(group)
+    }
+    expect(onSite).toContain('screens')
   })
 
   /**
    * Companies and deals are org data under the same predicate as contacts,
    * and leads are host data whose rows open in the CRM (AGL-2622). All three
-   * follow the contacts gate: offered with the tokens, withheld without them,
-   * whatever the plan says.
+   * follow the contacts gate: offered with the tokens and withheld without
+   * them, on a plan that carries the CRM.
    */
   it('offers leads, companies and deals under the same gate as contacts', () => {
     const withTokens = ids(scopeAt({ orgDataTokens: ['org', 'host:host-1'] }))
@@ -152,10 +165,6 @@ describe('where the caller is standing', () => {
       expect(offered).not.toContain('companies')
       expect(offered).not.toContain('deals')
     }
-    const free = ids(scopeAt({ entitlements: FREE, orgDataTokens: ['org', 'host:host-1'] }))
-    expect(free).toContain('leads')
-    expect(free).toContain('companies')
-    expect(free).toContain('deals')
   })
 
   it('withholds leads off a site even with tokens — they are host data', () => {

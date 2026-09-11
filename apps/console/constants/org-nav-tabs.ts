@@ -61,9 +61,11 @@ export function orgNavTabItems(orgSlug: string) {
      * Linked straight at the landing section rather than at the bare hub,
      * for the reason the site strip links its plugin tabs that way: the bare
      * address redirects, and the redirect can only be a client one. Contacts
-     * is the section on every plan, so it is the one the tab can name without
-     * a plan verdict. `resolveActiveTab` compares the first segment under the
-     * org, so the tab reads as active on every section of the hub.
+     * is the first section on every plan that opens the CRM, and on one that
+     * does not every section is the upgrade notice beside the rail
+     * (AGL-2851), so the tab names Contacts without a plan verdict.
+     * `resolveActiveTab` compares the first segment under the org, so the tab
+     * reads as active on every section of the hub.
      *
      * The strip itself is not rendered at all for a scoped collaborator
      * (`useSecondaryNav`), and the page refuses them independently — the tab

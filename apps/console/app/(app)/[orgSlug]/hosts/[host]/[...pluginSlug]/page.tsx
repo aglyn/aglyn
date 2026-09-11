@@ -35,6 +35,7 @@ import HostDisplayNameComponent from '../../../../../../components/host-display-
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
+import PluginHubRail from '../../../../../../components/plugin-hub-rail.component'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { resolveDocsHelpTopic } from '../../../../../../constants/docs-links'
 import {
@@ -225,6 +226,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
         isStaff,
         org,
         orgReady,
+        featureFlag: resolved?.extension.featureFlag,
       }),
     [resolved, basePath, flags, isStaff, org, orgReady],
   )
@@ -261,16 +263,21 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     resolved?.legacy && basePath
       ? resolved.segments.length
         ? `${basePath}/${resolved.segments.join('/')}`
-        : (resolvedSections?.find(
-            (section) => section.visible && !section.locked,
-          )?.href ?? basePath)
+        : orgReady
+          ? (resolvedSections?.find(
+              (section) => section.visible && !section.locked,
+            )?.href ?? basePath)
+          : undefined
       : undefined
   // The first section this reader may OPEN — released, and on the plan
-  // (AGL-2611): a bare hub URL on a plan without the suite lands on the
-  // section it does have rather than on an upgrade notice.
+  // (AGL-2611): a bare hub URL on a plan that lacks its first section lands
+  // on the next one it has, and one whose every section is locked stays put
+  // for the upgrade notice below. Held until the org has settled
+  // (AGL-2851): a landing is a claim about the plan, and an unsettled org
+  // locks nothing.
   const sectionRedirect =
     legacyRedirect ??
-    (resolved && !resolved.section && resolvedSections?.length
+    (resolved && !resolved.section && resolvedSections?.length && orgReady
       ? resolvedSections.find((section) => section.visible && !section.locked)
           ?.href
       : undefined)
@@ -311,9 +318,8 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   )
   /*
    * The SECTION's own flag, inside the extension's (AGL-2611). A hub can
-   * ship its first section on every plan and the rest on a paid one — the
-   * CRM's contacts list is on Free, the sales suite built on it is not —
-   * so the surface's verdict is the extension's AND the section's, in the
+   * ship its first section on every plan and the rest on a paid one, so the
+   * surface's verdict is the extension's AND the section's, in the
    * order `composeExtensionEntitlements` gives. Answered here, from the org
    * doc and the declared flag alone, for the reason the extension's is: the
    * plugin page below never mounts for a section it was refused.
@@ -439,37 +445,43 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     // the phrasing of one that went against it, and
     // `resolveUpgradeNoticeAnchor` keeps the destination on this route no
     // matter what it names.
-    <Alert
-      severity="info"
-      action={
-        orgSlug ? (
-          <AppLink
-            componentVariant="button"
-            size="small"
-            color="inherit"
-            href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}${
-              upgradeAnchor ? `#${upgradeAnchor}` : ''
-            }`}
-          >
-            {upgradeAnchor === 'addons' ? 'View add-ons' : 'View plans'}
-          </AppLink>
-        ) : undefined
-      }
-    >
-      {extensionEntitlement === 'blocked'
-        ? upgradeNoticeMessage(
-            resolved?.extension.upgradeNotice,
-            title,
-            resolved?.extension.featureFlag,
-          )
-        : // The SECTION was what refused (AGL-2611): the extension's own
-          // copy describes the whole surface, so the derived sentence names
-          // the section and the tier that carries it instead.
-          blockedExtensionNotice(
-            resolved?.section?.label ?? title,
-            resolved?.section?.featureFlag,
-          )}
-    </Alert>
+    //
+    // Beside the rail when the surface has sections (AGL-2851), so what the
+    // plan leaves out is drawn locked where the reader is — on the hub's bare
+    // address as on one of its sections or records.
+    <PluginHubRail sections={resolvedSections}>
+      <Alert
+        severity="info"
+        action={
+          orgSlug ? (
+            <AppLink
+              componentVariant="button"
+              size="small"
+              color="inherit"
+              href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}${
+                upgradeAnchor ? `#${upgradeAnchor}` : ''
+              }`}
+            >
+              {upgradeAnchor === 'addons' ? 'View add-ons' : 'View plans'}
+            </AppLink>
+          ) : undefined
+        }
+      >
+        {extensionEntitlement === 'blocked'
+          ? upgradeNoticeMessage(
+              resolved?.extension.upgradeNotice,
+              title,
+              resolved?.extension.featureFlag,
+            )
+          : // The SECTION was what refused (AGL-2611): the extension's own
+            // copy describes the whole surface, so the derived sentence names
+            // the section and the tier that carries it instead.
+            blockedExtensionNotice(
+              resolved?.section?.label ?? title,
+              resolved?.section?.featureFlag,
+            )}
+      </Alert>
+    </PluginHubRail>
   ) : (
     <Suspense
       fallback={
