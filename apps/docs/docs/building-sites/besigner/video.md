@@ -49,6 +49,22 @@ from the keyboard. `Space` or `K` plays and pauses, the left and right arrows sk
 five seconds, `M` mutes, `F` goes full screen, and `Esc` closes the lightbox from any
 control, leaving full screen first if it is on.
 
+## A video hosted on Wistia {#video-wistia}
+
+Paste a Wistia media link into **Video source**: the address of the video's page in
+your Wistia account, or its embed link. Then pick a **Poster image** from your media
+library. The poster becomes a play button, and Wistia's player loads only when a
+visitor presses it, so someone who never presses play never contacts Wistia. The
+player opens in the lightbox when **Open in a lightbox** is on, and in place of the
+poster when it is off. Without a poster the element asks for one instead of loading
+the player.
+
+Wistia's player brings its own controls. In the lightbox, `Esc` closes it until you
+move into the player; from inside the player, `Shift`+`Tab` reaches the close button.
+Wistia records a viewing only for a visitor whose analytics consent your site has on
+record, and plays with its tracking off for everyone else. Type the running time into
+**Duration (seconds)**, because a Wistia link does not carry it.
+
 ## The three fields a search result needs {#video-seo}
 
 **Video title**, **Video description** and **Publication date** are what let search
