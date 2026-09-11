@@ -37,6 +37,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { getPlatformLockdown } from './lockdown'
+import { mediaCdnRateLimitRefusal } from './media-cdn-rate-limit'
 import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
@@ -989,7 +990,9 @@ function clearMediaCdnRepresentation(res: NextApiResponse): void {
  * the whole file.
  *
  * The body streams (AGL-2810): each chunk leaves as Storage produces it, so no
- * file is held whole in function memory.
+ * file is held whole in function memory. A GET that will read the file is
+ * first counted against its caller (AGL-2812); see
+ * {@link mediaCdnRateLimitRefusal}.
  */
 export async function serveMediaCdn(
   req: NextApiRequest,
@@ -1410,11 +1413,36 @@ export async function serveMediaCdn(
           ? `${basePath}__w${width}.webp`
           : basePath
     const file = bucket.file(objectPath)
+    // The caller's count (AGL-2812), asked here and nowhere earlier: past every
+    // gate and the 304 exit, so only a GET about to read the file is counted.
+    // It starts before the metadata read and is awaited after it, so the two
+    // run together. It never rejects, and answers `null` whenever it could not
+    // count.
+    const callerCount =
+      req.method === 'GET'
+        ? mediaCdnRateLimitRefusal({
+            headers: req.headers,
+            remoteAddress: req.socket?.remoteAddress,
+            rateClass: mediaCdnEdgeCacheable(docServedType) ? 'image' : 'non-image',
+          })
+        : null
     const [metadata] = await file.getMetadata().catch(() => [null as any])
     if (!metadata) {
       res.status(404).json({ error: 'Not found' })
       return
     }
+    const refused = await callerCount
+    if (refused) {
+      // The file's validator and cache policy are already set. A refusal is
+      // about this caller rather than the URL, so no cache may keep it: an
+      // edge holding a 429 would refuse every visitor to that image for an
+      // hour.
+      clearMediaCdnRepresentation(res)
+      res.setHeader('Retry-After', String(refused.retryAfterSeconds))
+      res.status(429).json({ error: 'Too many requests' })
+      return
+    }
+
     const servedType =
       usePoster || useVariant
         ? 'image/webp'
