@@ -592,19 +592,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * A ROW THE PAGE DOES NOT CARRY AT ALL.
-     *
-     * Sending identity was not a published axis when `/pricing` was drawn, so
-     * there is no cell here to be ahead of — the whole row is new. It is
-     * pinned anyway, and for the same reason the email bands are: the gap
-     * between what the code sells and what the page says has to be visible as
-     * data, or the republish it is waiting on is remembered by nobody.
-     *
-     * Delete this block, and the `EXPECTED_MISSING` entry in
-     * `tools/marketing/build-pricing-tables.mts`, once the four responsive
-     * frames carry the row.
+     * Sending identity is a row of its own, beside the campaign band rather
+     * than beside "Custom domain & SSL", which is the site's public web
+     * address and authorizes nothing about mail. The page carries it (screen
+     * `v0clP6xQl-`, row `Kg15_-jaFq` on version `uMk4E9o739`) and so do the
+     * four responsive frames (AGL-2679): — · — · ✓ from Pro.
      */
-    describe('Send email from your own domain — a row the page has never had', () => {
+    describe('Send email from your own domain — — · — · ✓ from Pro', () => {
       it('starts at Pro, and Free and Starter do not carry it', () => {
         expect(flagColumn('customSendingDomain')).toEqual([
           false,
