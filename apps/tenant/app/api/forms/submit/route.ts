@@ -585,7 +585,7 @@ export async function POST(request: Request): Promise<Response> {
      * THE CAMPAIGN TOUCH, RESOLVED ONCE FOR THE WHOLE SUBMISSION.
      *
      * One visitor action lands in three collections here — the submission,
-     * the contact and (when the form declares itself a lead surface) the
+     * the contact and (when the submission came through a lead surface) the
      * lead — and all three are the same person arriving from the same
      * campaign. Resolving here and handing the result down is what keeps the
      * email-channel lookup at ONE keyed document read per submission instead
@@ -658,28 +658,37 @@ export async function POST(request: Request): Promise<Response> {
           : {}),
       })
       /*
-       * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`
-       * §4a).
+       * A lead, when the submission came through a LEAD SURFACE
+       * (`docs/specs/reusable-forms.md` §4a).
        *
        * The endpoint's own docblock has called itself a "lead-capture
        * submissions endpoint" since AGL-76 and it had never created a lead:
        * `addHostLead`'s three callers were the sign-up handler and the two
        * bookings paths, and this route was not among them.
        *
-       * `routing.lead` is an author's declaration, not a heuristic on the
-       * payload. That follows the existing split — the newsletter block
+       * Which forms are lead surfaces is the owning org's plan's question,
+       * answered by `submissionFilesLead` (AGL-2790). With the CRM suite it is
+       * `routing.lead`: an author's declaration, not a heuristic on the
+       * payload, which follows the existing split — the newsletter block
        * enrolls, the sign-up handler creates a lead, the bookings handler
        * creates a lead — each because the SURFACE is a lead surface, not
-       * because a rule inspected what the visitor typed.
+       * because a rule inspected what the visitor typed. Without the suite
+       * every live form is one, bound to a form document or not, because
+       * Leads is the section of the CRM that plan can read.
        *
        * Through `addHostLead` rather than beside it: the ceiling cannot see a
        * direct `collection('leads')` write, and the dedupe that stops one
        * person becoming two records lives in there too.
        *
-       * `void`, like the contact upsert above. A refused or failed lead must
-       * never fail the submission that produced it.
+       * A refused or failed lead must never fail the submission that
+       * produced it — see the await below.
        */
-      if (form?.get('routing')?.lead === true) {
+      if (
+        Aglyn.submissionFilesLead({
+          form: form?.data() as Aglyn.FormLeadRoutingInput | undefined,
+          org: orgBilling as any,
+        })
+      ) {
         /*
          * AWAITED, unlike the contact upsert beside it, and only because the
          * answer is counted.
@@ -706,8 +715,9 @@ export async function POST(request: Request): Promise<Response> {
               ? { name: sanitizedFields['name'] }
               : {}),
             // Names the form, so a lead's provenance survives the form being
-            // renamed — the same reason the submission carries the id.
-            source: `form:${form.id}`,
+            // renamed — the same reason the submission carries the id. A
+            // `Form` node with no form document has no id to name.
+            source: form ? `form:${form.id}` : 'form',
             ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
           },
           ...(campaignTouch ? { touch: campaignTouch } : {}),

@@ -202,6 +202,9 @@ export * from './plan-entitlements'
 export * from './bandwidth-cap'
 export * from './form-abuse-ceiling'
 export * from './forms'
+// Which submissions file a lead, by plan (AGL-2790). After `forms` and
+// `plan-entitlements`, the two it reads.
+export * from './form-lead-routing'
 // What a form's DESIGN must still satisfy for its submissions to arrive.
 // After `forms`, whose field walk it reads the drawn fields with.
 export * from './form-contract'
