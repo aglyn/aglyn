@@ -75,6 +75,19 @@ export const MEDIA_SIGNATURE_TTL_MS = 15 * 60 * 1000
 export const GATED_VIDEO_SESSION_TTL_MS = 4 * 60 * 60 * 1000
 
 /**
+ * How long a paid download's link works (AGL-2847): one hour.
+ *
+ * A download is one transfer rather than a sitting, so it needs far less than
+ * a viewing session. It gets more than the console's fifteen minutes because a
+ * large file on a slow connection can take longer than that to arrive, and a
+ * download manager that resumes a broken transfer asks again under the same
+ * URL. A refused resume sends the buyer back to the receipt link, which counts
+ * another attempt against the download limit, so the window is sized to make
+ * that rare while a forwarded link still dies the same evening.
+ */
+export const PAID_DOWNLOAD_LINK_TTL_MS = 60 * 60 * 1000
+
+/**
  * The longest lifetime any signature may claim, enforced by the VERIFIER as
  * well as the minter.
  *

@@ -125,12 +125,13 @@ function makeProject() {
       state.writes.push(['rewrite', `${hostId}/${productId}`, rewrites.length])
       const product = state.products[hostId].find((item) => item.id === productId)
       let changed = 0
-      product.gatedVideos = product.gatedVideos.map((entry) => {
-        const hit = rewrites.find((rewrite) => rewrite.from === entry.url)
-        if (!hit) return entry
-        changed += 1
-        return { ...entry, url: hit.to }
-      })
+      for (const rewrite of rewrites) {
+        product[rewrite.list] = (product[rewrite.list] ?? []).map((entry) => {
+          if (entry.url !== rewrite.from) return entry
+          changed += 1
+          return { ...entry, url: rewrite.to }
+        })
+      }
       return changed
     },
   }
@@ -153,6 +154,7 @@ describe('the dry run (AGL-2814)', () => {
       {
         hostId: 'host-1',
         productId: 'prod-course',
+        list: 'gatedVideos',
         index: 0,
         from: FILM_URL,
         to: 'media:org:acme/med-film',
@@ -168,9 +170,11 @@ describe('the dry run (AGL-2814)', () => {
     assert.deepEqual(totals, {
       sites: 1,
       products: 2,
-      productsWithGatedVideos: 1,
-      deletedProductsWithGatedVideos: 0,
+      productsWithPaidMedia: 1,
+      deletedProductsWithPaidMedia: 0,
       entries: 6,
+      gatedVideos: 6,
+      digitalFiles: 0,
       skipped: { external: 1, 'out-of-scope': 1 },
       assets: 3,
       assetsToFix: 1,
@@ -270,6 +274,37 @@ describe('--apply', () => {
     assert.deepEqual(state.writes, [])
     assert.equal(again.assetsToFix, 0)
     assert.equal(again.wouldRotateTokens, 0)
+  })
+
+  it('fixes a public paid download in its own list (AGL-2847)', async () => {
+    const { state, io } = makeProject()
+    const guideObject = 'hosts/host-1/media/Guides/med-guide'
+    const guideUrl = downloadUrl(guideObject, 'guide-token')
+    state.products['host-1'][1].digitalFiles = [{ url: guideUrl, fileName: 'guide.pdf' }]
+    state.media['hosts/host-1/media/med-guide'] = { storagePath: guideObject }
+    state.tokens[guideObject] = 'guide-token'
+
+    const report = await runGatedMediaBackfill({ io, bucket: BUCKET, apply: true })
+
+    const guide = planFor(report, 'hosts/host-1/media/med-guide')
+    assert.equal(guide.status, 'fix')
+    assert.deepEqual(guide.rotate, [guideObject])
+    assert.deepEqual(guide.rewrites, [
+      {
+        hostId: 'host-1',
+        productId: 'prod-mug',
+        list: 'digitalFiles',
+        index: 0,
+        from: guideUrl,
+        to: 'media:host-1/med-guide',
+      },
+    ])
+    assert.deepEqual(state.products['host-1'][1].digitalFiles, [
+      { url: 'media:host-1/med-guide', fileName: 'guide.pdf' },
+    ])
+    assert.notEqual(state.tokens[guideObject], 'guide-token')
+    assert.equal(state.media['hosts/host-1/media/med-guide'].private, true)
+    assert.equal(summarize(report).digitalFiles, 1)
   })
 
   it('reports a failed write and carries on with the rest', async () => {

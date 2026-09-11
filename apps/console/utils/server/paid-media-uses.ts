@@ -18,23 +18,27 @@
 import { paidMediaAssetOf, samePaidMediaLibrary } from '@aglyn/aglyn/server'
 
 /**
- * Which products still sell one library asset as a members video (AGL-2814).
+ * Which products still sell one library asset as paid media: a members video
+ * (AGL-2814) or a paid download (AGL-2847).
  *
- * A members video is private, and the stream route refuses to deliver one
- * that is not. That leaves one way to put it back in public: "Publish file" in
- * the media library, which gives the asset its permanent CDN URL again. That
- * URL has the same identity as every signed session link a buyer was ever
- * handed, so stripping `exp` and `sig` off any of them would start working
- * again. The media route asks this before it publishes, and refuses while the
- * answer is not empty.
+ * Paid media is private, and the commerce routes refuse to deliver a file
+ * that is not. That leaves one way to put it back in public: "Publish file"
+ * in the media library, which gives the asset its permanent CDN URL again.
+ * That URL names the same asset as every signed link a buyer was ever handed,
+ * so stripping `exp` and `sig` off any of them would start working again. The
+ * media route asks this before it publishes, and refuses while the answer is
+ * not empty.
  *
  * It reads the products themselves rather than a marker stamped on the media
  * document. A marker is one more thing every product writer has to keep true,
  * and the products hub, the CSV import, duplication and a direct edit all
- * write `gatedVideos`. The products cannot disagree with themselves.
+ * write these lists. The products cannot disagree with themselves.
  */
 
-/** A product that sells an asset as a members video. */
+/** The product fields that hold paid media, each a list of `{ url }`. */
+export const PAID_MEDIA_LISTS = ['gatedVideos', 'digitalFiles'] as const
+
+/** A product that sells an asset as paid media. */
 export interface PaidMediaUse {
   hostId: string
   productId: string
@@ -79,7 +83,7 @@ export interface PaidMediaUsesFirestore {
 
 /**
  * Every product selling the asset `mediaId` in the library at `base` —
- * `hosts/{hostId}` or `orgs/{orgId}` — as a members video.
+ * `hosts/{hostId}` or `orgs/{orgId}` — as paid media.
  *
  * `bucket` is the platform's media bucket, so a raw download URL from any
  * other bucket is never mistaken for this asset.
@@ -114,6 +118,13 @@ export async function findPaidMediaUses(options: {
     hostIds = [scopeId]
   }
 
+  const namesThisAsset = (entry: unknown) => {
+    const asset = paidMediaAssetOf((entry as { url?: unknown } | null)?.url, {
+      bucket: options.bucket,
+    })
+    return asset?.mediaId === mediaId && samePaidMediaLibrary(asset.scope, library)
+  }
+
   const uses: PaidMediaUse[] = []
   for (let index = 0; index < hostIds.length; index += HOST_CONCURRENCY) {
     const batch = hostIds.slice(index, index + HOST_CONCURRENCY)
@@ -124,7 +135,7 @@ export async function findPaidMediaUses(options: {
           .collection('hosts')
           .doc(hostId)
           .collection('products')
-          .select('name', 'deletedAt', 'gatedVideos')
+          .select('name', 'deletedAt', ...PAID_MEDIA_LISTS)
           .limit(PAID_MEDIA_USE_PRODUCT_CEILING + 1)
           .get(),
       })),
@@ -132,20 +143,12 @@ export async function findPaidMediaUses(options: {
     for (const { hostId, products } of catalogs) {
       if (products.size > PAID_MEDIA_USE_PRODUCT_CEILING) complete = false
       for (const product of products.docs.slice(0, PAID_MEDIA_USE_PRODUCT_CEILING)) {
-        // A deleted product sells nothing. Restoring one brings back a
-        // members video the stream route refuses until it is private again.
+        // A deleted product sells nothing. Restoring one brings back paid media
+        // the commerce routes refuse until the file is private again.
         if (product.get('deletedAt')) continue
-        const entries = product.get('gatedVideos')
-        if (!Array.isArray(entries)) continue
-        const sells = entries.some((entry) => {
-          const asset = paidMediaAssetOf(
-            (entry as { url?: unknown } | null)?.url,
-            { bucket: options.bucket },
-          )
-          return (
-            asset?.mediaId === mediaId &&
-            samePaidMediaLibrary(asset.scope, library)
-          )
+        const sells = PAID_MEDIA_LISTS.some((list) => {
+          const entries = product.get(list)
+          return Array.isArray(entries) && entries.some(namesThisAsset)
         })
         if (sells) {
           uses.push({
@@ -165,9 +168,9 @@ export function paidMediaPublishRefusal(result: PaidMediaUses): string {
   const { uses } = result
   if (!uses.length) {
     return (
-      'We could not check every product that might sell this file as a ' +
-      'members video, so it stays private. Remove it from any product that ' +
-      'uses it, then publish it again.'
+      'We could not check every product that might sell this file, so it ' +
+      'stays private. Remove it from any product that uses it, then publish ' +
+      'it again.'
     )
   }
   const names = uses
@@ -177,8 +180,7 @@ export function paidMediaPublishRefusal(result: PaidMediaUses): string {
   const more = uses.length > 3 ? ` and ${uses.length - 3} more` : ''
   const which = uses.length === 1 ? 'that product' : 'those products'
   return (
-    `This file is a members video on ${names}${more}. Remove it from ` +
-    `${which} before publishing it: a public copy would let anyone watch it ` +
-    'without buying.'
+    `This file is sold on ${names}${more}. Remove it from ${which} before ` +
+    'publishing it: a public copy would let anyone have it without buying.'
   )
 }

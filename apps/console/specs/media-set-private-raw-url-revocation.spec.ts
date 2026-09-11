@@ -465,6 +465,24 @@ describe('a file a product still sells stays private (AGL-2814)', () => {
     }
   })
 
+  it('refuses to publish a file sold as a paid download (AGL-2847)', async () => {
+    mockProducts = {
+      'host-1': [
+        {
+          id: 'prod-guide',
+          data: {
+            name: 'Field guide',
+            digitalFiles: [{ url: `media:org:${ORG}/${MEDIA}`, fileName: 'guide.pdf' }],
+          },
+        },
+      ],
+    }
+    const response = await setPrivate(false)
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toContain('“Field guide”')
+    expect(doc()['private']).toBe(true)
+  })
+
   it('publishes once no product sells it', async () => {
     mockProducts = sellingIt(`media:org:${ORG}/another-film`)
     const response = await setPrivate(false)

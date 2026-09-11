@@ -18,7 +18,12 @@
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  createPaidMediaDeliveryIo,
+  firebaseAdmin,
+  PAID_DOWNLOAD_LINK_TTL_MS,
+  resolvePaidMediaDelivery,
+} from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 
 /**
@@ -128,6 +133,59 @@ export const downloadHandler: PluginApiHandler = async (req, res) => {
     const file = product.digitalFiles?.[fileIndex]
     if (!file?.url) return res.status(404).send('No file available')
 
+    /**
+     * Where the redirect lands, decided BEFORE an attempt is counted
+     * (AGL-2847).
+     *
+     * Everything above only guards the 302, so what the 302 points at is what
+     * a buyer, and anyone they forward the `Location` to, keeps. The resolver
+     * hands back a link that expires, or nothing: a CDN URL signed for
+     * {@link PAID_DOWNLOAD_LINK_TTL_MS} for a PRIVATE file in this site's
+     * library or its org's, a V4 signed Storage read for an object no media
+     * document owns, or an author-typed hotlink unchanged. A raw Storage
+     * download URL is never the answer, and a file that is still public is
+     * refused, because its URL already works for anyone forever.
+     *
+     * Resolving first means a refusal costs the buyer no attempt: the limit
+     * meters files that were handed out, not the seller's setup.
+     *
+     * `?download=1` rides inside the signed URL and makes the CDN answer with
+     * `attachment`. The signature covers `(scope, mediaId, exp)` and not the
+     * parameter, so it chooses a disposition for the one file signed and can
+     * reach no other.
+     */
+    const delivery = await resolvePaidMediaDelivery({
+      stored: file.url,
+      hostId,
+      ttlMs: PAID_DOWNLOAD_LINK_TTL_MS,
+      cdnParams: [['download', '1']],
+      io: createPaidMediaDeliveryIo({
+        firestore,
+        bucket: firebaseAdmin
+          .app()
+          .storage()
+          .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET']),
+      }),
+    })
+    if (delivery.ok === false) {
+      res.setHeader('Cache-Control', 'no-store')
+      console.error(
+        '[commerce/download] paid file not delivered',
+        JSON.stringify({
+          hostId,
+          orderId,
+          productId,
+          file: fileIndex,
+          refusal: delivery.refusal,
+        }),
+      )
+      return delivery.refusal === 'not-private'
+        ? res
+            .status(409)
+            .send('This file is not ready to download yet — contact the seller')
+        : res.status(404).send('No file available')
+    }
+
     // ATTEMPT ACCOUNTING, IN ONE TRANSACTION (AGL-2275).
     //
     // This was a read-then-write across an await, from a snapshot fetched
@@ -169,31 +227,13 @@ export const downloadHandler: PluginApiHandler = async (req, res) => {
         .status(429)
         .send('Download limit reached — contact the seller for help')
     }
+    // Per-order and time-boxed: no cache may keep a redirect that carries a
+    // signature past the link it opens.
     res.setHeader('Cache-Control', 'no-store')
-    // ⚠️ THE REDIRECT TARGET IS A PERMANENT PUBLIC URL, AND THIS ROUTE CANNOT
-    // MAKE IT OTHERWISE (AGL-2454).
-    //
-    // Everything above is real: the token is HMAC'd and expiring, the
-    // entitlement test now honours partial refunds, and the attempt counter is
-    // transactional (AGL-2275). But `file.url` is the media asset's public CDN
-    // path, so one legitimate download yields a link that keeps working for
-    // anyone it is forwarded to — after a refund, after the token expires,
-    // after the download limit is spent. What is metered here is the REDIRECT,
-    // not the bytes.
-    //
-    // The specific blocker, so the next reader does not re-derive it: signing
-    // this URL would change nothing, because the CDN route only demands a
-    // signature for assets marked `private` (`serve-media-cdn.ts:805`), and a
-    // private asset carries NO `cdnPath` and is refused by the media pickers
-    // outright (`platform.types.ts:535`) — a merchant cannot attach one as a
-    // digital file today. Making the cap real therefore needs either private
-    // digital assets end to end (picker, upload, storage) or this route to
-    // proxy the bytes, which puts file transfer on a serverless execution
-    // budget. Both are delivery-architecture changes, not a fix to this
-    // handler.
-    //
-    // What IS closed here: a revoked entitlement no longer gets a NEW link.
-    return res.redirect(302, file.url)
+    // The link dies within the hour, so a refund, an expired receipt token or
+    // a spent limit also ends what a forwarded `Location` can fetch: the next
+    // download has to come back through this route and its checks.
+    return res.redirect(302, delivery.location)
   } catch (error) {
     console.error(error)
     return res.status(500).send('Download unavailable')

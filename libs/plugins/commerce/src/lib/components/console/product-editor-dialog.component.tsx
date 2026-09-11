@@ -56,7 +56,11 @@ import {
   EntitlementUpsell,
   useCommerceEntitlement,
 } from './entitlement-gate.component'
-import { MembersVideosField } from './paid-media'
+import {
+  MembersVideosField,
+  PaidDownloadAddButton,
+  PaidMediaProtection,
+} from './paid-media'
 
 /**
  * What each picker in this dialog will offer.
@@ -1048,6 +1052,12 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                   {file.fileName}
                   {file.version ? ` · v${file.version}` : ''}
                 </Typography>
+                <PaidMediaProtection
+                  url={file.url}
+                  hostId={hostId}
+                  productId={product?.$id}
+                  kind="download"
+                />
                 <TextField
                   label="Version"
                   value={file.version ?? ''}
@@ -1078,21 +1088,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               </Stack>
             ))}
             <Stack direction="row" spacing={2}>
-              <Button
-                size="small"
-                onClick={() =>
-                  void pick((media) =>
-                    update({
-                      digitalFiles: [
-                        ...(current.digitalFiles ?? []),
-                        { url: media.url, fileName: media.fileName ?? 'download' },
-                      ],
-                    }),
-                  )
+              {/* Paid downloads are private files delivered through expiring
+                  links (AGL-2847); adding one makes the file private. */}
+              <PaidDownloadAddButton
+                hostId={hostId}
+                productId={product?.$id}
+                onAdd={(file) =>
+                  update({ digitalFiles: [...(current.digitalFiles ?? []), file] })
                 }
-              >
-                {'Add file (media library)'}
-              </Button>
+              />
               <TextField
                 label="Download limit"
                 placeholder="Unlimited"

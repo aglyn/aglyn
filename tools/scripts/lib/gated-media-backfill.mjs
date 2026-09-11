@@ -24,9 +24,11 @@
  * Before AGL-2814 a product's members video was delivered by redirecting the
  * buyer to the file's permanent address: its public CDN path, or, for a
  * library without the media CDN, its raw Storage download URL, whose token
- * lives as long as the object. Every buyer who pressed play holds a URL that
- * still works. The stream route now refuses to deliver a video whose file is
- * not private, so nothing new leaks; this closes what was already handed out:
+ * lives as long as the object. Its digital downloads were delivered the same
+ * way (AGL-2847). Every buyer who pressed play or download holds a URL that
+ * still works. The stream and download routes now refuse to deliver a file
+ * that is not private, so nothing new leaks; this closes what was already
+ * handed out:
  *
  * 1. the file is marked PRIVATE, which closes its CDN URL to anyone without a
  *    signature, and loses the `cdnPath` and `url` fields that named its public
@@ -258,9 +260,15 @@ function libraryOfObject(objectPath, site) {
 }
 
 /**
- * Every members-video entry across the given sites, grouped by the library
- * asset it names; the in-scope objects no asset owns; and the entries skipped,
- * with why.
+ * The product fields that hold paid media, each a list of `{ url }`: members
+ * videos (AGL-2814) and digital downloads (AGL-2847).
+ */
+export const PAID_MEDIA_LISTS = ['gatedVideos', 'digitalFiles']
+
+/**
+ * Every paid media entry across the given sites, grouped by the library asset
+ * it names; the in-scope objects no asset owns; and the entries skipped, with
+ * why.
  */
 export function collectGatedMedia(sites, options) {
   const assets = new Map()
@@ -269,26 +277,33 @@ export function collectGatedMedia(sites, options) {
   const counts = {
     sites: 0,
     products: 0,
-    productsWithGatedVideos: 0,
-    deletedProductsWithGatedVideos: 0,
+    productsWithPaidMedia: 0,
+    deletedProductsWithPaidMedia: 0,
     entries: 0,
+    gatedVideos: 0,
+    digitalFiles: 0,
   }
   for (const site of sites) {
     counts.sites += 1
     for (const product of site.products ?? []) {
       counts.products += 1
-      const list = Array.isArray(product.gatedVideos) ? product.gatedVideos : []
-      if (!list.length) continue
-      counts.productsWithGatedVideos += 1
-      if (product.deleted) counts.deletedProductsWithGatedVideos += 1
-      list.forEach((entry, index) => {
+      const lists = PAID_MEDIA_LISTS.map((list) => ({
+        list,
+        entries: Array.isArray(product[list]) ? product[list] : [],
+      }))
+      if (!lists.some(({ entries }) => entries.length)) continue
+      counts.productsWithPaidMedia += 1
+      if (product.deleted) counts.deletedProductsWithPaidMedia += 1
+      for (const { list, entries } of lists) entries.forEach((entry, index) => {
         counts.entries += 1
+        counts[list] += 1
         const url = entry && typeof entry === 'object' ? entry.url : undefined
         const at = {
           hostId: site.hostId,
           productId: product.id,
           productName: product.name,
           deleted: Boolean(product.deleted),
+          list,
           index,
           url,
         }
@@ -390,6 +405,7 @@ export function planAsset({ asset, media, objectTokens, otherUses = [], includeS
     .map((entry) => ({
       hostId: entry.hostId,
       productId: entry.productId,
+      list: entry.list,
       index: entry.index,
       from: entry.url,
       to: asset.reference,

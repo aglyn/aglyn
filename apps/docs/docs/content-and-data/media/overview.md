@@ -382,7 +382,7 @@ A private file:
   serving the file forever,
 - **cannot be placed on a page**; the picker refuses it and says why. The one place a
   private file can be added is a product's
-  [members videos](#members-videos-are-private),
+  [members videos and digital downloads](#members-videos-are-private),
 - is viewable and downloadable in the console by people who can already see it, through a
   **temporary link that stops working after about fifteen minutes**.
 
@@ -432,11 +432,16 @@ file is the only kind whose links can expire:
   again or added some other way, buyers cannot play it. The product editor marks it
   **Public** and offers **Make private**.
 - **A file a product still sells cannot be published.** **Publish file** refuses while any
-  product lists the file as a members video, and names the product. Remove the video from the
-  product first.
+  product lists the file as a members video or a digital download, and names the product.
+  Remove the file from the product first.
 
 A members video added as a link to another site is served by that site, so Aglyn cannot make
 its links expire. The product editor marks it **Hosted elsewhere**.
+
+Files a product sells as **digital downloads** work the same way. Adding one makes it private
+after the same check, and the download link in a buyer's receipt hands over a link to the file
+that works for **one hour**. A file that is still public is refused rather than handed out,
+and a refused download does not count against the order's download limit.
 
 ## Approved image hosts {#approved-image-hosts}
 

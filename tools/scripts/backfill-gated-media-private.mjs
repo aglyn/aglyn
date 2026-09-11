@@ -17,8 +17,9 @@
  */
 
 /**
- * Make every file a product sells as a members video private, and kill the
- * download links buyers were already handed (AGL-2814). DRY RUN BY DEFAULT.
+ * Make every file a product sells, as a members video or a digital download,
+ * private, and kill the download links buyers were already handed (AGL-2814,
+ * AGL-2847). DRY RUN BY DEFAULT.
  *
  *   node --env-file=.env tools/scripts/backfill-gated-media-private.mjs \
  *     [--host=<id>] [--include-shared] [--bucket=<name>] [--apply]
@@ -28,7 +29,7 @@
  * NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, else `{project}.appspot.com`, and the
  * run prints which one it used.
  *
- * For each file a product's `gatedVideos` names, in the selling site's own
+ * For each file a product's `gatedVideos` or `digitalFiles` names, in the selling site's own
  * library or its org's, `--apply` writes, in this order:
  *
  * 1. a new download token on the object, when the file was public or a stored
@@ -51,6 +52,7 @@ import {
   DOWNLOAD_TOKEN_METADATA_KEY,
   haystackOf,
   mentionsMediaId,
+  PAID_MEDIA_LISTS,
   runGatedMediaBackfill,
   summarize,
 } from './lib/gated-media-backfill.mjs'
@@ -58,7 +60,7 @@ import {
 const args = parseDeployArgs({
   command: 'backfill-gated-media-private',
   summary:
-    'Make every file a product sells as a members video private, rotate the ' +
+    'Make every file a product sells as paid media private, rotate the ' +
     'download tokens buyers were handed, and replace stored download URLs ' +
     'with media references. Writes to the live project with --apply.',
   effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
@@ -128,13 +130,13 @@ const io = {
       .collection('hosts')
       .doc(hostId)
       .collection('products')
-      .select('name', 'deletedAt', 'gatedVideos')
+      .select('name', 'deletedAt', ...PAID_MEDIA_LISTS)
       .get()
     return products.docs.map((product) => ({
       id: product.id,
       name: String(product.get('name') ?? product.id),
       deleted: Boolean(product.get('deletedAt')),
-      gatedVideos: product.get('gatedVideos'),
+      ...Object.fromEntries(PAID_MEDIA_LISTS.map((list) => [list, product.get(list)])),
     }))
   },
 
@@ -180,8 +182,9 @@ const io = {
         }
       }
       for (const product of (await host.collection('products').get()).docs) {
-        // A members video list is a paid use, not somewhere the file shows.
-        const { gatedVideos: _paid, ...shown } = product.data()
+        // A paid media list is a sale, not somewhere the file shows.
+        const shown = { ...product.data() }
+        for (const list of PAID_MEDIA_LISTS) delete shown[list]
         check(`hosts/${hostId}/products/${product.id}`, shown)
       }
     }
@@ -216,16 +219,23 @@ const io = {
     const ref = firestore.collection('hosts').doc(hostId).collection('products').doc(productId)
     return firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref)
-      const list = snapshot.get('gatedVideos')
-      if (!Array.isArray(list)) return 0
       let changed = 0
-      const next = list.map((entry) => {
-        const hit = rewrites.find((rewrite) => entry && entry.url === rewrite.from)
-        if (!hit) return entry
-        changed += 1
-        return { ...entry, url: hit.to }
-      })
-      if (changed) transaction.update(ref, { gatedVideos: next })
+      const patch = {}
+      for (const list of PAID_MEDIA_LISTS) {
+        const entries = snapshot.get(list)
+        const mine = rewrites.filter((rewrite) => rewrite.list === list)
+        if (!Array.isArray(entries) || !mine.length) continue
+        let listChanged = 0
+        const next = entries.map((entry) => {
+          const hit = mine.find((rewrite) => entry && entry.url === rewrite.from)
+          if (!hit) return entry
+          listChanged += 1
+          return { ...entry, url: hit.to }
+        })
+        if (listChanged) patch[list] = next
+        changed += listChanged
+      }
+      if (changed) transaction.update(ref, patch)
       return changed
     })
   },
@@ -267,7 +277,7 @@ for (const plan of report.orphans) {
   console.log(`  ${plan.status.padEnd(9)} ${plan.objectPath} (no media document)${plan.rotate.length ? ' — rotate token' : ''}`)
 }
 for (const entry of report.skipped) {
-  console.log(`  skipped   ${entry.hostId}/${entry.productId} video ${entry.index} — ${entry.reason}`)
+  console.log(`  skipped   ${entry.hostId}/${entry.productId} ${entry.list}[${entry.index}] — ${entry.reason}`)
 }
 
 console.log(`\n${JSON.stringify(summarize(report), null, 2)}`)

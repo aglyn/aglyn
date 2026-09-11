@@ -24,6 +24,7 @@ import {
   MEDIA_SIGNATURE_MAX_TTL_MS,
   MEDIA_SIGNATURE_TTL_MS,
   mintMediaSignature,
+  PAID_DOWNLOAD_LINK_TTL_MS,
   signMediaAccess,
   verifyMediaAccess,
 } from './media-signing'
@@ -172,6 +173,33 @@ describe('private media signatures (AGL-1051)', () => {
         mintMediaSignature(SCOPE, MEDIA, NOW, MEDIA_SIGNATURE_MAX_TTL_MS + 1),
       ).toThrow(RangeError)
       expect(() => mintMediaSignature(SCOPE, MEDIA, NOW, 0)).toThrow(RangeError)
+    })
+  })
+
+  describe('a paid download link (AGL-2847)', () => {
+    it('lasts an hour, inside the lifetime every verifier accepts', () => {
+      expect(PAID_DOWNLOAD_LINK_TTL_MS).toBe(60 * 60 * 1000)
+      expect(PAID_DOWNLOAD_LINK_TTL_MS).toBeGreaterThan(MEDIA_SIGNATURE_TTL_MS)
+      expect(PAID_DOWNLOAD_LINK_TTL_MS).toBeLessThanOrEqual(
+        MEDIA_SIGNATURE_MAX_TTL_MS,
+      )
+      const signature = mintMediaSignature(
+        SCOPE,
+        MEDIA,
+        NOW,
+        PAID_DOWNLOAD_LINK_TTL_MS,
+      )
+      expect(
+        verifyMediaAccess(
+          SCOPE,
+          MEDIA,
+          signature,
+          NOW + PAID_DOWNLOAD_LINK_TTL_MS - 1,
+        ),
+      ).toBe(true)
+      expect(
+        verifyMediaAccess(SCOPE, MEDIA, signature, NOW + PAID_DOWNLOAD_LINK_TTL_MS),
+      ).toBe(false)
     })
   })
 

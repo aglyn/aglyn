@@ -138,6 +138,35 @@ describe('findPaidMediaUses', () => {
     ])
   })
 
+  it('finds a paid download as well as a members video (AGL-2847)', async () => {
+    const { firestore } = makeFirestore({
+      products: {
+        'host-1': [
+          {
+            id: 'prod-guide',
+            name: 'Field guide',
+            data: {},
+          },
+        ].map((product) => ({
+          ...product,
+          data: {
+            name: product.name,
+            digitalFiles: [{ url: 'media:host-1/m1', fileName: 'guide.pdf' }],
+          },
+        })),
+      },
+    })
+    const result = await findPaidMediaUses({
+      firestore,
+      base: 'hosts/host-1',
+      mediaId: 'm1',
+    })
+    expect(result).toEqual({
+      uses: [{ hostId: 'host-1', productId: 'prod-guide', productName: 'Field guide' }],
+      complete: true,
+    })
+  })
+
   it('reads only the site itself for a site-library film', async () => {
     const { firestore, queried } = makeFirestore({
       products: { 'host-1': [course('media:host-1/m1')] },
@@ -225,9 +254,9 @@ describe('paidMediaPublishRefusal', () => {
     expect(
       paidMediaPublishRefusal({ uses: [use('Training program')], complete: true }),
     ).toBe(
-      'This file is a members video on “Training program”. Remove it from ' +
-        'that product before publishing it: a public copy would let anyone ' +
-        'watch it without buying.',
+      'This file is sold on “Training program”. Remove it from that product ' +
+        'before publishing it: a public copy would let anyone have it without ' +
+        'buying.',
     )
   })
 

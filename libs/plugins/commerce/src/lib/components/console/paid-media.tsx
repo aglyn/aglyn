@@ -33,13 +33,14 @@ import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 
 /**
- * A product's members videos are private files (AGL-2814).
+ * A product's members videos (AGL-2814) and paid downloads (AGL-2847) are
+ * private files.
  *
- * The stream route only ever hands a buyer a link that expires, and it can
- * only do that for a PRIVATE asset: a public one already has a URL that works
- * for anyone, forever, and the route refuses to deliver it. So adding a video
- * to a product makes the file private, and the product editor shows, per
- * video, whether that is still true.
+ * The stream and download routes only ever hand a buyer a link that expires,
+ * and they can only do that for a PRIVATE asset: a public one already has a
+ * URL that works for anyone, forever, and the routes refuse to deliver it. So
+ * adding a file to a product makes it private, and the product editor shows,
+ * per file, whether that is still true.
  *
  * Making a file private is visible outside the product. A trailer that is
  * also on a public page stops playing there, and every public link to it that
@@ -59,6 +60,33 @@ export interface PaidMediaReference {
 
 /** How far the where-used scan got before the author was asked. */
 export type PaidMediaUsageCheck = 'full' | 'partial' | 'failed'
+
+/** Which list a flow adds to, for the words it uses. */
+export type PaidMediaKind = 'video' | 'download'
+
+const PAID_MEDIA_COPY: Record<
+  PaidMediaKind,
+  { title: string; lead: string; notAdded: string; unusable: string; choose: string }
+> = {
+  video: {
+    title: 'Make this video private?',
+    lead:
+      'Members videos are private: buyers play them through a link that ' +
+      'expires, and nobody else can open them.',
+    notAdded: 'The video was not added.',
+    unusable: 'Members cannot play it until it is private.',
+    choose: 'Choose the video from the media library, so its links can expire.',
+  },
+  download: {
+    title: 'Make this file private?',
+    lead:
+      'Paid downloads are private: buyers get a link that expires, and nobody ' +
+      'else can open the file.',
+    notAdded: 'The file was not added.',
+    unusable: 'Buyers cannot download it until it is private.',
+    choose: 'Choose the file from the media library, so its links can expire.',
+  },
+}
 
 /** The request body that names an asset's library to the media routes. */
 export function paidMediaScopeBody(
@@ -93,11 +121,10 @@ export function usesBesideProduct(
 export function paidMediaConfirmation(options: {
   others: readonly PaidMediaReference[]
   checked: PaidMediaUsageCheck
+  kind?: PaidMediaKind
 }): string {
   const { others, checked } = options
-  const lead =
-    'Members videos are private: buyers play them through a link that ' +
-    'expires, and nobody else can open them.'
+  const { lead } = PAID_MEDIA_COPY[options.kind ?? 'video']
   let usage: string
   if (others.length) {
     const names = others
@@ -119,14 +146,17 @@ export function paidMediaConfirmation(options: {
 }
 
 /**
- * Adds a picked file to a product as a members video, making it private
- * first when it is not, and makes an already-added one private.
+ * Adds a picked file to a product as paid media, making it private first when
+ * it is not, and makes an already-added one private.
  */
 export function usePaidMediaAttach(product: {
   hostId: string
   productId?: string
+  kind?: PaidMediaKind
 }) {
   const { hostId, productId } = product
+  const kind = product.kind ?? 'video'
+  const copy = PAID_MEDIA_COPY[kind]
   const { data: user } = useUser()
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
@@ -158,8 +188,8 @@ export function usePaidMediaAttach(product: {
         // "nothing uses it".
       }
       const confirmed = await confirm({
-        title: 'Make this video private?',
-        description: paidMediaConfirmation({ others, checked }),
+        title: copy.title,
+        description: paidMediaConfirmation({ others, checked, kind }),
         confirmationText: 'Make private',
       })
         .then(() => true)
@@ -179,9 +209,7 @@ export function usePaidMediaAttach(product: {
       if (!response.ok) {
         const reason = String(payload?.error ?? 'Could not make the video private')
         enqueueSnackbar(
-          options.adding
-            ? `${reason}. The video was not added.`
-            : `${reason}. Members cannot play it until it is private.`,
+          `${reason}. ${options.adding ? copy.notAdded : copy.unusable}`,
           { variant: 'error', allowDuplicate: true },
         )
         return false
@@ -196,7 +224,7 @@ export function usePaidMediaAttach(product: {
       }
       return true
     },
-    [confirm, enqueueSnackbar, hostId, productId, user],
+    [confirm, copy, enqueueSnackbar, hostId, kind, productId, user],
   )
 
   /** The value to store on the product, or null when nothing was added. */
@@ -207,10 +235,7 @@ export function usePaidMediaAttach(product: {
           ? formatMediaRef(picked.mediaScope, picked.mediaId)
           : undefined
       if (!reference || !picked.mediaScope || !picked.mediaId) {
-        enqueueSnackbar(
-          'Choose the video from the media library, so its links can expire.',
-          { variant: 'warning', persist: false },
-        )
+        enqueueSnackbar(copy.choose, { variant: 'warning', persist: false })
         return null
       }
       if (picked.private) return reference
@@ -220,7 +245,7 @@ export function usePaidMediaAttach(product: {
       )
       return madePrivate ? reference : null
     },
-    [enqueueSnackbar, protect],
+    [copy, enqueueSnackbar, protect],
   )
 
   return { attach, protect }
@@ -229,17 +254,18 @@ export function usePaidMediaAttach(product: {
 type Protection = 'checking' | 'private' | 'public' | 'missing' | 'unknown'
 
 /**
- * Whether one stored members video can play, read off its media document.
+ * Whether one stored paid file can be delivered, read off its media document.
  * A public one gets the button that fixes it.
  */
 export function PaidMediaProtection(props: {
   url: string
   hostId: string
   productId?: string
+  kind?: PaidMediaKind
 }) {
-  const { url, hostId, productId } = props
+  const { url, hostId, productId, kind } = props
   const firestore = useFirestore()
-  const { protect } = usePaidMediaAttach({ hostId, productId })
+  const { protect } = usePaidMediaAttach({ hostId, productId, kind })
   const [protection, setProtection] = useState<Protection>('checking')
   const [generation, setGeneration] = useState(0)
   const source = parsePaidMediaSource(url)
@@ -297,7 +323,7 @@ export function PaidMediaProtection(props: {
   if (protection === 'public') {
     return (
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Tooltip title="Anyone with its link can open a public file, so members cannot play it until it is private.">
+        <Tooltip title="Anyone with its link can open a public file, so buyers cannot get it until it is private.">
           <Chip size="small" color="warning" label="Public" />
         </Tooltip>
         <Button
@@ -379,5 +405,39 @@ export function MembersVideosField(props: {
         {'Add members video'}
       </Button>
     </>
+  )
+}
+
+/**
+ * The button that adds a paid download (AGL-2847): the picker offers private
+ * files, and a public one is made private before it is added.
+ *
+ * Its own component for the same reason as {@link MembersVideosField}: the
+ * product editor's body runs while the editor is closed, and this only mounts
+ * inside the open dialog.
+ */
+export function PaidDownloadAddButton(props: {
+  hostId: string
+  productId?: string
+  onAdd: (file: { url: string; fileName: string }) => void
+}) {
+  const { hostId, productId, onAdd } = props
+  const { pickMedia } = useMediaPicker()
+  const { attach } = usePaidMediaAttach({ hostId, productId, kind: 'download' })
+  return (
+    <Button
+      size="small"
+      onClick={() =>
+        void (async () => {
+          const media = await pickMedia?.({ allowPrivate: true })
+          if (!media) return
+          const url = await attach(media)
+          if (!url) return
+          onAdd({ url, fileName: media.fileName ?? 'download' })
+        })()
+      }
+    >
+      {'Add file (media library)'}
+    </Button>
   )
 }

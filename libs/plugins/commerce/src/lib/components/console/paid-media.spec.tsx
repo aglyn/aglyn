@@ -36,6 +36,7 @@ import {
 import { MediaPickerContext, type PickedMedia } from '@aglyn/aglyn'
 import {
   MembersVideosField,
+  PaidDownloadAddButton,
   paidMediaConfirmation,
   paidMediaScopeBody,
   usePaidMediaAttach,
@@ -173,6 +174,78 @@ describe('the pure pieces', () => {
     expect(paidMediaConfirmation({ others: [], checked: 'full' })).toContain(
       'Any public link to it that was already shared stops working too.',
     )
+  })
+})
+
+describe('AGL-2847 · adding a paid download', () => {
+  async function attachDownload(picked: PickedMedia) {
+    const { result } = renderHook(() =>
+      usePaidMediaAttach({ hostId: HOST, productId: PRODUCT, kind: 'download' }),
+    )
+    let stored: string | null = null
+    await act(async () => {
+      stored = await result.current.attach(picked)
+    })
+    return stored
+  }
+
+  it('asks about the file in the words of a download', async () => {
+    routes({
+      references: () => answer(200, { references: [], complete: true }),
+      folders: () => answer(200, { ok: true, rawUrlCleared: true }),
+    })
+    expect(await attachDownload({ ...publicFilm, fileName: 'guide.pdf' })).toBe(
+      'media:org:acme/med-film',
+    )
+    expect(mockConfirm.mock.calls[0][0].title).toBe('Make this file private?')
+    expect(mockConfirm.mock.calls[0][0].description).toContain(
+      'Paid downloads are private',
+    )
+  })
+
+  it('⛔ says the file was not added when it could not be made private', async () => {
+    routes({
+      references: () => answer(200, { references: [], complete: true }),
+      folders: () =>
+        answer(403, { error: 'Only an organization admin can change this' }),
+    })
+    expect(await attachDownload(publicFilm)).toBeNull()
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      'Only an organization admin can change this. The file was not added.',
+      expect.objectContaining({ variant: 'error' }),
+    )
+  })
+
+  it('⛔ refuses a pick that names no library file', async () => {
+    expect(await attachDownload({ url: 'https://files.example/guide.pdf' })).toBeNull()
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      'Choose the file from the media library, so its links can expire.',
+      expect.objectContaining({ variant: 'warning' }),
+    )
+  })
+
+  it('opens the picker for private files, and adds what it attached', async () => {
+    const pickMedia = jest.fn().mockResolvedValue({
+      url: 'media:org:acme/med-guide',
+      fileName: 'guide.pdf',
+      mediaId: 'med-guide',
+      mediaScope: 'org:acme',
+      private: true,
+    })
+    const onAdd = jest.fn()
+    render(
+      <MediaPickerContext.Provider value={{ pickMedia }}>
+        <PaidDownloadAddButton hostId={HOST} productId={PRODUCT} onAdd={onAdd} />
+      </MediaPickerContext.Provider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add file (media library)' }))
+    await waitFor(() =>
+      expect(onAdd).toHaveBeenCalledWith({
+        url: 'media:org:acme/med-guide',
+        fileName: 'guide.pdf',
+      }),
+    )
+    expect(pickMedia).toHaveBeenCalledWith({ allowPrivate: true })
   })
 })
 

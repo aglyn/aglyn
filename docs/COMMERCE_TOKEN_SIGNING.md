@@ -22,10 +22,10 @@ possible, which is why there isn't one now.
 
 | File | Tokens |
 | --- | --- |
-| `libs/plugins/commerce/src/lib/server/download.ts` | order download links (90-day TTL) — defines `tokenSigningSecret()` |
+| `libs/plugins/commerce/src/lib/server/download.ts` | order download links (90-day TTL) — defines `tokenSigningSecret()`; the redirect they answer is a private media signature valid for 1 hour (`PAID_DOWNLOAD_LINK_TTL_MS`) — AGL-2847 |
 | `libs/plugins/commerce/src/lib/server/billing-webhook.ts` | supplier tokens (**no expiry**, persisted on the order doc; re-derived and compared in `supplier-update.ts`) |
 | `libs/plugins/commerce/src/lib/server/stream.ts` | gated-video stream URLs (15-min TTL) — AGL-689; the redirect they answer is a private media signature for a 4-hour viewing session (`GATED_VIDEO_SESSION_TTL_MS`) — AGL-2814 |
-| `libs/tenant/data/admin/src/lib/server/media-signing.ts` | private media access signatures (15-min TTL for console previews, 4 hours for a gated-video session; the verifier refuses any lifetime above `MEDIA_SIGNATURE_MAX_TTL_MS`) — AGL-1051, AGL-2814 |
+| `libs/tenant/data/admin/src/lib/server/media-signing.ts` | private media access signatures (15-min TTL for console previews, 1 hour for a paid download, 4 hours for a gated-video session; the verifier refuses any lifetime above `MEDIA_SIGNATURE_MAX_TTL_MS`) — AGL-1051, AGL-2814, AGL-2847 |
 | `libs/tenant/data/admin/src/lib/server/edit-access-token.ts` | tenant admin-bar edit tokens (30-min TTL, `edit-bar:` namespace) — AGL-1302 follow-on |
 | `libs/tenant/data/admin/src/lib/server/edit-hint-token.ts` | edit-hint cookie (**7-day** TTL, set on `.aglyn.app`) and the 60-second bounce token |
 
