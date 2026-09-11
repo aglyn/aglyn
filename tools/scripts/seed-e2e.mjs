@@ -45,6 +45,7 @@ import {
   FREE_PLAN_FIXTURE,
   seedFreePlanWorkspace,
 } from './lib/crm-free-plan-fixtures.mjs'
+import { E2E_ORG_RELEASE_FLAGS } from './lib/e2e-release-flags.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
 
 if (
@@ -274,6 +275,11 @@ await put(firestore.collection('orgs').doc(orgId), {
     'workflows',
   ],
   subscription: { status: 'active' },
+  // Release flags granted to this org alone, through the per-org override
+  // every gate reads (AGL-1635) — `release_video_uploads`, without which the
+  // DAM e2e's films are refused (AGL-2830). The merge-set keeps an override
+  // another script stored and converges these keys on every run.
+  releaseFlags: E2E_ORG_RELEASE_FLAGS,
   createdAt: now,
 })
 await put(
