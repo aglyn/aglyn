@@ -111,6 +111,11 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
+  // The REAL release-flag registry, first so the entries below still win.
+  // The setup layout reaches the media library through the app-icon card, and
+  // `use-release-flags` builds its context default from `RELEASE_FLAGS` the
+  // moment it loads — an omitted export throws before any case runs.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/release-flags'),
   HostEntityType: { ORGANIZATION: 'Organization', PERSON: 'Person' },
   /*
     The REAL patterns, not stand-ins (AGL-2486). The Tracking tab's schema
