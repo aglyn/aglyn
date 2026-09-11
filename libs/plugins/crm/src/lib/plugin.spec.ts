@@ -95,7 +95,7 @@ describe('crm plugin', () => {
     // page anywhere but last would be a landing page for somebody.
     expect(sections?.[sections.length - 1]?.label).toBe('Settings')
     // No section declares its own flag — all of them ship with the surface
-    // and inherit `release_contacts` from the nav item.
+    // and inherit `release_crm` from the nav item.
     expect(sections?.every((section) => !section.navTabId)).toBe(true)
   })
 

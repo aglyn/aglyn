@@ -188,7 +188,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   { id: 'marketplace', label: 'Marketplace', description: 'Marketplace listings, templates, and installs.', releaseFlag: 'release_marketplace' },
   // `crm` was `contacts` until AGL-2595 widened one list into the hub; the
   // release flag kept its key because it is persisted in Remote Config.
-  { id: 'crm', label: 'CRM', description: 'Leads, contacts, companies, deals, tasks and reports.', releaseFlag: 'release_contacts' },
+  { id: 'crm', label: 'CRM', description: 'Leads, contacts, companies, deals, tasks and reports.', releaseFlag: 'release_crm' },
   { id: 'data', label: 'Data', description: 'Datasets, records, and CSV import/export.', releaseFlag: 'release_data_store' },
   { id: 'email', label: 'Email', description: 'Designed emails and campaign sending.', releaseFlag: 'release_email' },
   { id: 'events-calendar', label: 'Events Calendar', description: 'Event lists and calendars.', releaseFlag: 'release_events' },

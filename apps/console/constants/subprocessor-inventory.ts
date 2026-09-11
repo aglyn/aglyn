@@ -621,6 +621,27 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       "Aglyn's own project id and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is deployment metadata about Aglyn's own functions — resource name, region, state and `updateTime`.",
   },
 
+  // Google Cloud control-plane endpoints named by the operator scripts that
+  // provision alerting and scheduled jobs: the platform configuring or starting
+  // something in its own project, with no tenant, member or visitor record in
+  // scope to send. `not-a-subprocessor` on the first admissible reason, and NOT
+  // `no-request` — both are really called.
+
+  'monitoring.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Cloud Monitoring v3, called only by the operator script `tools/scripts/setup-alert-slack-channel.mjs`: it lists the project's notification channels and alert policies, adds the existing Slack channel to every outage policy that lacks it (a PATCH with `updateMask=notificationChannels`), then reads the policies back to prove the route is attached. No console or tenant code imports it, so no request-serving path reaches it, and it authenticates as the operator running it — Monitoring refuses the Firebase service account.",
+    dataReceived:
+      "The project id, the resource names of alert policies and notification channels, and the operator's own access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is the project's own alerting configuration.",
+  },
+  'run.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      'The Cloud Run Admin API `jobs.run` address, written by `tools/scripts/setup-edge-admission-run.mjs` and `tools/scripts/setup-github-app-dispatch.mjs` as the target of a Cloud Scheduler HTTP job. Scheduler POSTs to it on a cron, with an OAuth token for the job\'s dedicated service account, to start the edge-admission sampler or the job that dispatches the signup canary workflow. The same scripts deploy those jobs through `gcloud run jobs`, as the operator. No console or tenant code imports either script.',
+    dataReceived:
+      "Job definitions — a container built from the repository's own scripts, its service account, non-secret identifiers as environment variables, and Secret Manager references by name, never a secret value — and bodiless run requests naming a job. Nothing personal is in either: no customer, member or visitor record is read or sent to define or start a job.",
+  },
+
   // MARK – Literals that are never fetched
   //
   // Namespaces, contexts, link text, form placeholders, fixture values. Each

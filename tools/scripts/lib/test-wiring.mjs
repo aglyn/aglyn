@@ -61,7 +61,7 @@
  *
  * This is a statement of what is NOT covered, not permission to add more —
  * every entry is a library whose source is imported by real code and whose
- * behaviour nothing asserts. Adding a fifth line is a decision someone should
+ * behaviour nothing asserts. Adding a fourth line is a decision someone should
  * have to argue for in review, which is the only reason this list is a list
  * rather than a rule. The count is asserted in the sibling test, so REMOVING
  * one (as AGL-2486 found `shared-util-dom` had been) is equally deliberate.
@@ -73,11 +73,6 @@ export const UNTESTED_PROJECTS = [
     project: 'shared-util-rest-api',
     dir: 'libs/shared/util/rest-api',
     why: 'Pages-router JSON/cookie/middleware helpers. Its only spec (csrf-app.spec.ts) was deleted by ecc2a7d1d (AGL-910) and never replaced.',
-  },
-  {
-    project: 'shared-ui-next',
-    dir: 'libs/shared/ui/next',
-    why: 'Next-specific UI wrappers, imported by 69 files. Has never had a spec file in its history.',
   },
   {
     project: 'shared-svg-icons-svg-icons',

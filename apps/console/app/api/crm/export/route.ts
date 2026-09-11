@@ -162,7 +162,7 @@ async function handler(request: Request): Promise<Response> {
 
     // The surface is release-flagged, so the route is too: an export door
     // standing open on a hub nobody can reach is a door.
-    if (!staff && !(await isServerReleaseFlagOnForOrg('release_contacts', orgId))) {
+    if (!staff && !(await isServerReleaseFlagOnForOrg('release_crm', orgId))) {
       return json({ error: 'Not available' }, 404)
     }
     // The permission the CRM's own rules read for. Reading is not writing,

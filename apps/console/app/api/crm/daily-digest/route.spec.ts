@@ -196,7 +196,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   findUserByUidAcrossPools: async (uid: string) => ({
     record: { email: `${uid}@pool.example.com` },
   }),
-  getServerReleaseFlagValues: async () => ({ release_contacts: { enabled: true } }),
+  getServerReleaseFlagValues: async () => ({ release_crm: { enabled: true } }),
   listOrgMembers: async (orgId: string) =>
     mockChildren(`orgs/${orgId}/members`).map((path) => ({
       $id: mockLast(path),
@@ -332,7 +332,7 @@ function seedPlatform() {
     slug: 'off',
     plan: 'business',
     entitlements: { features: { crm: true } },
-    releaseFlags: { release_contacts: false },
+    releaseFlags: { release_crm: false },
   })
   seed('orgs/org-off/members/olly', { role: 'owner', email: 'olly@off.com' })
   seed('orgs/org-off/crmTasks/t', { status: 'open', dueAtMs: NOW - DAY, assigneeUid: 'olly', hostId: 'h' })

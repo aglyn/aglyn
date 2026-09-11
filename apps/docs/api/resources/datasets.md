@@ -73,8 +73,8 @@ model. A few behaviors matter when writing:
   `"true"` into a boolean works, and a date string into a timestamp field is parsed.
 - **Timestamps come back as epoch milliseconds** inside `values`, not ISO strings.
   The top-level `created`/`updated` are ISO — the two differ, deliberately.
-- **Coordinates** accept `"lat,lng"` strings or `{lat, lng}` objects, bounded to
-  ±90 / ±180.
+- **Coordinates** accept a `"lat,lng"` string or a `{latitude, longitude}` object,
+  bounded to ±90 / ±180. A `{lat, lng}` object fails validation.
 
 ## Endpoints
 
@@ -235,9 +235,10 @@ valid JSON with `Content-Type: application/json`.
 #### The record is written; the live page still isn't showing it {#records-and-publish}
 
 Writing a record and refreshing the site is the first thing everyone tries, and it
-usually shows the old data. That is the cache, not a failed write: live pages rebuild
-at most every 60 seconds and serve the previous copy while the new one is built, so a
-brand-new record can take a couple of minutes to appear on its own.
+usually shows the old data. That is the cache, not a failed write: no record write
+refreshes a live page. Live pages rebuild at most once an hour, the dataset reads behind
+them are cached for an hour too, and a page serves its previous copy while the new one
+is built — so a new record can take an hour or more to appear on its own.
 
 To make it appear now, [publish the site](sites.md#publish) once you've finished
 writing:
@@ -249,8 +250,8 @@ curl -X POST "https://app.aglyn.com/api/v1/sites/host_demo/publish" \
 
 Publish **after the batch, not after each record** — it is limited to
 [10 per site per hour](sites.md#publish-limit), and one publish covers every record you
-just wrote. Skipping it entirely is a valid choice too: the data still appears within
-the minute.
+just wrote. Skipping it is a valid choice when a delay is fine: the data still appears
+once those caches lapse, an hour or more later.
 
 ### Update a record
 
@@ -289,8 +290,9 @@ a response lost to a timeout doesn't come back as a `404` you'd read as a failur
 ## Validation
 
 Writes are validated against the dataset's model: required fields, text length and
-pattern, numeric ranges, enum options, and reference targets. Any failure returns a
-single `400`:
+pattern, numeric ranges, enum options, and reference shape — a record id, or a list of
+them where the field allows several. Whether that record exists is not checked. Any
+failure returns a single `400`:
 
 ```json
 {
@@ -299,8 +301,8 @@ single `400`:
     "message": "Record failed validation",
     "code": "validation_failed",
     "fields": {
-      "email": "Required",
-      "headcount": "Must be a whole number"
+      "email": "Email is required",
+      "headcount": "Headcount must be a whole number"
     }
   }
 }
@@ -319,11 +321,12 @@ the console enforces on the same write:
 | `record_quota` | The dataset already holds every record the plan includes. The message names the limit. | Upgrade. |
 | `data_storage_quota` | Dataset storage is exhausted, or the plan includes none at all. The message names the included size. | Upgrade. |
 
-On the plans that meter data storage — which is every plan that includes the API —
-crossing the included band **bills as
+On the self-serve plans that include the API — Business through Agency — crossing the
+included storage band **bills as
 [overage](../rate-limits.md#monthly-quota--overage) rather than refusing**, so a bulk
-import runs to completion and shows up on the invoice. The refusals above are what a
-plan that hard-caps answers instead.
+import runs to completion and shows up on the invoice. Enterprise has no overage rate,
+so it hard-caps: past its included storage, a record write gets the
+`data_storage_quota` refusal above.
 
 Like the dataset gates, **neither consumes an `Idempotency-Key`**: both clear on an
 upgrade, and the retry that should then succeed must not replay the refusal. The

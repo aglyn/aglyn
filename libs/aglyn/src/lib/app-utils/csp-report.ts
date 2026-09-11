@@ -46,6 +46,11 @@
  * emitted, is what makes the data usable.
  */
 
+// A violation from a scheme no deployment of ours serves is never ours to fix.
+// The error beacon reads the same list off a stack's frames, so it lives in
+// one place — see `FOREIGN_SCRIPT_SCHEMES`.
+import { isForeignScriptUrl as isForeign } from './foreign-script'
+
 /** One violation, normalized across the two wire formats. */
 export interface CspViolation {
   /** The page, PATH ONLY — see `documentPath`. */
@@ -61,31 +66,6 @@ export interface CspViolation {
   lineNumber: number | null
   /** `enforce` or `report`. */
   disposition: string
-}
-
-/**
- * Schemes whose violations are never ours to fix.
- *
- * Extension content scripts are the overwhelming majority of reports on any
- * real deployment. `webkit-masked-url` is Safari's redaction of the same
- * thing, and it is worth listing explicitly: it is opaque, so it can never be
- * actioned, and it arrives in volume.
- */
-const FOREIGN_SCHEMES = [
-  'chrome-extension:',
-  'moz-extension:',
-  'safari-extension:',
-  'safari-web-extension:',
-  'edge-extension:',
-  'webkit-masked-url:',
-  'chrome:',
-  'resource:',
-  'asset:',
-]
-
-const isForeign = (value: string) => {
-  const lowered = value.toLowerCase()
-  return FOREIGN_SCHEMES.some((scheme) => lowered.startsWith(scheme))
 }
 
 /** Trim a value that a hostile client controls, and that we log. */

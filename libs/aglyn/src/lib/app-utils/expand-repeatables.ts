@@ -120,24 +120,41 @@ const repeatDatasetKey = (node: unknown): string => {
 /**
  * Does this tree contain anything {@link expandRepeatables} would expand?
  *
- * Exported so the tenant compose pipeline can decide whether to PAY for the
- * datasets read at all (AGL-1440). That read is the single worst amplifier on
- * the render path — every dataset the host may see, plus up to
- * {@link REPEAT_MAX_RECORDS} records each, up to ~5,050 Firestore reads — and
- * it was issued unconditionally, including on the great majority of pages that
- * repeat over nothing.
+ * The datasets read is the largest on the render path — up to two pages of
+ * {@link REPEAT_MAX_RECORDS} records for every dataset a page repeats over —
+ * and a page that repeats over nothing should pay none of it (AGL-1440).
  *
- * The gate has to ask EXACTLY the question the expansion asks, which is why
- * `expandRepeatables` is built on this same predicate rather than on a second
- * copy of it. A gate that is even slightly stricter than the expansion is not a
- * saving: it is a published page that quietly renders one template row where
- * the author put a list.
+ * Any gate on that read has to ask EXACTLY the question the expansion asks,
+ * which is why this and {@link repeatDatasetKeys} share the one predicate
+ * `expandRepeatables` looks keys up with. A gate that is even slightly
+ * stricter than the expansion is not a saving: it is a published page that
+ * quietly renders one template row where the author put a list.
  */
 export function hasRepeatableNodes(
   nodes: Record<NodeId, unknown> | null | undefined,
 ): boolean {
   if (!nodes) return false
   return Object.values(nodes).some((node) => repeatDatasetKey(node) !== '')
+}
+
+/**
+ * Every dataset key this tree repeats over — a dataset id or a display name,
+ * exactly as {@link expandRepeatables} looks it up — sorted and without
+ * repeats.
+ *
+ * What the tenant compose reads, so a page loads the datasets it renders and
+ * not every dataset its site may see. Built on the same predicate as
+ * {@link hasRepeatableNodes} for the reason given there.
+ */
+export function repeatDatasetKeys(
+  nodes: Record<NodeId, unknown> | null | undefined,
+): string[] {
+  const keys = new Set<string>()
+  for (const node of Object.values(nodes ?? {})) {
+    const key = repeatDatasetKey(node)
+    if (key) keys.add(key)
+  }
+  return [...keys].sort()
 }
 
 /**

@@ -90,7 +90,7 @@ let putBodies: any[]
 
 /** One flag row, as `GET /api/admin/flags` returns it. */
 const flagRow = (value: Record<string, unknown>) => ({
-  key: 'release_contacts',
+  key: 'release_crm',
   label: 'Contacts CRM',
   description: 'Unified contacts list.',
   value,
@@ -201,7 +201,7 @@ describe('/admin/flags tier targeting (AGL-2486)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await waitFor(() => expect(putBodies).toHaveLength(1))
     expect(putBodies[0]).toMatchObject({
-      key: 'release_contacts',
+      key: 'release_crm',
       plans: ['pro'],
       rolloutPercent: 50,
     })

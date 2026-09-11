@@ -270,7 +270,7 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       // registry, because a serialised sentinel is `{}` and a merge ignores
       // it — which is the AGL-1109 no-op (org-override-route.spec.ts pins
       // the expansion).
-      expect(body.releaseFlags).not.toHaveProperty('release_contacts')
+      expect(body.releaseFlags).not.toHaveProperty('release_crm')
       expect(JSON.stringify(body)).not.toContain('__DELETE__')
       // Granting one org an unreleased feature records WHY (AGL-1652).
       expect(body.reason).toBe('beta')

@@ -32,8 +32,8 @@ import {
   hostScopeToken,
   narrowsScope,
   scopeCovers,
-  normalizeVisibleTo,
   ORG_SCOPE_TOKEN,
+  scopeToStore,
   storedScope,
   visibleToHost,
 } from '@aglyn/aglyn'
@@ -385,6 +385,25 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     const scopeChanged =
       JSON.stringify([...previousScope].sort()) !==
       JSON.stringify([...visibleTo].sort())
+    /**
+     * The scope this save writes, or null when it writes none.
+     *
+     * Only an org-wide member may change the scope — the AGL-1041 rules deny
+     * anyone else, and a rejected field fails the WHOLE write.
+     *
+     * A selection `scopeToStore` cannot store — "Selected sites…" with no site
+     * picked, or more sites than one query can match — refuses the save rather
+     * than substituting a scope: the org token would share the collection with
+     * every site, and anything narrower would drop sites somebody picked.
+     */
+    const scopeWrite =
+      orgId && viewerOrgWide && scopeChanged ? scopeToStore(visibleTo) : null
+    if (scopeWrite?.problem) {
+      return void enqueueSnackbar(scopeWrite.problem, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     if (scopeChanged && narrowsScope(previousScope, visibleTo)) {
       // Narrowing takes a dataset away from sites whose pages may bind it,
       // and a repeatable bound to a dataset it can no longer see renders
@@ -448,12 +467,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
             // v1 compat: keep the flat column list mirroring the model order
             // so unmigrated consumers (AGL-103 bindings) keep working.
             fields: model.order,
-            // Only an org-wide member may change the scope — the AGL-1041
-            // rules deny anyone else, and a rejected field fails the WHOLE
-            // write.
-            ...(orgId && viewerOrgWide && scopeChanged
-              ? { visibleTo: normalizeVisibleTo(visibleTo) ?? [ORG_SCOPE_TOKEN] }
-              : {}),
+            ...(scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {}),
           },
         )),
     )
@@ -639,6 +653,11 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                         )
                       })}
                     </Stack>
+                  ) : null}
+                  {!scopeUnset && scopeToStore(visibleTo).problem ? (
+                    <Typography variant="caption" color="error">
+                      {scopeToStore(visibleTo).problem}
+                    </Typography>
                   ) : null}
                 </>
               ) : (

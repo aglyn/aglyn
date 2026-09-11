@@ -30,6 +30,7 @@ import {
 } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { useVideoPlaybackBeacon } from './video-playback-beacon'
 
 /**
  * The lightbox, behind a lazy boundary rather than a plain import (AGL-2744).
@@ -346,7 +347,15 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    * The trigger still RENDERS as a button, because what an author sees on the
    * canvas has to be what a visitor gets.
    */
-  const { editorInert } = Aglyn.useScreenLink(undefined)
+  const { editorInert, suppressNavigation } = Aglyn.useScreenLink(undefined)
+  /**
+   * What a play is counted against (AGL-2781): the site, the asset the STORED
+   * value names, and whether this surface is an editor. Handed to the
+   * lightbox as data rather than as handlers, because a play there belongs to
+   * one open of the dialog and only the dialog knows when that begins.
+   */
+  const playback = { hostId, src: storedSrc, suppressed: suppressNavigation }
+  const playbackHandlers = useVideoPlaybackBeacon(playback)
   if (!src) {
     return (
       <Box
@@ -556,6 +565,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
               loop={loop}
               muted={muted}
               captions={track}
+              playback={playback}
             />
           </Suspense>
         ) : null}
@@ -577,6 +587,11 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
       playsInline={playsInline !== false}
       preload={resolveVideoPreload({ preload, poster, autoPlay })}
       {...rest}
+      // After the spread, so a stray prop from the tree cannot unwire the
+      // counters.
+      onPlay={playbackHandlers.onPlay}
+      onTimeUpdate={playbackHandlers.onTimeUpdate}
+      onEnded={playbackHandlers.onEnded}
       sx={[
         {
           display: 'block',

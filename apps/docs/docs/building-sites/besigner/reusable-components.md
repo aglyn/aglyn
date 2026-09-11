@@ -125,8 +125,8 @@ read the published component.
 1. **Save properties** — the dialog confirms *"Properties saved. Publish to make them
    available on live pages."*
 2. **File ▸ Publish to sites** (labeled **Publish again** when the version you have open
-   is already the published one) — *"Published. Every screen using this component picks
-   it up within a minute — you do not need to republish them."*
+   is already the published one) — *"Published. Every screen using this component is
+   refreshing now — you do not need to republish them."*
 
 Publishing the component is enough. You do not republish the pages that use it.
 

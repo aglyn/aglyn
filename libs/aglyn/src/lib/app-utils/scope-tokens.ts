@@ -210,6 +210,27 @@ export function normalizeVisibleTo(
   return unique
 }
 
+/**
+ * The scope a save writes, or why the selection cannot be written.
+ *
+ * {@link normalizeVisibleTo} answers null for a selection it cannot store, and
+ * a save has no safe substitute for that null: the org token shares the
+ * resource with every site, and dropping tokens takes access from sites
+ * somebody picked. So a caller refuses the save and shows `problem`.
+ */
+export function scopeToStore(
+  input: readonly string[] | undefined | null
+): { scope: ScopeToken[]; problem: null } | { scope: null; problem: string } {
+  const scope = normalizeVisibleTo(input)
+  if (scope) return { scope, problem: null }
+  return {
+    scope: null,
+    problem: (input ?? []).some(isScopeToken)
+      ? `Choose ${MAX_SCOPE_HOSTS} sites or fewer, or share with All sites.`
+      : 'Choose at least one site, or share with All sites.',
+  }
+}
+
 /** A scope covering exactly the given hosts; null when unusable. */
 export function scopeForHosts(
   hostIds: readonly string[]

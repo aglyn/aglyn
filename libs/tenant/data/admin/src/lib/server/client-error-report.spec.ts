@@ -85,6 +85,79 @@ describe('parseClientErrorEvents (AGL-1538)', () => {
 })
 
 /**
+ * An error with none of our code on its stack is refused at ingestion
+ * (AGL-2786), so a bundle cached before the beacon learned a scheme cannot
+ * page anyone. Every drop sits beside the frame that must keep it.
+ */
+describe('parseClientErrorEvents — foreign-only stacks (AGL-2786)', () => {
+  /** The `client-errors` entry that opened the alert, as the beacon posts it. */
+  const ANDROID_BRIDGE = {
+    kind: 'error',
+    message: 'Error invoking postMessage: Java object is gone',
+    stack: [
+      'Error: Error invoking postMessage: Java object is gone',
+      '    at sendDataToNative (iabjs://navigation_performance_logger_android:1:10632)',
+      '    at sendBeforeUnloadMessage (iabjs://navigation_performance_logger_android:1:14286)',
+      '    at iabjs://navigation_performance_logger_android:1:19687',
+    ].join('\n'),
+    url: 'https://aglyn.com/',
+  }
+  const OWN_FRAME =
+    '    at rJ (https://aglyn.com/_next/static/immutable/chunks/3cuw.js:31:45769)'
+
+  it('drops the Meta Android in-app browser bridge', () => {
+    expect(parseClientErrorEvents({ events: [ANDROID_BRIDGE] })).toEqual([])
+  })
+
+  it('keeps it the moment a frame of ours is on the stack', () => {
+    const events = parseClientErrorEvents({
+      events: [{ ...ANDROID_BRIDGE, stack: `${ANDROID_BRIDGE.stack}\n${OWN_FRAME}` }],
+    })
+    expect(events).toHaveLength(1)
+    expect(events[0].stack).toContain(OWN_FRAME.trim())
+  })
+
+  it('drops only the foreign event out of a mixed batch', () => {
+    const events = parseClientErrorEvents({
+      events: [
+        ANDROID_BRIDGE,
+        { kind: 'error', message: 'ours', stack: `Error: ours\n${OWN_FRAME}`, url: 'https://aglyn.com/' },
+      ],
+    })
+    expect(events.map((event) => event.message)).toEqual(['ours'])
+  })
+
+  it('keeps a stack whose frames are the document — ingestion has no page to compare', () => {
+    const [event] = parseClientErrorEvents({
+      events: [
+        {
+          kind: 'handled',
+          message: 'inline bootstrap',
+          stack: 'boot@https://aglyn.com/pricing:1:1325',
+          url: 'https://aglyn.com/pricing',
+        },
+      ],
+    })
+    expect(event?.message).toBe('inline bootstrap')
+  })
+
+  it('keeps a foreign stack cut at the clamp — the tail it lost could be ours', () => {
+    const frame = '    at f (iabjs://navigation_performance_logger_android:1:2)\n'
+    const [event] = parseClientErrorEvents({
+      events: [{ ...ANDROID_BRIDGE, stack: frame.repeat(200) }],
+    })
+    expect(event?.stack).toHaveLength(8_192)
+  })
+
+  it('keeps an event with no stack at all', () => {
+    const events = parseClientErrorEvents({
+      events: [{ ...ANDROID_BRIDGE, stack: undefined }],
+    })
+    expect(events).toHaveLength(1)
+  })
+})
+
+/**
  * The heartbeat that makes beacon silence detectable (AGL-1923).
  *
  * These drive the real function against a mocked credential and a mocked

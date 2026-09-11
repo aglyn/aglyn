@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
   mintEditHintToken,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Mints the BOUNCE half of the `*.aglyn.app` editor-presence hint
@@ -69,6 +70,13 @@ async function handler(request: Request): Promise<Response> {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). This
+    // mint fires unprompted from every signed-in console page, so it can be
+    // in flight when its account is deleted, and the wrapped `verifyIdToken`
+    // then throws `auth/id-token-revoked` (AGL-2785). Null for anything else:
+    // a cert-endpoint outage or a missing signing secret keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Could not mint edit hint' }, { status: 500 })
   }

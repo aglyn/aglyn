@@ -36,7 +36,8 @@ the console suggests an available variation.
 ## What a site contains
 
 - **Screens & layouts** — the pages and the shared frames they render in.
-- **Data** — datasets, variables, functions, and workflows.
+- **Data** — the datasets this site can see. Variables and functions are under
+  **Logic**, and workflows and actions under **Automation**.
 - **Media** — images, video, and files, organized in folders.
 - **Setup** — theme, SEO, tracking, and emails under tabbed settings.
   The **Site logo** card (Details tab) sets your brand mark: it's shown on the

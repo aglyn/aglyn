@@ -35,6 +35,10 @@
  * `api-v1-openapi.spec.ts` pins the documented paths against the dispatcher so
  * a resource cannot be added to one and forgotten in the other.
  *
+ * Write bodies are not transcribed. Each lists its handler's own writable set
+ * (`writable` on the resource), because a body that disagreed with the handler
+ * would tell a generated client to send what the handler refuses.
+ *
  * ## Why it is served WITHOUT a key
  *
  * A description of how to authenticate that itself requires authentication is
@@ -102,8 +106,11 @@ interface ResourceOp {
   readonly filters?: readonly Schema[]
   /** Path parameters, in order. */
   readonly pathParams?: readonly { name: string; description: string }[]
-  /** `true` when a `204` is the success answer. */
-  readonly noContent?: boolean
+  /**
+   * `true` for a create: a fresh one answers `201`, and a replay of the same
+   * `Idempotency-Key` answers `200` with the record the original create made.
+   */
+  readonly creates?: boolean
   /** Entitlement the call needs, named in the 403. */
   readonly entitlement?: string
 }
@@ -115,6 +122,19 @@ interface ResourceSpec {
   readonly fields: Record<string, Schema>
   readonly required: readonly string[]
   readonly ops: readonly ResourceOp[]
+  /**
+   * The members a write body may carry: the handler's own writable set, in the
+   * order they are described. A record returns members nothing can write —
+   * `siteId`, `sources`, the stamps — and a closed body listing them would tell
+   * a generated client to send what the handler refuses.
+   */
+  readonly writable?: readonly string[]
+  /** Schemas for writable members the record does not return, or returns differently. */
+  readonly writeOnly?: Record<string, Schema>
+  /** What a create accepts that an update does not, in words. */
+  readonly writeNote?: string
+  /** Members a write must carry. Only for a body a single method takes. */
+  readonly writeRequired?: readonly string[]
 }
 
 /** Every record carries these two. */
@@ -190,33 +210,31 @@ const RESOURCES: readonly ResourceSpec[] = [
     tag: 'Datasets',
     description: 'Structured collections and the records inside them.',
     schemaName: 'Dataset',
-    required: ['id', 'object', 'name'],
+    required: ['id', 'object', 'name', 'fields'],
     fields: {
       id: str('Dataset id.'),
       object: OBJECT_FIELD('dataset'),
-      name: str('Human-readable name.'),
-      fields: {
-        type: 'array',
-        description: 'Field definitions. Shape is the dataset model.',
-        items: { type: 'object', additionalProperties: true },
-      },
-      created: STAMPS.created,
+      name: str('Display name; `""` when none is set.'),
+      fields: strList(
+        'Field ids in the dataset’s model. The model itself — types, limits, display names — is not returned.',
+      ),
+      created: nullable(ISO('When the dataset was created.')),
     },
     ops: [
       { path: '/v1/datasets', method: 'get', operationId: 'listDatasets', summary: 'List datasets', list: true, returns: 'Dataset' },
-      { path: '/v1/datasets', method: 'post', operationId: 'createDataset', summary: 'Create a dataset', accepts: 'DatasetWrite', returns: 'Dataset' },
+      { path: '/v1/datasets', method: 'post', operationId: 'createDataset', summary: 'Create a dataset', accepts: 'DatasetWrite', returns: 'Dataset', creates: true },
       { path: '/v1/datasets/{datasetId}', method: 'get', operationId: 'getDataset', summary: 'Retrieve a dataset', returns: 'Dataset', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
       { path: '/v1/datasets/{datasetId}', method: 'patch', operationId: 'updateDataset', summary: 'Update a dataset', accepts: 'DatasetWrite', returns: 'Dataset', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
       {
-        path: '/v1/datasets/{datasetId}', method: 'delete', operationId: 'deleteDataset', summary: 'Delete a dataset', noContent: true,
+        path: '/v1/datasets/{datasetId}', method: 'delete', operationId: 'deleteDataset', summary: 'Delete a dataset', returns: 'Deleted',
         description: 'Refuses with `409 conflict` (`code: "dataset_not_empty"`) while the dataset still holds records.',
         pathParams: [{ name: 'datasetId', description: 'Dataset id.' }],
       },
       { path: '/v1/datasets/{datasetId}/records', method: 'get', operationId: 'listDatasetRecords', summary: 'List records', list: true, returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
-      { path: '/v1/datasets/{datasetId}/records', method: 'post', operationId: 'createDatasetRecord', summary: 'Create a record', accepts: 'DatasetRecordWrite', returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
+      { path: '/v1/datasets/{datasetId}/records', method: 'post', operationId: 'createDatasetRecord', summary: 'Create a record', accepts: 'DatasetRecordWrite', returns: 'DatasetRecord', creates: true, pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
       { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'get', operationId: 'getDatasetRecord', summary: 'Retrieve a record', returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
       { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'patch', operationId: 'updateDatasetRecord', summary: 'Update a record', accepts: 'DatasetRecordWrite', returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
-      { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'delete', operationId: 'deleteDatasetRecord', summary: 'Delete a record', noContent: true, pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
+      { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'delete', operationId: 'deleteDatasetRecord', summary: 'Delete a record', returns: 'Deleted', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
     ],
   },
   {
@@ -233,7 +251,7 @@ const RESOURCES: readonly ResourceSpec[] = [
     },
     ops: [
       { path: '/v1/sites', method: 'get', operationId: 'listSites', summary: 'List sites', list: true, returns: 'Site' },
-      { path: '/v1/sites', method: 'post', operationId: 'createSite', summary: 'Create a site', accepts: 'SiteWrite', returns: 'Site', description: 'Limited to 10 per hour per organization, separately from the request budget.' },
+      { path: '/v1/sites', method: 'post', operationId: 'createSite', summary: 'Create a site', accepts: 'SiteWrite', returns: 'Site', creates: true, description: 'Limited to 10 per hour per organization, separately from the request budget.' },
       { path: '/v1/sites/{siteId}', method: 'get', operationId: 'getSite', summary: 'Retrieve a site', returns: 'Site', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
       {
         path: '/v1/sites/{siteId}/publish', method: 'post', operationId: 'publishSite', summary: 'Publish a site', returns: 'PublishResult',
@@ -247,6 +265,16 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'People, organization-wide. Not gated on the CRM suite.',
     schemaName: 'Contact',
     required: ['id', 'object', 'email'],
+    writable: [
+      'email', 'name', 'tags', 'notes', 'marketingConsent', 'consentSiteId', 'custom',
+      'phone', 'jobTitle', 'companyId', 'address', 'ownerUid', 'lifecycleStage', 'mediaIds',
+    ],
+    writeOnly: {
+      consentSiteId: str('The site this write is made on behalf of: where the person opted in, and whose profile the profile fields land on.'),
+      custom: objectOf('Contact custom fields, keyed by field key.'),
+      mediaIds: strList('Media library files attached by the named site, by id, at most 20. An empty array clears them.'),
+    },
+    writeNote: '`email` is accepted on create only — a `PATCH` that names it is a `400`, because a contact is identified by its email.',
     fields: {
       id: str('Contact id.'),
       object: OBJECT_FIELD('contact'),
@@ -278,10 +306,10 @@ const RESOURCES: readonly ResourceSpec[] = [
           q('ownerUid', 'Always checked on the page.'),
         ],
       },
-      { path: '/v1/contacts', method: 'post', operationId: 'createContact', summary: 'Create a contact', accepts: 'ContactWrite', returns: 'Contact', description: 'A duplicate email is `409 conflict` (`code: "contact_exists"`), and the message names the existing id.' },
+      { path: '/v1/contacts', method: 'post', operationId: 'createContact', summary: 'Create a contact', accepts: 'ContactWrite', returns: 'Contact', creates: true, description: 'A duplicate email is `409 conflict` (`code: "contact_exists"`), and the message names the existing id.' },
       { path: '/v1/contacts/{contactId}', method: 'get', operationId: 'getContact', summary: 'Retrieve a contact', returns: 'Contact', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
       { path: '/v1/contacts/{contactId}', method: 'patch', operationId: 'updateContact', summary: 'Update a contact', accepts: 'ContactWrite', returns: 'Contact', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}', method: 'delete', operationId: 'deleteContact', summary: 'Delete a contact', noContent: true, pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
+      { path: '/v1/contacts/{contactId}', method: 'delete', operationId: 'deleteContact', summary: 'Delete a contact', returns: 'Deleted', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
       { path: '/v1/contacts/{contactId}/merge', method: 'post', operationId: 'mergeContact', summary: 'Merge two contacts', accepts: 'ContactMerge', returns: 'Contact', pathParams: [{ name: 'contactId', description: 'The contact that survives.' }] },
     ],
   },
@@ -290,6 +318,12 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'Organizations in the CRM.',
     schemaName: 'Company',
     required: ['id', 'object', 'name'],
+    writable: ['name', 'domain', 'website', 'phone', 'address', 'industry', 'ownerUid', 'notes', 'custom', 'mediaIds', 'consentSiteId'],
+    writeOnly: {
+      mediaIds: strList('Media library files attached to this company, by id, at most 20. An empty array clears them.'),
+      consentSiteId: str('The site the company is created on behalf of.'),
+    },
+    writeNote: 'A create needs `name` and `consentSiteId`; a `PATCH` that names `consentSiteId` is a `400`.',
     fields: {
       id: str('Company id.'),
       object: OBJECT_FIELD('company'),
@@ -308,10 +342,10 @@ const RESOURCES: readonly ResourceSpec[] = [
     },
     ops: [
       { path: '/v1/companies', method: 'get', operationId: 'listCompanies', summary: 'List companies', list: true, returns: 'Company', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('domain', 'Exact match.'), q('ownerUid', 'Owning user.')] },
-      { path: '/v1/companies', method: 'post', operationId: 'createCompany', summary: 'Create a company', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', description: 'A duplicate domain is `409 conflict` (`code: "company_exists"`), naming the existing id.' },
+      { path: '/v1/companies', method: 'post', operationId: 'createCompany', summary: 'Create a company', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', creates: true, description: 'A duplicate domain is `409 conflict` (`code: "company_exists"`), naming the existing id.' },
       { path: '/v1/companies/{companyId}', method: 'get', operationId: 'getCompany', summary: 'Retrieve a company', returns: 'Company', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
       { path: '/v1/companies/{companyId}', method: 'patch', operationId: 'updateCompany', summary: 'Update a company', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
-      { path: '/v1/companies/{companyId}', method: 'delete', operationId: 'deleteCompany', summary: 'Delete a company', noContent: true, entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
+      { path: '/v1/companies/{companyId}', method: 'delete', operationId: 'deleteCompany', summary: 'Delete a company', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
     ],
   },
   {
@@ -348,6 +382,12 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'Opportunities moving through a pipeline.',
     schemaName: 'Deal',
     required: ['id', 'object', 'title', 'pipelineId', 'stageId'],
+    writable: ['title', 'pipelineId', 'stageId', 'status', 'amountCents', 'currency', 'lineItems', 'expectedCloseAt', 'ownerUid', 'contactId', 'companyId', 'lostReason', 'notes', 'custom', 'mediaIds', 'consentSiteId'],
+    writeOnly: {
+      mediaIds: strList('Media library files attached to this deal, by id, at most 20. An empty array clears them.'),
+      consentSiteId: str('The site the deal is created on behalf of.'),
+    },
+    writeNote: '`pipelineId` and `consentSiteId` are accepted on create only; a `PATCH` that names either is a `400`.',
     fields: {
       id: str('Deal id.'),
       object: OBJECT_FIELD('deal'),
@@ -373,10 +413,10 @@ const RESOURCES: readonly ResourceSpec[] = [
     },
     ops: [
       { path: '/v1/deals', method: 'get', operationId: 'listDeals', summary: 'List deals', list: true, returns: 'Deal', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('pipelineId', 'Pipeline.'), q('stageId', 'Stage.'), q('status', 'Deal status.'), q('ownerUid', 'Owning user.')] },
-      { path: '/v1/deals', method: 'post', operationId: 'createDeal', summary: 'Create a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm' },
+      { path: '/v1/deals', method: 'post', operationId: 'createDeal', summary: 'Create a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', creates: true },
       { path: '/v1/deals/{dealId}', method: 'get', operationId: 'getDeal', summary: 'Retrieve a deal', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
       { path: '/v1/deals/{dealId}', method: 'patch', operationId: 'updateDeal', summary: 'Update a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
-      { path: '/v1/deals/{dealId}', method: 'delete', operationId: 'deleteDeal', summary: 'Delete a deal', noContent: true, entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
+      { path: '/v1/deals/{dealId}', method: 'delete', operationId: 'deleteDeal', summary: 'Delete a deal', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
     ],
   },
   {
@@ -384,6 +424,11 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'Follow-ups attached to CRM records.',
     schemaName: 'Task',
     required: ['id', 'object', 'title'],
+    writable: ['title', 'notes', 'kind', 'priority', 'status', 'dueAt', 'remindAt', 'assigneeUid', 'contactId', 'companyId', 'dealId', 'consentSiteId'],
+    writeOnly: {
+      consentSiteId: str('The site the task is created on behalf of.'),
+    },
+    writeNote: 'A create needs `title` and `consentSiteId`; a `PATCH` that names `consentSiteId` is a `400`.',
     fields: {
       id: str('Task id.'),
       object: OBJECT_FIELD('task'),
@@ -391,7 +436,7 @@ const RESOURCES: readonly ResourceSpec[] = [
       notes: nullable(str('Free-form notes.')),
       kind: str('Task kind, e.g. `call` or `email`.'),
       priority: str('Priority label.'),
-      status: str('`open` or `completed`.'),
+      status: str('`open` or `done`.'),
       dueAt: nullable(ISO('When the task is due.')),
       remindAt: nullable(ISO('When a reminder is scheduled.')),
       reminderSentAt: nullable(ISO('When the reminder was sent.')),
@@ -405,10 +450,10 @@ const RESOURCES: readonly ResourceSpec[] = [
     },
     ops: [
       { path: '/v1/tasks', method: 'get', operationId: 'listTasks', summary: 'List tasks', list: true, returns: 'Task', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('status', 'Task status.'), q('assigneeUid', 'Assigned user.'), q('contactId', 'Associated contact.'), q('dealId', 'Associated deal.')] },
-      { path: '/v1/tasks', method: 'post', operationId: 'createTask', summary: 'Create a task', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm' },
+      { path: '/v1/tasks', method: 'post', operationId: 'createTask', summary: 'Create a task', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm', creates: true },
       { path: '/v1/tasks/{taskId}', method: 'get', operationId: 'getTask', summary: 'Retrieve a task', returns: 'Task', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
       { path: '/v1/tasks/{taskId}', method: 'patch', operationId: 'updateTask', summary: 'Update a task', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
-      { path: '/v1/tasks/{taskId}', method: 'delete', operationId: 'deleteTask', summary: 'Delete a task', noContent: true, entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
+      { path: '/v1/tasks/{taskId}', method: 'delete', operationId: 'deleteTask', summary: 'Delete a task', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
     ],
   },
   {
@@ -416,6 +461,11 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'Logged interactions. Append-only: no PATCH.',
     schemaName: 'Activity',
     required: ['id', 'object', 'kind', 'at'],
+    writable: ['kind', 'body', 'at', 'byUid', 'contactId', 'companyId', 'dealId', 'outcome', 'durationMinutes', 'consentSiteId'],
+    writeOnly: {
+      consentSiteId: str('The site the activity is logged on behalf of.'),
+    },
+    writeRequired: ['body', 'consentSiteId'],
     fields: {
       id: str('Activity id.'),
       object: OBJECT_FIELD('activity'),
@@ -433,9 +483,9 @@ const RESOURCES: readonly ResourceSpec[] = [
     },
     ops: [
       { path: '/v1/activities', method: 'get', operationId: 'listActivities', summary: 'List activities', list: true, returns: 'Activity', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('kind', 'Activity kind.'), q('contactId', 'Associated contact.'), q('dealId', 'Associated deal.')] },
-      { path: '/v1/activities', method: 'post', operationId: 'createActivity', summary: 'Log an activity', accepts: 'ActivityWrite', returns: 'Activity', entitlement: 'crm' },
+      { path: '/v1/activities', method: 'post', operationId: 'createActivity', summary: 'Log an activity', accepts: 'ActivityWrite', returns: 'Activity', entitlement: 'crm', creates: true },
       { path: '/v1/activities/{activityId}', method: 'get', operationId: 'getActivity', summary: 'Retrieve an activity', returns: 'Activity', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
-      { path: '/v1/activities/{activityId}', method: 'delete', operationId: 'deleteActivity', summary: 'Delete an activity', noContent: true, entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
+      { path: '/v1/activities/{activityId}', method: 'delete', operationId: 'deleteActivity', summary: 'Delete an activity', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
     ],
   },
   {
@@ -443,6 +493,12 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'Unqualified interest, before it becomes a contact.',
     schemaName: 'Lead',
     required: ['id', 'object', 'siteId'],
+    writable: ['siteId', 'status', 'ownerUid', 'ownerEmail', 'notes', 'unqualifiedReason'],
+    writeOnly: {
+      siteId: str('The site the lead belongs to, instead of the `siteId` query parameter.'),
+      status: str('`new`, `working` or `unqualified`. A lead becomes `qualified` by being converted.'),
+      ownerEmail: str('A member’s address, resolved against the organization’s roster. Not with `ownerUid` in the same request.'),
+    },
     fields: {
       id: str('Lead id.'),
       object: OBJECT_FIELD('lead'),
@@ -477,6 +533,11 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'Reusable email bodies.',
     schemaName: 'EmailTemplate',
     required: ['id', 'object', 'name'],
+    writable: ['name', 'kind', 'visibility', 'ownerUid', 'subject', 'body', 'consentSiteId'],
+    writeOnly: {
+      consentSiteId: str('The site the template is created on behalf of.'),
+    },
+    writeNote: 'A create needs `name`, `body` and `consentSiteId`; a `PATCH` that names `consentSiteId` is a `400`.',
     fields: {
       id: str('Template id.'),
       object: OBJECT_FIELD('email_template'),
@@ -491,10 +552,10 @@ const RESOURCES: readonly ResourceSpec[] = [
     },
     ops: [
       { path: '/v1/email-templates', method: 'get', operationId: 'listEmailTemplates', summary: 'List email templates', list: true, returns: 'EmailTemplate', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, q('kind', 'Template kind.'), q('visibility', 'Visibility.')] },
-      { path: '/v1/email-templates', method: 'post', operationId: 'createEmailTemplate', summary: 'Create a template', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm' },
+      { path: '/v1/email-templates', method: 'post', operationId: 'createEmailTemplate', summary: 'Create a template', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm', creates: true },
       { path: '/v1/email-templates/{templateId}', method: 'get', operationId: 'getEmailTemplate', summary: 'Retrieve a template', returns: 'EmailTemplate', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
       { path: '/v1/email-templates/{templateId}', method: 'patch', operationId: 'updateEmailTemplate', summary: 'Update a template', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
-      { path: '/v1/email-templates/{templateId}', method: 'delete', operationId: 'deleteEmailTemplate', summary: 'Delete a template', noContent: true, entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
+      { path: '/v1/email-templates/{templateId}', method: 'delete', operationId: 'deleteEmailTemplate', summary: 'Delete a template', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
     ],
   },
   {
@@ -521,10 +582,10 @@ const RESOURCES: readonly ResourceSpec[] = [
     },
     ops: [
       { path: '/v1/media', method: 'get', operationId: 'listOrgMedia', summary: 'List organization media', list: true, returns: 'MediaAsset', description: 'Rows deleted since they were written are dropped after the read, so pages can come back short.' },
-      { path: '/v1/media', method: 'post', operationId: 'uploadOrgMedia', summary: 'Upload to the organization library', accepts: 'MediaUpload', returns: 'MediaAsset' },
+      { path: '/v1/media', method: 'post', operationId: 'uploadOrgMedia', summary: 'Upload to the organization library', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true },
       { path: '/v1/media/{mediaId}', method: 'get', operationId: 'getOrgMedia', summary: 'Retrieve an asset', returns: 'MediaAsset', pathParams: [{ name: 'mediaId', description: 'Asset id.' }] },
       { path: '/v1/sites/{siteId}/media', method: 'get', operationId: 'listSiteMedia', summary: 'List a site’s media', list: true, returns: 'MediaAsset', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
-      { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload to a site', accepts: 'MediaUpload', returns: 'MediaAsset', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
+      { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload to a site', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true, pathParams: [{ name: 'siteId', description: 'Site id.' }] },
     ],
   },
   {
@@ -559,6 +620,13 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'A site’s orders. Status moves are constrained.',
     schemaName: 'Order',
     required: ['id', 'object', 'number', 'status'],
+    writable: ['status', 'carrier', 'trackingNumber'],
+    writeOnly: {
+      status: { type: 'string', enum: ['fulfilled', 'delivered'], description: 'The status to move the order to.' },
+      carrier: str('Free text, e.g. `UPS`. Trimmed to 40 characters.'),
+      trackingNumber: str('Free text. Trimmed to 60 characters.'),
+    },
+    writeRequired: ['status'],
     fields: {
       id: str('Order id.'),
       object: OBJECT_FIELD('order'),
@@ -588,6 +656,8 @@ const RESOURCES: readonly ResourceSpec[] = [
     description: 'What visitors sent through a site’s forms.',
     schemaName: 'FormSubmission',
     required: ['id', 'object', 'form_id', 'fields'],
+    writable: ['read'],
+    writeRequired: ['read'],
     fields: {
       id: str('Submission id.'),
       object: OBJECT_FIELD('form_submission'),
@@ -603,31 +673,35 @@ const RESOURCES: readonly ResourceSpec[] = [
       { path: '/v1/sites/{siteId}/form-submissions', method: 'get', operationId: 'listFormSubmissions', summary: 'List submissions', list: true, returns: 'FormSubmission', description: 'Combining `form`/`formId` with `read` narrows on the form and checks `read` on the page, so pages can come back short.', filters: [q('form', 'Form name.'), q('formId', 'Form id.'), q('read', 'Either `true` or `false`. Anything else is a 400.', { type: 'string', enum: ['true', 'false'] })], pathParams: [{ name: 'siteId', description: 'Site id.' }] },
       { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'get', operationId: 'getFormSubmission', summary: 'Retrieve a submission', returns: 'FormSubmission', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'submissionId', description: 'Submission id.' }] },
       { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'patch', operationId: 'updateFormSubmission', summary: 'Mark a submission read', accepts: 'FormSubmissionWrite', returns: 'FormSubmission', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'submissionId', description: 'Submission id.' }] },
-      { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'delete', operationId: 'deleteFormSubmission', summary: 'Delete a submission', noContent: true, pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'submissionId', description: 'Submission id.' }] },
+      { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'delete', operationId: 'deleteFormSubmission', summary: 'Delete a submission', returns: 'Deleted', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'submissionId', description: 'Submission id.' }] },
     ],
   },
 ]
 
 /**
- * Fields the SERVER owns. A write body that accepted them would invite a
- * client to send an `id` or a `created` and quietly have it ignored, which is
- * the kind of silent no-op an integrator debugs for an afternoon.
+ * The write shape for a resource: exactly the members its handler accepts.
+ *
+ * It closes, because every handler with a body built here names an unknown key
+ * in a `400` (`refuseUnknownKeys` and its equivalents), so a typo'd member is a
+ * refusal rather than a value that vanishes. A body whose handler ignores an
+ * unknown member instead is declared by name further down, open, and says so.
  */
-const SERVER_OWNED = new Set(['id', 'object', 'created', 'updated'])
-
-/** The write shape for a resource: its own fields, minus the server's. */
 function writeSchema(resource: ResourceSpec): Schema {
   const properties: Record<string, Schema> = {}
-  for (const [name, schema] of Object.entries(resource.fields)) {
-    if (SERVER_OWNED.has(name)) continue
+  for (const name of resource.writable ?? []) {
+    const schema = resource.writeOnly?.[name] ?? resource.fields[name]
+    if (!schema) {
+      throw new Error(`${resource.schemaName} lists "${name}" as writable with no schema for it`)
+    }
     properties[name] = schema
   }
   return {
     type: 'object',
     description:
-      `Writable fields of a ${resource.schemaName}. Server-owned fields ` +
-      '(`id`, `object`, `created`, `updated`) are rejected rather than ' +
-      'silently ignored.',
+      `Writable fields of a ${resource.schemaName}.` +
+      (resource.writeNote ? ` ${resource.writeNote}` : '') +
+      ' Any other member is a `400` that names it, never silently ignored.',
+    ...(resource.writeRequired ? { required: [...resource.writeRequired] } : {}),
     properties,
     additionalProperties: false,
   }
@@ -733,9 +807,9 @@ export function buildCustomerApiOpenApi(
 
     for (const op of resource.ops) {
       if (op.accepts && !(op.accepts in schemas)) {
-        // Named write shapes that are not simply "the record minus the
-        // server's fields" are declared below; everything else is derived, so
-        // a field added to a resource cannot be forgotten on its write body.
+        // Built from the resource's `writable` list. A body whose handler
+        // ignores an unknown member rather than refusing it is declared by
+        // name below, open, and replaces what this builds.
         schemas[op.accepts] = writeSchema(resource)
       }
       if (op.list && op.returns) listItems.add(op.returns)
@@ -752,21 +826,38 @@ export function buildCustomerApiOpenApi(
         ...(op.filters ?? []),
       ]
 
-      const success: Schema = op.noContent
-        ? { description: 'Deleted. No body.' }
+      const body = (): Schema => ({
+        'application/json': {
+          schema: op.list
+            ? { $ref: `#/components/schemas/${op.returns}List` }
+            : { $ref: `#/components/schemas/${op.returns}` },
+        },
+      })
+      // A create answers `201` fresh and `200` on an `Idempotency-Key` replay,
+      // which is how a client tells the two apart. Every other success — a
+      // delete included — is a `200` with a body.
+      const success: Record<string, Schema> = op.creates
+        ? {
+            '201': { description: 'Created.', content: body() },
+            '200': {
+              description:
+                'A replay of the same `Idempotency-Key`: the record the original create made.',
+              content: body(),
+            },
+          }
         : {
-            description: op.list ? 'One page of the list.' : 'The record.',
-            content: {
-              'application/json': {
-                schema: op.list
-                  ? { $ref: `#/components/schemas/${op.returns}List` }
-                  : { $ref: `#/components/schemas/${op.returns}` },
-              },
+            '200': {
+              description: op.list
+                ? 'One page of the list.'
+                : op.returns === 'Deleted'
+                  ? 'Deleted. The receipt names what was removed.'
+                  : 'The record.',
+              content: body(),
             },
           }
 
       const responses: Record<string, Schema> = {
-        [op.noContent ? '204' : '200']: success,
+        ...success,
         '400': errorResponse('Validation failed. No data was read.'),
         '401': errorResponse('Missing, malformed, revoked or expired key.'),
         '404': errorResponse('No such record — or no such endpoint.'),
@@ -880,36 +971,95 @@ export function buildCustomerApiOpenApi(
     DatasetRecord: {
       type: 'object',
       description:
-        'A row in a dataset. Its fields are whatever that dataset’s model ' +
-        'defines, so they cannot be enumerated here — `id`, `object` and the ' +
-        'stamps are the only members every record shares.',
-      required: ['id', 'object'],
+        'A row in a dataset. Its values sit under `values`, keyed by field id — ' +
+        'whatever that dataset’s model defines, so they cannot be enumerated here.',
+      required: ['id', 'object', 'values'],
       properties: {
-        id: { type: 'string', description: 'Record id.' },
+        id: { type: 'string', description: 'Record id. Opaque — do not pattern-match it.' },
         object: { type: 'string', const: 'record', description: 'Always `record`.' },
-        created: { type: 'string', format: 'date-time' },
-        updated: { type: 'string', format: 'date-time' },
+        values: {
+          type: 'object',
+          description:
+            'Field id → value. A timestamp field comes back as epoch milliseconds, ' +
+            'not an ISO string.',
+          additionalProperties: true,
+        },
+        created: { type: ['string', 'null'], format: 'date-time' },
+        updated: { type: ['string', 'null'], format: 'date-time' },
       },
-      additionalProperties: true,
     },
     DatasetRecordWrite: {
       type: 'object',
       description:
-        'The record’s own fields, per its dataset’s model.\n\n' +
-        '⚠️ This is the ONE write body that is open. Every other one closes ' +
-        'with `additionalProperties: false`, because its fields are fixed by ' +
-        'this API. A record’s are fixed by the CUSTOMER, in the dataset ' +
-        'model, so closing this would reject the very fields they defined. ' +
-        'Server-owned members are still refused.',
-      not: {
-        anyOf: [
-          { required: ['id'] },
-          { required: ['object'] },
-          { required: ['created'] },
-          { required: ['updated'] },
-        ],
+        'A record’s values, under `values` and keyed by field id.\n\n' +
+        'Only `values` is read. Any other member — `id` included — is ignored ' +
+        'rather than rejected, and so is a field id inside `values` that the ' +
+        'dataset’s model does not define. Strings are coerced to the field’s ' +
+        'type, and a `PATCH` merges `values` shallowly over the stored ones.',
+      properties: {
+        values: {
+          type: 'object',
+          description: 'Field id → value, per the dataset’s model.',
+          additionalProperties: true,
+        },
       },
       additionalProperties: true,
+    },
+    DatasetWrite: {
+      type: 'object',
+      description:
+        'The writable half of a dataset. A create needs `name` and `fields`; a ' +
+        '`PATCH` takes any of the three and leaves an omitted one as it is.\n\n' +
+        'Members this body does not name are ignored rather than rejected — ' +
+        '`id` and `created` included.',
+      properties: {
+        name: { type: 'string', description: 'Display name. Trimmed, and truncated to 120 characters.' },
+        fields: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Field ids. Blanks are dropped and at most 100 kept; an empty result ' +
+            'is a `400`. A `PATCH` replaces the list rather than merging it.',
+        },
+        model: {
+          type: 'object',
+          additionalProperties: true,
+          description:
+            'The typed field model. Stored as sent when it serializes to under ' +
+            '64 KB; its shape is not validated, and it is never returned.',
+        },
+      },
+      additionalProperties: true,
+    },
+    SiteWrite: {
+      type: 'object',
+      required: ['displayName', 'subdomain'],
+      description:
+        'A new site. Members this body does not name are ignored rather than ' +
+        'rejected.',
+      properties: {
+        displayName: { type: 'string', description: 'Name shown in the console. Trimmed, and truncated at 80 characters.' },
+        subdomain: {
+          type: 'string',
+          description:
+            '3–30 characters: lowercase letters, numbers and hyphens, starting ' +
+            'with a letter or number. A reserved or taken subdomain is refused.',
+        },
+      },
+      additionalProperties: true,
+    },
+    Deleted: {
+      type: 'object',
+      description:
+        'What every delete answers, with `200` rather than `204`. A retry that ' +
+        'carries the `Idempotency-Key` of the delete that removed the record ' +
+        'replays this receipt.',
+      required: ['id', 'object', 'deleted'],
+      properties: {
+        id: { type: 'string', description: 'Id of the deleted record.' },
+        object: { type: 'string', description: 'What was deleted, e.g. `dataset`, `record` or `contact`.' },
+        deleted: { type: 'boolean', const: true },
+      },
     },
     ApiRoot: {
       type: 'object',
@@ -968,22 +1118,38 @@ export function buildCustomerApiOpenApi(
     },
     ContactMerge: {
       type: 'object',
-      required: ['sourceId'],
-      description: 'Merge another contact into this one. The source is removed.',
+      required: ['sourceContactId'],
+      description:
+        'Merge another contact into this one. The source is removed. Any other ' +
+        'member is a `400`.',
       properties: {
-        sourceId: { type: 'string', description: 'The contact to merge FROM. It does not survive.' },
+        sourceContactId: {
+          type: 'string',
+          description:
+            'The contact to merge FROM. It does not survive, and it must not be ' +
+            'the contact in the path.',
+        },
       },
       additionalProperties: false,
     },
     MediaUpload: {
       type: 'object',
-      description: 'An upload. See the media documentation for the multipart form.',
+      required: ['data', 'contentType'],
+      description:
+        'An upload, as JSON with the file’s bytes base64-encoded — there is no ' +
+        'multipart form. Members this body does not name are ignored rather ' +
+        'than rejected.',
       properties: {
-        fileName: { type: 'string' },
-        contentType: { type: 'string' },
-        alt: { type: 'string' },
-        tags: { type: 'array', items: { type: 'string' } },
-        folderId: { type: 'string' },
+        data: {
+          type: 'string',
+          contentEncoding: 'base64',
+          description: 'The file’s bytes. Anything that is not valid base64 is a `400`.',
+        },
+        contentType: { type: 'string', description: 'MIME type. Must be on the allowed list.' },
+        fileName: { type: 'string', description: 'Defaults to `upload`. Truncated at 200 characters.' },
+        folderId: { type: 'string', description: 'The folder to put the file in, by id.' },
+        alt: { type: 'string', description: 'Alt text.' },
+        private: { type: 'boolean', description: '`true` stores it restricted: no `cdnUrl`, no public link.' },
       },
       additionalProperties: true,
     },

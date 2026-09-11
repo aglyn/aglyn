@@ -30,6 +30,9 @@
  * "there was nothing to match" look identical from there.
  */
 
+import { execFileSync } from 'node:child_process'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { RELEASE_FLAGS } from '@aglyn/aglyn'
 import {
   gateNavTabItems,
@@ -40,6 +43,12 @@ import {
 // import TypeScript, so it hard-codes this string. Renaming the attribute
 // has to fail here rather than in a screenshot nobody re-reads.
 const HARNESS_ATTRIBUTE = 'data-staff-only'
+
+// The capture harness's own module, run in node by the last test below.
+const HARNESS_MODULE = join(
+  __dirname,
+  '../../../tools/e2e/lib/staff-only-chrome.mjs',
+)
 
 const CONTACTS_TAB = { id: 'nav-tab-contacts', label: 'Contacts', href: '/c' }
 const SETUP_TAB = { id: 'nav-tab-setup', label: 'Setup', href: '/s' }
@@ -52,11 +61,11 @@ describe('release-flagged nav tabs', () => {
   it('marks a flagged-off tab as staff-only, carrying the flag key', () => {
     const [contacts, setup] = gateNavTabItems(
       [CONTACTS_TAB, SETUP_TAB],
-      { release_contacts: { released: false } },
+      { release_crm: { released: false } },
       true,
     )
 
-    expect(contacts[HARNESS_ATTRIBUTE]).toBe('release_contacts')
+    expect(contacts[HARNESS_ATTRIBUTE]).toBe('release_crm')
     expect(contacts.icon?.path).toBeTruthy()
     // An ungated tab must NOT carry the marker — a harness that scrubbed
     // every tab would "pass" while capturing an empty strip.
@@ -66,7 +75,7 @@ describe('release-flagged nav tabs', () => {
   it('drops the flagged-off tab entirely for a customer', () => {
     const items = gateNavTabItems(
       [CONTACTS_TAB, SETUP_TAB],
-      { release_contacts: { released: false } },
+      { release_crm: { released: false } },
       false,
     )
 
@@ -76,7 +85,7 @@ describe('release-flagged nav tabs', () => {
   it('leaves a released tab unmarked even for staff', () => {
     const [contacts] = gateNavTabItems(
       [CONTACTS_TAB],
-      { release_contacts: { released: true } },
+      { release_crm: { released: true } },
       true,
     )
 
@@ -85,18 +94,56 @@ describe('release-flagged nav tabs', () => {
   })
 
   /**
-   * The harness's preflight refuses to capture unless it finds at least one
-   * staff-only tab on a host page — a check that only means something while
-   * some host tab is actually flagged off. When Contacts ships, this test is
-   * the one that says so, and the preflight canary has to move with it.
+   * The capture preflight only has a marker to find while a flag with a nav
+   * tab ships off, so it reads that list from the registry's SOURCE (plain
+   * node cannot import this TypeScript) and stands down when the list is
+   * empty. A text read can drift from the real array, so this runs the
+   * harness's own reader in node and holds it to `RELEASE_FLAGS` — and feeds
+   * it a registry with one flagged-off tab, so a reader that always answers
+   * "nothing" cannot pass.
    */
-  it('still has a flagged-off host tab for the preflight to find', () => {
-    const flaggedOff = RELEASE_FLAGS.filter(
+  it('lets the capture preflight read the flagged-off tabs the registry declares', () => {
+    const declared = RELEASE_FLAGS.filter(
       (definition) => definition.navTabId && !definition.defaultEnabled,
+    ).map((definition) => definition.key)
+    const probeRegistry = [
+      'export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [',
+      '  {',
+      "    key: 'release_probe_off',",
+      "    label: 'Probe',",
+      "    description: 'A tab that ships off.',",
+      '    defaultEnabled: false,',
+      "    navTabId: 'nav-tab-probe',",
+      '  },',
+      '  {',
+      "    key: 'release_probe_on',",
+      "    label: 'Released',",
+      "    description: 'A tab that ships on.',",
+      '    defaultEnabled: true,',
+      "    navTabId: 'nav-tab-released',",
+      '  },',
+      '  {',
+      "    key: 'release_probe_no_tab',",
+      "    label: 'No tab',",
+      "    description: 'Off, but gates no tab.',",
+      '    defaultEnabled: false,',
+      '  },',
+      ']',
+      'export const RELEASE_FLAG_KEYS = []',
+    ].join('\n')
+    const script =
+      `const harness = await import(${JSON.stringify(pathToFileURL(HARNESS_MODULE).href)});` +
+      'process.stdout.write(JSON.stringify({' +
+      ' live: harness.flaggedOffNavTabKeys(),' +
+      ` probe: harness.flaggedOffNavTabKeys(${JSON.stringify(probeRegistry)}),` +
+      ' }))'
+    const read = JSON.parse(
+      execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+        encoding: 'utf8',
+      }),
     )
 
-    expect(flaggedOff.map((definition) => definition.key)).toEqual([
-      'release_contacts',
-    ])
+    expect(read.live).toEqual(declared)
+    expect(read.probe).toEqual(['release_probe_off'])
   })
 })

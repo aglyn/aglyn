@@ -22,7 +22,7 @@ catalog to a marketplace, sync a CRM's contacts and deals in either direction, l
 calls from a dialer, back up records, or build an integration.
 
 :::info Plan availability
-The REST API is included on the **Business** and **Advanced** plans. Create keys from
+The REST API is included on **Business** and every plan above it. Create keys from
 **Organization → Settings → API keys**.
 :::
 
@@ -123,9 +123,11 @@ Two things to know when reading it:
 - The schemas use JSON Schema **2020-12**, so a field that can be `null` is a type
   *union* (`"type": ["string", "null"]`), not OpenAPI 3.0's `nullable: true`. A
   generator that only understands 3.0 will get optionality wrong.
-- Every write body **closes** — an unknown field is rejected, not ignored — with one
-  deliberate exception: a [dataset record](resources/datasets.md), whose fields are the
-  ones you defined in the dataset model.
+- Most write bodies **close** — an unknown field is rejected, not ignored. The
+  exceptions read only the members they document and ignore the rest:
+  [datasets and records](resources/datasets.md), whose record `values` also drop any
+  field id the dataset's model doesn't define; [creating a site](resources/sites.md#create);
+  and [media uploads](resources/media.md).
 
 ## Service endpoints
 

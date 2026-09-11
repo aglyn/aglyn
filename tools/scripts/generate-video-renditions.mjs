@@ -124,40 +124,141 @@ const ONLY = mediaArg > -1 ? String(process.argv[mediaArg + 1] ?? '') : ''
  * slow enough (minutes per second of source, with libaom) that a manual pass
  * over a real library stops being practical.
  */
-const PROFILES = [
-  ...(WEBM
-    ? [
-        {
-          key: '720p-vp9',
-          ext: 'webm',
-          contentType: 'video/webm',
-          height: 720,
-          args: (input, output) => [
-            '-y', '-i', input,
-            '-vf', 'scale=-2:720',
-            '-c:v', 'libvpx-vp9', '-crf', '33', '-b:v', '0', '-row-mt', '1',
-            '-c:a', 'libopus', '-b:a', '96k',
-            output,
-          ],
-        },
-      ]
-    : []),
-  {
-    key: '720p',
-    ext: 'mp4',
-    contentType: 'video/mp4',
+const VP9_PROFILE = {
+  key: '720p-vp9',
+  ext: 'webm',
+  contentType: 'video/webm',
+  height: 720,
+  args: (input, output) => [
+    '-y', '-i', input,
+    '-vf', 'scale=-2:720',
+    '-c:v', 'libvpx-vp9', '-crf', '33', '-b:v', '0', '-row-mt', '1',
+    '-c:a', 'libopus', '-b:a', '96k',
+    output,
+  ],
+}
+const MP4_PROFILE = {
+  key: '720p',
+  ext: 'mp4',
+  contentType: 'video/mp4',
+  height: 720,
+  args: (input, output) => [
+    '-y', '-i', input,
+    '-vf', 'scale=-2:720',
+    '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'veryfast', '-crf', '26',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '128k',
+    '-movflags', '+faststart',
+    output,
+  ],
+}
+const PROFILES = WEBM ? [VP9_PROFILE, MP4_PROFILE] : [MP4_PROFILE]
+
+/**
+ * Every key this script can produce, most efficient first, whether or not
+ * this run was asked for all of them. A document keeps this order however
+ * many runs it took to fill in, because a `--webm` pass over an asset encoded
+ * without it must still leave the WebM ahead of the MP4.
+ */
+const RENDITION_ORDER = [VP9_PROFILE, MP4_PROFILE].map((profile) => profile.key)
+
+/**
+ * The `videoRenditions` a run leaves on a document.
+ *
+ * This run's encodings, plus every entry the document already records that
+ * this run did not re-encode and whose object is still in the bucket. A run
+ * plans only the profiles an asset is MISSING, so writing its own output
+ * alone would drop every rendition an earlier run made: a `--webm` pass over
+ * an asset that already has its `720p` MP4 would leave only the WebM listed,
+ * `?r=auto` would find no MP4 baseline for the browsers that send `*\/*`, and
+ * the MP4 object would sit in the bucket unlisted, beyond the reach of the
+ * replace route that deletes what the document names.
+ *
+ * Keeping an entry only while its object exists is what still stops a
+ * rendition that failed to upload, or was deleted, from staying advertised.
+ * Known keys follow {@link RENDITION_ORDER}; a recorded key this script no
+ * longer produces keeps its place after them.
+ */
+function nextVideoRenditions({ recorded, encoded, stored, order }) {
+  const encodedKeys = new Set(encoded.map((entry) => entry.key))
+  const kept = recorded.filter(
+    (entry) => !encodedKeys.has(entry.key) && stored.has(entry.key),
+  )
+  const rank = (key) => {
+    const index = order.indexOf(key)
+    return index === -1 ? order.length : index
+  }
+  return [...encoded, ...kept]
+    .map((entry, position) => ({ entry, position }))
+    .sort((a, b) => rank(a.entry.key) - rank(b.entry.key) || a.position - b.position)
+    .map(({ entry }) => entry)
+}
+
+if (process.argv.includes('--self-test')) {
+  const entry = (key, sizeBytes = 1) => ({
+    key,
+    ext: key.endsWith('vp9') ? 'webm' : 'mp4',
+    contentType: key.endsWith('vp9') ? 'video/webm' : 'video/mp4',
+    width: 1280,
     height: 720,
-    args: (input, output) => [
-      '-y', '-i', input,
-      '-vf', 'scale=-2:720',
-      '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'veryfast', '-crf', '26',
-      '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac', '-b:a', '128k',
-      '-movflags', '+faststart',
-      output,
+    sizeBytes,
+  })
+  const keys = (list) => list.map((item) => `${item.key}:${item.sizeBytes}`).join(',')
+  const cases = [
+    [
+      'a --webm pass keeps the MP4 an earlier run recorded, WebM first',
+      nextVideoRenditions({
+        recorded: [entry('720p', 5)],
+        encoded: [entry('720p-vp9', 3)],
+        stored: new Set(['720p']),
+        order: RENDITION_ORDER,
+      }),
+      '720p-vp9:3,720p:5',
     ],
-  },
-]
+    [
+      're-encoding a key replaces its recorded entry rather than listing it twice',
+      nextVideoRenditions({
+        recorded: [entry('720p', 5)],
+        encoded: [entry('720p', 7)],
+        stored: new Set(['720p']),
+        order: RENDITION_ORDER,
+      }),
+      '720p:7',
+    ],
+    [
+      'a recorded entry whose object is gone is not kept advertised',
+      nextVideoRenditions({
+        recorded: [entry('720p', 5)],
+        encoded: [entry('720p-vp9', 3)],
+        stored: new Set(),
+        order: RENDITION_ORDER,
+      }),
+      '720p-vp9:3',
+    ],
+    [
+      'a key no profile produces keeps its place after the known ones',
+      nextVideoRenditions({
+        recorded: [entry('480p', 2), entry('720p', 5)],
+        encoded: [entry('720p-vp9', 3)],
+        stored: new Set(['480p', '720p']),
+        order: RENDITION_ORDER,
+      }),
+      '720p-vp9:3,720p:5,480p:2',
+    ],
+  ]
+  let failed = 0
+  for (const [name, actual, expected] of cases) {
+    const ok = keys(actual) === expected
+    if (!ok) failed += 1
+    console.log(`${ok ? 'ok  ' : 'FAIL'} ${name} — ${keys(actual) || '(none)'}`)
+  }
+  console.log(
+    failed
+      ? `SELF-TEST FAILED — ${failed} case(s)`
+      : 'SELF-TEST PASSED — no project was touched.',
+  )
+  process.exit(failed ? 1 : 0)
+}
 
 const projectId = process.env.FIREBASE_PROJECT_ID
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
@@ -214,7 +315,7 @@ const alias = Object.fromEntries(
     .sort((a, b) => b[0].length - a[0].length),
 )
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias })
-const { mediaRenditionObjectPath, isMediaRenditionKey } = jiti(
+const { mediaRenditionObjectPath, isMediaRenditionKey, parseMediaRenditions } = jiti(
   '../../libs/aglyn/src/lib/app-utils/media-ref.ts',
 )
 
@@ -278,6 +379,9 @@ for (const doc of snapshot.docs) {
     storagePath: d.storagePath,
     sizeBytes: Number(d.sizeBytes ?? 0),
     hasVideoMeta: Boolean(d.video),
+    // Through the same gate the CDN reads with, so an entry the CDN would
+    // refuse is never carried forward either.
+    recorded: parseMediaRenditions(d.videoRenditions),
     missing,
   })
 }
@@ -388,12 +492,29 @@ for (const item of plan.slice(0, LIMIT)) {
     }
     if (!renditions.length) continue
 
+    // What an earlier run recorded is kept only while its object exists —
+    // see `nextVideoRenditions`.
+    const stored = new Set()
+    for (const entry of item.recorded) {
+      if (renditions.some((made) => made.key === entry.key)) continue
+      const [exists] = await bucket
+        .file(mediaRenditionObjectPath(item.storagePath, entry))
+        .exists()
+      if (exists) stored.add(entry.key)
+    }
+
     await item.ref.set(
       {
-        // REPLACED, never merged — see the header. A key that failed to
-        // upload above is simply not in this array, so it cannot stay
-        // advertised on the document.
-        videoRenditions: renditions,
+        // REPLACED, never merged with the stored array — see the header. A
+        // key that failed to upload above is simply not in `renditions`, and
+        // a recorded key whose object is gone is not in `stored`, so neither
+        // can stay advertised on the document.
+        videoRenditions: nextVideoRenditions({
+          recorded: item.recorded,
+          encoded: renditions,
+          stored,
+          order: RENDITION_ORDER,
+        }),
         // Backfill the AGL-2742 metadata while the file is on disk. Only when
         // the document has none: a browser measured the display dimensions,
         // `ffprobe` reports the coded ones, and for anisotropic pixels those

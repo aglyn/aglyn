@@ -30,7 +30,7 @@ import { PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 export type ReleaseFlagKey =
-  | 'release_contacts'
+  | 'release_crm'
   | 'release_bookings'
   | 'release_events'
   | 'release_data_store'
@@ -71,11 +71,11 @@ export interface ReleaseFlagDefinition {
  */
 export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   {
-    key: 'release_contacts',
-    label: 'Contacts CRM',
+    key: 'release_crm',
+    label: 'CRM',
     description:
-      'Unified contacts list, segments and profile drawer (Contacts CRM v1).',
-    defaultEnabled: false,
+      'The CRM: contacts, leads, companies, deals, tasks, reports and fields.',
+    defaultEnabled: true,
     navTabId: 'nav-tab-contacts',
   },
   {

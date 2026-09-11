@@ -280,7 +280,12 @@ describe('every ingress door measures the pool (AGL-2075)', () => {
     // band, and nothing else in the type system would say so.
     const fs = require('fs') as typeof import('fs')
     const path = require('path') as typeof import('path')
-    const root = path.join(__dirname, '..', 'app', 'api')
+    // `app/api` holds the console's routes; `utils` holds the /v1 REST API's
+    // handlers, which reach the same gate from outside any route file.
+    const roots = [
+      path.join(__dirname, '..', 'app', 'api'),
+      path.join(__dirname, '..', 'utils'),
+    ]
     const files: string[] = []
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -289,7 +294,7 @@ describe('every ingress door measures the pool (AGL-2075)', () => {
         else if (entry.name.endsWith('.ts')) files.push(full)
       }
     }
-    walk(root)
+    for (const root of roots) walk(root)
     const callSites: string[] = []
     for (const file of files) {
       const source = fs.readFileSync(file, 'utf8')
@@ -303,8 +308,11 @@ describe('every ingress door measures the pool (AGL-2075)', () => {
       }
     }
     // Fails if a door is added and left unpooled, and fails if the doors
-    // vanish — a zero-length sweep must not read as compliance.
-    expect(callSites.length).toBe(4)
+    // vanish — a zero-length sweep must not read as compliance. Six doors: the
+    // direct upload, the mint and finalize legs of both signed routes
+    // (`upload-url` and `replace`), and the /v1 upload in
+    // `utils/api-v1-resources.ts`.
+    expect(callSites.length).toBe(6)
     for (const site of callSites) {
       expect(site).toContain('allowanceMb')
     }

@@ -42,6 +42,7 @@ import {
   foldResults,
   pathMatchesTarget,
   targetsForChangedFiles,
+  withEveryTarget,
 } from './promotion-deploys.mjs'
 import { FUNCTIONS_ENTRY_FILE, parseFunctionExports } from './functions-drift.mjs'
 
@@ -102,6 +103,27 @@ describe('which targets a range owes', () => {
       ['rules', 'functions', 'indexes'],
     )
     assert.deepEqual(owed[0].files, ['cloud/firebase-firestore.rules'])
+  })
+
+  it('--every-target keeps all three, with the files the range touched and none for the rest', () => {
+    const every = withEveryTarget(
+      targetsForChangedFiles(['cloud/firebase-firestore.rules', 'apps/console/app/page.tsx']),
+    )
+    assert.deepEqual(
+      every.map((entry) => [entry.target.id, entry.files]),
+      [
+        ['rules', ['cloud/firebase-firestore.rules']],
+        ['functions', []],
+        ['indexes', []],
+      ],
+    )
+    // The AGL-2791 shape: a range that reached no manual path still verifies all three.
+    assert.deepEqual(
+      withEveryTarget(targetsForChangedFiles(['apps/console/app/page.tsx'])).map(
+        (entry) => entry.target.id,
+      ),
+      ['rules', 'functions', 'indexes'],
+    )
   })
 })
 
@@ -244,6 +266,46 @@ describe('the CLI, over a real promotion range', () => {
         })
         assert.equal(code, 0, out)
         assert.match(out, /Every manual deploy this range owes has happened/)
+      },
+    )
+  })
+
+  it('--every-target finds a deploy an earlier promotion owed, on a range that touched nothing', async () => {
+    // The AGL-2791 shape. Production still owes the functions deploy and this
+    // range reaches no manual path: scoped to the range, the CLI verifies
+    // nothing and passes, which is how the next promotion went green over it.
+    await withStub(
+      { functions: deploymentAt(functionsCommitMs - 86_400_000) },
+      async ({ base, requests }) => {
+        const scoped = await runCli({
+          base,
+          args: ['--range=HEAD..HEAD', '--only=functions'],
+        })
+        assert.equal(scoped.code, 0, scoped.out)
+        assert.deepEqual(requests, [])
+
+        const every = await runCli({
+          base,
+          args: ['--range=HEAD..HEAD', '--only=functions', '--every-target'],
+        })
+        assert.equal(every.code, 1, every.out)
+        assert.match(every.out, /verified anyway \(--every-target\): Cloud Functions/)
+        assert.match(every.out, /NOT DEPLOYED Cloud Functions/)
+        assert.match(every.out, /owed by an earlier promotion and never made/)
+      },
+    )
+  })
+
+  it('--every-target passes once that deploy has happened', async () => {
+    await withStub(
+      { functions: deploymentAt(functionsCommitMs + 3_600_000) },
+      async ({ base }) => {
+        const { code, out } = await runCli({
+          base,
+          args: ['--range=HEAD..HEAD', '--only=functions', '--every-target'],
+        })
+        assert.equal(code, 0, out)
+        assert.match(out, /Every manual deploy target is deployed at the head of this range/)
       },
     )
   })

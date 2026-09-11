@@ -215,7 +215,7 @@ beforeEach(() => {
     ...Object.fromEntries(
       RELEASE_FLAGS.map((definition) => [definition.key, { enabled: false }]),
     ),
-    release_contacts: { enabled: true },
+    release_crm: { enabled: true },
   })
   // Overrides and the org's tier from one read (AGL-2486). A known tier,
   // not null: the route is asked what this org can reach, and a null here
@@ -409,7 +409,7 @@ describe('AGL-2185 · what actually reaches Linear', () => {
     expect(description).toContain('| Role | admin |')
     // A flag that is ON is named; one that is OFF is not — otherwise the row
     // says nothing about which surface the reporter was actually looking at.
-    expect(description).toContain('release\\_contacts')
+    expect(description).toContain('release\\_crm')
     expect(description).not.toContain('release\\_assist')
     // The correlation id is a real uuid, not a constant — the shape of bug
     // where a field "records a constant instead of the measured value".

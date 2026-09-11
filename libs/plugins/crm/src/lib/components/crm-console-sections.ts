@@ -41,7 +41,7 @@ export type CrmConsoleSectionId =
  * so `/crm/contacts` names the list and reads as one.
  *
  * Every section here ships with the surface and inherits the nav item's
- * `release_contacts` gate — no `navTabId` on any of them. A section that
+ * `release_crm` gate — no `navTabId` on any of them. A section that
  * later needs its own schedule declares one, which can only narrow.
  *
  * The PLAN is the other axis (AGL-2611), and it splits the rail in two.

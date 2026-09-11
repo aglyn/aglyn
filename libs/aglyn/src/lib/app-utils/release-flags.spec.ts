@@ -30,9 +30,9 @@ describe('release flags (AGL-227)', () => {
     expect(new Set(keys).size).toBe(keys.length)
     const tabIds = RELEASE_FLAGS.map((flag) => flag.navTabId).filter(Boolean)
     expect(new Set(tabIds).size).toBe(tabIds.length)
-    expect(isReleaseFlagKey('release_contacts')).toBe(true)
+    expect(isReleaseFlagKey('release_crm')).toBe(true)
     expect(isReleaseFlagKey('release_nonsense')).toBe(false)
-    expect(getReleaseFlagDefinition('release_contacts').navTabId).toBe(
+    expect(getReleaseFlagDefinition('release_crm').navTabId).toBe(
       'nav-tab-contacts',
     )
   })
@@ -62,8 +62,8 @@ describe('release flags (AGL-227)', () => {
   })
 
   it('buckets deterministically per flag and subject', () => {
-    const first = releaseFlagBucket('release_contacts', 'tenant-a')
-    expect(releaseFlagBucket('release_contacts', 'tenant-a')).toBe(first)
+    const first = releaseFlagBucket('release_crm', 'tenant-a')
+    expect(releaseFlagBucket('release_crm', 'tenant-a')).toBe(first)
     expect(first).toBeGreaterThanOrEqual(0)
     expect(first).toBeLessThan(100)
     // Different flags should not all share the subject's bucket.
@@ -74,15 +74,15 @@ describe('release flags (AGL-227)', () => {
   })
 
   it('gates fully on/off regardless of subject', () => {
-    expect(isReleaseFlagOn('release_contacts', { enabled: true }, null)).toBe(
+    expect(isReleaseFlagOn('release_crm', { enabled: true }, null)).toBe(
       true,
     )
     expect(
-      isReleaseFlagOn('release_contacts', { enabled: false }, 'tenant-a'),
+      isReleaseFlagOn('release_crm', { enabled: false }, 'tenant-a'),
     ).toBe(false)
     expect(
       isReleaseFlagOn(
-        'release_contacts',
+        'release_crm',
         { enabled: false, rolloutPercent: 50 },
         null,
       ),
@@ -91,26 +91,26 @@ describe('release flags (AGL-227)', () => {
 
   it('honors rollout boundaries and stays stable per subject', () => {
     const value = { enabled: false, rolloutPercent: 100 }
-    expect(isReleaseFlagOn('release_contacts', value, 'anyone')).toBe(true)
+    expect(isReleaseFlagOn('release_crm', value, 'anyone')).toBe(true)
     const zero = { enabled: false, rolloutPercent: 0 }
-    expect(isReleaseFlagOn('release_contacts', zero, 'anyone')).toBe(false)
+    expect(isReleaseFlagOn('release_crm', zero, 'anyone')).toBe(false)
 
     const half = { enabled: false, rolloutPercent: 50 }
-    const verdict = isReleaseFlagOn('release_contacts', half, 'tenant-a')
+    const verdict = isReleaseFlagOn('release_crm', half, 'tenant-a')
     for (let index = 0; index < 5; index += 1) {
-      expect(isReleaseFlagOn('release_contacts', half, 'tenant-a')).toBe(
+      expect(isReleaseFlagOn('release_crm', half, 'tenant-a')).toBe(
         verdict,
       )
     }
     // The verdict should track the bucket exactly.
-    expect(verdict).toBe(releaseFlagBucket('release_contacts', 'tenant-a') < 50)
+    expect(verdict).toBe(releaseFlagBucket('release_crm', 'tenant-a') < 50)
   })
 
   it('spreads subjects roughly according to the rollout percent', () => {
     const value = { enabled: false, rolloutPercent: 30 }
     let enabled = 0
     for (let index = 0; index < 1000; index += 1) {
-      if (isReleaseFlagOn('release_contacts', value, `tenant-${index}`)) {
+      if (isReleaseFlagOn('release_crm', value, `tenant-${index}`)) {
         enabled += 1
       }
     }

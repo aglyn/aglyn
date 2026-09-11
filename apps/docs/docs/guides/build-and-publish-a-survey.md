@@ -33,13 +33,16 @@ Datasets belong to your organization, so every site can share them. Open the
 organization **Data** page (or any site's Data page — both edit the same data).
 
 1. Choose **Add dataset**. In the **New dataset** dialog give it a **Name**
-   (say `Survey responses`) and an optional comma-separated starting list of
-   **Fields** (`satisfaction, visit, topics, comments`). Create it.
+   (say `Survey responses`) and a comma-separated list of **Fields**
+   (`satisfaction, visit, topics, comments`) — at least one, or **Create** stays
+   disabled. Create it.
 2. Select your new dataset in the **Dataset** dropdown and open **Schema**.
    The **Schema** dialog lists each field with its display name, generated
    field id, and a type chip.
 3. Use **Add field** / **Edit** to type the fields properly:
-   - `satisfaction` → type **Integer** (the star rating submits a number).
+   - `satisfaction` → type **Integer**. A form stores every value as text, so the
+     rating lands as `"4"`; the Data page's filter and sort still compare it as a
+     number.
    - `visit` → type **Text** (one radio choice).
    - `topics` → type **Text** (ticked checkboxes arrive joined with `, `).
    - `comments` → type **Text**.
@@ -57,9 +60,10 @@ Renaming the display name later never changes the id.
 
 :::tip Model first
 A clean schema now makes everything downstream typed: the record editor renders
-the right input per field, imports are validated, and quota-guarded writes
-reject junk. See the [datasets deep-dive](datasets-and-schema.md) for the full
-type system.
+the right input per field and imports are validated. Form submissions are the
+exception — they are stored as text without validation, so a submitted value can
+disagree with its field's type. See the [datasets deep-dive](datasets-and-schema.md)
+for the full type system.
 :::
 
 ## 2. Add a screen for the survey
@@ -106,7 +110,7 @@ fields, or the dropdown reads *No dataset selected on the form*.
 For this survey:
 
 1. `satisfaction` — Type **Star rating**, label "How satisfied are you?". The
-   five stars submit a number (`4`).
+   five stars submit their count (`4`), which the form stores as text.
 2. `visit` — Type **Radio choice**, Options `First time, Monthly, Weekly`.
 3. `topics` — Type **Checkboxes**, Options `Products, Support, Pricing`.
    Visitors can tick several; the submission joins them with `, `.

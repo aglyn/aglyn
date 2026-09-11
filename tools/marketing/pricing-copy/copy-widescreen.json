@@ -1510,7 +1510,7 @@
               "name": "qa",
               "cells": [
                 "What happens if I exceed a plan limit?",
-                "You’re not cut off. Extra sites, seats, datasets, storage, and API calls are metered at the rates in the usage table and itemized on your invoice."
+                "Storage and API calls keep working: usage past your allowance is metered at the rates in the usage table and itemized on your invoice. Sites, seats, and datasets stop at your limit until you buy an add-on or upgrade."
               ]
             },
             {

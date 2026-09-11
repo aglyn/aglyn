@@ -20,7 +20,7 @@
  * (AGL-1662) — the surface `db5ecdf2b` fixed on the console billing page.
  *
  * AGL-1604 stopped the usage cron putting `contactsOverageUsd` into
- * `billedCents` while `release_contacts` is off for the org. This alert kept
+ * `billedCents` while `release_crm` is off for the org. This alert kept
  * quoting "(≈$0.05 this month)" with no flag check.
  *
  * The gap is narrower than the billing page's and staff-only, which is the
@@ -214,7 +214,7 @@ const alertText = (): string =>
   screen.queryByText(new RegExp(OVERAGE_LEAD))?.textContent ?? ''
 
 describe('the Contacts overage alert follows what is billed (AGL-1662)', () => {
-  it('withholds the dollar figure while `release_contacts` is off', () => {
+  it('withholds the dollar figure while `release_crm` is off', () => {
     mount({ released: false, ready: true })
 
     const text = alertText()
@@ -227,7 +227,7 @@ describe('the Contacts overage alert follows what is billed (AGL-1662)', () => {
     expect(text).not.toContain('metered at')
     expect(text).not.toContain('Upgrade in Billing')
     // The billing page's exact sentences (`db5ecdf2b` / `1a2aed5cb`).
-    expect(text).toContain('not billed while the Contacts page is unavailable')
+    expect(text).toContain('not billed while the CRM is unavailable')
     expect(text).toContain('$1/1,000 rate applies once Contacts opens')
   })
 
@@ -250,8 +250,8 @@ describe('the Contacts overage alert follows what is billed (AGL-1662)', () => {
   })
 
   it('makes no claim at all before the flag verdict settles', () => {
-    // `release_contacts` is default-off, so an ungated alert would assert the
-    // withheld wording here — on an org whose published value may be ON.
+    // The registry default is no org's verdict, so an ungated alert could
+    // assert either wording here before the org's own value arrives.
     mount({ released: false, ready: false })
 
     expect(screen.queryByText(new RegExp(OVERAGE_LEAD))).toBeNull()

@@ -375,20 +375,33 @@ describe('a picker reads a page, not a catalog', () => {
     ])
   })
 
-  it('leaves the other four kinds unfiltered', () => {
+  it('offers only the datasets THIS site may use (AGL-2773)', () => {
+    // Datasets are owned by the org and shared per site (AGL-1044). A page
+    // bound to a dataset its site cannot see renders nothing, so offering one
+    // here lets an author bind a repeat or a form to an empty result. The
+    // predicate drops documents with no `visibleTo`, which is correct: an
+    // unshared dataset is visible to no site.
+    render(
+      <EntityPickerProvider hostId="h1">
+        <Consumer kinds={['datasets']} />
+      </EntityPickerProvider>,
+    )
+    expect(filtersOn('orgs/org-1/datasets')).toEqual([
+      ['visibleTo', 'array-contains-any', ['org', 'host:h1']],
+    ])
+  })
+
+  it('leaves the other three kinds unfiltered', () => {
     // Only `collections` shares its path with a second feature. A stray
     // predicate on any of the others would drop every document missing the
     // field it named.
     render(
       <EntityPickerProvider hostId="h1">
-        <Consumer
-          kinds={['products', 'categories', 'datasets', 'forms']}
-        />
+        <Consumer kinds={['products', 'categories', 'forms']} />
       </EntityPickerProvider>,
     )
     expect(filtersOn('hosts/h1/products')).toEqual([])
     expect(filtersOn('hosts/h1/productCategories')).toEqual([])
-    expect(filtersOn('orgs/org-1/datasets')).toEqual([])
     expect(filtersOn('hosts/h1/forms')).toEqual([])
   })
 })
@@ -492,6 +505,41 @@ describe('a stored value is resolved by a keyed read', () => {
     expect(keyedReads).toEqual([])
   })
 
+  it('resolves a dataset this site cannot see as unavailable (AGL-2773)', async () => {
+    // Stored on a node before the dataset's sharing was narrowed. It renders
+    // nothing on this site, so the picker must say so rather than show the
+    // name as if the binding worked.
+    keyedDocFor['orgs/org-1/datasets/d-internal'] = {
+      displayName: 'Internal pricing',
+      visibleTo: ['host:another-site'],
+    }
+    const latest = mount(['datasets'])
+    await act(async () => {
+      latest().resolve?.('datasets', 'd-internal')
+    })
+    await waitFor(() =>
+      expect(latest().resolved?.datasets).toHaveProperty('d-internal'),
+    )
+    expect(latest().resolved?.datasets?.['d-internal']).toBeNull()
+  })
+
+  it('THE CONTROL: resolves a dataset shared with this site', async () => {
+    keyedDocFor['orgs/org-1/datasets/d-menu'] = {
+      displayName: 'Menu',
+      visibleTo: ['host:h1'],
+    }
+    const latest = mount(['datasets'])
+    await act(async () => {
+      latest().resolve?.('datasets', 'd-menu')
+    })
+    await waitFor(() =>
+      expect(latest().resolved?.datasets?.['d-menu']).toEqual({
+        id: 'd-menu',
+        label: 'Menu',
+      }),
+    )
+  })
+
   it('falls back to the id rather than resolving to a blank label', async () => {
     keyedDocFor['hosts/h1/products/p9'] = { sku: 'ABC' }
     const latest = mount(['products'])
@@ -513,6 +561,7 @@ describe('a stored value is resolved by a keyed read', () => {
     // same defect one level down.
     keyedDocFor['orgs/org-1/datasets/d-far'] = {
       displayName: 'Newsletter signups',
+      visibleTo: ['org'],
       model: {
         order: ['email'],
         fields: { email: { name: 'Email address' } },

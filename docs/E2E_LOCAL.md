@@ -27,9 +27,9 @@ flow, and the notifications feed with category mutes.
 Three terminals (or background the first two):
 
 ```bash
-# 1. Emulators (dedicated config: auth 9099, firestore 8082, UI disabled)
+# 1. Emulators (dedicated config: auth 9099, firestore 8082, storage 9199, UI disabled)
 cd cloud && npx -y firebase-tools@13 emulators:start \
-  --config firebase.e2e.json --project aglyn-main --only auth,firestore
+  --config firebase.e2e.json --project aglyn-main --only auth,firestore,storage
 
 # 2. Seed + console dev server with the emulator flags
 npm run seed:e2e
@@ -39,15 +39,23 @@ npm run serve:console:emulated     # port 4200
 npm run e2e:console                # E2E_BASE_URL overrides the target
 ```
 
+Storage is emulated too, and has to be. Both `serve:*:emulated` scripts set
+`FIREBASE_STORAGE_EMULATOR_HOST=localhost:9199`, which is the only variable
+firebase-admin reads to find a Storage emulator; without it every media upload,
+replace, delete and CDN read from an "emulated" server goes to the real bucket
+named in `.env.development.local`, with the real service account beside it.
+Start the emulators with `storage` in `--only`, as above, or media calls fail
+with a refused connection, which is the failure you want.
+
 ## The CRM specs (AGL-2610)
 
-Seven browser-driven scripts under `tools/e2e/crm-*.e2e.mjs`, one per surface
-the v2 arc shipped, each signing in through `/signin`, driving the console
-as a person does, and asserting on the page AND on the document behind it
-through the emulator-side Admin SDK:
+Eight browser-driven scripts under `tools/e2e/crm-*.e2e.mjs`: seven, one per
+surface the v2 arc shipped, and one for the plan gate on a Free workspace. Each
+signs in through `/signin`, drives the console as a person does, and asserts on
+the page AND on the document behind it through the emulator-side Admin SDK:
 
 ```bash
-E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all seven, in order
+E2E_BASE_URL=http://localhost:4210 npm run e2e:crm          # all eight, in order
 npm run e2e:crm:bulk-bar        # tick two rows → tag, stage, owner, audience, CSV, remove
 npm run e2e:crm:reports         # /crm/reports (dashes until read) + the two dashboard cards
 npm run e2e:crm:leads           # status, owner, convert from the row menu, already-converted, unqualify (+ Convert… disabled), Inbox → CRM
@@ -57,6 +65,16 @@ npm run e2e:crm:deals           # board → move → won (the contact floored at
 npm run e2e:crm:org-hub         # /{org}/contacts → /{org}/crm/contacts, bare /crm, Known by, a create stamped with the picked site, the lead-surfaces note grouped by site, a lead's site address, a deal moved from the org board + its org activity line, an organization task (no site) filed and completed, the two CRM cards on the org's sites page, a recipe installed from org Settings → stamped on the site, refused twice, shown on the site's Actions page
 ```
 
+```bash
+npm run e2e:crm:free-plan       # a Free workspace: the seven suite sections locked on both hubs (rail and body), New contact and Import CSV locked, crm/contacts-create 403 plan_required for the owner and for staff, client-direct suite writes refused by the rules; the list, a record, Export CSV and erasure still open
+```
+
+The seven surface specs drive the primary org, which is on Business, so the
+whole suite is open to them and none of them can see the gate (AGL-2787,
+AGL-2788, AGL-2801). `crm-free-plan` signs in as the non-staff owner of a
+second workspace that is always on Free, and its rules step runs again on
+Starter as the control: the same write, allowed.
+
 They share `tools/e2e/lib/console-session.mjs` (Chrome, the UI sign-in, the
 three-verdict tally, MUI gestures) and re-seed their own fixtures first, so
 each is re-runnable on its own. Set `E2E_SHOTS_DIR` to a directory and every
@@ -64,6 +82,54 @@ script also drops staged captures of its surface there at 1840×1160 — the
 frame the docs and the press kit use — with the emulator banner, the dev
 indicator and the staff-only release-flag chrome stripped. Run them one at a
 time: they share one fixture and each resets it.
+
+## The DAM spec (AGL-2782)
+
+`tools/e2e/dam-replace-and-video.e2e.mjs` drives the media library and a
+published page together, so it needs BOTH dev servers and the Storage
+emulator:
+
+```bash
+# emulators with storage (step 1), seed (step 2), then:
+npm run serve:console:emulated                      # console on 4200
+REVALIDATE_SECRET=local npm run serve:tenant:emulated   # tenant on 4500
+E2E_STORAGE_BUCKET=<NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET of those servers> \
+  E2E_REVALIDATE_SECRET=local npm run e2e:dam
+```
+
+The tenant caches a host's routing map for an hour and a publish busts it
+through `/api/revalidate`, so the spec publishes its screens the way the
+console does: documents first, then that call. Without a matching
+`REVALIDATE_SECRET` a freshly published screen is a 404 for the hour, and the
+spec refuses to start rather than report the page as broken.
+
+It uploads an image, a PDF, a film and a CSV through the library's own input
+(so the browser video probe runs as it does for a person), publishes a page
+placing each one, and asserts the published HTML, the VideoObject, every media
+CDN representation (poster, missing poster, `?r=`, `?r=auto`, ranges), the
+lightbox as a visitor uses it (no dialog code or film bytes before it is
+approached; Enter, Space and click to open; a named dialog that holds focus;
+Escape and the close button; focus returned), a replace of every family
+through the card menu followed to every reference on the page, the old
+content-hashed URL's redirect, and the storage band at signed-replace mint.
+
+⛔ It refuses to upload anything until both servers have served an object that
+exists ONLY in the Storage emulator. A server started without
+`FIREBASE_STORAGE_EMULATOR_HOST` fails that preflight instead of writing test
+files into a real bucket. The two films it uploads are committed under
+`tools/e2e/fixtures/`; every other fixture is generated per run, and every
+name carries the run id, so it is re-runnable without a re-seed.
+
+One step is expected to fail until AGL-2802 is decided: Escape from inside
+Chrome's native player controls. From those focus stops no Escape event
+reaches the page in any phase, so the dialog cannot hear it; the step closes
+the dialog with its button so the rest of the run is unaffected.
+
+What it cannot see: Vercel's edge. A replaced image can stay edge-cached under
+its stable URL for up to `s-maxage`, and under a content-pinned URL for a year
+(AGL-2798). Locally there is no edge, so the spec proves the origin half only.
+The player's play beacon is gated to production surfaces and sends nothing
+from a loopback page; `video-playback-beacon.spec.tsx` covers it.
 
 ## Tenant production-mode smoke (AGL-595) — REQUIRED before deploying tenant changes
 
@@ -179,6 +245,13 @@ emulator-host env vars** so it can never touch production):
   merge, because the CRM specs mutate these and re-seed them; the owner's
   legal acceptance (`users/{uid}/legalAcceptances/v1`) is seeded beside them
   so no page opens under the re-acceptance banner.
+- A workspace on Free (AGL-2809), from
+  `tools/scripts/lib/crm-free-plan-fixtures.mjs`: auth user
+  `e2e-free-owner@aglyn.test` / `E2e-Password-1` (uid `e2e-free-owner`,
+  **no** `staff` claim), org `e2e-free-owner` (slug `e2e-free`,
+  `plan: 'free'`, no subscription), site `free-demo`, three captured contacts
+  and one company. Written with plain `set` and re-written by
+  `crm-free-plan.e2e.mjs`, which also withdraws the erasure request it files.
 
 ## Env knobs (all optional)
 

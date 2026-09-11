@@ -47,7 +47,7 @@ first syllable (IPA `/ˈæɡlɪn/`).
   </a>
   <a className="home-card" href="/content-and-data">
     <div className="home-card__title">Content &amp; data</div>
-    <p className="home-card__desc">Datasets and dynamic content, the media library, forms, and the CRM (rolling out).</p>
+    <p className="home-card__desc">Datasets and dynamic content, the media library, forms, and the CRM.</p>
   </a>
   <a className="home-card" href="/marketing-and-automation">
     <div className="home-card__title">Marketing &amp; automation</div>
@@ -76,10 +76,12 @@ product clicks into place.
 flowchart TD
   H[Site — your website] --> S[Screens]
   H --> L[Layouts]
-  H --> D[Data: datasets, variables, functions]
+  H --> D[Data: datasets]
+  H --> G[Logic: variables, functions]
   H --> M[Media]
   L -. wraps .-> S
   D -. binds into .-> S
+  G -. binds into .-> S
   M -. used by .-> S
   S --> P[Published site]
 ```

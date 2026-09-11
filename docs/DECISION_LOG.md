@@ -92,6 +92,22 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-10 — The CRM opens to every workspace, and its release flag is renamed `release_crm`
+
+- **Decided by:** the account owner, 2026-09-10 — release the CRM in this promotion, and name its flag for the whole hub rather than its first section. Lifts the 2026-09-07 hold on the flag; AGL-2680, the precondition this log attached to the flip, was settled 2026-09-08.
+- **Scope:** pricing
+- **Evidence:** `RELEASE_FLAGS` in `libs/aglyn/src/lib/app-utils/release-flags.ts` (`release_crm`, `defaultEnabled: true`) and `cloud/firebase-remoteconfig.template.json` (`"enabled":true`), held together by `release-flags-template.spec.ts`; the Remote Config template published at the promotion (`release_crm` on, `release_contacts` removed); the `release_contacts` entry dropped from `apps/console/constants/docs-release-flags.ts` and the rolling-out disclosures taken down from the six pages it watched, as `docs-release-flags.spec.ts` requires of a flag that is on; production read at the flip — 12 organizations, no September rollup past its records band, `contactsOverageWithheldUsd` 0 on every one; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2772.
+
+**No price, band or cap moves.** The records overage `report-usage` withheld while the
+flag was off now reaches the invoice of any paid organization past its band — none is,
+so the flip bills nothing today. The daily digest, task reminders and inbound filing
+now send for organizations whose plan carries the suite, and a non-staff member can
+export. A staff override can still hold one organization off, and that organization's
+overage stays withheld. Earlier entries keep the name `release_contacts`, the flag's
+name when they were written.
+
+---
+
 ## 2026-09-09 — The bandwidth conversion is re-paired with the re-pegged rate: a GB is 1,035 page views, not 1,748
 
 - **Decided by:** the account owner, 2026-09-09, on the standing instruction that neither a monthly nor an annual plan may put the platform under water at any utilization. Re-pair the two constants; do not touch a price or a band.

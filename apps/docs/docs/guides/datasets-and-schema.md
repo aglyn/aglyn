@@ -79,8 +79,9 @@ The types you can author:
 | **Reference** | A link to a record in another dataset — see [relations](../content-and-data/datasets/relations.md) |
 
 Plugins can register **custom field types**, which appear in the type picker
-suffixed with the plugin id. Records are validated and coerced against the
-model on every server-side write.
+suffixed with the plugin id. The console, imports, site restores and the REST
+API validate records against the model. Form submissions and the automation
+dataset steps do not: they store each value as text.
 
 :::info Legacy datasets
 Datasets created before typed models (a flat comma-separated field list) still
@@ -95,33 +96,39 @@ deleted**: *Clear the reference* (default) or *Block the delete*. Tick
 
 ## Record quotas per plan
 
-Dataset counts and records per dataset are entitlements of your organization's
-plan:
+Dataset counts, records per dataset and dataset storage are entitlements of your
+organization's plan:
 
-| Plan | Datasets | Records per dataset |
-| --- | --- | --- |
-| Free | — (no data store) | — |
-| Starter | 3 | 1,000 |
-| Pro | 15 | 10,000 |
-| Business | 100 | 100,000 |
-| Advanced | 500 | 1,000,000 |
+| Plan | Datasets | Most with add-ons | Records per dataset | Dataset storage |
+| --- | --- | --- | --- | --- |
+| Free | — (no data store) | — | — | — |
+| Starter | 3 | 10 | 1,000 | 1 GB |
+| Pro | 15 | 50 | 10,000 | 5 GB |
+| Business | 100 | 250 | 100,000 | 25 GB |
+| Scale | 250 | 500 | 500,000 | 50 GB |
+| Advanced | 500 | 1,000 | 1,000,000 | 100 GB |
+| Agency | 2,000 | 5,000 | Unlimited | 500 GB |
+| Enterprise | Custom | Custom | Custom | Custom |
 
 - Creating datasets on Free is rejected with *"Datasets require a Starter plan
   or higher."*
 - Hitting the record cap surfaces *"Record limit reached — see Billing to
-  upgrade"* in the console, and imports that would overflow are refused with
-  the exact slot math.
+  upgrade"* in the console. An import that would overflow writes the rows that
+  fit and skips the rest, reporting them as *over the record limit*.
 - **Form submissions never fail on quota** — if the dataset is full the record
   write is skipped silently, but the inbox copy is always kept.
 - [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md) raise the
-  dataset count beyond the base allowance, up to a hard per-plan ceiling.
+  dataset count beyond the base allowance, up to the most shown above.
+- Dataset storage past the included amount bills at $0.36 per GB-month from
+  Starter to Agency. Enterprise has no overage rate, so writes stop at its limit.
 
 ## Import & export
 
 The Data page round-trips **CSV and JSON**:
 
-- **Export** — the **CSV** and **JSON** toolbar buttons download the loaded
-  records with one column per model field.
+- **Export** — the **CSV** and **JSON** toolbar buttons download every record in
+  the dataset, not only the rows loaded in the table, with one column per model
+  field.
 - **Import** — the **Import records** dialog takes pasted **CSV (with a header
   row) or a JSON array**. Columns match by field id first, then
   case-insensitively by display name; rows are validated against the model on

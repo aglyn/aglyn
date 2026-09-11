@@ -155,7 +155,7 @@ const UNMATCHED_REFUND_REASON: Record<string, string> = {
 /**
  * Contacts CRM (AGL-109 → AGL-395): the unified contacts list, segments,
  * and profile drawer, owned by the contacts plugin and rendered by the
- * shell's generic plugin route. The shell applies the `release_contacts`
+ * shell's generic plugin route. The shell applies the `release_crm`
  * gate (via the nav tab) and passes the resolved `org` doc for the
  * `contactsPerHost` quota check.
  *
@@ -180,7 +180,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // (AGL-1662), and whether that question has been answered yet.
   //
   // AGL-1604 stopped the usage cron putting `contactsOverageUsd` into
-  // `billedCents` while `release_contacts` is off for the org; `db5ecdf2b`
+  // `billedCents` while `release_crm` is off for the org; `db5ecdf2b`
   // taught the console billing page's caption the same thing. This page's own
   // alert still quoted the dollar figure with no flag check — and this is the
   // surface a staff member reaches with the flag OFF, because the shell's
@@ -942,9 +942,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           ) : quota.overageRecords > 0 &&
             quota.overageRateUsd != null &&
             // No claim about money until the verdict that decides it has
-            // settled (AGL-1662). `release_contacts` is default-off before
-            // Remote Config activation, so an ungated alert would assert the
-            // withheld wording for one paint on an org that IS billed.
+            // settled (AGL-1662). Before Remote Config activation the flag
+            // reads its registry default, which is no org's verdict, so an
+            // ungated alert could assert the wrong wording for one paint.
             releaseFlagsReady ? (
             <Alert severity="info">
               {contactsBilled
@@ -974,7 +974,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   // happening.
                   `${quota.overageRecords.toLocaleString()} CRM records over ` +
                   `your plan's included ${quota.included.toLocaleString()} — ` +
-                  'not billed while the Contacts page is unavailable. ' +
+                  'not billed while the CRM is unavailable. ' +
                   `The $${quota.overageRateUsd}/1,000 rate applies once ` +
                   'Contacts opens.'}
             </Alert>

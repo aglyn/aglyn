@@ -440,8 +440,9 @@ export async function composeNodesWithChrome(options: {
     ]),
   ])
   const screenNodes = await options.screenNodes
-  const screenDatasetsPromise = Aglyn.hasRepeatableNodes(screenNodes)
-    ? getDatasets({ hostId })
+  const screenDatasetKeys = Aglyn.repeatDatasetKeys(screenNodes)
+  const screenDatasetsPromise = screenDatasetKeys.length
+    ? getDatasets({ hostId, keys: screenDatasetKeys })
     : undefined
   // Does the SCREEN itself place a form entity? Gated and re-asked exactly
   // like the datasets read beside it (AGL-1440): most pages carry no form, and
@@ -514,20 +515,23 @@ export async function composeNodesWithChrome(options: {
   // reusable components) and before bindings (so {{name}} tokens inside
   // cloned items still resolve).
   //
-  // The datasets themselves are fetched only if this tree actually repeats
-  // (AGL-1440). `expandRepeatables` returns its input untouched when no node
-  // carries `repeatDataset`, so on every other page the up-to-5,050 reads
-  // bought nothing at all. The gate is the composed tree — after grafting —
-  // because that is the map the expansion reads: a repeatable living in a
-  // layout or a reusable component is invisible in `screenNodes`, and gating
-  // on the screen alone would silently render one template row where the
-  // author put a list. When the screen DID declare one, the read is already in
-  // hand from the batch above and this costs no extra round trip.
-  const datasets =
-    screenDatasets ??
-    (Aglyn.hasRepeatableNodes(grafted as any)
-      ? await getDatasets({ hostId })
-      : undefined)
+  // Only the datasets this tree repeats over are read (AGL-1440), and the tree
+  // asked is the composed one — after grafting — because that is the map the
+  // expansion reads: a repeatable living in a layout or a reusable component
+  // is invisible in `screenNodes`, and reading only the screen's keys would
+  // silently render one template row where the author put a list. The
+  // screen's own keys were issued beside the chrome reads above; a key only a
+  // layout or a component adds is read here, for that key alone.
+  const datasetKeys = Aglyn.repeatDatasetKeys(grafted as any)
+  const unreadDatasetKeys = datasetKeys.filter(
+    (key) => !screenDatasetKeys.includes(key),
+  )
+  const datasets = unreadDatasetKeys.length
+    ? {
+        ...screenDatasets,
+        ...(await getDatasets({ hostId, keys: unreadDatasetKeys })),
+      }
+    : screenDatasets
   const repeated = Aglyn.expandRepeatables(grafted as any, datasets)
   // Collection entries blocks (AGL-551) expand alongside repeatables:
   // per-entry {{entry.*}} tokens substitute inside the clones here, while
