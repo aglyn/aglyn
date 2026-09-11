@@ -433,6 +433,14 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'The CONSOLE_ORIGIN / TENANT_APEX defaults, which PLUGIN_LOADER_CONSOLE_URL and PLUGIN_LOADER_TENANT_DOMAIN override (AGL-2196).',
   },
   {
+    file: 'tools/scripts/lib/gated-media-backfill.mjs',
+    count: 3,
+    reason:
+      'AGL-2814. An operator backfill run against the platform\'s own production after the ' +
+      'gated-media fix, never shipped in a build. The apexes mirror FIRST_PARTY_APEXES in ' +
+      'media-ref.ts so it recognizes the platform\'s own stored media URLs.',
+  },
+  {
     file: 'tools/scripts/backfill-subdomain-redirects.mjs',
     count: 1,
     reason:
