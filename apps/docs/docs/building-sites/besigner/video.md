@@ -43,6 +43,12 @@ Turn on **Open in a lightbox** and the poster becomes a play button that opens t
 film full size over the page, with a close button and `Esc` to dismiss. It needs a
 poster; without one the player stays in the page as usual.
 
+The lightbox has its own player controls: play, a seek bar with the time, mute and
+volume, captions when the video has a captions file, and full screen. Each one works
+from the keyboard. `Space` or `K` plays and pauses, the left and right arrows skip
+five seconds, `M` mutes, `F` goes full screen, and `Esc` closes the lightbox from any
+control, leaving full screen first if it is on.
+
 ## The three fields a search result needs {#video-seo}
 
 **Video title**, **Video description** and **Publication date** are what let search
