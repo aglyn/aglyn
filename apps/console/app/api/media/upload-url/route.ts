@@ -36,6 +36,7 @@ import {
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
+import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -156,6 +157,15 @@ async function handler(request: Request): Promise<Response> {
           error: SIGNED_UPLOAD_TYPES_MESSAGE,
         }, { status: 415 })
       }
+      // Video ingress is behind a release flag (AGL-2830). Refused before a
+      // URL exists, so no bytes can reach the bucket.
+      {
+        const refusal = await videoUploadPausedRefusal({
+          contentType,
+          orgId: scope.orgId,
+        })
+        if (refusal) return refusal
+      }
       if (
         !Number.isFinite(sizeBytes) ||
         sizeBytes <= 0 ||
@@ -259,6 +269,19 @@ async function handler(request: Request): Promise<Response> {
     if (!maxBytes || declaredBytes > maxBytes) {
       await file.delete().catch(() => undefined)
       return Response.json({ error: 'Uploaded object rejected' }, { status: 415 })
+    }
+    // The video flag again, at finalize (AGL-2830). A URL minted before the
+    // flag closed stays valid for its whole TTL, and by now the object is in
+    // the bucket, so a refusal deletes it like every other finalize refusal.
+    {
+      const refusal = await videoUploadPausedRefusal({
+        contentType,
+        orgId: scope.orgId,
+      })
+      if (refusal) {
+        await file.delete().catch(() => undefined)
+        return refusal
+      }
     }
 
     /**

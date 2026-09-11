@@ -224,6 +224,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   generateMediaVariants: jest.fn(async () => ({ variants: [], error: undefined })),
   isImpersonationSession: () => false,
+  // Video ingress stays open here (AGL-2830): these cases are about what an
+  // ingress does with a file it accepts. The pause has its own cases.
+  isServerReleaseFlagOnForOrg: async () => true,
   resolveOrgMembership: async () => ({ member: { role: 'owner' } }),
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),

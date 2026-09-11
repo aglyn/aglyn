@@ -33,6 +33,7 @@ import {
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
+import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
   deleteMediaWithTombstone,
   emailUnverifiedResponse,
@@ -170,6 +171,16 @@ async function handler(request: Request): Promise<Response> {
     const isImage = isImageUploadType(contentType)
     if (!isAllowedUploadType(contentType)) {
       return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
+    }
+    // Video ingress is behind a release flag (AGL-2830). Asked before the body
+    // is decoded, so a refused video costs no inspection, digest, deny-list
+    // read or quota read.
+    {
+      const refusal = await videoUploadPausedRefusal({
+        contentType,
+        orgId: scope.orgId,
+      })
+      if (refusal) return refusal
     }
     const uploaded = Buffer.from(data, 'base64')
     /**

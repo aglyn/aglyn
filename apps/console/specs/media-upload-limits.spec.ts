@@ -19,12 +19,20 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import {
   isAllowedUploadType,
+  isVideoUploadType,
   MB,
   normalizeUploadContentType,
   signedUploadMaxBytes,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
   UPLOAD_ACCEPT_ATTRIBUTE,
+  uploadAcceptAttribute,
+  uploadAcceptForKind,
   UPLOAD_TYPES,
+  UPLOAD_TYPES_MESSAGE,
+  uploadTypesMessage,
+  VIDEO_UPLOADS_PAUSED_CODE,
+  VIDEO_UPLOADS_PAUSED_MESSAGE,
+  VIDEO_UPLOADS_RELEASE_FLAG,
 } from '../utils/media-upload-limits'
 
 /**
@@ -145,7 +153,10 @@ describe('one upload allowlist, three layers (AGL-1465)', () => {
 
   describe('no layer keeps its own copy any more', () => {
     it('the file input renders the derived attribute, not a literal', () => {
-      expect(component).toContain('accept={UPLOAD_ACCEPT_ATTRIBUTE}')
+      // Derived from the table through the video flag (AGL-2830), so the
+      // attribute follows `UPLOAD_TYPES` whichever way the flag points.
+      expect(component).toContain('uploadAcceptAttribute({ video: videoUploadsOpen })')
+      expect(component).toContain('accept={uploadAccept}')
       // The old literal listed mime types inline; any return of that shape
       // is a fourth list being born.
       expect(component).not.toMatch(/accept="[^"]*application\//)
@@ -231,5 +242,95 @@ describe('one upload allowlist, three layers (AGL-1465)', () => {
     ]) {
       expect(read(route)).toContain('File is empty or too large')
     }
+  })
+})
+
+/**
+ * The video flag's half of the one-table rule (AGL-2830).
+ *
+ * The pause takes a family out of what the library OFFERS without taking it
+ * out of what the platform RECOGNIZES: a video still normalizes, still has a
+ * ceiling and still passes the allowlist, so what a person is told names the
+ * pause instead of calling a video an unsupported file.
+ */
+describe('video uploads pause without forking the table (AGL-2830)', () => {
+  const VIDEO_ROWS = UPLOAD_TYPES.filter((spec) =>
+    spec.contentType.startsWith('video/'),
+  )
+  const OTHER_ROWS = UPLOAD_TYPES.filter(
+    (spec) => !spec.contentType.startsWith('video/'),
+  )
+
+  it('has video rows to pause, so the assertions below are not over nothing', () => {
+    expect(VIDEO_ROWS.map((spec) => spec.contentType).sort()).toEqual([
+      'video/mp4',
+      'video/quicktime',
+      'video/webm',
+    ])
+  })
+
+  it('names exactly the video rows as the family the pause refuses', () => {
+    for (const spec of UPLOAD_TYPES) {
+      expect([spec.contentType, isVideoUploadType(spec.contentType)]).toEqual([
+        spec.contentType,
+        spec.contentType.startsWith('video/'),
+      ])
+    }
+    expect(isVideoUploadType('image/png')).toBe(false)
+  })
+
+  it('drops every video type and extension from the paused accept', () => {
+    const paused = uploadAcceptAttribute({ video: false }).split(',')
+    for (const spec of VIDEO_ROWS) {
+      expect(paused).not.toContain(spec.contentType)
+      for (const extension of spec.extensions) {
+        expect(paused).not.toContain(extension)
+      }
+    }
+  })
+
+  it('keeps images and every document in the paused accept', () => {
+    const paused = uploadAcceptAttribute({ video: false }).split(',')
+    expect(paused).toContain('image/*')
+    for (const spec of OTHER_ROWS) {
+      expect(paused).toContain(spec.contentType)
+      for (const extension of spec.extensions) {
+        expect(paused).toContain(extension)
+      }
+    }
+  })
+
+  it('offers video again, unchanged, once the flag opens', () => {
+    expect(uploadAcceptAttribute({ video: true })).toBe(UPLOAD_ACCEPT_ATTRIBUTE)
+    for (const spec of VIDEO_ROWS) {
+      expect(UPLOAD_ACCEPT_ATTRIBUTE.split(',')).toContain(spec.contentType)
+    }
+  })
+
+  it('narrows the fallback replace chooser the same way', () => {
+    expect(uploadAcceptForKind(undefined, { video: false })).toBe(
+      uploadAcceptAttribute({ video: false }),
+    )
+    expect(uploadAcceptForKind(undefined)).toBe(UPLOAD_ACCEPT_ATTRIBUTE)
+    expect(uploadAcceptForKind('document', { video: false })).toBe(
+      uploadAcceptForKind('document'),
+    )
+  })
+
+  it('stops promising video in the supported-uploads sentence', () => {
+    const paused = uploadTypesMessage({ video: false })
+    expect(paused).not.toMatch(/mp4|webm|quicktime/)
+    expect(paused).toContain('video uploads are paused')
+    expect(uploadTypesMessage({ video: true })).toBe(UPLOAD_TYPES_MESSAGE)
+  })
+
+  it('still recognizes a video, so the refusal can name the pause', () => {
+    for (const spec of VIDEO_ROWS) {
+      expect(isAllowedUploadType(spec.contentType)).toBe(true)
+      expect(signedUploadMaxBytes(spec.contentType)).toBeGreaterThan(0)
+    }
+    expect(VIDEO_UPLOADS_PAUSED_MESSAGE).toMatch(/^Video uploads are paused\./)
+    expect(VIDEO_UPLOADS_PAUSED_CODE).toBe('video_uploads_paused')
+    expect(VIDEO_UPLOADS_RELEASE_FLAG).toBe('release_video_uploads')
   })
 })

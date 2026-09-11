@@ -16,6 +16,11 @@ Set a **Video source** with **Browse media**. A video from your media library
 arrives with a poster frame, its running time and its dimensions already filled
 in — you only need **Poster image** to override the frame the library picked.
 
+:::note Video uploads are paused
+New video files cannot be uploaded to the media library for now. The **Video** element
+can still use any video that is already in your library.
+:::
+
 :::tip
 Picking a video from the media library copies its dimensions onto the element, which
 reserves the right-shaped box before anything loads and stops the rest of the page

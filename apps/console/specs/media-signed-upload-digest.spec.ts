@@ -214,6 +214,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   generateMediaVariants: jest.fn(async () => ({ variants: [], error: undefined })),
   isImpersonationSession: () => false,
+  // The release-flag verdict the video gate reads (AGL-2830), declared with
+  // the cases that close it at the bottom of the file.
+  isServerReleaseFlagOnForOrg: async (key: string, orgId: unknown) => {
+    mockVideoUploads.calls.push([key, orgId])
+    return mockVideoUploads.open
+  },
   resolveOrgMembership: async () => ({ member: { role: 'owner' } }),
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -288,7 +294,7 @@ jest.mock('../utils/server/media-scope', () => ({
   scopeAllows: () => true,
 }))
 
-import { PATCH as finalize } from '../app/api/media/upload-url/route'
+import { PATCH as finalize, POST as mint } from '../app/api/media/upload-url/route'
 
 const sha256 = (buffer: Buffer) =>
   createHash('sha256').update(new Uint8Array(buffer)).digest('hex')
@@ -445,5 +451,79 @@ describe('signed finalize · the bound the decision accepted (AGL-1629)', () => 
     })
     expect((await patch('clip.mp4')).status).toBe(200)
     expect(mockCounterSet).toHaveBeenCalled()
+  })
+})
+
+/**
+ * The signed route with video ingress paused (AGL-2830). OPEN by default in
+ * this file, because the cases above are about what finalize does with a film
+ * it accepts.
+ *
+ * The bytes never pass through this function, so the flag is asked twice: at
+ * the mint, where a refusal means no URL exists, and at finalize, where a URL
+ * minted before the flag closed has already put the object in the bucket and
+ * a refusal has to delete it.
+ */
+const mockVideoUploads: { open: boolean; calls: Array<[string, unknown]> } = {
+  open: true,
+  calls: [],
+}
+
+const MP4 = Buffer.concat([
+  Buffer.from([0x00, 0x00, 0x00, 0x18]),
+  Buffer.from('ftypmp42', 'ascii'),
+  Buffer.alloc(64, 0x00),
+])
+
+const mintFor = (contentType: string, fileName: string, sizeBytes: number) =>
+  mint(
+    new Request('https://app.aglyn.com/api/media/upload-url', {
+      method: 'POST',
+      headers: { authorization: 'Bearer tok' },
+      body: JSON.stringify({ orgId: 'org-1', contentType, fileName, sizeBytes }),
+    }),
+  )
+
+describe('signed uploads · a paused video never lands (AGL-2830)', () => {
+  beforeEach(() => {
+    mockVideoUploads.open = false
+    mockVideoUploads.calls = []
+  })
+
+  afterEach(() => {
+    mockVideoUploads.open = true
+  })
+
+  it('refuses to mint a URL for a video, so no bytes can reach the bucket', async () => {
+    const response = await mintFor('video/mp4', 'launch.mp4', 40 * 1024 * 1024)
+    expect(response.status).toBe(403)
+    const body = await response.json()
+    expect(body.code).toBe('video_uploads_paused')
+    expect(body.uploadUrl).toBeUndefined()
+    expect(mockVideoUploads.calls).toEqual([['release_video_uploads', 'org-1']])
+  })
+
+  it('still mints a URL for a PDF while video is paused, without reading the flag', async () => {
+    const response = await mintFor('application/pdf', 'brochure.pdf', 5 * 1024 * 1024)
+    expect(response.status).toBe(200)
+    expect((await response.json()).uploadUrl).toBe('https://storage.test/put')
+    expect(mockVideoUploads.calls).toEqual([])
+  })
+
+  it('refuses a video at finalize and deletes the object a stale URL put there', async () => {
+    placeObject({ bytes: MP4, contentType: 'video/mp4' })
+    const response = await patch('launch.mp4')
+    expect(response.status).toBe(403)
+    expect((await response.json()).code).toBe('video_uploads_paused')
+    expect(mockFileDelete).toHaveBeenCalled()
+    expect(mockMediaSet).not.toHaveBeenCalled()
+    expect(mockCounterSet).not.toHaveBeenCalled()
+    // Refused before inspection and the digest: no byte of the film was read.
+    expect(mockState.reads).toEqual([])
+  })
+
+  it('still finalizes a PDF while video is paused', async () => {
+    expect((await patch()).status).toBe(200)
+    expect(mockMediaSet).toHaveBeenCalled()
   })
 })

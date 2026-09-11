@@ -223,6 +223,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   generateMediaVariants: jest.fn(async () => ({ variants: [], error: undefined })),
   isImpersonationSession: () => false,
+  // Video ingress stays open here (AGL-2830): these cases are about what an
+  // ingress does with a file it accepts. The pause has its own cases.
+  isServerReleaseFlagOnForOrg: async () => true,
   // Nothing is taken down in these fixtures (AGL-1613). The routes now
   // consult the deny list before they write, so the mock has to answer —
   // `null` is "not quarantined", which is what every case here assumes.

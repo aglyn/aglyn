@@ -158,6 +158,40 @@ export const FLAG_DOC_PAGES: Partial<
       checkNoPriceClaim: true,
     },
   ],
+
+  // AGL-2830. The flag reopens video INGRESS only: a video already stored keeps
+  // serving whichever way it points. So no page here is ABOUT the flag, and
+  // each discloses the pause beside its own upload claim. The windows tie the
+  // disclosure to that claim, so deleting it fails even while the word
+  // "paused" survives somewhere else on the page.
+  release_video_uploads: [
+    {
+      path: 'docs/content-and-data/media/overview.md',
+      disclosure: [
+        /## Upload[\s\S]{0,600}\*\*Video uploads are paused\.\*\*/,
+        /\| Video \| 200 MB per file \| \*\*Paused\*\* on every plan \|/,
+      ],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The media library page carries a `:::info Plan availability` admonition and a per-plan size table for images, documents and storage, which ship on their own plan gates. A whole-file check would fail on those forever.',
+    },
+    {
+      path: 'api/resources/media.md',
+      disclosure: [
+        /\*\*Video uploads are paused\.\*\*[\s\S]{0,120}video_uploads_paused/,
+      ],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The media API page documents the whole resource: reads, image and document uploads, and the storage quota. A plan claim on it belongs to those, not to this flag.',
+    },
+    {
+      path: 'docs/building-sites/besigner/video.md',
+      disclosure: [
+        /## Choosing the film[\s\S]{0,500}:::note Video uploads are paused/,
+      ],
+      checkNoPriceClaim: true,
+    },
+  ],
 }
 
 /**
