@@ -1004,9 +1004,21 @@ describe('deploy request bodies (AGL-2015)', () => {
     ])
   })
 
-  it('a bare field path is not escaped; an exotic one is', () => {
+  it('a bare field path is not escaped; an exotic segment is', () => {
     assert.equal(fieldResourceId('nodes'), 'nodes')
-    assert.equal(fieldResourceId('a.b'), '`a.b`')
+    assert.equal(fieldResourceId('my-field'), '`my-field`')
+  })
+
+  it('a dotted path names a map key, so it is quoted per segment and never whole', () => {
+    // `values.email` is the `email` key inside the `values` map, the field a
+    // `where('values.email', ...)` reads. Quoted whole, `values.email` in
+    // backticks is a different, top-level field whose name contains a dot. On
+    // aglyn-main that one inherits `__default__/fields/*`, while the map key
+    // inherits the `records.values` exemption, so patching the quoted form
+    // would report success and leave the query unplannable.
+    assert.equal(fieldResourceId('values.email'), 'values.email')
+    assert.equal(fieldResourceId('values.my-field'), 'values.`my-field`')
+    assert.equal(fieldResourceId('`values.email`'), '`values.email`')
   })
 })
 
