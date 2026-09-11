@@ -219,7 +219,7 @@ export const PUBLISHED_ON_IN_PRODUCTION: Partial<
     defaultStaysOff:
       'Flipping the default in code has to be a failing test rather than a quiet deploy: assist-anthropic-subprocessor-gate.spec.ts pins both defaultEnabled and the template seed to false, so the flag can only be released by publishing Remote Config.',
     precondition:
-      'AGL-1909: Anthropic has to be a published subprocessor before Assist sends it customer content. The published subprocessors page (/legal/subprocessors) lists Anthropic for the Aglyn Assist helper.',
+      'AGL-1909: Anthropic has to be a published subprocessor before Assist sends it customer content. The published subprocessors page (/legal/subprocessors) lists Anthropic for the Assist helper.',
   },
 }
 
