@@ -138,6 +138,7 @@ jest.mock('@aglyn/aglyn', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-match'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
 }))
 jest.mock('@aglyn/besigner', () => ({
   focus: { getLastSelected: () => null },

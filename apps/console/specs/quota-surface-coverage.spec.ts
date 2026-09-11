@@ -157,6 +157,20 @@ const INDIRECT_SURFACES: Record<string, { via: string; renderedIn: string; label
     renderedIn: 'apps/console/components/org-members-card.component.tsx',
     label: 'manager seats used',
   },
+  /*
+   * The quota warnings banner meters datasets against the limit a create is
+   * refused at: `checkDatasetQuota(org, count).limit`, the included
+   * `datasetsPerOrg` plus purchased datasets, clamped to the plan maximum.
+   * The helper resolves the key internally, so the string legitimately
+   * appears in no component. Pinned at both ends, as for `managersPerOrg`:
+   * the helper's file must still name the key and the banner must still
+   * render its datasets line.
+   */
+  datasetsPerOrg: {
+    via: 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts',
+    renderedIn: 'apps/console/components/quota-warnings-banner.component.tsx',
+    label: "label: 'datasets'",
+  },
 }
 
 /**
