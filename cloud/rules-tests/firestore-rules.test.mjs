@@ -2106,11 +2106,11 @@ describe('hosts', () => {
     // two siblings, beside the regression guard that keeps the console
     // card's Delete button working.
     //
-    // `leads` LEFT this list in AGL-2801: its create and update are excluded
-    // from the catch-all and re-granted by a dedicated block that also asks
-    // the plan for the CRM suite. All three legs, on a plan with the suite
-    // and on Free, are asserted in `the CRM suite collections answer to the
-    // plan (AGL-2801)`.
+    // `leads` LEFT this list in AGL-2801: its create, update and — since
+    // AGL-2790 — delete are excluded from the catch-all and re-granted by a
+    // dedicated block that also asks the plan for the CRM suite. All three
+    // legs, on a plan with the suite and on Free, are asserted in `the CRM
+    // suite collections answer to the plan (AGL-2801)`.
     //
     // `inventoryAdjustments` LEFT this list in AGL-2269 and is not an
     // oversight: it is now append-only, so it fails the update/delete legs
@@ -9352,11 +9352,12 @@ describe('an email template is every editor\'s when shared and its owner\'s when
 /**
  * THE CRM SUITE IS THE PLAN'S IN THE DATABASE TOO (AGL-2801).
  *
- * The 2026-09-05 pricing decision includes the CRM suite from Starter and
- * keeps the contacts list on Free. The companion collections above, the saved
- * views, the email templates and a lead's working state are the suite, so on
- * a workspace whose plan does not carry it a create and an update are refused
- * — while a read and a delete, the workspace's own records, are not. The plan
+ * The CRM suite is included from Starter. The companion collections above,
+ * the saved views, the email templates and a lead's working state are the
+ * suite, so on a workspace whose plan does not carry it a create and an
+ * update are refused — while a read and a delete, the workspace's own
+ * records, are not. A lead is the exception on delete (AGL-2790): a plan
+ * without the suite reads its leads and removes none of them. The plan
  * question is `resolveOrgEntitlements`', restated: a per-org grant or
  * revocation wins, a missing plan is Free, and a paid plan whose subscription
  * died is Free until billing restores it.
@@ -9491,7 +9492,7 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
     )
   })
 
-  it("refuses a Free workspace a lead's working state, and keeps its read and delete", async () => {
+  it("refuses a Free workspace a lead's working state and its removal, and keeps its read (AGL-2790)", async () => {
     await setOrg({ plan: 'free' })
     await mustDeny(
       'an editor setting a lead status on Free',
@@ -9501,8 +9502,9 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
       'an editor creating a lead on Free',
       setDoc(lead(EDITOR, 'lead-new'), { email: 'new@example.test' }),
     )
+    await mustDeny('an editor deleting a lead on Free', deleteDoc(lead(EDITOR, 'lead-held')))
+    await mustDeny('the owner deleting a lead on Free', deleteDoc(lead(OWNER, 'lead-held')))
     await mustAllow('an editor reading a lead on Free', getDoc(lead(EDITOR, 'lead-held')))
-    await mustAllow('an editor deleting a lead on Free', deleteDoc(lead(EDITOR, 'lead-held')))
   })
 
   it("keeps a lead's authoring on a plan with the suite", async () => {

@@ -3354,22 +3354,24 @@ service cloud.firestore {
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
-              'flowEnrollments']));
+              'flowEnrollments', 'leads']));
       }
-      // A site's leads (AGL-2801). A capture door files one on every plan —
-      // a form, a sign-up, a booking, an import — through the Admin SDK,
-      // which these rules do not gate. What the console writes client-direct
-      // is a lead's WORKING state, its status, owner and notes in the CRM's
-      // Leads section, and that is the CRM suite's, included from Starter.
+      // A site's leads (AGL-2801, AGL-2790). A capture door files one on
+      // every plan — a form, a sign-up, a booking, an import — through the
+      // Admin SDK, which these rules do not gate, and a person's erasure
+      // removes one the same way. What the console writes client-direct is a
+      // lead's WORKING state — its status, owner and notes in the CRM's Leads
+      // section — and that, like removing a lead, is the CRM suite's,
+      // included from Starter. A plan without the suite reads its leads and
+      // changes none of them.
       //
-      // The catch-all's create and update lists name `leads`, and this block
-      // re-grants both on the catch-all's own terms plus the plan: sibling
-      // matches are OR'd and the looser one wins, so without the exclusions
-      // this block would narrow nothing. Read and delete stay with the
-      // catch-all, because reading a lead and removing one stay open on
-      // every plan.
+      // All three catch-all lists name `leads`, and this block re-grants
+      // create, update and delete on the catch-all's own terms plus the plan:
+      // sibling matches are OR'd and the looser one wins, so without the
+      // exclusions this block would narrow nothing. Read stays with the
+      // catch-all, because reading a lead stays open on every plan.
       match /leads/{leadId} {
-        allow create, update: if isStaff() ||
+        allow create, update, delete: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             hostOrgCarriesCrmSuite(hostId));
       }
