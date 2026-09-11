@@ -414,6 +414,15 @@ jobs:
       # node, no network, ~1s.
       - run: npm run test:ci-test-digest
 
+      # test:lint-verdict  The CI lint grader (AGL-2829). Main Gate runs
+      # 34540545704 and 34553636957 went red on `console:lint` with a warning
+      # listing cut off mid-file and no error anywhere in the log: the
+      # executor's single write of a 66 KB report did not drain before the task
+      # exited. Both lint steps run `--quiet` and hand their log and exit codes
+      # to this grader, which says whether a red is errors, a kill, or a report
+      # that never arrived. Pure node, no network.
+      - run: npm run test:lint-verdict
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs

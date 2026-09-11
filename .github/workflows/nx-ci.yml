@@ -509,7 +509,33 @@ jobs:
       # so the flag that matters in the test job means nothing here. The
       # reasoning behind that flag, and behind test and build being separate
       # invocations at all, is recorded in the test job below.
-      - run: npx nx affected -t lint --parallel=3
+      #
+      # `--quiet`, `cloud-functions` apart, and the log graded in words, for
+      # the reasons main-gate.yml's lint step records (AGL-2829): a large
+      # report is cut off before its error arrives, and `--quiet` on a
+      # run-commands target is a shell syntax error. `cloud-functions` is still
+      # linted only when it is affected, and a project listing that fails is a
+      # red, never a silent skip.
+      - name: lint
+        run: |
+          set +e
+          log="$RUNNER_TEMP/nx-lint.log"
+          npx nx affected -t lint --exclude=cloud-functions --parallel=3 --quiet > "$log" 2>&1
+          workspace=$?
+          projects=$(npx nx show projects --affected -t lint --json)
+          if [ $? -ne 0 ]; then
+            echo "::error::lint: could not list the affected lint projects, so cloud-functions was not graded."
+            exit 1
+          fi
+          functions=0
+          case "$projects" in
+            *'"cloud-functions"'*)
+              npx nx run cloud-functions:lint >> "$log" 2>&1
+              functions=$?
+              ;;
+          esac
+          cat "$log"
+          node tools/scripts/report-lint-verdict.mjs "$log" "$workspace" "$functions"
 
   # THE SUITE, SHARDED ACROSS FOUR RUNNERS (AGL-2505).
   #

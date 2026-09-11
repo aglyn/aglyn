@@ -108,6 +108,7 @@
     "test:week-one-preflight": "node tools/scripts/check-week-one-preflight.mjs --self-test",
     "test:runbook-commands": "node tools/scripts/check-runbook-commands.mjs --self-test",
     "test:ci-test-digest": "node --test tools/scripts/lib/ci-test-digest.test.mjs",
+    "test:lint-verdict": "node --test tools/scripts/lib/lint-verdict.test.mjs",
     "test:deploy-guard": "node --test tools/scripts/lib/clean-deploy-source.test.mjs",
     "test:gate-script": "bash tools/gate.sh --self-test",
     "test:vercel-ignore-build": "node --test tools/scripts/lib/vercel-ignore-build.test.mjs",

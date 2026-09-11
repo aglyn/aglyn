@@ -355,7 +355,32 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm ci --prefix cloud/functions
-      - run: npx nx run-many -t lint --all --parallel=3
+      # THE LINT REPORT HAS TO ARRIVE WHOLE (AGL-2829). The `@nx/eslint:lint`
+      # executor writes its report in one `console.info`, and the task process
+      # exits before a large write drains. `console:lint` prints ~66 KB of
+      # warnings, so runs 34540545704 and 34553636957 showed a listing cut off
+      # mid-file, no `✖ N problems` summary, and a red task whose one error sat
+      # in the lost tail. `--quiet` leaves the errors as the whole report, and
+      # no project sets `maxWarnings`, so no verdict moves.
+      #
+      # `cloud-functions` runs apart because its target is `nx:run-commands`,
+      # and nx appends an unknown flag to a run-commands command string:
+      # `--quiet` would land after the `}` of its install check as a shell
+      # syntax error (the `--maxWorkers` trap docs/RELEASING.md records).
+      #
+      # `set +e` so both commands run and their codes are read bare. The grader
+      # then says in words whether a red is errors, a kill, or a report that
+      # never arrived.
+      - name: lint
+        run: |
+          set +e
+          log="$RUNNER_TEMP/nx-lint.log"
+          npx nx run-many -t lint --all --exclude=cloud-functions --parallel=3 --quiet > "$log" 2>&1
+          workspace=$?
+          npx nx run cloud-functions:lint >> "$log" 2>&1
+          functions=$?
+          cat "$log"
+          node tools/scripts/report-lint-verdict.mjs "$log" "$workspace" "$functions"
       - run: node tools/scripts/run-guards.mjs --concurrency 4
         # Same reason as the fast job above (AGL-2670).
         env:
