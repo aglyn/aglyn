@@ -121,3 +121,55 @@ describe('crm plugin', () => {
     expect(Aglyn.PLAN_ENTITLEMENTS.starter.features.crm).toBe(true)
   })
 })
+
+/**
+ * THE CRM RAIL AS IT SHIPS, BY PLAN (AGL-2790).
+ *
+ * The sections as registered, judged the way the console shell judges them:
+ * a section is locked when `checkEntitlement` refuses the flag it declares,
+ * and a bare `/crm` lands on the first section left open. Every section is
+ * visible to every reader, because none declares a release flag of its own.
+ * Asserted here because an app never imports a plugin; the console's
+ * `plugin-hub-sections` spec pins the shell's half on a fixture of this shape.
+ */
+describe('the CRM rail as it ships, by plan (AGL-2790)', () => {
+  const rail = (org: unknown) => {
+    registerCrmConsole()
+    return (registered()?.navItems?.[0]?.sections ?? []).map((section) => ({
+      id: section.id,
+      locked:
+        section.featureFlag != null &&
+        Aglyn.checkEntitlement(org as never, section.featureFlag) !== true,
+    }))
+  }
+  const lockedIds = (org: unknown) =>
+    rail(org)
+      .filter((section) => section.locked)
+      .map((section) => section.id)
+  const landing = (org: unknown) => rail(org).find((section) => !section.locked)?.id
+
+  it('locks Contacts with the rest of the suite on Free, opens Leads, and lands there', () => {
+    const free = { $id: 'org-1', plan: 'free' }
+    expect(lockedIds(free)).toEqual([
+      'contacts',
+      'companies',
+      'deals',
+      'tasks',
+      'reports',
+      'fields',
+      'settings',
+    ])
+    expect(landing(free)).toBe('leads')
+  })
+
+  it('opens every section on Starter and lands a bare /crm on Contacts', () => {
+    const starter = { $id: 'org-1', plan: 'starter', subscription: { status: 'active' } }
+    expect(lockedIds(starter)).toEqual([])
+    expect(landing(starter)).toBe('contacts')
+  })
+
+  it('reads a dead subscription as Free and a per-org grant on Free as the suite', () => {
+    expect(landing({ plan: 'pro', billingStatus: 'canceled' })).toBe('leads')
+    expect(landing({ plan: 'free', entitlements: { features: { crm: true } } })).toBe('contacts')
+  })
+})

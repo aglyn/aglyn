@@ -28,7 +28,6 @@
  */
 
 import type { ConsoleNavSection, ReleaseFlagKey } from '@aglyn/aglyn'
-import { CRM_CONSOLE_SECTIONS } from '@aglyn/plugins-crm/components/crm-console-sections'
 import {
   hubLandingHref,
   releaseFlagForNavTab,
@@ -40,7 +39,12 @@ const FREE_ORG = { $id: 'org-1', features: {} }
 /** An org holding the CRM suite: Starter, the lowest plan that carries it. */
 const CRM_ORG = { $id: 'org-1', plan: 'starter', subscription: { status: 'active' } }
 
-/** The CRM's shape (AGL-2790): Leads on every plan, Contacts and Deals the suite's. */
+/**
+ * The CRM's shape (AGL-2790): Leads on every plan, Contacts and Deals the
+ * suite's. A fixture rather than `CRM_CONSOLE_SECTIONS` because an app never
+ * imports a plugin; the CRM plugin's own spec runs the list it registers
+ * through the same entitlement check.
+ */
 const SECTIONS: readonly ConsoleNavSection[] = [
   { id: 'contacts', label: 'Contacts', featureFlag: 'crm' },
   { id: 'leads', label: 'Leads' },
@@ -171,18 +175,17 @@ describe('hubLandingHref', () => {
 })
 
 /**
- * THE CRM RAIL AS IT SHIPS, BY PLAN (AGL-2790).
+ * A PLAN WITHOUT THE CRM SUITE (AGL-2790).
  *
- * The cases above run a fixture; these run `CRM_CONSOLE_SECTIONS` itself,
- * the list both shells mount. On a plan without the CRM suite Contacts is
- * locked with the rest of the suite, Leads is the one section open, and a
- * bare `/crm` lands there; on Starter nothing is locked and the landing is
- * Contacts, as it always was. The plan read is the effective one, so a dead
- * subscription reads as Free and a per-org grant as the suite.
+ * The shell's half of the split. Contacts is locked with the rest of the
+ * suite, Leads is the one section open, and a bare `/crm` lands there. A lock
+ * is the plan's verdict and nothing else, so staff inside a Free workspace
+ * draw the locks its members draw. The plan read is the effective one, so a
+ * dead subscription reads as Free and a per-org grant on Free as the suite.
  */
-describe('the CRM rail as it ships, by plan (AGL-2790)', () => {
+describe('a plan without the CRM suite (AGL-2790)', () => {
   const rail = (org: unknown, isStaff = false) =>
-    resolveHubSections(CRM_CONSOLE_SECTIONS, '/acme/crm', {
+    resolveHubSections(SECTIONS, '/acme/crm', {
       flags: flags(),
       isStaff,
       org,
@@ -191,17 +194,9 @@ describe('the CRM rail as it ships, by plan (AGL-2790)', () => {
   const lockedIds = (sections: ReturnType<typeof rail>) =>
     (sections ?? []).filter((section) => section.locked).map((section) => section.id)
 
-  it('locks Contacts with the rest of the suite on Free, opens Leads, and lands there', () => {
+  it('locks Contacts with the rest of the suite, opens Leads, and lands there', () => {
     const free = rail({ $id: 'org-1', plan: 'free' })
-    expect(lockedIds(free)).toEqual([
-      'contacts',
-      'companies',
-      'deals',
-      'tasks',
-      'reports',
-      'fields',
-      'settings',
-    ])
+    expect(lockedIds(free)).toEqual(['contacts', 'deals'])
     expect(free?.find((section) => section.id === 'leads')).toMatchObject({
       visible: true,
       locked: false,
@@ -211,14 +206,8 @@ describe('the CRM rail as it ships, by plan (AGL-2790)', () => {
 
   it('locks the same sections for staff inside a Free workspace', () => {
     const staff = rail({ $id: 'org-1', plan: 'free' }, true)
-    expect(lockedIds(staff)).toContain('contacts')
+    expect(lockedIds(staff)).toEqual(['contacts', 'deals'])
     expect(hubLandingHref(staff)).toBe('/acme/crm/leads')
-  })
-
-  it('opens every section on Starter and lands a bare /crm on Contacts', () => {
-    const starter = rail({ $id: 'org-1', plan: 'starter', subscription: { status: 'active' } })
-    expect(lockedIds(starter)).toEqual([])
-    expect(hubLandingHref(starter)).toBe('/acme/crm/contacts')
   })
 
   it('reads a dead subscription as Free and a per-org grant on Free as the suite', () => {
