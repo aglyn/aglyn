@@ -40,12 +40,76 @@ npm run e2e:console                # E2E_BASE_URL overrides the target
 ```
 
 Storage is emulated too, and has to be. Both `serve:*:emulated` scripts set
-`FIREBASE_STORAGE_EMULATOR_HOST=localhost:9199`, which is the only variable
-firebase-admin reads to find a Storage emulator; without it every media upload,
-replace, delete and CDN read from an "emulated" server goes to the real bucket
-named in `.env.development.local`, with the real service account beside it.
-Start the emulators with `storage` in `--only`, as above, or media calls fail
-with a refused connection, which is the failure you want.
+`FIREBASE_STORAGE_EMULATOR_HOST` (`localhost:9199` unless the caller exports
+another), which is the only variable firebase-admin reads to find a Storage
+emulator; without it every media upload, replace, delete and CDN read from an
+"emulated" server goes to the real bucket named in `.env.development.local`,
+with the real service account beside it. Start the emulators with `storage` in
+`--only`, as above, or media calls fail with a refused connection, which is the
+failure you want.
+
+## A private port set (AGL-2834)
+
+Several sessions share this machine, and one of them usually holds the default
+emulator ports. Every part of the stack finds the emulators through the same
+four variables, so a whole stack — emulators, seed, console, tenant and
+harness — runs beside another one once those variables name other ports:
+
+```bash
+# 1. Every port the e2e config pins, moved by an offset, and the variables to match
+eval "$(node tools/scripts/emulator-config.mjs --offset=10000)"
+npx -y firebase-tools@13 emulators:start --config "$FIREBASE_EMULATOR_CONFIG" \
+  --project aglyn-main --only auth,firestore,storage,database
+
+# 2. In every other terminal on that stack, the same `eval` first, then:
+npm run seed:e2e
+npm run serve:console:emulated -- --port 4310
+E2E_BASE_URL=http://localhost:4310 npm run e2e:crm:reports
+```
+
+- `emulator-config.mjs` writes `tmp/emulators/firebase.e2e.offset-<N>.json`.
+  The four emulators move, and so do the hub, logging and Firestore websocket
+  ports, because each of those collides with a second stack too. An offset
+  whose ports are taken is refused. It prints `export` lines for
+  `FIRESTORE_EMULATOR_HOST`, `FIREBASE_AUTH_EMULATOR_HOST`,
+  `FIREBASE_STORAGE_EMULATOR_HOST`, `FIREBASE_DATABASE_EMULATOR_HOST` and
+  `FIREBASE_EMULATOR_CONFIG`.
+- `seed:e2e`, both `serve:*:emulated` scripts and `require-emulator.mjs` read
+  those variables, and fall back to the default ports when they are unset. The
+  serve scripts also hand them to the page. A browser bundle only sees
+  `NEXT_PUBLIC_*`, so each host the page connects to is mirrored into
+  `NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST`,
+  `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` and, for the console's presence
+  session, `NEXT_PUBLIC_FIREBASE_DATABASE_EMULATOR_HOST`. Before those twins,
+  the page always connected to 8082 and 9099, so its reads and writes landed in
+  whichever stack held them.
+- The harness reads `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST`
+  as well (`tools/e2e/lib/console-session.mjs`).
+- The console dev server takes any free port. The tenant dev server does not:
+  its middleware routes `localhost:4500` and `*.localhost:4500` only, so one
+  tenant dev server runs at a time, whichever stack it points at.
+- Two stacks for one project id share a hub locator file in the system temp
+  directory, which is what firebase-tools' warning about multiple instances
+  refers to. Commands that look a running hub up, such as `emulators:export`,
+  find only one of them.
+
+To confirm a run landed where you meant it to, ask the emulators rather than
+the harness. The Auth emulator lists each account's `lastLoginAt`, which the UI
+sign-in moves:
+
+```bash
+curl -s -X POST -H 'Authorization: Bearer owner' -H 'Content-Type: application/json' \
+  -d '{}' "http://$FIREBASE_AUTH_EMULATOR_HOST/identitytoolkit.googleapis.com/v1/projects/aglyn-main/accounts:query"
+```
+
+The Firestore emulator counts rule evaluations, which only a client SDK causes;
+the Admin SDK in the seed and the harness bypasses the rules:
+
+```bash
+curl -s "http://$FIRESTORE_EMULATOR_HOST/emulator/v1/projects/aglyn-main:ruleCoverage"
+```
+
+Stop the emulators with Ctrl-C, and delete `tmp/emulators/` when you are done.
 
 ## The CRM specs (AGL-2610)
 

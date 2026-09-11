@@ -65,6 +65,10 @@ import {
   appCheckSiteKey,
 } from '../../constants/firebase-config'
 import {
+  authEmulatorUrl,
+  firestoreEmulatorHost,
+} from '../../constants/firebase-emulator-hosts'
+import {
   type AuthPersistenceClass,
   createAuthInstance,
 } from './auth-persistence'
@@ -440,7 +444,14 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
               },
         )
         if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
-          connectFirestoreEmulator(getFirestore(app), 'localhost', 8082)
+          // Where the server was told the emulator is, rather than a default
+          // port another session's stack may hold (AGL-2834).
+          const emulator = firestoreEmulatorHost()
+          connectFirestoreEmulator(
+            getFirestore(app),
+            emulator.host,
+            emulator.port,
+          )
         }
       } catch {
         // already initialized (e.g. HMR reset the module flag) — getFirestore() returns the existing instance
@@ -453,7 +464,8 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     if (!connectedAuth) {
       try {
         if (FIREBASE_AUTH_EMULATOR_ENABLED) {
-          connectAuthEmulator(auth, 'http://localhost:9099')
+          // The emulator the server was started with (AGL-2834).
+          connectAuthEmulator(auth, authEmulatorUrl())
         }
         connectedAuth = true
       } catch (error) {
