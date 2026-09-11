@@ -270,10 +270,14 @@ describe('the CRM suite entitlement (AGL-2611)', () => {
     expect(childPaths(COMPANIES)).toEqual([])
   })
 
-  it('leaves contacts open — they are not part of the suite', async () => {
+  // The CRM is paid-only (AGL-2851): contacts are refused with the rest,
+  // reads included, before the scope is asked.
+  it('refuses contacts too, a read included', async () => {
     mockOrg = { ...mockOrg, entitlements: { features: { crm: false } } }
     mockScopes = ['contacts:read']
-    expect((await call('GET', 'contacts')).status).toBe(200)
+    const read = await call('GET', 'contacts')
+    expect(read.status).toBe(403)
+    expect((await json(read)).error).toMatchObject({ type: 'plan_required', code: 'crm' })
   })
 
   it('CONTROL: the plan as sold answers, and a per-org grant on a lesser plan answers too', async () => {

@@ -2776,33 +2776,6 @@ function readContactInput(
   return Object.keys(errors).length ? { errors } : { values }
 }
 
-/**
- * The refusal a contact write gets on a plan without the CRM suite — the
- * console's `crm/contact-update` answer, in the REST shape the suite's own
- * resources are refused in. `null` when the plan carries the suite.
- *
- * EVERY write, whatever it carries (AGL-2822, AGL-2790). A plan without the
- * suite reads its Leads and changes no contact: not an owner, a lifecycle
- * stage, a company, files or custom values, and not the profile a capture
- * writes, tags or notes either. It adds no contact by hand, which is what a
- * create over the API is, and it merges none.
- *
- * A create and an update ask once the body has parsed and before any
- * document is read, so a malformed body still names its fields and a refused
- * one spends nothing; a merge asks before its body is read. Every plan that
- * carries `apiAccess` carries the suite; this answers the org whose
- * entitlements an override split.
- */
-function contactSuiteRefusal(ctx: ApiV1Context): Response | null {
-  if (checkEntitlement(ctx.org, 'crm')) return null
-  return ApiErrors.planRequired({
-    message:
-      'Adding, editing and merging contacts is part of the CRM suite, which is ' +
-      'not included in this organization’s plan',
-    code: 'crm',
-    headers: ctx.headers,
-  })
-}
 
 /**
  * The two references a contact's CRM profile can carry, checked for
@@ -2996,8 +2969,6 @@ async function createContact(
       headers: ctx.headers,
     })
   }
-  const suite = contactSuiteRefusal(ctx)
-  if (suite) return suite
   const { email, name, tags, notes, marketingConsent, consentSiteId, crm } =
     parsed.values
   if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
@@ -3171,8 +3142,6 @@ async function updateContact(
       headers: ctx.headers,
     })
   }
-  const suite = contactSuiteRefusal(ctx)
-  if (suite) return suite
   const snap = await contactRef.get()
   if (!snap.exists) {
     return ApiErrors.notFound({
@@ -3522,8 +3491,6 @@ async function handleContacts(
     }
     const denied = requireScope(ctx, 'contacts:write')
     if (denied) return denied
-    const suite = contactSuiteRefusal(ctx)
-    if (suite) return suite
     const group = contactViewGroup(ctx, url)
     if ('response' in group) return group.response
     return mergeContactRoute(request, ctx, contactRef, (snap) =>
@@ -3799,19 +3766,21 @@ export async function handleUsage(
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
 /**
- * The resources the CRM SUITE entitlement gates (AGL-2611). Contacts are not
- * among them: the contacts list ships on every plan, banded, and its API
- * has been open since AGL-899.
+ * The resources the CRM entitlement gates (AGL-2611, AGL-2851): the whole
+ * CRM, which is included from Starter. A Free workspace has none of it, so
+ * none of these answers a read or a write for an org without `features.crm`.
  */
 const CRM_SUITE_RESOURCES: ReadonlySet<string> = new Set([
+  // The people, on every verb (AGL-2851). A capture still records them on
+  // every plan; reading and changing them is the CRM.
+  'contacts',
   'companies',
   'pipelines',
   'deals',
   'tasks',
   'activities',
-  // A site's leads are captured on every plan; their working state — a
-  // status, an owner, the conversion — is the suite's, and so is the API
-  // onto them (AGL-2627).
+  // A site's leads: captured on every plan, read and worked in the CRM
+  // (AGL-2627).
   'leads',
   // The letters a team sends from a record (AGL-2658) — the CRM's, like the
   // one-to-one send they are written for.
@@ -3825,17 +3794,17 @@ export async function dispatchResource(
   segments: string[],
 ): Promise<Response> {
   const url = new URL(request.url)
-  // The plan question before the scope one, in front of the five handlers
+  // The plan question before the scope one, in front of the CRM's handlers
   // rather than inside each: `crm:*` is mintable on a Business key whose org
-  // was later moved to a plan without the suite by a staff override, and a
+  // was later moved to a plan without the CRM by a staff override, and a
   // scope that still answered would be the shell's "extensions cannot bypass
   // entitlements" promise broken over the wire. Same shape as the
   // `dataStore` refusal on datasets.
   if (CRM_SUITE_RESOURCES.has(segments[0]) && !checkEntitlement(ctx.org, 'crm')) {
     return ApiErrors.planRequired({
       message:
-        'The CRM suite — companies, pipelines, deals, tasks, activities, ' +
-        'leads and email templates — is not included in this organization’s plan',
+        'The CRM — contacts, leads, companies, deals, tasks, pipelines, ' +
+        'activities and email templates — is not included in this organization’s plan',
       code: 'crm',
       headers: ctx.headers,
     })

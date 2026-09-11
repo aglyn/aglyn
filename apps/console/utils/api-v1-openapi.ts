@@ -262,7 +262,7 @@ const RESOURCES: readonly ResourceSpec[] = [
   },
   {
     tag: 'Contacts',
-    description: 'People, organization-wide. Not gated on the CRM suite.',
+    description: 'People, organization-wide. Part of the CRM, which is included from Starter.',
     schemaName: 'Contact',
     required: ['id', 'object', 'email'],
     writable: [
@@ -297,7 +297,7 @@ const RESOURCES: readonly ResourceSpec[] = [
     },
     ops: [
       {
-        path: '/v1/contacts', method: 'get', operationId: 'listContacts', summary: 'List contacts', list: true, returns: 'Contact',
+        path: '/v1/contacts', method: 'get', operationId: 'listContacts', summary: 'List contacts', list: true, returns: 'Contact', entitlement: 'crm',
         description: 'Combining `email` with `tag` narrows on `email` and checks `tag` on the page, so pages can come back short. `lifecycleStage` and `ownerUid` live on a per-site profile and are ALWAYS checked on the page.',
         filters: [
           q('email', 'Exact match, normalized the way the write path normalizes it. An unusable value is a 400.'),
@@ -306,11 +306,11 @@ const RESOURCES: readonly ResourceSpec[] = [
           q('ownerUid', 'Always checked on the page.'),
         ],
       },
-      { path: '/v1/contacts', method: 'post', operationId: 'createContact', summary: 'Create a contact', accepts: 'ContactWrite', returns: 'Contact', creates: true, description: 'A duplicate email is `409 conflict` (`code: "contact_exists"`), and the message names the existing id.' },
-      { path: '/v1/contacts/{contactId}', method: 'get', operationId: 'getContact', summary: 'Retrieve a contact', returns: 'Contact', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}', method: 'patch', operationId: 'updateContact', summary: 'Update a contact', accepts: 'ContactWrite', returns: 'Contact', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}', method: 'delete', operationId: 'deleteContact', summary: 'Delete a contact', returns: 'Deleted', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}/merge', method: 'post', operationId: 'mergeContact', summary: 'Merge two contacts', accepts: 'ContactMerge', returns: 'Contact', pathParams: [{ name: 'contactId', description: 'The contact that survives.' }] },
+      { path: '/v1/contacts', method: 'post', operationId: 'createContact', summary: 'Create a contact', accepts: 'ContactWrite', returns: 'Contact', entitlement: 'crm', creates: true, description: 'A duplicate email is `409 conflict` (`code: "contact_exists"`), and the message names the existing id.' },
+      { path: '/v1/contacts/{contactId}', method: 'get', operationId: 'getContact', summary: 'Retrieve a contact', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
+      { path: '/v1/contacts/{contactId}', method: 'patch', operationId: 'updateContact', summary: 'Update a contact', accepts: 'ContactWrite', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
+      { path: '/v1/contacts/{contactId}', method: 'delete', operationId: 'deleteContact', summary: 'Delete a contact', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
+      { path: '/v1/contacts/{contactId}/merge', method: 'post', operationId: 'mergeContact', summary: 'Merge two contacts', accepts: 'ContactMerge', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'The contact that survives.' }] },
     ],
   },
   {

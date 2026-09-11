@@ -481,12 +481,16 @@ describe('a plan without the CRM suite (AGL-2822, AGL-2790)', () => {
     ])
   })
 
-  it('still names a malformed field before it asks the plan', async () => {
+  // Contacts are the CRM's resource (AGL-2851): the plan is asked before the
+  // body is read, as for every CRM resource, so a malformed body on a plan
+  // without the CRM is refused for the plan and names no field.
+  it('asks the plan before it reads a malformed body', async () => {
     const response = await call('PATCH', 'contacts/c-1', {
       consentSiteId: 'host-1',
       phone: 'call me maybe',
     })
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(403)
+    expect((await json(response)).error).toMatchObject({ type: 'plan_required', code: 'crm' })
     expect(mockDocs.get(`${CONTACTS}/c-1`)!.facets).toEqual(STORED_FACETS)
   })
 
