@@ -29,10 +29,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, render, screen } from '@testing-library/react'
 import {
-  createVideoAssetFactsStore,
-  VideoAssetFactsContext,
-  type VideoAssetFactsStore,
-} from '../contexts/video-asset-facts-context'
+  createMediaAssetFactsStore,
+  MediaAssetFactsContext,
+  type MediaAssetFactsStore,
+} from '../contexts/media-asset-facts-context'
 import ElementPropsForm from './element-props-form.component'
 
 const KEY = 'org:acme/film'
@@ -54,9 +54,9 @@ const durationAttribute = {
   description: DESCRIPTION,
 }
 
-const mount = (store: VideoAssetFactsStore) =>
+const mount = (store: MediaAssetFactsStore) =>
   render(
-    <VideoAssetFactsContext.Provider value={store}>
+    <MediaAssetFactsContext.Provider value={store}>
       <ElementPropsForm
         node={
           {
@@ -69,18 +69,18 @@ const mount = (store: VideoAssetFactsStore) =>
           } as never
         }
       />
-    </VideoAssetFactsContext.Provider>,
+    </MediaAssetFactsContext.Provider>,
   )
 
 describe('the Duration field after a replace (AGL-2838)', () => {
   it('shows its own description while the film has no answer', async () => {
-    mount(createVideoAssetFactsStore())
+    mount(createMediaAssetFactsStore())
     expect(await screen.findByText(DESCRIPTION)).toBeTruthy()
     expect(screen.queryByText(/media library/)).toBeNull()
   })
 
   it('names the running time the page uses once the asset records another', async () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     mount(store)
     await screen.findByText(DESCRIPTION)
     act(() =>
@@ -94,7 +94,7 @@ describe('the Duration field after a replace (AGL-2838)', () => {
   })
 
   it('says the page gives no running time once the asset records none', async () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     mount(store)
     await screen.findByText(DESCRIPTION)
     act(() => store.set(KEY, { poster: { width: 480, height: 480 } }))
@@ -104,7 +104,7 @@ describe('the Duration field after a replace (AGL-2838)', () => {
   })
 
   it('stays quiet when the asset agrees with the field', async () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     mount(store)
     await screen.findByText(DESCRIPTION)
     act(() =>

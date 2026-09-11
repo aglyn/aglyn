@@ -31,10 +31,10 @@ import * as Aglyn from '@aglyn/aglyn'
 import NodeLeaf from '@aglyn/besigner-ui/components/node-leaf'
 import ComponentPromotionContext from '@aglyn/besigner-ui/contexts/component-promotion-context'
 import {
-  createVideoAssetFactsStore,
-  VideoAssetFactsContext,
-  type VideoAssetFactsStore,
-} from '@aglyn/besigner-ui/contexts/video-asset-facts-context'
+  createMediaAssetFactsStore,
+  MediaAssetFactsContext,
+  type MediaAssetFactsStore,
+} from '@aglyn/besigner-ui/contexts/media-asset-facts-context'
 import { act, render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import Video, { schema } from './video'
@@ -93,11 +93,11 @@ const boxOf = (element: Element | null) =>
 const player = (root: ParentNode = document) =>
   root.querySelector('video') as HTMLVideoElement
 
-const onCanvas = (store: VideoAssetFactsStore | undefined, child: ReactNode) =>
+const onCanvas = (store: MediaAssetFactsStore | undefined, child: ReactNode) =>
   render(
-    <VideoAssetFactsContext.Provider value={store}>
+    <MediaAssetFactsContext.Provider value={store}>
       {child}
-    </VideoAssetFactsContext.Provider>,
+    </MediaAssetFactsContext.Provider>,
   )
 
 beforeAll(() => {
@@ -110,7 +110,7 @@ afterAll(() => {
 
 describe('a replaced film on the besigner canvas (AGL-2838)', () => {
   it("draws the pick's shape and poster while nothing has answered for the film", () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     onCanvas(store, <NodeLeaf node={filmNode()} />)
     expect(boxOf(player())).toBe('640/360')
     expect(player().getAttribute('poster')).toContain('poster=1')
@@ -119,7 +119,7 @@ describe('a replaced film on the besigner canvas (AGL-2838)', () => {
   })
 
   it("follows a replace to the new film's frame", () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     onCanvas(store, <NodeLeaf node={filmNode()} />)
     act(() => store.set(KEY, REPLACED))
     expect(boxOf(player())).toBe('480/480')
@@ -127,7 +127,7 @@ describe('a replaced film on the besigner canvas (AGL-2838)', () => {
   })
 
   it('stops showing a generated poster the replacement no longer has', () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     onCanvas(store, <NodeLeaf node={filmNode()} />)
     act(() => store.set(KEY, { video: REPLACED.video }))
     expect(boxOf(player())).toBe('480/480')
@@ -137,7 +137,7 @@ describe('a replaced film on the besigner canvas (AGL-2838)', () => {
   })
 
   it("returns to the pick's values when the answer is withdrawn", () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     onCanvas(store, <NodeLeaf node={filmNode()} />)
     act(() => store.set(KEY, REPLACED))
     act(() => store.set(KEY, undefined))
@@ -146,7 +146,7 @@ describe('a replaced film on the besigner canvas (AGL-2838)', () => {
   })
 
   it('draws the replacement without writing it into the node', () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     const node = filmNode() as { props: Record<string, unknown> }
     onCanvas(store, <NodeLeaf node={node as never} />)
     act(() => store.set(KEY, REPLACED))
@@ -155,14 +155,14 @@ describe('a replaced film on the besigner canvas (AGL-2838)', () => {
   })
 
   it('lets go of the film once the canvas stops drawing it', () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     const { unmount } = onCanvas(store, <NodeLeaf node={filmNode()} />)
     unmount()
     expect(store.getRetained()).toEqual([])
   })
 
   it('draws a film inside a component instance the same way', () => {
-    const store = createVideoAssetFactsStore()
+    const store = createMediaAssetFactsStore()
     const definitions = {
       hero: {
         rootId: 'root',

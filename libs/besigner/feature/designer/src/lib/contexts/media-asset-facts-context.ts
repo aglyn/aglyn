@@ -18,66 +18,68 @@
 import type { MediaRef } from '@aglyn/aglyn'
 // By path: the overlay rules stay out of every `@aglyn/aglyn` barrel.
 import {
-  type VideoAssetFacts,
-  videoAssetFactsKey,
-} from '@aglyn/aglyn/app-utils/video-asset-facts'
+  type MediaAssetFacts,
+  mediaAssetFactsKey,
+} from '@aglyn/aglyn/app-utils/media-asset-facts'
 import { createContext } from 'react'
 
 /**
- * What each placed film's DAM asset records NOW, for the canvas (AGL-2838).
+ * What each placed library asset's DAM document records NOW, for the canvas
+ * (AGL-2838, AGL-2856).
  *
- * Picking a library film copies its running time, its frame's pixel pair and
- * its poster flag onto the Video node. A replace rewrites the asset and cannot
- * rewrite the nodes. The published page lays the asset's current records over
- * the node when it is composed (AGL-2807); a canvas drawing the node's props
- * alone would show the replaced film's shape and poster instead.
+ * Picking a library asset copies facts onto its node: a film's running time,
+ * frame pair and poster flag, an image's pixel pair. A replace rewrites the
+ * asset and cannot rewrite the nodes. The published page lays the asset's
+ * current records over the node when it is composed (AGL-2807, AGL-2833); a
+ * canvas drawing the node's props alone would show the replaced file's shape
+ * instead.
  *
  * The designer does not read Firestore — it renders inside a plugin sandbox,
  * and the documents are the host app's to know, which is the same reason
  * `MediaPickerContext` carries the approved image hosts. So the host app
- * supplies a source, the canvas holds the films it is drawing, and
- * `useVideoAssetFactsOverlay` lays each answer over the render copy through
- * `applyVideoAssetFacts`, the published page's own rule.
+ * supplies a source, the canvas holds the assets it is drawing, and
+ * `useMediaAssetFactsOverlay` lays each answer over the render copy through
+ * `applyMediaAssetFacts`, the published page's own rule.
  *
- * ABSENT when no host app answers for films: every film then renders from its
- * stored props.
+ * ABSENT when no host app answers for assets: every placement then renders
+ * from its stored props.
  */
-export interface VideoAssetFactsSource {
+export interface MediaAssetFactsSource {
   /**
-   * The facts filed under `videoAssetFactsKey`, or `undefined` while nothing
-   * has answered for that film. Pending, refused, deleted and failed are all
+   * The facts filed under `mediaAssetFactsKey`, or `undefined` while nothing
+   * has answered for that asset. Pending, refused, deleted and failed are all
    * `undefined`, because each of them renders the node's stored props.
    */
-  get(key: string): VideoAssetFacts | undefined
+  get(key: string): MediaAssetFacts | undefined
   /**
-   * Keeps the film's document read while the caller holds it, and returns the
-   * release. Holds are counted, so two placements of one film share a read and
-   * the read ends with the last of them.
+   * Keeps the asset's document read while the caller holds it, and returns
+   * the release. Holds are counted, so two placements of one asset share a
+   * read and the read ends with the last of them.
    */
   retain(ref: MediaRef): () => void
-  /** Called after any film's answer changes. Returns the unsubscribe. */
+  /** Called after any asset's answer changes. Returns the unsubscribe. */
   subscribe(listener: () => void): () => void
   /** Moves on every change, so a subscriber can tell a new answer apart. */
   getVersion(): number
 }
 
 /** The source, plus the two ends the host app drives it from. */
-export interface VideoAssetFactsStore extends VideoAssetFactsSource {
-  /** Files a film's answer; `undefined` withdraws it. */
-  set(key: string, facts: VideoAssetFacts | undefined): void
+export interface MediaAssetFactsStore extends MediaAssetFactsSource {
+  /** Files an asset's answer; `undefined` withdraws it. */
+  set(key: string, facts: MediaAssetFacts | undefined): void
   /**
-   * The films something currently holds, one per key. The array is replaced
+   * The assets something currently holds, one per key. The array is replaced
    * only when that set changes, which is the stable snapshot
-   * `useSyncExternalStore` needs to render one reader per film.
+   * `useSyncExternalStore` needs to render one reader per asset.
    */
   getRetained(): readonly MediaRef[]
   /** Called after the held set changes. Returns the unsubscribe. */
   subscribeRetained(listener: () => void): () => void
 }
 
-/** An in-memory store. How each film is read is the host app's business. */
-export function createVideoAssetFactsStore(): VideoAssetFactsStore {
-  const answers = new Map<string, VideoAssetFacts>()
+/** An in-memory store. How each asset is read is the host app's business. */
+export function createMediaAssetFactsStore(): MediaAssetFactsStore {
+  const answers = new Map<string, MediaAssetFacts>()
   const holds = new Map<string, { ref: MediaRef; count: number }>()
   const listeners = new Set<() => void>()
   const retainedListeners = new Set<() => void>()
@@ -100,7 +102,7 @@ export function createVideoAssetFactsStore(): VideoAssetFactsStore {
       }
     },
     retain: (ref) => {
-      const key = videoAssetFactsKey(ref)
+      const key = mediaAssetFactsKey(ref)
       const hold = holds.get(key)
       if (hold) {
         hold.count += 1
@@ -136,9 +138,9 @@ export function createVideoAssetFactsStore(): VideoAssetFactsStore {
   }
 }
 
-export const VideoAssetFactsContext = createContext<
-  VideoAssetFactsSource | undefined
+export const MediaAssetFactsContext = createContext<
+  MediaAssetFactsSource | undefined
 >(undefined)
-VideoAssetFactsContext.displayName = 'VideoAssetFactsContext'
+MediaAssetFactsContext.displayName = 'MediaAssetFactsContext'
 
-export default VideoAssetFactsContext
+export default MediaAssetFactsContext

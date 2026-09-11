@@ -16,11 +16,11 @@
  */
 
 /**
- * The console answers the besigner canvas's films from their DAM documents
- * (AGL-2838).
+ * The console answers the besigner canvas's placed images and films from their
+ * DAM documents (AGL-2838, AGL-2856).
  *
- * The canvas lays whatever this files over a Video node's render copy, so what
- * it files has to be what the published page would use: the document the
+ * The canvas lays whatever this files over a node's render copy, so what it
+ * files has to be what the published page would use: the document the
  * composition reads, decided by the composition's own function, for the site
  * the canvas edits — and nothing at all while the read is pending, after it
  * fails, or when the page keeps the node's stored props. A replace rewrites the
@@ -87,47 +87,48 @@ jest.mock('firebase/firestore', () => ({
   doc: (_firestore: unknown, path: string) => ({ path }),
 }))
 
-import { videoAssetFactsKey } from '@aglyn/aglyn/app-utils/video-asset-facts'
+import { mediaAssetFactsKey } from '@aglyn/aglyn/app-utils/media-asset-facts'
 import { hostScopeToken } from '@aglyn/aglyn/server'
-import { VideoAssetFactsContext } from '@aglyn/besigner-ui/contexts/video-asset-facts-context'
-import BesignerVideoAssetFactsProvider from '../components/besigner-video-asset-facts-provider.component'
+import { MediaAssetFactsContext } from '@aglyn/besigner-ui/contexts/media-asset-facts-context'
+import BesignerMediaAssetFactsProvider from '../components/besigner-media-asset-facts-provider.component'
 
-type Film = { scope: string; mediaId: string }
+type Asset = { scope: string; mediaId: string }
 
-const ORG_FILM: Film = { scope: 'org:acme', mediaId: 'film' }
-const SITE_FILM: Film = { scope: 'site1', mediaId: 'clip' }
+const ORG_FILM: Asset = { scope: 'org:acme', mediaId: 'film' }
+const SITE_FILM: Asset = { scope: 'site1', mediaId: 'clip' }
+const SITE_PHOTO: Asset = { scope: 'site1', mediaId: 'photo' }
 const FIRST = { durationMs: 2000, width: 640, height: 360 }
 const REPLACED = { durationMs: 3000, width: 480, height: 480 }
 const POSTER = { width: 480, height: 480, variants: [320] }
 const noSubscription = () => () => undefined
 const noVersion = () => 0
 
-/** Holds a film the way a canvas leaf does, and prints what it is answered. */
-function CanvasFilm(props: { film: Film }) {
-  const { film } = props
-  const source = useContext(VideoAssetFactsContext)
-  useEffect(() => source?.retain(film), [source, film])
+/** Holds an asset the way a canvas leaf does, and prints what it is answered. */
+function CanvasAsset(props: { asset: Asset }) {
+  const { asset } = props
+  const source = useContext(MediaAssetFactsContext)
+  useEffect(() => source?.retain(asset), [source, asset])
   useSyncExternalStore(
     source ? source.subscribe : noSubscription,
     source ? source.getVersion : noVersion,
   )
-  const answer = source?.get(videoAssetFactsKey(film))
+  const answer = source?.get(mediaAssetFactsKey(asset))
   return (
-    <output data-testid={videoAssetFactsKey(film)}>
+    <output data-testid={mediaAssetFactsKey(asset)}>
       {JSON.stringify(answer ?? null)}
     </output>
   )
 }
 
-const answerFor = (film: Film) =>
-  JSON.parse(screen.getByTestId(videoAssetFactsKey(film)).textContent ?? 'null')
+const answerFor = (asset: Asset) =>
+  JSON.parse(screen.getByTestId(mediaAssetFactsKey(asset)).textContent ?? 'null')
 
-const canvas = (films: Film[], hostId = 'site1') => (
-  <BesignerVideoAssetFactsProvider hostId={hostId}>
-    {films.map((film) => (
-      <CanvasFilm key={videoAssetFactsKey(film)} film={film} />
+const canvas = (assets: Asset[], hostId = 'site1') => (
+  <BesignerMediaAssetFactsProvider hostId={hostId}>
+    {assets.map((asset) => (
+      <CanvasAsset key={mediaAssetFactsKey(asset)} asset={asset} />
     ))}
-  </BesignerVideoAssetFactsProvider>
+  </BesignerMediaAssetFactsProvider>
 )
 
 beforeEach(() => {
@@ -136,7 +137,7 @@ beforeEach(() => {
   mockOpenPaths.length = 0
 })
 
-describe('BesignerVideoAssetFactsProvider (AGL-2838)', () => {
+describe('BesignerMediaAssetFactsProvider (AGL-2838, AGL-2856)', () => {
   it("reads an org film from the org library and a site film from the site's own", () => {
     render(canvas([ORG_FILM, SITE_FILM]))
     expect([...mockOpenPaths].sort()).toEqual([
@@ -164,6 +165,25 @@ describe('BesignerVideoAssetFactsProvider (AGL-2838)', () => {
     expect(answerFor(ORG_FILM)).toEqual({ video: REPLACED, poster: POSTER })
   })
 
+  it("answers an image with its document's pixel pair, and follows a replace", () => {
+    render(canvas([SITE_PHOTO]))
+    expect(mockOpenPaths).toEqual(['hosts/site1/media/photo'])
+    act(() =>
+      mockDeliver('hosts/site1/media/photo', {
+        status: 'success',
+        data: { width: 1200, height: 630 },
+      }),
+    )
+    expect(answerFor(SITE_PHOTO)).toEqual({ width: 1200, height: 630 })
+    act(() =>
+      mockDeliver('hosts/site1/media/photo', {
+        status: 'success',
+        data: { width: 480, height: 480 },
+      }),
+    )
+    expect(answerFor(SITE_PHOTO)).toEqual({ width: 480, height: 480 })
+  })
+
   it('answers nothing while the read is pending, or once it has failed', () => {
     render(canvas([ORG_FILM]))
     expect(answerFor(ORG_FILM)).toBeNull()
@@ -178,12 +198,12 @@ describe('BesignerVideoAssetFactsProvider (AGL-2838)', () => {
     expect(answerFor(ORG_FILM)).toBeNull()
   })
 
-  it('answers nothing for a film the published page keeps at its stored props', () => {
+  it('answers nothing for an asset the published page keeps at its stored props', () => {
     const restricted = { scope: 'org:acme', mediaId: 'restricted' }
     const gone = { scope: 'site1', mediaId: 'gone' }
     const hidden = { scope: 'site1', mediaId: 'hidden' }
-    const films = [ORG_FILM, SITE_FILM, restricted, gone, hidden]
-    render(canvas(films))
+    const assets = [ORG_FILM, SITE_FILM, restricted, gone, hidden]
+    render(canvas(assets))
     act(() => {
       // An org film with no scope at all: the CDN serves it under no URL.
       mockDeliver('orgs/acme/media/film', {
@@ -192,7 +212,7 @@ describe('BesignerVideoAssetFactsProvider (AGL-2838)', () => {
       })
       mockDeliver('orgs/acme/media/restricted', {
         status: 'success',
-        data: { video: FIRST, visibleTo: [hostScopeToken('site9')] },
+        data: { width: 1200, height: 630, visibleTo: [hostScopeToken('site9')] },
       })
       mockDeliver('hosts/site1/media/clip', {
         status: 'success',
@@ -201,10 +221,10 @@ describe('BesignerVideoAssetFactsProvider (AGL-2838)', () => {
       mockDeliver('hosts/site1/media/gone', { status: 'success' })
       mockDeliver('hosts/site1/media/hidden', {
         status: 'success',
-        data: { video: FIRST, private: true },
+        data: { width: 1200, height: 630, private: true },
       })
     })
-    for (const film of films) expect(answerFor(film)).toBeNull()
+    for (const asset of assets) expect(answerFor(asset)).toBeNull()
   })
 
   it('asks visibility of the site the canvas edits', () => {
@@ -220,17 +240,17 @@ describe('BesignerVideoAssetFactsProvider (AGL-2838)', () => {
     expect(answerFor(ORG_FILM)).toEqual({ video: FIRST })
   })
 
-  it('reads one film once however many placements draw it', () => {
+  it('reads one asset once however many placements draw it', () => {
     render(
-      <BesignerVideoAssetFactsProvider hostId="site1">
-        <CanvasFilm film={ORG_FILM} />
-        <CanvasFilm film={{ ...ORG_FILM }} />
-      </BesignerVideoAssetFactsProvider>,
+      <BesignerMediaAssetFactsProvider hostId="site1">
+        <CanvasAsset asset={ORG_FILM} />
+        <CanvasAsset asset={{ ...ORG_FILM }} />
+      </BesignerMediaAssetFactsProvider>,
     )
     expect(mockOpenPaths).toEqual(['orgs/acme/media/film'])
   })
 
-  it('stops reading a film nothing on the canvas draws any more', () => {
+  it('stops reading an asset nothing on the canvas draws any more', () => {
     const { rerender } = render(canvas([ORG_FILM, SITE_FILM]))
     rerender(canvas([ORG_FILM]))
     expect(mockOpenPaths).toEqual(['orgs/acme/media/film'])

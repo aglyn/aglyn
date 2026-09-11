@@ -24,7 +24,7 @@ import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 // Deep, not the designer barrel: Preview renders no besigner.
-import { useVideoAssetFactsOverlay } from '@aglyn/besigner-ui/hooks/use-video-asset-facts-overlay'
+import { useMediaAssetFactsOverlay } from '@aglyn/besigner-ui/hooks/use-media-asset-facts-overlay'
 import {
   getGoogleFontsUrl,
   ThemeProvider,
@@ -59,7 +59,7 @@ import {
   readPreviewState,
 } from '../constants/preview-state'
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
-import BesignerVideoAssetFactsProvider from './besigner-video-asset-facts-provider.component'
+import BesignerMediaAssetFactsProvider from './besigner-media-asset-facts-provider.component'
 import { useDeclareDocumentSubject } from './document-subject'
 
 const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
@@ -210,8 +210,8 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   const [formDesigns, setFormDesigns] = useState<
     Record<string, Aglyn.PlacedFormDesign> | undefined
   >(undefined)
-  // The snapshot as composed and denormalized, before the placed films'
-  // current DAM facts are laid over it (AGL-2849).
+  // The snapshot as composed and denormalized, before the placed assets'
+  // current DAM facts are laid over it (AGL-2849, AGL-2856).
   const [composed, setComposed] = useState<
     Record<string, unknown> | undefined
   >(undefined)
@@ -570,12 +570,13 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
     return () => window.removeEventListener('storage', handleStorage)
   }, [hostId, kind, docId, versionId, definitions, formDesigns])
 
-  // A placed film's length, shape and poster as its DAM asset records them
-  // NOW (AGL-2849), laid over the tree Preview renders. The tenant's
-  // composition takes the same step last, on the tree a published page ships,
-  // so a replace shows here as it shows to a visitor. Until the film's
-  // document answers, and if the read fails, the snapshot renders as stored.
-  const shownNodes = useVideoAssetFactsOverlay(composed)
+  // A placed asset's shape, and a film's length and poster, as its DAM
+  // document records them NOW (AGL-2849, AGL-2856), laid over the tree Preview
+  // renders. The tenant's composition takes the same step last, on the tree a
+  // published page ships, so a replace shows here as it shows to a visitor.
+  // Until the asset's document answers, and if the read fails, the snapshot
+  // renders as stored.
+  const shownNodes = useMediaAssetFactsOverlay(composed)
   useEffect(() => {
     if (shownNodes) Aglyn.canvas.setNodes(shownNodes as any)
   }, [shownNodes])
@@ -848,14 +849,15 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
 const ObservedDocumentPreviewSurface = observer(DocumentPreviewSurface)
 
 /**
- * Preview, with the site's placed films answering from their DAM documents
- * (AGL-2849) through the provider the besigner canvas mounts.
+ * Preview, with the site's placed images and films answering from their DAM
+ * documents (AGL-2849, AGL-2856) through the provider the besigner canvas
+ * mounts.
  */
 export function DocumentPreview(props: DocumentPreviewProps) {
   return (
-    <BesignerVideoAssetFactsProvider hostId={props.ids?.hostId ?? ''}>
+    <BesignerMediaAssetFactsProvider hostId={props.ids?.hostId ?? ''}>
       <ObservedDocumentPreviewSurface {...props} />
-    </BesignerVideoAssetFactsProvider>
+    </BesignerMediaAssetFactsProvider>
   )
 }
 

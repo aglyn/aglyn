@@ -144,7 +144,7 @@ export {
   useDebouncedCommit,
 } from '../hooks/use-debounced-commit'
 import { useDebouncedCommit } from '../hooks/use-debounced-commit'
-import { useNodeWithVideoAssetFacts } from '../hooks/use-video-asset-facts-overlay'
+import { useNodeWithMediaAssetFacts } from '../hooks/use-media-asset-facts-overlay'
 
 // Subscribes to form value changes via FormSpy and schedules a debounced
 // commit when dirty. The spy is needed because MUI Select uses a Portal, so
@@ -1685,7 +1685,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
      * field goes on editing the stored value — nothing here writes a draft —
      * and says which value the page uses rather than implying it is this one.
      */
-    const shownNode = useNodeWithVideoAssetFacts(node)
+    const shownNode = useNodeWithMediaAssetFacts(node)
     const answered = shownNode !== node
     const answeredSeconds = answered
       ? (shownNode?.props as Record<string, unknown> | undefined)?.[

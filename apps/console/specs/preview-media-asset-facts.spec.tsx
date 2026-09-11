@@ -18,14 +18,15 @@
  */
 
 /**
- * Preview draws a replaced film the way the published page does (AGL-2849).
+ * Preview draws a replaced film or image the way the published page does
+ * (AGL-2849, AGL-2856).
  *
- * The published page lays a placed film's current DAM records over its node
- * as the last step of composing it (AGL-2807). Preview composes the draft
- * snapshot itself and renders what it puts in the canvas store, so the facts
- * have to be laid over THAT: the pick's values while the film's document has
- * not answered, the replacement's once it has, and the pick's again if the
- * read fails.
+ * The published page lays a placed asset's current DAM records over its node
+ * as the last step of composing it (AGL-2807, AGL-2833). Preview composes the
+ * draft snapshot itself and renders what it puts in the canvas store, so the
+ * facts have to be laid over THAT: the pick's values while the asset's
+ * document has not answered, the replacement's once it has, and the pick's
+ * again if the read fails.
  */
 
 import * as Aglyn from '@aglyn/aglyn'
@@ -47,10 +48,13 @@ function mockDeliver(path: string, state: MockDocState) {
   for (const listener of [...mockListeners]) listener()
 }
 
-/** The draft the besigner handed Preview: one film, as the pick stored it. */
+/**
+ * The draft the besigner handed Preview: an org film and a site image, as the
+ * pick stored them.
+ */
 function mockSnapshotNodes() {
   return {
-    '_@_': { $id: '_@_', componentId: 'div', nodes: ['film'] },
+    '_@_': { $id: '_@_', componentId: 'div', nodes: ['film', 'photo'] },
     film: {
       $id: 'film',
       componentId: 'video',
@@ -62,6 +66,18 @@ function mockSnapshotNodes() {
         intrinsicWidth: 640,
         intrinsicHeight: 360,
         posterFromSource: true,
+      },
+      nodes: [],
+    },
+    photo: {
+      $id: 'photo',
+      componentId: 'image',
+      parentId: '_@_',
+      props: {
+        src: 'media:site1/photo',
+        alt: 'The pipeline board',
+        intrinsicWidth: 1200,
+        intrinsicHeight: 630,
       },
       nodes: [],
     },
@@ -129,12 +145,15 @@ jest.mock('../constants/preview-state', () => ({
 import DocumentPreview from '../components/document-preview.component'
 
 const FILM_DOCUMENT = 'orgs/acme/media/film'
+const PHOTO_DOCUMENT = 'hosts/site1/media/photo'
 const REPLACED = { durationMs: 3000, width: 480, height: 480 }
 
-/** The film's props as Preview put them in the store it renders. */
-const shownFilm = () =>
-  (Aglyn.canvas.getNode('film') as { props?: Record<string, unknown> } | undefined)
+/** A node's props as Preview put them in the store it renders. */
+const shownProps = (id: string) =>
+  (Aglyn.canvas.getNode(id) as { props?: Record<string, unknown> } | undefined)
     ?.props
+const shownFilm = () => shownProps('film')
+const shownPhoto = () => shownProps('photo')
 
 const openPreview = () =>
   render(
@@ -147,7 +166,7 @@ beforeEach(() => {
   Aglyn.canvas.reset()
 })
 
-describe("Preview lays a placed film's current DAM facts over the draft (AGL-2849)", () => {
+describe("Preview lays a placed asset's current DAM facts over the draft (AGL-2849, AGL-2856)", () => {
   it("renders the pick's values while the film's document has not answered", async () => {
     openPreview()
     await waitFor(() => expect(shownFilm()?.['intrinsicWidth']).toBe(640))
@@ -190,5 +209,24 @@ describe("Preview lays a placed film's current DAM facts over the draft (AGL-284
     await waitFor(() => expect(shownFilm()?.['intrinsicWidth']).toBe(480))
     act(() => mockDeliver(FILM_DOCUMENT, { status: 'error' }))
     await waitFor(() => expect(shownFilm()?.['intrinsicWidth']).toBe(640))
+  })
+
+  it("reserves the replacement's box for an image the replace reshaped", async () => {
+    openPreview()
+    await waitFor(() => expect(shownPhoto()?.['intrinsicWidth']).toBe(1200))
+    act(() =>
+      mockDeliver(PHOTO_DOCUMENT, {
+        status: 'success',
+        data: { width: 480, height: 480 },
+      }),
+    )
+    await waitFor(() =>
+      expect(shownPhoto()).toMatchObject({
+        intrinsicWidth: 480,
+        intrinsicHeight: 480,
+      }),
+    )
+    // The film has not answered, so it still renders as the pick stored it.
+    expect(shownFilm()).toMatchObject({ intrinsicWidth: 640, intrinsicHeight: 360 })
   })
 })
