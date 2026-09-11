@@ -66,14 +66,14 @@ npm run e2e:crm:org-hub         # /{org}/contacts → /{org}/crm/contacts, bare 
 ```
 
 ```bash
-npm run e2e:crm:free-plan       # a Free workspace: the seven suite sections locked on both hubs (rail and body), New contact and Import CSV locked, crm/contacts-create 403 plan_required for the owner and for staff, client-direct suite writes refused by the rules; the list, a record, Export CSV and erasure still open
+npm run e2e:crm:free-plan       # a Free workspace: /crm lands on read-only Leads (no import, no status select, Open lead alone, the exports alone on the bar), Contacts and the six other suite sections locked on both hubs (rail, body and a contact's record), a lead's page read-only with its erasure open, crm/contacts-create, contact-update and lead-convert 403 plan_required, a lead's status change and delete and a company's writes refused by the rules; the same writes admitted on Starter
 ```
 
 The seven surface specs drive the primary org, which is on Business, so the
 whole suite is open to them and none of them can see the gate (AGL-2787,
-AGL-2788, AGL-2801). `crm-free-plan` signs in as the non-staff owner of a
-second workspace that is always on Free, and its rules step runs again on
-Starter as the control: the same write, allowed.
+AGL-2788, AGL-2801, AGL-2790). `crm-free-plan` signs in as the non-staff owner
+of a second workspace that is always on Free, and its route and rules steps run
+again on Starter as the control: the same writes, allowed.
 
 They share `tools/e2e/lib/console-session.mjs` (Chrome, the UI sign-in, the
 three-verdict tally, MUI gestures) and re-seed their own fixtures first, so
