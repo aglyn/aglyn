@@ -15,10 +15,11 @@ section's bar offers what that record can do; every bar has **Export CSV**,
 **Export all…** and **Clear**.
 
 :::info Plan availability
-On Free the one bar is the Leads bar, and it keeps **Export CSV**, **Export all…** and
-**Clear**. Every other act, and the Contacts, Companies, Deals and Tasks bars, belong to
-the **CRM suite**, included from **Starter**, whose sections Free sees locked. See
-[What each plan includes](./overview.md#what-each-plan-includes).
+Bulk actions are part of the **CRM**, included from **Starter**. On Free every CRM
+section is shown locked, and no bar is offered. The complete contacts and leads files
+that **Export all…** writes are on every plan under
+[Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
+See [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 
 ## Two exports, and the difference matters

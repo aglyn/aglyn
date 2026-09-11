@@ -20,8 +20,8 @@ across every site in the organization, like the records themselves; the values a
 records on a contact are that site's own view of the person.
 
 :::info Plan availability
-Custom fields are part of the **CRM suite**, included from **Starter**; on Free the
-Fields section is shown locked, as Contacts is. See
+Custom fields are part of the **CRM**, included from **Starter**. On Free the Fields
+section is shown locked, with the rest of the CRM. See
 [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 

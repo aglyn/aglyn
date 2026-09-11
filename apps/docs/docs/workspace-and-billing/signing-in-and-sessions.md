@@ -278,8 +278,8 @@ something you expected is missing, that section is where to check first.
 
 ### Downloading a whole workspace
 
-Owners and admins can export an entire workspace from **Settings → Delete → Download
-workspace data**: its sites and their content, datasets, contacts, orders, form
+The workspace owner can export an entire workspace from **Settings → Delete → Download
+workspace data**: its sites and their content, datasets, contacts, leads, orders, form
 submissions, members, support threads, custom domains and billing identifiers.
 
 Do this **before** deleting a workspace. Deletion keeps no copy, and the 7-day hold is
@@ -290,6 +290,53 @@ Sales-tax records for transactions on your storefront are kept after an erasure,
 tax law requires it. They are included in the export — it is the one place you can see
 what remains.
 :::
+
+## Privacy requests {#privacy-requests}
+
+**Settings → Privacy** is where a workspace answers the people its sites hold: someone
+who asks for the data you keep about them, or asks to be forgotten. The section is shown
+to workspace **owners and admins**, and it is on **every plan**, Free included. These
+are obligations rather than features, so they sit outside the
+[CRM](../content-and-data/crm/overview.md) and do not wait for a plan that includes it.
+
+### Exporting contacts and leads
+
+**Export contacts** downloads a CSV file of every contact the workspace holds, and
+**Export leads** one of every lead its sites captured. Each file is complete — the same
+file the CRM's **Export all…** writes. If fewer rows arrive than the server promised,
+because a connection dropped, nothing is saved and you are told how many of how many
+arrived; try again.
+
+### Erasing a person
+
+**Erase a person** is the privacy erasure, for someone who asks to be forgotten under
+the GDPR, the CCPA or any similar law. Type the person's email address, type it again
+to confirm, and choose **Erase permanently**. It cannot be undone.
+
+- **It is filed by address, across the workspace.** It reaches every site of the
+  workspace, whether or not any page shows the person.
+- **Capture stops at once.** From the moment the request is filed, your sites stop
+  capturing the address, and no campaign is sent to it.
+- **The nightly erasure job completes it.** Before you choose, the card lists what the
+  job removes, what it keeps with the person taken off, and what it does not reach:
+
+| | |
+| --- | --- |
+| **Removed across the workspace** | The contact record on every site — profile, notes, tags, timeline and custom fields; every lead for the address, on every site; the tasks and logged activities filed against the person; the person on any email audience list; the campaign delivery log for the address, with its opens and clicks. |
+| **Kept, with the person taken off** | Orders and bookings stay as financial records with the name, email, phone and addresses removed. Deals stay on the pipeline, unlinked from the person. Companies stay, with their contact count reduced. |
+| **Not reached — finish these by hand** | Form submissions — delete them from the Inbox. A site member account — close it from the site's Members page. |
+
+Filing the same address again does no harm: a request already waiting is answered, not
+filed twice.
+
+On **Starter and above**, the CRM offers the same exports and the same erasure where
+you work: **Export all…** on its lists, and **Erase this person** in the menu of a
+contact's or a lead's page — see
+[Deleting and erasing](../content-and-data/crm/contact-record.md#deleting-and-erasing).
+
+To take everything the workspace holds rather than only its people, use
+**Settings → Delete → Download workspace data**, described
+[above](#downloading-a-whole-workspace).
 
 ## Closing your account
 

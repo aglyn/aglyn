@@ -229,35 +229,51 @@ logged activities, pipelines and custom fields are not counted.
   falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
   current rate on your plan, per extra 1,000 records per month. Upgrading a tier is
   always cheaper than sustained overage.
-- On **Free**, the band is a hard limit and the next record is refused: a new
-  visitor past 100 keeps their member account and orders but no contact is kept (the
-  count of missed sign-ups is recorded and shown on the contacts page).
+- On **Free**, which includes no CRM, the band is a hard limit on capture: past 100
+  records a site adds no new person — a new visitor keeps their member account and
+  orders, but no contact is kept — and the count of missed captures is recorded. On
+  **Billing → Usage** the band reads **Stored records (organization)**, captioned *At
+  this limit your sites stop adding new people. Working with them is part of the CRM,
+  included from Starter.* The Free plan card names no CRM records.
 - **The billed count is the size of your CRM at the end of the month**, not its size
   on any other day. The three collections are a running total rather than a monthly
   tally, so a month has to be charged on one moment in it, and that moment is the
   last daily reading taken before the month closes. Records added after a month ends
   belong to the new month; records deleted after it ends do not undo the month that
   already ran.
-- The billing page's **CRM records** meter shows the total against your band, with
-  the contacts, companies and deals it is made of beneath it.
+- On a plan with the CRM, the billing page's **CRM records (organization)** meter
+  shows the total against your band, with the contacts, companies and deals it is made
+  of beneath it.
 
-### The CRM suite {#the-crm-suite}
+### The CRM {#the-crm-suite}
 
-On every plan including Free, the CRM has a **Leads** section: the people your sites'
-forms, member sign-ups and bookings captured. On Free the CRM opens on it, and it is
-**read-only** — the list, a lead's page, CSV export and erasing a person — while every
-form on your site files a lead, so what your site captures is listed there.
+The **CRM** is included from **Starter**, while the subscription is live: Leads,
+Contacts, Companies, Deals, Tasks, Reports, Fields and Settings; working a lead — its
+status, owner and notes, converting it and importing leads; adding a contact by hand,
+importing a CSV, saved views, and every edit to a contact — profile, tags and notes,
+owner, lifecycle stage, company, custom fields, tasks, deals, files, logged calls and
+activities, one-to-one email and merges; the CSV exports on its lists and **Erase this
+person** on a record; the two CRM cards on the site dashboard; the CRM steps in
+automations; and the CRM's resources on the REST API.
 
-Everything else is the **CRM suite**, included from **Starter**: Contacts, Companies,
-Deals, Tasks, Reports, Fields and Settings; working a lead — its status, owner and
-notes, converting it and importing leads; adding a contact by hand, importing a CSV,
-saved views, and every edit to a contact — profile, tags and notes, owner, lifecycle
-stage, company, custom fields, tasks, deals, files, logged calls and activities,
-one-to-one email and merges; the two CRM cards on the site dashboard; the CRM steps in
-automations; and the `crm:*` resources of the REST API. On Free those sections appear
-in the CRM rail with a lock, each showing which plan includes it and a link to your
-plans. Records already held — people captured earlier, or kept from a paid plan — stay
-stored, count against the band, and open again with the suite.
+**Free includes no part of the CRM**, and neither does a paid plan whose subscription
+has ended. The **CRM** tab stays in the navigation: every section is drawn locked in the
+CRM rail beside a notice that the CRM is not included in your current plan and is
+included from Starter, with a **View plans** button, and a bare `…/crm` address shows
+the same notice. Nothing in the CRM can be read or changed — not in the console, not
+through its routes, and not over the REST API, where contacts, leads, companies, deals,
+tasks, pipelines, activities and email templates refuse with `plan_required`.
+
+Two things do not depend on the plan:
+
+- **Capture.** Every form submission, sign-up, order or booking that carries an email
+  address updates the person in Contacts, and a form files a lead only when its lead
+  routing is on — the same on Free as on a paid plan. Those records are kept and count
+  against the [band](#crm-records); on Free the CRM that shows them is locked, and they
+  are there when the plan includes it.
+- **Privacy requests.** Workspace owners and admins export every contact and every lead
+  the workspace holds, and erase a person by email address, from **Settings → Privacy**
+  — see [Privacy requests](../signing-in-and-sessions.md#privacy-requests).
 
 ### One-to-one email {#one-to-one-email}
 

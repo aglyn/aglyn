@@ -17,12 +17,11 @@ Open **CRM → Leads** in the console, or use **Open in CRM** on a lead row in
 the Inbox's **Site Members & Leads** section.
 
 :::info Plan availability
-Leads are on every plan, and on Free the CRM opens on them. On Free the section is
-**read-only**: the list, a lead's page, **Export CSV**, **Export all…** and **Erase this
-person** stay, and every form on your site files a lead. Working a lead — its status,
-owner and notes, **Convert**, **Unqualify**, **Import CSV**, calls, email and bookings —
-is part of the **CRM suite**, included from **Starter**. See
-[What each plan includes](./overview.md#what-each-plan-includes).
+Leads are part of the **CRM**, included from **Starter**. On Free the section is shown
+locked, with the rest of the CRM. Leads are still filed on Free, exactly as described
+below, and kept; workspace owners and admins can export every lead, or erase a person,
+from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
+See [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 
 ## What makes a lead
@@ -38,9 +37,9 @@ describes what happened. A **lead** is created in addition, and only by a
   gives this form** switched on. A form without it still updates the contact
   at stage Lead; it just files nothing here.
 
-On **Free** there is no switch to turn: every form on your site is a lead surface,
-including a form placed on a page with no saved form behind it, so every submission
-that carries an email address files a lead.
+The plan changes none of this. On Free too, a form files a lead only when its lead
+routing is on, and the lead is kept, though the Leads section that lists it is locked
+with the rest of the CRM.
 
 So Contacts is the address book and Leads is the working list. The Leads
 section opens with which surfaces create leads on this site — sign-ups,
@@ -272,8 +271,8 @@ Anyone who can open the CRM can work leads — that is the workspace's
 **data** permission, the same one that guards contacts. Converting a lead
 also requires a role on the site the lead belongs to.
 
-Working leads is part of the **CRM suite**, included from **Starter**. On Free the
-Leads section is read-only, and every form on your site files a lead into it.
+Leads are part of the **CRM**, included from **Starter**. On Free the Leads section is
+shown locked, with the rest of the CRM.
 
 ## Related
 

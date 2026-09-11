@@ -12,9 +12,9 @@ opportunity, moving through the stages your business sells in. Open it at
 `…/crm/deals/{id}`.
 
 :::info Plan availability
-Deals are part of the **CRM suite**, included from **Starter**; on Free the section
-is shown locked. A deal is a **CRM record**, counted with contacts and companies
-against your plan's records band — see
+Deals are part of the **CRM**, included from **Starter**. On Free the section is shown
+locked, with the rest of the CRM. A deal is a **CRM record**, counted with contacts and
+companies against your plan's records band — see
 [CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
 :::
 
@@ -29,10 +29,11 @@ flowchart LR
 
 ## Pipelines
 
-Every workspace starts with one pipeline, **Sales**, and a default set of
-stages: *Qualified*, *Contact made*, *Proposal sent*, *Negotiation*, then
-*Won* and *Lost*. The pipeline is created the first time somebody opens the
-Deals section, so there is nothing to set up before the first deal.
+Every workspace on a plan with the CRM starts with one pipeline, **Sales**, and
+a default set of stages: *Qualified*, *Contact made*, *Proposal sent*,
+*Negotiation*, then *Won* and *Lost*. The pipeline is created the first time
+somebody opens the Deals section, so there is nothing to set up before the
+first deal.
 
 A business that sells more than one way — new accounts and renewals, retail
 and wholesale — can run more than one pipeline, each with its own stages and

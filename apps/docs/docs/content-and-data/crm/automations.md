@@ -33,11 +33,11 @@ editor.
 ## The steps
 
 :::info Plan availability
-The five CRM steps are part of the **CRM suite**, included from **Starter**. On a
+The five CRM steps are part of the **CRM**, included from **Starter**. On a
 workspace whose plan does not include it, a step that reaches the CRM does nothing and
 the run history records why — the plan that carries the steps is named — the same way a
 webhook step reports the plan it needs. See
-[The CRM suite](../../workspace-and-billing/billing-and-plans/overview.md#the-crm-suite).
+[The CRM](../../workspace-and-billing/billing-and-plans/overview.md#the-crm-suite).
 :::
 
 Five server steps act on the CRM: **Set the contact's lifecycle stage**, **Tag
@@ -79,7 +79,7 @@ welcome sequence shows on the person's history beside the calls a rep made.
 
 Nothing is logged when the step writes to somebody else — an internal alert sent
 to your own address through the **To** field — or when the address belongs to
-nobody this site can see. The row needs the CRM suite like the five steps above,
+nobody this site can see. The row needs the CRM like the five steps above,
 and a record already at the activity ceiling gets the email without the entry.
 Automated email is metered as usage and is not counted against the
 [one-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email)

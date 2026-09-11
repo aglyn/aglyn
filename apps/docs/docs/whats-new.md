@@ -12,12 +12,15 @@ for the how-to.
 
 ## September 2026 — the CRM (newest)
 
-- **[The CRM is open to every workspace](content-and-data/crm/overview.md)** — the
-  **CRM** tab now reaches every organization. On Free it opens on
-  [Leads](content-and-data/crm/leads.md), read-only: every form on your site files a
-  lead there to read, export or erase. Contacts, companies, deals, tasks, reports and
-  custom fields, and working a lead, are included from Starter. On a
-  paid plan, records past your band now bill as
+- **[The CRM is included from Starter](content-and-data/crm/overview.md#what-each-plan-includes)** —
+  every part of it, from leads and contacts to companies, deals, tasks, reports, fields
+  and settings, comes with a paid plan, and Free includes none of it. On Free the
+  **CRM** tab stays in the navigation, with every section shown locked beside the
+  upgrade notice. Capture does not depend on the plan: forms, sign-ups, orders and
+  bookings still update the people your workspace holds, and exporting them or erasing
+  a person on request is under
+  [Settings → Privacy](workspace-and-billing/signing-in-and-sessions.md#privacy-requests)
+  on every plan. On a paid plan, records past your band now bill as
   [overage](workspace-and-billing/billing-and-plans/overview.md#crm-records) on the
   monthly invoice.
 - **[AI assist past the included band](workspace-and-billing/billing-and-plans/overview.md#assist-overage)** —

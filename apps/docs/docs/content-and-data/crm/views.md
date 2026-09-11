@@ -13,9 +13,9 @@ list the way you work it — "my open leads in Texas" — and it is there again
 when you come back.
 
 :::info Plan availability
-Saved views are part of the **CRM suite**, included from **Starter**. On Free the views
-menu on the Leads list shows every act on a view locked, and the Contacts list, with its
-[segments](./overview.md#segments), is locked with the rest of the suite.
+Saved views are part of the **CRM**, included from **Starter**. On Free every CRM list is
+shown locked, and with it the views menu and the Contacts list's
+[segments](./overview.md#segments).
 :::
 
 ## The views control

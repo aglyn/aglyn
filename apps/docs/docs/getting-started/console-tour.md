@@ -202,7 +202,7 @@ and in through a card action.
 
 Organization-wide settings (name, workspace URL) live under
 **Organization → Settings**, which also holds Profile, API keys, Branding,
-Single sign-on, Ownership and Delete. Turning plugins on and off for the
+Single sign-on, Privacy, Ownership and Delete. Turning plugins on and off for the
 workspace is its own section, **Organization → Plugins** — **Marketplace** is
 for finding and installing new ones, not for administering what you already run:
 

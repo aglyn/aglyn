@@ -92,6 +92,24 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-11 — The CRM is paid-only: every section locks on Free, and the whole CRM opens from Starter
+
+- **Decided by:** the account owner, 2026-09-11 — the CRM is for paying subscribers and no part of it is on Free, one gate in place of a view-only Leads mode; beta.118 held until it ships. Supersedes the 2026-09-10 entry below (Free opens on Leads, view-only), which never shipped, and the 2026-09-05 line that Free keeps the contacts list.
+- **Scope:** pricing
+- **Evidence:** `featureFlag: 'crm'` on the CRM console extension in `libs/plugins/crm/src/lib/plugin.ts`, composed into every section's lock by `resolveHubSections` in `apps/console/utils/plugin-hub-sections.ts` and drawn beside the shell's upgrade notice by `apps/console/components/plugin-hub-rail.component.tsx` (`libs/plugins/crm/src/lib/plugin.spec.ts`, `apps/console/specs/plugin-hub-sections.spec.ts`); every `crm/*` route refusing 403 `plan_required` / `crm` after authorization through `libs/plugins/crm/src/lib/server/suite-gate.ts`, with capture, `crm/erase-person` and the contacts and leads files of `/api/crm/export` exempt (`company-delete.spec.ts`, `contact-email-history.spec.ts`, `org-activity.spec.ts`, `recipe-routes.spec.ts`, `apps/console/specs/crm-export-is-complete.spec.ts`); `contacts` joining the CRM resources of `/v1` in `apps/console/utils/api-v1-resources.ts` (`api-v1-crm-resources.spec.ts`); client creates and updates of a lead, a contact and a segment asking `orgCarriesCrmSuite` in `cloud/firebase-firestore.rules` (`cloud/rules-tests/firestore-rules.test.mjs`, `crm-suite-rules-drift.spec.ts`); Settings → Privacy exporting contacts and leads and filing an erasure by address on every plan (`apps/console/components/settings/org-privacy-card.component.tsx`, `org-privacy-card.spec.tsx`, `libs/plugins/crm/src/lib/server/erase-person.spec.ts`); `tools/e2e/crm-free-plan.e2e.mjs`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2851, AGL-2839.
+
+**No price, band or cap moves.** What moves is what a Free workspace reaches: no part of the
+CRM. On Free every CRM section — Leads, Contacts, Companies, Deals, Tasks, Reports, Fields and
+Settings — is drawn locked beside the upgrade notice, a bare `/crm` shows that notice, and every
+CRM read and write is refused in the console, its routes, `/v1` and client writes
+(`plan_required`, code `crm`), staff included. Starter and above with a live subscription get
+the whole CRM. Capture is unchanged and does not depend on the plan. Exporting everyone a
+workspace holds and erasing a person stay on every plan, outside the CRM, in Settings → Privacy.
+Free's hard 100-record band still caps capture; the records overage ladder, the one-to-one email
+caps (Free 0) and `release_crm` on for every workspace are unchanged.
+
+---
+
 ## 2026-09-10 — On Free, the CRM opens on Leads, read-only; Contacts join the suite from Starter
 
 - **Decided by:** the account owner, 2026-09-10, answering AGL-2790 — on a plan without the CRM suite the people a site captures are leads to read rather than contacts to edit; asked to choose, Leads view-only with Contacts locked, and beta.118 held until it ships. Supersedes the 2026-09-05 line that Free keeps the contacts list.

@@ -13,9 +13,9 @@ people at it. The Companies section lives in the CRM hub at
 `…/hosts/{site}/crm/companies`.
 
 :::info Plan availability
-Companies are part of the **CRM suite**, included from **Starter**; on Free the
-section is shown locked. A company is a **CRM record**, counted with contacts and
-deals against your plan's records band — see
+Companies are part of the **CRM**, included from **Starter**. On Free the section is
+shown locked, with the rest of the CRM. A company is a **CRM record**, counted with
+contacts and deals against your plan's records band — see
 [CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
 :::
 
@@ -86,9 +86,10 @@ The link can be made from either side. On a contact's own page the
 site may see — type to search by name or domain, choose one, or type a name
 nobody has filed yet and choose **Create** to make the company on the spot.
 A company made this way is a new record like one made from the list: it counts
-against the records band, and on Free it is refused at the band with the same
-message. Clearing the field unlinks the person. A contact whose record carries a
-company **name** but no link — from an import, or from before the picker
+against the records band, and on a plan whose band is a hard limit it is refused at
+the band with the same message. Clearing the field unlinks the person. A contact
+whose record carries a company **name** but no link — from an import, or from
+before the picker
 existed — is offered that name as the company to link or create. The
 contacts table's [bulk bar](./bulk-actions.md) has **Set company** for many
 people at once.
