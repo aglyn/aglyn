@@ -148,6 +148,14 @@ files into a real bucket. The two films it uploads are committed under
 `tools/e2e/fixtures/`; every other fixture is generated per run, and every
 name carries the run id, so it is re-runnable without a re-seed.
 
+Video uploads ship paused behind `release_video_uploads` (AGL-2830), so the
+films are accepted only for an org holding that flag's per-org override.
+`seed:e2e` grants it to the primary e2e org and to no other
+(`tools/scripts/lib/e2e-release-flags.mjs`). An emulator seeded without the
+grant refuses both films with `403 video_uploads_paused`: re-run the seed, and
+allow a running console up to a minute, which is how long its server caches an
+org's overrides.
+
 The lightbox's player draws its own controls (AGL-2802), because Chrome's
 native ones keep Escape from the page: from inside them no key event reaches it
 in any phase. The spec reads the dialog's tab order, reaches each stop with Tab,
