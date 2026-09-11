@@ -388,11 +388,15 @@ const seedContacts = (n: number) => {
  * by the band, and therefore the only shape the band can be observed through.
  * This is not a hypothetical: it is exactly the shape AGL-2163 found running
  * unbounded on the request meter.
+ *
+ * The override grants the CRM suite beside the API: a plan without the suite
+ * adds no contact over `/v1` whatever its band (AGL-2790), so an org lacking
+ * it would be refused before the band was ever asked.
  */
 const overriddenOrg = (contactsPerHost: number) => ({
   plan: 'free',
   entitlements: {
-    features: { apiAccess: true },
+    features: { apiAccess: true, crm: true },
     apiRequestsPerMonth: 1_000_000,
     contactsPerHost,
   },

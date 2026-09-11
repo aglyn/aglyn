@@ -24,10 +24,10 @@
  *  1. THE GATE. A method other than POST, a body without a scope, contacts
  *     or readable fields, and a caller the rules would refuse a write are
  *     each refused before a contact is read.
- *  2. THE PLAN. The suite's fields — owner, company, custom values, files —
- *     are refused to a Free workspace with `plan_required` before a contact
- *     is read, and Starter is admitted. The profile a capture writes, tags,
- *     notes and campaign filing are saved on Free.
+ *  2. THE PLAN. Every field — the profile a capture writes, tags, notes and
+ *     campaign filing as much as owner, company, custom values and files — is
+ *     refused to a Free workspace with `plan_required` before a contact is
+ *     read, staff included, and Starter is admitted (AGL-2790).
  *  3. THE WRITE. One dotted `update()` per contact into ONE holder's facet,
  *     with the echoes, the company link's mirror, label and count, and the
  *     tag cap — and nothing of another holder's.
@@ -410,36 +410,61 @@ describe('the gate', () => {
 })
 
 /**
- * THE PLAN (AGL-2804). The suite's fields are refused to a plan without the
+ * THE PLAN (AGL-2804, AGL-2790). Every field is refused to a plan without the
  * suite once the caller is known to be a writer, and before any contact is
  * read — the same answer the console's locks give, where a script holding a
  * member's token cannot walk round it.
  */
 describe('the plan', () => {
   it.each([
-    ['an owner', { ownerUid: 'owner-uid' }],
-    ['a company', { companyId: 'co-acme' }],
-    ['a company label', { companyName: 'Acme' }],
-    ['a custom value', { custom: { tier: 'platinum' } }],
-    ['a file', { mediaIds: ['media-1'] }],
-  ])('refuses a Free workspace %s before any contact is read', async (_label, set) => {
+    ['a name', { name: 'Ada L.' }, "Editing a contact's profile"],
+    ['a phone number', { phone: '(512) 555-0199' }, "Editing a contact's profile"],
+    ['a job title', { jobTitle: 'Founder' }, "Editing a contact's profile"],
+    [
+      'an address',
+      { address: { line1: '1 Main St', city: 'Austin', country: 'us' } },
+      "Editing a contact's profile",
+    ],
+    ['notes', { notes: 'Prefers email' }, "Editing a contact's notes"],
+    ['tags', { tags: ['vip', 'beta'] }, 'Tagging a contact'],
+    ['a tag to add', { addTag: 'wholesale' }, 'Tagging a contact'],
+    ['a tag to remove', { removeTag: 'vip' }, 'Tagging a contact'],
+    ['campaign filing', { campaignIds: ['spring'] }, 'Filing a contact under a campaign'],
+    ['an owner', { ownerUid: 'owner-uid' }, "Assigning a contact's owner"],
+    ['a company', { companyId: 'co-acme' }, 'Filing a contact under a company'],
+    ['a company label', { companyName: 'Acme' }, 'Filing a contact under a company'],
+    ['a custom value', { custom: { tier: 'platinum' } }, "Editing a contact's custom fields"],
+    ['a file', { mediaIds: ['media-1'] }, 'Attaching files to a contact'],
+  ])('refuses a Free workspace %s before any contact is read', async (_label, set, act) => {
     org = { plan: 'free' }
+    const before = JSON.parse(JSON.stringify(contact('ada')))
     const { status, payload } = await post(onSite(set))
     expect(status).toBe(403)
     expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(payload.error).toMatch(/part of the CRM suite/)
+    expect(payload.error.startsWith(`${act} is part of the CRM suite`)).toBe(true)
     expect(payload.error).toMatch(/Included from Starter/)
     expect(readContacts).not.toHaveBeenCalled()
     expect(contactWrites).toEqual([])
-    expect(facetOf('ada').ownerUid).toBe('owner-uid')
+    expect(contact('ada')).toEqual(before)
   })
 
-  it('refuses a Free workspace a suite field even beside the fields Free keeps', async () => {
+  it('refuses a request carrying several fields once, naming the first, and writes none', async () => {
     org = { plan: 'free' }
-    const { status } = await post(onSite({ notes: 'A note', ownerUid: 'editor-uid' }))
+    const { status, payload } = await post(onSite({ notes: 'A note', ownerUid: 'editor-uid' }))
     expect(status).toBe(403)
+    expect(payload.error.startsWith("Editing a contact's notes is part of the CRM suite")).toBe(true)
     expect(contactWrites).toEqual([])
     expect(facetOf('ada').notes).toBeUndefined()
+  })
+
+  it('refuses staff editing a contact inside a Free workspace the same way', async () => {
+    org = { plan: 'free' }
+    caller = { uid: 'staff-uid', staff: true }
+    const { status, payload } = await post(onSite({ notes: 'Support note' }))
+    expect(status).toBe(403)
+    expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(readContacts).not.toHaveBeenCalled()
+    expect(contactWrites).toEqual([])
   })
 
   it('tells a viewer on a Free workspace about the role, not the plan', async () => {
@@ -448,6 +473,13 @@ describe('the plan', () => {
     const { status, payload } = await post(onSite({ ownerUid: 'owner-uid' }))
     expect(status).toBe(403)
     expect(payload.reason).toBeUndefined()
+  })
+
+  it('admits a Free workspace granted the suite by a per-org override', async () => {
+    org = { plan: 'free', entitlements: { features: { crm: true } } }
+    const { status } = await post(onSite({ notes: 'Granted' }))
+    expect(status).toBe(200)
+    expect(facetOf('ada').notes).toBe('Granted')
   })
 
   it('admits Starter to the suite fields', async () => {
@@ -464,8 +496,8 @@ describe('the plan', () => {
     })
   })
 
-  it('saves the profile a capture writes, tags, notes and campaign filing on Free', async () => {
-    org = { plan: 'free' }
+  it('saves the profile a capture writes, tags, notes and campaign filing on Starter', async () => {
+    org = { plan: 'starter' }
     const { status, payload } = await post(
       onSite({
         name: 'Ada L.',
@@ -495,12 +527,6 @@ describe('the plan', () => {
     expect(contact('ada').phone).toBe('+15125550199')
   })
 
-  it('adds a tag on Free', async () => {
-    org = { plan: 'free' }
-    const { status } = await post(onSite({ addTag: 'Wholesale' }))
-    expect(status).toBe(200)
-    expect(facetOf('ada').tags).toEqual(['vip', 'wholesale'])
-  })
 })
 
 describe('the write', () => {

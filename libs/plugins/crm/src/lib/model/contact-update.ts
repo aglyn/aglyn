@@ -91,20 +91,6 @@ export const CONTACT_UPDATE_FIELDS: ReadonlyArray<keyof ContactUpdateFields> = [
   'mediaIds',
 ]
 
-/**
- * The fields that are the CRM suite's (AGL-2788). A request carrying any of
- * them is refused to a plan without the suite, whatever else it carries; the
- * rest — the profile a capture writes, tags, notes and campaign filing — are
- * saved on every plan.
- */
-export const CONTACT_SUITE_UPDATE_FIELDS: ReadonlyArray<keyof ContactUpdateFields> = [
-  'ownerUid',
-  'companyId',
-  'companyName',
-  'custom',
-  'mediaIds',
-]
-
 export interface ContactUpdateRequest {
   /** The mounted site; at the organization level the record's own site, or nothing. */
   hostId?: string | null

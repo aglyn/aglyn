@@ -2758,36 +2758,28 @@ function readContactInput(
 }
 
 /**
- * The half of the CRM profile that is the CRM SUITE's (AGL-2822): an owner, a
- * lifecycle stage, a company and files, beside `custom`. `phone`, `jobTitle`
- * and `address` are the profile a capture writes, saved on every plan as the
- * console saves them.
- */
-const CONTACT_SUITE_CRM_FIELDS = ['ownerUid', 'lifecycleStage', 'companyId', 'mediaIds'] as const
-
-/**
- * The refusal a contact write gets when it carries a field of the CRM suite
- * on a plan without the suite — the console's `crm/contact-update` answer,
- * in the REST shape the suite's own resources are refused in. `null` when
- * the plan carries the suite or the body writes none of its fields.
+ * The refusal a contact write gets on a plan without the CRM suite — the
+ * console's `crm/contact-update` answer, in the REST shape the suite's own
+ * resources are refused in. `null` when the plan carries the suite.
  *
- * Asked once the body has parsed and before any document is read, so a
- * malformed body still names its fields and a refused one spends nothing.
- * Every plan that carries `apiAccess` carries the suite; this answers the
- * org whose entitlements an override split.
+ * EVERY write, whatever it carries (AGL-2822, AGL-2790). A plan without the
+ * suite reads its Leads and changes no contact: not an owner, a lifecycle
+ * stage, a company, files or custom values, and not the profile a capture
+ * writes, tags or notes either. It adds no contact by hand, which is what a
+ * create over the API is, and it merges none.
+ *
+ * A create and an update ask once the body has parsed and before any
+ * document is read, so a malformed body still names its fields and a refused
+ * one spends nothing; a merge asks before its body is read. Every plan that
+ * carries `apiAccess` carries the suite; this answers the org whose
+ * entitlements an override split.
  */
-function contactSuiteRefusal(
-  ctx: ApiV1Context,
-  values: { crm: ContactCrmInput; custom?: Record<string, unknown> },
-): Response | null {
-  const writesSuite =
-    values.custom !== undefined ||
-    CONTACT_SUITE_CRM_FIELDS.some((field) => values.crm[field] !== undefined)
-  if (!writesSuite || checkEntitlement(ctx.org, 'crm')) return null
+function contactSuiteRefusal(ctx: ApiV1Context): Response | null {
+  if (checkEntitlement(ctx.org, 'crm')) return null
   return ApiErrors.planRequired({
     message:
-      "A contact's owner, lifecycle stage, company, files and custom fields are " +
-      'part of the CRM suite, which is not included in this organization’s plan',
+      'Adding, editing and merging contacts is part of the CRM suite, which is ' +
+      'not included in this organization’s plan',
     code: 'crm',
     headers: ctx.headers,
   })
@@ -2985,7 +2977,7 @@ async function createContact(
       headers: ctx.headers,
     })
   }
-  const suite = contactSuiteRefusal(ctx, parsed.values)
+  const suite = contactSuiteRefusal(ctx)
   if (suite) return suite
   const { email, name, tags, notes, marketingConsent, consentSiteId, crm } =
     parsed.values
@@ -3160,7 +3152,7 @@ async function updateContact(
       headers: ctx.headers,
     })
   }
-  const suite = contactSuiteRefusal(ctx, parsed.values)
+  const suite = contactSuiteRefusal(ctx)
   if (suite) return suite
   const snap = await contactRef.get()
   if (!snap.exists) {
@@ -3511,6 +3503,8 @@ async function handleContacts(
     }
     const denied = requireScope(ctx, 'contacts:write')
     if (denied) return denied
+    const suite = contactSuiteRefusal(ctx)
+    if (suite) return suite
     const group = contactViewGroup(ctx, url)
     if ('response' in group) return group.response
     return mergeContactRoute(request, ctx, contactRef, (snap) =>

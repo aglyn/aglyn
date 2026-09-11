@@ -407,17 +407,16 @@ describe('files on a contact', () => {
 })
 
 /**
- * AGL-2822 — the CRM suite's half of the profile over `/v1`.
+ * AGL-2822, AGL-2790 — a contact over `/v1` on a plan without the CRM suite.
  *
- * An owner, a lifecycle stage, a company, files and custom values are the
- * CRM suite's (AGL-2788), and the console refuses them to a plan without it
- * (AGL-2804). Every plan that carries `apiAccess` carries the suite, so the
- * org below has had the suite revoked by a per-org override — the one shape
- * in which the API reached what the console refuses. The fields the contacts
- * list keeps on every plan — the profile a capture writes, tags, notes —
- * still save.
+ * Every plan that carries `apiAccess` carries the suite, so the org below has
+ * had the suite revoked by a per-org override — the one shape in which the
+ * API reaches what the console refuses. The console refuses such a plan
+ * every contact edit and every contact added by hand, so the API refuses
+ * every write: the suite's half of the profile, and the profile a capture
+ * writes, tags and notes as well.
  */
-describe('a plan without the CRM suite (AGL-2822)', () => {
+describe('a plan without the CRM suite (AGL-2822, AGL-2790)', () => {
   const STORED_FACETS = {
     'grp-a': { sources: {}, interactions: [], lifecycleStage: 'lead' },
   }
@@ -436,11 +435,25 @@ describe('a plan without the CRM suite (AGL-2822)', () => {
     ['a cleared lifecycle stage', { lifecycleStage: null }],
     ['a company', { companyId: 'co-acme' }],
     ['files', { mediaIds: ['m1'] }],
+    ['a job title', { jobTitle: 'CTO' }],
+    ['a phone number', { phone: '(512) 555-0123' }],
   ])('refuses %s on a patch with plan_required, writing nothing', async (_label, fields) => {
     const response = await call('PATCH', 'contacts/c-1', { consentSiteId: 'host-1', ...fields })
     expect(response.status).toBe(403)
     expect((await json(response)).error).toMatchObject({ type: 'plan_required', code: 'crm' })
     expect(mockDocs.get(`${CONTACTS}/c-1`)!.facets).toEqual(STORED_FACETS)
+  })
+
+  // Tags and notes are the contact's own, named with no site.
+  it.each([
+    ['tags', { tags: ['vip'] }],
+    ['notes', { notes: 'Met at the fair' }],
+  ])('refuses %s on a patch with plan_required, writing nothing', async (_label, fields) => {
+    const before = JSON.parse(JSON.stringify(mockDocs.get(`${CONTACTS}/c-1`)))
+    const response = await call('PATCH', 'contacts/c-1', fields)
+    expect(response.status).toBe(403)
+    expect((await json(response)).error).toMatchObject({ type: 'plan_required', code: 'crm' })
+    expect(JSON.parse(JSON.stringify(mockDocs.get(`${CONTACTS}/c-1`)))).toEqual(before)
   })
 
   it('refuses custom values on a patch, and a suite field on a create', async () => {
@@ -459,7 +472,26 @@ describe('a plan without the CRM suite (AGL-2822)', () => {
     ])
   })
 
-  it('saves what the contacts list keeps on every plan: the profile a capture writes, tags and notes', async () => {
+  it('refuses a create that carries nothing of the suite, adding no contact', async () => {
+    const created = await call('POST', 'contacts', { email: 'bare@example.com', name: 'Bare' })
+    expect(created.status).toBe(403)
+    expect((await json(created)).error).toMatchObject({ type: 'plan_required', code: 'crm' })
+    expect([...mockDocs.keys()].filter((key) => key.startsWith(`${CONTACTS}/`))).toEqual([
+      `${CONTACTS}/c-1`,
+    ])
+  })
+
+  it('still names a malformed field before it asks the plan', async () => {
+    const response = await call('PATCH', 'contacts/c-1', {
+      consentSiteId: 'host-1',
+      phone: 'call me maybe',
+    })
+    expect(response.status).toBe(400)
+    expect(mockDocs.get(`${CONTACTS}/c-1`)!.facets).toEqual(STORED_FACETS)
+  })
+
+  it('saves the profile a capture writes, tags and notes once the suite is granted back', async () => {
+    mockOrg = { ...mockOrg, entitlements: { features: { crm: true } } }
     const response = await call('PATCH', 'contacts/c-1', {
       consentSiteId: 'host-1',
       jobTitle: 'CTO',

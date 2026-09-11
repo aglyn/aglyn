@@ -44,12 +44,13 @@
  *
  * ## The plan
  *
- * Owner, company, custom values and files are the CRM suite's
- * (`CONTACT_SUITE_UPDATE_FIELDS`). A request carrying any of them is refused
- * to a plan without the suite once the caller is known, and before a contact
- * is read — staff included, because the plan is a fact about the workspace.
- * The profile a capture writes (name, phone, job title, address), tags,
- * notes and campaign filing are saved on every plan.
+ * Every field is the CRM suite's (AGL-2790). A plan without the suite reads
+ * its Leads and edits no contact: not the owner, company, custom values or
+ * files, and not the profile a capture writes (name, phone, job title,
+ * address), the tags, the notes or the campaign filing either. A request
+ * carrying any field is refused to such a plan once the caller is known, and
+ * before a contact is read — staff included, because the plan is a fact
+ * about the workspace. Erasing a person is another route, open on every plan.
  *
  * ## One holder, by dotted path
  *
@@ -102,7 +103,6 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
-  CONTACT_SUITE_UPDATE_FIELDS,
   CONTACT_UPDATE_FIELDS,
   type ContactUpdateFields,
   type ContactUpdateOutcome,
@@ -121,8 +121,17 @@ import { readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 import { authorizeCrmWriter, canReach, type Writer } from './task-routes'
 
-/** What the suite gate names for each of the suite's fields. */
-const SUITE_ACTS: Partial<Record<keyof ContactUpdateFields, string>> = {
+/** What the suite gate names for each field a request can carry. */
+const SUITE_ACTS: Record<keyof ContactUpdateFields, string> = {
+  name: "Editing a contact's profile",
+  phone: "Editing a contact's profile",
+  jobTitle: "Editing a contact's profile",
+  address: "Editing a contact's profile",
+  notes: "Editing a contact's notes",
+  tags: 'Tagging a contact',
+  addTag: 'Tagging a contact',
+  removeTag: 'Tagging a contact',
+  campaignIds: 'Filing a contact under a campaign',
   ownerUid: "Assigning a contact's owner",
   companyId: 'Filing a contact under a company',
   companyName: 'Filing a contact under a company',
@@ -134,12 +143,13 @@ const SUITE_ACTS: Partial<Record<keyof ContactUpdateFields, string>> = {
 const NO_HOLDER_REFUSAL = 'No site holds this contact yet, so it has no profile to edit.'
 
 /**
- * The act a request is refused for on a plan without the suite, or `null`
- * when every field it carries is saved on every plan.
+ * The act a request is refused for on a plan without the suite: the first
+ * field it carries, in the order the route reads them. Every field is the
+ * suite's, so whichever field a request names is the act its refusal names.
  */
-export function contactUpdateSuiteAct(fields: ContactUpdateFields): string | null {
-  const field = CONTACT_SUITE_UPDATE_FIELDS.find((key) => fields[key] !== undefined)
-  return field ? (SUITE_ACTS[field] ?? null) : null
+export function contactUpdateSuiteAct(fields: ContactUpdateFields): string {
+  const field = CONTACT_UPDATE_FIELDS.find((key) => fields[key] !== undefined)
+  return field ? SUITE_ACTS[field] : "Editing a contact's profile"
 }
 
 /**
@@ -432,8 +442,7 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
       return
     }
     // The plan after the person, and before any contact is read (AGL-2787).
-    const act = contactUpdateSuiteAct(fields)
-    const suite = act ? crmSuiteRefusal(writer.org, act) : null
+    const suite = crmSuiteRefusal(writer.org, contactUpdateSuiteAct(fields))
     if (suite) {
       res.status(suite.status).json(suite.body)
       return

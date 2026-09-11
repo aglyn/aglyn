@@ -78,6 +78,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
+  // The REAL plan table: a merge asks the org's plan for the CRM suite
+  // before it reads the body (AGL-2790).
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
@@ -295,6 +298,14 @@ describe('POST /v1/contacts/{id}/merge', () => {
     const denied = await call('POST', 'contacts/c-keep/merge', { sourceContactId: 'c-gone' })
     expect(denied.status).toBe(403)
     expect((await json(denied)).error.type).toBe('insufficient_scope')
+    expect(mockDocs.has(`${CONTACTS}/c-gone`)).toBe(true)
+  })
+
+  it('refuses a plan without the CRM suite, merging nothing (AGL-2790)', async () => {
+    mockOrg = { ...mockOrg, entitlements: { features: { crm: false } } }
+    const response = await call('POST', 'contacts/c-keep/merge', { sourceContactId: 'c-gone' })
+    expect(response.status).toBe(403)
+    expect((await json(response)).error).toMatchObject({ type: 'plan_required', code: 'crm' })
     expect(mockDocs.has(`${CONTACTS}/c-gone`)).toBe(true)
   })
 

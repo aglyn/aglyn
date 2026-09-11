@@ -18,9 +18,8 @@
 /**
  * THE CRM SUITE'S PLAN GATE, for the routes the console calls (AGL-2787).
  *
- * The 2026-09-05 pricing decision includes the CRM suite from Starter:
- * `features.crm` is false on Free, and Free keeps the contacts list — the
- * capture projection the email audiences read. Two doors onto the suite's
+ * The CRM suite is included from Starter: `features.crm` is false on Free,
+ * where the CRM opens on its Leads, read-only (AGL-2790). Two doors onto the suite's
  * records already ask the plan: the shell draws the suite's sections locked
  * and refuses their bodies, and the `/v1` dispatcher refuses the `crm:*`
  * resources. These routes are the third door. A lock drawn on a page is
