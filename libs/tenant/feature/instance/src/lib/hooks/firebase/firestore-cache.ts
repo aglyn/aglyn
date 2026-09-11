@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { type FirebaseApp } from 'firebase/app'
 import {
   type FirestoreLocalCache,
   memoryLocalCache,
@@ -25,6 +26,16 @@ import {
 } from 'firebase/firestore'
 
 import { type AuthPersistenceClass } from './auth-persistence'
+import {
+  pruneBrowserSharedClientState,
+  type SharedClientStatePrunePlan,
+} from './firestore-shared-client-state'
+
+/**
+ * The durable cache's size bound: the SDK's own default, 40 MB, written down.
+ * See "The durable cache's size" on {@link localCacheFor}.
+ */
+export const DURABLE_CACHE_SIZE_BYTES = 40 * 1024 * 1024
 
 /**
  * The Firestore `localCache` an origin of this persistence class may use
@@ -61,6 +72,31 @@ import { type AuthPersistenceClass } from './auth-persistence'
  *   why console read volume is what it is (AGL-1440).
  * - `ephemeral` → `memoryLocalCache`, so **nothing** reaches disk on an origin
  *   whose DNS the customer can re-point at their own server.
+ *
+ * ## The durable cache's size
+ *
+ * `cacheSizeBytes` is spelled out at the SDK default so the bound is stated
+ * here and cannot quietly become `CACHE_SIZE_UNLIMITED` if that default moves.
+ * Stating it changes nothing at runtime, and what it governs is narrower than
+ * the name suggests — measured against `@firebase/firestore` 4.17.1:
+ *
+ * - LRU collection is on without it: an unset `cacheSizeBytes` resolves to
+ *   `LruParams.DEFAULT`, the same 40 MB threshold.
+ * - It runs only in the tab holding the primary lease, 1 minute after that tab
+ *   becomes primary and every 5 minutes after.
+ * - The threshold is compared with the byte size of **cached documents**
+ *   (`remoteDocumentsV14`) and nothing else. `targets` and `targetDocuments`
+ *   rows are collected alongside documents once documents cross it, never
+ *   before.
+ * - It never touches `localStorage`, where the multi-tab manager strands a
+ *   record per tab and per query target; {@link pruneSharedClientStateFor}
+ *   handles those.
+ *
+ * It is deliberately not lowered. A smaller cache evicts exactly the documents
+ * that make this cache worth having — a cold load resuming from disk, and
+ * listeners painting through a stale session — and a collected target is given
+ * a NEW id the next time its query is listened to, which adds a `localStorage`
+ * record rather than removing one.
  *
  * ## Why the memory cache gets the LRU collector, not the default
  *
@@ -108,5 +144,29 @@ export function localCacheFor(
   if (originClass === 'ephemeral') {
     return memoryLocalCache({ garbageCollector: memoryLruGarbageCollector() })
   }
-  return persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  return persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+    cacheSizeBytes: DURABLE_CACHE_SIZE_BYTES,
+  })
+}
+
+/**
+ * Prunes the multi-tab records the durable cache strands in `localStorage`
+ * (AGL-2845), for an app whose Firestore this page has just initialized.
+ *
+ * Keyed off the same origin class as {@link localCacheFor}, because the
+ * durable class is the only one running `persistentMultipleTabManager`, the
+ * only writer of those records. An ephemeral origin's memory cache writes
+ * none, so it resolves without looking.
+ *
+ * Fire-and-forget: it never rejects and nothing waits on it. What it deletes,
+ * and why a live tab's records never are, is in
+ * `firestore-shared-client-state.ts`.
+ */
+export function pruneSharedClientStateFor(
+  originClass: AuthPersistenceClass,
+  app: FirebaseApp,
+): Promise<SharedClientStatePrunePlan | undefined> {
+  if (originClass === 'ephemeral') return Promise.resolve(undefined)
+  return pruneBrowserSharedClientState(app.name, app.options?.projectId)
 }
