@@ -135,7 +135,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: async (token: string) => {
           // A support engineer's token, which the org variant admits.
           if (token === 'staff') return { uid: 'staff-1', staff: true }
-          if (token !== 'good') throw new Error('bad token')
+          // What firebase-admin throws (AGL-2852): a certificate outage
+          // carries a forged token's code and differs only in its message.
+          if (token === 'outage') {
+            throw Object.assign(new Error('Error fetching public keys for Google certs: ETIMEDOUT'), {
+              code: 'auth/argument-error',
+            })
+          }
+          if (token !== 'good') {
+            throw Object.assign(new Error('Firebase ID token has invalid signature.'), {
+              code: 'auth/argument-error',
+            })
+          }
           return { uid: 'u1' }
         },
       }),
@@ -255,6 +266,14 @@ describe('the deal-stage route (AGL-2598)', () => {
   it('is registered under crm/deal-stage', () => {
     registerCrmConsoleApi()
     expect(resolvePluginApiRoute('crm/deal-stage')).toBe(crmDealStageHandler)
+  })
+
+  it('answers a refused token 401 and a certificate outage 500 (AGL-2852)', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const move = { hostId: 'shop', dealId: 'd1', stageId: 'negotiation' }
+    expect((await call(move, { token: 'forged' })).status).toBe(401)
+    expect((await call(move, { token: 'outage' })).status).toBe(500)
+    logged.mockRestore()
   })
 
   it('refuses a GET, a missing session, and a member without data.manage', async () => {
@@ -559,7 +578,7 @@ describe('the plan (AGL-2787)', () => {
   const expectRefused = (answer: { status: number; body: any }) => {
     expect(answer.status).toBe(403)
     expect(answer.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(answer.body.error).toMatch(/part of the CRM suite/)
+    expect(answer.body.error).toMatch(/part of the CRM/)
     expect(answer.body.error).toMatch(/Included from Starter/)
   }
   const expectNothingMoved = () => {

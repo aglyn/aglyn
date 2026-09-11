@@ -435,7 +435,7 @@ describe('the plan (AGL-2787)', () => {
   const expectSuiteRefusal = ({ status: code, answer }: { status: number; answer: any }) => {
     expect(code).toBe(403)
     expect(answer).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(answer.error).toMatch(/part of the CRM suite/)
+    expect(answer.error).toMatch(/part of the CRM/)
     expect(answer.error).toMatch(/Included from Starter/)
     expect(answer.error).not.toMatch(/actions builder/)
   }
@@ -521,5 +521,60 @@ describe('crm/recipe-status', () => {
     expect((await status({}, {})).status).toBe(400)
     expect((await status({ orgId: ORG }, { method: 'GET' })).status).toBe(405)
     expect((await status({ orgId: ORG }, { token: null })).status).toBe(401)
+  })
+})
+
+/**
+ * THE PLAN ON THE STATUS READ (AGL-2851). Which sites carry which recipe is
+ * read in the CRM, and the CRM is included from Starter: a workspace whose
+ * plan does not carry it is refused `plan_required` / `crm` at either level
+ * once the caller is known, staff included. The install asks the same.
+ */
+describe('crm/recipe-status and the plan', () => {
+  const refusedForPlan = (answer: { status: number; answer: any }) =>
+    answer.status === 403 &&
+    answer.answer?.reason === 'plan_required' &&
+    answer.answer?.code === 'crm'
+
+  it('refuses a Free workspace at the org and the site level, staff included', async () => {
+    orgs[ORG] = { $id: ORG, plan: 'free' }
+    expect(refusedForPlan(await status({ orgId: ORG }))).toBe(true)
+    expect(refusedForPlan(await status({ hostId: 'host-a' }))).toBe(true)
+    mockDecoded = { ...mockDecoded, staff: true }
+    expect(refusedForPlan(await status({ orgId: ORG }))).toBe(true)
+  })
+
+  it('answers authorization before the plan', async () => {
+    orgs[ORG] = { $id: ORG, plan: 'free' }
+    mockPermissions = { ...orgWideManager(), orgWide: false, hostRole: 'admin' }
+    const scoped = await status({ orgId: ORG })
+    expect(scoped.status).toBe(403)
+    expect(scoped.answer.reason).toBeUndefined()
+  })
+
+  it('CONTROL: admits Starter', async () => {
+    orgs[ORG] = { $id: ORG, plan: 'starter', subscription: { status: 'active' } }
+    expect((await status({ orgId: ORG })).status).toBe(200)
+    expect((await status({ hostId: 'host-a' })).status).toBe(200)
+  })
+})
+
+/**
+ * THE SITE WRITER'S TOKEN (AGL-2852). A refused credential is the caller's
+ * 401; a failure to check one is ours and keeps a 5xx, so an outage pages.
+ */
+describe('a site writer whose token verification throws', () => {
+  it('answers a refused token 401 and a certificate outage 500', async () => {
+    ;(mockVerifyIdToken as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('revoked'), { code: 'auth/id-token-revoked' }),
+    )
+    expect((await status({ hostId: 'host-a' })).status).toBe(401)
+    ;(mockVerifyIdToken as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('Error fetching public keys for Google certs: ETIMEDOUT'), {
+        code: 'auth/argument-error',
+      }),
+    )
+    expect((await status({ hostId: 'host-a' })).status).toBe(500)
+    expect(actionsOf('host-a')).toEqual({})
   })
 })

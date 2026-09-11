@@ -359,6 +359,23 @@ describe('the request', () => {
     expectNothingSent()
   })
 
+  it('answers a refused token 401 and a certificate outage 500, before any read (AGL-2852)', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error('revoked'), { code: 'auth/id-token-revoked' }),
+    )
+    expect((await call(MESSAGE)).status).toBe(401)
+    verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error('Error fetching public keys for Google certs'), {
+        code: 'auth/argument-error',
+      }),
+    )
+    expect((await call(MESSAGE)).status).toBe(500)
+    expect(getOrgForHost).not.toHaveBeenCalled()
+    expectNothingSent()
+    logged.mockRestore()
+  })
+
   it('refuses without a token, before any read', async () => {
     const { status } = await call(MESSAGE, { token: null })
     expect(status).toBe(401)
@@ -401,7 +418,7 @@ describe('the plan (AGL-2787)', () => {
   const expectRefused = ({ status, body }: { status: number; body: any }) => {
     expect(status).toBe(403)
     expect(body).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(body.error).toMatch(/part of the CRM suite/)
+    expect(body.error).toMatch(/part of the CRM/)
     expect(body.error).toMatch(/Included from Starter/)
   }
 

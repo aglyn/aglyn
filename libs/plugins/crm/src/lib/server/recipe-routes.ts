@@ -71,6 +71,7 @@ import {
   logHostActivity,
   logOrgActivity,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   CRM_API_ROUTES,
@@ -126,8 +127,12 @@ async function authorizeSiteWriter(
   let decoded: { uid: string; email?: string; staff?: unknown }
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-  } catch {
-    return { ok: false, status: 401, error: 'Unauthenticated' }
+  } catch (error) {
+    // A refused credential is the caller's 401; a failure to check one is
+    // ours and keeps a 5xx (AGL-2852).
+    if (isRefusedIdToken(error)) return { ok: false, status: 401, error: 'Unauthenticated' }
+    console.error('[crm] the recipe site writer could not be verified', error)
+    return { ok: false, status: 500, error: 'The sign-in could not be checked. Try again.' }
   }
   const staff = decoded.staff === true
   const host = await firebaseAdmin
@@ -408,7 +413,8 @@ export const crmRecipeStatusHandler: PluginApiHandler = async (req, res) => {
   }
   try {
     const firestore = firebaseAdmin.app().firestore()
-    let hostIds: string[]
+    let orgId: string | null = null
+    let org: unknown
     if (scope.level === 'org') {
       const caller = await authorizeOrgCaller(req, scope.orgId, {
         needs: 'data.manage',
@@ -418,15 +424,23 @@ export const crmRecipeStatusHandler: PluginApiHandler = async (req, res) => {
         res.status(caller.status).json({ error: caller.error })
         return
       }
-      hostIds = await orgHostIds(firestore, caller.orgId)
+      orgId = caller.orgId
+      org = caller.org
     } else {
       const caller = await authorizeSiteWriter(req, scope.hostId)
       if (caller.ok === false) {
         res.status(caller.status).json({ error: caller.error })
         return
       }
-      hostIds = [scope.hostId]
+      org = caller.org
     }
+    // The plan after the caller, before any site is read (AGL-2851).
+    const suite = crmSuiteRefusal(org, 'Reading which sites carry a CRM recipe')
+    if (suite) {
+      res.status(suite.status).json(suite.body)
+      return
+    }
+    const hostIds = orgId ? await orgHostIds(firestore, orgId) : [scope.hostId]
     const sites = await Promise.all(
       hostIds.map(async (hostId): Promise<CrmRecipeSiteStatus> => {
         const stamps = readSiteStamps(

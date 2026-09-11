@@ -108,6 +108,38 @@ describe('the organization gate asks the catalog for data.manage (AGL-2843)', ()
   })
 })
 
+/**
+ * A VERIFICATION THAT THROWS (AGL-2852). A refused credential is the
+ * caller's 401. A failure to check one is ours and keeps a 5xx — including a
+ * Google certificate outage, which firebase-admin reports with the code of a
+ * forged token — so an outage pages rather than telling every caller their
+ * sign-in is bad.
+ */
+describe('a verification that throws (AGL-2852)', () => {
+  const authError = (code: string, message = 'x') => Object.assign(new Error(message), { code })
+
+  it('answers 401 for a refused credential', async () => {
+    verifyIdToken.mockRejectedValue(authError('auth/id-token-expired'))
+    expect(await gate()).toEqual({ ok: false, status: 401, error: 'Unauthenticated' })
+    verifyIdToken.mockRejectedValue(
+      authError('auth/argument-error', 'Firebase ID token has invalid signature.'),
+    )
+    expect(await gate()).toMatchObject({ ok: false, status: 401 })
+  })
+
+  it('answers 500 for a certificate outage and for a throw with no auth code', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    verifyIdToken.mockRejectedValue(
+      authError('auth/argument-error', 'Error fetching public keys for Google certs: ETIMEDOUT'),
+    )
+    expect(await gate()).toMatchObject({ ok: false, status: 500 })
+    verifyIdToken.mockRejectedValue(new Error('ECONNRESET'))
+    expect(await gate()).toMatchObject({ ok: false, status: 500 })
+    expect(logged).toHaveBeenCalled()
+    logged.mockRestore()
+  })
+})
+
 describe('holdsDataManage (AGL-2843)', () => {
   it('answers from the catalog for the member on the roster', async () => {
     members.set('org-1:owner', { role: 'owner' })

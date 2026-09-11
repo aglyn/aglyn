@@ -77,6 +77,7 @@ import {
   orgDataCollectionForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
@@ -153,8 +154,12 @@ async function authorizeSiteEditor(
   let uid: string
   try {
     uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
-  } catch {
-    return { ok: false, status: 401, error: 'Unauthenticated' }
+  } catch (error) {
+    // A refused credential is the caller's 401; a failure to check one is
+    // ours and keeps a 5xx (AGL-2852).
+    if (isRefusedIdToken(error)) return { ok: false, status: 401, error: 'Unauthenticated' }
+    console.error('[crm] the site editor could not be verified', error)
+    return { ok: false, status: 500, error: 'The sign-in could not be checked. Try again.' }
   }
   const hostSnapshot = await firebaseAdmin
     .app()

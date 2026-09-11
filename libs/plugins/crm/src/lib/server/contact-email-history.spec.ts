@@ -202,7 +202,10 @@ beforeEach(() => {
   }
   groupHostIds = [HOST_ID]
   verifyIdToken.mockReset().mockResolvedValue({ uid: READER })
-  getOrgForHost.mockReset().mockImplementation(async () => ({ orgId: ORG_ID, org: {} }))
+  // A plan that carries the CRM, so the cases below reach what they test.
+  getOrgForHost
+    .mockReset()
+    .mockImplementation(async () => ({ orgId: ORG_ID, org: { plan: 'starter' } }))
   resolveOrgMembership
     .mockReset()
     .mockImplementation(async (uid: string, orgId: string) =>
@@ -232,8 +235,19 @@ describe('the door', () => {
 
   it('refuses an unauthenticated or unverifiable caller before reading anything', async () => {
     expect((await call({ body: { hostId: HOST_ID, contactId: CONTACT }, token: null })).status).toBe(401)
-    verifyIdToken.mockRejectedValueOnce(new Error('expired'))
+    verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error('expired'), { code: 'auth/id-token-expired' }),
+    )
     expect((await ask()).status).toBe(401)
+    // A failure to check the token is ours, not the caller's (AGL-2852).
+    verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error('Error fetching public keys for Google certs'), {
+        code: 'auth/argument-error',
+      }),
+    )
+    expect((await ask()).status).toBe(500)
+    verifyIdToken.mockRejectedValueOnce(new Error('ECONNRESET'))
+    expect((await ask()).status).toBe(500)
     expect(readEmailDeliveryHistory).not.toHaveBeenCalled()
   })
 
@@ -278,6 +292,45 @@ describe('the door', () => {
     roster = {}
     verifyIdToken.mockResolvedValueOnce({ uid: 'staff-uid', staff: true })
     expect((await ask()).status).toBe(200)
+  })
+})
+
+/**
+ * THE PLAN (AGL-2851). A contact's campaign mail is read in the CRM, and the
+ * CRM is included from Starter: a workspace whose plan does not carry it is
+ * refused `plan_required` / `crm` once the reader is known, staff included,
+ * and no log is read.
+ */
+describe('the plan', () => {
+  const refusedForPlan = (answer: { status: number; body: any }) =>
+    answer.status === 403 &&
+    answer.body?.reason === 'plan_required' &&
+    answer.body?.code === 'crm'
+  const onPlan = (org: Record<string, unknown>) =>
+    getOrgForHost.mockImplementation(async () => ({ orgId: ORG_ID, org }))
+
+  it('refuses a Free workspace, staff included, and reads no log', async () => {
+    onPlan({ plan: 'free' })
+    expect(refusedForPlan(await ask())).toBe(true)
+    verifyIdToken.mockResolvedValueOnce({ uid: 'staff-uid', staff: true })
+    expect(refusedForPlan(await ask())).toBe(true)
+    onPlan({ plan: 'pro', billingStatus: 'canceled' })
+    expect(refusedForPlan(await ask())).toBe(true)
+    expect(readEmailDeliveryHistory).not.toHaveBeenCalled()
+  })
+
+  it('answers authorization before the plan', async () => {
+    onPlan({ plan: 'free' })
+    verifyIdToken.mockResolvedValueOnce({ uid: 'stranger' })
+    const stranger = await ask()
+    expect(stranger.status).toBe(403)
+    expect(stranger.body.reason).toBeUndefined()
+  })
+
+  it('CONTROL: admits Starter', async () => {
+    onPlan({ plan: 'starter', subscription: { status: 'active' } })
+    expect((await ask()).status).toBe(200)
+    expect(readEmailDeliveryHistory).toHaveBeenCalledTimes(1)
   })
 })
 

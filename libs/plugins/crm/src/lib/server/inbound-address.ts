@@ -32,6 +32,7 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { CRM_API_ROUTES } from '../constants/api-routes'
 import { authorizeOrgCaller, readCrmRouteScope } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
@@ -115,8 +116,12 @@ async function authorizeSiteCaller(
   let decoded: { uid: string; email?: string; staff?: unknown }
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-  } catch {
-    return refuse(401, 'Unauthenticated')
+  } catch (error) {
+    // A refused credential is the caller's 401; a failure to check one is
+    // ours and keeps a 5xx (AGL-2852).
+    if (isRefusedIdToken(error)) return refuse(401, 'Unauthenticated')
+    console.error('[crm] inbound-address could not verify the caller', error)
+    return refuse(500, 'The sign-in could not be checked. Try again.')
   }
   const resolved = await getOrgForHost(hostId).catch(() => null)
   if (!resolved) return refuse(404, 'Unknown site')

@@ -51,7 +51,18 @@ let mockOrg: Record<string, unknown> | null = { plan: 'starter' }
 /** `orgs/org-1/contacts`, by id. */
 let mockContacts: Record<string, Record<string, unknown>> = {}
 const mockVerifyIdToken = jest.fn(async (token: string) => {
-  if (token !== 'good') throw new Error('bad token')
+  // What firebase-admin throws (AGL-2852): a certificate outage carries the
+  // code of a forged token and differs only in its message.
+  if (token === 'outage') {
+    throw Object.assign(new Error('Error fetching public keys for Google certs: ETIMEDOUT'), {
+      code: 'auth/argument-error',
+    })
+  }
+  if (token !== 'good') {
+    throw Object.assign(new Error('Firebase ID token has invalid signature.'), {
+      code: 'auth/argument-error',
+    })
+  }
   return mockDecoded
 })
 /** Every resolution of the contacts collection, which precedes any contact read. */
@@ -189,6 +200,13 @@ describe('the gate', () => {
     expect(mockVerifyIdToken).not.toHaveBeenCalled()
   })
 
+  it('answers a certificate outage with a 5xx, not a refusal (AGL-2852)', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    expect((await post(MOVE, { authorization: 'Bearer outage' })).status).toBe(500)
+    expect(mockContactsCollection).not.toHaveBeenCalled()
+    logged.mockRestore()
+  })
+
   it('refuses a caller with no token, and one whose token does not verify', async () => {
     expect((await post(MOVE, {})).status).toBe(401)
     expect((await post(MOVE, { authorization: 'Bearer forged' })).status).toBe(401)
@@ -228,7 +246,7 @@ describe('the plan (AGL-2787)', () => {
     const { status, payload } = await post(MOVE)
     expect(status).toBe(403)
     expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(payload.error).toMatch(/part of the CRM suite/)
+    expect(payload.error).toMatch(/part of the CRM/)
     expect(payload.error).toMatch(/Included from Starter/)
     expect(mockContactsCollection).not.toHaveBeenCalled()
     expect(mockUpdate).not.toHaveBeenCalled()

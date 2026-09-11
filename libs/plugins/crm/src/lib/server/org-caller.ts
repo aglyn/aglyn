@@ -46,6 +46,7 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 /**
@@ -151,8 +152,13 @@ export async function authorizeOrgCaller(
   let decoded: { uid: string; email?: string; name?: string; staff?: unknown }
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-  } catch {
-    return { ok: false, status: 401, error: 'Unauthenticated' }
+  } catch (error) {
+    // A refused credential is the caller's 401. A failure to check one is
+    // ours and keeps a 5xx, so an outage pages instead of reading as a bad
+    // token (AGL-2852).
+    if (isRefusedIdToken(error)) return { ok: false, status: 401, error: 'Unauthenticated' }
+    console.error('[crm] the organization caller could not be verified', error)
+    return { ok: false, status: 500, error: 'The sign-in could not be checked. Try again.' }
   }
   const staff = decoded.staff === true
   const membership = await resolveOrgPermissions(decoded.uid, { orgId }).catch(

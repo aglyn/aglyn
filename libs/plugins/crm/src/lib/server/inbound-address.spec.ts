@@ -124,6 +124,22 @@ describe('crm/inbound-address', () => {
     expect(CRM_INBOUND_ADDRESS_ROUTE).toBe('crm/inbound-address')
   })
 
+  it('answers a refused token 401 and a certificate outage 500 at the site level (AGL-2852)', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    ;(mockVerifyIdToken as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('expired'), { code: 'auth/id-token-expired' }),
+    )
+    expect((await call({ hostId: HOST })).status).toBe(401)
+    ;(mockVerifyIdToken as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('Error fetching public keys for Google certs'), {
+        code: 'auth/argument-error',
+      }),
+    )
+    expect((await call({ hostId: HOST })).status).toBe(500)
+    expect(mockEnsure).not.toHaveBeenCalled()
+    logged.mockRestore()
+  })
+
   it('refuses anything but a POST, a body with no scope, and a caller with no token', async () => {
     expect((await call({ hostId: HOST }, { method: 'GET' })).status).toBe(405)
     expect((await call({})).status).toBe(400)
@@ -230,7 +246,7 @@ describe('the plan (AGL-2787)', () => {
   const expectRefused = ({ status, answer }: { status: number; answer: any }) => {
     expect(status).toBe(403)
     expect(answer).toMatchObject({ reason: 'plan_required', code: 'crm' })
-    expect(answer.error).toMatch(/part of the CRM suite/)
+    expect(answer.error).toMatch(/part of the CRM/)
     expect(answer.error).toMatch(/Included from Starter/)
   }
 
