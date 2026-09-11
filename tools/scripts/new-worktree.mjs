@@ -43,7 +43,7 @@
 // cache a running dev server is using (see clean-next.mjs).
 
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -146,11 +146,18 @@ run('node', [join('tools', 'scripts', 'sync-next-tsconfigs.mjs')], {
   cwd: worktree,
 })
 
-// ── 5. Hand back a start command that carries the prune ────────────────────
-// `nx serve` routes through the app's clean-next-cache dependsOn (AGL-930);
-// a bare `npx next dev` does not, which is how the last worktree quietly grew
-// a 6 GB cache. So the command printed here is always the nx one.
+// ── 5. Hand back start commands that carry the prune ───────────────────────
+// `nx serve` routes through the app's clean-next-cache dependsOn (AGL-930),
+// and the `serve:<app>:emulated` script runs the same command itself; a bare
+// `npx next dev` does neither, which is how the last worktree quietly grew a
+// 6 GB cache. The emulator-backed command is that script rather than
+// `nx serve` with emulator variables, because under nx every credential in
+// the env files reaches the server whatever the shell sets (AGL-2828).
 const collision = portInUse(port)
+const emulatedScript = `serve:${app}:emulated`
+const hasEmulatedScript = Boolean(
+  JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')).scripts?.[emulatedScript],
+)
 console.log(`\nWorktree ready: ${worktree}`)
 if (collision) {
   console.log(
@@ -159,15 +166,14 @@ if (collision) {
   )
 }
 console.log(
-  `\nServe from it with (nx serve, NOT \`next dev\` — only nx carries the\n` +
+  `\nServe from it with (nx serve, NOT a bare \`next dev\`, which skips the\n` +
     `cache prune):\n\n` +
     `  cd ${worktree} && npx nx serve ${app} --port ${port}\n\n` +
-    `Emulator-backed instead:\n\n` +
-    `  cd ${worktree} && FIREBASE_AUTH_EMULATOR_ENABLED=true ` +
-    `FIREBASE_FIRESTORE_EMULATOR_ENABLED=true \\\n` +
-    `    FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 ` +
-    `FIRESTORE_EMULATOR_HOST=localhost:8082 \\\n` +
-    `    npx nx serve ${app} --port ${port}\n\n` +
+    (hasEmulatedScript
+      ? `Emulator-backed instead (start the emulators first; holds no\n` +
+        `production credential):\n\n` +
+        `  cd ${worktree} && npm run ${emulatedScript} -- --port ${port}\n\n`
+      : '') +
     `Tear down when finished:\n\n` +
     `  git worktree remove --force ${worktree}\n`,
 )

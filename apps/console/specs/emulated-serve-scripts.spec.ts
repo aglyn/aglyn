@@ -61,3 +61,25 @@ describe('emulated serve scripts keep Storage off the real bucket (AGL-2795)', (
     )
   })
 })
+
+/**
+ * Nor may an "emulated" server hold the keys for services the emulators do
+ * not stand in for (AGL-2828). `nx serve` cannot give that: its task runner
+ * loads the env files through dotenv-expand, which writes a file's value over
+ * an empty variable, so a credential blanked in the script comes back. The
+ * scripts start `next dev` through `tools/scripts/serve-emulated.mjs`, which
+ * assembles the environment without that refill and sets every outbound
+ * credential to ''.
+ */
+describe('emulated serve scripts hold no outbound credential (AGL-2828)', () => {
+  it.each(emulatedServeScripts)(
+    '%s serves through serve-emulated.mjs, not the nx task runner',
+    (name, command) => {
+      const app = name.split(':')[1]
+      expect(command).toMatch(
+        new RegExp(`\\bnode tools/scripts/serve-emulated\\.mjs ${app}$`),
+      )
+      expect(command).not.toMatch(/\bnx\s/)
+    },
+  )
+})
