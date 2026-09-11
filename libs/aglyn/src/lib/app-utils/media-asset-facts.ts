@@ -42,13 +42,17 @@
  *
  * ## The rule
  *
- * The tenant's composition reads each placed asset's document
- * (`libs/tenant/runtime/src/lib/get-media-asset-facts.ts`) and lays what it
- * records over the node here. When the asset cannot be answered for (a
- * failed read, a missing or deleted document, an asset the CDN would not
- * serve under this page's URL, one past the read's cap), the node keeps what
- * the pick stored. That is the render every page had before this, never a
- * worse one. When the asset answers:
+ * Two surfaces read each placed asset's document and lay what it records over
+ * the node here: the tenant's composition, for the page a visitor gets
+ * (`libs/tenant/runtime/src/lib/get-media-asset-facts.ts`), and the console,
+ * for the besigner canvas an author edits and the Preview that checks it
+ * (AGL-2838, AGL-2849). Both decide what a read answers through
+ * {@link mediaAssetFactsFromDocument}, so the editor cannot disagree with the
+ * page about which assets answer. When the asset cannot be answered for (a
+ * failed or pending read, a missing or deleted document, an asset the CDN
+ * would not serve under this page's URL, one past the composition's cap), the
+ * node keeps what the pick stored. That is the render every page had before
+ * this, never a worse one. When the asset answers:
  *
  * - **A film's facts win, including their ABSENCE.** A film the replace left
  *   with no `video` record has no known shape, so a stored pair describing
@@ -76,12 +80,14 @@
  * the placement rather than the file.
  *
  * Imported by path and never through a barrel: every `@aglyn/aglyn` barrel
- * ships to published pages, and the composition is a server-side caller.
+ * ships to published pages, and nothing here has a reason to reach one, so
+ * the composition and the console both import this module by path.
  */
 
 import { CANVAS_ROOT_ELEMENT_ID } from '../foundation/constants/canvas'
+import { mediaCdnScopeRefusal, parseMediaCdnScope } from './media-cdn-scope'
 import { intrinsicMediaSize, videoMediaProps } from './media-metadata'
-import { type MediaRef, parseMediaRef } from './media-ref'
+import { hostQualifiedScope, type MediaRef, parseMediaRef } from './media-ref'
 import { VIDEO_COMPONENT_ID } from './video-object'
 
 /** The Image element's persisted component id (`image.tsx`), never renamed. */
@@ -108,6 +114,28 @@ export interface MediaAssetFacts {
   /** The document's generated `poster` record, when it has one. */
   poster?: unknown
 }
+
+/**
+ * Every field an asset's facts are decided from, and the projection a reader
+ * asks Firestore for: ONE list, whichever surface reads. `width` and `height`
+ * (an image's) and `video` and `poster` (a film's) are the facts. The other
+ * three are the gates `serveMediaCdn` applies before it will serve an asset at
+ * all, so no surface shows the shape of a file its page's URL refuses.
+ */
+export const MEDIA_ASSET_FACT_FIELDS = [
+  'width',
+  'height',
+  'video',
+  'poster',
+  'deletedAt',
+  'private',
+  'visibleTo',
+] as const
+
+/** An asset's media document, as far as {@link MEDIA_ASSET_FACT_FIELDS} reach. */
+export type MediaAssetDocument = Partial<
+  Record<(typeof MEDIA_ASSET_FACT_FIELDS)[number], unknown>
+>
 
 /** The elements whose placements follow their file. */
 export type MediaAssetElement =
@@ -144,6 +172,50 @@ export function mediaAssetFactsKey(
   ref: Pick<MediaRef, 'scope' | 'mediaId'>,
 ): string {
   return `${ref.scope}/${ref.mediaId}`
+}
+
+/**
+ * Where an asset's media document lives: under the scope's OWNER, `orgs/` for
+ * the org library and `hosts/` for a site's own, whichever site places it.
+ * `null` for a scope the CDN would not parse, which no read can answer for.
+ */
+export function mediaAssetDocumentPath(
+  ref: Pick<MediaRef, 'scope' | 'mediaId'>,
+): string | null {
+  const scope = parseMediaCdnScope(ref.scope)
+  if (!scope) return null
+  return `${scope.isOrg ? 'orgs' : 'hosts'}/${scope.scopeId}/media/${ref.mediaId}`
+}
+
+/**
+ * The facts one read of an asset's document yields for a placement rendered
+ * on `hostId`'s pages, or `undefined` when the placement keeps its stored
+ * props.
+ *
+ * An answer exists only for a document that was read, is live, is not
+ * private, and is visible to that site under the host-qualified scope the page
+ * renders: the verdict the CDN reaches when the browser asks for the bytes.
+ * The URL a page renders names the site doing the rendering
+ * (`resolveMediaSrc`), so visibility is asked of THAT scope, not of the scope
+ * the reference was stored with.
+ */
+export function mediaAssetFactsFromDocument(
+  document: MediaAssetDocument | null | undefined,
+  ref: Pick<MediaRef, 'scope'>,
+  hostId: string,
+): MediaAssetFacts | undefined {
+  if (!document) return undefined
+  if (document.deletedAt || document.private === true) return undefined
+  const served = parseMediaCdnScope(hostQualifiedScope(ref.scope, hostId))
+  if (!served || mediaCdnScopeRefusal(served, document.visibleTo)) {
+    return undefined
+  }
+  return {
+    width: document.width,
+    height: document.height,
+    video: document.video,
+    poster: document.poster,
+  }
 }
 
 /** The library asset an Image or Video node places, or null for anything else. */
