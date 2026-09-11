@@ -59,6 +59,7 @@ import {
 } from '../resources/count-billable-screens'
 import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
 import { ensureCustomFieldTypes } from '../../../../utils/ensure-custom-field-types'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * The document to store, built from a bundle item by ALLOW-list (AGL-1382).
@@ -1340,6 +1341,10 @@ async function handler(request: Request): Promise<Response> {
       dataReportTotal: dataReport.length,
     }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Import failed' }, { status: 500 })
   }

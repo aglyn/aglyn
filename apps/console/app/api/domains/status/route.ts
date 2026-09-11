@@ -24,6 +24,7 @@ import {
   lockdownRefusal,
   projectDomainStatus,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * What a site's custom domain is actually doing, right now (AGL-1913).
@@ -60,8 +61,13 @@ async function handler(request: Request): Promise<Response> {
   let decoded: Record<string, unknown> & { uid: string; email_verified?: boolean }
   try {
     decoded = (await firebaseAdmin.app().auth().verifyIdToken(idToken)) as never
-  } catch {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  } catch (error) {
+    // A refused credential is a 401 (AGL-1993). A check that could not run is
+    // ours, so it is a 500 rather than a request to sign in again.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error('[domains/status] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
   }
   if (!decoded.email_verified && !isImpersonationSession(decoded as never)) {
     return emailUnverifiedResponse()

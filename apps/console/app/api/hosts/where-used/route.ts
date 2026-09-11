@@ -36,6 +36,7 @@ import {
   type UsageCandidate,
 } from '../../../../utils/server/scan-artifact-usage'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 export interface WhereUsedDependent {
   /** Resource collection the dependent lives in. */
@@ -350,6 +351,10 @@ async function handler(request: Request): Promise<Response> {
         .length,
     }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Scan failed' }, { status: 500 })
   }

@@ -488,6 +488,33 @@ describe('the Screen picker and a target the host has lost (AGL-1893)', () => {
 })
 
 /**
+ * The attributes panel's Screen picker offers collection listings (AGL-2799).
+ *
+ * Read from the source for the reason the describe above gives. The option
+ * list itself is pinned where it is built, in `screen-link-context.spec.ts`;
+ * what only this can check is that the panel builds its list with that
+ * function, rather than mapping the routing map by hand — the private copy
+ * that had no way to learn a listing exists.
+ */
+describe('the Screen picker offers collection listings (AGL-2799)', () => {
+  const source = readFileSync(
+    join(__dirname, 'element-props-form.component.tsx'),
+    'utf8',
+  )
+  const screenSelectBranch = source.slice(
+    source.indexOf('FieldComponentType.SCREEN_SELECT'),
+    source.indexOf('FieldComponentType.PLUGIN_SETTINGS'),
+  )
+
+  it('builds its options with the shared target builder', () => {
+    expect(screenSelectBranch).toMatch(
+      /\bscreenLinkTargetOptions\(\s*screens,\s*labels,/,
+    )
+    expect(screenSelectBranch).not.toMatch(/Object\.entries\(\s*screens/)
+  })
+})
+
+/**
  * AGL-2486 — the two fields that disagreed about which one is the content.
  *
  * The renderer draws `props.html` in preference to `children`, while this

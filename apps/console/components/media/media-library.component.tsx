@@ -138,16 +138,20 @@ import {
   sumAssetUsage,
   type MediaDayMedia,
 } from '../../utils/analytics-day-cache'
+import { useReleaseFlag } from '../../hooks/use-release-flags'
 import {
   isAllowedUploadType,
+  isVideoUploadType,
   MEDIA_UPLOAD_KIND_LABELS,
   mediaUploadKind,
   normalizeUploadContentType,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
   requiresFileUploadEntitlement,
+  uploadAcceptAttribute,
   uploadAcceptForKind,
-  UPLOAD_ACCEPT_ATTRIBUTE,
-  UPLOAD_TYPES_MESSAGE,
+  uploadTypesMessage,
+  VIDEO_UPLOADS_PAUSED_MESSAGE,
+  VIDEO_UPLOADS_RELEASE_FLAG,
 } from '../../utils/media-upload-limits'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -549,6 +553,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * console.
    */
   const fileUploads = orgReady && checkEntitlement(org as never, 'videoMedia')
+  /**
+   * Whether this org may store a NEW video (AGL-2830): the
+   * `release_video_uploads` flag, which every ingress route also enforces.
+   *
+   * `released`, not `visible`: the routes give staff no preview, so a staff
+   * session shown a video picker here would pick a file the server refuses.
+   * Before Remote Config activates, `released` is the registry default (OFF),
+   * so the library errs toward not offering a video rather than offering one
+   * it then refuses. The paused chip waits for `ready`, so a workspace the
+   * flag is on for never sees it flash.
+   */
+  const videoUploadsFlag = useReleaseFlag(VIDEO_UPLOADS_RELEASE_FLAG)
+  const videoUploadsOpen = videoUploadsFlag.released
+  const uploadAccept = uploadAcceptAttribute({ video: videoUploadsOpen })
+  const uploadTypesCopy = uploadTypesMessage({ video: videoUploadsOpen })
   const cdnDelivery = orgReady && checkEntitlement(org as never, 'mediaCdn')
   const fileUploadPlanLabel =
     planLabelGrantingFeature('videoMedia') ?? 'a higher plan'
@@ -1986,7 +2005,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const kind = mediaUploadKind(contentType)
       if (!kind) {
         return void enqueueSnackbar(
-          `"${file.name}" skipped — ${UPLOAD_TYPES_MESSAGE.toLowerCase()}`,
+          `"${file.name}" skipped — ${uploadTypesCopy.toLowerCase()}`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+      }
+      // A replace stores a new file, so a paused video is refused here too
+      // (AGL-2830). The route refuses it regardless; this says so before a
+      // byte is sent.
+      if (kind === 'video' && !videoUploadsOpen) {
+        return void enqueueSnackbar(
+          `"${file.name}" skipped — ${VIDEO_UPLOADS_PAUSED_MESSAGE}`,
           { variant: 'warning', persist: false, allowDuplicate: true },
         )
       }
@@ -2077,28 +2105,61 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         setBusy(false)
       }
     },
-    [user, scopeId, replaceMediaBytes, finishReplace, enqueueSnackbar],
+    [
+      user,
+      scopeId,
+      replaceMediaBytes,
+      finishReplace,
+      enqueueSnackbar,
+      videoUploadsOpen,
+      uploadTypesCopy,
+    ],
+  )
+  /**
+   * Whether this asset's file cannot be replaced right now because video
+   * uploads are paused (AGL-2830). A video's replacement is a new video, so
+   * both choosers ask this before opening rather than offering a file the
+   * route will refuse.
+   */
+  const replaceIsPaused = useCallback(
+    (media: any) =>
+      !videoUploadsOpen &&
+      mediaUploadKind(
+        normalizeUploadContentType(String(media?.contentType ?? ''), ''),
+      ) === 'video',
+    [videoUploadsOpen],
   )
   // Card-level replace: the overflow "Replace file" opens a chooser for that
   // specific asset. A ref holds the target so click() isn't racing a state
   // update.
   const cardReplaceInputRef = useRef<HTMLInputElement>(null)
   const cardReplaceTargetRef = useRef<any>(null)
-  const requestCardReplace = useCallback((media: any) => {
-    cardReplaceTargetRef.current = media
-    const input = cardReplaceInputRef.current
-    // Written straight onto the node rather than through state (AGL-2732):
-    // one hidden input serves every card, and the picker opens in the same
-    // tick as this click — a re-render would arrive after the dialog.
-    if (input) {
-      input.accept = uploadAcceptForKind(
-        mediaUploadKind(
-          normalizeUploadContentType(String(media?.contentType ?? ''), ''),
-        ),
-      )
-    }
-    input?.click()
-  }, [])
+  const requestCardReplace = useCallback(
+    (media: any) => {
+      if (replaceIsPaused(media)) {
+        enqueueSnackbar(VIDEO_UPLOADS_PAUSED_MESSAGE, {
+          variant: 'warning',
+          persist: false,
+        })
+        return
+      }
+      cardReplaceTargetRef.current = media
+      const input = cardReplaceInputRef.current
+      // Written straight onto the node rather than through state (AGL-2732):
+      // one hidden input serves every card, and the picker opens in the same
+      // tick as this click — a re-render would arrive after the dialog.
+      if (input) {
+        input.accept = uploadAcceptForKind(
+          mediaUploadKind(
+            normalizeUploadContentType(String(media?.contentType ?? ''), ''),
+          ),
+          { video: videoUploadsOpen },
+        )
+      }
+      input?.click()
+    },
+    [replaceIsPaused, enqueueSnackbar, videoUploadsOpen],
+  )
   const handleCardReplaceFile = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
@@ -2847,7 +2908,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // calls, so the UI cannot accept a drop the API will refuse.
       if (!isAllowedUploadType(contentType)) {
         enqueueSnackbar(
-          `"${file.name}" skipped — ${UPLOAD_TYPES_MESSAGE.toLowerCase()}`,
+          `"${file.name}" skipped — ${uploadTypesCopy.toLowerCase()}`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+        return 0
+      }
+      // The video flag (AGL-2830), refused before a byte leaves the browser.
+      // The picker no longer offers a video, but a drag-and-drop never goes
+      // through the picker, so this is the check that holds for both.
+      if (isVideoUploadType(contentType) && !videoUploadsOpen) {
+        enqueueSnackbar(
+          `"${file.name}" skipped — ${VIDEO_UPLOADS_PAUSED_MESSAGE}`,
           { variant: 'warning', persist: false, allowDuplicate: true },
         )
         return 0
@@ -3065,6 +3136,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       currentFolder,
       enqueueSnackbar,
       logActivity,
+      videoUploadsOpen,
+      uploadTypesCopy,
     ],
   )
 
@@ -3463,10 +3536,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
             Rendered only once `orgReady`, so a cold console never tells a
             paying workspace it is on the free tier. */}
+        {/* Video ingress is behind a release flag (AGL-2830) on every plan.
+            No upgrade lifts it, so it is stated as a fact rather than as a
+            plan limit, and it waits for Remote Config to answer so a
+            workspace the flag is on for never sees it flash. */}
+        {videoUploadsFlag.ready && !videoUploadsOpen ? (
+          <Tooltip title={VIDEO_UPLOADS_PAUSED_MESSAGE}>
+            <Chip
+              size="small"
+              variant="outlined"
+              color="default"
+              label="Video uploads paused"
+            />
+          </Tooltip>
+        ) : null}
         {orgReady && !fileUploads ? (
           <Tooltip
             title={
-              `Images upload on every plan. Video, PDF, Word, Excel, ` +
+              `Images upload on every plan. ` +
+              `${videoUploadsOpen ? 'Video, PDF' : 'PDF'}, Word, Excel, ` +
               `PowerPoint and ZIP need ${fileUploadPlanLabel}.`
             }
           >
@@ -3500,7 +3588,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           ref={inputRef}
           type="file"
           multiple
-          accept={UPLOAD_ACCEPT_ATTRIBUTE}
+          accept={uploadAccept}
           onChange={handleUpload}
           sx={{ display: 'none' }}
         />
@@ -3511,7 +3599,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           // One hidden input serves every card, so the family narrowing is
           // written onto the node by `requestCardReplace` in the same tick as
           // the click (AGL-2732). This is the value before any card has asked.
-          accept={UPLOAD_ACCEPT_ATTRIBUTE}
+          accept={uploadAccept}
           onChange={handleCardReplaceFile}
           sx={{ display: 'none' }}
         />
@@ -4042,7 +4130,16 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             {editor?.media ? (
               <Button
                 size="small"
-                onClick={() => replaceInputRef.current?.click()}
+                onClick={() => {
+                  if (replaceIsPaused(editor.media)) {
+                    enqueueSnackbar(VIDEO_UPLOADS_PAUSED_MESSAGE, {
+                      variant: 'warning',
+                      persist: false,
+                    })
+                    return
+                  }
+                  replaceInputRef.current?.click()
+                }}
               >
                 {'Replace file'}
               </Button>
@@ -4066,6 +4163,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   '',
                 ),
               ),
+              { video: videoUploadsOpen },
             )}
             onChange={handleReplaceFile}
             sx={{ display: 'none' }}

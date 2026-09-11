@@ -28,6 +28,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Permanently delete a single site (AGL-488). Site-admin only. Unlike an
@@ -207,6 +208,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Site deletion failed' }, { status: 500 })
   }

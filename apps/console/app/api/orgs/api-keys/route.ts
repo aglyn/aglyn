@@ -38,6 +38,7 @@ import {
   resolveOrgMembership,
   revokeApiKey,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Only owners/admins manage keys; any ORG-WIDE member may view the (metadata)
@@ -182,6 +183,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'API key request failed' }, { status: 500 })
   }

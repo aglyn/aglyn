@@ -274,6 +274,14 @@ export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
  */
 const featureGroups = (
   brand: string,
+  /**
+   * Whether video uploads are open for the org (AGL-2830). The row sells the
+   * `videoMedia` entitlement, which stays a plan inclusion either way, but
+   * "Video & file uploads" ticked on a paid tier promises something no plan
+   * can buy while the pause is on. Defaults open, so the flat `FEATURE_ROWS`
+   * list keeps the entitlement's own name.
+   */
+  options: { videoUploads: boolean } = { videoUploads: true },
 ): Array<{
   title: string
   rows: Array<{ key: FeatureKey; label: string }>
@@ -289,7 +297,12 @@ const featureGroups = (
       { key: 'multilingual', label: 'Multilingual sites' },
       { key: 'redirects', label: 'URL redirects' },
       { key: 'siteExport', label: 'Site backup & restore' },
-      { key: 'videoMedia', label: 'Video & file uploads' },
+      {
+        key: 'videoMedia',
+        label: options.videoUploads
+          ? 'Video & file uploads'
+          : 'File uploads (video uploads paused)',
+      },
       { key: 'mediaCdn', label: 'CDN delivery & responsive images' },
     ],
   },
@@ -633,8 +646,9 @@ function upgradeGains(
   from: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   to: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   brand: string,
+  options: { videoUploads: boolean } = { videoUploads: true },
 ): string[] {
-  return featureGroups(brand)
+  return featureGroups(brand, options)
     .flatMap((group) => group.rows)
     .filter((row) => !from.features[row.key] && to.features[row.key])
     .map((row) => row.label)
@@ -651,8 +665,9 @@ function upgradeGains(
 function keyFeatures(
   entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   brand: string,
+  options: { videoUploads: boolean } = { videoUploads: true },
 ): string[] {
-  return featureGroups(brand)
+  return featureGroups(brand, options)
     .flatMap((group) => group.rows)
     .filter((row) => entitlements.features[row.key])
     .map((row) => row.label)
@@ -667,10 +682,14 @@ function keyFeatures(
  * a flag nobody sells above you is correctly absent rather than listed as a
  * loss, and nothing here is a feature that does not exist to be bought.
  */
-function missingFromTier(plan: OrgPlan, brand: string): string[] {
+function missingFromTier(
+  plan: OrgPlan,
+  brand: string,
+  options: { videoUploads: boolean } = { videoUploads: true },
+): string[] {
   const mine = PLAN_ENTITLEMENTS[plan]
   const above = PLAN_ORDER.slice(PLAN_ORDER.indexOf(plan) + 1)
-  return featureGroups(brand)
+  return featureGroups(brand, options)
     .flatMap((group) => group.rows)
     .filter(
       (row) =>
@@ -874,6 +893,11 @@ function FocusedTierView(props: {
     onCompare,
   } = props
   const contactsOverageBilled = useContactsOverageBilled()
+  // `released`, not `visible`, for the reason `useContactsOverageBilled`
+  // gives: plan copy follows what the org can use, not who is reading.
+  const featureLabels = {
+    videoUploads: useReleaseFlag('release_video_uploads').released,
+  }
   const current = PLAN_ENTITLEMENTS[currentTier]
   const price = (tier: OrgPlan) =>
     interval === 'year'
@@ -905,6 +929,7 @@ function FocusedTierView(props: {
               PLAN_ENTITLEMENTS[leftward as OrgPlan],
               PLAN_ENTITLEMENTS[rung as OrgPlan],
               brand,
+              featureLabels,
             )
           : []
         const tickRows = adds
@@ -920,7 +945,11 @@ function FocusedTierView(props: {
             ? ENTERPRISE_HIGHLIGHTS.slice(0, 5).map(
                 (highlight) => highlight.label,
               )
-            : keyFeatures(PLAN_ENTITLEMENTS[rung as OrgPlan], brand)
+            : keyFeatures(
+                PLAN_ENTITLEMENTS[rung as OrgPlan],
+                brand,
+                featureLabels,
+              )
         return (
           <Grid key={String(rung)} size={{ xs: 12, md: span }}>
             <Card
@@ -1142,7 +1171,7 @@ function FocusedTierView(props: {
                 </Stack>
 
                 {role === 'current' &&
-                missingFromTier(currentTier, brand).length ? (
+                missingFromTier(currentTier, brand, featureLabels).length ? (
                   <>
                     <Divider sx={{ my: 1.5 }} />
                     <Typography
@@ -1153,7 +1182,7 @@ function FocusedTierView(props: {
                       {'Not in your plan'}
                     </Typography>
                     <Stack spacing={0.75} sx={{ mt: 0.75 }}>
-                      {capped(missingFromTier(currentTier, brand)).shown.map(
+                      {capped(missingFromTier(currentTier, brand, featureLabels)).shown.map(
                         (line) => (
                           <Stack
                             key={line}
@@ -1175,14 +1204,14 @@ function FocusedTierView(props: {
                           </Stack>
                         ),
                       )}
-                      {capped(missingFromTier(currentTier, brand)).more ? (
+                      {capped(missingFromTier(currentTier, brand, featureLabels)).more ? (
                         <Typography
                           variant="body2"
                           color="text.secondary"
                           sx={{ pl: 4 }}
                         >
                           {`and ${
-                            capped(missingFromTier(currentTier, brand)).more
+                            capped(missingFromTier(currentTier, brand, featureLabels)).more
                           } more`}
                         </Typography>
                       ) : null}
@@ -1553,7 +1582,10 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
   // their own product name on the grid that sells them the tier.
   const { branding } = useBranding()
   const taglines = planTaglines(branding.productName)
-  const groups = featureGroups(branding.productName)
+  // `released`, not `visible`: see `featureGroups` (AGL-2830).
+  const groups = featureGroups(branding.productName, {
+    videoUploads: useReleaseFlag('release_video_uploads').released,
+  })
   // An enterprise org sits above the ladder: nothing in the grid is its
   // "current" plan, and nothing there is an upgrade for it either.
   const currentIndex = enterprise || !plan ? -1 : PLAN_ORDER.indexOf(plan)

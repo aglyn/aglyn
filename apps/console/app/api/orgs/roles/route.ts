@@ -33,6 +33,7 @@ import {
   syncOrgAuthProjections,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath } from 'firebase-admin/firestore'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Custom roles returned per request (AGL-2334).
@@ -222,6 +223,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Role management failed' }, { status: 500 })
   }

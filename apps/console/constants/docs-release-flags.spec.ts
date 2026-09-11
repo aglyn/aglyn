@@ -22,30 +22,52 @@
  * Structure mirrors that guard's lesson: a check that can only ever report
  * "nothing is wrong" says exactly that once its marker moves, so the
  * anti-vacuity block below fails on an empty registry, on a stale path, on an
- * undeclared OFF flag, and on a run where no page assertion actually executed.
+ * undeclared OFF flag, on a run where no page assertion actually executed, and
+ * on a run where no page was required to disclose anything.
  */
 
 import { execFileSync } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/aglyn'
+import {
+  isReleaseFlagOn,
+  parseReleaseFlagValue,
+  RELEASE_FLAG_PLAN_LADDER,
+  RELEASE_FLAGS,
+  type ReleaseFlagKey,
+} from '@aglyn/aglyn'
 import {
   FLAG_DOC_PAGES,
   FLAGS_WITHOUT_DOCS,
   OFF_BY_DEFAULT_FLAG_KEYS,
   PRICE_CLAIM_PATTERNS,
+  PUBLISHED_ON_IN_PRODUCTION,
   ROLLING_OUT_ADMONITION,
   type FlagDocPage,
+  type PublishedOnEvidence,
 } from './docs-release-flags'
 
 const DOCS_ROOT = join(__dirname, '../../..', 'apps/docs')
 
+const isPublishedOn = (key: ReleaseFlagKey): boolean =>
+  PUBLISHED_ON_IN_PRODUCTION[key] !== undefined
+
+/**
+ * Whether the docs must treat the feature as one the reader cannot open. The
+ * registry default is only what an unreachable Remote Config falls back to,
+ * so a flag production publishes ON counts as ON here however it defaults.
+ */
 const isOff = (key: ReleaseFlagKey): boolean =>
-  OFF_BY_DEFAULT_FLAG_KEYS.includes(key)
+  OFF_BY_DEFAULT_FLAG_KEYS.includes(key) && !isPublishedOn(key)
 
 const declaredEntries = Object.entries(FLAG_DOC_PAGES) as [
   ReleaseFlagKey,
   readonly FlagDocPage[],
+][]
+
+const publishedOnEntries = Object.entries(PUBLISHED_ON_IN_PRODUCTION) as [
+  ReleaseFlagKey,
+  PublishedOnEvidence,
 ][]
 
 /**
@@ -70,6 +92,14 @@ const readPage = (page: FlagDocPage): string =>
  * pass. Asserted at the bottom of the file, after the per-page suites have run.
  */
 let contentAssertions = 0
+
+/**
+ * The subset of `contentAssertions` that REQUIRED a disclosure. The total
+ * alone cannot see the disclosure half go vacuous: a registry whose every OFF
+ * flag is declared published-ON still reads its pages, but only to find a
+ * marker absent.
+ */
+let disclosureAssertions = 0
 
 describe('docs release-flag registry (AGL-1605)', () => {
   describe('anti-vacuity', () => {
@@ -98,9 +128,11 @@ describe('docs release-flag registry (AGL-1605)', () => {
 
     it('has at least one OFF flag with real pages to check', () => {
       // "Every OFF flag is declared" is satisfiable by moving them all into
-      // FLAGS_WITHOUT_DOCS. This is the half that notices.
+      // FLAGS_WITHOUT_DOCS, and "OFF" is satisfiable by declaring them all in
+      // PUBLISHED_ON_IN_PRODUCTION. This is the half that notices either: a
+      // published-ON flag's pages are held only to the absence of a marker.
       const offWithPages = OFF_BY_DEFAULT_FLAG_KEYS.filter(
-        (key) => (FLAG_DOC_PAGES[key]?.length ?? 0) > 0,
+        (key) => isOff(key) && (FLAG_DOC_PAGES[key]?.length ?? 0) > 0,
       )
       expect(offWithPages.length).toBeGreaterThan(0)
     })
@@ -129,6 +161,77 @@ describe('docs release-flag registry (AGL-1605)', () => {
         ...Object.keys(FLAGS_WITHOUT_DOCS),
       ]) {
         expect(known.has(key as ReleaseFlagKey)).toBe(true)
+      }
+    })
+
+    it('declares published-ON only for registry flags that are OFF by default', () => {
+      // A flag that defaults ON has no default to override, and an entry for
+      // one would outlive the decision it records. An unknown key exempts
+      // nothing, so it is a dead declaration that still reads as evidence.
+      const known = new Map(RELEASE_FLAGS.map((flag) => [flag.key, flag]))
+      for (const [key] of publishedOnEntries) {
+        const flag = known.get(key)
+        if (!flag) {
+          throw new Error(
+            `PUBLISHED_ON_IN_PRODUCTION names ${key}, which is not a release flag. Rename the entry to the flag's current key, or remove it.`,
+          )
+        }
+        if (flag.defaultEnabled) {
+          throw new Error(
+            `PUBLISHED_ON_IN_PRODUCTION declares ${key}, which is already ON by default. The declaration exists only to override an OFF default; remove the entry.`,
+          )
+        }
+      }
+    })
+
+    it('backs every published-ON declaration with evidence of a full release', () => {
+      // The evidence has to be checkable, and the recorded value has to be one
+      // the gate itself reads as ON for everyone. With no subject,
+      // `isReleaseFlagOn` passes only a flag enabled outright, so a percentage
+      // rollout fails here; walking every plan catches a tier list.
+      for (const [key, evidence] of publishedOnEntries) {
+        expect([key, evidence.templateVersion]).toEqual([
+          key,
+          expect.any(Number),
+        ])
+        expect([
+          key,
+          Number.isInteger(evidence.templateVersion) &&
+            evidence.templateVersion > 0,
+        ]).toEqual([key, true])
+        expect([key, evidence.publishedAt]).toEqual([
+          key,
+          expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        ])
+        const publishedAt = Date.parse(evidence.publishedAt)
+        expect([
+          key,
+          Number.isFinite(publishedAt) && publishedAt <= Date.now(),
+        ]).toEqual([key, true])
+        expect([key, evidence.defaultStaysOff.trim().length > 0]).toEqual([
+          key,
+          true,
+        ])
+        expect([key, evidence.precondition.trim().length > 0]).toEqual([
+          key,
+          true,
+        ])
+
+        const value = parseReleaseFlagValue(evidence.publishedValue, false)
+        const leftOut = [null, ...RELEASE_FLAG_PLAN_LADDER].filter(
+          (plan) => !isReleaseFlagOn(key, value, null, plan),
+        )
+        if (leftOut.length > 0) {
+          throw new Error(
+            `PUBLISHED_ON_IN_PRODUCTION.${key} records ${
+              evidence.publishedValue
+            }, which the release gate does not turn on for every workspace (off for: ${leftOut
+              .map((plan) => plan ?? 'no plan')
+              .join(
+                ', ',
+              )}). A partial rollout still owes its pages the disclosure; remove the entry until production publishes the flag enabled outright.`,
+          )
+        }
       }
     })
 
@@ -190,6 +293,7 @@ describe('docs release-flag registry (AGL-1605)', () => {
 
           for (const pattern of patterns) {
             contentAssertions += 1
+            if (off) disclosureAssertions += 1
             const matched = pattern.test(source)
             if (off && !matched) {
               throw new Error(
@@ -201,7 +305,9 @@ describe('docs release-flag registry (AGL-1605)', () => {
               // disclosures have to come down, or the guard rots into a
               // permanent pass and the docs understate a shipped feature.
               throw new Error(
-                `${key} is now ON, but apps/docs/${page.path} still carries a rolling-out disclosure: ${pattern}. Remove it (and its registry entry if the page no longer needs watching).`,
+                isPublishedOn(key)
+                  ? `${key} is published ON in production (PUBLISHED_ON_IN_PRODUCTION in docs-release-flags.ts), but apps/docs/${page.path} still carries a rolling-out disclosure: ${pattern}. Its registry default stays OFF on purpose, which is not a rollout. Remove the disclosure.`
+                  : `${key} is now ON, but apps/docs/${page.path} still carries a rolling-out disclosure: ${pattern}. Remove it (and its registry entry if the page no longer needs watching).`,
               )
             }
           }
@@ -236,6 +342,13 @@ describe('docs release-flag registry (AGL-1605)', () => {
       // means every page assertion was skipped — the shape of pass this guard
       // exists to make impossible.
       expect(contentAssertions).toBeGreaterThan(0)
+    })
+
+    it('required a rolling-out disclosure on at least one page', () => {
+      // The disclosure half on its own. Every page assertion can still run
+      // with none of them requiring a marker — declare every OFF flag
+      // published-ON and the total above stays positive.
+      expect(disclosureAssertions).toBeGreaterThan(0)
     })
   })
 })

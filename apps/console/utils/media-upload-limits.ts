@@ -320,20 +320,59 @@ export function directUploadMaxBytes(contentType: string): number | undefined {
 }
 
 /**
+ * The release flag that decides whether an org may store a NEW video
+ * (AGL-2830). It is OFF by default, so every ingress route refuses a video
+ * and the library stops offering one until staff turn it on: for everyone at
+ * `/admin/flags`, or for one org through its release-flag override.
+ *
+ * A video already stored is not affected either way. The flag gates ingress,
+ * not delivery.
+ */
+export const VIDEO_UPLOADS_RELEASE_FLAG = 'release_video_uploads' as const
+
+/** The `code` on every refusal of a paused video, console and `/v1` alike. */
+export const VIDEO_UPLOADS_PAUSED_CODE = 'video_uploads_paused'
+
+/** What a person is told when a video is refused while uploads are paused. */
+export const VIDEO_UPLOADS_PAUSED_MESSAGE =
+  'Video uploads are paused. Videos already in your media library keep ' +
+  'playing, and images and documents upload as usual.'
+
+/**
+ * Whether an accepted content type is a video — the one family the pause
+ * refuses. Derived from {@link UPLOAD_TYPES} like every other layer, so a
+ * video row added to the table is paused with the rest.
+ */
+export function isVideoUploadType(contentType: string): boolean {
+  return VIDEO_TYPES.has(contentType)
+}
+
+/**
  * The library file input's `accept`. Extensions are listed alongside the
  * MIME types because browsers report an empty type for several of these
  * (`.zip` on macOS, `.md` almost everywhere) and would otherwise grey the
  * file out in the picker.
+ *
+ * `video: false` drops every video row, MIME type and extension both, for a
+ * library whose org cannot store video right now (AGL-2830).
  */
-export const UPLOAD_ACCEPT_ATTRIBUTE = [
-  'image/*',
-  ...UPLOAD_TYPES.map((spec) => spec.contentType),
-  // Windows' zip alias — historically present in `accept` and the client
-  // pre-check but NOT the server allowlist. Folded by
-  // `normalizeUploadContentType`, listed here so the picker shows it.
-  'application/x-zip-compressed',
-  ...UPLOAD_TYPES.flatMap((spec) => spec.extensions),
-].join(',')
+export function uploadAcceptAttribute(options: { video: boolean }): string {
+  const rows = UPLOAD_TYPES.filter(
+    (spec) => options.video || !isVideoUploadType(spec.contentType),
+  )
+  return [
+    'image/*',
+    ...rows.map((spec) => spec.contentType),
+    // Windows' zip alias — historically present in `accept` and the client
+    // pre-check but NOT the server allowlist. Folded by
+    // `normalizeUploadContentType`, listed here so the picker shows it.
+    'application/x-zip-compressed',
+    ...rows.flatMap((spec) => spec.extensions),
+  ].join(',')
+}
+
+/** Every accepted type, video included. */
+export const UPLOAD_ACCEPT_ATTRIBUTE = uploadAcceptAttribute({ video: true })
 
 /**
  * The `accept` for a picker that may only offer ONE family (AGL-2732).
@@ -347,10 +386,14 @@ export const UPLOAD_ACCEPT_ATTRIBUTE = [
  * Derived from {@link UPLOAD_TYPES} like every other layer. An unrecognized
  * family (a legacy asset with no usable stored type) falls back to the full
  * attribute rather than to nothing, which matches the route's own decision to
- * let that asset be replaced at all.
+ * let that asset be replaced at all. That fallback drops video while
+ * `options.video` is false, exactly as the library's own input does.
  */
-export function uploadAcceptForKind(kind: MediaUploadKind | undefined): string {
-  if (!kind) return UPLOAD_ACCEPT_ATTRIBUTE
+export function uploadAcceptForKind(
+  kind: MediaUploadKind | undefined,
+  options: { video: boolean } = { video: true },
+): string {
+  if (!kind) return uploadAcceptAttribute(options)
   if (kind === 'image') return 'image/*'
   const rows = UPLOAD_TYPES.filter(
     (spec) => mediaUploadKind(spec.contentType) === kind,
@@ -363,10 +406,23 @@ export function uploadAcceptForKind(kind: MediaUploadKind | undefined): string {
   ].join(',')
 }
 
+/** Every family but video, as the "supported uploads" sentence names them. */
+const NON_VIDEO_UPLOADS_LABEL =
+  'PDF, ZIP, Word, Excel, PowerPoint, CSV, text, Markdown and JSON'
+
+/**
+ * The "supported uploads" sentence. `video: false` stops naming video as a
+ * thing to upload and says it is paused (AGL-2830), for a library whose org
+ * cannot store one right now.
+ */
+export function uploadTypesMessage(options: { video: boolean }): string {
+  return options.video
+    ? `Supported uploads: images, mp4/webm/quicktime video, ${NON_VIDEO_UPLOADS_LABEL}`
+    : `Supported uploads: images, ${NON_VIDEO_UPLOADS_LABEL} (video uploads are paused)`
+}
+
 /** One sentence, used by the client snackbar and both routes' 415s. */
-export const UPLOAD_TYPES_MESSAGE =
-  'Supported uploads: images, mp4/webm/quicktime video, PDF, ZIP, ' +
-  'Word, Excel, PowerPoint, CSV, text, Markdown and JSON'
+export const UPLOAD_TYPES_MESSAGE = uploadTypesMessage({ video: true })
 
 export const SIGNED_UPLOAD_TYPES_MESSAGE = UPLOAD_TYPES_MESSAGE
 

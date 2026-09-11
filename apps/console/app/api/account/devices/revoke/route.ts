@@ -17,6 +17,7 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { isValidDeviceId, revokeDeviceSession } from '../../../_lib/device-registry'
+import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — account-scoped, and the one action worth keeping
 // reachable during an incident. There is no org context here and no capability
@@ -122,14 +123,14 @@ async function handler(request: Request): Promise<Response> {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {
-    const code = (error as { code?: string })?.code ?? ''
-    if (
-      code === 'auth/id-token-revoked' ||
-      code === 'auth/id-token-expired' ||
-      code === 'auth/argument-error'
-    ) {
-      return Response.json({ error: 'Unauthenticated' }, { status: 401 })
-    }
+    // A refused credential is a 401, not a fault of ours (AGL-1993). With
+    // `checkRevoked`, firebase-admin's own lookup raises `auth/user-not-found`
+    // for a deleted account and `auth/user-disabled` for a disabled one, and
+    // every Admin Auth call above acts on the verified uid, so each code the
+    // helper recognizes is a statement about THIS caller. A cert-fetch outage
+    // or an error with no auth code keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[account/devices/revoke]', error)
     return Response.json({ error: 'Revoke failed' }, { status: 500 })
   }

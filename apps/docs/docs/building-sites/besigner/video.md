@@ -16,6 +16,12 @@ Set a **Video source** with **Browse media**. A video from your media library
 arrives with a poster frame, its running time and its dimensions already filled
 in — you only need **Poster image** to override the frame the library picked.
 
+:::note Video uploads are paused
+New video files cannot be uploaded to the media library for now. The **Video** element
+can still use any video that is already in your library, or
+[a video hosted on Wistia](#video-wistia).
+:::
+
 :::tip
 Picking a video from the media library copies its dimensions onto the element, which
 reserves the right-shaped box before anything loads and stops the rest of the page
@@ -42,6 +48,28 @@ paints a black rectangle. If you want the old behavior on a postered video, set
 Turn on **Open in a lightbox** and the poster becomes a play button that opens the
 film full size over the page, with a close button and `Esc` to dismiss. It needs a
 poster; without one the player stays in the page as usual.
+
+The lightbox has its own player controls: play, a seek bar with the time, mute and
+volume, captions when the video has a captions file, and full screen. Each one works
+from the keyboard. `Space` or `K` plays and pauses, the left and right arrows skip
+five seconds, `M` mutes, `F` goes full screen, and `Esc` closes the lightbox from any
+control, leaving full screen first if it is on.
+
+## A video hosted on Wistia {#video-wistia}
+
+Paste a Wistia media link into **Video source**: the address of the video's page in
+your Wistia account, or its embed link. Then pick a **Poster image** from your media
+library. The poster becomes a play button, and Wistia's player loads only when a
+visitor presses it, so someone who never presses play never contacts Wistia. The
+player opens in the lightbox when **Open in a lightbox** is on, and in place of the
+poster when it is off. Without a poster the element asks for one instead of loading
+the player.
+
+Wistia's player brings its own controls. In the lightbox, `Esc` closes it until you
+move into the player; from inside the player, `Shift`+`Tab` reaches the close button.
+Wistia records a viewing only for a visitor whose analytics consent your site has on
+record, and plays with its tracking off for everyone else. Type the running time into
+**Duration (seconds)**, because a Wistia link does not carry it.
 
 ## The three fields a search result needs {#video-seo}
 

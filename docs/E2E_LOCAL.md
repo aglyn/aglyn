@@ -120,14 +120,18 @@ files into a real bucket. The two films it uploads are committed under
 `tools/e2e/fixtures/`; every other fixture is generated per run, and every
 name carries the run id, so it is re-runnable without a re-seed.
 
-One step is expected to fail until AGL-2802 is decided: Escape from inside
-Chrome's native player controls. From those focus stops no Escape event
-reaches the page in any phase, so the dialog cannot hear it; the step closes
-the dialog with its button so the rest of the run is unaffected.
+The lightbox's player draws its own controls (AGL-2802), because Chrome's
+native ones keep Escape from the page: from inside them no key event reaches it
+in any phase. The spec reads the dialog's tab order, reaches each stop with Tab,
+checks it draws a focus ring, presses Escape, and checks the dialog closed and
+focus went back to the trigger. It then presses the player's own keys in Chrome
+(K, M, the arrows, and F with Escape leaving full screen first). A stop that
+stays open is closed with its button, so the rest of the run is unaffected.
 
 What it cannot see: Vercel's edge. A replaced image can stay edge-cached under
-its stable URL for up to `s-maxage`, and under a content-pinned URL for a year
-(AGL-2798). Locally there is no edge, so the spec proves the origin half only.
+its stable URL for up to `s-maxage`. A page never names the content-hashed URL,
+which an edge keeps for a year (AGL-2798), and the spec checks that it does
+not. Locally there is no edge, so the spec proves the origin half only.
 The player's play beacon is gated to production surfaces and sends nothing
 from a loopback page; `video-playback-beacon.spec.tsx` covers it.
 

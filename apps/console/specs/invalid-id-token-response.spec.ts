@@ -38,6 +38,10 @@
  * reds 1, and leaking the code into the body reds 1.
  */
 
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import ts from 'typescript'
 import { invalidIdTokenResponse } from '../app/api/_lib/invalid-id-token-response'
 
 /** An error shaped like the ones firebase-admin actually throws. */
@@ -157,39 +161,154 @@ describe('invalidIdTokenResponse — something broke on OUR side (AGL-1993)', ()
 })
 
 /**
- * Every admin route must actually USE it. The helper being correct and
- * unreferenced is the shape this repo keeps finding (written but never read),
- * so the wiring is pinned rather than assumed.
+ * Every console route that verifies an ID token must actually USE it —
+ * `/api/admin` since AGL-1993, every other route since AGL-2796, whose 71
+ * catch-alls answered a deleted account's token with 500 and paged. The helper
+ * being correct and unreferenced is the shape this repo keeps finding (written
+ * but never read), so the wiring is pinned rather than assumed.
+ *
+ * ## Why it reads the catch, not only the file
+ *
+ * "The file calls the helper" passes a route with two verifications and one
+ * wired catch: `auth/legal-acceptance` verifies in two handlers, and several
+ * routes verify in a try of their own ahead of the one that does the work. So
+ * each `.verifyIdToken(` is traced to the innermost `try` that catches it
+ * within the same function, and THAT catch must consult the helper. A call
+ * with no such `try` in its own function (a `verifyCaller` whose caller does
+ * the catching) is held to the file check alone.
+ *
+ * ## The deliberate exceptions
+ *
+ * Each is named with its reason and held to two conditions, so a stale entry
+ * cannot hide a regression: the route must still verify a token, and the catch
+ * around its verification must be unable to answer 5xx at all.
  */
-describe('every admin route that verifies a token uses it (AGL-1993)', () => {
-  it('leaves no route answering 500 for a refused credential', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { execSync } = require('node:child_process')
-    const root = require('node:path').resolve(__dirname, '../../..')
-    const verifying: string[] = execSync(
-      'git ls-files -- apps/console/app/api/admin | grep "route.ts$"',
-      { cwd: root, encoding: 'utf8' },
+describe('every console route that verifies a token uses it (AGL-1993, AGL-2796)', () => {
+  const REPO_ROOT = resolve(__dirname, '../../..')
+  const CALLS_HELPER = /\binvalidIdTokenResponse\(/
+
+  const DELIBERATE_EXCEPTIONS: Readonly<Record<string, string>> = {
+    'apps/console/app/api/[...pluginApi]/route.ts':
+      'A refused token is read as an anonymous caller and the dispatch goes ' +
+      'on: tenant form posts reach the same registry with no token at all, ' +
+      'and the plugin handler decides what an anonymous caller may do.',
+    'apps/console/app/api/screens/revalidate/route.ts':
+      'Never a 5xx to the editor: the publish already succeeded, so every ' +
+      'failure, a refused token included, answers 200 `reason: error`.',
+  }
+
+  const read = (file: string) => readFileSync(join(REPO_ROOT, file), 'utf8')
+
+  const verifying = execFileSync(
+    'git',
+    ['ls-files', '--', 'apps/console/app/api'],
+    { cwd: REPO_ROOT, encoding: 'utf8' },
+  )
+    .split('\n')
+    .filter((file) => /\/route\.tsx?$/.test(file))
+    .filter((file) => /\.verifyIdToken\(/.test(read(file)))
+
+  const parse = (file: string) =>
+    ts.createSourceFile(
+      file,
+      read(file),
+      ts.ScriptTarget.Latest,
+      true,
+      file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     )
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .filter((file: string) =>
-        require('node:fs')
-          .readFileSync(require('node:path').join(root, file), 'utf8')
-          .includes('verifyIdToken'),
-      )
 
-    // Anti-vacuity: if this ever reads zero files the assertion below is
-    // meaningless, and a silently-empty guard is the thing that lets a
-    // regression through.
-    expect(verifying.length).toBeGreaterThan(35)
+  /** Every `.verifyIdToken(` call in a file, paired with the catch around it. */
+  const verifications = (file: string) => {
+    const source = parse(file)
+    const found: { line: number; handler: ts.CatchClause | null }[] = []
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === 'verifyIdToken'
+      ) {
+        let handler: ts.CatchClause | null = null
+        let child: ts.Node = node
+        // Stops at the function boundary: a catch in an OUTER function does
+        // not run when this call throws inside a callback it never awaited.
+        for (
+          let parent = node.parent;
+          parent && !ts.isFunctionLike(parent);
+          parent = parent.parent
+        ) {
+          if (
+            ts.isTryStatement(parent) &&
+            parent.tryBlock === child &&
+            parent.catchClause
+          ) {
+            handler = parent.catchClause
+            break
+          }
+          child = parent
+        }
+        const { line } = source.getLineAndCharacterOfPosition(
+          node.getStart(source),
+        )
+        found.push({ line: line + 1, handler })
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(source)
+    return { source, found }
+  }
 
+  it('sweeps admin and non-admin routes alike', () => {
+    // Anti-vacuity: a sweep that reads nothing passes everything, and a
+    // silently-empty guard is the thing that lets a regression through.
+    expect(verifying.length).toBeGreaterThan(130)
+    expect(verifying).toContain('apps/console/app/api/admin/users/route.ts')
+    expect(verifying).toContain('apps/console/app/api/hosts/delete/route.ts')
+  })
+
+  it('leaves no route that never consults it', () => {
     const missing = verifying.filter(
-      (file: string) =>
-        !require('node:fs')
-          .readFileSync(require('node:path').join(root, file), 'utf8')
-          .includes('invalidIdTokenResponse'),
+      (file) => !(file in DELIBERATE_EXCEPTIONS) && !CALLS_HELPER.test(read(file)),
     )
     expect(missing).toEqual([])
+  })
+
+  it('consults it in the catch around every verification, not only somewhere in the file', () => {
+    const unwired = verifying
+      .filter((file) => !(file in DELIBERATE_EXCEPTIONS))
+      .flatMap((file) => {
+        const { source, found } = verifications(file)
+        return found
+          .filter(
+            ({ handler }) =>
+              handler && !CALLS_HELPER.test(handler.getText(source)),
+          )
+          .map(({ line }) => `${file}:${line}`)
+      })
+    expect(unwired).toEqual([])
+  })
+
+  it('names only exceptions that still verify a token and cannot answer 5xx', () => {
+    const canAnswerServerError = (handler: ts.CatchClause) => {
+      let found = false
+      const visit = (node: ts.Node) => {
+        if (ts.isThrowStatement(node)) found = true
+        if (ts.isNumericLiteral(node) && /^5\d\d$/.test(node.text)) found = true
+        ts.forEachChild(node, visit)
+      }
+      visit(handler.block)
+      return found
+    }
+    for (const file of Object.keys(DELIBERATE_EXCEPTIONS)) {
+      expect([file, verifying.includes(file)]).toEqual([file, true])
+      const { found } = verifications(file)
+      expect([file, found.length > 0]).toEqual([file, true])
+      for (const { line, handler } of found) {
+        expect([`${file}:${line}`, Boolean(handler)]).toEqual([`${file}:${line}`, true])
+        expect([`${file}:${line}`, canAnswerServerError(handler)]).toEqual([
+          `${file}:${line}`,
+          false,
+        ])
+      }
+    }
   })
 })

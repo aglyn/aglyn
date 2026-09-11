@@ -26,6 +26,7 @@ import {
   getOrgForUser,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — support must stay reachable: the lockdown notice itself says
 // "contact support", and a locked member doing so is the happy path.
@@ -215,6 +216,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Forum operation failed' }, { status: 500 })
   }

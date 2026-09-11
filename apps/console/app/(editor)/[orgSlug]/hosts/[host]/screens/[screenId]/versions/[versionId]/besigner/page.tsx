@@ -162,7 +162,9 @@ import {
   collectionTemplateRoutesSummary,
 } from '../../../../../../../../../../constants/collection-templates'
 import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
-import useScreenLinkRoutes from '../../../../../../../../../../hooks/use-screen-link-routes'
+import useScreenLinkRoutes, {
+  screenLinkLabels,
+} from '../../../../../../../../../../hooks/use-screen-link-routes'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useHostComponentDefinitions from '../../../../../../../../../../hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
@@ -1549,17 +1551,14 @@ function BesignerPage(props) {
   const screenLinks = useMemo(
     () => ({
       screens: linkableRoutes,
-      labels: Object.fromEntries(
-        Object.entries(screensById).map(([id, screen]) => [
-          id,
-          screen?.displayName ?? id,
-        ]),
-      ),
+      labels: screenLinkLabels(screenDocs, {
+        listingTargets: collectionTemplates.listingTargets,
+      }),
       suppressNavigation: true,
       // Static canvas: interactions inert, menus/drawers show editor affordance (AGL-830).
       editorInert: true,
     }),
-    [linkableRoutes, screensById],
+    [linkableRoutes, screenDocs, collectionTemplates.listingTargets],
   )
 
   useEffect(() => {

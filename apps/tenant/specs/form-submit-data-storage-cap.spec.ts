@@ -186,6 +186,7 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 }))
 
 import { POST } from '../app/api/forms/submit/route'
+import { signFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
 
 /** A dataset document the route will accept and append to. */
 const datasetDoc = (overrides: Record<string, any> = {}) => {
@@ -229,8 +230,12 @@ const submit = (body: Record<string, unknown> = {}) =>
         formName: 'Contact',
         path: '/contact',
         fields: { email: 'visitor@example.com', message: 'hello' },
-        datasetId: 'dataset-1',
-        fieldMap: { email: 'email', message: 'message' },
+        // The binding the page's compose signed into this form (AGL-2773);
+        // the route writes a record nowhere else.
+        datasetBinding: signFormDatasetBinding(HOST_ID, {
+          datasetId: 'dataset-1',
+          fieldMap: { email: 'email', message: 'message' },
+        }),
         ...body,
       }),
     }),
@@ -238,6 +243,7 @@ const submit = (body: Record<string, unknown> = {}) =>
 
 
 beforeEach(() => {
+  process.env['TOKEN_SIGNING_SECRET'] = 'test-signing-secret'
   mockStore = { [`hosts/${HOST_ID}`]: { name: 'Site' } }
   mockDatasetRecords = []
   mockSubmissionUpdates = []

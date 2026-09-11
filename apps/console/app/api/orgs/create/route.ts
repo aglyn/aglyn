@@ -42,6 +42,7 @@ import {
   recordSignupRefusal,
 } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Creates an organization for the signed-in user (AGL-233). Like Slack,
@@ -274,6 +275,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ orgId, slug }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     if (error instanceof OrgSlugTakenError) {
       return Response.json({ error: 'That workspace URL is taken' }, { status: 409 })
     }

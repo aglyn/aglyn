@@ -164,6 +164,7 @@ import {
   PLAN_LABELS,
   planLabelGrantingFeature,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 export const dynamic = 'force-dynamic'
 
@@ -214,8 +215,13 @@ async function handler(request: Request): Promise<Response> {
   let decoded: Record<string, unknown> & { uid: string; email_verified?: boolean }
   try {
     decoded = (await firebaseAdmin.app().auth().verifyIdToken(idToken)) as never
-  } catch {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  } catch (error) {
+    // A refused credential is a 401 (AGL-1993). A check that could not run is
+    // ours, so it is a 500 rather than a request to sign in again.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error('[email/sending-identity] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
   }
   if (!decoded.email_verified && !isImpersonationSession(decoded as never)) {
     return emailUnverifiedResponse()

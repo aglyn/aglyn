@@ -25,6 +25,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
 import { renderSystemEmail } from '../../_lib/render-system-email'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — account recovery/verification must always work; pre-org, and the
 // session mint carries the lockdown gate.
@@ -151,7 +152,10 @@ async function handler(request: Request): Promise<Response> {
     await meterPlatformEmail()
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {
-    console.error('[auth/send-verification] failed', error)
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     // Identity Platform throttles link minting on its own, ahead of and
     // independently of the per-uid budget above, and reports it as a 400
     // `auth/internal-error` carrying TOO_MANY_ATTEMPTS_TRY_LATER. Reported as
@@ -159,12 +163,21 @@ async function handler(request: Request): Promise<Response> {
     // over: the previous mail had been sent, and the fix is to wait rather
     // than to retry. This page mints a link on every mount, so returning here
     // is what someone reopening the tab actually meets.
+    //
+    // Logged as the throttle it is, and before anything logs the error: the
+    // error's own text is firebase-admin's generic "An internal error has
+    // occurred.", which reads as a fault to anyone triaging the logs, and the
+    // raw upstream response adds nothing that naming the throttle does not.
     if (isTooManyAttempts(error)) {
+      console.warn(
+        '[auth/send-verification] Identity Platform throttled the link mint (TOO_MANY_ATTEMPTS_TRY_LATER)',
+      )
       return Response.json(
         { error: 'Too many requests — wait a moment before requesting another link.' },
         { status: 429 },
       )
     }
+    console.error('[auth/send-verification] failed', error)
     return Response.json({ error: 'Sending the email failed' }, { status: 500 })
   }
 }

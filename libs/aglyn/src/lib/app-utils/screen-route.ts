@@ -16,7 +16,9 @@
  */
 
 import { HOST_ERROR_SCREEN_SLOTS, type ScreenUid } from '../foundation'
+import { collectionListUrl } from './collection-entries'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
+import { formatCollectionLinkValue } from './screen-link-value'
 
 /**
  * Route path of a host's root screen. The tenant matcher joins the catch-all
@@ -391,6 +393,14 @@ export interface LinkableScreenRouteSources {
    * these before matching, so their routing-map path is a 404.
    */
   unrouted?: Iterable<string> | null | undefined
+  /**
+   * collection id → collection slug, for every CONTENT collection with a slug
+   * (AGL-2799): the collections whose listing `/{collectionSlug}` serves. Each
+   * becomes a link target of its own, keyed by `formatCollectionLinkValue`,
+   * so a link can name a blog's listing whether or not a list template screen
+   * renders it.
+   */
+  collectionListings?: Record<string, string> | null | undefined
 }
 
 /**
@@ -413,20 +423,44 @@ export interface LinkableScreenRouteSources {
  *
  * So the map every linking surface reads is derived here, from the same two
  * facts the router uses, and the picker can no longer offer a path the router
- * would refuse. A raw map with neither source given comes back unchanged; an
- * absent map with no overrides stays absent, because `undefined` means
- * "nothing resolves yet" to {@link ScreenLinkContext} and `{}` would mean
- * "resolved: nowhere".
+ * would refuse.
+ *
+ * A content collection's LISTING is a target in its own right (AGL-2799),
+ * keyed `collection:<collectionId>` beside the screen ids. Its path comes from
+ * `collectionListUrl`, the builder the pager, the canonical link and the
+ * sitemap already share, so a link cannot give a listing an address the rest
+ * of the site does not; and because the key is the collection's id rather than
+ * its slug, renaming the slug moves every link to it on the next render. A
+ * collection that is gone, or that has lost its slug, has no entry — the same
+ * absence `isScreenLinkBroken` reads as a dead target.
+ *
+ * A raw map with no source given comes back unchanged; an absent map with no
+ * overrides and no listings stays absent, because `undefined` means "nothing
+ * resolves yet" to {@link ScreenLinkContext} and `{}` would mean "resolved:
+ * nowhere".
  */
 export function linkableScreenRoutes(
   screens: Record<ScreenUid, string> | null | undefined,
   sources: LinkableScreenRouteSources = {},
 ): Record<ScreenUid, string> | undefined {
-  const { routedElsewhere, unrouted } = sources
+  const { routedElsewhere, unrouted, collectionListings } = sources
   const overrides = Object.entries(routedElsewhere ?? {})
-  if (!screens && !overrides.length) return undefined
+  const listings = Object.entries(collectionListings ?? {})
+  if (!screens && !overrides.length && !listings.length) return undefined
   const next: Record<ScreenUid, string> = { ...(screens ?? {}) }
   for (const id of unrouted ?? []) delete next[id]
+  for (const [collectionId, collectionSlug] of listings) {
+    const slug =
+      typeof collectionSlug === 'string'
+        ? collectionSlug.trim().replace(/^\/+|\/+$/g, '')
+        : ''
+    if (!collectionId.trim() || !slug) continue
+    // Built by the one listing-URL builder, then stored in the map's own
+    // format: no leading slash, which `resolveScreenHref` puts back.
+    next[formatCollectionLinkValue(collectionId)] = collectionListUrl({
+      collectionSlug: slug,
+    }).replace(/^\/+/, '')
+  }
   for (const [id, path] of overrides) {
     // A collection slug (`blog`) arrives in the map's own format already, but
     // the same fact is spelled `/blog` in half the places it is read from, and

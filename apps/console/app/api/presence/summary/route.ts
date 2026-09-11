@@ -24,6 +24,7 @@ import {
   lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import { summarizeOrgPresence } from '../../_lib/presence-summary'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Who is in each document of one site, for list rows and detail pages
@@ -159,7 +160,11 @@ async function handler(request: Request): Promise<Response> {
     )
   } catch (error) {
     const code = String((error as { code?: string })?.code ?? '')
-    if (code.startsWith('auth/')) {
+    // Decided by `invalidIdTokenResponse` (AGL-1993), not by the `auth/`
+    // prefix: an `auth/` code can also be ours — the Google cert fetch that
+    // firebase-admin reports as `auth/argument-error` — and an outage belongs
+    // to the fail-soft answer below, not to a sign-in the reader cannot fix.
+    if (invalidIdTokenResponse(error)) {
       console.warn('[presence/summary] refused:', code)
       return Response.json(
         { error: 'Your sign-in is no longer valid', reason: code },

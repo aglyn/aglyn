@@ -216,6 +216,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     poster: { width: 1280, height: 720, variants: [640] },
   }),
   isImpersonationSession: () => false,
+  // The release-flag verdict the video gate reads (AGL-2830). Recorded, so a
+  // case can assert WHICH flag and WHICH org were asked; `mockVideoUploads`
+  // is declared with the cases that close it, at the bottom of the file.
+  isServerReleaseFlagOnForOrg: async (key: string, orgId: unknown) => {
+    mockVideoUploads.calls.push([key, orgId])
+    return mockVideoUploads.open
+  },
   quarantinedUploadRefusal: async () => null,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -622,5 +629,100 @@ describe('the UI offers it for every family too (AGL-2732)', () => {
   it('leaves no image-only refusal in the route', () => {
     expect(route).not.toContain('Only images can be replaced')
     expect(route).toContain('isAllowedUploadType(contentType)')
+  })
+})
+
+/**
+ * Replace is a door onto video ingress too (AGL-2830): it stores a new film
+ * under a `cdnPath` that pages already embed. OPEN by default in this file,
+ * because the cases above are about what a replace does with a film it
+ * accepts; the cases below close it.
+ *
+ * Every refusal is paired with the replace that must still succeed on the
+ * same closed flag — an image and a PDF — so a route that refused everything
+ * could not pass.
+ */
+const mockVideoUploads: { open: boolean; calls: Array<[string, unknown]> } = {
+  open: true,
+  calls: [],
+}
+
+describe('a paused video cannot be swapped in either (AGL-2830)', () => {
+  beforeEach(() => {
+    mockVideoUploads.open = false
+    mockVideoUploads.calls = []
+    mockState.existing = {
+      contentType: 'video/mp4',
+      visibleTo: ['org'],
+      poster: { width: 1280, height: 720, variants: [640] },
+    }
+  })
+
+  afterEach(() => {
+    mockVideoUploads.open = true
+  })
+
+  it('refuses the base64 leg with the code the console renders, and touches nothing', async () => {
+    const response = await replace(MP4, 'video/mp4', {
+      video: { durationMs: 12_000, width: 1920, height: 1080 },
+    })
+    expect(response.status).toBe(403)
+    const body = await response.json()
+    expect(body.code).toBe('video_uploads_paused')
+    expect(String(body.error)).toMatch(/^Video uploads are paused\./)
+    // The film already there is untouched: nothing saved, no poster dropped,
+    // no document write, no counter delta.
+    expect(mockOps.saved).toEqual([])
+    expect(mockOps.deleted).toEqual([])
+    expect(mockMediaSet).not.toHaveBeenCalled()
+    expect(mockCounterSet).not.toHaveBeenCalled()
+  })
+
+  it('asks the video flag for the org that owns the asset', async () => {
+    await replace(MP4, 'video/mp4')
+    expect(mockVideoUploads.calls).toEqual([['release_video_uploads', 'org-1']])
+  })
+
+  it('refuses to mint a signed URL for a video', async () => {
+    const response = await call(replacePut, 'PUT', {
+      contentType: 'video/mp4',
+      fileName: 'recut.mp4',
+      sizeBytes: 40 * 1024 * 1024,
+    })
+    expect(response.status).toBe(403)
+    expect((await response.json()).code).toBe('video_uploads_paused')
+    expect(mockOps.signed).toEqual([])
+  })
+
+  it('refuses a staged video at finalize, deletes the staged object and keeps the master', async () => {
+    mockState.stagedBytes = MP4
+    mockState.stagedMetadata = { contentType: 'video/mp4', size: MP4.length }
+    const response = await call(replacePatch, 'PATCH', {})
+    expect(response.status).toBe(403)
+    expect(mockOps.deleted).toEqual([MOCK_STAGED])
+    expect(mockOps.moved).toEqual([])
+    expect(mockMediaSet).not.toHaveBeenCalled()
+    expect(mockCounterSet).not.toHaveBeenCalled()
+  })
+
+  it('still replaces an IMAGE while video is paused, without reading the flag', async () => {
+    mockState.existing = { contentType: 'image/png', visibleTo: ['org'] }
+    expect((await replace(PNG, 'image/png')).status).toBe(200)
+    expect(mockVideoUploads.calls).toEqual([])
+  })
+
+  it('still replaces a PDF while video is paused', async () => {
+    mockState.existing = { contentType: 'application/pdf', visibleTo: ['org'] }
+    expect((await replace(PDF, 'application/pdf')).status).toBe(200)
+    expect(mockVideoUploads.calls).toEqual([])
+  })
+
+  it('replaces the film once the flag opens for the org', async () => {
+    mockVideoUploads.open = true
+    const response = await replace(MP4, 'video/mp4', {
+      video: { durationMs: 12_000, width: 1920, height: 1080 },
+    })
+    expect(response.status).toBe(200)
+    expect(mockOps.saved[0]?.path).toBe(MOCK_MASTER)
   })
 })

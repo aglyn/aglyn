@@ -324,6 +324,57 @@ describe('buildPageMarkdown', () => {
     ).toBe('Blog\n')
   })
 
+  it('resolves a collection listing link from either slot (AGL-2799)', () => {
+    /*
+      A listing link stores the collection's id, and the map the router honors
+      carries the listing under `collection:<id>`. The Markdown follows it the
+      way the HTML does — including from the URL slot a component prop can put
+      it in, which is the half a local reading of `screenId` would miss.
+    */
+    const nodes = page(
+      {
+        a: {
+          componentId: 'muiScreenLink',
+          props: { screenId: 'collection:blog', children: 'Blog' },
+        },
+        b: {
+          componentId: 'muiButton',
+          props: { href: 'collection:blog', children: 'Read the blog' },
+        },
+      },
+      ['a', 'b'],
+    )
+    const markdown = buildPageMarkdown({
+      nodes,
+      context: {
+        origin: ORIGIN,
+        screenRoutes: { home: '/', 'collection:blog': 'blog' },
+      },
+    })
+    expect(markdown).toBe(
+      '[Blog](https://example.test/blog)\n\n[Read the blog](https://example.test/blog)\n',
+    )
+    expect(markdown).not.toContain('collection:')
+  })
+
+  it('emits the label alone when the linked collection is gone (AGL-2799)', () => {
+    const nodes = page(
+      {
+        link: {
+          componentId: 'muiScreenLink',
+          props: { screenId: 'collection:gone', href: '/blog', children: 'Blog' },
+        },
+      },
+      ['link'],
+    )
+    expect(
+      buildPageMarkdown({
+        nodes,
+        context: { origin: ORIGIN, screenRoutes: { 'collection:blog': 'blog' } },
+      }),
+    ).toBe('Blog\n')
+  })
+
   it('refuses a link target the page itself would refuse to render', () => {
     const nodes = page(
       {

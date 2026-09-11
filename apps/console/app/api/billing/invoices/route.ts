@@ -25,6 +25,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { describeStripeModeSplit } from '../../_lib/stripe-customer-mode-notice'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — a billing-locked org must be able to SEE what it owes to pay it;
 // part of the recovery surface AGL-1501 keeps sessions alive for.
@@ -162,6 +163,10 @@ async function handler(request: Request): Promise<Response> {
       ...(emptyFirstPage ? await describeStripeModeSplit(orgId) : {}),
     }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Invoice lookup failed' }, { status: 500 })
   }

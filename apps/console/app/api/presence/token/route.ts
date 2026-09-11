@@ -31,6 +31,7 @@ import {
   isImpersonationSession,
   lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Mint a Realtime Database token scoped to one org, for presence (AGL-675).
@@ -252,7 +253,12 @@ async function handler(request: Request): Promise<Response> {
     // thing nothing said. `reason` travels so the editor can name a remedy
     // instead of a status code.
     const code = String((error as { code?: string })?.code ?? '')
-    if (code.startsWith('auth/')) {
+    // Decided by `invalidIdTokenResponse` (AGL-1993), not by the `auth/`
+    // prefix: an `auth/` code can also be ours — the Google cert fetch that
+    // firebase-admin reports as `auth/argument-error`, a custom-token mint the
+    // broker's credentials were refused — and those are broker faults that
+    // must not read as a sign-in to repair. The body stays the editor's.
+    if (invalidIdTokenResponse(error)) {
       console.warn('[presence/token] refused:', code)
       return Response.json(
         { error: 'Your sign-in is no longer valid', reason: code },

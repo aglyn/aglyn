@@ -555,6 +555,13 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       "Whatever an embedded player receives from the visitor's browser, on a page the site author chose to put it on.",
   },
+  'fast.wistia.net': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Customer-chosen destination, the same shape as the YouTube and Vimeo embeds above. The Video element keeps only the media id from a Wistia link a site author pasted and rebuilds the player address on this host, and nothing loads until the visitor presses play. Aglyn placing its own films on its own surfaces through Wistia would be a vendor Aglyn chose, which needs a published /legal/subprocessors row first, as the advertising pixel on the marketing site has.",
+    dataReceived:
+      "Whatever an embedded player receives from the visitor's browser after they press play (IP and user-agent), on a page the site author chose to put it on, with Wistia's do-not-track flag set unless the visitor consented to analytics.",
+  },
   'picsum.photos': {
     disposition: 'not-a-subprocessor',
     reason:

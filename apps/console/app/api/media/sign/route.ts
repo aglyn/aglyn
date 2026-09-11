@@ -31,6 +31,7 @@ import {
   mintMediaSignature,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Mints a short-lived signed URL for a PRIVATE media asset (AGL-1051).
@@ -179,6 +180,10 @@ async function handler(request: Request): Promise<Response> {
       },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Could not sign media' }, { status: 500 })
   }

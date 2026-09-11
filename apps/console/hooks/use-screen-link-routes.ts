@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { linkableScreenRoutes, SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn'
+import {
+  formatCollectionLinkValue,
+  linkableScreenRoutes,
+  SCREEN_KIND_TEMPLATE,
+} from '@aglyn/aglyn'
 import { useMemo } from 'react'
 import type { UseCollectionTemplatesResult } from './use-collection-templates'
 
@@ -65,8 +69,12 @@ export function useScreenLinkRoutes(
   options: UseScreenLinkRoutesOptions,
 ): Record<string, string> | undefined {
   const { templates, routingMap, screens } = options
-  const { templateScreenIds, listTemplateScreenIds, listRoutesByScreenId } =
-    templates
+  const {
+    templateScreenIds,
+    listTemplateScreenIds,
+    listRoutesByScreenId,
+    listingTargets,
+  } = templates
   return useMemo(() => {
     const unrouted = new Set<string>()
     for (const id of templateScreenIds) {
@@ -83,9 +91,16 @@ export function useScreenLinkRoutes(
       if (!screen?.$id) continue
       if (screen.kind === SCREEN_KIND_TEMPLATE) unrouted.add(screen.$id)
     }
+    const collectionListings: Record<string, string> = {}
+    for (const [collectionId, target] of Object.entries(listingTargets ?? {})) {
+      collectionListings[collectionId] = target.slug
+    }
     return linkableScreenRoutes(routingMap, {
       routedElsewhere: listRoutesByScreenId,
       unrouted,
+      // Every content collection's listing page, as a target of its own
+      // (AGL-2799) — the same table the tenant renders links against.
+      collectionListings,
     })
   }, [
     routingMap,
@@ -93,7 +108,39 @@ export function useScreenLinkRoutes(
     templateScreenIds,
     listTemplateScreenIds,
     listRoutesByScreenId,
+    listingTargets,
   ])
+}
+
+/**
+ * The names the besigner's link pickers show, keyed exactly as
+ * {@link useScreenLinkRoutes} keys its map (AGL-2799): a screen under its id
+ * by its display name, a collection listing under its `collection:<id>` key by
+ * its collection's name.
+ *
+ * One function for every besigner surface rather than a mapping per page,
+ * because the key a listing is NAMED under has to be the key the map HOLDS it
+ * under — a copy spelling either one differently shows the listing by its raw
+ * document id.
+ */
+export function screenLinkLabels(
+  screens:
+    | ReadonlyArray<{ $id?: string; displayName?: string } | null | undefined>
+    | null
+    | undefined,
+  templates: Partial<Pick<UseCollectionTemplatesResult, 'listingTargets'>>,
+): Record<string, string> {
+  const labels: Record<string, string> = {}
+  for (const [collectionId, target] of Object.entries(
+    templates.listingTargets ?? {},
+  )) {
+    labels[formatCollectionLinkValue(collectionId)] = target.name
+  }
+  for (const screen of screens ?? []) {
+    if (!screen?.$id) continue
+    labels[screen.$id] = screen.displayName ?? screen.$id
+  }
+  return labels
 }
 
 export default useScreenLinkRoutes

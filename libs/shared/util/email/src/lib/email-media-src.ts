@@ -84,18 +84,15 @@ export function resolveEmailMediaSrc(
   const scope = rest.slice(0, slash)
   // A reference may carry a content pin, `…/{mediaId}@{contentHash}`
   // (AGL-2685). Neither half can contain '@', so the first one is the
-  // boundary; a malformed pin loses the pin and keeps the reference.
+  // boundary, and the pin itself names no URL.
   const tail = rest.slice(slash + 1)
   const at = tail.indexOf(MEDIA_REF_HASH_SEPARATOR)
   const mediaId = at === -1 ? tail : tail.slice(0, at)
-  const rawHash = at === -1 ? undefined : tail.slice(at + 1)
-  const contentHash = rawHash && SEGMENT.test(rawHash) ? rawHash : undefined
   if (!isCdnScope(scope) || !SEGMENT.test(mediaId)) return undefined
-  const stable = `${MEDIA_CDN_ROUTE}/${hostQualified(scope, hostId)}/${mediaId}`
-  // A year in the inbox's image cache instead of a minute. An inbox is the
-  // consumer that benefits most and can least be re-rendered, and a pin that
-  // has gone stale redirects rather than breaking.
-  return contentHash ? `${stable}/${contentHash}` : stable
+  // The stable URL, pinned or not (AGL-2798). An inbox is the consumer that
+  // can least be re-rendered, which makes it the last place to hand a URL
+  // whose year-long `immutable` response no replace can reach.
+  return `${MEDIA_CDN_ROUTE}/${hostQualified(scope, hostId)}/${mediaId}`
 }
 
 /**

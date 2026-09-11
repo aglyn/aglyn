@@ -68,7 +68,9 @@ import {
   UPLOAD_TYPES_MESSAGE,
 } from '../../../../utils/media-upload-limits'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
+import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import { createHash, randomUUID } from 'crypto'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000
 
@@ -243,7 +245,12 @@ async function handler(request: Request): Promise<Response> {
         String(body?.contentType ?? ''),
         String(body?.fileName ?? ''),
       )
-      const refusal = replacementRefusal({ contentType, previousType, org })
+      const refusal = await replacementRefusal({
+        contentType,
+        previousType,
+        org,
+        orgId: scope.orgId,
+      })
       if (refusal) return refusal
       const sizeBytes = Number(body?.sizeBytes ?? 0)
       const maxBytes = signedUploadMaxBytes(contentType) as number
@@ -332,7 +339,12 @@ async function handler(request: Request): Promise<Response> {
       const [metadata] = await staged.getMetadata()
       uploadedBytes = Number(metadata.size ?? 0)
       contentType = String(metadata.contentType ?? '')
-      const refusal = replacementRefusal({ contentType, previousType, org })
+      const refusal = await replacementRefusal({
+        contentType,
+        previousType,
+        org,
+        orgId: scope.orgId,
+      })
       if (refusal) {
         await discardStaged()
         return refusal
@@ -430,7 +442,12 @@ async function handler(request: Request): Promise<Response> {
         String(body?.contentType ?? ''),
         String(body?.fileName ?? ''),
       )
-      const refusal = replacementRefusal({ contentType, previousType, org })
+      const refusal = await replacementRefusal({
+        contentType,
+        previousType,
+        org,
+        orgId: scope.orgId,
+      })
       if (refusal) return refusal
 
       const uploaded = Buffer.from(data, 'base64')
@@ -779,6 +796,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ replaced: true, url, contentHash }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Replace failed' }, { status: 500 })
   }
@@ -787,21 +808,27 @@ async function handler(request: Request): Promise<Response> {
 /**
  * May these bytes stand in for that asset's? (AGL-2732)
  *
- * Three questions in the order that gives the clearest refusal: is the type
+ * Four questions in the order that gives the clearest refusal: is the type
  * one media ingress accepts at all, does it belong to the same family as the
- * asset it would replace, and does the plan cover it.
+ * asset it would replace, is video ingress open for the org (AGL-2830), and
+ * does the plan cover it.
  *
  * The family test is skipped when the existing document records no usable
  * type. That is a legacy asset rather than a cross-family swap, and refusing
  * one would make it permanently un-replaceable — the failure this issue is
  * about, arrived at from the other side.
+ *
+ * A paused video is refused here and not only at upload, because a replace
+ * stores a new film under a `cdnPath` that pages already embed — the same
+ * delivery exposure as a first upload, reached through a second door.
  */
-function replacementRefusal(options: {
+async function replacementRefusal(options: {
   contentType: string
   previousType: string
   org: unknown
-}): Response | null {
-  const { contentType, previousType, org } = options
+  orgId: string
+}): Promise<Response | null> {
+  const { contentType, previousType, org, orgId } = options
   if (!isAllowedUploadType(contentType)) {
     return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
   }
@@ -820,6 +847,11 @@ function replacementRefusal(options: {
       },
       { status: 415 },
     )
+  }
+  // Video ingress is behind a release flag (AGL-2830).
+  {
+    const paused = await videoUploadPausedRefusal({ contentType, orgId })
+    if (paused) return paused
   }
   // Everything that is not an image rides `videoMedia` — AGL-162's "video &
   // file uploads" tier gate, which documents join (AGL-1465). The upload

@@ -66,6 +66,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { resolveMediaScope, scopeAllows } from '../../../../utils/server/media-scope'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * How many assets one call may ask about.
@@ -185,6 +186,10 @@ async function handler(request: Request): Promise<Response> {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[media/quarantine] failed', error)
     return Response.json({ error: 'Could not read file state' }, { status: 500 })
   }

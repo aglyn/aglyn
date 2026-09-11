@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — this is a leg of SIGNING IN, and the lockdown gate
 // for auth lives on the session mint and exchange, which this flow still goes
@@ -145,10 +146,13 @@ async function handler(request: Request): Promise<Response> {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {
-    const code = (error as { code?: string })?.code ?? ''
-    if (code.startsWith('auth/')) {
-      return Response.json({ error: 'Unauthenticated' }, { status: 401 })
-    }
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Only the
+    // codes that say the token is bad earn it: an `auth/` code can also be an
+    // outage — the Google cert fetch firebase-admin reports as
+    // `auth/argument-error`, an internal error — and that keeps its 500 rather
+    // than asking the person to sign in again.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[auth/handoff/authorize]', error)
     return Response.json({ error: 'Handoff failed' }, { status: 500 })
   }

@@ -41,6 +41,7 @@ import { deploymentLivemode } from '@aglyn/aglyn/app-utils/stripe-deployment-mod
 import { platformPaymentsConfigured } from '../../../../utils/server/payments-platform'
 import { stripeAddressDivergence } from '../../../../utils/stripe-address-divergence'
 import { taxIdTypeLabel } from '../../../../utils/stripe-tax-id-types'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — the same recovery reasoning as `/invoices` and
 // `/subscription`. A billing-locked org has to be able to fix the billing
@@ -801,6 +802,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[billing/profile]', error)
     return Response.json({ error: 'Billing profile request failed' }, { status: 500 })
   }

@@ -23,6 +23,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { promises as dns, Resolver as CallbackResolver } from 'dns'
 import { CNAME_TARGET, HOST_APEX_ADDRESSES } from '../../../../utils/tenant-dns'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — advisory DNS lookup with no org/host doc in reach (domain string
 // only); the attach mutation carries the gate.
@@ -205,8 +206,13 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-  } catch {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  } catch (error) {
+    // A refused credential is a 401 (AGL-1993). A check that could not run is
+    // ours, so it is a 500 rather than a request to sign in again.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error('[domains/verify] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
   }
 
   const { query } = await pluginRequestFromWeb(request)

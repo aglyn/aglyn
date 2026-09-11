@@ -30,6 +30,9 @@ import {
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
 import { captureHostContact, emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
+// The leaf, not the barrel: this route's specs substitute the barrel wholesale,
+// and the verification must be the real one under them.
+import { verifyFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
@@ -236,17 +239,9 @@ function readDeclaredMarketingConsent(
  */
 export async function POST(request: Request): Promise<Response> {
   const payload = (await request.json().catch(() => ({}))) as Record<string, any>
-  const {
-    hostId,
-    formId,
-    formName,
-    dataset,
-    datasetId,
-    fieldMap,
-    path,
-    fields,
-    website,
-  } = payload
+  // `datasetId`, `dataset` and `fieldMap` are deliberately not read: the
+  // dataset a record lands in comes from the page's signed binding (below).
+  const { hostId, formId, formName, path, fields, website } = payload
 
   // Honeypot filled → pretend success so bots learn nothing, counted so the
   // owner of the attestation decision learns something (AGL-1664).
@@ -724,33 +719,31 @@ export async function POST(request: Request): Promise<Response> {
         })
       }
     }
-    // Dataset binding (AGL-141/556): append a record into the bound
-    // dataset — by id first (rename-safe), by human name for legacy nodes.
-    // Best-effort — a missing dataset or a full record quota never fails
-    // the submission (the inbox copy above is canonical).
-    const datasetName = String(dataset ?? '')
-      .trim()
-      .slice(0, 60)
-    const boundDatasetId = String(datasetId ?? '')
-      .trim()
-      .slice(0, 128)
-    // Client-supplied field → model-fieldId mapping (AGL-556); entries
-    // are re-validated against the dataset model below (unknown ids drop).
-    const sanitizedFieldMap: Record<string, string> = {}
-    if (fieldMap && typeof fieldMap === 'object' && !Array.isArray(fieldMap)) {
-      for (const [key, value] of Object.entries(fieldMap).slice(0, MAX_FIELDS)) {
-        if (typeof value !== 'string' || !value) continue
-        sanitizedFieldMap[String(key).slice(0, 64)] = value.slice(0, 64)
-      }
-    }
-    if (boundDatasetId || datasetName) {
+    /*
+     * THE DATASET A SUBMISSION ALSO WRITES A RECORD TO (AGL-141/556), decided
+     * on the server.
+     *
+     * The body is public and unauthenticated, so nothing in it may choose
+     * where a record lands: a dataset id or field map taken from it let anyone
+     * add rows to any dataset the site can see and send any submitted value
+     * into any of its fields. The binding is the one the page's compose read
+     * off this form and signed (`stampFormDatasetBindings`): for this site
+     * only, and exactly what the form's own props and fields declare, so a
+     * form writes where it always wrote. Without a valid signature there is no
+     * record. The Inbox copy above is canonical either way.
+     *
+     * Best-effort: a missing dataset or a full record quota never fails the
+     * submission.
+     */
+    const binding = verifyFormDatasetBinding(hostId, payload['datasetBinding'])
+    if (binding) {
       try {
         // Org-scoped datasets (AGL-237): the form's dataset resolves
         // against the org so every host shares it.
         const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
         const datasetDoc = await resolveDatasetDoc(
           datasetsRef,
-          { datasetId: boundDatasetId, datasetName },
+          { datasetId: binding.datasetId, datasetName: binding.datasetName },
           hostId,
         )
         if (datasetDoc?.exists && !datasetDoc.get('deletedAt')) {
@@ -762,7 +755,7 @@ export async function POST(request: Request): Promise<Response> {
                 : [],
             },
             sanitizedFields,
-            sanitizedFieldMap,
+            binding.fieldMap,
           )
           let allowed = Object.keys(values).length > 0
           if (allowed) {
@@ -847,7 +840,7 @@ export async function POST(request: Request): Promise<Response> {
                   name: String(
                     datasetDoc.get('displayName') ??
                       datasetDoc.get('name') ??
-                      datasetName ??
+                      binding.datasetName ??
                       '',
                   ).slice(0, 60),
                   recordId: recordRef.id,

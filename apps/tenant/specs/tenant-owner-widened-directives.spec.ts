@@ -20,6 +20,8 @@
  * limitations under the License.
  */
 
+import { WISTIA_PLAYER_ORIGIN } from '@aglyn/aglyn/app-utils/wistia-embed'
+
 /*
   MODULE, not a script (AGL-2718).
 
@@ -141,6 +143,16 @@ describe('owner-widened tenant CSP directives (AGL-1152)', () => {
     const value = tenantFrameSrcDirective(true, [], SITE)
     expect(value).toContain('https://www.youtube-nocookie.com')
     expect(value).toContain('https://player.vimeo.com')
+  })
+
+  it('pins the Wistia player the Video element builds, by the same name (AGL-2826)', () => {
+    // `wistiaPlayerSrc` rebuilds the frame address from a parsed media id, so
+    // this origin is the only one a Wistia video can frame. The policy is
+    // CommonJS and the builder is TypeScript, so nothing but this comparison
+    // keeps the two spellings of the origin the same.
+    const sources = tenantFrameSrcDirective(true, [], SITE).split(' ')
+    expect(WISTIA_PLAYER_ORIGIN).toBe('https://fast.wistia.net')
+    expect(sources).toContain(WISTIA_PLAYER_ORIGIN)
   })
 
   it('pins the payment frames, so in-page checkout still renders a card field', () => {

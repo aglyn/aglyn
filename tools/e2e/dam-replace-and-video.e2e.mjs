@@ -35,10 +35,13 @@
 // 4. The lightbox downloads no dialog code and no film bytes until a visitor
 //    approaches it, opens by click, Enter and Space, is named, traps focus,
 //    closes on Escape and on its button, and hands focus back (AGL-2744).
+//    Escape closes it from every stop of its own player, each stop draws a
+//    focus ring, and the player's keys work in the browser (AGL-2802).
 // 5. Replace keeps the asset id and swaps the bytes behind every reference
-//    for every family; the old content-hashed URL redirects instead of 404ing;
-//    the video's poster is regenerated and its stale rendition is dropped
-//    (AGL-2732, AGL-2685).
+//    for every family; a pinned reference publishes the stable URL, so the
+//    page names nothing a replace cannot reach (AGL-2798); the old
+//    content-hashed URL redirects instead of 404ing; the video's poster is
+//    regenerated and its stale rendition is dropped (AGL-2732, AGL-2685).
 // 6. The storage band refuses a signed replace when it is MINTED, and still
 //    mints one that fits (AGL-2732).
 // 7. The collector counts one play per play beacon, and nothing else.
@@ -411,8 +414,9 @@ if (ids.film && ids.image && ids.pdf && ids.sheet) {
     inline: {
       componentId: 'video',
       props: {
-        // PINNED to the upload's hash, so the replace below has a stale pin
-        // to redirect.
+        // PINNED to the upload's hash. The page must still name the stable
+        // URL for it: the content-hashed one is what an edge keeps for a
+        // year (AGL-2798).
         src: `media:${HOST_ID}/${ids.film}@${before.film.contentHash}`,
         posterFromSource: true,
         title: 'E2E inline film',
@@ -463,13 +467,15 @@ const attr = (html) => html.replace(/&amp;/g, '&')
 await apiStep('the published page ships a poster-only trigger, an idle inline player and the document links', async () => {
   const raw = await pageHtml(pageSlug)
   const html = attr(raw)
-  const pinned = cdnPath(ids.film, `/${before.film.contentHash}`)
   const inlineVideo = html.match(/<video[^>]*>/)?.[0] ?? ''
   const checks = {
     image: html.includes(`src="${cdnPath(ids.image)}"`),
     trigger: html.includes(`aria-label="${TRIGGER_LABEL}"`),
     triggerPoster: html.includes(`src="${cdnPath(ids.film)}?poster=1"`),
-    inlinePinnedSrc: inlineVideo.includes(`src="${pinned}?r=auto"`),
+    // The pinned inline film publishes the stable URL, and the page names the
+    // content-hashed one nowhere (AGL-2798).
+    inlinePinnedRendersStable: inlineVideo.includes(`src="${cdnPath(ids.film)}?r=auto"`),
+    noContentHashedUrl: !html.includes(cdnPath(ids.film, `/${before.film.contentHash}`)),
     inlinePreloadNone: inlineVideo.includes('preload="none"'),
     pdfLink: html.includes(`href="${cdnPath(ids.pdf)}"`),
     csvLink: html.includes(`href="${cdnPath(ids.sheet)}"`),
@@ -700,15 +706,41 @@ await apiStep('a recorded rendition is served by key and negotiated for r=auto',
     tally.pass('Space reopens it', `aria-label="${await dialog.getAttribute('aria-label')}"`)
   })
 
-  await step(tally, visitor, "Escape closes it from inside the player's native controls (AGL-2802)", async () => {
-    // From the close button, one Tab reaches the <video> and the next lands in
-    // Chrome's own media controls. Measured: from there no keydown or keyup
-    // for Escape reaches the page in any phase, so no page listener can close
-    // the dialog (AGL-2802). Closed with the button afterwards either way, so
-    // the steps below start from a closed dialog.
-    await closeButton.focus()
-    await visitor.keyboard.press('Tab')
-    await visitor.keyboard.press('Tab')
+  /**
+   * Whether the focused stop draws a ring a keyboard visitor can see. A
+   * slider's focus lands on its visually hidden range input, so its ring is
+   * read off the thumb MUI draws for it.
+   */
+  const focusRingShown = () =>
+    visitor.evaluate(() => {
+      const focused = document.activeElement
+      if (!focused) return false
+      const drawn = focused.closest('.MuiSlider-thumb') ?? focused
+      const style = getComputedStyle(drawn)
+      return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0
+    })
+
+  /**
+   * Opens the dialog from the trigger by keyboard, then waits for the film's
+   * length: the seek slider is disabled, and so out of the tab order, until the
+   * browser knows how long the film runs.
+   */
+  const openByKeyboard = async () => {
+    if ((await dialog.count()) > 0) return
+    if ((await focusLabel()) !== TRIGGER_LABEL) await trigger.focus()
+    await visitor.keyboard.press('Enter')
+    await dialog.waitFor({ timeout: TIMEOUT_MS })
+    await visitor
+      .locator('.MuiDialog-root input[aria-label="Seek"]:not([disabled])')
+      .waitFor({ state: 'attached', timeout: 30_000 })
+  }
+
+  /**
+   * Escape, then whether the dialog went and focus came back to the trigger.
+   * A dialog that stays open is closed with its button, so the next stop
+   * starts from a closed dialog either way.
+   */
+  const escapeCloses = async () => {
     await visitor.keyboard.press('Escape')
     const closed = await dialog
       .waitFor({ state: 'detached', timeout: 10_000 })
@@ -717,11 +749,140 @@ await apiStep('a recorded rendition is served by key and negotiated for r=auto',
       await closeButton.click()
       await dialog.waitFor({ state: 'detached', timeout: TIMEOUT_MS })
     }
+    return { closed, back: (await focusLabel()) === TRIGGER_LABEL }
+  }
+
+  await step(tally, visitor, 'Escape closes it from every stop in the player and hands focus back (AGL-2802)', async () => {
+    // The player draws its own controls, so a key pressed on any of them
+    // reaches the page; the browser's own controls kept Escape from it. The
+    // stops are read off the dialog's tab order, then each is reached as a
+    // keyboard visitor reaches it: open from the trigger, Tab to it, Escape.
+    // The dialog itself, where focus lands on open, is its own case first.
+    await openByKeyboard()
+    const opening = await focusLabel()
+    const fromOpening = await escapeCloses()
+    await openByKeyboard()
+    const stops = []
+    for (let presses = 0; presses < 20; presses += 1) {
+      await visitor.keyboard.press('Tab')
+      const label = await focusLabel()
+      if (stops.includes(label)) break
+      stops.push(label)
+    }
+    await escapeCloses()
+    const outcomes = []
+    for (const label of stops) {
+      await openByKeyboard()
+      for (let presses = 0; presses < 20 && (await focusLabel()) !== label; presses += 1) {
+        await visitor.keyboard.press('Tab')
+      }
+      const reached = (await focusLabel()) === label
+      const ring = reached && (await focusRingShown())
+      outcomes.push({ label, reached, ring, ...(await escapeCloses()) })
+    }
+    // A click on the film leaves focus on the dialog itself, not on a control.
+    await openByKeyboard()
+    await visitor.locator('.MuiDialog-root video').click()
+    const fromFilm = await escapeCloses()
+    const describe = (outcome) =>
+      `${outcome.label} ${outcome.reached ? '' : 'NOT REACHED, '}${outcome.closed ? 'closed' : 'STAYED OPEN'}${outcome.back ? '' : ', focus not returned'}`
     tally.check(
-      "Escape closes it from inside the player's native controls (AGL-2802)",
-      closed,
-      closed ? 'closed' : 'still open with focus in the native controls; closed with the close button instead',
+      'Escape closes it from every stop in the player and hands focus back (AGL-2802)',
+      ['Close video', 'Seek', 'Play', 'Mute'].every((label) => stops.includes(label)) &&
+        outcomes.every((outcome) => outcome.reached && outcome.closed && outcome.back) &&
+        fromOpening.closed &&
+        fromOpening.back &&
+        fromFilm.closed &&
+        fromFilm.back,
+      `on open (focus on "${opening}") ${fromOpening.closed ? 'closed' : 'STAYED OPEN'}; stops ${stops.join(' → ')}; ${outcomes.map(describe).join('; ')}; after a click on the film ${fromFilm.closed ? 'closed' : 'STAYED OPEN'}`,
     )
+    tally.check(
+      'every stop in the player draws a focus ring a keyboard visitor can see (AGL-2802)',
+      outcomes.length > 0 && outcomes.every((outcome) => outcome.ring),
+      outcomes.map((outcome) => `${outcome.label} ${outcome.ring ? 'ring' : 'NO RING'}`).join('; '),
+    )
+  })
+
+  await step(tally, visitor, "the player's own keys work in Chrome (AGL-2802)", async () => {
+    await openByKeyboard()
+    const film = () =>
+      visitor.evaluate(() => {
+        const video = document.querySelector('.MuiDialog-root video')
+        const pressed = (label) =>
+          document.querySelector(`.MuiDialog-root button[aria-label="${label}"]`)?.getAttribute('aria-pressed')
+        const full = document.fullscreenElement
+        return {
+          paused: video.paused,
+          muted: video.muted,
+          time: video.currentTime,
+          duration: video.duration,
+          playPressed: pressed('Play'),
+          mutePressed: pressed('Mute'),
+          fullscreenPressed: pressed('Full screen'),
+          fullscreenHoldsPlayer: Boolean(full?.contains(video) && full.querySelector('[aria-label="Seek"]')),
+        }
+      })
+    const settles = (predicate, timeoutMs = 10_000) =>
+      waitFor(film, predicate, { timeoutMs, everyMs: 100 }).then(() => true, () => false)
+    /** Paused at the top. The film runs two seconds, so letting it play would race the keys. */
+    const rewind = () =>
+      visitor.evaluate(() => {
+        const video = document.querySelector('.MuiDialog-root video')
+        video.pause()
+        video.currentTime = 0
+      })
+    await waitFor(film, (state) => Number.isFinite(state.duration) && state.duration > 0, { timeoutMs: 30_000 })
+    await rewind()
+    // Focus is on the dialog, where it opens, and none of these keys is the
+    // dialog surface's own, so each one is the player's.
+    await visitor.keyboard.press('k')
+    const played = await settles((state) => !state.paused && state.playPressed === 'true')
+    await visitor.keyboard.press('k')
+    // Short of the end, so a film that simply finished cannot pass for a pause.
+    const paused = await settles(
+      (state) => state.paused && state.playPressed === 'false' && state.time < state.duration - 0.05,
+    )
+    await visitor.keyboard.press('m')
+    const muted = await settles((state) => state.muted && state.mutePressed === 'true')
+    await visitor.keyboard.press('m')
+    const unmuted = await settles((state) => !state.muted && state.mutePressed === 'false')
+    await rewind()
+    await visitor.keyboard.press('ArrowRight')
+    const forward = await settles((state) => state.time >= Math.min(5, state.duration) - 0.05)
+    await visitor.keyboard.press('ArrowLeft')
+    const back = await settles((state) => state.time <= 0.05)
+    tally.check(
+      "the player's own keys work in Chrome: K plays and pauses, M mutes, the arrows seek (AGL-2802)",
+      played && paused && muted && unmuted && forward && back,
+      JSON.stringify({ played, paused, muted, unmuted, forward, back }),
+    )
+
+    const name =
+      'F puts the film and its controls full screen with focus inside, F and Escape bring it back, and the dialog stays open (AGL-2802)'
+    if (!(await visitor.evaluate(() => document.fullscreenEnabled))) {
+      tally.skip(name, 'document.fullscreenEnabled is false in this browser, so the control is not offered')
+    } else {
+      // Full screen blurs focus left outside the player, and a key pressed
+      // from the body never reaches the dialog; the player takes focus in.
+      await visitor.keyboard.press('f')
+      const entered = await settles((state) => state.fullscreenHoldsPlayer && state.fullscreenPressed === 'true', 5000)
+      const focusInside = await visitor.evaluate(() =>
+        Boolean(document.fullscreenElement?.contains(document.activeElement)),
+      )
+      await visitor.keyboard.press('f')
+      const toggledOut = await settles((state) => !state.fullscreenHoldsPlayer && state.fullscreenPressed === 'false', 5000)
+      await visitor.keyboard.press('f')
+      const reentered = await settles((state) => state.fullscreenHoldsPlayer, 5000)
+      await visitor.keyboard.press('Escape')
+      const escaped = await settles((state) => !state.fullscreenHoldsPlayer, 5000)
+      const stillOpen = (await dialog.count()) === 1
+      tally.check(
+        name,
+        entered && focusInside && toggledOut && reentered && escaped && stillOpen,
+        `entered=${entered} focus inside=${focusInside} F out=${toggledOut} F back in=${reentered} Escape out=${escaped} dialog still open=${stillOpen}`,
+      )
+    }
+    if ((await dialog.count()) > 0) await escapeCloses()
   })
 
   await step(tally, visitor, 'a click opens it again and the close button closes it', async () => {
@@ -839,11 +1000,12 @@ await apiStep('every reference on the published page now resolves to the new byt
   const inlinePoster = inlineVideo.match(/ poster="([^"]+)"/)?.[1] ?? ''
   const posterObject = await objectBytes(`${after.film.storagePath}__poster.webp`)
   const follow = async (path) => get(`${TENANT_URL}${path}`, {}, 'follow')
-  const pinnedHop = await get(`${TENANT_URL}${inlineSrc}`)
   const results = {
     image: sha((await follow(cdnPath(ids.image))).body) === files.image.b.sha,
     lightboxPoster: sha((await follow(`${cdnPath(ids.film)}?poster=1`)).body) === sha(posterObject),
-    inlinePinnedHop: pinnedHop.status === 302 && pinnedHop.headers.get('location') === `${cdnPath(ids.film)}?r=auto`,
+    // The pinned inline film's URL did not change with the replace, and needs
+    // no hop to reach the new film (AGL-2798).
+    inlineStableSrc: inlineSrc === `${cdnPath(ids.film)}?r=auto`,
     inlineFilm: sha((await follow(inlineSrc)).body) === files.film.b.sha,
     inlinePoster: (await follow(inlinePoster)).headers.get('content-type') === 'image/webp',
     pdf: sha((await follow(html.match(new RegExp(`href="(${cdnPath(ids.pdf)})"`))?.[1] ?? '/missing')).body) === files.pdf.b.sha,
@@ -854,6 +1016,30 @@ await apiStep('every reference on the published page now resolves to the new byt
     Object.values(results).every(Boolean),
     JSON.stringify(results),
   )
+})
+
+const FOLLOWS_DURATION = "the page publishes the replaced film's running time, not the picked one (AGL-2807)"
+await apiStep(FOLLOWS_DURATION, async () => {
+  // The tour node still stores what a pick of the FIRST film copied: 2 s at
+  // 640x360. The replacement runs 3 s, and the page has to say so.
+  const [block] = videoObjects(attr(await pageHtml(pageSlug)))
+  tally.check(
+    FOLLOWS_DURATION,
+    Math.abs(Number(after.film?.video?.durationMs) - 3000) <= 150 && block?.duration === 'PT3S',
+    `asset durationMs=${after.film?.video?.durationMs} VideoObject.duration=${block?.duration}`,
+  )
+})
+
+const FOLLOWS_SHAPE = 'the player takes its shape from the asset, not from the pick (AGL-2807)'
+await apiStep(FOLLOWS_SHAPE, async () => {
+  // Both fixture films are 640x360, so a replace alone cannot show a change of
+  // shape. A square frame recorded on the asset can: the node still stores the
+  // pick's 640x360, and the page has to follow the asset.
+  await media().doc(ids.film).update({ 'video.width': 480, 'video.height': 480 })
+  const html = attr(await pageHtml(pageSlug))
+  const square = /aspect-ratio:\s*480\s*\/\s*480/.test(html)
+  const picked = /aspect-ratio:\s*640\s*\/\s*360/.test(html)
+  tally.check(FOLLOWS_SHAPE, square && !picked, `480/480 present=${square}, 640/360 still present=${picked}`)
 })
 
 await apiStep('a replace across families is refused', async () => {

@@ -206,7 +206,7 @@ The **FAQ** preset drops three complete panels at once.
 
 | Element | What it's for |
 | --- | --- |
-| **Screen Link** | A link that targets a screen by id, so it survives slug renames. Renders as a button or as a text link. |
+| **Screen Link** | A link that targets a screen — or a content collection's listing page — by id, so it survives slug renames. Renders as a button or as a text link. See [Linking to a collection listing](#linking-to-a-collection-listing). |
 | **App bar** / **Toolbar Content** | The site header frame. The app bar is the band; **Toolbar Content** is the row inside it that holds the brand, the links and the actions, and it may only be dropped into an app bar. |
 | **Nav menu** / **Mega menu** | Dropdown and full-width navigation menus. |
 | **Drawer** / **Menu Button** | A panel that slides in from the **left, right, top or bottom**. Open it with a Menu Button or an interaction. **Width** applies to left/right drawers; top and bottom sheets span the viewport, and the control is hidden for them. The **Mobile Nav** preset wires a hamburger, a drawer and a desktop link row in one insert. |
@@ -233,6 +233,28 @@ a screen or a URL:
 Links that open elsewhere are marked up so the new page can't reach back into the one it
 came from. **Link Container** has the same choice as a simple **Open in a new tab**
 switch, which applies to external destinations only.
+
+### Linking to a collection listing
+
+The **Screen** picker lists your screens first, then one entry for each content collection's
+listing page — the page at `/{collection}` that lists its entries, such as your blog's
+`/blog`. Each reads like **Blog (/blog) — collection listing**, so a listing is never mistaken
+for a screen with the same name.
+
+Picking one stores the collection itself, not its address. Rename the collection's slug and
+every link to its listing follows, just as a screen link follows its screen. It makes no
+difference whether the collection has a list template screen: without one, the link opens the
+built-in listing.
+
+If the collection is deleted or its slug is cleared, the link stops navigating, the canvas
+flags it as a broken link, and the picker shows **⚠ Unavailable collection listing (…)** — the
+same treatment an unpublished screen gets. Pick the listing again or clear the link. A typed
+`/blog` in **External URL** gets none of this: it never follows a rename, and nothing warns you
+when it stops working.
+
+The same entries appear everywhere the Screen picker does — **Button**, **Image**, **Link
+Container**, **Tabs** links, an **Accordion Summary**'s header link, a form's redirect, and a
+component's **Link** property.
 
 ### Tabs
 
