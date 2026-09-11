@@ -217,9 +217,9 @@ describe('poster and rendition URLs', () => {
     )
   })
 
-  it('merges onto a pinned reference rather than replacing its query', () => {
+  it('asks a pinned reference for its poster at the stable URL (AGL-2798)', () => {
     expect(mediaPosterSrc('media:org:acme/v1@abc123')).toBe(
-      '/api/media/cdn/org:acme/v1/abc123?poster=1',
+      '/api/media/cdn/org:acme/v1?poster=1',
     )
   })
 
@@ -259,8 +259,9 @@ describe('poster and rendition URLs', () => {
     expect(videoDeliverySrc(REF, { hostId: 'site9' })).toBe(
       '/api/media/cdn/org:acme:site9/v1?r=auto',
     )
+    // A pinned reference asks at the stable URL too (AGL-2798).
     expect(videoDeliverySrc('media:org:acme/v1@abc123')).toBe(
-      '/api/media/cdn/org:acme/v1/abc123?r=auto',
+      '/api/media/cdn/org:acme/v1?r=auto',
     )
   })
 

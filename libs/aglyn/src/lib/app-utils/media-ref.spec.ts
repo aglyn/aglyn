@@ -23,12 +23,17 @@ import {
   isMediaCdnUrl,
   isMediaRef,
   mediaNodeSrc,
+  mediaPosterSrc,
   mediaRefFromCdnPath,
   mediaRefPattern,
+  mediaRenditionSrc,
+  mediaVariantSrc,
   MEDIA_CDN_ROUTE,
   parseMediaRef,
   resolveMediaSrc,
   siteRelativeMediaSrc,
+  videoDeliverySrc,
+  videoPosterSrc,
 } from './media-ref'
 
 const RAW_URL =
@@ -431,7 +436,7 @@ describe('media references (AGL-1215)', () => {
     })
   })
 
-  describe('the content pin (AGL-2685)', () => {
+  describe('the content pin (AGL-2685, AGL-2798)', () => {
     const PIN = 'abc123def4567890'
 
     it('round-trips a pinned reference', () => {
@@ -444,23 +449,48 @@ describe('media references (AGL-1215)', () => {
       })
     })
 
-    it('resolves to the immutable URL, and an unpinned one does not', () => {
+    it('resolves a pinned reference to the stable URL, never the content-hashed one', () => {
+      // The content-hashed form is served `immutable`: the edge and every
+      // browser that fetched it keep it for a year without asking again, so a
+      // replace could never reach a page that named it.
       expect(resolveMediaSrc(`media:site-a/med123@${PIN}`)).toBe(
-        `${MEDIA_CDN_ROUTE}/site-a/med123/${PIN}`,
-      )
-      expect(resolveMediaSrc('media:site-a/med123')).toBe(
         `${MEDIA_CDN_ROUTE}/site-a/med123`,
+      )
+      expect(resolveMediaSrc(`media:site-a/med123@${PIN}`)).toBe(
+        resolveMediaSrc('media:site-a/med123'),
       )
     })
 
     it('host-qualifies a pinned org reference like any other', () => {
-      // The pin is the LAST segment; qualification rewrites the FIRST. A
-      // resolver that concatenated in the wrong order would produce a URL
-      // that 404s on a restricted asset and nowhere else, which is the
-      // hardest kind of bug to see.
       expect(resolveMediaSrc(`media:org:o1/med123@${PIN}`, { hostId: 'h2' })).toBe(
-        `${MEDIA_CDN_ROUTE}/org:o1:h2/med123/${PIN}`,
+        `${MEDIA_CDN_ROUTE}/org:o1:h2/med123`,
       )
+    })
+
+    it('names no content-hashed URL on any surface a page renders from a pin', () => {
+      // Every builder here starts from `resolveMediaSrc` today. This is what
+      // keeps the next one from starting anywhere else.
+      const hostId = 'h2'
+      for (const stored of [
+        `media:site-a/med123@${PIN}`,
+        `media:org:o1/med123@${PIN}`,
+      ]) {
+        const urls = [
+          resolveMediaSrc(stored, { hostId }),
+          siteRelativeMediaSrc(stored, { hostId }),
+          absoluteMediaSrc(stored, { hostId, origin: 'https://acme.example' }),
+          mediaVariantSrc(stored, { hostId, width: 640 }),
+          mediaPosterSrc(stored, { hostId, width: 1280 }),
+          mediaRenditionSrc(stored, '720p', { hostId }),
+          videoDeliverySrc(stored, { hostId }),
+          videoPosterSrc({ hostId, src: stored, generated: true, width: 1280 }),
+          videoPosterSrc({ hostId, poster: stored }),
+        ]
+        for (const url of urls) {
+          expect(url).toContain('/med123')
+          expect(url).not.toContain(PIN)
+        }
+      }
     })
 
     it('drops a malformed pin and KEEPS the reference', () => {
@@ -500,17 +530,22 @@ describe('media references (AGL-1215)', () => {
       expect(isFirstPartyMediaSrc(`media:site-a/med123@${PIN}`)).toBe(true)
     })
 
-    it('pins from the media document, never from a hashed cdnPath', () => {
-      // `cdnPath` can itself be content-hashed. That hash is whatever was
-      // written when the path was minted; the document's is current.
+    it('writes no pin, even from a document that carries a content hash', () => {
+      // A pin changes no URL, so writing one would only put a value in the
+      // document that nothing reads — and invite someone to turn it back into
+      // the year-long URL a replace cannot reach.
+      expect(
+        mediaNodeSrc({
+          cdnPath: `${MEDIA_CDN_ROUTE}/site-a/med123`,
+          contentHash: PIN,
+        }),
+      ).toBe('media:site-a/med123')
+      // A content-hashed `cdnPath` still yields the reference for its asset.
       expect(
         mediaNodeSrc({
           cdnPath: `${MEDIA_CDN_ROUTE}/site-a/med123/oldhash0000`,
           contentHash: PIN,
         }),
-      ).toBe(`media:site-a/med123@${PIN}`)
-      expect(
-        mediaNodeSrc({ cdnPath: `${MEDIA_CDN_ROUTE}/site-a/med123` }),
       ).toBe('media:site-a/med123')
     })
 

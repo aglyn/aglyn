@@ -145,6 +145,12 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
       '/api/media/cdn/h1/med123',
     )
     expect(resolveEmailMediaSrc('media:h1/bad id')).toBeUndefined()
+    // A content pin names no URL (AGL-2798). Both copies agreeing on the
+    // hashed form would pass the table above and still mail a URL an inbox
+    // keeps for a year after the asset is replaced.
+    expect(resolveEmailMediaSrc('media:h1/med123@abc123def4567890')).toBe(
+      '/api/media/cdn/h1/med123',
+    )
     expect(hostEmailOrigin({ subdomain: 'acme' })).toBe(
       'https://acme.aglyn.app',
     )

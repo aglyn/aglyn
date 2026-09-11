@@ -126,8 +126,9 @@ reaches the page in any phase, so the dialog cannot hear it; the step closes
 the dialog with its button so the rest of the run is unaffected.
 
 What it cannot see: Vercel's edge. A replaced image can stay edge-cached under
-its stable URL for up to `s-maxage`, and under a content-pinned URL for a year
-(AGL-2798). Locally there is no edge, so the spec proves the origin half only.
+its stable URL for up to `s-maxage`. A page never names the content-hashed URL,
+which an edge keeps for a year (AGL-2798), and the spec checks that it does
+not. Locally there is no edge, so the spec proves the origin half only.
 The player's play beacon is gated to production surfaces and sends nothing
 from a loopback page; `video-playback-beacon.spec.tsx` covers it.
 

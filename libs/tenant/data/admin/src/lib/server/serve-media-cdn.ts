@@ -914,9 +914,11 @@ export function parseMediaCdnRange(
  *   replaced asset propagates without ever breaking references. This is
  *   the URL the console hands out.
  * - **Immutable** `/api/media/cdn/[scope]/[mediaId]/[contentHash]` —
- *   year-long `immutable` cache; the hash must match the current content,
- *   so it can never serve stale bytes (older embeds keep working until the
- *   asset is replaced, then that exact URL 404s by design).
+ *   year-long `immutable` cache; bytes are served only while the hash
+ *   matches the current content, and a stale hash 302s to the stable URL
+ *   (AGL-2685). No renderer names this form (AGL-2798): an edge or a browser
+ *   holding an immutable response never asks again, so a replace could not
+ *   reach a page that did. It is answered for the URLs already handed out.
  *
  * `?w=[width]` selects a generated WebP variant. `?download=1` swaps the
  * `Content-Disposition` from `inline` to `attachment` (AGL-1411) — the press
@@ -1122,12 +1124,12 @@ export async function serveMediaCdn(
      * that are not the ones its hash names.** A stale one now serves a
      * pointer to the URL that is allowed to change instead of a dead end.
      *
-     * What the 404 cost is what made the pin unusable. A pin lives in a
-     * published document; the first **replace** of an asset makes every
-     * document holding the old hash name a URL that 404s, so pinning meant
-     * every screen carrying that image broke until a backfill re-pinned it.
-     * With a redirect the same situation costs one extra hop and self-heals,
-     * which is what lets `resolveMediaSrc` emit this form at all.
+     * What the 404 cost was every copy of this URL breaking on the first
+     * **replace** of its asset. With a redirect, a stale URL that reaches
+     * this handler costs one extra hop and self-heals. It does NOT make the
+     * form safe to publish: an edge or a browser already holding the
+     * immutable response answers from its copy and never reaches this line,
+     * which is why no renderer names this form (AGL-2798).
      *
      * **302, not 301.** A hash can become current again — a replace reverted
      * to the previous bytes restores it — and a permanent redirect is exactly
