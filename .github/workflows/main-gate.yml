@@ -196,11 +196,14 @@ jobs:
       # apps/docs nor cloud/functions is an npm workspace, and a root-only
       # install fails docs:typecheck and cloud-functions with errors that read
       # as source defects.
-      - if: steps.moved.outputs.skip != 'true'
+      - id: install
+        if: steps.moved.outputs.skip != 'true'
         run: npm ci
-      - if: steps.moved.outputs.skip != 'true'
+      - id: install-functions
+        if: steps.moved.outputs.skip != 'true'
         run: npm ci --prefix cloud/functions
-      - if: steps.moved.outputs.skip != 'true'
+      - id: install-docs
+        if: steps.moved.outputs.skip != 'true'
         run: npm ci --prefix apps/docs
 
       # `TYPECHECK_CONCURRENCY` because this runner has 4 vCPU and 16 GB, and
@@ -224,14 +227,20 @@ jobs:
         env:
           TYPECHECK_CONCURRENCY: '2'
         run: npm run typecheck
-      - if: steps.moved.outputs.skip != 'true'
+      # The docs typecheck and the guards run whatever the workspace typecheck
+      # concluded, provided the installs they read succeeded (AGL-2835). A step's
+      # default condition is `success()`, under which one type error skips every
+      # guard: 22 fast runs from 2026-09-03 to 2026-09-11 ran none, so a guard
+      # break that landed during a type error stayed unseen until the type error
+      # was fixed. The job is red either way; the verdict covers both classes.
+      - if: ${{ !cancelled() && steps.moved.outputs.skip != 'true' && steps.install.outcome == 'success' && steps.install-functions.outcome == 'success' && steps.install-docs.outcome == 'success' }}
         run: npx nx run docs:typecheck
 
       # All of them, concurrently. The list is DERIVED from nx-ci.yml and
       # tools-guards.yml by the script itself, so a guard added to either is
       # gated here without anyone editing this file — and deriving zero is a
       # hard failure rather than an empty green phase.
-      - if: steps.moved.outputs.skip != 'true'
+      - if: ${{ !cancelled() && steps.moved.outputs.skip != 'true' && steps.install.outcome == 'success' && steps.install-functions.outcome == 'success' && steps.install-docs.outcome == 'success' }}
         run: node tools/scripts/run-guards.mjs --concurrency 4
         # `check:linear-ids` is one of the guards derived above, and it asks
         # Linear for the highest issue that exists — an answer that can only
@@ -353,8 +362,10 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: 'npm'
-      - run: npm ci
-      - run: npm ci --prefix cloud/functions
+      - id: install
+        run: npm ci
+      - id: install-functions
+        run: npm ci --prefix cloud/functions
       # THE LINT REPORT HAS TO ARRIVE WHOLE (AGL-2829). The `@nx/eslint:lint`
       # executor writes its report in one `console.info`, and the task process
       # exits before a large write drains. `console:lint` prints ~66 KB of
@@ -381,7 +392,12 @@ jobs:
           functions=$?
           cat "$log"
           node tools/scripts/report-lint-verdict.mjs "$log" "$workspace" "$functions"
-      - run: node tools/scripts/run-guards.mjs --concurrency 4
+      # The guards run whatever lint concluded, for the reason the fast job's
+      # guard step records (AGL-2835): under the default `success()` a red lint
+      # or typecheck skipped every guard in 8 full sweeps from 2026-09-03 to
+      # 2026-09-11.
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.install-functions.outcome == 'success' }}
+        run: node tools/scripts/run-guards.mjs --concurrency 4
         # Same reason as the fast job above (AGL-2670).
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
