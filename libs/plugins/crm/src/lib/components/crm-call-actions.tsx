@@ -79,8 +79,8 @@ export interface CrmCallButtonProps {
   /** The record's number, when the page holds one. */
   phone?: string | null
   /**
-   * The org's plan lacks the CRM suite (AGL-2788). Logging the call is the
-   * suite's and stands locked; dialing the number is not, and stays.
+   * The org's plan lacks the CRM (AGL-2788). Logging the call stands locked;
+   * dialing the number writes nothing, and stays.
    */
   suiteLocked?: boolean
 }

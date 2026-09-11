@@ -67,7 +67,7 @@ export interface RecordFilesCardProps {
    * is not the other's to see — so the field is a facet's, and a facet is the
    * server's to write (AGL-2804): a contact's files are saved through
    * `crm/contact-update`, which writes the holder's facet and refuses a plan
-   * without the CRM suite. `null` for a company or a deal, whose fields are
+   * without the CRM. `null` for a company or a deal, whose fields are
    * the organization's, sit at the top of the document and are written here.
    */
   facetGroupId?: string | null

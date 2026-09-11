@@ -134,10 +134,11 @@ const ORG_REFUSAL =
 
 export interface CrmWriterOptions {
   /**
-   * The act a plan without the CRM suite is refused for, named the way
+   * The act a plan without the CRM is refused for, named the way
    * `crmSuiteRefusalMessage` takes it. `null` for a route that asks the plan
-   * itself, once it knows what the request writes — a contact's tags are on
-   * every plan and its owner is the suite's. Tasks when unsaid.
+   * itself, once it knows what the request writes, so the refusal can name
+   * that act — a contact update names the first field it carries. Tasks
+   * when unsaid.
    */
   suiteAct?: string | null
 }

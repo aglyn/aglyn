@@ -79,9 +79,9 @@ export interface CrmViewsControlProps {
    */
   onSaveAsSegment?: (() => void) | null
   /**
-   * The org's plan lacks the CRM suite, whose saved views are (AGL-2788).
+   * The org's plan lacks the CRM, whose saved views are (AGL-2788).
    * Every act on a view stands in the menu, locked; views already saved
-   * still open, and segments — which are not views — stay on every plan.
+   * still open, and segments — which are not views — draw no lock here.
    */
   suiteLocked?: boolean
 }
@@ -148,7 +148,7 @@ export function CrmViewsControl(props: CrmViewsControlProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [dialog, setDialog] = useState<NameDialog>(null)
   const close = () => setAnchor(null)
-  // On a plan without the suite each act on a view is drawn with the rail's
+  // On a plan without the CRM each act on a view is drawn with the rail's
   // lock in place of its own glyph, and says why beneath its label.
   const lockedReason = suiteLocked ? crmSuiteLockedReason() : undefined
   const glyph = (path: string) => (suiteLocked ? mdiLockOutline.path : path)

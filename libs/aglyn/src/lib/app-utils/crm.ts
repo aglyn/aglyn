@@ -102,8 +102,8 @@ export const CRM_RECORD_COLLECTIONS = [
  *
  * One sentence in one place, because a reader who is refused in the drawer
  * and then reads the list must be told the same thing, and the remedy is the
- * same wherever the refusal lands: only Free has a band with no rate, so
- * "upgrade" is the whole of the answer.
+ * same wherever the refusal lands: a band refuses only on a plan that puts
+ * no overage rate past it, so "upgrade" is the whole of the answer.
  */
 export const CRM_RECORDS_BAND_FULL_MESSAGE =
   'CRM records limit reached — this record was not added. Upgrade in ' +

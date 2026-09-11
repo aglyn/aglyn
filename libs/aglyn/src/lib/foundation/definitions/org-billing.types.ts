@@ -141,23 +141,25 @@ export interface OrgFeatureFlags {
   /** Appointment bookings (AGL-159). */
   bookings?: boolean
   /**
-   * The CRM SUITE (AGL-2611): leads, companies, the deals pipeline, tasks,
-   * reports and custom fields, the CRM automation steps, and the `crm:*`
-   * REST resources.
+   * THE CRM (AGL-2611): contacts, leads, companies, the deals pipeline,
+   * tasks, reports and custom fields, the CRM automation steps, and the
+   * `crm:*` REST resources.
    *
-   * NOT the Contacts section. Contacts are the capture projection of a
-   * site's audience — the list, tags, notes, export and segments that the
-   * email audiences read — and they ship on every plan including Free, banded
-   * by `contactsPerHost`. What this flag gates is everything a sales team
-   * builds ON that list, and it is the upgrade motive from Free to the first
+   * The Contacts section included (AGL-2851). Capture still writes a site's
+   * audience into the contacts collection on every plan including Free,
+   * banded by `contactsPerHost`, and exporting or erasing those people stays
+   * on every plan in Settings → Privacy. What this flag gates is the CRM a
+   * team works them in, and it is the upgrade motive from Free to the first
    * paid tier rather than a line on top of one: for the small-business buyer
    * the CRM is the reason to pick a platform over a page builder.
    *
-   * Read by the console shell through a section's or a widget's
-   * `featureFlag` (so the shell refuses the surface before it mounts), by
-   * the automation executor before a CRM step runs, and by the REST
-   * dispatcher in front of the five CRM resources. A per-org override on
-   * `entitlements.features.crm` works the way every other flag's does.
+   * Read by the console shell through the CRM extension's and its widgets'
+   * `featureFlag` (so the shell refuses every CRM section and page before
+   * one mounts), by the `crm/*` routes, by the automation executor before a
+   * CRM step runs, by the REST dispatcher in front of the CRM resources,
+   * contacts included, and, restated, by the Firestore rules on a client's
+   * CRM writes. A per-org override on `entitlements.features.crm` works the
+   * way every other flag's does.
    */
   crm?: boolean
   /**
@@ -453,9 +455,10 @@ export interface OrgEntitlements {
    * and deals, counted together across the org. The persisted key still says
    * "contacts" because it is written on live org documents as a staff
    * override and read back through this type; every customer surface says
-   * "CRM records". Paid tiers meter past it at `extraContactsUsdPer1k`; Free
-   * refuses the next record of any of the three kinds. Tasks and activities
-   * are not counted — see `CRM_ACTIVITIES_PER_RECORD_CEILING`.
+   * "CRM records". A tier with an `extraContactsUsdPer1k` rate meters past
+   * it; a tier with none refuses the next record. Free has no CRM
+   * (AGL-2851), so on Free the record its band refuses is a capture. Tasks
+   * and activities are not counted — see `CRM_ACTIVITIES_PER_RECORD_CEILING`.
    */
   contactsPerHost?: number
   /**
@@ -475,8 +478,8 @@ export interface OrgEntitlements {
    * the counter it is enforced against is `orgs/{orgId}/crmEmailUsage/{day}`.
    *
    * Every send still counts on the org's `emailSends` cost meter, like any
-   * other message the provider charged for. 0 on Free, which has no CRM
-   * suite; `UNLIMITED` on Enterprise, whose contract prices its own volume.
+   * other message the provider charged for. 0 on Free, which has no CRM,
+   * and finite on every paid tier, Enterprise's 2,000 included.
    *
    * ## This ladder and `emailSendsPerMonth` are NOT the same ladder
    *

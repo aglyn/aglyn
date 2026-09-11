@@ -35,7 +35,7 @@
  * other capture (AGL-2605). That is what makes an import
  * dedupe on the address the way a second form submission does, land in the
  * capturing group's facet the way a form capture does, record consent
- * against the capturing site, and stop at the free band where a form
+ * against the capturing site, and stop at a hard band where a form
  * capture stops. A bulk path with its own `add()` would be the fastest way
  * to grow an unscoped, unbanded, unconsented copy of the address book.
  *
@@ -157,12 +157,13 @@ async function resolveCompanyId(
   }
   /*
    * THE RECORDS BAND (AGL-2611). A company is a record of the same band
-   * the contact behind this row will meet at its own door, so on a Free
-   * org at its hundred the row gets no company rather than a company it
+   * the contact behind this row will meet at its own door, so on an org
+   * at a full hard band the row gets no company rather than a company it
    * was not allowed to hold. Nothing is reported here: the contact is
    * refused `audience-band` a few lines on and the row is listed skipped,
-   * which is the one message the operator needs. A paid org never reaches
-   * this branch — a rate is what makes the band meter instead of refuse.
+   * which is the one message the operator needs. A plan with an overage
+   * rate never reaches this branch — a rate is what makes the band meter
+   * instead of refuse.
    */
   const room = await crmRecordsQuotaForOrg(context.org as never, orgRef)
   if (!room.allowed) return ''

@@ -145,8 +145,8 @@ export type CreateCompany = (name: string) => Promise<CompanyOption>
  * owns it, as the drawer seeds too. `null` until the org has resolved, so a
  * picker offered before the scope is known offers no create.
  *
- * A company is a record of the band the drawers refuse on (AGL-2644): a
- * Free org at its hundred is refused here with the drawers' sentence, and
+ * A company is a record of the band the drawers refuse on (AGL-2644): an
+ * org at a full hard band is refused here with the drawers' sentence, and
  * the picker shows it beneath the field the way it shows any create that
  * failed. Measured on the click and not on the mount — see
  * `readCrmRecordsQuota` — and never for an edit, because linking an

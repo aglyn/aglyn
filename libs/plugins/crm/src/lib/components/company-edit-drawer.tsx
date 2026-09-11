@@ -165,8 +165,8 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
   const [custom, setCustom] = useState<CrmCustomDraft>({})
   /*
    * THE RECORDS BAND (AGL-2611), read only for a CREATE: a company is a
-   * record of the band the contacts list is banded by, and on a Free org at
-   * its hundred this drawer refuses the way `upsertHostContact` refuses a
+   * record of the band the contacts list is banded by, and on an org at a
+   * full hard band this drawer refuses the way `upsertHostContact` refuses a
    * capture — same number, same sentence. An edit is not a record and pays
    * for no aggregate. Only a SETTLED refusal refuses: three reads that have
    * not answered are not a full band.

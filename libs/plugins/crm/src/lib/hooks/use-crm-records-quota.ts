@@ -58,7 +58,7 @@ async function countCrmCollection(
  * create that mostly never comes. This is the same three reads and the same
  * fallback as {@link useCrmRecordsQuota}, taken at the moment they decide
  * something. A read that failed counts as nothing, which is the permissive
- * direction: a Free org is refused only by a band that was measured full.
+ * direction: an org is refused only by a hard band that was measured full.
  */
 export async function readCrmRecordsQuota(
   firestore: Firestore,
@@ -102,8 +102,8 @@ export interface CrmRecordsQuotaState {
  *
  * `scope` may be `null` to read nothing — a drawer that is closed, or a
  * drawer editing an existing record, has no create to gate and pays for no
- * aggregate. A denied read stays `null` and falls back: the band alert on a
- * Free org must not be cleared by a count that could not be taken, and a
+ * aggregate. A denied read stays `null` and falls back: the alert on a full
+ * hard band must not be cleared by a count that could not be taken, and a
  * defaulted 0 would do exactly that.
  */
 export function useCrmRecordsQuota(

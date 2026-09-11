@@ -263,10 +263,10 @@ export function leadIsForMember(
 }
 
 /**
- * Whether the org's plan carries the CRM suite (AGL-2611's `features.crm`).
+ * Whether the org's plan carries the CRM (AGL-2611's `features.crm`).
  *
  * Read by key rather than through the typed flag map so this module does not
- * depend on the key existing: the flag lands with the suite's gate, and a
+ * depend on the key existing: the flag lands with the CRM's gate, and a
  * plan that has not declared it is a plan that does not include it — a
  * digest about a surface the plan cannot open would be a reminder to pay.
  */

@@ -93,8 +93,8 @@ export interface ContactAssociationsCardProps {
  * the same stale-seed guard the properties card uses: a campaign membership
  * written over a cached read could revert somebody else's filing. The save
  * goes to `crm/contact-update` (AGL-2804), because the filing is this
- * holder's facet and a facet is the server's to write; filing is not the CRM
- * suite's, so it saves on every plan.
+ * holder's facet and a facet is the server's to write; like every field that
+ * route writes, it is refused to a plan without the CRM (AGL-2851).
  *
  * ## The lead (AGL-2612)
  *

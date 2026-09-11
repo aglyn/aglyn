@@ -70,7 +70,7 @@ export interface ContactCustomFieldsCardProps
  * the values are the holder's facet, which the server writes, judging each
  * against its definition and writing it at its own dotted path — a nested
  * `custom` object would replace the map and take every key this card did
- * not touch out with it — and refusing a plan without the CRM suite. A
+ * not touch out with it — and refusing a plan without the CRM. A
  * refusal is shown in the route's own words, with the draft kept.
  *
  * A cleared control sends `null`, the explicit "cleared" the model keeps the

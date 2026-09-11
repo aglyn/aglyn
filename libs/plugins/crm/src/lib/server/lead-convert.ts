@@ -236,7 +236,7 @@ export const leadConvertHandler: PluginApiHandler = async (req, res) => {
       return
     }
     const { orgId, org } = resolved
-    // A lead's conversion is the suite's, like its status and owner (AGL-2787).
+    // A lead's conversion is the CRM's, like its status and owner (AGL-2787).
     const suite = crmSuiteRefusal(org, 'Converting a lead')
     if (suite) {
       res.status(suite.status).json(suite.body)

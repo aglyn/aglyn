@@ -40,7 +40,7 @@ export interface CrmSendEmailButtonProps {
   email?: string | null
   name?: string | null
   /**
-   * The org's plan lacks the CRM suite, whose act one-to-one email is
+   * The org's plan lacks the CRM, whose act one-to-one email is
    * (AGL-2788): the button stands locked where it would be, and no dialog
    * opens.
    */

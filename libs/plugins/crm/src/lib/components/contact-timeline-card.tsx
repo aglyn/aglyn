@@ -225,9 +225,9 @@ export interface ContactTimelineCardProps {
    */
   campaignHref?: (email: ContactCampaignEmail) => string | null
   /**
-   * The org's plan lacks the CRM suite (AGL-2788). The history reads on
-   * every plan; logging an activity, and editing one already logged, is the
-   * suite's.
+   * The org's plan lacks the CRM (AGL-2788), which the shell mounts no CRM
+   * page for (AGL-2851). The history still draws; logging an activity stands
+   * locked, and one already logged cannot be edited.
    */
   suiteLocked?: boolean
 }

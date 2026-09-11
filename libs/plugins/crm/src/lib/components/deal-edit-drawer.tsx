@@ -322,8 +322,8 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
 
   /*
    * THE RECORDS BAND (AGL-2611), read only while a CREATE is open: a deal
-   * is a record of the band the contacts list is banded by, and on a Free
-   * org at its hundred this drawer refuses the way `upsertHostContact`
+   * is a record of the band the contacts list is banded by, and on an org
+   * at a full hard band this drawer refuses the way `upsertHostContact`
    * refuses a capture — same number, same sentence. Memoized, because the
    * tuple is an effect dependency and a fresh one per render would re-read
    * the three aggregates on every keystroke.

@@ -170,7 +170,7 @@ export const contactsMergeHandler: PluginApiHandler = async (req, res) => {
       actor = { uid: decoded.uid, email: decoded.email ?? null }
       actorName = typeof decoded['name'] === 'string' ? decoded['name'] : null
     }
-    // Merging is the suite's at either level (AGL-2787).
+    // Merging is the CRM's at either level (AGL-2787).
     const suite = crmSuiteRefusal(org, 'Merging two contacts')
     if (suite) {
       res.status(suite.status).json(suite.body)

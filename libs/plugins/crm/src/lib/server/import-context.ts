@@ -138,7 +138,7 @@ export async function resolveImportContext(req: ImportRequest): Promise<ImportCo
     }
   }
   // Every file this context serves — contacts, companies, deals, tasks and
-  // leads — is the CRM suite's to import, whoever is asking (AGL-2787).
+  // leads — is the CRM's to import, whoever is asking (AGL-2787).
   const suite = crmSuiteRefusal(org, 'Importing from a CSV file')
   if (suite) return { ok: false, status: suite.status, body: suite.body }
   const group = await consentGroupForSite(hostId)

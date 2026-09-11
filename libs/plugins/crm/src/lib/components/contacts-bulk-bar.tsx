@@ -146,9 +146,10 @@ export interface ContactsBulkBarProps {
    */
   csv?: ContactCsvOptions
   /**
-   * The org's plan lacks the CRM suite (AGL-2788). The owner, the stage and
-   * the company are the suite's and stand locked; tags, the exports, the
-   * audience door and removing people from a site are not the suite's.
+   * The org's plan lacks the CRM (AGL-2788), which the shell mounts no CRM
+   * page for (AGL-2851). The owner, the stage and the company stand locked;
+   * tags, the exports, the audience door and removing people from a site
+   * draw no lock of their own.
    */
   suiteLocked?: boolean
 }

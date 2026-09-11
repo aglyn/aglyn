@@ -44,13 +44,14 @@
  *
  * ## The plan
  *
- * Every field is the CRM suite's (AGL-2790). A plan without the suite reads
- * its Leads and edits no contact: not the owner, company, custom values or
- * files, and not the profile a capture writes (name, phone, job title,
- * address), the tags, the notes or the campaign filing either. A request
- * carrying any field is refused to such a plan once the caller is known, and
- * before a contact is read — staff included, because the plan is a fact
- * about the workspace. Erasing a person is another route, open on every plan.
+ * Every field is the CRM's (AGL-2790), and a plan without the CRM has none
+ * of it (AGL-2851), so it edits no contact: not the owner, company, custom
+ * values or files, and not the profile a capture writes (name, phone, job
+ * title, address), the tags, the notes or the campaign filing either. A
+ * request carrying any field is refused to such a plan once the caller is
+ * known, and before a contact is read — staff included, because the plan is
+ * a fact about the workspace. Erasing a person is another route, open on
+ * every plan.
  *
  * ## One holder, by dotted path
  *
@@ -143,9 +144,9 @@ const SUITE_ACTS: Record<keyof ContactUpdateFields, string> = {
 const NO_HOLDER_REFUSAL = 'No site holds this contact yet, so it has no profile to edit.'
 
 /**
- * The act a request is refused for on a plan without the suite: the first
+ * The act a request is refused for on a plan without the CRM: the first
  * field it carries, in the order the route reads them. Every field is the
- * suite's, so whichever field a request names is the act its refusal names.
+ * CRM's, so whichever field a request names is the act its refusal names.
  */
 export function contactUpdateSuiteAct(fields: ContactUpdateFields): string {
   const field = CONTACT_UPDATE_FIELDS.find((key) => fields[key] !== undefined)

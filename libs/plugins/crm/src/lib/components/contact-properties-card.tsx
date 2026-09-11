@@ -77,10 +77,10 @@ export interface ContactPropertiesCardProps {
   /** The team, for the owner picker and the owner's name. */
   members: OrgMembers
   /**
-   * The org's plan lacks the CRM suite (AGL-2788). The owner, the lifecycle
-   * stage and the company are the suite's: they show, locked, and a save
-   * leaves them as they are. The rest of the profile, the tags and the notes
-   * save as on every plan.
+   * The org's plan lacks the CRM (AGL-2788), which the shell mounts no CRM
+   * page for (AGL-2851). The owner, the lifecycle stage and the company
+   * show, locked, and are left out of a save; `crm/contact-update` refuses
+   * such a plan the rest of the profile, the tags and the notes too.
    */
   suiteLocked?: boolean
 }
@@ -106,8 +106,8 @@ export interface ContactPropertiesCardProps {
  * dotted path into the holder's facet — never a nested object, which would
  * take every other holder's records with it — clears a blank field rather
  * than storing it empty, keeps the phone's and the company's search echoes
- * at the top of the document, and refuses the owner and the company to a
- * plan without the CRM suite. A refusal is shown in the route's own words.
+ * at the top of the document, and refuses every field to a plan without
+ * the CRM. A refusal is shown in the route's own words.
  *
  * ## The stage goes to its own route
  *
@@ -224,7 +224,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       address,
       tags: parseContactTags(tags),
       notes: notes.slice(0, 2000),
-      // The suite's fields, sent only on a plan that carries the suite.
+      // The owner and the company, sent only on a plan that carries the CRM.
       ...(suiteLocked
         ? {}
         : { ownerUid, companyId, companyName: companyName.trim().slice(0, 120) }),

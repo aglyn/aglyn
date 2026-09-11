@@ -34,7 +34,7 @@ import type { CrmBulkAnswer } from '../model/crm-bulk-writes'
  * holder, and under a site it writes the site's.
  *
  * A request refused WHOLE — no session, no permission, a plan without the CRM
- * suite for a field that is the suite's — throws with the route's sentence.
+ * — throws with the route's sentence.
  * `updateMany` hands a per-contact answer back in the bulk runners' shape;
  * `updateOne` throws that one contact's refusal, which is what a single
  * record's Save shows.

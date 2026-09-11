@@ -59,8 +59,8 @@ export interface ContactDuplicatesCardProps {
   /** Opens the merge dialog with the candidate picked. */
   onMerge: (candidate: ContactPick) => void
   /**
-   * The org's plan lacks the CRM suite (AGL-2788). Looking is a read and
-   * stays; merging is the suite's, so each candidate's merge stands locked.
+   * The org's plan lacks the CRM (AGL-2788). Looking stays drawn; each
+   * candidate's merge stands locked.
    */
   suiteLocked?: boolean
 }
