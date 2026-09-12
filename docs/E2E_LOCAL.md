@@ -460,6 +460,13 @@ Re-run it after UI changes so the docs never drift:
 E2E_BASE_URL=http://localhost:4200 node tools/e2e/capture-docs-screenshots.mjs
 ```
 
+A shot whose surface ships behind a release flag that is off by default names
+that flag in `orgReleaseFlags`, and the harness writes it as a per-org override
+on the seeded org for that one shot, then restores the org. That is a Firestore
+write, so such a shot also needs `FIRESTORE_EMULATOR_HOST` — and
+`FIREBASE_PROJECT_ID`, if the seed was given one — set to what the seed ran
+with, which is not the defaults whenever `emulator-config.mjs` moved the ports.
+
 `tools/e2e/capture-docs-shots.mjs` (AGL-554) does the same for the docs
 **Guides** section (`apps/docs/static/img/guides/`), but flow-driven: it
 seeds guide fixtures on top of `seed:e2e` (a typed survey dataset, a
