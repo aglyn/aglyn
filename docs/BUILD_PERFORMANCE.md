@@ -166,8 +166,10 @@ deleting it is one cold rebuild, and a dev server that is about to start is goin
 cost anyway. So each Next app's `serve` target carries `"dependsOn": ["clean-next-cache"]`,
 which runs `tools/scripts/clean-next.mjs --prune --app=<app>` first. Over 10 GB the app's
 `.next` is removed and the server starts fresh; under it, nothing happens. `nx serve console`
-and `npm run serve:console:emulated` both go through the target, so there is no way to start a
-dev server the normal way and skip the check.
+goes through the target. `npm run serve:console:emulated` starts `next dev` without nx, so that
+no production credential reaches it (AGL-2828, `docs/E2E_LOCAL.md`), and runs the target's
+command from `project.json` itself before it starts. There is no way to start a dev server the
+normal way and skip the check.
 
 Run it by hand with `npm run clean:next` (report only) or `npm run clean:next:prune` (delete
 regardless of size). Override the limit with `--threshold=<GB>` or `NEXT_CACHE_MAX_GB`.
@@ -236,10 +238,10 @@ finding it again. Overrides: `DEV_DISK_MIN_FREE_GB`, `DEV_DISK_WARN_FREE_GB`, or
 
 Because it lives in `clean-next-cache`, it covers every route people actually use — `nx serve
 console`, `nx serve tenant`, `nx serve www`, any `--configuration=production` or `--port`
-variant, the `.claude/launch.json` entries (which all shell out to `nx serve`), and the
-`serve:*:emulated` npm scripts. It does **not** cover `apps/docs`, which is Docusaurus rather
-than Next and has no `clean-next-cache` target; that app has never been the one that fills the
-disk. The threshold logic is pure and tested — `npm run test:disk-space`, and in CI.
+variant, the `.claude/launch.json` entries (which shell out to `nx serve` or to the emulated
+scripts), and the `serve:*:emulated` npm scripts, which run the target's command before they
+start `next dev`. It does **not** cover `apps/docs`, which is Docusaurus rather than Next and has
+no `clean-next-cache` target; that app has never been the one that fills the disk. The threshold logic is pure and tested — `npm run test:disk-space`, and in CI.
 
 ### What is actually growing
 
@@ -341,10 +343,14 @@ element outranks the stylesheet a text LCP is waiting on.
 Same page, same run: the shared hero components rendered `{{prop.mockup}}` with
 no intrinsic `width`/`height`, so the hero was 0 px tall until it decoded and
 the section beneath it jumped by the full image height (CLS 0.114, all of it on
-that one section). That is a document fix, not a code fix — the dimensions ride
-on the node (`intrinsicWidth` / `intrinsicHeight`, see `media-metadata.ts`),
-and components authored before AGL-2486 started copying them off the media
-document have none until someone writes them.
+that one section). The pick copies the dimensions onto the node
+(`intrinsicWidth` / `intrinsicHeight`, see `media-metadata.ts`), and a component
+authored before AGL-2486 started copying them carries none. Since AGL-2833 the
+composition reads every placed library image's media document and lays its pair
+over the node (`media-asset-facts.ts`), so an image whose source resolves to a
+`media:` reference is sized from its asset whether or not the node carries a
+pair. A hotlinked image, and an asset the upload could not measure (an SVG),
+still reserve only what the node carries.
 
 ### What attribution you can and cannot trust in this stack
 

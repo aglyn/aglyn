@@ -1,0 +1,10 @@
+# The pushed range, checked in seconds for the classes that most often reached
+# `main` as a red (AGL-2837): the brand-literal, color, contact-address,
+# personal-identifier and NEXT_PUBLIC guards over the pushed files, test
+# wiring, the generated Next tsconfigs, the page-view rate, specs that still
+# assert copy the push changed, and Linear ids above the checked-in ceiling.
+# Tests, lint and the workspace typecheck stay in CI.
+#
+# git hands the refs being pushed to this hook on stdin, and the script reads
+# them from there.
+node tools/scripts/prepush.mjs

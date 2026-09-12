@@ -51,20 +51,39 @@
  * the absolute-URL and dimension handling instead of writing a third copy
  * that forgets one of them.
  *
- * ## Why the dimensions are stored beside the reference
+ * ## Where the dimensions come from (AGL-2850)
  *
- * They are read off {@link AglynHostMedia.width}/`height` — auto-captured at
- * upload (AGL-173) — and persisted next to the reference by whichever picker
- * wrote it, rather than looked up at render. `generateMetadata` runs on the
- * ISR render path, which is under an active cold-start budget (AGL-1152); a
- * media-doc read per screen render buys a number that changes only when
- * someone REPLACES the asset with one of different proportions, and the
- * picker rewrites the pair whenever it is re-picked. The tradeoff is stated
- * so the next person can reverse it deliberately.
+ * Each picker copies {@link AglynHostMedia.width}/`height` — auto-captured at
+ * upload (AGL-173) — beside the reference it writes, and that copy is the
+ * FALLBACK. A replace (AGL-2732) keeps an asset's id and URL and rewrites its
+ * pair. It cannot reach the copies stored beside the references to it, so a
+ * card replaced with a picture of another shape went on declaring the old
+ * shape to the crawlers that lay a card out before fetching its image, while
+ * its URL served the new bytes (AGL-2798).
+ *
+ * So the page's composition reads the document of each asset a card may name
+ * (a screen's and the host's `seo.image`, an entry's cover, an author's
+ * pictures) and hands their pairs here as `assetFacts`
+ * (`libs/tenant/runtime/src/lib/social-image-facts.ts`). The winning source
+ * takes its asset's pair when the document records a usable one, and its
+ * stored copy when it does not: an SVG the upload could not measure, a file
+ * older than AGL-173, an asset the CDN would not serve to this site, a failed
+ * read. Each of those renders the card every page rendered before.
+ *
+ * This reverses the tradeoff this note used to record. The pair was stored so
+ * that `generateMetadata`, on the ISR render path under a cold-start budget
+ * (AGL-1152), never read a media document for a number that changes only when
+ * someone replaces the asset. The composition already reads the documents of
+ * the images and films a page places, in one projected batch, so the card's
+ * documents join that read instead of adding one. The page that composes
+ * nothing, a password-protected screen, reads its card's documents on its own
+ * in one projected read.
  *
  * The pair travels WITH its image and is never mixed across sources — taking
  * a screen's image and the host's dimensions would describe a card that does
- * not exist, which is worse than emitting no dimensions at all.
+ * not exist, which is worse than emitting no dimensions at all. A current pair
+ * is looked up by the winning source's own reference, so it cannot cross
+ * sources either.
  *
  * ## `og:image:alt` (AGL-2417)
  *
@@ -99,7 +118,10 @@ import { absoluteMediaSrc } from './media-ref'
 export interface SocialImageSource {
   /** A `media:` reference, a CDN path, or an author-supplied absolute URL. */
   image?: string | null
-  /** Pixel dimensions copied from the media record at pick time. */
+  /**
+   * Pixel dimensions copied from the media record at pick time: the fallback
+   * when `assetFacts` records no usable pair for `image`.
+   */
   imageWidth?: number | null
   imageHeight?: number | null
   /**
@@ -134,9 +156,18 @@ export interface SocialImageHost {
 }
 
 /**
- * A dimension pair is emitted only when BOTH sides are positive integers.
- * Half a pair tells a crawler nothing and invites it to infer the other.
+ * What each library asset a card may name records NOW (AGL-2850): the pixel
+ * pair on its DAM document, keyed by the reference exactly as a source stores
+ * it (`media:{scope}/{mediaId}`, pinned or not).
+ *
+ * Built on the server from the batch the page's composition reads. A
+ * reference with no entry is one that read did not answer for, and its card
+ * keeps the pair stored beside it.
  */
+export type SocialImageAssetFacts = Readonly<
+  Record<string, { width?: number | null; height?: number | null }>
+>
+
 /**
  * The alt, trimmed, or nothing.
  *
@@ -152,12 +183,40 @@ function alt(source: SocialImageSource) {
   return value ? { alt: value.slice(0, MEDIA_ALT_MAX_LENGTH) } : {}
 }
 
-function dimensions(source: SocialImageSource) {
+/**
+ * A dimension pair is emitted only when BOTH sides are positive integers.
+ * Half a pair tells a crawler nothing and invites it to infer the other.
+ */
+function dimensions(source: SocialImageSource): {
+  width?: number
+  height?: number
+} {
   const width = Number(source.imageWidth)
   const height = Number(source.imageHeight)
   if (!Number.isFinite(width) || !Number.isFinite(height)) return {}
   if (width <= 0 || height <= 0) return {}
   return { width: Math.round(width), height: Math.round(height) }
+}
+
+/**
+ * The pair a card emits: its asset's current one when `assetFacts` records a
+ * usable pair for the winning source's OWN reference, and otherwise the copy
+ * stored beside that reference. Both pass through {@link dimensions}, so the
+ * two cannot disagree about what a usable pair is.
+ */
+function currentDimensions(
+  source: SocialImageSource,
+  assetFacts: SocialImageAssetFacts | null | undefined,
+): { width?: number; height?: number } {
+  const image = source.image ?? ''
+  const recorded =
+    assetFacts && Object.prototype.hasOwnProperty.call(assetFacts, image)
+      ? assetFacts[image]
+      : undefined
+  const current: { width?: number; height?: number } = recorded
+    ? dimensions({ imageWidth: recorded.width, imageHeight: recorded.height })
+    : {}
+  return current.width === undefined ? dimensions(source) : current
 }
 
 /**
@@ -193,8 +252,16 @@ export function resolveSocialImage(options: {
    * from.
    */
   origin?: string | null
+  /**
+   * What the named assets' DAM documents record now (AGL-2850). The winning
+   * source's pair comes from here when its own reference has a usable one,
+   * and from the copy stored beside the reference otherwise. A surface that
+   * read no documents omits it and emits the stored copy, as every surface
+   * did before.
+   */
+  assetFacts?: SocialImageAssetFacts | null
 }): ResolvedSocialImage | undefined {
-  const { sources, host, origin } = options
+  const { sources, host, origin, assetFacts } = options
   const source = sources.find((candidate) => Boolean(candidate?.image))
   if (!source?.image) return undefined
   // A `media:` reference becomes the site-relative CDN path, host-qualified
@@ -209,5 +276,5 @@ export function resolveSocialImage(options: {
     origin: origin || hostPublicOrigin(host),
   })
   if (!url) return undefined
-  return { url, ...dimensions(source), ...alt(source) }
+  return { url, ...currentDimensions(source, assetFacts), ...alt(source) }
 }

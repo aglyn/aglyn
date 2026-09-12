@@ -40,12 +40,106 @@ npm run e2e:console                # E2E_BASE_URL overrides the target
 ```
 
 Storage is emulated too, and has to be. Both `serve:*:emulated` scripts set
-`FIREBASE_STORAGE_EMULATOR_HOST=localhost:9199`, which is the only variable
-firebase-admin reads to find a Storage emulator; without it every media upload,
-replace, delete and CDN read from an "emulated" server goes to the real bucket
-named in `.env.development.local`, with the real service account beside it.
-Start the emulators with `storage` in `--only`, as above, or media calls fail
-with a refused connection, which is the failure you want.
+`FIREBASE_STORAGE_EMULATOR_HOST` (`localhost:9199` unless the caller exports
+another), which is the only variable firebase-admin reads to find a Storage
+emulator; without it every media upload, replace, delete and CDN read from an
+"emulated" server goes to the real bucket named in `.env.development.local`,
+with the real service account beside it. Start the emulators with `storage` in
+`--only`, as above, or media calls fail with a refused connection, which is the
+failure you want.
+
+No production credentials either (AGL-2828). The scripts do not serve through
+`nx serve`: its task runner loads the env files through dotenv-expand, which
+reads an empty variable as unset and writes the file's value over it, so a key
+blanked in the script or in your shell still reaches the server. They run
+`tools/scripts/serve-emulated.mjs <app>` instead. It loads the env files nx
+would (the app's, then the workspace root's), sets every credential for a
+service the emulators do not stand in for to an empty value, runs the
+`clean-next-cache` prune, and starts `next dev` with that environment. That
+covers Stripe, Vercel, Resend and the GA4 API secret, and by default any new
+`*_API_KEY`, `*_TOKEN` or `*_SECRET`. Next never replaces an inherited
+variable, even an empty one, so a flow that reaches billing, email or domains
+fails closed instead of calling the real service. The startup line names what
+was blanked. What stays, and why, is `KEPT_CREDENTIALS` in
+`tools/scripts/lib/emulated-env.mjs`: the Firebase service account (the Admin
+SDK does not start without it) and the secrets the app uses only to sign and
+verify its own requests. A port passes through as before:
+`npm run serve:console:emulated -- --port 4210`. The emulator hosts a script
+sets, and the `NEXT_PUBLIC_` twins the page reads (below), reach `next dev`
+unchanged: `serve-emulated.mjs` keeps every variable it inherits and empties
+only credential-shaped names.
+
+## A private port set (AGL-2834)
+
+Several sessions share this machine, and one of them usually holds the default
+emulator ports. Every part of the stack finds the emulators through the same
+four variables, so a whole stack — emulators, seed, console, tenant and
+harness — runs beside another one once those variables name other ports:
+
+```bash
+# 1. Every port the e2e config pins, moved by an offset, and the variables to match
+eval "$(node tools/scripts/emulator-config.mjs --offset=10000)"
+npx -y firebase-tools@13 emulators:start --config "$FIREBASE_EMULATOR_CONFIG" \
+  --project aglyn-main --only auth,firestore,storage,database
+
+# 2. In every other terminal on that stack, the same `eval` first, then:
+npm run seed:e2e
+npm run serve:console:emulated -- --port 4310
+E2E_BASE_URL=http://localhost:4310 npm run e2e:crm:reports
+```
+
+- `emulator-config.mjs` writes `cloud/firebase.e2e.offset-<N>.json`, beside
+  the config it copies, where git ignores it. It has to be there, because
+  firebase-tools resolves every rules and indexes path against the directory
+  of the config it was started with, and refuses a path that leads out of that
+  directory (AGL-2858). The four emulators move, and so do the hub, logging
+  and Firestore websocket ports, because each of those collides with a second
+  stack too. An offset whose ports are taken is refused. It prints `export`
+  lines for `FIRESTORE_EMULATOR_HOST`, `FIREBASE_AUTH_EMULATOR_HOST`,
+  `FIREBASE_STORAGE_EMULATOR_HOST`, `FIREBASE_DATABASE_EMULATOR_HOST` and
+  `FIREBASE_EMULATOR_CONFIG`.
+- firebase-tools does not refuse a rules file it cannot find. The Firestore and
+  Realtime Database emulators log `rules file … does not exist` and start
+  anyway, and Firestore then allows every read and write, so a spec that
+  expects the rules to refuse a write passes or fails for the wrong reason.
+  Read the start log for that line.
+- `seed:e2e`, both `serve:*:emulated` scripts and `require-emulator.mjs` read
+  those variables, and fall back to the default ports when they are unset. The
+  serve scripts also hand them to the page. A browser bundle only sees
+  `NEXT_PUBLIC_*`, so each host the page connects to is mirrored into
+  `NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST`,
+  `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` and, for the console's presence
+  session, `NEXT_PUBLIC_FIREBASE_DATABASE_EMULATOR_HOST`. Before those twins,
+  the page always connected to 8082 and 9099, so its reads and writes landed in
+  whichever stack held them.
+- The harness reads `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST`
+  as well (`tools/e2e/lib/console-session.mjs`).
+- The console dev server takes any free port. The tenant dev server does not:
+  its middleware routes `localhost:4500` and `*.localhost:4500` only, so one
+  tenant dev server runs at a time, whichever stack it points at.
+- Two stacks for one project id share a hub locator file in the system temp
+  directory, which is what firebase-tools' warning about multiple instances
+  refers to. Commands that look a running hub up, such as `emulators:export`,
+  find only one of them.
+
+To confirm a run landed where you meant it to, ask the emulators rather than
+the harness. The Auth emulator lists each account's `lastLoginAt`, which the UI
+sign-in moves:
+
+```bash
+curl -s -X POST -H 'Authorization: Bearer owner' -H 'Content-Type: application/json' \
+  -d '{}' "http://$FIREBASE_AUTH_EMULATOR_HOST/identitytoolkit.googleapis.com/v1/projects/aglyn-main/accounts:query"
+```
+
+The Firestore emulator counts rule evaluations, which only a client SDK causes;
+the Admin SDK in the seed and the harness bypasses the rules:
+
+```bash
+curl -s "http://$FIRESTORE_EMULATOR_HOST/emulator/v1/projects/aglyn-main:ruleCoverage"
+```
+
+Stop the emulators with Ctrl-C, and delete the config when you are done, with
+`rm "$FIREBASE_EMULATOR_CONFIG"`.
 
 ## The CRM specs (AGL-2610)
 
@@ -114,12 +208,30 @@ Escape and the close button; focus returned), a replace of every family
 through the card menu followed to every reference on the page, the old
 content-hashed URL's redirect, and the storage band at signed-replace mint.
 
-⛔ It refuses to upload anything until both servers have served an object that
+⛔ Before it writes anything, even to the emulator, it refuses a server that
+holds a credential for Stripe, Vercel, Resend or any other service the
+emulators do not stand in for (AGL-2828). It finds the process listening on each port and reads its
+environment with `ps eww`, printing names only. Next's dev server retitles
+itself, which hides its environment from `ps`, so that is read from the
+`next dev` parent that forked it. Every such credential an env file defines has
+to be present and empty there. Absent does not pass, because a server fills an
+undefined variable from its env files after `ps` has looked. A server started
+with `nx serve` or with a bare `next dev` fails this preflight.
+
+⛔ It then refuses to upload anything until both servers have served an object that
 exists ONLY in the Storage emulator. A server started without
 `FIREBASE_STORAGE_EMULATOR_HOST` fails that preflight instead of writing test
 files into a real bucket. The two films it uploads are committed under
 `tools/e2e/fixtures/`; every other fixture is generated per run, and every
 name carries the run id, so it is re-runnable without a re-seed.
+
+Video uploads ship paused behind `release_video_uploads` (AGL-2830), so the
+films are accepted only for an org holding that flag's per-org override.
+`seed:e2e` grants it to the primary e2e org and to no other
+(`tools/scripts/lib/e2e-release-flags.mjs`). An emulator seeded without the
+grant refuses both films with `403 video_uploads_paused`: re-run the seed, and
+allow a running console up to a minute, which is how long its server caches an
+org's overrides.
 
 The lightbox's player draws its own controls (AGL-2802), because Chrome's
 native ones keep Escape from the page: from inside them no key event reaches it
@@ -288,7 +400,7 @@ ever see that redirect locally, check what owns 4500 before anything else.
 
 ```bash
 # emulators + seed as above, then:
-npm run serve:tenant:emulated      # nx serve tenant --port 4500 + emulator flags
+npm run serve:tenant:emulated      # next dev on 4500 + emulator flags, no outbound credentials
 ```
 
 What to assert (all against `http://localhost:4500`):
@@ -328,18 +440,21 @@ somebody had already got wrong:
   sign-in page, which reads like bad credentials rather than a missing file.
 - `tsconfig.next.json` is generated, not committed.
 
-**Serve with `nx serve`, not `next dev`.** Only the nx target carries the cache prune
-(`docs/BUILD_PERFORMANCE.md`), and a bare `npx next dev` is how the last worktree quietly grew a
-6 GB cache nothing was ever going to clean. The script prints the right command when it finishes.
+**Serve with `nx serve` or a `serve:*:emulated` script, never a bare `next dev`.** Both carry the
+cache prune (`docs/BUILD_PERFORMANCE.md`), and a bare `npx next dev` is how the last worktree
+quietly grew a 6 GB cache nothing was ever going to clean. The script prints the right commands
+when it finishes.
 
-When `nx serve` refuses a second instance (one is already serving the main checkout), the
-fallback is `npx next dev apps/console -p 4210` with the same emulator env vars
-`serve:console:emulated` sets — and **on turbopack, not `--webpack`**: the webpack build follows
-`instrumentation.ts`'s deferred import into the edge bundle and dies on `import 'crypto'`, so every
-page 500s with `Module not found: Can't resolve 'crypto'`. Turbopack, in turn, refuses a
-`node_modules` that is a symlink out of the project root (`Symlink [project]/node_modules is
-invalid`), which is the clone rule above with an error message attached. Delete the `.next` it
-grew when you are done.
+Against the emulators, serve from the worktree with
+`npm run serve:console:emulated -- --port 4210`. It starts `next dev` itself rather than through
+nx, so the second-instance refusal `nx serve` gives while the main checkout is serving does not
+apply, and it holds no production credential. A bare `npx next dev apps/console -p 4210` holds
+every key the env files carry, and the DAM spec refuses it. The script runs on **turbopack, not
+`--webpack`**, the only bundler that works here: the webpack build follows `instrumentation.ts`'s
+deferred import into the edge bundle and dies on `import 'crypto'`, so every page 500s with
+`Module not found: Can't resolve 'crypto'`. Turbopack, in turn, refuses a `node_modules` that is a
+symlink out of the project root (`Symlink [project]/node_modules is invalid`), which is the clone
+rule above with an error message attached.
 
 Tear down with `git worktree remove --force <path>` — worktrees are cheap to recreate and a
 stale one keeps a whole `node_modules` and `.next` on disk.
@@ -354,6 +469,13 @@ Re-run it after UI changes so the docs never drift:
 ```bash
 E2E_BASE_URL=http://localhost:4200 node tools/e2e/capture-docs-screenshots.mjs
 ```
+
+A shot whose surface ships behind a release flag that is off by default names
+that flag in `orgReleaseFlags`, and the harness writes it as a per-org override
+on the seeded org for that one shot, then restores the org. That is a Firestore
+write, so such a shot also needs `FIRESTORE_EMULATOR_HOST` — and
+`FIREBASE_PROJECT_ID`, if the seed was given one — set to what the seed ran
+with, which is not the defaults whenever `emulator-config.mjs` moved the ports.
 
 `tools/e2e/capture-docs-shots.mjs` (AGL-554) does the same for the docs
 **Guides** section (`apps/docs/static/img/guides/`), but flow-driven: it

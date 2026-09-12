@@ -19,15 +19,14 @@ import * as Aglyn from '@aglyn/aglyn/server'
 // By path: the overlay is server-only, and every `@aglyn/aglyn` barrel
 // re-exports `app-utils/server` into published pages.
 import {
-  applyVideoAssetFacts,
-  videoAssetFactsKey,
-  videoAssetRefs,
-} from '@aglyn/aglyn/app-utils/video-asset-facts'
+  applyMediaAssetFacts,
+  mediaAssetRefs,
+} from '@aglyn/aglyn/app-utils/media-asset-facts'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
 import getForms from './get-forms'
-import getVideoAssetFacts from './get-video-asset-facts'
+import getMediaAssetFacts from './get-media-asset-facts'
 import {
   getPublishedCollectionSource,
   type PublishedCollectionSource,
@@ -36,6 +35,11 @@ import getPluginInstalls from './get-plugin-installs'
 import getVariables, { getFunctions, getWorkflows } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
 import getScreenVersion from './get-screen-version'
+import {
+  type ComposeSocialImages,
+  socialImageAssetFacts,
+  socialImageRefs,
+} from './social-image-facts'
 import { stampFormDatasetBindings } from './stamp-form-dataset-bindings'
 
 /**
@@ -302,7 +306,9 @@ async function expandCollectionEntryBlocks(
  * Shared post-version composition (AGL-551, extracted from
  * `composeScreenNodes`): layout chrome, reusable components, repeatables,
  * collection entries, bindings, function definitions, plugin installs,
- * named tokens, denormalize. The screen path and the collection-fallback
+ * named tokens, denormalize, and last the current facts of each placed image
+ * and film, and of the social card the page is shared as. The screen path and
+ * the collection-fallback
  * path (which has no screen doc) build identical trees through this one
  * pipeline.
  */
@@ -345,6 +351,12 @@ export async function composeNodesWithChrome(options: {
    * data we already have in hand.
    */
   host?: Aglyn.HostTokenSource | null
+  /**
+   * The social card the head shares this page as (AGL-2850). The documents of
+   * the assets it names are read in the same batch as the images and films
+   * the tree places.
+   */
+  socialImages?: ComposeSocialImages
 }): Promise<Record<string, any>> {
   const { hostId, layoutId } = options
 
@@ -461,15 +473,6 @@ export async function composeNodesWithChrome(options: {
   // component — so the composed tree is asked again below.
   const screenFormsPromise = Aglyn.placesFormEntity(screenNodes)
     ? getForms({ hostId })
-    : undefined
-  // The library films the SCREEN places (AGL-2807), read beside the chrome
-  // reads for the reason the datasets and forms reads are: most pages place
-  // none, and one that does usually says so on its own document. Not the
-  // correctness gate — a film can arrive from a layout, a component or a
-  // binding — so the composed tree is asked again at the end.
-  const screenVideoRefs = videoAssetRefs(screenNodes)
-  const screenVideoFactsPromise = screenVideoRefs.length
-    ? getVideoAssetFacts({ hostId, refs: screenVideoRefs })
     : undefined
   // Issued HERE, beside the datasets read and before the chrome bundle is
   // awaited, so the collection read overlaps it instead of trailing it.
@@ -614,23 +617,43 @@ export async function composeNodesWithChrome(options: {
   const denormalized = Aglyn.canvas.processNodesToDenormalized(
     withFormBindings as any,
   )
-  // A placed film's length, shape and poster come from its DAM asset as it is
-  // NOW, not as it was when it was picked (AGL-2807). LAST, on the tree the
-  // page ships, because a film can arrive from any stage above; only a film
-  // the screen's own read did not already cover costs a second one.
-  const videoRefs = videoAssetRefs(denormalized)
-  if (!videoRefs.length) return denormalized
-  const prefetched = new Set(screenVideoRefs.map(videoAssetFactsKey))
-  const unread = videoRefs.filter(
-    (ref) => !prefetched.has(videoAssetFactsKey(ref)),
-  )
-  const [screenFacts, laterFacts] = await Promise.all([
-    screenVideoFactsPromise,
-    unread.length ? getVideoAssetFacts({ hostId, refs: unread }) : undefined,
-  ])
-  const facts = new Map(screenFacts)
-  laterFacts?.forEach((value, key) => facts.set(key, value))
-  return applyVideoAssetFacts(denormalized, facts)
+  /*
+   * WHAT EACH PLACED IMAGE AND FILM IS NOW (AGL-2807, AGL-2833).
+   *
+   * An image's pixel pair and a film's length, shape and poster come from the
+   * asset's DAM document as it is now, not as it was when it was picked. LAST,
+   * on the tree the page ships, because an asset can arrive from any stage
+   * above: a layout, a component, a form, a repeated row, a collection entry,
+   * a binding.
+   *
+   * ONE read for all of them, issued once the tree is final rather than beside
+   * the chrome reads. A read issued there could only cover the screen's own
+   * placements, and nearly every layout places an image the screen does not
+   * (a logo, a footer mark), so it would buy a second read on almost every
+   * page. The late read costs its own round trip after the chrome reads, paid
+   * each time a page is composed, which for a published page is its ISR
+   * regeneration. A tree with no library asset, on a page whose social card
+   * names none, issues none.
+   *
+   * THE SOCIAL CARD'S ASSETS JOIN THE SAME READ (AGL-2850), ahead of the
+   * placements. A placement the cap leaves out keeps its pick-time pair, which
+   * for an image is a reservation the decoded picture corrects. Nothing
+   * corrects a card's pair, because a crawler lays the card out from it before
+   * fetching the image, and a card names at most three documents.
+   */
+  const socialImages = options.socialImages
+  const cardRefs = socialImages ? socialImageRefs(socialImages.images) : []
+  const refs = mediaAssetRefs(denormalized)
+  if (!refs.length && !cardRefs.length) return denormalized
+  const facts = await getMediaAssetFacts({
+    hostId,
+    refs: [...cardRefs, ...refs],
+  })
+  if (socialImages) {
+    const cardFacts = socialImageAssetFacts(socialImages.images, facts)
+    if (cardFacts) socialImages.onFacts(cardFacts)
+  }
+  return applyMediaAssetFacts(denormalized, facts)
 }
 
 /**
@@ -654,6 +677,8 @@ export async function composeScreenNodes(options: {
   versionId?: string
   /** The host document, for `host.*` tokens (AGL-1022). */
   host?: Aglyn.HostTokenSource | null
+  /** The social card the head shares this page as (AGL-2850). */
+  socialImages?: ComposeSocialImages
 }): Promise<Record<string, any> | null> {
   const { hostId, screenId, screen } = options
 
@@ -725,6 +750,7 @@ export async function composeScreenNodes(options: {
     tokens: options.tokens,
     collection: options.collection,
     host: options.host,
+    socialImages: options.socialImages,
   })
   void composed.catch(() => undefined)
 

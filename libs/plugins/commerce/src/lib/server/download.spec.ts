@@ -152,22 +152,62 @@ const fakeFirestore = {
   },
 }
 
-jest.mock('@aglyn/tenant-data-admin', () => ({
-  /*
-   * The real resolution's shape: an org that declared no pooling resolves
-   * every site to a group of ONE. Faked rather than imported because this
-   * file mocks the whole module — but faked to the NARROW answer, which is
-   * the direction a wrong group may fail in.
-   */
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
+const BUCKET = 'aglyn-test.appspot.com'
+
+/** Every V4 read the handler asked the bucket to sign. */
+const signedReads: { path: string; expires: number }[] = []
+
+const fakeBucket = {
+  name: BUCKET,
+  file: (path: string) => ({
+    getSignedUrl: async ({ expires }: { expires: number }) => {
+      signedReads.push({ path, expires })
+      return [
+        `https://storage.googleapis.com/${BUCKET}/${path}` +
+          '?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Signature=v4',
+      ]
+    },
   }),
-  firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
-}))
+}
+
+jest.mock('@aglyn/tenant-data-admin', () => {
+  // The REAL resolver and signing (AGL-2847): only Firestore and the bucket
+  // are faked, so "the link expires" is checked with the verifier the CDN runs.
+  const delivery = jest.requireActual(
+    '@aglyn/tenant-data-admin/server/paid-media-delivery',
+  )
+  const signing = jest.requireActual(
+    '@aglyn/tenant-data-admin/server/media-signing',
+  )
+  return {
+    /*
+     * The real resolution's shape: an org that declared no pooling resolves
+     * every site to a group of ONE. Faked rather than imported because this
+     * file mocks the whole module — but faked to the NARROW answer, which is
+     * the direction a wrong group may fail in.
+     */
+    consentGroupForSite: async (hostId: string) => ({
+      hostId,
+      groupId: hostId,
+      name: null,
+      hostIds: [hostId],
+      declared: false,
+    }),
+    firebaseAdmin: {
+      app: () => ({
+        firestore: () => fakeFirestore,
+        storage: () => ({ bucket: () => fakeBucket }),
+      }),
+    },
+    createPaidMediaDeliveryIo: delivery.createPaidMediaDeliveryIo,
+    resolvePaidMediaDelivery: delivery.resolvePaidMediaDelivery,
+    PAID_DOWNLOAD_LINK_TTL_MS: signing.PAID_DOWNLOAD_LINK_TTL_MS,
+  }
+})
+
+const { PAID_DOWNLOAD_LINK_TTL_MS, verifyMediaAccess } = jest.requireActual(
+  '@aglyn/tenant-data-admin/server/media-signing',
+)
 
 const HOST = 'host-1'
 const ORDER = 'order-1'
@@ -391,5 +431,123 @@ describe('a concurrent second request (AGL-2275)', () => {
       'prod-pdf': 1,
       'prod-other': 3,
     })
+  })
+})
+
+/**
+ * AGL-2847. The receipt link was checked, metered and expiring, and all of it
+ * guarded a 302 to the file's permanent public URL, which whoever read the
+ * `Location` kept.
+ */
+describe('AGL-2847 · the redirect lands on a link that expires', () => {
+  const DELIVERY_SCOPE = 'org:acme:host-1'
+
+  /** The product's one digital file, as the paid-media picker stores it. */
+  function sell(url: string) {
+    docs.set(`hosts/${HOST}/products/prod-pdf`, {
+      ...docs.get(`hosts/${HOST}/products/prod-pdf`),
+      digitalFiles: [{ url, fileName: 'guide.pdf' }],
+    })
+  }
+
+  let consoleError: jest.SpyInstance
+
+  beforeEach(() => {
+    consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    signedReads.length = 0
+    docs.set(`hostIndex/${HOST}`, { orgId: 'acme' })
+    docs.set('orgs/acme/media/med-guide', {
+      fileName: 'guide.pdf',
+      contentType: 'application/pdf',
+      storagePath: 'orgs/acme/media/Guides/med-guide',
+      visibleTo: ['org'],
+      private: true,
+    })
+    sell('media:org:acme/med-guide')
+  })
+
+  afterEach(() => {
+    consoleError.mockRestore()
+  })
+
+  it('signs a private file as a download that dies within the hour, and counts the attempt', async () => {
+    const before = Date.now()
+    const result = await download()
+    const after = Date.now()
+    expect(result.status).toBe(302)
+    const location = new URL(result.redirectedTo, 'https://shop.example')
+    expect(location.pathname).toBe(`/api/media/cdn/${DELIVERY_SCOPE}/med-guide`)
+    expect(location.searchParams.get('download')).toBe('1')
+    const signature = {
+      exp: Number(location.searchParams.get('exp')),
+      sig: String(location.searchParams.get('sig')),
+    }
+    expect(signature.exp).toBeGreaterThanOrEqual(before + PAID_DOWNLOAD_LINK_TTL_MS)
+    expect(signature.exp).toBeLessThanOrEqual(after + PAID_DOWNLOAD_LINK_TTL_MS)
+    expect(
+      verifyMediaAccess(DELIVERY_SCOPE, 'med-guide', signature, signature.exp - 1),
+    ).toBe(true)
+    expect(
+      verifyMediaAccess(DELIVERY_SCOPE, 'med-guide', signature, signature.exp),
+    ).toBe(false)
+    expect(result.headers['Cache-Control']).toBe('no-store')
+    expect(storedOrder().downloadAttempts).toEqual({ 'prod-pdf': 1 })
+  })
+
+  it('⛔ refuses a file that is still public, and the refusal costs no attempt', async () => {
+    docs.set('orgs/acme/media/med-guide', {
+      ...docs.get('orgs/acme/media/med-guide'),
+      private: false,
+    })
+    const result = await download()
+    expect(result.status).toBe(409)
+    expect(result.redirectedTo).toBe('')
+    expect(storedOrder().downloadAttempts).toBeUndefined()
+    expect(consoleError).toHaveBeenCalledWith(
+      '[commerce/download] paid file not delivered',
+      expect.stringContaining('"refusal":"not-private"'),
+    )
+  })
+
+  it('⛔ never hands out a raw download URL', async () => {
+    sell(
+      `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/` +
+        `${encodeURIComponent('orgs/acme/media/Guides/med-guide')}` +
+        '?alt=media&token=long-lived-token',
+    )
+    const result = await download()
+    expect(result.status).toBe(302)
+    expect(result.redirectedTo).not.toContain('token=')
+    expect(result.redirectedTo).not.toContain('firebasestorage')
+    expect(new URL(result.redirectedTo, 'https://shop.example').pathname).toBe(
+      `/api/media/cdn/${DELIVERY_SCOPE}/med-guide`,
+    )
+  })
+
+  it('gives an object no document owns a V4 read with the same window', async () => {
+    sell(
+      `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/` +
+        `${encodeURIComponent(`hosts/${HOST}/media/guide.pdf`)}` +
+        '?alt=media&token=long-lived-token',
+    )
+    const before = Date.now()
+    const result = await download()
+    expect(result.status).toBe(302)
+    expect(result.redirectedTo).not.toContain('token=')
+    expect(signedReads).toHaveLength(1)
+    expect(signedReads[0].expires).toBeGreaterThanOrEqual(
+      before + PAID_DOWNLOAD_LINK_TTL_MS,
+    )
+  })
+
+  it('⛔ refuses a download URL from a bucket this platform does not serve, costing no attempt', async () => {
+    sell(
+      'https://firebasestorage.googleapis.com/v0/b/someone-else.appspot.com/o/' +
+        'guide.pdf?alt=media&token=long-lived-token',
+    )
+    const result = await download()
+    expect(result.status).toBe(404)
+    expect(result.redirectedTo).toBe('')
+    expect(storedOrder().downloadAttempts).toBeUndefined()
   })
 })

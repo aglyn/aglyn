@@ -51,7 +51,8 @@
 // tenant dev server on :4500 (E2E_TENANT_URL), both carrying
 // FIREBASE_STORAGE_EMULATOR_HOST. E2E_STORAGE_BUCKET names the bucket the two
 // servers use. Nothing is uploaded until the script has proved that both
-// servers read that bucket from the emulator.
+// servers read that bucket from the emulator, and that neither holds a
+// Stripe, Vercel or Resend key, which only `serve:*:emulated` guarantees.
 //
 //   npm run e2e:dam
 
@@ -63,6 +64,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { chromium } from 'playwright-core'
 import sharp from 'sharp'
+import { serversHoldNoCredential } from '../scripts/lib/emulated-env.mjs'
 import { putMediaDocument } from '../scripts/lib/media-counter.mjs'
 import {
   adminFirestore,
@@ -243,6 +245,18 @@ const files = {
  *    Storage from the emulator.
  *=========================================*/
 
+// Credentials first, before anything is written even to the emulator: a
+// server holding a Stripe, Vercel or Resend key turns a step that reaches
+// billing, email or domains into a call to the real service (AGL-2828).
+{
+  const credentials = serversHoldNoCredential({ console: BASE_URL, tenant: TENANT_URL }, { repoRoot })
+  if (!credentials.ok) {
+    console.error(`REFUSED — ${credentials.detail}`)
+    process.exit(2)
+  }
+  tally.pass('neither server holds a credential the emulators do not stand in for', credentials.detail)
+}
+
 const PREFLIGHT_ID = `e2e-dam-preflight`
 {
   const path = `hosts/${HOST_ID}/media/${PREFLIGHT_ID}`
@@ -396,7 +410,11 @@ async function publish(screenId, slug, children) {
 
 if (ids.film && ids.image && ids.pdf && ids.sheet) {
   await publish(`e2e-dam-${RUN}`, pageSlug, {
-    photo: { componentId: 'image', props: { src: `media:${HOST_ID}/${ids.image}`, alt: 'E2E photo' } },
+    photo: {
+      componentId: 'image',
+      // The pair a pick of the 1400x800 fixture copies onto the node.
+      props: { src: `media:${HOST_ID}/${ids.image}`, alt: 'E2E photo', intrinsicWidth: 1400, intrinsicHeight: 800 },
+    },
     tour: {
       componentId: 'video',
       props: {
@@ -1040,6 +1058,19 @@ await apiStep(FOLLOWS_SHAPE, async () => {
   const square = /aspect-ratio:\s*480\s*\/\s*480/.test(html)
   const picked = /aspect-ratio:\s*640\s*\/\s*360/.test(html)
   tally.check(FOLLOWS_SHAPE, square && !picked, `480/480 present=${square}, 640/360 still present=${picked}`)
+})
+
+const IMAGE_FOLLOWS_SHAPE = 'the photo reserves the shape the asset records, not the one it was picked with (AGL-2833)'
+await apiStep(IMAGE_FOLLOWS_SHAPE, async () => {
+  // Both fixture images are 1400x800, so a replace alone cannot show a change
+  // of shape. A square recorded on the asset can: the photo node still stores
+  // the pick's 1400x800, and the page has to follow the asset.
+  await media().doc(ids.image).update({ width: 480, height: 480 })
+  const html = attr(await pageHtml(pageSlug))
+  const photo = html.match(new RegExp(`<img[^>]* src="${cdnPath(ids.image)}"[^>]*>`))?.[0] ?? ''
+  const square = / width="480"/.test(photo) && / height="480"/.test(photo)
+  const picked = / width="1400"/.test(photo) || / height="800"/.test(photo)
+  tally.check(IMAGE_FOLLOWS_SHAPE, square && !picked, `480x480 present=${square}, 1400x800 still present=${picked}`)
 })
 
 await apiStep('a replace across families is refused', async () => {

@@ -29,6 +29,8 @@ Aglyn Assist answers and directs — it doesn't change anything in your
 workspace. It can't edit your site, publish, or update settings, so there's
 nothing it can do by accident; you stay in control of every change.
 
+![The Aglyn Assist panel header with its help tooltip open, linking to the documentation](/img/getting-started/assist-panel-help-tip.png)
+
 ## Answers for beginners and developers
 
 Every answer is written twice over, in one message.

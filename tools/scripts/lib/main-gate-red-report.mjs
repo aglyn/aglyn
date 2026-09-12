@@ -64,9 +64,10 @@ export const REPORTABLE_JOBS = ['fast', 'full', 'sweepDue']
 /**
  * Which jobs actually failed, in a stable order.
  *
- * `skipped` and `cancelled` are NOT failures: `full` is skipped on every push
- * by design (it runs on the hourly cron), and treating that as red would alert
- * on every green push.
+ * `skipped` and `cancelled` are NOT failures: `full` is skipped when a dispatch
+ * or a cron asks for the fast path only, and a sweep that a newer push replaced
+ * in the queue is cancelled (AGL-2836). Treating either as red would alert on a
+ * sweep that never looked.
  */
 export function failedJobs(results) {
   return REPORTABLE_JOBS.filter((job) => results?.[job] === 'failure')

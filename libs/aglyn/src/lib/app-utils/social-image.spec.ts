@@ -335,4 +335,89 @@ describe('social card image resolution (AGL-1337)', () => {
       ).toBeUndefined()
     })
   })
+
+  /**
+   * The pair follows the ASSET (AGL-2850).
+   *
+   * A replace keeps a reference's id and URL and rewrites the asset's pixel
+   * pair, and it cannot reach the copy a picker stored beside the reference.
+   * So the resolver is handed what each named asset's document records now,
+   * and the stored copy is only what it falls back to.
+   */
+  describe('the pair follows the asset (AGL-2850)', () => {
+    const CARD = 'media:host-1/card'
+    /** The picker's copy of the card as first uploaded. */
+    const PICKED = { image: CARD, imageWidth: 1200, imageHeight: 630 }
+    /** The card's document after a replace with a square picture. */
+    const REPLACED = { [CARD]: { width: 1080, height: 1080 } }
+
+    it("emits the asset's current pair over the copy stored beside the reference", () => {
+      expect(
+        resolveSocialImage({ sources: [PICKED], host: HOST, assetFacts: REPLACED }),
+      ).toEqual({
+        url: 'https://custom.example/api/media/cdn/host-1/card',
+        width: 1080,
+        height: 1080,
+      })
+    })
+
+    it('falls back to the stored copy when the document records no usable pair', () => {
+      // Anti-vacuity: with a usable pair the same card takes it, so what
+      // follows is the fallback rule and not the facts being ignored.
+      expect(
+        resolveSocialImage({ sources: [PICKED], host: HOST, assetFacts: REPLACED }),
+      ).toMatchObject({ width: 1080, height: 1080 })
+      for (const recorded of [
+        {},
+        { width: 1080 },
+        { width: 0, height: 0 },
+        { width: -1, height: 1080 },
+        { width: null, height: null },
+      ]) {
+        expect(
+          resolveSocialImage({
+            sources: [PICKED],
+            host: HOST,
+            assetFacts: { [CARD]: recorded },
+          }),
+        ).toMatchObject({ width: 1200, height: 630 })
+      }
+      // …and when nothing was read for that reference at all.
+      expect(
+        resolveSocialImage({ sources: [PICKED], host: HOST, assetFacts: {} }),
+      ).toMatchObject({ width: 1200, height: 630 })
+    })
+
+    it("never lends one source's current pair to another source's image", () => {
+      // The site default's asset was replaced, but the screen's image won.
+      const resolved = resolveSocialImage({
+        sources: [{ image: 'media:host-1/screen-img' }, PICKED],
+        host: HOST,
+        assetFacts: REPLACED,
+      })
+      expect(resolved?.url).toBe(
+        'https://custom.example/api/media/cdn/host-1/screen-img',
+      )
+      expect(resolved).not.toHaveProperty('width')
+      // Anti-vacuity: the same facts DO describe the default when it wins.
+      expect(
+        resolveSocialImage({
+          sources: [{ image: '' }, PICKED],
+          host: HOST,
+          assetFacts: REPLACED,
+        }),
+      ).toMatchObject({ width: 1080, height: 1080 })
+    })
+
+    it('describes a reference stored with no pair once its asset records one', () => {
+      // An entry's cover and an author's pictures are written without a pair.
+      expect(
+        resolveSocialImage({
+          sources: [{ image: CARD }],
+          host: HOST,
+          assetFacts: REPLACED,
+        }),
+      ).toMatchObject({ width: 1080, height: 1080 })
+    })
+  })
 })

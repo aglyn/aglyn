@@ -1,0 +1,209 @@
+name: Main Gate full sweep
+
+# ---------------------------------------------------------------------------
+# THE FULL SWEEP, AS ONE UNIT (AGL-2836)
+# ---------------------------------------------------------------------------
+# Called by main-gate.yml's `full` job, whose concurrency group makes this whole
+# workflow the unit that queues: one sweep runs per ref, the newest waiting push
+# replaces an older waiting one, and a running sweep is never cut off. Per-job
+# groups cannot give that. A typecheck group and a test group turn over at
+# different times, so a burst of pushes leaves runs with some parts cancelled
+# and no run with all of them.
+#
+# The parts run in parallel on separate runners (AGL-2721), for the reason
+# recorded there: `TYPECHECK_CONCURRENCY: '2'` is a MEMORY ceiling on a 4-vCPU /
+# 16 GB runner, so adding concurrency inside one runner reintroduces the OOM the
+# cap fixed. Separate runners give each part its own 16 GB, and Actions minutes
+# are free on this plan.
+#
+# No job here declares `concurrency`. `main-gate-full-sweep.test.mjs` refuses
+# one, because it would split the unit again.
+
+on:
+  workflow_call:
+
+env:
+  NX_NO_CLOUD: 'true'
+
+permissions:
+  contents: read
+
+jobs:
+  full-typecheck:
+    name: full · typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+      - run: npm ci
+      - run: npm ci --prefix cloud/functions
+      - run: npm ci --prefix apps/docs
+      # The 4-vCPU / 16 GB ceiling (AGL-2684). On its own runner, and the cap
+      # STAYS: the constraint is this job's own memory, not contention with
+      # other steps.
+      - env:
+          TYPECHECK_CONCURRENCY: '2'
+        run: npm run typecheck
+      - run: npx nx run docs:typecheck
+
+  full-lint:
+    name: full · lint + guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+      - id: install
+        run: npm ci
+      - id: install-functions
+        run: npm ci --prefix cloud/functions
+      # THE LINT REPORT HAS TO ARRIVE WHOLE (AGL-2829). The `@nx/eslint:lint`
+      # executor writes its report in one `console.info`, and the task process
+      # exits before a large write drains. `console:lint` prints ~66 KB of
+      # warnings, so runs 34540545704 and 34553636957 showed a listing cut off
+      # mid-file, no `✖ N problems` summary, and a red task whose one error sat
+      # in the lost tail. `--quiet` leaves the errors as the whole report, and
+      # no project sets `maxWarnings`, so no verdict moves.
+      #
+      # `cloud-functions` runs apart because its target is `nx:run-commands`,
+      # and nx appends an unknown flag to a run-commands command string:
+      # `--quiet` would land after the `}` of its install check as a shell
+      # syntax error (the `--maxWorkers` trap docs/RELEASING.md records).
+      #
+      # `set +e` so both commands run and their codes are read bare. The grader
+      # then says in words whether a red is errors, a kill, or a report that
+      # never arrived.
+      - name: lint
+        run: |
+          set +e
+          log="$RUNNER_TEMP/nx-lint.log"
+          npx nx run-many -t lint --all --exclude=cloud-functions --parallel=3 --quiet > "$log" 2>&1
+          workspace=$?
+          npx nx run cloud-functions:lint >> "$log" 2>&1
+          functions=$?
+          cat "$log"
+          node tools/scripts/report-lint-verdict.mjs "$log" "$workspace" "$functions"
+      # The guards run whatever lint concluded, for the reason main-gate.yml's
+      # fast guard step records (AGL-2835): under the default `success()` a red
+      # lint or typecheck skipped every guard in 8 full sweeps from 2026-09-03 to
+      # 2026-09-11.
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.install-functions.outcome == 'success' }}
+        run: node tools/scripts/run-guards.mjs --concurrency 4
+        # The Linear key, for the reason main-gate.yml's fast job records
+        # (AGL-2670).
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+
+  full-test:
+    name: full · tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+      - run: npm ci
+      - run: npm ci --prefix cloud/functions
+      # Sharded the way nx-ci.yml shards its own: jest's `--shard` does the
+      # splitting and reaches jest THROUGH nx, so each shard runs a quarter of
+      # every project's files. `fail-fast: false` so one red shard does not
+      # cancel the others and cost the run its diagnosis.
+      #
+      # REDIRECTED to a file, not piped (AGL-1617). A pipe makes nx's stdout
+      # asynchronous and nx ends a failed run with process.exit(), which drops
+      # whatever is still buffered — always the failing task's output, since nx
+      # prints FAILED last.
+      - name: test
+        run: |
+          status=0
+          npx nx run-many -t test --all --parallel=3 --maxWorkers=2 \
+            --shard=${{ matrix.shard }}/4 \
+            > "$RUNNER_TEMP/nx-test.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/nx-test.log"
+          exit "$status"
+
+      # --task-failed: this step only runs because the job is already red, so
+      # the premise comes from the workflow rather than from a log that may not
+      # contain it. A log with nothing in it is INCONCLUSIVE, not clean.
+      - if: failure()
+        run: node tools/scripts/lib/ci-test-digest.mjs "$RUNNER_TEMP/nx-test.log" --task-failed
+
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nx-test-log-main-gate-full-${{ matrix.shard }}
+          path: ${{ runner.temp }}/nx-test.log
+          retention-days: 7
+          if-no-files-found: warn
+
+  full-build:
+    name: full · production builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+      - run: npm ci
+      - run: npm ci --prefix apps/docs
+      # PRODUCTION builds, named individually. A bare `nx run-many -t build`
+      # once went green while BOTH Next production builds errored on a
+      # misplaced `use client`, and `docs` has no `production` configuration.
+      # This is the non-negotiable: a gate that skips the production build has
+      # historically let a broken build reach production.
+      - run: npx nx run console:build:production
+      - run: npx nx run tenant:build:production
+      - run: npx nx run docs:build
+
+  # The aggregator. `success` from every part is the only pass: a part that did
+  # not run has proved nothing.
+  #
+  # `!cancelled()` rather than `always()`. A failed part must still reach this
+  # job, so the sweep reads red; a cancelled sweep proved nothing and must not
+  # read red either, so this job is left out and the caller sees `cancelled`,
+  # which main-gate.yml's report writes no status for.
+  full:
+    name: full (tests + production builds)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [full-typecheck, full-lint, full-test, full-build]
+    if: ${{ !cancelled() }}
+    steps:
+      - name: every part of the sweep passed
+        env:
+          TYPECHECK: ${{ needs.full-typecheck.result }}
+          LINT: ${{ needs.full-lint.result }}
+          TEST: ${{ needs.full-test.result }}
+          BUILD: ${{ needs.full-build.result }}
+        run: |
+          set -euo pipefail
+          bad=0
+          for part in "typecheck:$TYPECHECK" "lint:$LINT" "test:$TEST" "build:$BUILD"; do
+            name="${part%%:*}"; result="${part#*:}"
+            printf '  %-10s %s\n' "$name" "$result"
+            [ "$result" = "success" ] || bad=1
+          done
+          [ "$bad" = 0 ] || { echo "::error::the full sweep did not pass in full"; exit 1; }

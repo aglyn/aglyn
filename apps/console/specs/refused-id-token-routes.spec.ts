@@ -29,8 +29,11 @@
  * for one route per shape of catch: a catch-all 500, a 502, refusal mappers
  * ahead of the fault, a catch with no binding, a verification inside a helper
  * its caller catches, a try around verification alone, a try inside the one
- * doing the work, two verifications in one file, and the routes that already
- * answered 401 by a rule of their own.
+ * doing the work, two verifications in one file, the routes that already
+ * answered 401 by a rule of their own, and every caller of the two shared
+ * helpers that verify on a route's behalf: the maintenance staff check, which
+ * throws what it could not verify back to its caller, and the passkey gate,
+ * which answers for its caller (AGL-2816).
  *
  * ## The two halves are paired on purpose
  *
@@ -129,10 +132,16 @@ jest.mock('../app/api/_lib/render-system-email', () =>
 
 import * as accountClose from '../app/api/account/close/route'
 import * as accountEmails from '../app/api/account/emails/route'
+import * as auditArchive from '../app/api/admin/audit-archive/route'
+import * as reapPluginArtifacts from '../app/api/admin/reap-plugin-artifacts/route'
 import * as adminRevenue from '../app/api/admin/revenue/route'
+import * as reverifyPluginVersions from '../app/api/admin/reverify-plugin-versions/route'
 import * as runErasures from '../app/api/admin/run-erasures/route'
 import * as handoffAuthorize from '../app/api/auth/handoff/authorize/route'
 import * as legalAcceptance from '../app/api/auth/legal-acceptance/route'
+import * as passkeyRegisterOptions from '../app/api/auth/passkeys/register/options/route'
+import * as passkeyRegisterVerify from '../app/api/auth/passkeys/register/verify/route'
+import * as passkeyRemove from '../app/api/auth/passkeys/remove/route'
 import * as sendVerification from '../app/api/auth/send-verification/route'
 import * as billingSubscription from '../app/api/billing/subscription/route'
 import * as usageConfig from '../app/api/billing/usage-config/route'
@@ -325,6 +334,54 @@ const ROUTES: RouteCase[] = [
     send: () => runErasures.GET(request('GET', '/api/admin/run-erasures')),
     broken: 500,
   },
+  {
+    label: 'admin/audit-archive, whose shared staff check throws what it could not verify',
+    send: () => auditArchive.GET(request('GET', '/api/admin/audit-archive')),
+    broken: 500,
+  },
+  {
+    label: 'admin/reap-plugin-artifacts, the same shared staff check',
+    send: () =>
+      reapPluginArtifacts.GET(request('GET', '/api/admin/reap-plugin-artifacts')),
+    broken: 500,
+  },
+  {
+    label: 'admin/reverify-plugin-versions, the same shared staff check',
+    send: () =>
+      reverifyPluginVersions.GET(
+        request('GET', '/api/admin/reverify-plugin-versions'),
+      ),
+    broken: 500,
+  },
+  {
+    label: 'auth/passkeys/register/options, whose shared passkey gate answers for it',
+    send: () =>
+      passkeyRegisterOptions.POST(
+        request('POST', '/api/auth/passkeys/register/options', {}),
+      ),
+    broken: 500,
+  },
+  {
+    label: 'auth/passkeys/register/verify, the same passkey gate',
+    send: () =>
+      passkeyRegisterVerify.POST(
+        request('POST', '/api/auth/passkeys/register/verify', {
+          challengeId: 'challenge-1',
+          response: { id: 'credential-1' },
+        }),
+      ),
+    broken: 500,
+  },
+  {
+    label: 'auth/passkeys/remove, the same passkey gate',
+    send: () =>
+      passkeyRemove.POST(
+        request('POST', '/api/auth/passkeys/remove', {
+          credentialId: 'credential-1',
+        }),
+      ),
+    broken: 500,
+  },
 ]
 
 const ENV_KEYS = ['STRIPE_SECRET_KEY', 'CRON_SECRET'] as const
@@ -332,7 +389,7 @@ const savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string>> = {}
 
 beforeAll(() => {
   for (const key of ENV_KEYS) savedEnv[key] = process.env[key]
-  // Both routes answer 501 before verifying when unconfigured.
+  // The billing and cron routes answer 501 before verifying when unconfigured.
   process.env.STRIPE_SECRET_KEY = 'sk_test_refused_token_spec'
   process.env.CRON_SECRET = 'cron-secret-the-caller-does-not-send'
 })

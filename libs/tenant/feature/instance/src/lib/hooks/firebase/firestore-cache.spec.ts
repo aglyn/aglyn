@@ -18,15 +18,19 @@
 /**
  * AGL-1456, the declaration half. `firestore-cache-provider.spec.tsx` proves
  * the provider reaches this helper and asserts `localCache.kind` against the
- * real SDK; this asserts the two things `kind` cannot see.
+ * real SDK; this asserts the things `kind` cannot see.
  *
  * The garbage collector is one of them: `memoryLocalCache()` bakes it into a
  * closure, so the returned object is `{ kind: 'memory' }` either way and an
  * eager collector would be indistinguishable from the LRU one at the settings
  * surface — while costing a full working-set re-read on every intra-session
  * navigation. Asserted at the call, since it cannot be asserted at the value.
+ *
+ * The durable cache's size bound is another (AGL-2845), and so is which origin
+ * class gets its multi-tab records pruned.
  */
 
+import { type FirebaseApp } from 'firebase/app'
 import {
   memoryLocalCache,
   memoryLruGarbageCollector,
@@ -34,7 +38,8 @@ import {
   persistentMultipleTabManager,
 } from 'firebase/firestore'
 
-import { localCacheFor } from './firestore-cache'
+import { localCacheFor, pruneSharedClientStateFor } from './firestore-cache'
+import { pruneBrowserSharedClientState } from './firestore-shared-client-state'
 
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
@@ -42,6 +47,11 @@ jest.mock('firebase/firestore', () => ({
   memoryLruGarbageCollector: jest.fn(() => ({ kind: 'memoryLru' })),
   persistentLocalCache: jest.fn(() => ({ kind: 'persistent' })),
   persistentMultipleTabManager: jest.fn(() => ({ kind: 'PERSISTENT_MULTIPLE_TAB' })),
+}))
+
+jest.mock('./firestore-shared-client-state', () => ({
+  __esModule: true,
+  pruneBrowserSharedClientState: jest.fn(async () => undefined),
 }))
 
 beforeEach(() => {
@@ -57,6 +67,11 @@ describe('localCacheFor', () => {
     // would multiply reads by the number of open console tabs.
     expect(persistentLocalCache).toHaveBeenCalledWith({
       tabManager: (persistentMultipleTabManager as jest.Mock).mock.results[0].value,
+      // 40 MB is `LruParams.DEFAULT` in @firebase/firestore 4.17.1, the value an
+      // unset `cacheSizeBytes` already resolved to. Written as a number, not
+      // the constant, so the bound cannot drift — least of all to
+      // `CACHE_SIZE_UNLIMITED` — without this line changing too.
+      cacheSizeBytes: 40 * 1024 * 1024,
     })
     expect(memoryLocalCache).not.toHaveBeenCalled()
   })
@@ -79,5 +94,22 @@ describe('localCacheFor', () => {
     expect(memoryLocalCache).toHaveBeenCalledWith({
       garbageCollector: (memoryLruGarbageCollector as jest.Mock).mock.results[0].value,
     })
+  })
+})
+
+describe('pruneSharedClientStateFor', () => {
+  const app = { name: 'DEFAULT_AGLYN', options: { projectId: 'aglyn-main' } } as FirebaseApp
+
+  it("prunes a durable origin's multi-tab records under its own app and project", async () => {
+    await pruneSharedClientStateFor('durable', app)
+
+    expect(pruneBrowserSharedClientState).toHaveBeenCalledTimes(1)
+    expect(pruneBrowserSharedClientState).toHaveBeenCalledWith('DEFAULT_AGLYN', 'aglyn-main')
+  })
+
+  it('never looks on an ephemeral origin, whose memory cache writes none', async () => {
+    await expect(pruneSharedClientStateFor('ephemeral', app)).resolves.toBeUndefined()
+
+    expect(pruneBrowserSharedClientState).not.toHaveBeenCalled()
   })
 })

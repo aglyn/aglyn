@@ -133,7 +133,10 @@ can hold both the pitch and the members-only part:
 - **Members video** — plays one of a product's videos for members entitled to
   that product, and resumes where each member left off. **Video number** picks
   which one (the first is `0`), and **Locked text** is what sits over the
-  poster frame for everyone else.
+  poster frame for everyone else. The video file is private and every link a
+  member's player gets expires, so a link copied out of the page stops working
+  on its own; see
+  [Members videos are private files](../content-and-data/media/overview.md#members-videos-are-private).
 - **Member feed** — posts only entitled members can see, newest first, with a
   **Heading**, **Empty text** for when there are none, and a cap on how many
   show. Non-members never receive the posts, not merely a hidden copy of them.

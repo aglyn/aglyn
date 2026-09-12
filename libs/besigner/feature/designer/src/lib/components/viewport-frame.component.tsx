@@ -60,7 +60,7 @@ import { hoistStateSx } from '../utils/state-sx'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
 import InlineMarkdownEditorComponent from './inline-markdown-editor.component'
 import InlineTextEditorComponent from './inline-text-editor.component'
-import NodeLeaf from './node-leaf'
+import NodeLeaf, { MediaFactsLeaf } from './node-leaf'
 import NodeOverlay from './node-overlay'
 
 const ViewportFrame = styled('div', {
@@ -249,10 +249,12 @@ const LayoutChromeLeaf = forwardRef<any, any>((props, ref) => {
       </Leaf>
     )
   }
+  // An image or film in the chrome shows its DAM asset's current facts, as the
+  // published page composes it (AGL-2838, AGL-2856).
   return (
-    <Leaf ref={ref} node={node} {...rest}>
+    <MediaFactsLeaf ref={ref} node={node} {...rest}>
       {children}
-    </Leaf>
+    </MediaFactsLeaf>
   )
 })
 LayoutChromeLeaf.displayName = 'LayoutChromeLeaf'

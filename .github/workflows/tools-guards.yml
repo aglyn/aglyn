@@ -345,6 +345,16 @@ jobs:
       # only the proxy measurement pointed at it. Pure node.
       - run: npm run test:front-door
 
+      # test:emulator-config  Does a private-port emulator config name its
+      # rules files (AGL-2858)? firebase-tools resolves every rules and indexes
+      # path in a config against the directory of that config, and refuses a
+      # path that leads out of it. A config can parse, with every port moved,
+      # and still name no rules file: an absolute path is doubled by the join,
+      # and a `../` path is refused. This runs `emulator-config.mjs` from a
+      # copy of the repo layout and reads each path it writes back the way
+      # firebase-tools does. Pure node.
+      - run: npm run test:emulator-config
+
       # test:render-errors  Is a PAGE ROUTE throwing (AGL-2709)? The half the
       # front door does not close: Next serves the cached ISR document while
       # every regeneration underneath it fails, so a 200 is a statement about
@@ -413,6 +423,34 @@ jobs:
       # failed test in the log must grade INCONCLUSIVE, never clean. Pure
       # node, no network, ~1s.
       - run: npm run test:ci-test-digest
+
+      # test:lint-verdict  The CI lint grader (AGL-2829). Main Gate runs
+      # 34540545704 and 34553636957 went red on `console:lint` with a warning
+      # listing cut off mid-file and no error anywhere in the log: the
+      # executor's single write of a 66 KB report did not drain before the task
+      # exited. Both lint steps run `--quiet` and hand their log and exit codes
+      # to this grader, which says whether a red is errors, a kill, or a report
+      # that never arrived. Pure node, no network.
+      - run: npm run test:lint-verdict
+
+      # test:prepush  The pre-push checks (AGL-2837): which checks a pushed
+      # path trips, citations above the Linear ceiling, the stale-literal
+      # finder replayed against a throwaway repository in the 551bdd32f shape,
+      # and the `--files-from` scope of the five file-content guards, including
+      # the refusal to write a ratchet baseline from a partial sweep. A hook
+      # runs on one machine and gates nothing, so this suite is what keeps its
+      # decisions honest. Pure node and git, no network.
+      - run: npm run test:prepush
+
+      # test:emulated-env  What a `serve:*:emulated` dev server may hold
+      # (AGL-2828). `serve-emulated.mjs` starts `next dev` with every
+      # credential for a service the emulators do not stand in for set empty,
+      # and the DAM spec's preflight refuses a server that still holds one.
+      # Both rest on this suite's decisions: which names are such credentials,
+      # which env files nx would have loaded, and how a process's environment
+      # reads under `ps`. Neither runs in CI, so a regression in those
+      # decisions surfaces here or nowhere. Pure node, no network.
+      - run: npm run test:emulated-env
 
       - run: npm run test:standalone-installs
 
@@ -925,6 +963,13 @@ jobs:
       # count should read — and the source guards that refuse `--apply` when
       # the tree no longer says what the script assumes.
       - run: npm run test:crm-lifecycle-backfill
+
+      # AGL-2814. The members-video backfill's decisions: which files become
+      # private, which download tokens are rotated, which stored links are
+      # rewritten, and the public file used elsewhere that is listed and left
+      # alone. A dry run that finds nothing reads the same as one that looked
+      # at nothing, so the finding itself is what is proved.
+      - run: npm run test:gated-media-backfill
 
       # AGL-2586. The uptime probe's Slack notifier — who is told when a
       # journey check goes red. It has to be provable without an outage, and

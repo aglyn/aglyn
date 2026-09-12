@@ -135,7 +135,9 @@ export interface ImageProps {
   height?: string
   /**
    * The asset's own pixel dimensions, copied off the media document when the
-   * image was picked (AGL-2486).
+   * image was picked (AGL-2486), and read from the asset again when the page
+   * is composed, so a replace with a different shape reaches every page that
+   * places it (AGL-2833).
    *
    * NOT author controls, which is why neither appears in the schema below:
    * they describe the file, and the CSS `width`/`height` above describe the
@@ -151,10 +153,11 @@ export interface ImageProps {
    * emitted — one alone gives the browser no ratio and would be read as a
    * real dimension.
    *
-   * Written by the media picker, and read from the node like any other prop,
-   * so nothing on the render path has to fetch a media document. `srcSet`
-   * still selects which variant is downloaded; these only say what shape it
-   * will be.
+   * Read from the node like any other prop, so this element never fetches a
+   * media document: the composition has already laid the asset's current
+   * pair over the pick's (`media-asset-facts.ts`), and the pick's copy is
+   * what renders wherever that read cannot answer. `srcSet` still selects
+   * which variant is downloaded; these only say what shape it will be.
    */
   intrinsicWidth?: number
   /** See `intrinsicWidth` — the two are only ever used as a pair. */

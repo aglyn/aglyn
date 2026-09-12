@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 export interface PasskeyEligibleUser {
   uid: string
@@ -32,6 +33,12 @@ export interface PasskeyEligibleUser {
  *   supporting them would fork the account.
  * - Unverified emails are refused, matching the session-mint gate (AGL-479):
  *   a passkey must not become a way to hold a session the mint would refuse.
+ *
+ * A token Firebase refuses answers the 401 a missing header gets. A token that
+ * could not be checked at all — a Google certificate outage, a failure with no
+ * auth code — answers 500 (AGL-2816): it says nothing about the caller's
+ * credential, and a 401 there would hide the outage from the alert that pages
+ * on server errors.
  */
 export async function requirePasskeyEligibleUser(
   request: Request,
@@ -55,7 +62,10 @@ export async function requirePasskeyEligibleUser(
       uid: decoded.uid,
       email: decoded.email ? String(decoded.email) : null,
     }
-  } catch {
-    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  } catch (error) {
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
+    console.error('[passkeys] token verification failed', error)
+    return Response.json({ error: 'internal' }, { status: 500 })
   }
 }
