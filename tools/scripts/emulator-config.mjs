@@ -26,20 +26,26 @@
 // Several sessions share one machine, and one of them usually holds the
 // emulators' default ports. Every port `cloud/firebase.e2e.json` pins moves by
 // the offset: the four emulators, and the hub, logging and Firestore websocket
-// ports, which collide just as surely and fail the start. The config lands in
-// `tmp/emulators/` with its rules paths made absolute, so it starts from
-// anywhere.
+// ports, which collide just as surely and fail the start.
+//
+// The config is written to `cloud/`, beside the one it copies, and each rules
+// and indexes path in it is relative to that directory (AGL-2858).
+// firebase-tools treats the directory of the config it is given as the project
+// directory: it joins every such path onto that directory, and refuses a path
+// that leads out of it. An absolute path is doubled by the join and a `../`
+// path is refused, so the config has to sit in `cloud/` or above it.
 //
 // stdout is shell, for `eval`: FIRESTORE_EMULATOR_HOST,
 // FIREBASE_AUTH_EMULATOR_HOST, FIREBASE_STORAGE_EMULATOR_HOST and
 // FIREBASE_DATABASE_EMULATOR_HOST — what `seed:e2e`, both `serve:*:emulated`
 // scripts (and through them the page in the browser) and the e2e harness read
-// — plus FIREBASE_EMULATOR_CONFIG, the file to start. An offset whose ports are
-// already taken is refused, rather than written into a stack that half-binds.
+// — plus FIREBASE_EMULATOR_CONFIG, the absolute path of the file to start. An
+// offset whose ports are already taken is refused, rather than written into a
+// stack that half-binds.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import net from 'node:net'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -63,8 +69,11 @@ const config = JSON.parse(
   readFileSync(join(cloudDir, 'firebase.e2e.json'), 'utf8'),
 )
 
-// Rules and index paths resolve against the directory of the config that
-// names them, and this one is written somewhere else.
+const file = join(cloudDir, `firebase.e2e.offset-${offset}.json`)
+
+// Each path is written relative to the directory of the file that names it,
+// which is the directory firebase-tools resolves it against. `resolve` leaves
+// an absolute path naming the file it already named.
 for (const [section, keys] of [
   ['firestore', ['rules', 'indexes']],
   ['storage', ['rules']],
@@ -72,8 +81,8 @@ for (const [section, keys] of [
 ]) {
   for (const key of keys) {
     const value = config[section]?.[key]
-    if (typeof value === 'string' && !isAbsolute(value)) {
-      config[section][key] = join(cloudDir, value)
+    if (typeof value === 'string') {
+      config[section][key] = relative(dirname(file), resolve(cloudDir, value))
     }
   }
 }
@@ -111,8 +120,6 @@ if (taken.length) {
   process.exit(1)
 }
 
-const file = join(repoRoot, 'tmp', 'emulators', `firebase.e2e.offset-${offset}.json`)
-mkdirSync(dirname(file), { recursive: true })
 writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`)
 
 process.stderr.write(

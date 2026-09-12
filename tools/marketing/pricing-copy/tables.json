@@ -433,7 +433,7 @@
             }
           },
           {
-            "label": "Form submissions / mo",
+            "label": "Form submissions / mo, per site",
             "duplicateOf": null,
             "values": {
               "free": "20",
@@ -447,10 +447,10 @@
             }
           },
           {
-            "label": "Contacts included",
+            "label": "CRM records included (contacts, companies & deals)",
             "duplicateOf": null,
             "values": {
-              "free": "100",
+              "free": "—",
               "starter": "1,000",
               "pro": "10,000",
               "business": "50,000",
@@ -461,7 +461,35 @@
             }
           },
           {
-            "label": "Email sends / mo",
+            "label": "CRM: contacts, leads, companies, deals & tasks",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "✓",
+              "pro": "✓",
+              "business": "✓",
+              "scale": "✓",
+              "advanced": "✓",
+              "agency": "✓",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "One-to-one emails / day",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "50",
+              "pro": "150",
+              "business": "200",
+              "scale": "300",
+              "advanced": "500",
+              "agency": "1,000",
+              "enterprise": "Talk to us"
+            }
+          },
+          {
+            "label": "Campaign emails / mo",
             "duplicateOf": null,
             "values": {
               "free": "—",
@@ -817,7 +845,8 @@
           "1% commerce fees",
           "300k API requests/mo",
           "25,000 products per site",
-          "290 GB bandwidth"
+          "290 GB bandwidth",
+          "40,000 campaign emails/mo"
         ],
         "cta": "CHOOSE",
         "byInterval": {
@@ -845,7 +874,8 @@
           "0% commerce fees",
           "1M API requests/mo",
           "unlimited products",
-          "priority scale & limits"
+          "priority scale & limits",
+          "65,000 campaign emails/mo"
         ],
         "cta": "CHOOSE",
         "byInterval": {
@@ -873,7 +903,8 @@
           "full white-label incl. custom console domain",
           "5M API requests/mo",
           "unlimited records & variables",
-          "20 POS registers per site"
+          "20 POS registers per site",
+          "130,000 campaign emails/mo"
         ],
         "cta": "CHOOSE",
         "byInterval": {
@@ -897,12 +928,13 @@
       "annualLabel": "Quoted per agreement",
       "blurb": "For large organizations with bespoke requirements — volume pricing available.",
       "specs": [
-        "Unlimited scale",
-        "0% platform fees",
+        "Scale as you grow",
+        "0% transaction fees",
         "white-label",
         "SSO",
         "dedicated support",
-        "custom contracts"
+        "custom contracts",
+        "campaign email volume by agreement"
       ],
       "cta": "CONTACT SALES",
       "byInterval": null
@@ -995,7 +1027,7 @@
         }
       },
       {
-        "label": "Extra data storage, per GB-month",
+        "label": "Extra dataset storage, per GB-month",
         "rate": "extraDataGbMonthlyUsd",
         "values": {
           "starter": "$0.36",
@@ -1021,7 +1053,7 @@
         }
       },
       {
-        "label": "Contacts, per 1,000 over the included band",
+        "label": "CRM records, per 1,000 over the included band",
         "rate": "extraContactsUsdPer1k",
         "values": {
           "starter": "$1",
