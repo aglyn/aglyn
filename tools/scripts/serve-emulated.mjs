@@ -36,7 +36,7 @@
 // from project.json, and PORT exported to the server.
 
 import { fork, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, readlinkSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -82,6 +82,34 @@ const port = Number(portArg ?? targets.serve.options?.port)
 if (!Number.isInteger(port) || port <= 0) fail(`No usable port for ${app}.`)
 const prune = targets['clean-next-cache']?.options?.command
 if (!prune) fail(`apps/${app} has no clean-next-cache command to run first.`)
+
+/*
+ * Modules the bundler can reach (AGL-2860).
+ *
+ * `git worktree add` leaves `node_modules` a symlink to the checkout the
+ * worktree came from, and Turbopack refuses one whose target is outside the
+ * project root: `next dev` dies on "Symlink [project]/node_modules is invalid,
+ * it points out of the filesystem root" and names no remedy. `--webpack` is
+ * not one — it follows the link, the escaped path stops matching the server
+ * externals, and the app fails on a Node builtin instead. A worktree inside
+ * the checkout is unaffected, because its link stays under that root.
+ *
+ * Checked here so the answer arrives before the bundler's question.
+ */
+const modulesDir = join(repoRoot, 'node_modules')
+const modulesLink = lstatSync(modulesDir, { throwIfNoEntry: false })
+if (modulesLink?.isSymbolicLink()) {
+  const target = resolve(repoRoot, readlinkSync(modulesDir))
+  if (target !== repoRoot && !target.startsWith(`${repoRoot}/`)) {
+    console.error(
+      `node_modules links out of this checkout, to ${target}, and the bundler ` +
+        'refuses that. Give this worktree modules of its own — on APFS the ' +
+        'clone costs seconds and almost no disk:\n' +
+        `  rm ${modulesDir} && cp -Rc ${target} ${modulesDir}`,
+    )
+    process.exit(1)
+  }
+}
 
 const { env, blanked } = emulatedServeEnvironment(
   process.env,

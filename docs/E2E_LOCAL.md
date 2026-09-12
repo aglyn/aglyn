@@ -122,6 +122,19 @@ E2E_BASE_URL=http://localhost:4310 npm run e2e:crm:reports
   refers to. Commands that look a running hub up, such as `emulators:export`,
   find only one of them.
 
+⚠️ Serve from a worktree only if `npm run worktree:new` made it (AGL-2860).
+"A second checkout, when the main one is busy" below says what it does and why
+each step is there. A worktree from a bare `git worktree add` has a
+`node_modules` SYMLINK, which Turbopack refuses outright, and none of the
+gitignored env files, which costs the sign-in page its Firebase key and every
+spec a 45-second `page.fill` timeout that looks like a slow compile.
+`serve-emulated.mjs` refuses to start on the symlink and prints the clone; the
+missing env files announce themselves only in the browser console. Reaching for
+`--webpack` gets past neither — it follows the link and then fails on a Node
+builtin the server externals no longer cover, and switching bundlers leaves
+`apps/console/.next` mixed, after which every route answers 404 until it is
+deleted.
+
 To confirm a run landed where you meant it to, ask the emulators rather than
 the harness. The Auth emulator lists each account's `lastLoginAt`, which the UI
 sign-in moves:
