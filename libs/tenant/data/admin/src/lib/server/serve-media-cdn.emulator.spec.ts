@@ -89,12 +89,33 @@ const describeEmulated = EMULATED ? describe : describe.skip
 function makeRes() {
   const headers: Record<string, string> = {}
   const captured = { status: 0, body: undefined as unknown, ended: false }
+  // The headers as they stood when the handler first tore a representation
+  // down. An allowed request chooses its delivery headers and THEN fails in
+  // Storage (no bucket, by design above); AGL-2810's failure path clears that
+  // representation and stamps `no-store`, which is correct for a 500 and
+  // erases the one header that separates allowed from denied. Keeping the
+  // snapshot preserves the choice the handler made, which is what this file
+  // asks about.
+  const chosen: Record<string, string> = {}
+  let cleared = false
   const res = {
     headers,
     captured,
     setHeader: (key: string, value: string) => {
       headers[key.toLowerCase()] = String(value)
       return res
+    },
+    // `clearMediaCdnRepresentation` strips the file's own headers off an answer
+    // that will not carry it, so the double has to forget them the same way
+    // `setHeader` records them. `ServerResponse.removeHeader` returns void, and
+    // a double that returned `res` would let a chained call pass here and throw
+    // in production.
+    removeHeader: (key: string) => {
+      if (!cleared) {
+        cleared = true
+        Object.assign(chosen, headers)
+      }
+      delete headers[key.toLowerCase()]
     },
     status: (code: number) => {
       captured.status = code
@@ -114,9 +135,17 @@ function makeRes() {
       captured.ended = true
       return res
     },
+    chosen,
   }
   return res
 }
+
+/**
+ * The cache policy the handler CHOSE for this request: the live header when it
+ * answered under one, and the snapshot when a later failure cleared it.
+ */
+const deliveryCacheControl = (res: ReturnType<typeof makeRes>) =>
+  res.chosen['cache-control'] ?? res.headers['cache-control']
 
 const get = async (
   serveMediaCdn: typeof import('./serve-media-cdn').serveMediaCdn,
@@ -207,12 +236,12 @@ describeEmulated('media CDN scope boundary (AGL-1047)', () => {
       `org:${ORG}:${INTERNAL}`,
       'm-internal',
     ])
-    expect(res.headers['cache-control']).toBe(stableCacheControl)
+    expect(deliveryCacheControl(res)).toBe(stableCacheControl)
   }, 60_000)
 
   it('serves an org-wide asset on the bare org URL', async () => {
     const res = await get(serveMediaCdn, [`org:${ORG}`, 'm-shared'])
-    expect(res.headers['cache-control']).toBe(stableCacheControl)
+    expect(deliveryCacheControl(res)).toBe(stableCacheControl)
   }, 60_000)
 
   it('refuses an asset carrying no scope, which is visible to nobody', async () => {
@@ -250,7 +279,7 @@ describeEmulated('media CDN scope boundary (AGL-1047)', () => {
       expect(res.captured.status).not.toBe(404)
       // And still never shared-cacheable: a signed response cached publicly
       // would outlive its own signature.
-      expect(res.headers['cache-control']).toBe('private, no-store')
+      expect(deliveryCacheControl(res)).toBe('private, no-store')
     })
 
     it('rejects a signature minted for a different asset', async () => {
