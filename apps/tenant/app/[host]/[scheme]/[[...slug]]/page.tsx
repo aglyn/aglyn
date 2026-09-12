@@ -128,6 +128,9 @@ type CatchAllPageProps = {
 function buildMetadata(props: Props): Metadata {
   const host = props.data?.host as any
   const screen = props.data?.screen?.data as any
+  // What each asset a card below may name records now (AGL-2850). Every card
+  // takes its pair from here before the copy stored beside its reference.
+  const assetFacts = props.socialImageFacts
   const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
   const separator: string | undefined = host?.seo?.separator
   // White-label (White-Label Phase 2): the generic title fallback reads the
@@ -232,7 +235,10 @@ function buildMetadata(props: Props): Metadata {
     /**
      * The card, through the same resolver every other surface's card goes
      * through — so an author page gains the absolute URL, the dimension pair
-     * and `og:image:alt` rather than the bare string this emitted.
+     * and `og:image:alt` rather than the bare string this emitted. The record
+     * stores no pair beside either picture, so the pair is the one each
+     * picture's asset records when the page is composed (AGL-2850), and there
+     * is none when the asset records none.
      *
      * Resolved in two steps because the SHARE CARD and the PORTRAIT are
      * different pictures with different consequences below: a purpose-made
@@ -243,10 +249,15 @@ function buildMetadata(props: Props): Metadata {
     const authorCard = Aglyn.resolveSocialImage({
       sources: [{ image: record?.seoImage, imageAlt: record?.seoImageAlt }],
       host,
+      assetFacts,
     })
     const authorImage =
       authorCard ??
-      Aglyn.resolveSocialImage({ sources: [{ image: record?.image }], host })
+      Aglyn.resolveSocialImage({
+        sources: [{ image: record?.image }],
+        host,
+        assetFacts,
+      })
     return {
       title: authorTitle,
       ...(authorDescription ? { description: authorDescription } : {}),
@@ -372,6 +383,7 @@ function buildMetadata(props: Props): Metadata {
         host?.seo,
       ],
       host,
+      assetFacts,
     })
     const fullTitle = titleFor({ title: authoredTitle, name })
     // Collection pages had NO canonical at all (AGL-1272). This branch returns
@@ -479,6 +491,7 @@ function buildMetadata(props: Props): Metadata {
   const socialImage = Aglyn.resolveSocialImage({
     sources: [screen?.seo, host?.seo],
     host,
+    assetFacts,
   })
   // One policy, four surfaces (AGL-1263): this, the client twin in
   // `catch-all-client.tsx`, `robots.txt` and `sitemap.xml` all ask
@@ -1149,6 +1162,19 @@ export async function generateMetadata({
 }
 
 /**
+ * The loader's props without what only the head reads: the social card's
+ * asset facts (AGL-2850). The SAME object when there is nothing to drop, and a
+ * copy otherwise, never a mutation, because `result.props` belongs to the
+ * cached loader.
+ */
+function withoutHeadOnlyProps(props: Props): Props {
+  if (!('socialImageFacts' in props)) return props
+  const shipped = { ...props }
+  delete shipped.socialImageFacts
+  return shipped
+}
+
+/**
  * Catch-all tenant site render (AGL-398), migrated from the Pages Router
  * `[[...slug]]` + getStaticProps. The server loader composes the page and
  * this route maps its result to `notFound()` / `redirect()` / the client
@@ -1181,6 +1207,9 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   const deferred = result.props.nodes
     ? deferLazyPanelNodes(result.props.nodes)
     : null
+  // The card's facts (AGL-2850) are read by `generateMetadata` and by nothing
+  // the client renders, so they stop here rather than cross into its payload.
+  const shippedProps = withoutHeadOnlyProps(result.props)
   // `blockingPlugins` is already on `result.props` — the loader computes it
   // from the FULL document, before this prune. That ordering matters: a
   // component sitting inside a withheld panel still belongs to this page, and
@@ -1188,11 +1217,11 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   // unrenderable the moment someone opened it.
   const prunedProps: Props = deferred?.deferredPanelIds.length
     ? {
-        ...result.props,
+        ...shippedProps,
         nodes: deferred.nodes,
         deferral: { host, slug: slug ?? [] },
       }
-    : result.props
+    : shippedProps
   /**
    * Screen links resolve against the routing map the ROUTER honours, not the
    * one publishing wrote (AGL-1998).
@@ -1222,7 +1251,7 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   }
   // A new object again, never a mutated one — `result.props` belongs to the
   // cached loader, and `prunedProps` IS that object whenever nothing was
-  // withheld above.
+  // withheld above and there were no head-only facts to drop.
   const clientProps: Props = screenRoutes
     ? { ...prunedProps, screenRoutes }
     : prunedProps

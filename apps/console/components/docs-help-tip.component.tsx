@@ -16,17 +16,8 @@
  */
 'use client'
 
-import { mdiHelpCircleOutline, mdiOpenInNew } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
-import { mergeSxProps } from '@aglyn/shared-ui-theme'
-import {
-  IconButton,
-  Link,
-  Stack,
-  type SxProps,
-  Tooltip,
-  Typography,
-} from '@mui/material'
+import { HelpTip } from '@aglyn/shared-ui-jsx'
+import type { SxProps } from '@mui/material'
 import type { ReactNode } from 'react'
 import {
   buildDocsUrl,
@@ -65,6 +56,10 @@ export interface DocsHelpTipProps<
 /**
  * Unobtrusive question-mark affordance that surfaces a docs excerpt on hover
  * and deep-links to the full documentation page in a new tab (AGL-599).
+ *
+ * The affordance is the shared `HelpTip`, the same one every `docsHelp()` tip
+ * renders, so the two kinds of tip are labeled, placed and re-placed alike.
+ * This component only resolves a registry topic into that tip's content.
  */
 export function DocsHelpTip<K extends DocsHelpTopicKey>(
   props: DocsHelpTipProps<K>,
@@ -81,56 +76,7 @@ export function DocsHelpTip<K extends DocsHelpTopicKey>(
   const excerpt = props.excerpt ?? <DocsHelpExcerpt topic={topic} />
   const href = `${buildDocsUrl(path)}${anchor ?? ''}`
 
-  return (
-    <Tooltip
-      arrow
-      enterDelay={150}
-      title={
-        <Stack spacing={0.5} sx={{ p: 0.5, maxWidth: 280 }}>
-          <Typography variant="subtitle2" component="span">
-            {title}
-          </Typography>
-          <Typography variant="caption" component="span">
-            {excerpt}
-          </Typography>
-          <Link
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            variant="caption"
-            sx={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 0.5,
-              color: 'inherit',
-              fontWeight: 600,
-            }}
-          >
-            Open documentation
-            <MdiIcon path={mdiOpenInNew.path} sx={{ fontSize: '1em' }} />
-          </Link>
-        </Stack>
-      }
-    >
-      <IconButton
-        component="a"
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        size="small"
-        aria-label={`Help: ${title} — open documentation in a new tab`}
-        sx={mergeSxProps(
-          {
-            color: 'text.disabled',
-            ':hover': { color: 'text.secondary' },
-          },
-          sx,
-        )}
-      >
-        <MdiIcon path={mdiHelpCircleOutline.path} fontSize="inherit" />
-      </IconButton>
-    </Tooltip>
-  )
+  return <HelpTip title={title} excerpt={excerpt} href={href} sx={sx} />
 }
 DocsHelpTip.displayName = 'DocsHelpTip'
 DocsHelpTip.aglyn = true

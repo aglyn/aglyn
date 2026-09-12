@@ -88,13 +88,21 @@ npm run serve:console:emulated -- --port 4310
 E2E_BASE_URL=http://localhost:4310 npm run e2e:crm:reports
 ```
 
-- `emulator-config.mjs` writes `tmp/emulators/firebase.e2e.offset-<N>.json`.
-  The four emulators move, and so do the hub, logging and Firestore websocket
-  ports, because each of those collides with a second stack too. An offset
-  whose ports are taken is refused. It prints `export` lines for
-  `FIRESTORE_EMULATOR_HOST`, `FIREBASE_AUTH_EMULATOR_HOST`,
+- `emulator-config.mjs` writes `cloud/firebase.e2e.offset-<N>.json`, beside
+  the config it copies, where git ignores it. It has to be there, because
+  firebase-tools resolves every rules and indexes path against the directory
+  of the config it was started with, and refuses a path that leads out of that
+  directory (AGL-2858). The four emulators move, and so do the hub, logging
+  and Firestore websocket ports, because each of those collides with a second
+  stack too. An offset whose ports are taken is refused. It prints `export`
+  lines for `FIRESTORE_EMULATOR_HOST`, `FIREBASE_AUTH_EMULATOR_HOST`,
   `FIREBASE_STORAGE_EMULATOR_HOST`, `FIREBASE_DATABASE_EMULATOR_HOST` and
   `FIREBASE_EMULATOR_CONFIG`.
+- firebase-tools does not refuse a rules file it cannot find. The Firestore and
+  Realtime Database emulators log `rules file … does not exist` and start
+  anyway, and Firestore then allows every read and write, so a spec that
+  expects the rules to refuse a write passes or fails for the wrong reason.
+  Read the start log for that line.
 - `seed:e2e`, both `serve:*:emulated` scripts and `require-emulator.mjs` read
   those variables, and fall back to the default ports when they are unset. The
   serve scripts also hand them to the page. A browser bundle only sees
@@ -130,7 +138,8 @@ the Admin SDK in the seed and the harness bypasses the rules:
 curl -s "http://$FIRESTORE_EMULATOR_HOST/emulator/v1/projects/aglyn-main:ruleCoverage"
 ```
 
-Stop the emulators with Ctrl-C, and delete `tmp/emulators/` when you are done.
+Stop the emulators with Ctrl-C, and delete the config when you are done, with
+`rm "$FIREBASE_EMULATOR_CONFIG"`.
 
 ## The CRM specs (AGL-2610)
 
@@ -459,6 +468,13 @@ Re-run it after UI changes so the docs never drift:
 ```bash
 E2E_BASE_URL=http://localhost:4200 node tools/e2e/capture-docs-screenshots.mjs
 ```
+
+A shot whose surface ships behind a release flag that is off by default names
+that flag in `orgReleaseFlags`, and the harness writes it as a per-org override
+on the seeded org for that one shot, then restores the org. That is a Firestore
+write, so such a shot also needs `FIRESTORE_EMULATOR_HOST` — and
+`FIREBASE_PROJECT_ID`, if the seed was given one — set to what the seed ran
+with, which is not the defaults whenever `emulator-config.mjs` moved the ports.
 
 `tools/e2e/capture-docs-shots.mjs` (AGL-554) does the same for the docs
 **Guides** section (`apps/docs/static/img/guides/`), but flow-driven: it

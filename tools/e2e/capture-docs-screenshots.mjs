@@ -74,6 +74,11 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * `hoverXY`, `scroll`, `dblclickXY` (select-then-double-click, for the
  * canvas' in-place text editor), `fill: [selector, value]` and
  * `press: 'Key'`. A shot may also set its own `viewport`.
+ *
+ * `orgReleaseFlags: { <flag key>: boolean }` writes a per-org release-flag
+ * override onto the seeded org in the Firestore emulator for that one shot,
+ * and restores the org after it. `assertAbsent: [selector, …]` (or a single
+ * selector) fails the shot when any of them is visible at the shutter.
  * A step may carry only `settleMs`, which is how a shot waits for the
  * canvas to finish laying out before its first click.
  *
@@ -575,12 +580,12 @@ const shots = [
   },
   // ── Release documentation (AGL-1950, specs A1–A16) ──────────────────
   //
-  // Only the shots that can actually be staged are here. The rest are
-  // recorded as unfilled in SCREENSHOT_PLAN.md with the reason — the
-  // billing ones need a Stripe customer the seeded org does not have,
-  // three need fixtures the seed does not carry, and A15 is on a release
-  // flag that is still off. A spec whose surface cannot be reached is not
-  // a shot waiting to be run; it is a shot that would have to be faked.
+  // Only the shots that can actually be staged are here. The three that
+  // are not — A1, A2 and A7 — are recorded as unfilled in
+  // SCREENSHOT_PLAN.md with the reason: each needs a real Stripe customer or
+  // a real paid invoice, which the seeded org does not have. A spec whose
+  // surface cannot be reached is not a shot waiting to be run; it is a shot
+  // that would have to be faked.
   //
   // Several selectors below differ from the pasted specs because the
   // surfaces moved between 2026-08-18 and now. Each difference is noted
@@ -867,6 +872,48 @@ const shots = [
     },
   },
   {
+    // A15. The Aglyn Assist panel, with its help tip open.
+    //
+    // `release_assist` stays OFF by default on purpose — the Assist
+    // subprocessor gate spec pins it — and production releases it by
+    // publishing Remote Config. A capture must not hang on a real project's
+    // template, so the shot turns the flag on for the seeded org the way staff
+    // grant one org a feature: a per-org override, in the emulator.
+    //
+    // Staff see the panel either way. With the flag off it renders as a staff
+    // preview, with a `Staff preview` chip in this very header, and removing
+    // the chip would only make that render look released. So the chip is
+    // asserted absent, and the shot fails when the override did not take.
+    out: 'getting-started/assist-panel-help-tip.png',
+    path: `/${HOST_BASE}`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_assist: true },
+    actions: [
+      {
+        click: '[aria-label="Open Aglyn Assist"]',
+        waitFor: 'Aglyn Assist',
+        settleMs: 1200,
+      },
+      // The tip's title and link render with the tooltip, but its excerpt is
+      // a chunk fetched when the tooltip first opens (AGL-2706) — so the wait
+      // names the excerpt's words, or the shutter can catch a tip without them.
+      {
+        hover: '[aria-label^="Help: Aglyn Assist"]',
+        waitFor: 'built-in AI helper',
+        settleMs: 1500,
+      },
+    ],
+    assertAbsent: ['.MuiDrawer-paper :text("Staff preview")'],
+    // The header row spans the panel's full width. The tip opens over the
+    // intro alert beneath it, and is a portal outside the panel, so both are
+    // named or the crop cuts the tip off at the header's bottom edge.
+    clipTo: {
+      locator:
+        '.MuiDrawer-paper .MuiStack-root:has(> button[aria-label="Close Aglyn Assist"])',
+      include: ['.MuiDrawer-paper .MuiAlert-root', '[role="tooltip"]'],
+    },
+  },
+  {
     out: 'besigner/element-search-best-matches.png',
     path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
     waitFor: 'Properties',
@@ -1071,6 +1118,79 @@ async function clearCoEditMirror() {
   }
 }
 
+// Per-org release-flag overrides (AGL-1635) live on the org document as
+// `releaseFlags`, and every gate applies them ahead of Remote Config. That
+// makes a flag's state a precondition the emulator can hold on its own: a
+// shot whose surface ships behind a flag that is OFF by default names the
+// override, and the harness writes it for that shot alone. Seeded onto the
+// shared org instead, the override would photograph every other shot of that
+// org — `staff-console/admin-orgs.png` counts overrides per row.
+// Both read the way seed-e2e.mjs reads them, so the override lands in the
+// project and on the ports the seed actually wrote to — `emulator-config.mjs`
+// moves the Firestore port when a peer session holds the default (AGL-2834),
+// and `FIREBASE_PROJECT_ID` is the project id every tool here names.
+const FIRESTORE_HOST = process.env.FIRESTORE_EMULATOR_HOST ?? 'localhost:8082'
+const FIRESTORE_PROJECT = process.env.FIREBASE_PROJECT_ID ?? 'aglyn-main'
+// Matches seed-e2e.mjs: the org document id is the owner's uid.
+const ORG_ID = process.env.E2E_ORG_ID ?? 'e2e-owner'
+const ORG_DOC_URL =
+  `http://${FIRESTORE_HOST}/v1/projects/${FIRESTORE_PROJECT}` +
+  `/databases/(default)/documents/orgs/${ORG_ID}`
+
+/**
+ * Writes a shot's per-org release-flag overrides, and returns the function
+ * that restores the org's `releaseFlags` exactly as they were — absent
+ * included, because a PATCH mask naming a field the body omits deletes it.
+ *
+ * `owner` is the Firestore emulator's admin bearer token, and nothing but an
+ * emulator accepts it, so this cannot write to a real project. Throws rather
+ * than warning, for the reason `clearCoEditMirror` does: an override that
+ * silently failed photographs the feature with its flag still OFF.
+ */
+async function applyOrgReleaseFlags(flags) {
+  const headers = {
+    Authorization: 'Bearer owner',
+    'Content-Type': 'application/json',
+  }
+  const read = await fetch(`${ORG_DOC_URL}?mask.fieldPaths=releaseFlags`, {
+    headers,
+  })
+  if (!read.ok) {
+    throw new Error(
+      `org ${ORG_ID} not readable (${read.status}) at ${FIRESTORE_HOST}; seed the emulator first`,
+    )
+  }
+  const previous = (await read.json()).fields?.releaseFlags
+  const patch = async (paths, fields) => {
+    const mask = paths.map((path) => `updateMask.fieldPaths=${path}`).join('&')
+    const response = await fetch(`${ORG_DOC_URL}?${mask}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ fields }),
+    })
+    if (!response.ok) {
+      throw new Error(
+        `org ${ORG_ID} release flags not written (${response.status}) at ${FIRESTORE_HOST}`,
+      )
+    }
+  }
+  const keys = Object.keys(flags)
+  await patch(
+    keys.map((key) => `releaseFlags.${key}`),
+    {
+      releaseFlags: {
+        mapValue: {
+          fields: Object.fromEntries(
+            keys.map((key) => [key, { booleanValue: flags[key] }]),
+          ),
+        },
+      },
+    },
+  )
+  return () =>
+    patch(['releaseFlags'], previous ? { releaseFlags: previous } : {})
+}
+
 let failures = 0
 /**
  * Removes what the docs must never show: the auth-emulator warning banner,
@@ -1149,6 +1269,7 @@ async function resolveClipTo(page, clipTo) {
 
 for (const shot of selected) {
   const page = await context.newPage()
+  let restoreOrgReleaseFlags = null
   try {
     // A taller window for a surface that is genuinely taller than 900px.
     // `clip` is clamped to the viewport, so a dialog that overflows gets
@@ -1172,6 +1293,9 @@ for (const shot of selected) {
           // Storage blocked — nothing to restore from either.
         }
       })
+    }
+    if (shot.orgReleaseFlags) {
+      restoreOrgReleaseFlags = await applyOrgReleaseFlags(shot.orgReleaseFlags)
     }
     await page.goto(`${BASE_URL}${shot.path}`, {
       waitUntil: 'domcontentloaded',
@@ -1229,6 +1353,19 @@ for (const shot of selected) {
     await stripChrome(page)
     // Last gate before the shutter: nothing only staff can see (AGL-1600).
     await assertNoStaffOnlyChrome(page, shot.out)
+    // …and nothing a shot names as the sign that its precondition did not
+    // hold. Counted over VISIBLE matches: `.first()` can land on a hidden
+    // copy of the same text and pass while the visible one is in frame.
+    //
+    // A lone selector is taken as a list of one. Iterating a bare string
+    // would walk its characters, and a one-character CSS type selector
+    // matches nothing — so the check would pass on a precondition that never
+    // held, which is the one outcome it exists to prevent.
+    for (const selector of [shot.assertAbsent ?? []].flat()) {
+      if (await page.locator(selector).filter({ visible: true }).count()) {
+        throw new Error(`${selector} is in frame for ${shot.out}`)
+      }
+    }
     if (shot.annotate) await annotate(page, shot.annotate)
     const clip = shot.clipTo
       ? await resolveClipTo(page, shot.clipTo)
@@ -1242,6 +1379,16 @@ for (const shot of selected) {
     console.error(`FAIL  ${shot.out}: ${String(error?.message ?? error).split('\n')[0]}`)
   } finally {
     await page.close()
+    // Restored whether or not the shot passed, so the next shot (and the next
+    // run) reads the org as seeded.
+    if (restoreOrgReleaseFlags) {
+      await restoreOrgReleaseFlags().catch((error) => {
+        failures += 1
+        console.error(
+          `FAIL  ${shot.out}: org release flags not restored: ${error.message}`,
+        )
+      })
+    }
   }
 }
 
