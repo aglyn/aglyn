@@ -563,6 +563,7 @@ export interface RoutePayload {
   [Route.ORG_SETTINGS_BRANDING]: { orgSlug: string }
   [Route.ORG_SETTINGS_SSO]: { orgSlug: string }
   [Route.ORG_SETTINGS_OWNERSHIP]: { orgSlug: string }
+  [Route.ORG_SETTINGS_PRIVACY]: { orgSlug: string }
   [Route.ORG_SETTINGS_DELETE]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }
