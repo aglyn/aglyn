@@ -156,8 +156,9 @@ content on the marketing site and is written separately.
 - **brand:** write down how Aglyn is pronounced, where a reader and Assist both meet it ([AGL-2762](https://linear.app/aglyn/issue/AGL-2762), [AGL-2755](https://linear.app/aglyn/issue/AGL-2755))
 
 <details>
-<summary>Also in this release: 24 test, 1 ci</summary>
+<summary>Also in this release: 25 test, 1 ci</summary>
 
+- **tenant-data-admin:** let the CDN response double forget a representation ([AGL-2863](https://linear.app/aglyn/issue/AGL-2863))
 - **tenant-data-admin:** pin that a plugin catch answering 401 classified the throw ([AGL-2852](https://linear.app/aglyn/issue/AGL-2852))
 - **tools:** keep the full-access domains key's name out of the emulated-env self-test ([AGL-2828](https://linear.app/aglyn/issue/AGL-2828))
 - **console:** transcribe the send-from-your-domain row the page already carries ([AGL-2831](https://linear.app/aglyn/issue/AGL-2831))
