@@ -194,6 +194,40 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /Quantum sync/)
   })
 
+  it('dashes both CRM rows for a plan without the CRM, and fails a frame that prints its band', () => {
+    // The CRM is paid-only (AGL-2851). Free still holds a 100-record band in
+    // `contactsPerHost`, but it opens no CRM for the band to fill, so the page
+    // names no CRM figure for it. The generated table says so, and a frame that
+    // prints Free's band is a disagreement the code wins.
+    resetFixtures()
+    const tables = JSON.parse(readFileSync(TABLES, 'utf8'))
+    const rows = new Map(
+      tables.compare.groups.flatMap((g) => g.rows).map((r) => [r.label, r.values]),
+    )
+    const records = rows.get('CRM records included (contacts, companies & deals)')
+    const crm = rows.get('CRM: contacts, leads, companies, deals & tasks')
+    assert.ok(records && crm, 'the generated table carries no CRM rows')
+    assert.deepEqual([records.free, crm.free], ['—', '—'])
+    assert.deepEqual([records.starter, crm.starter], ['1,000', '✓'])
+    assert.deepEqual([records.enterprise, crm.enterprise], ['Talk to us', '✓'])
+
+    const data = readFrame()
+    const row = featureTable(data).records.find(
+      (r) => r.cells[0] === 'CRM records included (contacts, companies & deals)',
+    )
+    assert.ok(row, 'fixture no longer carries the CRM records row')
+    row.cells[1] = '100'
+    writeFrame(data)
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(run.stderr, /CODE-vs-FRAME disagreements/)
+    assert.match(
+      run.stderr,
+      /CRM records included \(contacts, companies & deals\) · Free: code=— {2}frame=100/,
+    )
+  })
+
   it('fails LOUDLY on a record that is not a full plan row', () => {
     // Previously the silent half of the same defect: `rec.cells.length === 9`
     // simply skipped anything else, so an extractor that emitted eight cells
@@ -271,10 +305,10 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
    * These three rows were reconciled by nothing at all until AGL-2194 — the
    * compare table had every case above and the metered infrastructure table
    * beside it had none, which is how `/pricing` came to advertise $0.65 / 1k
-   * form submissions against a charged $0.065 / 1k for weeks. Two of the six
-   * cells are DECLARED stale in `FRAME_STALE_METERED` because the frames they
-   * come from are a Figma export this repo cannot regenerate; the cases below
-   * are what stop that declaration from becoming a blanket exemption.
+   * form submissions against a charged $0.065 / 1k for weeks. The shipped
+   * `FRAME_STALE_METERED` is empty while the frames draw the code's rates, so
+   * the cases below inject their own declarations; they are what stop a
+   * declaration from becoming a blanket exemption.
    *========================================*/
 
   it('fails when a pass-through cell disagrees and nothing declares it', () => {
@@ -450,21 +484,21 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
   it('fails when an ADD-ON CAPACITY rate disagrees with the code', () => {
     resetFixtures()
     editWide('Usage pricing', 'Metered table', (table) => {
-      const row = table.records.find((r) => r.cells[0] === 'Extra team seat')
+      const row = table.records.find((r) => r.cells[0] === 'Extra team seat, per month')
       assert.ok(row, 'fixture no longer carries the row this case perturbs')
-      row.cells[2] = '+$40/mo'
+      row.cells[2] = '$40'
     })
 
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /add-on capacity: CODE-vs-FRAME disagreements/)
-    assert.match(run.stderr, /Extra team seat · Pro .*code=\+\$4\/mo {2}frame=\+\$40\/mo/)
+    assert.match(run.stderr, /Extra team seat, per month · Pro .*code=\$4 {2}frame=\$40/)
   })
 
   it('fails when an ADD-ON CARD price disagrees with the code', () => {
     resetFixtures()
     editWide('Usage pricing', 'cards', (cards) => {
-      const pos = cards.records.find((r) => r.cells[0] === 'POS Pro register')
+      const pos = cards.records.find((r) => r.cells[0] === 'Extra POS register')
       assert.ok(pos, 'fixture no longer carries the register card')
       pos.cells[1] = '$8 / mo'
     })
@@ -505,9 +539,11 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     resetFixtures()
     const data = readFrame('mobile')
     const rates = groupOf(data, 'Usage pricing', 'Add-on rates · selected plan')
-    const row = rates.records.find((r) => r.cells[0] === 'Extra data storage')
+    const row = rates.records.find(
+      (r) => r.cells[0] === 'Extra dataset storage, per GB-month',
+    )
     assert.ok(row, 'fixture no longer carries the row this case perturbs')
-    row.cells[1] = '$4.00 / GB-mo'
+    row.cells[1] = '$4.00'
     writeFrame(data, 'mobile')
 
     const run = check()
@@ -515,7 +551,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /add-on capacity: CODE-vs-FRAME disagreements/)
     assert.match(
       run.stderr,
-      /Extra data storage · Pro \[mobile\]: code=\$0\.36 \/ GB-mo {2}frame=\$4\.00 \/ GB-mo/,
+      /Extra dataset storage, per GB-month · Pro \[mobile\]: code=\$0\.36 {2}frame=\$4\.00/,
     )
   })
 
@@ -614,9 +650,9 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
    * gets the same both-directions treatment as every other one here.
    *=========================================*/
 
-  /** One wide-table record for a per-1k rate, in the frame's own decoration. */
+  /** One wide-table record for a per-1k rate, printed bare as the page prints rates. */
   const rateRecord = (label, rates) => ({ cells: [label, ...rates] })
-  const EMAIL_LABEL = 'Email sends over included band'
+  const EMAIL_LABEL = 'Email sends, per 1,000 over the included band'
   /**
    * Starter→Agency then Enterprise, exactly as the code renders them.
    *
@@ -626,11 +662,11 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
    */
   const EMAIL_CELLS = [
     '—',
-    '+$2.25 / 1k',
-    '+$2 / 1k',
-    '+$1.9 / 1k',
-    '+$1.85 / 1k',
-    '+$1.8 / 1k',
+    '$2.25',
+    '$2',
+    '$1.9',
+    '$1.85',
+    '$1.8',
     'Custom',
   ]
 
@@ -660,14 +696,14 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     })
     const mobile = readFrame('mobile')
     groupOf(mobile, 'Usage pricing', 'Add-on rates · selected plan').records.push(
-      rateRecord(EMAIL_LABEL, ['+$2.25 / 1k']),
+      rateRecord(EMAIL_LABEL, ['$2.25']),
     )
     writeFrame(mobile, 'mobile')
 
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /declared absent from the frame but no breakpoint reported it/)
-    assert.match(run.stderr, /Email sends over included band/)
+    assert.match(run.stderr, /Email sends, per 1,000 over the included band/)
   })
 
   it('keeps the absence declaration alive while ONE breakpoint still lacks it', () => {
@@ -701,7 +737,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const rates = groupOf(data, 'Usage pricing', 'Add-on rates · selected plan')
     const before = rates.records.length
     rates.records = rates.records.filter(
-      (r) => r.cells[0] !== 'Contacts over included band',
+      (r) => r.cells[0] !== 'CRM records, per 1,000 over the included band',
     )
     assert.equal(rates.records.length, before - 1, 'fixture lost no row')
     writeFrame(data, 'mobile')
@@ -709,7 +745,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /add-on capacity: rows the frame does not carry/)
-    assert.match(run.stderr, /Contacts over included band \[mobile\]/)
+    assert.match(run.stderr, /CRM records, per 1,000 over the included band \[mobile\]/)
   })
 
   it('publishes both billed rates, at the values the billing code reads', () => {
