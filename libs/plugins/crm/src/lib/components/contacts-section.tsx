@@ -110,6 +110,7 @@ import { NoNextActivityToggle } from './crm-next-activity-column'
 import { useCompanyOptions } from './company-picker'
 import CrmFilterBar, { type CrmFilterOption } from './crm-filter-bar'
 import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
+import { CrmSuiteLockedButton, CrmSuiteNotice, crmSuiteIncluded } from './crm-suite-lock'
 
 /**
  * The shared labels, under the name this file has always called them.
@@ -148,13 +149,14 @@ const UNMATCHED_REFUND_REASON: Record<string, string> = {
 /**
  * Contacts CRM (AGL-198): the unified people list fed by AGL-197's
  * ingestion — search, source badges, a profile drawer with the
- * interaction timeline plus tags/notes editing, and CSV export. Available
- * on every plan; the contactsPerHost quota is the upgrade lever.
+ * interaction timeline plus tags/notes editing, and CSV export. Part of
+ * the CRM, included from Starter (AGL-2851); the contactsPerHost band
+ * counts the records in it.
  */
 /**
  * Contacts CRM (AGL-109 → AGL-395): the unified contacts list, segments,
  * and profile drawer, owned by the contacts plugin and rendered by the
- * shell's generic plugin route. The shell applies the `release_contacts`
+ * shell's generic plugin route. The shell applies the `release_crm`
  * gate (via the nav tab) and passes the resolved `org` doc for the
  * `contactsPerHost` quota check.
  *
@@ -179,7 +181,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // (AGL-1662), and whether that question has been answered yet.
   //
   // AGL-1604 stopped the usage cron putting `contactsOverageUsd` into
-  // `billedCents` while `release_contacts` is off for the org; `db5ecdf2b`
+  // `billedCents` while `release_crm` is off for the org; `db5ecdf2b`
   // taught the console billing page's caption the same thing. This page's own
   // alert still quoted the dollar figure with no flag check — and this is the
   // surface a staff member reaches with the flag OFF, because the shell's
@@ -204,6 +206,15 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // and the viewing group and the scope clause are both `null`.
   const crmScope = useCrmScope({ hostId, org })
   const { scope: dataScope, orgId, consentGroup, visibleTo: visibleToTokens } = crmScope
+  /*
+   * THE CRM (AGL-2788). This list is the CRM's, and the shell mounts no CRM
+   * page for a plan without it (AGL-2851). The locks below — adding a person
+   * by hand, importing a file, a saved view, the owner, stage and company of
+   * a selection — draw only for an org whose plan lacks the CRM. The shell
+   * mounts this page only once the org has settled, so the plan read here
+   * is an answer.
+   */
+  const suiteIncluded = crmSuiteIncluded(org)
   // The org's site list, at the organization level only — what names the
   // sites in the "Known by" column (AGL-2630).
   const mount = useCrmOrgMount()
@@ -483,11 +494,13 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   // (it is the same collection, capped), never overstate, so no alert this
   // number gates can fire on a count larger than the truth.
   const contactCount = records.contactsCount ?? contacts.length
-  // Records bands (AGL-890): paid plans meter past the included count
-  // instead of blocking; only free hard-bands (quota.allowed = false).
+  // Records bands (AGL-890): a plan with an overage rate meters past the
+  // included count instead of blocking; a plan without one hard-bands
+  // (quota.allowed = false).
   const quota = records.quota
-  // Signups whose CRM record was dropped at the free band (AGL-891) —
-  // written by upsert-contact, host-scoped.
+  // Signups whose CRM record was dropped at a hard band (AGL-891), Free's
+  // included: capture still fills that band on a plan without the CRM.
+  // Written by upsert-contact, host-scoped.
   // Host-scoped, so absent at the organization level (AGL-2630): the
   // counter is a fact about one site's capture, and summing thirty of them
   // would be a figure about nothing in particular.
@@ -847,7 +860,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   : `${quota.used.toLocaleString()} CRM records`
               }`}
             </Typography>
-            <ContactImportButton hostId={hostId} org={org} />
+            {suiteIncluded ? (
+              <ContactImportButton hostId={hostId} org={org} />
+            ) : (
+              <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+            )}
             <Button
               size="small"
               onClick={handleExport}
@@ -859,19 +876,33 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 list. Disabled until the org has resolved, because the route
                 resolves the org from the site and a click before that has
                 nowhere to write. */}
-            <Button
-              size="small"
-              variant="contained"
-              color="primary"
-              disabled={!dataScope}
-              onClick={() => {
-                setCreateError(null)
-                setCreateOpen(true)
-              }}
-            >
-              {'New contact'}
-            </Button>
+            {suiteIncluded ? (
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                disabled={!dataScope}
+                onClick={() => {
+                  setCreateError(null)
+                  setCreateOpen(true)
+                }}
+              >
+                {'New contact'}
+              </Button>
+            ) : (
+              <CrmSuiteLockedButton variant="contained" color="primary">
+                {'New contact'}
+              </CrmSuiteLockedButton>
+            )}
           </Stack>
+          {suiteIncluded ? null : (
+            <CrmSuiteNotice>
+              {'Contacts arrive here on their own from your forms, sign-ups, ' +
+                'orders and bookings. Adding one by hand, importing a CSV, ' +
+                "saved views, and a contact's owner, stage and company are " +
+                'part of the CRM.'}
+            </CrmSuiteNotice>
+          )}
           {/*
             The view this list is showing, and the clauses narrowing it
             (AGL-2617). The control names the view and holds everything a
@@ -883,6 +914,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             <CrmViewsControl
               controller={views}
               allLabel="All contacts"
+              suiteLocked={!suiteIncluded}
               presets={segmentPresets}
               onSaveAsSegment={
                 segmentFilters && dataScope ? () => setSegmentName('') : null
@@ -914,9 +946,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           ) : quota.overageRecords > 0 &&
             quota.overageRateUsd != null &&
             // No claim about money until the verdict that decides it has
-            // settled (AGL-1662). `release_contacts` is default-off before
-            // Remote Config activation, so an ungated alert would assert the
-            // withheld wording for one paint on an org that IS billed.
+            // settled (AGL-1662). Before Remote Config activation the flag
+            // reads its registry default, which is no org's verdict, so an
+            // ungated alert could assert the wrong wording for one paint.
             releaseFlagsReady ? (
             <Alert severity="info">
               {contactsBilled
@@ -946,7 +978,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   // happening.
                   `${quota.overageRecords.toLocaleString()} CRM records over ` +
                   `your plan's included ${quota.included.toLocaleString()} — ` +
-                  'not billed while the Contacts page is unavailable. ' +
+                  'not billed while the CRM is unavailable. ' +
                   `The $${quota.overageRateUsd}/1,000 rate applies once ` +
                   'Contacts opens.'}
             </Alert>
@@ -993,10 +1025,19 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               description={
                 contactsStatus === 'loading'
                   ? undefined
-                  : 'Form submissions, member sign-ups, orders and bookings become contacts on their own; add one by hand or bring a list in from a CSV.'
+                  : suiteIncluded
+                    ? 'Form submissions, member sign-ups, orders and bookings become contacts on their own; add one by hand or bring a list in from a CSV.'
+                    : 'Form submissions, member sign-ups, orders and bookings become contacts on their own.'
               }
               action={
-                contactsStatus === 'loading' ? undefined : (
+                contactsStatus === 'loading' ? undefined : !suiteIncluded ? (
+                  <Stack direction="row" spacing={1}>
+                    <CrmSuiteLockedButton variant="contained" color="primary">
+                      {'New contact'}
+                    </CrmSuiteLockedButton>
+                    <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+                  </Stack>
+                ) : (
                   <Stack direction="row" spacing={1}>
                     <Button
                       size="small"
@@ -1033,7 +1074,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                     ' Sorting reorders that window.'}
                 </Typography>
               ) : null}
-              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} />
+              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} suiteLocked={!suiteIncluded} />
               <CrmColumnOrderProvider value={grid.columnOrder}>
                 <ListTable
                   rows={visible}

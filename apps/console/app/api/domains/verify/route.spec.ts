@@ -249,7 +249,11 @@ describe('it is the wizard lookup, not a public one', () => {
   })
 
   it('401s on a token that does not verify', async () => {
-    mockVerifyIdToken.mockRejectedValue(new Error('nope'))
+    mockVerifyIdToken.mockRejectedValue(
+      Object.assign(new Error('Firebase ID token has invalid signature.'), {
+        code: 'auth/argument-error',
+      }),
+    )
     expect((await GET(get('www.example.com'))).status).toBe(401)
   })
 

@@ -212,6 +212,13 @@ async function renderMarkdown(
     faithful representation is that string, and rendering it into a node tree
     and back could only lose fidelity. The entry template's chrome is not
     missed: it is the same furniture on every entry.
+
+    It therefore carries NO `screenRoutes`, and needs none: a body string is
+    emitted verbatim, and the only link shapes markdown-lite stores are the
+    ones `safeLinkUrl` admits — `/path` and `http(s):`. A `screen:` reference
+    cannot be written into one, which is why this branch cannot leak the token
+    the node walk had to be taught to resolve (AGL-2740). Anything added below
+    that RESOLVES links in a body would need the map built further down.
   */
   const entry = props.content?.entry
   if (entry) {
@@ -255,6 +262,7 @@ async function renderMarkdown(
     screenRoutes = Aglyn.linkableScreenRoutes(routedHost.screens, {
       routedElsewhere: routing.listRoutes,
       unrouted: routing.templateScreenIds,
+      collectionListings: routing.collectionListings,
     })
   }
 

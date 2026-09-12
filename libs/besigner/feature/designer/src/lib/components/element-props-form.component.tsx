@@ -60,6 +60,7 @@ import {
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   ScreenLinkContext,
+  screenLinkTargetOptions,
   subscribeKnownPluginInstalls,
   unresolvedScreenOption,
 } from '@aglyn/aglyn'
@@ -143,6 +144,7 @@ export {
   useDebouncedCommit,
 } from '../hooks/use-debounced-commit'
 import { useDebouncedCommit } from '../hooks/use-debounced-commit'
+import { useNodeWithMediaAssetFacts } from '../hooks/use-media-asset-facts-overlay'
 
 // Subscribes to form value changes via FormSpy and schedules a debounced
 // commit when dirty. The spy is needed because MUI Select uses a Portal, so
@@ -1184,16 +1186,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
       return (rawAttributes ?? []).map(withAttributeHelp).map((field) => {
         if (field.component === FieldComponentType.SCREEN_SELECT) {
+          // The host's screens by path, then its collection listings
+          // (AGL-2799) — built by the function the `Link`-typed prop picker
+          // uses too, so neither can offer a target the other does not.
           const options = [
             { value: '', label: 'None (use external URL)' },
-            ...Object.entries(screens ?? {})
-              .sort(([, a], [, b]) => a.localeCompare(b))
-              .map(([screenId, path]) => ({
-                value: screenId,
-                label: `${labels?.[screenId] ?? screenId} (${
-                  path === '/' ? '/' : `/${path}`
-                })`,
-              })),
+            ...screenLinkTargetOptions(screens, labels, 'path').map(
+              ({ value, label }) => ({ value, label }),
+            ),
           ]
           // A stored target the host no longer has renders as a BLANK
           // picker, which reads as "no link set" while the element still
@@ -1675,6 +1675,41 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       handleBrowseInstanceMedia,
     ])
 
+    /**
+     * Which running time the published page uses, beside the one the field
+     * holds (AGL-2838).
+     *
+     * The page lays a placed film's current DAM records over its node, and the
+     * asset's running time wins over the one the pick stored, so after a
+     * replace the field can hold a number the page no longer publishes. The
+     * field goes on editing the stored value — nothing here writes a draft —
+     * and says which value the page uses rather than implying it is this one.
+     */
+    const shownNode = useNodeWithMediaAssetFacts(node)
+    const answered = shownNode !== node
+    const answeredSeconds = answered
+      ? (shownNode?.props as Record<string, unknown> | undefined)?.[
+          'durationSeconds'
+        ]
+      : undefined
+    const storedSeconds = (nodeProps as Record<string, unknown> | undefined)?.[
+      'durationSeconds'
+    ]
+    const fieldsWithAssetFacts = useMemo(() => {
+      if (!answered || answeredSeconds === storedSeconds) {
+        return fieldsWithMediaPickers
+      }
+      const note =
+        answeredSeconds === undefined
+          ? 'The media library no longer records a running time for this ' +
+            'film, so the published page gives none.'
+          : `The media library records ${answeredSeconds} seconds for this ` +
+            'film, and the published page uses that.'
+      return fieldsWithMediaPickers.map((field: any) =>
+        field.name === 'durationSeconds' ? { ...field, helperText: note } : field,
+      )
+    }, [fieldsWithMediaPickers, answered, answeredSeconds, storedSeconds])
+
     // The field names whose value is a number, instance overrides included
     // under the `propValues.` path the schema names them by.
     const numericFieldNames = useMemo(
@@ -1755,7 +1790,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             onCancel={handleFormCancel}
             onSubmit={handleElementSave}
             initialValues={nodeProps}
-            schema={{ fields: fieldsWithMediaPickers }}
+            schema={{ fields: fieldsWithAssetFacts }}
             {...rest}
           >
             {({ formFields, schema, ...rest }) => (

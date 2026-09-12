@@ -152,7 +152,8 @@ curl "https://app.aglyn.com/api/v1/datasets/ds_signups/records?limit=5" \
 
 Your data lives in `values`, keyed by **field id** — which is not the same as the
 display name you see in the console. `Email address` in the console is `email` here.
-The dataset's `fields` array tells you the mapping.
+The dataset's `fields` array lists those ids but not their display names; the
+console's **Schema** dialog shows both, as `Display name · fieldId`.
 
 ### In JavaScript
 

@@ -249,6 +249,34 @@ crop. Paste each `spec` into the `SHOTS` array, run the harness, then replace
 the `<!-- screenshot: … -->` comment on the named docs page with a standard
 image reference using the alt text given.
 
+## Fourth run of 2026-09-11 (AGL-2805) — A15 captured, 3 not
+
+**A15 is captured.** It had been read as a decision a human should make, and the
+decision has since been made and published: production Remote Config version 8
+turns `release_assist` on for every workspace, and the subprocessor row it waited
+on is live. The flag's *default* is still off on purpose, so the shot grants the
+seeded org a per-org override for its own duration rather than asking the
+emulator to mirror production — see the entry for why the seed is the wrong place
+for it.
+
+**One claim in the A15 entry was wrong, and the shot would have published the
+mistake.** The entry said no **Staff preview** chip existed in the panel any
+more. It does exist; the panel draws it whenever a staff viewer sees a
+released-off feature. Under the entry's own instruction — remove the chip, then
+assert it gone — the harness would have produced a staff-preview render with the
+only thing marking it as one deleted. The shot never touches the chip now: it
+fails if the chip is in frame, because that is the state where the override
+silently did not take.
+
+**Two harness affordances came out of it**, both general: `orgReleaseFlags` on a
+shot, and `assertAbsent`. Any shot whose surface ships behind a flag that is off
+by default can now state that as a precondition instead of being unreachable.
+
+**The three that remain are A1, A2 and A7**, and none of them is a capture:
+A1/A2 need a real Stripe customer with a scheduled downgrade, A7 a real paid
+invoice on Stripe's own pages, carrying real billing data into a **public**
+repository.
+
 ## Third run of 2026-08-24 (AGL-1950) — 12 captured, 4 not
 
 **A10 and A14 are captured.** Neither needed a decision or a Stripe mutation;
@@ -814,52 +842,64 @@ hand and redact.)*
 
 ## Tooltips (AGL-1943)
 
-### A15. `static/img/getting-started/assist-panel-help-tip.png` — ⛔ BLOCKED (AGL-1950)
+### A15. `static/img/getting-started/assist-panel-help-tip.png` — ✅ CAPTURED (AGL-2805)
 
 - **Docs page:** `getting-started/aglyn-assist.md` → `#what-it-can-do`
-- **Frame:** the Assist panel header with the `?` tooltip **open**.
-- ⚠️ **Flagged surface.** `release_assist` is off by default and the harness
-  signs in as staff, so the **Staff preview** chip will be in frame. Hide it
-  before capturing, and assert it is gone — a staff-only chip published in a
-  customer doc is the AGL-1600 leak.
+- **Frame:** the Assist panel header with the `?` tooltip **open**, over the
+  intro alert beneath it.
 - **Alt text:** The Aglyn Assist panel header with its help tooltip open,
   linking to the documentation.
-- **⛔ Not captured 2026-08-23 — deliberately, and this one is a judgement call
-  a human should confirm.** The surface renders and the shot is technically
-  easy: the launcher is `[aria-label="Open Aglyn Assist"]` and the tip is
-  `Help: Aglyn Assist`. Three things argued against publishing it:
-  - **`release_assist` still ships `defaultEnabled: false`**, and its own
-    description says it is blocked on two *published legal artifacts* — the
-    privacy-policy disclosure for stored Q&A, and the Anthropic row on
-    `/legal/subprocessors` that was removed on the premise that no production
-    key existed. A screenshot is a stronger claim that a feature is here than
-    prose hedged with a rollout caution.
-  - **The hazard the spec guards against no longer reproduces.** There is now no
-    **Staff preview** chip anywhere in the panel, so the spec's mitigation — hide
-    the chip, then assert it is gone — protects nothing. That is worse, not
-    better: the staff-only render is now visually identical to the shipped one.
-  - **The staff-only guard cannot see this surface.** `data-staff-only` is set
-    only in `secondary-nav-bar.component.tsx`, so `assertNoStaffOnlyChrome`
-    would pass on a page full of Assist. Nothing mechanical would have caught it.
-
-  If the flag is on — or the legal artifacts are published and the rollout
-  decision is made — this is a two-minute capture.
+- **✅ Captured 2026-09-11.** What had blocked it was the release decision, not
+  the harness. Production Remote Config **version 8** publishes `release_assist`
+  as `{"enabled":true,"rolloutPercent":0}`, so Assist is on for every workspace,
+  and `/legal/subprocessors` lists Anthropic for the helper (AGL-1909). The
+  screenshot now claims no more than the product does.
+- **`defaultEnabled: false` is still true, and stays true**, so the shot cannot
+  ride on the flag's default. It names a **per-org override** instead
+  (`orgReleaseFlags`, AGL-1635), written onto the seeded org in the emulator for
+  that one shot and restored after it — the same grant staff make for one
+  customer, resolved by the same gate. Seeded onto the shared org it would
+  photograph every other shot of that org: `staff-console/admin-orgs.png` counts
+  overrides per row.
+- **The chip mitigation became a precondition check.** The **Staff preview** chip
+  does still render — `assist-panel.component.tsx` draws it on
+  `verdict.staffPreview` — so removing it before the shutter would have made a
+  staff render look released. The shot asserts it **absent** and does not touch
+  it: in frame, it means the override did not take, and the shot fails. (The
+  earlier note here, that no such chip existed any more, was wrong.)
+- **The staff-only guard still cannot see this surface.** `data-staff-only` is
+  set only in `secondary-nav-bar.component.tsx`, so `assertNoStaffOnlyChrome`
+  passes on a page full of Assist. `assertAbsent` is what covers it.
+- **Spec corrections.** The panel is a `Drawer`, so `.MuiPaper-root:has(…)`
+  matches outer paper as well; the crop names `.MuiDrawer-paper .MuiStack-root:
+  has(> button[…])`, the header row itself, and includes the intro alert the tip
+  opens over. The excerpt is a chunk fetched on first open (AGL-2706), so the
+  hover waits on the excerpt's own words rather than a fixed delay — and the
+  first-hover placement bug that wait exposed is AGL-2855.
 
 ```js
 {
   out: 'getting-started/assist-panel-help-tip.png',
   path: `/${HOST_BASE}`,
-  waitFor: 'Aglyn Assist',
+  waitFor: 'Demo Bakery',
+  orgReleaseFlags: { release_assist: true },
   actions: [
-    { click: '[aria-label="Open Aglyn Assist"]', settleMs: 800 },
-    // AGL-1600: hide the staff-preview chip, then assert it is really gone.
-    { evaluate: `document.querySelectorAll('.MuiChip-root').forEach(c => { if (c.textContent === 'Staff preview') c.remove() })` },
-    { hover: '[aria-label^="Help: Aglyn Assist"]', settleMs: 600 },
+    {
+      click: '[aria-label="Open Aglyn Assist"]',
+      waitFor: 'Aglyn Assist',
+      settleMs: 1200,
+    },
+    {
+      hover: '[aria-label^="Help: Aglyn Assist"]',
+      waitFor: 'built-in AI helper',
+      settleMs: 1500,
+    },
   ],
-  assertAbsent: 'text=Staff preview',
+  assertAbsent: ['.MuiDrawer-paper :text("Staff preview")'],
   clipTo: {
-    locator: '.MuiPaper-root:has([aria-label="Close Aglyn Assist"])',
-    include: ['[role="tooltip"]'],
+    locator:
+      '.MuiDrawer-paper .MuiStack-root:has(> button[aria-label="Close Aglyn Assist"])',
+    include: ['.MuiDrawer-paper .MuiAlert-root', '[role="tooltip"]'],
   },
 }
 ```

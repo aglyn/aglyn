@@ -15,6 +15,12 @@ the record you already have.
 The address is `…/hosts/{site}/crm/contacts`. Importing needs the same
 **Manage data** permission as editing a contact.
 
+:::info Plan availability
+Importing is part of the **CRM**, included from **Starter**. On Free the Contacts and
+Leads sections are shown locked with the rest of the CRM, and there is no **Import CSV**.
+See [What each plan includes](./overview.md#what-each-plan-includes).
+:::
+
 ## Three steps
 
 1. **Choose the file.** A CSV with a header row. Up to **5,000 rows** per file —
@@ -63,7 +69,7 @@ it, and the result names the values it could not keep, by field.
 | --- | --- |
 | **Not a valid email address** | The email cell is empty or not an address. |
 | **Appears earlier in the file** | The same address is on an earlier row; the first row wins. |
-| **Contact limit reached** | Your plan's contact band is full. Only the Free tier's band is a hard limit — see [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md). |
+| **Contact limit reached** | Your plan's records band is full, on a plan whose band is a hard limit — see [CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records). |
 | **Could not be saved** | Something went wrong writing the record. Try that row again. |
 
 A file the CRM itself exported — from the table's **Export CSV** or the

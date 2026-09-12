@@ -1,10 +1,10 @@
 {
   "parameters": {
-    "release_contacts": {
+    "release_crm": {
       "defaultValue": {
-        "value": "{\"enabled\":false,\"rolloutPercent\":0,\"note\":\"Held until Contacts CRM v1 is ready (AGL-227)\"}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"Released to every workspace 2026-09-10 (AGL-2772)\"}"
       },
-      "description": "Unified contacts list, segments and profile drawer (Contacts CRM v1).",
+      "description": "The CRM: contacts, leads, companies, deals, tasks, reports and fields.",
       "valueType": "JSON"
     },
     "release_bookings": {
@@ -117,6 +117,13 @@
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
       },
       "description": "Aglyn Assist, the in-console AI chat helper (AGL-1860). OFF by default and blocked on two PUBLISHED legal artifacts (AGL-1909): the privacy-policy disclosure for the org-scoped Q&A the data loop stores, and the Anthropic row on /legal/subprocessors, which was deliberately removed on 2026-08-13 on the premise that no production key existed. Note the real trigger is ANTHROPIC_API_KEY, not this flag: /api/ai/assist (the besigner copy assistant) carries no release flag and sends customer content to Anthropic on the key plus a Pro entitlement alone.",
+      "valueType": "JSON"
+    },
+    "release_video_uploads": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "New video in the media library, on every upload path (AGL-2830). OFF by default: a video is refused with 403 video_uploads_paused. Images, documents and stored videos are unaffected; grant one org through its release-flag override.",
       "valueType": "JSON"
     }
   },

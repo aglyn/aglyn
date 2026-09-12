@@ -593,9 +593,7 @@ export interface ConsoleWidget {
    * does: a card cannot escape its extension's gate by declaring nothing,
    * and declaring one here can only narrow. The case is an extension whose
    * surface ships on every plan while one of its cards belongs to a paid
-   * part of it — the CRM's dashboard cards, which read the tasks and the
-   * pipeline a Free workspace does not have. Absent without an upsell, for
-   * the reason `permission` gives.
+   * part of it. Absent without an upsell, for the reason `permission` gives.
    */
   featureFlag?: keyof OrgFeatureFlags
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

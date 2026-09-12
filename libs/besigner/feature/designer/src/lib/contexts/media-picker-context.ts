@@ -42,11 +42,11 @@ export interface MediaPickerContextValue {
    * alt — never inline the rule, or the override precedence drifts per
    * surface.
    *
-   * The dimensions are copied at PICK TIME because no tenant render path ever
-   * reads a media document (AGL-2486). Resolving them while rendering would
-   * put a per-image Firestore read on the hottest cached path; carrying them
-   * on the node costs two numbers and is read like any other prop. They are
-   * best-effort at upload, so either may be absent.
+   * The dimensions are copied at PICK TIME because no tenant render path
+   * reads an image's media document (AGL-2486). Resolving them while
+   * rendering would put a per-image Firestore read on the hottest cached
+   * path; carrying them on the node costs two numbers and is read like any
+   * other prop. They are best-effort at upload, so either may be absent.
    *
    * `video` and `poster` are the video half of the same bargain (AGL-2749),
    * and they are the DOCUMENT's own records rather than anything flattened on

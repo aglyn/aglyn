@@ -23,19 +23,13 @@ import {
   CONTACT_LIFECYCLE_STAGES,
   type ConsentGroup,
   type ContactLifecycleStage,
-  CRM_COLLECTIONS,
   crmTelHref,
-  normalizeAddress,
   normalizePhone,
 } from '@aglyn/aglyn'
 import { mdiPhoneOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  useFirestore,
-  useUser,
-  writeGuardedBySeed,
-} from '@aglyn/tenant-feature-instance'
+import { useUser, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import {
   Button,
   Grid,
@@ -47,11 +41,11 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { deleteField, doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
-import { contactCompanyLinkWrites } from '../model/companies'
 import { type ContactRecord, parseContactTags } from '../model/contact-record'
+import type { ContactUpdateFields } from '../model/contact-update'
 import { setContactStage } from '../model/crm-api'
 import {
   CompanyPicker,
@@ -63,6 +57,7 @@ import {
   ContactAddressFields,
   type AddressDraft,
 } from './contact-address-fields'
+import { crmSuiteLockedReason } from './crm-suite-lock'
 import type { OrgMembers } from './use-org-members'
 
 export interface ContactPropertiesCardProps {
@@ -72,10 +67,8 @@ export interface ContactPropertiesCardProps {
   org?: Partial<AglynOrgBilling> | null
   /** The row, flattened through the viewing group's facet. */
   record: ContactRecord
-  /** The controller whose facet the edits are written into. */
+  /** The controller whose facet the edits are saved into. */
   consentGroup: ConsentGroup
-  /** `['orgs', orgId]` — where the contact document lives. */
-  scope: readonly [string, string]
   /**
    * The listener's verdict on the row the drafts were seeded from, for the
    * guard that refuses a save over an unconfirmed read.
@@ -83,50 +76,54 @@ export interface ContactPropertiesCardProps {
   seed: { status: 'loading' | 'success' | 'error'; fromCache: boolean }
   /** The team, for the owner picker and the owner's name. */
   members: OrgMembers
+  /**
+   * The org's plan lacks the CRM (AGL-2788), which the shell mounts no CRM
+   * page for (AGL-2851). The owner, the lifecycle stage and the company
+   * show, locked, and are left out of a save; `crm/contact-update` refuses
+   * such a plan the rest of the profile, the tags and the notes too.
+   */
+  suiteLocked?: boolean
 }
 
 /**
  * THE RECORD ITSELF: every field a team keeps on a person, in one card with
  * one Save (AGL-2596).
  *
- * ## One save, one write, one guard
+ * ## One save, one request, one guard
  *
- * A field-at-a-time save would be nine writes and nine chances for the
+ * A field-at-a-time save would be nine requests and nine chances for the
  * stale-seed guard to refuse one of them — so the card holds a draft of the
- * whole profile and writes it once. The guard WRAPS the write: a row seeded
- * from the cache or from a failed read is refused with the message the
- * guard chooses, and what was typed stays in the fields, because a refusal
- * that also emptied the form would read as a save that worked.
+ * whole profile and sends it once. The guard WRAPS the send: a row seeded
+ * from the cache or from a failed read is refused with the message the guard
+ * chooses, and what was typed stays in the fields, because a refusal that
+ * also emptied the form would read as a save that worked.
  *
- * ## Everything lands in THIS holder's facet
+ * ## The server writes the facet (AGL-2804)
  *
- * Dotted paths, on an `updateDoc`, one per field. A nested `facets` object
- * here would REPLACE the map and take every other holder's notes, tags and
- * order history with it. A cleared field is `deleteField()` rather than an
- * empty string, so "no phone number" has one shape on the document however
- * it got there. The two exceptions are the search echoes — the phone and
- * the company name are ALSO written to the top of the document, where a
- * query can hit them; see `HostContact.phone`.
+ * Every field here lives in THIS holder's facet, and the Firestore rules
+ * cannot tell one field of a facet from another, so the card writes nothing
+ * itself. The draft goes to `crm/contact-update`, which writes each field by
+ * dotted path into the holder's facet — never a nested object, which would
+ * take every other holder's records with it — clears a blank field rather
+ * than storing it empty, keeps the phone's and the company's search echoes
+ * at the top of the document, and refuses every field to a plan without
+ * the CRM. A refusal is shown in the route's own words.
  *
- * ## A stage MOVE goes through the server
+ * ## The stage goes to its own route
  *
  * The lifecycle stage is the one field an automation listens for:
  * `contactStageChanged` (AGL-2605) is emitted by `crm/contact-stage` after it
  * performs the write, and by nothing else. So when the stage the reader
- * picked differs from the one the record holds, it is left OUT of the client
- * write and sent to that route once the rest has landed — a facet write that
- * carried the new stage first would leave the route reading "already there"
- * and announcing nothing, which is the defect that made every action on
- * *Contact changed stage* silent for a stage moved from this page. Clearing
- * the stage stays client-direct: there is no event for "no stage", and the
- * route refuses an empty one. A refusal from the route — a member without a
- * role on this site — is reported on its own, with the route's sentence,
- * after the fields that did save.
+ * picked differs from the one the record holds, it is sent to that route
+ * once the rest of the profile has landed — the stage picked, or `null` for
+ * "Not placed yet", which clears it and announces nothing. A refusal from
+ * that route is reported on its own, with its sentence, after the fields that
+ * did save.
  *
  * ## The name is an override
  *
  * The canonical name is shared by every site holding the person, so this
- * card never edits it. What it writes is this holder's own name for them,
+ * card never edits it. What it saves is this holder's own name for them,
  * and the helper says what a blank falls back to, so nobody clears the
  * field expecting the record to go nameless.
  *
@@ -134,19 +131,27 @@ export interface ContactPropertiesCardProps {
  *
  * The Company field is the picker (AGL-2613): the link is `companyId` in
  * this holder's facet, mirrored into the top-level `companyIds` for the
- * company page's query, and the company's contacts count moves in the same
- * batch — `contactCompanyLinkWrites` decides all three from the row's link
- * state, so this card never reasons about another holder's link. The name
- * is still written, from the picked company, because the list column and
- * the global search read the name and not the id; a record that carries a
- * name with no link — an import, a save from before the picker — keeps it
- * as the label, and the picker offers it as the company to link or create.
+ * company page's query, and the company's contacts count moves with it —
+ * all planned by the route from the stored document, so this card never
+ * reasons about another holder's link. The name is sent too, from the picked
+ * company, because the list column and the global search read the name and
+ * not the id; a record that carries a name with no link — an import, a save
+ * from before the picker — keeps it as the label, and the picker offers it
+ * as the company to link or create.
  */
 export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
-  const { hostId, org, record, consentGroup, scope, seed, members } = props
-  const firestore = useFirestore()
+  const {
+    hostId,
+    org,
+    record,
+    consentGroup,
+    seed,
+    members,
+    suiteLocked = false,
+  } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
+  const contactUpdate = useContactUpdate(hostId)
   // The site a stage move is routed through: the mounted one, or at the
   // organization level the holder's own (AGL-2630).
   const siteHostId = hostId ?? (consentGroup.hostId || null)
@@ -209,29 +214,21 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       return
     }
     setPhoneError('')
-    const path = (field: string) =>
-      Aglyn.contactFacetPath(consentGroup.groupId, field)
-    /** A blank is a clearing, and a clearing is the field's absence. */
-    const text = (value: string, max: number) => {
-      const trimmed = value.trim().slice(0, max)
-      return trimmed ? trimmed : deleteField()
+    // A stage that differs from the record's is the stage route's to write —
+    // see the note above.
+    const stageChanged = !suiteLocked && lifecycleStage !== record.lifecycleStage
+    const set: ContactUpdateFields = {
+      name: nameOverride.trim().slice(0, 120),
+      phone: normalizedPhone ?? '',
+      jobTitle: jobTitle.trim().slice(0, 120),
+      address,
+      tags: parseContactTags(tags),
+      notes: notes.slice(0, 2000),
+      // The owner and the company, sent only on a plan that carries the CRM.
+      ...(suiteLocked
+        ? {}
+        : { ownerUid, companyId, companyName: companyName.trim().slice(0, 120) }),
     }
-    const storedAddress = normalizeAddress(address)
-    const storedCompany = companyName.trim().slice(0, 120)
-    // A stage that differs from the record's and is not a clearing is a
-    // MOVE, and a move is the server's to write — see the note above.
-    const stageMoved = Boolean(lifecycleStage) && lifecycleStage !== record.lifecycleStage
-    /*
-     * The link, when it changed: the facet's id and the mirror on this
-     * document, and the count on each company it moved. `null` when the
-     * picker was left where the record had it, in which case the save is
-     * the one `updateDoc` it always was.
-     */
-    const link = contactCompanyLinkWrites(
-      record.companyLink,
-      consentGroup.groupId,
-      companyId,
-    )
     setSaving(true)
     try {
       const verdict = await writeGuardedBySeed(
@@ -240,41 +237,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           unreadable: seed.status === 'error',
           fromCache: seed.fromCache,
         },
-        async () => {
-          const contactRef = doc(firestore, scope[0], scope[1], 'contacts', record.$id)
-          const payload = {
-            ...(link?.contact ?? {}),
-            [path('name')]: text(nameOverride, 120),
-            [path('phone')]: normalizedPhone || deleteField(),
-            [path('jobTitle')]: text(jobTitle, 120),
-            [path('companyName')]: storedCompany || deleteField(),
-            [path('address')]: storedAddress ?? deleteField(),
-            [path('ownerUid')]: ownerUid || deleteField(),
-            ...(stageMoved
-              ? {}
-              : { [path('lifecycleStage')]: lifecycleStage || deleteField() }),
-            [path('tags')]: parseContactTags(tags),
-            [path('notes')]: notes.slice(0, 2000),
-            // The search echoes — see `HostContact.phone`.
-            phone: normalizedPhone || deleteField(),
-            companyName: storedCompany || deleteField(),
-            updatedAt: new Date(),
-          }
-          if (!link?.companies.length) {
-            await updateDoc(contactRef, payload)
-            return
-          }
-          // The count moves with the link or not at all — one commit.
-          const batch = writeBatch(firestore)
-          batch.update(contactRef, payload)
-          for (const company of link.companies) {
-            batch.update(
-              doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, company.id),
-              company.update,
-            )
-          }
-          await batch.commit()
-        },
+        () => contactUpdate.updateOne(record.$id, set),
       )
       if (!verdict.ok) {
         return void enqueueSnackbar(verdict.message, {
@@ -287,11 +250,11 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
         id: record.$id,
         name: record.name || record.email,
       })
-      if (stageMoved && lifecycleStage && siteHostId) {
+      if (stageChanged && siteHostId) {
         try {
-          await setContactStage(user, siteHostId, record.$id, lifecycleStage)
+          await setContactStage(user, siteHostId, record.$id, lifecycleStage || null)
         } catch (error) {
-          // The rest of the profile is saved; only the move was refused, and
+          // The rest of the profile is saved; only the stage was refused, and
           // the route's own sentence says why.
           return void enqueueSnackbar(
             `Saved, but the stage could not be changed: ${
@@ -304,10 +267,10 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       enqueueSnackbar('Contact saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
+      enqueueSnackbar(
+        error instanceof Error && error.message ? error.message : 'An error has occurred',
+        { variant: 'error', allowDuplicate: true },
+      )
     } finally {
       setSaving(false)
     }
@@ -315,9 +278,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     address,
     companyId,
     companyName,
-    consentGroup.groupId,
+    contactUpdate,
     enqueueSnackbar,
-    firestore,
     siteHostId,
     jobTitle,
     lifecycleStage,
@@ -327,13 +289,12 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     ownerUid,
     phone,
     record.$id,
-    record.companyLink,
     record.email,
     record.lifecycleStage,
     record.name,
-    scope,
     seed.fromCache,
     seed.status,
+    suiteLocked,
     tags,
     user,
   ])
@@ -457,7 +418,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             onCreate={createCompany}
             email={record.email}
             fallbackName={companyName}
-            disabled={saving}
+            disabled={saving || suiteLocked}
+            helperText={suiteLocked ? crmSuiteLockedReason() : undefined}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -469,6 +431,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             onChange={(event) =>
               setLifecycleStage(event.target.value as ContactLifecycleStage | '')
             }
+            disabled={suiteLocked}
+            helperText={suiteLocked ? crmSuiteLockedReason() : undefined}
             fullWidth
           >
             <MenuItem value="">{'Not placed yet'}</MenuItem>
@@ -486,10 +450,13 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             label="Owner"
             value={ownerUid}
             onChange={(event) => setOwnerUid(event.target.value)}
+            disabled={suiteLocked}
             helperText={
-              members.ready && !members.options.length
-                ? 'The team roster could not be read, so nobody can be picked yet.'
-                : 'The team member responsible for this relationship'
+              suiteLocked
+                ? crmSuiteLockedReason()
+                : members.ready && !members.options.length
+                  ? 'The team roster could not be read, so nobody can be picked yet.'
+                  : 'The team member responsible for this relationship'
             }
             fullWidth
           >

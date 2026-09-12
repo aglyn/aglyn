@@ -30,7 +30,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
-  useHostActivityLogger,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -60,6 +59,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import {
   type CrmOrgDoc,
@@ -186,11 +186,12 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
   const { data: user } = useUser()
   const { orgId, consentGroup, visibleTo, createHostId, createTokens } =
     useCrmScope({ hostId, org })
-  // The site a new deal is captured by — the mounted one, or the picked one
-  // — and the site whose feed the act is logged in: the deal's own on an
-  // edit, so a deal made on one site is not logged against another.
-  const dealHostId = deal ? (deal.hostId ?? null) : createHostId
-  const logActivity = useHostActivityLogger(dealHostId ?? undefined)
+  // The feed the act is logged in is the level it was PERFORMED at
+  // (AGL-2738): this site's under a site, the organization's at the org
+  // hub. `createHostId` is where the deal is STAMPED, which at the hub is a
+  // site the reader picked and may hold no role on — a different question
+  // from where the line belongs, and a gate the record write never faced.
+  const logActivity = useCrmActivityLogger(hostId)
   const roster = useOrgMemberDirectory(open ? orgId : null)
 
   const [values, setValues] = useState<DealFormValues>(() =>
@@ -321,8 +322,8 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
 
   /*
    * THE RECORDS BAND (AGL-2611), read only while a CREATE is open: a deal
-   * is a record of the band the contacts list is banded by, and on a Free
-   * org at its hundred this drawer refuses the way `upsertHostContact`
+   * is a record of the band the contacts list is banded by, and on an org
+   * at a full hard band this drawer refuses the way `upsertHostContact`
    * refuses a capture — same number, same sentence. Memoized, because the
    * tuple is an effect dependency and a fresh one per render would re-read
    * the three aggregates on every keystroke.

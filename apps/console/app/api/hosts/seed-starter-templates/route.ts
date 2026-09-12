@@ -27,6 +27,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import materializeStarterTemplate, {
   type SeedFirestore,
 } from '../../../../utils/server/seed-starter-templates'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Copies ONE first-party starter into a host's template library (AGL-687).
@@ -104,6 +105,10 @@ async function handler(request: Request): Promise<Response> {
     )
     return Response.json({ ok: true, ...result }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Adding the starter failed' }, { status: 500 })
   }

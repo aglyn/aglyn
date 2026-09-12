@@ -30,12 +30,14 @@ const resolveOrgMembership = jest.fn()
 const memberHasOrgPermission = jest.fn()
 const recomputeCrmNextTaskAt = jest.fn()
 const sweepCrmNextTaskAt = jest.fn()
+const resolveOrgPermissions = jest.fn()
+const getOrgDoc = jest.fn()
 const firestoreHandle = { collection: () => ({}) }
 
 jest.mock('@aglyn/tenant-runtime', () => ({ __esModule: true, emitHostEvent: jest.fn() }))
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   __esModule: true,
-  resolveOrgPermissions: jest.fn(),
+  resolveOrgPermissions: (...args: unknown[]) => resolveOrgPermissions(...args),
 }))
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -50,7 +52,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: (...args: unknown[]) => getOrgForHost(...args),
-  getOrgDoc: jest.fn(),
+  getOrgDoc: (...args: unknown[]) => getOrgDoc(...args),
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
   notifyUsers: jest.fn(),
@@ -97,7 +99,18 @@ beforeEach(() => {
     if (token !== 'good-token') throw new Error('bad token')
     return { uid: 'editor-uid' }
   })
-  getOrgForHost.mockResolvedValue({ orgId: ORG_ID, org: {} })
+  getOrgForHost.mockResolvedValue({ orgId: ORG_ID, org: { plan: 'starter' } })
+  // The organization variant: an org-wide admin holding the permission, in an
+  // org on Starter, the lowest plan carrying the CRM suite.
+  resolveOrgPermissions.mockResolvedValue({
+    orgId: ORG_ID,
+    orgWide: true,
+    role: 'admin',
+    permissions: { 'data.manage': true },
+  })
+  getOrgDoc.mockImplementation(async (orgId: string) =>
+    orgId === ORG_ID ? { $id: ORG_ID, plan: 'starter' } : null,
+  )
   resolveOrgMembership.mockResolvedValue({ member: { role: 'editor', orgWide: true } })
   memberHasOrgPermission.mockResolvedValue(true)
   recomputeCrmNextTaskAt.mockResolvedValue({ records: 2, missing: 1 })
@@ -138,5 +151,51 @@ describe('crm/next-activity (AGL-2661)', () => {
     expect(status).toBe(200)
     expect(sweepCrmNextTaskAt).toHaveBeenCalledWith(firestoreHandle, ORG_ID)
     expect(body).toEqual({ ok: true, records: 15, missing: 0, tasks: 40, cleared: 3, truncated: false })
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787). The recompute is authorized as a task write is, so it
+ * is refused as one is: once the caller is known, for a workspace whose plan
+ * does not carry the CRM suite, staff included, at either level.
+ */
+describe('the plan (AGL-2787)', () => {
+  const FREE_SITE = { orgId: ORG_ID, org: { plan: 'free' } }
+  const expectRefused = ({ status, body }: { status: number; body: Record<string, unknown> }) => {
+    expect(status).toBe(403)
+    expect(body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(body['error']).toMatch(/part of the CRM/)
+    expect(body['error']).toMatch(/Included from Starter/)
+  }
+
+  it('refuses a Free workspace under a site, recomputing and sweeping nothing', async () => {
+    getOrgForHost.mockResolvedValue(FREE_SITE)
+    expectRefused(await call({ body: { hostId: HOST_ID, links: [{ dealId: 'd-1' }] } }))
+    expectRefused(await call({ body: { hostId: HOST_ID, all: true } }))
+    expect(recomputeCrmNextTaskAt).not.toHaveBeenCalled()
+    expect(sweepCrmNextTaskAt).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff acting inside a Free workspace the same way', async () => {
+    getOrgForHost.mockResolvedValue(FREE_SITE)
+    verifyIdToken.mockImplementation(async () => ({ uid: 'staff-uid', staff: true }))
+    resolveOrgMembership.mockResolvedValue(null)
+    expectRefused(await call({ body: { hostId: HOST_ID, links: [{ dealId: 'd-1' }] } }))
+    expect(recomputeCrmNextTaskAt).not.toHaveBeenCalled()
+  })
+
+  it('refuses a Free workspace at the organization level', async () => {
+    getOrgDoc.mockImplementation(async () => ({ $id: ORG_ID, plan: 'free' }))
+    expectRefused(await call({ body: { orgId: ORG_ID, links: [{ dealId: 'd-1' }] } }))
+    expectRefused(await call({ body: { orgId: ORG_ID, all: true } }))
+    expect(recomputeCrmNextTaskAt).not.toHaveBeenCalled()
+    expect(sweepCrmNextTaskAt).not.toHaveBeenCalled()
+  })
+
+  it('admits Starter, the lowest plan that carries the suite, at both levels', async () => {
+    expect((await call({ body: { hostId: HOST_ID, links: [{ dealId: 'd-1' }] } })).status).toBe(200)
+    expect((await call({ body: { orgId: ORG_ID, all: true } })).status).toBe(200)
+    expect(recomputeCrmNextTaskAt).toHaveBeenCalledTimes(1)
+    expect(sweepCrmNextTaskAt).toHaveBeenCalledWith(firestoreHandle, ORG_ID)
   })
 })

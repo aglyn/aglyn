@@ -18,9 +18,9 @@
 
 import {
   contactDisplayName,
-  CRM_COLLECTIONS,
   nameSearchKey,
   normalizeContactEmail,
+  planContactCompanyLink,
   pluginDocsHelp,
   readContactCompanyLink,
   readContactFacet,
@@ -47,7 +47,6 @@ import {
 } from '@mui/material'
 import {
   collection,
-  doc,
   endAt,
   getCountFromServer,
   getDocs,
@@ -56,14 +55,11 @@ import {
   query,
   startAt,
   where,
-  writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
+import { useContactUpdate } from '../hooks/use-contact-update'
 import { type CrmScope, crmVisibleToClause } from '../hooks/use-crm-scope'
-import {
-  CONTACT_COMPANY_IDS_FIELD,
-  contactCompanyLinkWrites,
-} from '../model/companies'
+import { CONTACT_COMPANY_IDS_FIELD } from '../model/companies'
 import { contactPrimaryGroup } from '../model/contact-record'
 import type { CrmRoutes } from '../model/crm-routes'
 
@@ -121,8 +117,9 @@ interface ContactRow {
  *
  * "Add contact" finds a person by email address or by name among the
  * contacts this site may see — those reads DO carry the scope predicate —
- * and links them through `contactCompanyLinkUpdate`, which is what keeps the
- * facet and the mirror in step. A person already at another company is moved,
+ * and links them through `crm/contact-update` (AGL-2804): the link is the
+ * holder's facet, which the server writes, keeping the facet, the mirror and
+ * the company's count in step. A person already at another company is moved,
  * and the row says so before the click.
  */
 export function CompanyContactsCard(props: CompanyContactsCardProps) {
@@ -130,6 +127,7 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
   const { scope, consentGroup, visibleTo } = crmScope
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const contactUpdate = useContactUpdate(crmScope.hostId)
   /**
    * The holder a person is read and linked through: the viewing group under
    * a site; at the organization level (AGL-2630) each person's own primary
@@ -275,34 +273,20 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
   const setLink = useCallback(
     async (row: ContactRow, companyIdOrNull: string | null) => {
       if (!scope) return
-      /*
-       * The name rides with the link, so the person reads as "at Acme" in
-       * the contact list and the global search the moment they are linked
-       * here — and stops reading so when unlinked. The count on each company
-       * the link moves lands in the same commit, so the figure above this
-       * table and the one on the companies list cannot disagree.
-       */
+      // Nothing to send when this holder's facet already says what was asked.
       const groupId = groupIdOf(row.data)
-      const link = contactCompanyLinkWrites(
-        readContactCompanyLink(row.data, groupId),
-        groupId,
-        companyIdOrNull,
-        companyIdOrNull ? companyName : null,
-      )
-      if (!link) return
+      if (!planContactCompanyLink(readContactCompanyLink(row.data, groupId), companyIdOrNull)) {
+        return
+      }
       try {
-        const batch = writeBatch(firestore)
-        batch.update(
-          doc(firestore, scope[0], scope[1], 'contacts', row.$id),
-          link.contact,
-        )
-        for (const company of link.companies) {
-          batch.update(
-            doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, company.id),
-            company.update,
-          )
-        }
-        await batch.commit()
+        /*
+         * The route writes the link with the company's own name beside it, so
+         * the person reads as "at Acme" in the contact list and the global
+         * search the moment they are linked here and stops when unlinked, and
+         * it moves each company's count, so the figure above this table and
+         * the one on the companies list cannot disagree.
+         */
+        await contactUpdate.updateOne(row.$id, { companyId: companyIdOrNull })
         bumpMembership()
         enqueueSnackbar(
           companyIdOrNull
@@ -317,13 +301,13 @@ export function CompanyContactsCard(props: CompanyContactsCardProps) {
         }
       } catch (error) {
         console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
+        enqueueSnackbar(
+          error instanceof Error && error.message ? error.message : 'An error has occurred',
+          { variant: 'error', allowDuplicate: true },
+        )
       }
     },
-    [scope, groupIdOf, firestore, bumpMembership, enqueueSnackbar, companyName],
+    [scope, groupIdOf, contactUpdate, bumpMembership, enqueueSnackbar, companyName],
   )
 
   const denied = status === 'error'

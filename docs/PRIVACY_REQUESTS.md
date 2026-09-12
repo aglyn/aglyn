@@ -129,6 +129,7 @@ reversible-where-it-matters, and need no staff involvement:
 | **Erasure — one site** | `/[orgSlug]/hosts/[host]/admin` → **Delete site** | Site admin. Immediate, no hold |
 | **Access / portability — person** | `/manage/user` → **Close account** tab → **Download my data** | Machine-readable JSON, served to their own session. Excludes colleagues' data; never reproduces a secret |
 | **Access / portability — workspace** | `/[orgSlug]/settings` → **Delete** tab → **Download workspace data** | Owner or admin. No plan gate — a statutory right is not a feature |
+| **Access / portability — the people a workspace holds** | `/[orgSlug]/settings/privacy` → **Export contacts** / **Export leads** | Owner or admin. **Every plan** — outside the CRM, so Free has it too. Complete CSVs, the same files the CRM's **Export all…** writes. The **Erase a person** card beside them is §6's |
 | **Rectification** | `/manage/user` and org settings | Self-service |
 | **Call/text opt-out** | reply STOP, or ask us — §5 | |
 
@@ -145,8 +146,9 @@ wrong account.
 `/manage/user` → Close account → **Download my data** produces a
 machine-readable JSON copy, served to the account's own signed-in session, so
 it cannot act on the wrong account. Owners get the whole workspace from
-**Settings → Delete → Download workspace data**. Reply with the link and the
-exact button name.
+**Settings → Delete → Download workspace data**, and owners and admins get the
+people it holds as CSV from **Settings → Privacy → Export contacts** /
+**Export leads**, on every plan. Reply with the link and the exact button name.
 
 When they cannot sign in, run the same assembly yourself (AGL-1974):
 
@@ -357,10 +359,15 @@ The requester is a visitor to a customer's site.
    verifying nothing — that would itself be a breach.
 2. Tell the customer, via their support channel, that a request arrived.
 3. Assist them under DPA §8. In practice that means pointing them at
-   **Erase this person** on the person's record — the overflow menu of a
-   contact's or a lead's page in **CRM**, workspace admins only, with the
-   address typed back (AGL-2623). It files a request that the nightly
-   `run-erasures` job executes: the contact on every site, leads, tasks,
+   **Settings → Privacy → Erase a person** (`/[orgSlug]/settings/privacy`):
+   workspace owners and admins, **every plan**, the address typed twice, then
+   **Erase permanently**. It is filed by address for every site of the
+   workspace whether or not any page shows the person, so it works on Free,
+   where the CRM is locked. On a plan with the CRM (Starter and above) the
+   same request can also be filed from the record — **Erase this person** in
+   the overflow menu of a contact's or a lead's page in **CRM**, with the
+   address typed back (AGL-2623). Either way it files a request that the
+   nightly `run-erasures` job executes: the contact on every site, leads, tasks,
    activities, audience memberships and the campaign delivery log are removed;
    orders and bookings are kept as financial records with the person's identity
    taken off; the address is closed to re-capture the moment it is filed.

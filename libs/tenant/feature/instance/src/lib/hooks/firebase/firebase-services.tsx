@@ -65,10 +65,14 @@ import {
   appCheckSiteKey,
 } from '../../constants/firebase-config'
 import {
+  authEmulatorUrl,
+  firestoreEmulatorHost,
+} from '../../constants/firebase-emulator-hosts'
+import {
   type AuthPersistenceClass,
   createAuthInstance,
 } from './auth-persistence'
-import { localCacheFor } from './firestore-cache'
+import { localCacheFor, pruneSharedClientStateFor } from './firestore-cache'
 
 /**
  * Drop-in replacement for reactfire's `ObservableStatus<T>` — reactfire is
@@ -440,7 +444,19 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
               },
         )
         if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
-          connectFirestoreEmulator(getFirestore(app), 'localhost', 8082)
+          // Where the server was told the emulator is, rather than a default
+          // port another session's stack may hold (AGL-2834).
+          const emulator = firestoreEmulatorHost()
+          connectFirestoreEmulator(
+            getFirestore(app),
+            emulator.host,
+            emulator.port,
+          )
+        } else {
+          // The SDK never sweeps the multi-tab records the durable cache
+          // strands in localStorage, and a full localStorage fails the whole
+          // Firestore client — see `firestore-shared-client-state.ts`.
+          void pruneSharedClientStateFor(authPersistence, app)
         }
       } catch {
         // already initialized (e.g. HMR reset the module flag) — getFirestore() returns the existing instance
@@ -453,7 +469,8 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     if (!connectedAuth) {
       try {
         if (FIREBASE_AUTH_EMULATOR_ENABLED) {
-          connectAuthEmulator(auth, 'http://localhost:9099')
+          // The emulator the server was started with (AGL-2834).
+          connectAuthEmulator(auth, authEmulatorUrl())
         }
         connectedAuth = true
       } catch (error) {

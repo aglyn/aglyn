@@ -45,7 +45,10 @@
  * `crm/contacts-create` (AGL-2596) is a person typed into the console by a
  * member of the team — a server route because the dedupe against every
  * holder's rows and the audience band are judgments the browser cannot make.
- * Every other field stays client-direct under the rules.
+ * `crm/contact-update` (AGL-2804) is every other write to a contact's facets:
+ * the rules cannot tell one field of a holder's facet from another, so they
+ * leave a client nothing there but letting a holder go, and the plan is
+ * asked here about the fields a save carries.
  */
 
 import {
@@ -74,6 +77,7 @@ import {
   orgDataCollectionForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CRM_API_ROUTES } from './constants/api-routes'
@@ -98,6 +102,10 @@ import { CONTACTS_MERGE_ROUTE, contactsMergeHandler } from './server/contacts-me
 import { CRM_ERASE_PERSON_ROUTE, crmErasePersonHandler } from './server/erase-person'
 import { CRM_ORG_ACTIVITY_ROUTE, crmOrgActivityHandler } from './server/org-activity'
 import { CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler } from './server/inbound-address'
+import { crmCompanyDeleteHandler } from './server/company-delete'
+import { CONTACT_PHONE_REFUSAL, normalizeTags, typed } from './server/contact-profile'
+import { crmContactUpdateHandler } from './server/contact-update'
+import { crmSuiteRefusal } from './server/suite-gate'
 import {
   CRM_RECIPE_INSTALL_ROUTE,
   CRM_RECIPE_STATUS_ROUTE,
@@ -146,8 +154,12 @@ async function authorizeSiteEditor(
   let uid: string
   try {
     uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
-  } catch {
-    return { ok: false, status: 401, error: 'Unauthenticated' }
+  } catch (error) {
+    // A refused credential is the caller's 401; a failure to check one is
+    // ours and keeps a 5xx (AGL-2852).
+    if (isRefusedIdToken(error)) return { ok: false, status: 401, error: 'Unauthenticated' }
+    console.error('[crm] the site editor could not be verified', error)
+    return { ok: false, status: 500, error: 'The sign-in could not be checked. Try again.' }
   }
   const hostSnapshot = await firebaseAdmin
     .app()
@@ -177,6 +189,13 @@ async function authorizeSiteEditor(
  * the response says `changed: false`, and no automation listening for a
  * change hears one that did not happen.
  *
+ * `lifecycleStage: null` CLEARS the stage (AGL-2804). A facet is the
+ * server's to write, so "not placed yet" comes through the route that owns
+ * the stage rather than as a client-direct delete, and it is refused to a
+ * plan without the suite the way a move is. There is no event for "no
+ * stage", so a clear announces nothing; an empty string names no stage and
+ * is refused like any other the list does not have.
+ *
  * The contact is looked up by id and then checked against `visibleTo`,
  * because the Admin SDK evaluates no rules: a caller who can edit site A
  * must not be able to restage a contact only site B holds by guessing its
@@ -190,12 +209,19 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
   }
   const hostId = String(req.body?.hostId ?? '').trim()
   const contactId = String(req.body?.contactId ?? '').trim()
-  const lifecycleStage: unknown = req.body?.lifecycleStage
+  const requested: unknown = req.body?.lifecycleStage
   if (!hostId || !contactId) {
     res.status(400).json({ error: 'Missing hostId or contactId' })
     return
   }
-  if (!isContactLifecycleStage(lifecycleStage)) {
+  // `null` clears the stage; anything else has to be one of the list's.
+  const clearing = requested === null
+  const lifecycleStage = clearing
+    ? ''
+    : isContactLifecycleStage(requested)
+      ? requested
+      : null
+  if (lifecycleStage === null) {
     res.status(400).json({ error: 'Pick a lifecycle stage' })
     return
   }
@@ -205,6 +231,17 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
     return
   }
   try {
+    // A lifecycle stage is the suite's (AGL-2787) — see `suite-gate.ts`.
+    const owner = await getOrgForHost(hostId)
+    if (!owner) {
+      res.status(404).json({ error: 'Unknown site' })
+      return
+    }
+    const suite = crmSuiteRefusal(owner.org, "Moving a contact's lifecycle stage")
+    if (suite) {
+      res.status(suite.status).json(suite.body)
+      return
+    }
     const contactsRef = await orgDataCollectionForHost(hostId, 'contacts')
     const snapshot = await contactsRef.doc(contactId).get()
     if (!snapshot.exists || !visibleToHost(snapshot.get('visibleTo'), hostId)) {
@@ -224,17 +261,21 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
       return
     }
     await snapshot.ref.update({
-      [contactFacetPath(group.groupId, 'lifecycleStage')]: lifecycleStage,
+      [contactFacetPath(group.groupId, 'lifecycleStage')]: clearing
+        ? FieldValue.delete()
+        : lifecycleStage,
       updatedAt: FieldValue.serverTimestamp(),
     })
     // Awaited, not floated: a serverless response ending cancels in-flight
-    // work, and the event is the reason this route exists.
-    await emitHostEvent(hostId, 'contactStageChanged', {
-      contactId,
-      email: String(snapshot.get('email') ?? ''),
-      lifecycleStage,
-      previousStage,
-    })
+    // work, and the event is the reason this route exists. A clear has none.
+    if (!clearing) {
+      await emitHostEvent(hostId, 'contactStageChanged', {
+        contactId,
+        email: String(snapshot.get('email') ?? ''),
+        lifecycleStage,
+        previousStage,
+      })
+    }
     res
       .status(200)
       .json({ ok: true, changed: true, lifecycleStage, previousStage })
@@ -255,33 +296,6 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
 export const CONTACT_BAND_FULL_MESSAGE =
   'Contact limit reached — this contact was not added. Upgrade in Billing ' +
   'to keep collecting.'
-
-/** The most tags one create may attach, matching the record page's cap. */
-const CONTACT_TAGS_MAX = 20
-
-/** What one typed field may be, after the trim every string gets. */
-function typed(value: unknown, max: number): string {
-  return String(value ?? '')
-    .trim()
-    .slice(0, max)
-}
-
-/**
- * Tags as the record page stores them: lower-cased, trimmed, deduplicated,
- * capped — so a tag typed here and a tag typed on the page are the same tag
- * to the segment filter that matches on them.
- */
-function normalizeTags(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return [
-    ...new Set(
-      value
-        .map((tag) => typed(tag, 40).toLowerCase())
-        .filter(Boolean)
-        .slice(0, CONTACT_TAGS_MAX),
-    ),
-  ]
-}
 
 /**
  * `POST /api/crm/contacts-create` — a person added by hand (AGL-2596).
@@ -355,11 +369,7 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
   const rawPhone = typed(body['phone'], 40)
   const phone = rawPhone ? normalizePhone(rawPhone) : null
   if (rawPhone && !phone) {
-    res.status(400).json({
-      error:
-        'That phone number could not be read. Enter it with its country ' +
-        'code, like +1 512 555 0107.',
-    })
+    res.status(400).json({ error: CONTACT_PHONE_REFUSAL })
     return
   }
   const rawStage = typed(body['lifecycleStage'], 40)
@@ -411,6 +421,14 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
         })
         return
       }
+    }
+
+    // A person typed in by the team is the suite's; the capture doors that
+    // fill a Free workspace's contacts do not come through here (AGL-2787).
+    const suite = crmSuiteRefusal(resolved.org, 'Adding a contact by hand')
+    if (suite) {
+      res.status(suite.status).json(suite.body)
+      return
     }
 
     if (companyId) {
@@ -531,6 +549,12 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
 export function registerCrmConsoleApi(): void {
   registerPluginApiRoute(CRM_API_ROUTES.ping, crmPingHandler)
   registerPluginApiRoute(CRM_API_ROUTES.contactStage, contactStageHandler)
+  // Every other console write to a contact's facets (AGL-2804): the rules
+  // cannot tell one facet field from another, so the plan is asked here.
+  registerPluginApiRoute(CRM_API_ROUTES.contactUpdate, crmContactUpdateHandler)
+  // A company's contacts unlinked, then the company (AGL-2804): the unlink
+  // clears a facet, which is the server's to write.
+  registerPluginApiRoute(CRM_API_ROUTES.companyDelete, crmCompanyDeleteHandler)
   // Tasks (AGL-2599): the two writes with a side effect outside the document
   // — an assignee's notification, and the `taskCompleted` host event.
   registerPluginApiRoute(CRM_TASK_ROUTES.save, crmTaskSaveHandler)

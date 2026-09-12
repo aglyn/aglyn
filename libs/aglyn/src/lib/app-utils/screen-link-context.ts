@@ -24,7 +24,14 @@ import {
   ScreenLinkContext,
   type ScreenRouteMap,
 } from './screen-link-context-value'
-import { parseScreenLinkValue } from './screen-link-value'
+import {
+  EXTERNAL_HREF_PATTERN,
+  SAFE_HREF_PATTERN,
+  parseCollectionLinkValue,
+  resolveScreenHref,
+  screenRoutesAnswerFor,
+  splitLinkValue,
+} from './screen-link-value'
 
 export * from './screen-link-context-value'
 
@@ -75,7 +82,10 @@ export function isScreenLinkBroken(
   screenId: string | null | undefined,
 ): boolean {
   if (!screenId) return false
-  if (!screens || Object.keys(screens).length === 0) return false
+  // Both "we cannot tell" cases, asked of the half of the map that holds this
+  // target's kind: a collection listing (AGL-2799) is judged against the
+  // listings, a screen against the screens — see `screenRoutesAnswerFor`.
+  if (!screenRoutesAnswerFor(screens, screenId)) return false
   return resolveScreenHref(screens, screenId) === undefined
 }
 
@@ -96,11 +106,12 @@ export function isScreenLinkBroken(
  * target must not rewrite it, or opening the panel and pressing Save would
  * quietly convert a recoverable reference into something else.
  *
- * Two shapes get named, because a Screen picker can legally hold either
- * (AGL-1335 / AGL-1894): a screen reference whose screen is gone, and a
- * plain address typed in before the picker existed. The second is not
- * broken — but it is just as invisible, and an author who cannot see it is
- * the reason those links are not rename-safe yet.
+ * Three shapes get named, because a Screen picker can legally hold any of
+ * them (AGL-1335 / AGL-1894 / AGL-2799): a screen reference whose screen is
+ * gone, a collection listing whose collection is gone, and a plain address
+ * typed in before the picker existed. The last is not broken — but it is
+ * just as invisible, and an author who cannot see it is the reason those
+ * links are not rename-safe yet.
  */
 export function unavailableScreenLabel(
   screenId: string,
@@ -110,9 +121,13 @@ export function unavailableScreenLabel(
   // shown plainly. Flashing "unavailable" over every link for the beat
   // before the console's host subscription lands would teach authors to
   // ignore the warning that matters.
-  return screensKnown
-    ? `⚠ Unavailable screen (${screenId}) — unpublished or deleted`
-    : screenId
+  if (!screensKnown) return screenId
+  // A listing has no publish state of its own: its collection is either gone
+  // or no longer has the slug its address is built from.
+  const collectionId = parseCollectionLinkValue(screenId)
+  return collectionId
+    ? `⚠ Unavailable collection listing (${collectionId}) — deleted or has no slug`
+    : `⚠ Unavailable screen (${screenId}) — unpublished or deleted`
 }
 
 export function unresolvedScreenOption(
@@ -121,7 +136,6 @@ export function unresolvedScreenOption(
 ): { value: string; label: string } | undefined {
   const raw = typeof value === 'string' ? value.trim() : ''
   if (!raw) return undefined
-  const known = !!screens && Object.keys(screens).length > 0
   const target = splitLinkValue(raw, undefined)
   if (target.screenId) {
     if (resolveScreenHref(screens, target.screenId) !== undefined) {
@@ -129,12 +143,82 @@ export function unresolvedScreenOption(
     }
     return {
       value: raw,
-      label: unavailableScreenLabel(target.screenId, known),
+      label: unavailableScreenLabel(
+        target.screenId,
+        screenRoutesAnswerFor(screens, target.screenId),
+      ),
     }
   }
   return target.href
     ? { value: raw, label: `⚠ Plain address (${target.href}) — not a screen` }
     : undefined
+}
+
+/** One target a link picker offers — see {@link screenLinkTargetOptions}. */
+export interface ScreenLinkTargetOption {
+  /**
+   * The routing-map key: a bare screen id, or a collection listing's
+   * `collection:<id>`. Stored as it is in a screen slot, and through
+   * `formatScreenLinkValue` in a `Link`-typed prop.
+   */
+  value: string
+  label: string
+  kind: 'screen' | 'collection-listing'
+}
+
+/**
+ * Everything a Screen picker offers, in the order it offers it (AGL-2799):
+ * the host's screens, then its content collections' listing pages.
+ *
+ * ONE builder for both pickers — the attributes panel's `SCREEN_SELECT` and
+ * the `Link`-typed prop picker. Each used to map the routing map into options
+ * by itself, so a target added to one list was missing from the other; and
+ * neither offered a collection's listing at all, which is how the drawer on
+ * aglyn.com came to link its blog as a typed `/blog`.
+ *
+ * A listing is labeled with its collection's name and address, like a
+ * screen, and marked as a listing IN the label rather than only by position:
+ * a closed select shows the chosen label and nothing else, and "Blog (/blog)"
+ * there reads exactly like a screen named Blog.
+ *
+ * `order` keeps each picker's established screen order — by path in the
+ * attributes panel, by name in the prop picker — and the listings follow the
+ * screens in the same order.
+ */
+export function screenLinkTargetOptions(
+  screens: ScreenRouteMap | undefined,
+  labels: Record<string, string> | undefined,
+  order: 'path' | 'label' = 'path',
+): ScreenLinkTargetOption[] {
+  type Ranked = ScreenLinkTargetOption & { path: string }
+  const pages: Ranked[] = []
+  const listings: Ranked[] = []
+  for (const [key, path] of Object.entries(screens ?? {})) {
+    const href = resolveScreenHref(screens, key) ?? ''
+    const collectionId = parseCollectionLinkValue(key)
+    if (collectionId) {
+      listings.push({
+        value: key,
+        label: `${labels?.[key] ?? collectionId} (${href}) — collection listing`,
+        kind: 'collection-listing',
+        path,
+      })
+    } else {
+      pages.push({
+        value: key,
+        label: `${labels?.[key] ?? key} (${href})`,
+        kind: 'screen',
+        path,
+      })
+    }
+  }
+  const compare = (a: Ranked, b: Ranked) =>
+    order === 'path'
+      ? a.path.localeCompare(b.path)
+      : a.label.localeCompare(b.label)
+  return [...pages.sort(compare), ...listings.sort(compare)].map(
+    ({ value, label, kind }) => ({ value, label, kind }),
+  )
 }
 
 /**
@@ -146,9 +230,9 @@ export const BROKEN_SCREEN_LINK_ATTR = 'data-aglyn-broken-link'
 
 /** What the AUTHOR is told, on the one surface that can fix it. */
 export const BROKEN_SCREEN_LINK_MESSAGE =
-  'Broken link: this points at a screen that is unpublished or deleted, so ' +
-  'it will not work on the published site. Pick a screen again in the ' +
-  'attributes panel, or clear the link.'
+  'Broken link: this points at a screen or collection listing that is ' +
+  'unpublished or deleted, so it will not work on the published site. Pick ' +
+  'a target again in the attributes panel, or clear the link.'
 
 /**
  * The editor-only outline. A warning ring rather than an error one: the
@@ -185,93 +269,27 @@ export function brokenScreenLinkProps(
 }
 
 /**
- * Turns a screen id into its current href against a routing map, or
- * `undefined` when there is no id or the id has no entry (unpublished or
- * deleted). Pure and hook-free on purpose: an element that resolves ONE
- * target uses {@link useScreenLink}, but a row of them — the Tabs strip's
- * per-tab links (AGL-1312) — cannot call a hook per item, and the
- * map-to-path contract (root is `'/'`, everything else gains a leading
- * slash) must have exactly one implementation.
- */
-export function resolveScreenHref(
-  screens: ScreenRouteMap | undefined,
-  screenId: string | null | undefined,
-): string | undefined {
-  if (!screenId) return undefined
-  // A value that arrived through a `Link`-typed component prop (AGL-1335)
-  // carries the prefix, because there it has to be distinguishable from the
-  // raw path strings those props held before the picker existed. Stripping
-  // it HERE rather than at each call site is the same "one resolver" rule
-  // the doc comment above states: every surface that resolves a screen id
-  // must accept both spellings, or a prop-fed tab strip would resolve where
-  // a prop-fed button did not.
-  const id = parseScreenLinkValue(screenId) ?? screenId
-  const path = screens?.[id]
-  if (path === undefined) return undefined
-  return path === '/' ? '/' : `/${path}`
-}
-
-/**
- * Link VALUE parsing lives in `./screen-link-value` — server-safe, because
- * the where-used scan runs on the server and the `createContext` this module
- * reaches keeps it out of the `@aglyn/aglyn/server` barrel (AGL-703).
+ * Link VALUE parsing AND resolution live in `./screen-link-value` —
+ * server-safe, because the where-used scan and the Markdown representation of
+ * a page both run on the server, and the `createContext` this module reaches
+ * keeps it out of the `@aglyn/aglyn/server` barrel (AGL-703, AGL-2740).
  * Re-exported here so every existing importer, and the spec beside this file,
  * keeps reaching them at the address they have always used.
  */
 export {
+  COLLECTION_LINK_VALUE_PREFIX,
+  EXTERNAL_HREF_PATTERN,
+  SAFE_HREF_PATTERN,
   SCREEN_LINK_VALUE_PREFIX,
+  formatCollectionLinkValue,
   formatScreenLinkValue,
   nodesReferenceScreen,
+  parseCollectionLinkValue,
   parseScreenLinkValue,
+  resolveScreenHref,
+  screenRoutesAnswerFor,
+  splitLinkValue,
 } from './screen-link-value'
-
-/**
- * Navigable protocols only. A stored `javascript:`/`data:` href would
- * execute in visitors' browsers, so the guard the linking components each
- * carried is here instead — one copy, one place to harden.
- */
-export const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:|\/|#)/i
-
-/** Of those, the ones that actually leave the site (new-tab decisions). */
-export const EXTERNAL_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:)/i
-
-/**
- * Sorts an element's two link inputs into "a screen id" and "a literal
- * href", tolerating either value arriving in either slot (AGL-1335).
- *
- * Both slots are string props, and a component prop bound with
- * `{{prop.link}}` can be dropped into whichever one the author reached for
- * first. So the ROUTING is driven by the value's shape, not by which field
- * it sits in:
- *
- * - a `screen:`-prefixed value is a screen reference wherever it appears;
- * - an href-shaped value (`/x`, `https://…`, `#a`, `mailto:`) in the screen
- *   slot is a literal href — a real screen id never looks like that, and
- *   the alternative is a link that silently resolves to nothing;
- * - anything else in the screen slot is a bare screen id, exactly as before.
- *
- * A resolved screen id always wins: `screenId` has taken precedence over
- * `href` since AGL-139, and this must not change which of the two an
- * already-published page follows.
- */
-export function splitLinkValue(
-  screenId: string | null | undefined,
-  href: string | null | undefined,
-): { screenId?: string; href?: string } {
-  const rawScreen = typeof screenId === 'string' ? screenId.trim() : ''
-  const rawHref = typeof href === 'string' ? href.trim() : ''
-  const fromScreenSlot = parseScreenLinkValue(rawScreen)
-  if (fromScreenSlot) return { screenId: fromScreenSlot }
-  if (rawScreen && !SAFE_HREF_PATTERN.test(rawScreen)) {
-    return { screenId: rawScreen }
-  }
-  const fromHrefSlot = parseScreenLinkValue(rawHref)
-  if (fromHrefSlot) return { screenId: fromHrefSlot }
-  // An href-shaped value in the screen slot beats an empty href slot, and
-  // loses to a real one — the screen slot was never meant to hold a path.
-  const literal = rawHref || rawScreen
-  return literal ? { href: literal } : {}
-}
 
 /** What a linking element renders — see {@link useLinkTarget}. */
 export interface ResolvedLinkTarget extends ResolvedScreenLink {

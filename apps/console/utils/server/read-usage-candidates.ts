@@ -109,6 +109,13 @@ export async function readUsageCandidates(
         ...(docSnapshot.get('parentId')
           ? { parentId: String(docSnapshot.get('parentId')) }
           : {}),
+        // Components only: the declared properties, whose Link defaults render
+        // as links wherever an instance leaves one unset (AGL-2846). The same
+        // document the tree came from, so it costs no read.
+        ...(collectionName === 'components' &&
+        Array.isArray(docSnapshot.get('props'))
+          ? { props: docSnapshot.get('props') }
+          : {}),
       } satisfies UsageCandidate
     }),
   )

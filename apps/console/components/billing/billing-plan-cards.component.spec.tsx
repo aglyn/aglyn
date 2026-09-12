@@ -437,6 +437,23 @@ describe('the page opens on the decision, not the catalogue', () => {
     expect(screen.queryAllByText(/Unlimited CRM records/)).toHaveLength(0)
   })
 
+  /*
+   * The CRM is included from Starter (AGL-2851). Free's band still caps what
+   * its sites capture, but the plan opens no CRM, so a row reading "100 CRM
+   * records" on its card would name a thing the tier does not have — and it
+   * sits directly beside Starter's, where the same words mean the product.
+   *
+   * The Starter half is the control: without it a component that printed the
+   * row for nobody would pass.
+   */
+  it('the Free card names no CRM records, and the tier that has the CRM does', () => {
+    renderCards({ plan: 'free' })
+    expect(within(cardFor('Free')).queryAllByText(/CRM records/)).toHaveLength(0)
+    expect(
+      within(cardFor('Starter')).queryAllByText(/CRM records/).length,
+    ).toBeGreaterThan(0)
+  })
+
   it('the Enterprise card states its limits like every other card', () => {
     renderCards({ plan: 'agency' })
     // Agency's own figures — with its per-unit rate, since Agency meters —

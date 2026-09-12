@@ -53,6 +53,7 @@ import {
   absoluteMediaSrc,
   videoPosterSrc,
 } from './media-ref'
+import { wistiaEmbedUrl } from './wistia-embed'
 
 /** Component id of the Video element. Persisted in documents; never renamed. */
 export const VIDEO_COMPONENT_ID = 'video'
@@ -121,10 +122,16 @@ export function videoObjectJsonLd(
   // All four, or nothing. See the module note: a block missing one of these is
   // an error a search console reports, not a smaller win.
   if (!name || !description || !uploadDate || !thumbnailUrl) return undefined
-  const contentUrl = absoluteMediaSrc(
-    typeof props['src'] === 'string' ? props['src'] : undefined,
-    { hostId, origin },
-  )
+  // A Wistia link names a player, not a file (AGL-2826), so it is published
+  // as the player page and never as `contentUrl`: the link an author pasted
+  // is Wistia's media page, whose bytes are HTML.
+  const embedUrl = wistiaEmbedUrl(props['src'])
+  const contentUrl = embedUrl
+    ? undefined
+    : absoluteMediaSrc(
+        typeof props['src'] === 'string' ? props['src'] : undefined,
+        { hostId, origin },
+      )
   // Through the DAM's own formatter, in ITS unit. The node stores seconds
   // because that is what an author types; `videoDurationIso8601` takes
   // milliseconds and rounds a sub-second clip UP to `PT1S` rather than to a
@@ -142,11 +149,11 @@ export function videoObjectJsonLd(
     description,
     thumbnailUrl,
     uploadDate,
-    // `contentUrl` rather than `embedUrl`: the file is served from this site's
-    // own media CDN, and `embedUrl` names a PLAYER page — a third-party embed
-    // iframe, which is what the separate Video embed element renders and this
-    // element never does.
+    // Exactly one of the two. `contentUrl` is the file, for a film served from
+    // this site's media CDN or hotlinked; `embedUrl` is a PLAYER page, which
+    // this element renders only for a Wistia video.
     ...(contentUrl ? { contentUrl } : {}),
+    ...(embedUrl ? { embedUrl } : {}),
     ...(duration ? { duration } : {}),
   }
 }

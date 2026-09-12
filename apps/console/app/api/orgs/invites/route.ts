@@ -54,6 +54,7 @@ import {
   verifiedAccountEmails,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // `author` (AGL-2334). An invite carries the pending host grant, so leaving
 // it out here would make the role assignable to an existing account and not
@@ -665,6 +666,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     // Acceptance is the hard cap for a site-scoped invite (AGL-2068):
     // `upsertOrgMember` raises the refusal from inside the grant transaction,
     // which is what makes N simultaneous accepts land as one.

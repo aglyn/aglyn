@@ -50,11 +50,20 @@ export interface ErasePersonRequestBody {
   hostId?: string
   /** The organization, at the organization level (AGL-2634). */
   orgId?: string
-  /** Exactly one of these names the record the request is filed from. */
+  /**
+   * At most one of these names the record the request is filed from. Under
+   * a site exactly one does; at the organization level neither may, which
+   * files the request by `email` alone (AGL-2839).
+   */
   contactId?: string
   leadId?: string
-  /** The address as the admin typed it — the confirmation. */
+  /**
+   * The address as the admin typed it — the confirmation of a record's
+   * address, or, filed by address alone, the person the request is about.
+   */
   email: string
+  /** Filed by address alone: the address typed a second time. */
+  confirmEmail?: string
 }
 
 export interface ErasePersonResponse {
@@ -110,6 +119,17 @@ export interface ErasePersonResponse {
  * page that lists it. The sweep is what it always was — every site of the
  * org, found by `orgId` — and the row goes to the org's feed. A lead still
  * names its site, because that is where a lead lives.
+ *
+ * ## By address alone (AGL-2839)
+ *
+ * `{ orgId, email, confirmEmail }` with no record, from the workspace's
+ * Privacy settings: the same workspace admin, for any person the workspace
+ * may hold — including one no page shows, since the CRM that lists records
+ * is included from Starter and a Free workspace has none of it. Nothing is
+ * read to file it: the sweep is keyed by the address, the markers are found
+ * by it, and the typed address must match its second typing, which is the
+ * confirmation a record's address gives the other variants. No plan is
+ * asked on any variant: erasure is an obligation, not a CRM feature.
  */
 export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -130,7 +150,8 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
   const routeScope = readCrmRouteScope(body as Record<string, unknown>)
   const contactId = String(body.contactId ?? '').trim()
   const leadId = String(body.leadId ?? '').trim()
-  if (!routeScope || (!contactId && !leadId) || (contactId && leadId)) {
+  const byAddress = routeScope?.level === 'org' && !contactId && !leadId
+  if (!routeScope || (!byAddress && !contactId && !leadId) || (contactId && leadId)) {
     res.status(400).json({ error: 'Name the site and exactly one contact or lead' })
     return
   }
@@ -173,7 +194,9 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
 
     let recordEmail: string | null = null
-    if (contactId) {
+    if (byAddress) {
+      recordEmail = normalizeContactEmail(body.email)
+    } else if (contactId) {
       const contactsRef =
         routeScope.level === 'org'
           ? firestore.collection('orgs').doc(orgId).collection('contacts')
@@ -199,10 +222,20 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
     }
     const key = recordEmail ? personKey(recordEmail) : null
     if (!recordEmail || !key) {
-      res.status(422).json({ error: 'This record has no usable email address to erase by' })
+      res.status(byAddress ? 400 : 422).json({
+        error: byAddress
+          ? 'Enter the email address of the person to erase'
+          : 'This record has no usable email address to erase by',
+      })
       return
     }
-    if (!personErasureConfirmationMatches(body.email, recordEmail)) {
+    if (byAddress && !personErasureConfirmationMatches(body.confirmEmail, recordEmail)) {
+      res.status(400).json({
+        error: 'Type the email address a second time, exactly, to confirm the erasure',
+      })
+      return
+    }
+    if (!byAddress && !personErasureConfirmationMatches(body.email, recordEmail)) {
       res.status(400).json({
         error: 'Type the record’s email address exactly to confirm the erasure',
       })
@@ -284,9 +317,13 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
     // org's at the organization level.
     const target = { type: contactId ? 'contact' : 'lead', id: contactId || leadId } as const
     if (routeScope.level === 'org') {
-      await logOrgActivity(orgId, actor, 'Requested privacy erasure', target).catch(
-        () => undefined,
-      )
+      // Filed by address, the line names no record — and never the address.
+      await logOrgActivity(
+        orgId,
+        actor,
+        'Requested privacy erasure',
+        byAddress ? { type: 'org' } : target,
+      ).catch(() => undefined)
     } else {
       await logHostActivity(hostId, actor, 'Requested privacy erasure', target).catch(
         () => undefined,
@@ -302,7 +339,7 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
         after: {
           hostId: hostId || null,
           hosts: hostIds.length,
-          from: contactId ? 'contact' : 'lead',
+          from: byAddress ? 'address' : contactId ? 'contact' : 'lead',
         },
         at: FieldValue.serverTimestamp(),
       })

@@ -44,6 +44,37 @@ export interface MediaSearchFieldProps {
 }
 
 /**
+ * The magnifier, built once.
+ *
+ * It depends on nothing this component renders, and its IDENTITY is load
+ * bearing (AGL-2854). MUI `InputBase` reports the adornment up to the
+ * enclosing `FormControl` from a passive effect keyed on the element:
+ *
+ * ```js
+ * useEffect(() => {
+ *   if (muiFormControl) muiFormControl.setAdornedStart(Boolean(startAdornment))
+ * }, [muiFormControl, startAdornment])
+ * ```
+ *
+ * Inline, that element was new on every render, so the effect re-ran on
+ * every render and called `setAdornedStart` with the value the state
+ * already held. React cannot take the eager-bailout path for that call —
+ * the fiber's alternate still carries the lanes of the render being
+ * committed — so each one enqueued a real update during the commit's
+ * passive flush. React counts those, never resetting the count while they
+ * keep arriving, and throws at 50.
+ *
+ * The library re-renders this field on every keystroke ANYWHERE on the
+ * page, so the 51st keystroke in the details drawer's Alt text field threw
+ * React error #185 and unmounted the media page.
+ */
+const SEARCH_ADORNMENT = (
+  <InputAdornment position="start">
+    <SearchIcon fontSize="small" color="disabled" />
+  </InputAdornment>
+)
+
+/**
  * The DAM search box (AGL-1460).
  *
  * Extracted from the 3,400-line library for one reason: the two complaints
@@ -77,11 +108,7 @@ export function MediaSearchField(props: MediaSearchFieldProps) {
       helperText={mediaSearchScopeMessage({ ...scope, active })}
       slotProps={{
         input: {
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon fontSize="small" color="disabled" />
-            </InputAdornment>
-          ),
+          startAdornment: SEARCH_ADORNMENT,
           endAdornment: value ? (
             <InputAdornment position="end">
               <Tooltip title="Clear search">

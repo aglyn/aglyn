@@ -18,17 +18,15 @@ name: Main Gate
 # then happened — "a break can sit on `main` unnoticed until someone runs the
 # gate."
 #
-# Restoring the push trigger would restore the noise. This workflow is the
-# other way out of that trade: gate on a TIMER rather than per push.
+# This workflow gates `main` on every push without restoring that noise:
 #
-#   - N commits in a window collapse into ONE run and ONE verdict, so the
-#     notification rate is bounded by the cadence, not by how many agents are
-#     committing. That is the entire noise problem, solved by arithmetic.
-#   - The window is small enough that a red still names a short list of
-#     suspects instead of a day of them. The summary prints that list.
-#   - The verdict lands as a COMMIT STATUS on the gated sha (see `statuses:
+#   - The verdict lands as a COMMIT STATUS on the gated SHA (see `statuses:
 #     write` below for why it is not a tracking issue). A break is therefore a
 #     visible STATE rather than an email that scrolls away.
+#   - An alert is sent once per DISTINCT red: the same sha failing the same way
+#     is recorded and never repeated (AGL-2537).
+#   - The full sweep grades the newest push, so a burst of commits costs one
+#     sweep and one full verdict (AGL-2836).
 #
 #     ⚠️ A status ALONE is a state nobody is notified of, and that was
 #     a real gap rather than a nuance (AGL-2533). A status sits on a sha the
@@ -36,64 +34,52 @@ name: Main Gate
 #     who went looking at that sha. Two reds went unread for hours on
 #     2026-09-03 — a linear-id ceiling violation and a genuine 429-vs-200
 #     assertion failure — and the second was misread as an already-explained
-#     flake because nothing surfaced it. The `report` job now ALERTS on a red:
+#     flake because nothing surfaced it. The report jobs ALERT on a red:
 #     Slack `#ci` is the notification, and the status is the durable record.
 #
 # ---------------------------------------------------------------------------
-# WHY TWO JOBS
+# WHY TWO HALVES
 # ---------------------------------------------------------------------------
 # `fast` is typecheck + docs:typecheck + every derived guard. It finishes in
-# minutes, so it runs on every push. `full` adds the test sweep and the
-# PRODUCTION builds; it takes a measured 25-41 minutes, so it cannot run per
-# push and is DEBOUNCED to at most one run an hour (AGL-2552) — a push asks
-# whether the last sweep has aged out, and only a stale one runs.
+# about ten minutes and grades every pushed commit, so a type or guard break
+# names its own commit.
 #
-# ⚑ Both cadences were once written as crons, and both were fiction. `full`
-# asked for 24 runs a day and got 6; median gap 246 minutes, for the job that
-# says a release is safe. Do not describe a cadence here without measuring the
-# delivered one — that is twice this file has claimed a rate it did not have.
+# `full` is lint, the tests in four shards and the three PRODUCTION builds, in
+# `main-gate-full.yml`. It runs on every push as ONE unit behind ONE queue: a
+# sweep runs, a push that lands meanwhile waits, and only the newest waiting
+# push is kept (AGL-2836). Debounced to one sweep an hour (AGL-2552), it left
+# the 24 test, lint and build breaks of 2026-09-03 to 2026-09-11 on `main` a
+# median 43 minutes before their first red.
+#
+# ⚑ Cadences were once written here as crons, and they were fiction: GitHub
+# delivered 13 of 120 quarter-hourly runs and 6 of 24 hourly ones. Do not
+# describe a cadence in this file without measuring the delivered one.
 #
 # The split is not a guess about which half matters. ALL FOUR of the 2026-08-22
-# failures were in the `fast` half — one typecheck, three guards. That is what
-# the cadences are sized against: the class that actually accumulates on `main`
-# is the cheap class, and it is worth catching four times an hour.
-#
-# `full` is still the thing that says a release is safe. Neither job replaces
-# `tools/gate.sh`, which is what a promotion runs; these keep `main` in a state
-# where running it is uneventful.
+# failures were in the `fast` half — one typecheck, three guards — and from
+# 2026-09-03 to 2026-09-11 the halves caught 20 and 24 breaks. Neither half
+# replaces `tools/gate.sh`, which is what a promotion runs; they keep `main` in a
+# state where running it is uneventful.
 
 on:
-  # THE PRIMARY TRIGGER. Measured 2026-09-03: the crons below asked for 120
-  # runs in 24 hours and GitHub delivered 13 — an 11% delivery rate, median
-  # gap 89 minutes, longest 227. The comment under `schedule` had always said
-  # runs "may be late or skipped entirely"; what nobody had measured is that
-  # skipping is the NORMAL case, so the job sized to catch a break within 15
-  # minutes was in practice catching it within an hour and a half. A session
-  # waiting on the gate as a signal waited two hours for a run that never came.
-  #
-  # A clock was always the wrong instrument for this. The event that can break
-  # `main` is a push to `main`, so that is what gates it now, and the crons
-  # stay as a backstop for the case a push-triggered run is lost.
+  # THE PRIMARY TRIGGER. The event that can break `main` is a push to `main`, so
+  # that is what gates it. GitHub delivered 13 of 120 requested cron runs when
+  # this was measured on 2026-09-03, so the crons below are backstops.
   #
   # ⚑ This does NOT restore the noise that moved `nx-ci.yml`'s push trigger off
-  # `main` for the Sept-1 freeze. That workflow notifies on every red, which is
-  # why continuous agent pushes made it noise; this one alerts once per DISTINCT
-  # red — the same sha failing the same way is recorded and never repeated
-  # (AGL-2537) — and writes a commit status besides. The `full` sweep is
-  # deliberately NOT reachable from a push — see its `if:` — so a push costs
-  # the `fast` job's few minutes, never the 90-minute sweep.
+  # `main` for the Sept-1 freeze. That workflow notifies on every red; this one
+  # alerts once per DISTINCT red and writes a commit status besides.
   push:
     branches:
       - main
   schedule:
     # Every 15 minutes, offset off :00 — GitHub's scheduler is most congested
     # on the hour and schedules are best-effort, so a run may be late or
-    # skipped entirely (measured: 11% delivered). A BACKSTOP now rather than
-    # the cadence; `tools/gate.sh` at promotion time remains the guarantee.
+    # skipped entirely (measured: 11% delivered). A BACKSTOP for the fast half;
+    # `tools/gate.sh` at promotion time remains the guarantee.
     - cron: '7,22,37,52 * * * *'
-    # Hourly, offset again. No longer the only path to `full` — a push now asks
-    # whether the sweep is stale (AGL-2552) — so this is a BACKSTOP for a quiet
-    # `main`, where nothing pushes and nothing therefore asks.
+    # Hourly, offset again. Re-sweeps the tip of a quiet `main`, which is also
+    # what finds a spec that fails on the clock rather than on a commit.
     - cron: '11 * * * *'
   workflow_dispatch:
     inputs:
@@ -196,11 +182,14 @@ jobs:
       # apps/docs nor cloud/functions is an npm workspace, and a root-only
       # install fails docs:typecheck and cloud-functions with errors that read
       # as source defects.
-      - if: steps.moved.outputs.skip != 'true'
+      - id: install
+        if: steps.moved.outputs.skip != 'true'
         run: npm ci
-      - if: steps.moved.outputs.skip != 'true'
+      - id: install-functions
+        if: steps.moved.outputs.skip != 'true'
         run: npm ci --prefix cloud/functions
-      - if: steps.moved.outputs.skip != 'true'
+      - id: install-docs
+        if: steps.moved.outputs.skip != 'true'
         run: npm ci --prefix apps/docs
 
       # `TYPECHECK_CONCURRENCY` because this runner has 4 vCPU and 16 GB, and
@@ -224,14 +213,20 @@ jobs:
         env:
           TYPECHECK_CONCURRENCY: '2'
         run: npm run typecheck
-      - if: steps.moved.outputs.skip != 'true'
+      # The docs typecheck and the guards run whatever the workspace typecheck
+      # concluded, provided the installs they read succeeded (AGL-2835). A step's
+      # default condition is `success()`, under which one type error skips every
+      # guard: 22 fast runs from 2026-09-03 to 2026-09-11 ran none, so a guard
+      # break that landed during a type error stayed unseen until the type error
+      # was fixed. The job is red either way; the verdict covers both classes.
+      - if: ${{ !cancelled() && steps.moved.outputs.skip != 'true' && steps.install.outcome == 'success' && steps.install-functions.outcome == 'success' && steps.install-docs.outcome == 'success' }}
         run: npx nx run docs:typecheck
 
       # All of them, concurrently. The list is DERIVED from nx-ci.yml and
       # tools-guards.yml by the script itself, so a guard added to either is
       # gated here without anyone editing this file — and deriving zero is a
       # hard failure rather than an empty green phase.
-      - if: steps.moved.outputs.skip != 'true'
+      - if: ${{ !cancelled() && steps.moved.outputs.skip != 'true' && steps.install.outcome == 'success' && steps.install-functions.outcome == 'success' && steps.install-docs.outcome == 'success' }}
         run: node tools/scripts/run-guards.mjs --concurrency 4
         # `check:linear-ids` is one of the guards derived above, and it asks
         # Linear for the highest issue that exists — an answer that can only
@@ -256,21 +251,12 @@ jobs:
             echo "Gated \`$(git rev-parse --short HEAD)\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # IS THE FULL SWEEP DUE? (AGL-2552)
+  # IS THE FULL SWEEP DUE? (AGL-2552, AGL-2836)
   #
-  # AGL-2534 moved `fast` off the clock and onto the push event, because GitHub
-  # delivered 13 of 120 requested cron runs. It deliberately left `full` on the
-  # hourly cron, and measuring that half a day later gave the number the file
-  # never had: the sweep asked for 24 runs and got 6 — 25%, median gap 246
-  # minutes. The job that decides whether a release is safe was the one running
-  # least often, while the file said "hourly".
-  #
-  # A push cannot fire a 33-minute sweep directly; that is why AGL-2534 did not
-  # do it. So the push instead ASKS whether the sweep is stale, and only a stale
-  # one runs. The interval sets the cadence, not the push rate: a burst of six
-  # commits buys one sweep, and an hour with any activity reliably gets one.
-  #
-  # Cheap by construction — no checkout, no install, one API walk, seconds.
+  # A push always is; a dispatch asks with its `full` input; of the two crons,
+  # only the hourly one is. The rule lives in `lib/main-gate-full-sweep.mjs`,
+  # where it is tested, because logic inline in a workflow can only be tested by
+  # running the workflow. No install and no network: a sparse checkout, seconds.
   sweep-due:
     name: is the full sweep due
     runs-on: ubuntu-latest
@@ -285,203 +271,42 @@ jobs:
           sparse-checkout-cone-mode: false
       - id: decide
         env:
-          GH_TOKEN: ${{ github.token }}
           MAIN_GATE_SCHEDULE: ${{ github.event.schedule }}
           MAIN_GATE_INPUTS_FULL: ${{ inputs.full }}
         run: node tools/scripts/check-main-gate-full-sweep.mjs
-  # ---------------------------------------------------------------------------
-  # THE FULL SWEEP, IN PARALLEL (AGL-2721)
-  # ---------------------------------------------------------------------------
-  # It was one job running six independent things in series and took 26-35
-  # minutes. Measured on run 34428799468: install 79s, typecheck 443s, lint
-  # 149s, guards 58s, tests 813s and still going, three production builds not
-  # yet started. Nothing in that list depends on anything else in it.
+
+  # THE FULL SWEEP, ONE UNIT BEHIND ONE QUEUE (AGL-2836)
   #
-  # Split across runners rather than parallelised inside one, deliberately.
-  # `TYPECHECK_CONCURRENCY: '2'` is a MEMORY ceiling, not a throughput choice —
-  # the driver sizes on CPU and dies on RAM (AGL-2684) — so adding concurrency
-  # inside a 4-vCPU / 16 GB runner reintroduces exactly the OOM that cap fixed.
-  # Separate runners give each step its own 16 GB and cost nothing: Actions
-  # minutes are free on this plan.
+  # The concurrency group sits on this CALLER, so the whole of
+  # `main-gate-full.yml` is what queues. `cancel-in-progress: false` holds one
+  # running sweep and one waiting sweep per ref: a newer push replaces the
+  # waiting one, which ends `cancelled` and writes no status, and a running
+  # sweep is never cut off. Replayed over the pushes of 2026-09-04 to
+  # 2026-09-11 with an 11-minute sweep, a push waited a median 12 and at most 22
+  # minutes for a sweep covering it. Cancelling the running sweep instead gave a
+  # max of 45, because it grades nothing until a burst ends.
   #
-  # `full` survives as an AGGREGATOR so two contracts do not move: the check
-  # name `full (tests + production builds)`, and `report`'s reading of
-  # `needs.full.result` — where `skipped` means the sweep was not due and must
-  # never be read as green.
-  full-typecheck:
-    name: full · typecheck
-    runs-on: ubuntu-latest
-    concurrency:
-      group: main-gate-full-typecheck
-      cancel-in-progress: false
-    timeout-minutes: 45
-    needs: sweep-due
-    if: needs.sweep-due.outputs.due == 'true'
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: 'npm'
-      - run: npm ci
-      - run: npm ci --prefix cloud/functions
-      - run: npm ci --prefix apps/docs
-      # The 4-vCPU / 16 GB ceiling (AGL-2684). On its own runner now, and the
-      # cap STAYS: the constraint is this job's own memory, not contention
-      # with the steps that used to share the box.
-      - env:
-          TYPECHECK_CONCURRENCY: '2'
-        run: npm run typecheck
-      - run: npx nx run docs:typecheck
-
-  full-lint:
-    name: full · lint + guards
-    runs-on: ubuntu-latest
-    concurrency:
-      group: main-gate-full-lint
-      cancel-in-progress: false
-    timeout-minutes: 30
-    needs: sweep-due
-    if: needs.sweep-due.outputs.due == 'true'
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: 'npm'
-      - run: npm ci
-      - run: npm ci --prefix cloud/functions
-      - run: npx nx run-many -t lint --all --parallel=3
-      - run: node tools/scripts/run-guards.mjs --concurrency 4
-        # Same reason as the fast job above (AGL-2670).
-        env:
-          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-
-  full-test:
-    name: full · tests
-    runs-on: ubuntu-latest
-    concurrency:
-      group: main-gate-full-test-${{ matrix.shard }}
-      cancel-in-progress: false
-    timeout-minutes: 45
-    needs: sweep-due
-    if: needs.sweep-due.outputs.due == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: 'npm'
-      - run: npm ci
-      - run: npm ci --prefix cloud/functions
-      # Sharded the way nx-ci.yml shards its own: jest's `--shard` does the
-      # splitting and reaches jest THROUGH nx, so each shard runs a quarter of
-      # every project's files. `fail-fast: false` so one red shard does not
-      # cancel the others and cost the run its diagnosis.
-      #
-      # REDIRECTED to a file, not piped (AGL-1617). A pipe makes nx's stdout
-      # asynchronous and nx ends a failed run with process.exit(), which drops
-      # whatever is still buffered — always the failing task's output, since nx
-      # prints FAILED last.
-      - name: test
-        run: |
-          status=0
-          npx nx run-many -t test --all --parallel=3 --maxWorkers=2 \
-            --shard=${{ matrix.shard }}/4 \
-            > "$RUNNER_TEMP/nx-test.log" 2>&1 || status=$?
-          cat "$RUNNER_TEMP/nx-test.log"
-          exit "$status"
-
-      # --task-failed: this step only runs because the job is already red, so
-      # the premise comes from the workflow rather than from a log that may not
-      # contain it. A log with nothing in it is INCONCLUSIVE, not clean.
-      - if: failure()
-        run: node tools/scripts/lib/ci-test-digest.mjs "$RUNNER_TEMP/nx-test.log" --task-failed
-
-      - if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: nx-test-log-main-gate-full-${{ matrix.shard }}
-          path: ${{ runner.temp }}/nx-test.log
-          retention-days: 7
-          if-no-files-found: warn
-
-  full-build:
-    name: full · production builds
-    runs-on: ubuntu-latest
-    concurrency:
-      group: main-gate-full-build
-      cancel-in-progress: false
-    timeout-minutes: 45
-    needs: sweep-due
-    if: needs.sweep-due.outputs.due == 'true'
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: 'npm'
-      - run: npm ci
-      - run: npm ci --prefix apps/docs
-      # PRODUCTION builds, named individually. A bare `nx run-many -t build`
-      # once went green while BOTH Next production builds errored on a
-      # misplaced `use client`, and `docs` has no `production` configuration.
-      # This is the non-negotiable: a gate that skips the production build has
-      # historically let a broken build reach production.
-      - run: npx nx run console:build:production
-      - run: npx nx run tenant:build:production
-      - run: npx nx run docs:build
-
-  # The aggregator. It exists so the check NAME and `report`'s
-  # `needs.full.result` both keep meaning exactly what they meant when this was
-  # one job.
+  # Per-job groups inside the called workflow would not be one unit: a typecheck
+  # group and a test group turn over at different times, so a burst would leave
+  # runs with some parts cancelled and no run with all of them.
   #
-  # `always()` is load-bearing: without it a failed child SKIPS this job, and
-  # `report` reads `skipped` as "the sweep was not due" — turning a red sweep
-  # into a green verdict, which is the AGL-2378 shape.
+  # Keyed on the ref, so a sweep dispatched on a branch never queues with, or
+  # displaces, the sweep of `main`.
   full:
-    name: full (tests + production builds)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: [sweep-due, full-typecheck, full-lint, full-test, full-build]
-    if: always() && needs.sweep-due.outputs.due == 'true'
-    steps:
-      - name: every part of the sweep passed
-        env:
-          TYPECHECK: ${{ needs.full-typecheck.result }}
-          LINT: ${{ needs.full-lint.result }}
-          TEST: ${{ needs.full-test.result }}
-          BUILD: ${{ needs.full-build.result }}
-        run: |
-          set -euo pipefail
-          bad=0
-          for part in "typecheck:$TYPECHECK" "lint:$LINT" "test:$TEST" "build:$BUILD"; do
-            name="${part%%:*}"; result="${part#*:}"
-            printf '  %-10s %s\n' "$name" "$result"
-            # `success` only. `skipped` is not a pass here — a part that did
-            # not run has proved nothing, and this job's whole purpose is to
-            # refuse to say otherwise.
-            [ "$result" = "success" ] || bad=1
-          done
-          [ "$bad" = 0 ] || { echo "::error::the full sweep did not pass in full"; exit 1; }
+    name: full sweep
+    needs: sweep-due
+    if: needs.sweep-due.outputs.due == 'true'
+    concurrency:
+      group: main-gate-full-${{ github.ref }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/main-gate-full.yml
+    secrets: inherit
 
   # -------------------------------------------------------------------------
-  # THE VERDICT, AND THE ALERT THAT CARRIES IT
+  # THE VERDICTS, AND THE ALERTS THAT CARRY THEM
   # -------------------------------------------------------------------------
   # A failing workflow emails whoever is watching, and an email is exactly the
-  # thing that scrolled away and let failures sit on main for hours. So the
+  # thing that scrolled away and let failures sit on main for hours. So each
   # verdict also lands as a STATE: a commit status on the SHA that was gated,
   # visible beside that commit in the branch and commit views, persisting until
   # something supersedes it.
@@ -491,14 +316,13 @@ jobs:
   # steps reports `success`, and reading that as green would clear a red on a
   # `main` nobody is pushing to; and `fast` and `full` write SEPARATE contexts,
   # so a cheap green cannot overwrite an expensive red.
-  report:
-    name: report
+  #
+  # One report job per half, so the fast verdict and its alert never wait on a
+  # sweep that may be queued behind another (AGL-2836).
+  report-fast:
+    name: report · fast
     runs-on: ubuntu-latest
-    # `sweep-due` is needed for its RESULT, not its output: `full` depends on
-    # it, so a failed `sweep-due` leaves `full` skipped — and a skipped `full`
-    # is not a red. Without this the sweep would stop running on every push
-    # while the reporter said "nothing to report" (AGL-2552).
-    needs: [fast, full, sweep-due]
+    needs: [fast]
     if: always() && github.event_name != 'pull_request'
     permissions:
       contents: read
@@ -520,9 +344,7 @@ jobs:
           node tools/scripts/gate-report.mjs \
             --sha "${{ needs.fast.outputs.sha || github.sha }}" \
             --fast "${{ needs.fast.result }}" \
-            --fast-verified "${{ needs.fast.outputs.verified }}" \
-            --full "${{ needs.full.result }}" \
-            --full-verified "${{ needs.full.result != 'skipped' }}"
+            --fast-verified "${{ needs.fast.outputs.verified }}"
 
       # THE NOTIFICATION (AGL-2533). The commit status above is correct,
       # precise, and attached to a sha the branch has already moved past —
@@ -530,23 +352,17 @@ jobs:
       # four promotions went out. This sends the red to Slack `#ci`, which is
       # the only channel it goes to.
       #
-      # It posted a Linear comment as well until 2026-09-04 (AGL-2537). One
-      # fact does not need two channels, and an issue accumulating a comment
-      # per red becomes a stream people are trained to scroll past — the
-      # silence of AGL-2533, reached by a slower road.
-      #
       # `GITHUB_TOKEN` is what makes the alert idempotent: the reporter records
       # each red it sends as a commit status on the graded sha and skips a red
-      # already recorded there. The job's `statuses: write` above covers both
-      # halves. Absent the token the reporter still alerts, because a duplicate
-      # is better than a miss.
+      # already recorded there. Absent the token the reporter still alerts,
+      # because a duplicate is better than a miss.
       #
-      # `if: always()` and the script's own exit-0 discipline are both
-      # deliberate — a gate that failed BECAUSE it could not report would be
-      # strictly worse than the silence it replaces. A green posts nothing; a
-      # repeat of the same red posts nothing.
+      # `always()` and the script's own exit-0 discipline are both deliberate —
+      # a gate that failed BECAUSE it could not report would be strictly worse
+      # than the silence it replaces. Only from `main`: a sweep dispatched on a
+      # branch is a proof run, and its red is not `main`'s.
       - name: red -> Slack
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -555,8 +371,6 @@ jobs:
           node tools/scripts/report-main-gate-red.mjs \
             --sha="${{ needs.fast.outputs.sha || github.sha }}" \
             --fast="${{ needs.fast.result }}" \
-            --full="${{ needs.full.result }}" \
-            --sweep-due="${{ needs.sweep-due.result }}" \
             --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --subject="$(git log -1 --format=%s || true)"
 
@@ -582,20 +396,79 @@ jobs:
             --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --subject='TEST of the notification path - not a real failure'
 
-      # The suspect list. Its length is the whole argument for gating on a short
-      # timer: a day of accumulated commits is not a suspect list, an hour of
-      # them is.
+      # The suspect list for a fast red: the commits of the last twenty minutes.
       - if: always()
         run: |
           {
-            echo "### main gate"
+            echo "### main gate · fast"
             echo
             echo "| job | result | verified |"
             echo "|---|---|---|"
             echo "| fast | ${{ needs.fast.result }} | ${{ needs.fast.outputs.verified }} |"
-            echo "| full | ${{ needs.full.result }} | ${{ needs.full.result != 'skipped' }} |"
             echo
-            echo "Gated \`$(git rev-parse --short HEAD)\`. Commits in this window:"
+            echo "Gated \`$(git rev-parse --short HEAD)\`. Commits in the last 20 minutes:"
             echo
-            git log --since='70 minutes ago' --format='- `%h` %s (%an)' || true
+            git log --since='20 minutes ago' --format='- `%h` %s (%an)' || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  report-full:
+    name: report · full
+    runs-on: ubuntu-latest
+    # `sweep-due` is needed for its RESULT, not its output: `full` depends on
+    # it, so a failed `sweep-due` leaves `full` skipped — and a skipped `full`
+    # is not a red. Without this the sweep would stop running on every push
+    # while the reporter said "nothing to report" (AGL-2552).
+    needs: [full, sweep-due]
+    if: always() && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A sweep that a newer push replaced ends `cancelled`, which gate-report
+      # reads as inconclusive and writes no status for, so the previous verdict
+      # on `main` stands until the newest sweep finishes.
+      - name: verdict -> commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          node tools/scripts/gate-report.mjs \
+            --sha "${{ github.sha }}" \
+            --full "${{ needs.full.result }}" \
+            --full-verified "${{ needs.full.result != 'skipped' }}"
+
+      # The same notifier as `report-fast`, for the same reasons, and only from
+      # `main`.
+      - name: red -> Slack
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          node tools/scripts/report-main-gate-red.mjs \
+            --sha="${{ github.sha }}" \
+            --full="${{ needs.full.result }}" \
+            --sweep-due="${{ needs.sweep-due.result }}" \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --subject="$(git log -1 --format=%s || true)"
+
+      - if: always()
+        run: |
+          {
+            echo "### main gate · full"
+            echo
+            echo "| job | result |"
+            echo "|---|---|"
+            echo "| sweep-due | ${{ needs.sweep-due.result }} |"
+            echo "| full | ${{ needs.full.result }} |"
+            echo
+            echo "Swept \`$(git rev-parse --short HEAD)\`. Commits in the last 30 minutes:"
+            echo
+            git log --since='30 minutes ago' --format='- `%h` %s (%an)' || true
           } >> "$GITHUB_STEP_SUMMARY"

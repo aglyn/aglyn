@@ -37,6 +37,8 @@ import {
   ORG_SCOPE_TOKEN,
   planLabelGrantingFeature,
   planLegacyFolderMigration,
+  type ScopeToken,
+  scopeToStore,
   storedScope,
   visibleToHost,
   wouldCreateCycle,
@@ -136,13 +138,20 @@ import {
   sumAssetUsage,
   type MediaDayMedia,
 } from '../../utils/analytics-day-cache'
+import { useReleaseFlag } from '../../hooks/use-release-flags'
 import {
   isAllowedUploadType,
+  isVideoUploadType,
+  MEDIA_UPLOAD_KIND_LABELS,
+  mediaUploadKind,
   normalizeUploadContentType,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
   requiresFileUploadEntitlement,
-  UPLOAD_ACCEPT_ATTRIBUTE,
-  UPLOAD_TYPES_MESSAGE,
+  uploadAcceptAttribute,
+  uploadAcceptForKind,
+  uploadTypesMessage,
+  VIDEO_UPLOADS_PAUSED_MESSAGE,
+  VIDEO_UPLOADS_RELEASE_FLAG,
 } from '../../utils/media-upload-limits'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -392,6 +401,23 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 /**
+ * The doc revision the caller was looking at, as the replace route's 409
+ * precondition. Absent rather than zero when the asset carries no timestamp —
+ * the route treats a missing precondition as "no opinion", and sending one it
+ * cannot compare would refuse every replace of a legacy document.
+ */
+function replacePrecondition(media: unknown): { expectedUpdatedAtMs?: number } {
+  const updatedAt = (media as { updatedAt?: unknown })?.updatedAt as {
+    toMillis?: () => number
+    seconds?: number
+  } | null
+  const updatedAtMs =
+    updatedAt?.toMillis?.() ??
+    (updatedAt?.seconds ? updatedAt.seconds * 1000 : undefined)
+  return updatedAtMs ? { expectedUpdatedAtMs: updatedAtMs } : {}
+}
+
+/**
  * Per-host media library (AGL-72/73): files live in Firebase Storage at
  * `hosts/{hostId}/media/{mediaId}` with a Firestore metadata mirror and a
  * bytes counter doc (`counters/media`) that feeds the storage quota meter.
@@ -527,6 +553,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * console.
    */
   const fileUploads = orgReady && checkEntitlement(org as never, 'videoMedia')
+  /**
+   * Whether this org may store a NEW video (AGL-2830): the
+   * `release_video_uploads` flag, which every ingress route also enforces.
+   *
+   * `released`, not `visible`: the routes give staff no preview, so a staff
+   * session shown a video picker here would pick a file the server refuses.
+   * Before Remote Config activates, `released` is the registry default (OFF),
+   * so the library errs toward not offering a video rather than offering one
+   * it then refuses. The paused chip waits for `ready`, so a workspace the
+   * flag is on for never sees it flash.
+   */
+  const videoUploadsFlag = useReleaseFlag(VIDEO_UPLOADS_RELEASE_FLAG)
+  const videoUploadsOpen = videoUploadsFlag.released
+  const uploadAccept = uploadAcceptAttribute({ video: videoUploadsOpen })
+  const uploadTypesCopy = uploadTypesMessage({ video: videoUploadsOpen })
   const cdnDelivery = orgReady && checkEntitlement(org as never, 'mediaCdn')
   const fileUploadPlanLabel =
     planLabelGrantingFeature('videoMedia') ?? 'a higher plan'
@@ -1742,6 +1783,23 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     const scopeChanged =
       JSON.stringify([...previousScope].sort()) !==
       JSON.stringify([...editor.visibleTo].sort())
+    // The scope this save writes, or null when it writes none. Only an
+    // org-wide member may change it — the AGL-1042 rules deny anyone else, so
+    // sending it would fail the whole write rather than just this field.
+    //
+    // A selection `scopeToStore` cannot store refuses the save rather than
+    // writing a substitute: the org token would share the file with every
+    // site, and anything narrower would drop sites somebody picked.
+    const scopeWrite =
+      orgId && viewerOrgWide && scopeChanged
+        ? scopeToStore(editor.visibleTo)
+        : null
+    if (scopeWrite?.problem) {
+      return void enqueueSnackbar(scopeWrite.problem, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     // Narrowing can break a LIVE page (AGL-1045). Before taking an asset
     // away from a site, find out which sites actually use it and name them
     // — silently breaking a published client site is the worst outcome this
@@ -1785,12 +1843,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           folderId,
           // Legacy string kept in sync until every reader is on folderId.
           folder: folderId ? (folderNameById[folderId] ?? '') : '',
-          // Sharing scope (AGL-1045). Only an org-wide member may change
-          // it — the AGL-1042 rules deny anyone else, so sending it would
-          // fail the whole write rather than just this field.
-          ...(orgId && viewerOrgWide && scopeChanged
-            ? { visibleTo: normalizeVisibleTo(editor.visibleTo) ?? [ORG_SCOPE_TOKEN] }
-            : {}),
+          // Sharing scope (AGL-1045) — see `scopeWrite`.
+          ...(scopeWrite?.scope ? { visibleTo: scopeWrite.scope } : {}),
           // Rename (AGL-184): display-name only; the Storage object id/URL
           // stays stable so existing references keep resolving.
           ...(editor.fileName.trim()
@@ -1869,56 +1923,243 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     if (next === null) return
     setEditor((prev) => (prev ? { ...prev, tags: next } : prev))
   }, [editor?.tags, tagDraft])
+  /**
+   * The tail every replace shares: report, log, close, reload.
+   *
+   * Split out because a replace now arrives three ways — a base64 body, a
+   * signed finalize, and the image editor's transform — and the half that
+   * has to stay identical between them is what the person sees afterwards.
+   */
+  const finishReplace = useCallback(
+    async (media: any, response: Response) => {
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        enqueueSnackbar(payload?.error ?? 'Replace failed', {
+          ...uploadRefusalOptions(payload),
+          allowDuplicate: true,
+        })
+        return false
+      }
+      // Not "Image replaced" any more (AGL-2732): the same button now swaps a
+      // PDF, a deck or a film.
+      enqueueSnackbar('File replaced', { variant: 'success', persist: false })
+      logActivity('Replaced media file', {
+        type: 'media',
+        id: media.$id ?? media.id,
+        name: media?.fileName ?? media.$id ?? media.id,
+      })
+      setEditor(null)
+      refresh()
+      return true
+    },
+    [enqueueSnackbar, logActivity, refresh],
+  )
   const replaceMediaBytes = useCallback(
-    async (media: any, base64: string, contentType: string) => {
-      if (!media) return
-      const mediaId = media.$id ?? media.id
-      const updatedAtMs =
-        media?.updatedAt?.toMillis?.() ??
-        (media?.updatedAt?.seconds ? media.updatedAt.seconds * 1000 : undefined)
+    async (media: any, base64: string, contentType: string, extra?: object) => {
+      if (!media) return false
       const response = await authorizedFetch(user, '/api/media/replace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...scopeBody,
-          mediaId,
+          mediaId: media.$id ?? media.id,
           contentType,
           data: base64,
-          ...(updatedAtMs ? { expectedUpdatedAtMs: updatedAtMs } : {}),
+          ...replacePrecondition(media),
+          ...(extra ?? {}),
         }),
       })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        return void enqueueSnackbar(payload?.error ?? 'Replace failed', {
-          ...uploadRefusalOptions(payload),
-          allowDuplicate: true,
-        })
-      }
-      enqueueSnackbar('Image replaced', { variant: 'success', persist: false })
-      logActivity('Replaced media file', {
-        type: 'media',
-        id: mediaId,
-        name: media?.fileName ?? mediaId,
-      })
-      setEditor(null)
-      refresh()
+      return finishReplace(media, response)
     },
-    [user, scopeId, enqueueSnackbar, logActivity, refresh],
+    [user, scopeId, finishReplace],
   )
   const replaceBytes = useCallback(
     (base64: string, contentType: string) =>
       replaceMediaBytes(editor?.media, base64, contentType),
     [editor, replaceMediaBytes],
   )
-  // Card-level replace (AGL-827): overflow "Replace file" opens a chooser
-  // for that specific asset. A ref holds the target so click() isn't racing
-  // a state update.
+  /**
+   * Replace an asset's bytes with a file a person just chose (AGL-2732).
+   *
+   * Three things the old image-only path did not have to do:
+   *
+   * 1. **Route on size.** A 7 MB PDF cannot ride a base64 JSON body — Vercel
+   *    rejects the request at ~4.5 MB before any handler runs — and that,
+   *    not the 415, is why replacing the published brand guidelines was
+   *    impossible. Above the threshold the bytes go browser→storage through
+   *    a signed URL and the route finalizes them, exactly as a first upload
+   *    does.
+   * 2. **Probe a video.** The poster and the duration come from the browser,
+   *    because there is no decoder on either server. A replace that skipped
+   *    the probe would land a new film with the previous one's poster
+   *    deleted and none to put back.
+   * 3. **Check the family here too.** The route refuses a cross-family swap,
+   *    but the picker is already narrowed to the family, so a file that
+   *    reaches this check came from a drag or a browser that reports types
+   *    loosely — and saying which kinds are involved is more use than a 415.
+   */
+  const replaceMediaFile = useCallback(
+    async (media: any, file: File) => {
+      if (!media || !file) return
+      const contentType = normalizeUploadContentType(file.type, file.name)
+      const kind = mediaUploadKind(contentType)
+      if (!kind) {
+        return void enqueueSnackbar(
+          `"${file.name}" skipped — ${uploadTypesCopy.toLowerCase()}`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+      }
+      // A replace stores a new file, so a paused video is refused here too
+      // (AGL-2830). The route refuses it regardless; this says so before a
+      // byte is sent.
+      if (kind === 'video' && !videoUploadsOpen) {
+        return void enqueueSnackbar(
+          `"${file.name}" skipped — ${VIDEO_UPLOADS_PAUSED_MESSAGE}`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+      }
+      const assetKind = mediaUploadKind(
+        normalizeUploadContentType(String(media.contentType ?? ''), ''),
+      )
+      if (assetKind && assetKind !== kind) {
+        return void enqueueSnackbar(
+          `"${file.name}" is ${MEDIA_UPLOAD_KIND_LABELS[kind]} and this ` +
+            `file is ${MEDIA_UPLOAD_KIND_LABELS[assetKind]} — replacing ` +
+            'keeps the same link everywhere it is used, so upload it as a ' +
+            'new file instead.',
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+      }
+      const mediaId = media.$id ?? media.id
+      setBusy(true)
+      try {
+        // The video probe (AGL-2742), before either branch because both need
+        // it and neither server can produce it.
+        const probe = kind === 'video' ? await probeVideoFile(file) : null
+        const videoBody = probe
+          ? {
+              ...(probe.video ? { video: probe.video } : {}),
+              ...(probe.posterBase64 ? { poster: probe.posterBase64 } : {}),
+              ...(probe.reason && !probe.posterBase64
+                ? { posterError: probe.reason }
+                : {}),
+            }
+          : {}
+        if (file.size <= SIGNED_UPLOAD_THRESHOLD_BYTES) {
+          await replaceMediaBytes(media, await fileToBase64(file), contentType, {
+            fileName: file.name,
+            ...videoBody,
+          })
+          return
+        }
+        const mint = await authorizedFetch(user, '/api/media/replace', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...scopeBody,
+            mediaId,
+            contentType,
+            fileName: file.name,
+            sizeBytes: file.size,
+            ...replacePrecondition(media),
+          }),
+        })
+        const minted = await mint.json().catch(() => ({}))
+        if (!mint.ok || !minted?.uploadUrl) {
+          return void enqueueSnackbar(
+            minted?.error ?? `Replace failed for "${file.name}"`,
+            uploadRefusalOptions(minted),
+          )
+        }
+        const put = await fetch(minted.uploadUrl, {
+          method: 'PUT',
+          // Must match the type the signed URL was minted for exactly.
+          headers: { 'Content-Type': minted.contentType ?? contentType },
+          body: file,
+        })
+        if (!put.ok) {
+          return void enqueueSnackbar(
+            `Replace failed for "${file.name}" — try again`,
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
+        const finalize = await authorizedFetch(user, '/api/media/replace', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...scopeBody,
+            mediaId,
+            fileName: file.name,
+            ...replacePrecondition(media),
+            ...videoBody,
+          }),
+        })
+        await finishReplace(media, finalize)
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar(`Replace failed for "${file.name}"`, {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setBusy(false)
+      }
+    },
+    [
+      user,
+      scopeId,
+      replaceMediaBytes,
+      finishReplace,
+      enqueueSnackbar,
+      videoUploadsOpen,
+      uploadTypesCopy,
+    ],
+  )
+  /**
+   * Whether this asset's file cannot be replaced right now because video
+   * uploads are paused (AGL-2830). A video's replacement is a new video, so
+   * both choosers ask this before opening rather than offering a file the
+   * route will refuse.
+   */
+  const replaceIsPaused = useCallback(
+    (media: any) =>
+      !videoUploadsOpen &&
+      mediaUploadKind(
+        normalizeUploadContentType(String(media?.contentType ?? ''), ''),
+      ) === 'video',
+    [videoUploadsOpen],
+  )
+  // Card-level replace: the overflow "Replace file" opens a chooser for that
+  // specific asset. A ref holds the target so click() isn't racing a state
+  // update.
   const cardReplaceInputRef = useRef<HTMLInputElement>(null)
   const cardReplaceTargetRef = useRef<any>(null)
-  const requestCardReplace = useCallback((media: any) => {
-    cardReplaceTargetRef.current = media
-    cardReplaceInputRef.current?.click()
-  }, [])
+  const requestCardReplace = useCallback(
+    (media: any) => {
+      if (replaceIsPaused(media)) {
+        enqueueSnackbar(VIDEO_UPLOADS_PAUSED_MESSAGE, {
+          variant: 'warning',
+          persist: false,
+        })
+        return
+      }
+      cardReplaceTargetRef.current = media
+      const input = cardReplaceInputRef.current
+      // Written straight onto the node rather than through state (AGL-2732):
+      // one hidden input serves every card, and the picker opens in the same
+      // tick as this click — a re-render would arrive after the dialog.
+      if (input) {
+        input.accept = uploadAcceptForKind(
+          mediaUploadKind(
+            normalizeUploadContentType(String(media?.contentType ?? ''), ''),
+          ),
+          { video: videoUploadsOpen },
+        )
+      }
+      input?.click()
+    },
+    [replaceIsPaused, enqueueSnackbar, videoUploadsOpen],
+  )
   const handleCardReplaceFile = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
@@ -1926,34 +2167,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const media = cardReplaceTargetRef.current
       cardReplaceTargetRef.current = null
       if (!file || !media) return
-      if (!file.type.startsWith('image/')) {
-        return void enqueueSnackbar('Replace with an image file', {
-          variant: 'warning',
-          persist: false,
-        })
-      }
-      setBusy(true)
-      try {
-        await replaceMediaBytes(media, await fileToBase64(file), file.type)
-      } finally {
-        setBusy(false)
-      }
+      await replaceMediaFile(media, file)
     },
-    [replaceMediaBytes, enqueueSnackbar],
+    [replaceMediaFile],
   )
   const handleReplaceFile = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
       event.target.value = ''
-      if (!file || !file.type.startsWith('image/')) return
-      setBusy(true)
-      try {
-        await replaceBytes(await fileToBase64(file), file.type)
-      } finally {
-        setBusy(false)
-      }
+      if (!file) return
+      await replaceMediaFile(editor?.media, file)
     },
-    [replaceBytes],
+    [editor, replaceMediaFile],
   )
 
   // Bulk tag/delete (AGL-173) on the current selection.
@@ -2366,7 +2591,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
 
   const applyScopeToSelection = useCallback(
-    async (ids: string[], next: string[]) => {
+    async (ids: string[], next: ScopeToken[]) => {
       const narrowing = ids.filter((id) =>
         narrowsScope(
           scopeOfMedia(items.find((item: any) => item.$id === id)),
@@ -2398,7 +2623,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // write would take the other 49 down with it.
       for (const [index, id] of ids.entries()) {
         await updateDoc(doc(firestore, scopeCollection, scopeId, 'media', id), {
-          visibleTo: normalizeVisibleTo(next) ?? [ORG_SCOPE_TOKEN],
+          // Already a storable scope: `handleScopeApply`, the one caller,
+          // normalizes the selection and refuses one it cannot store.
+          visibleTo: next,
         })
         setScopeRun({ done: index + 1, total: ids.length, running: true })
       }
@@ -2681,7 +2908,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // calls, so the UI cannot accept a drop the API will refuse.
       if (!isAllowedUploadType(contentType)) {
         enqueueSnackbar(
-          `"${file.name}" skipped — ${UPLOAD_TYPES_MESSAGE.toLowerCase()}`,
+          `"${file.name}" skipped — ${uploadTypesCopy.toLowerCase()}`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+        return 0
+      }
+      // The video flag (AGL-2830), refused before a byte leaves the browser.
+      // The picker no longer offers a video, but a drag-and-drop never goes
+      // through the picker, so this is the check that holds for both.
+      if (isVideoUploadType(contentType) && !videoUploadsOpen) {
+        enqueueSnackbar(
+          `"${file.name}" skipped — ${VIDEO_UPLOADS_PAUSED_MESSAGE}`,
           { variant: 'warning', persist: false, allowDuplicate: true },
         )
         return 0
@@ -2899,6 +3136,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       currentFolder,
       enqueueSnackbar,
       logActivity,
+      videoUploadsOpen,
+      uploadTypesCopy,
     ],
   )
 
@@ -3297,10 +3536,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
             Rendered only once `orgReady`, so a cold console never tells a
             paying workspace it is on the free tier. */}
+        {/* Video ingress is behind a release flag (AGL-2830) on every plan.
+            No upgrade lifts it, so it is stated as a fact rather than as a
+            plan limit, and it waits for Remote Config to answer so a
+            workspace the flag is on for never sees it flash. */}
+        {videoUploadsFlag.ready && !videoUploadsOpen ? (
+          <Tooltip title={VIDEO_UPLOADS_PAUSED_MESSAGE}>
+            <Chip
+              size="small"
+              variant="outlined"
+              color="default"
+              label="Video uploads paused"
+            />
+          </Tooltip>
+        ) : null}
         {orgReady && !fileUploads ? (
           <Tooltip
             title={
-              `Images upload on every plan. Video, PDF, Word, Excel, ` +
+              `Images upload on every plan. ` +
+              `${videoUploadsOpen ? 'Video, PDF' : 'PDF'}, Word, Excel, ` +
               `PowerPoint and ZIP need ${fileUploadPlanLabel}.`
             }
           >
@@ -3334,7 +3588,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           ref={inputRef}
           type="file"
           multiple
-          accept={UPLOAD_ACCEPT_ATTRIBUTE}
+          accept={uploadAccept}
           onChange={handleUpload}
           sx={{ display: 'none' }}
         />
@@ -3342,7 +3596,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           component="input"
           ref={cardReplaceInputRef}
           type="file"
-          accept="image/*"
+          // One hidden input serves every card, so the family narrowing is
+          // written onto the node by `requestCardReplace` in the same tick as
+          // the click (AGL-2732). This is the value before any card has asked.
+          accept={uploadAccept}
           onChange={handleCardReplaceFile}
           sx={{ display: 'none' }}
         />
@@ -3722,11 +3979,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       ? handleCopySignedLink(media)
                       : undefined
                   }
-                  onReplace={
-                    String(media.contentType ?? '').startsWith('image/')
-                      ? () => requestCardReplace(media)
-                      : undefined
-                  }
+                  // Every family, not only images (AGL-2732). This prop was
+                  // gated on `image/`, which is why an audit run against a
+                  // PDF concluded the console had no replace at all: the
+                  // capability shipped in AGL-184 and was invisible on every
+                  // asset that was not a picture.
+                  onReplace={() => requestCardReplace(media)}
                   onDetails={() => {
                     // The third AGL-1466 surface, and the busiest (AGL-1480).
                     // This seeded the "Shared with" control with the org token
@@ -3865,25 +4123,48 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 {'Download file'}
               </Button>
             ) : null}
+            {/* Replace is for EVERY family (AGL-2732); the transforms beside
+                it are genuinely image-only — there is nothing to crop or
+                rotate about a PDF — so the two split here rather than
+                sharing one `image/` test. */}
+            {editor?.media ? (
+              <Button
+                size="small"
+                onClick={() => {
+                  if (replaceIsPaused(editor.media)) {
+                    enqueueSnackbar(VIDEO_UPLOADS_PAUSED_MESSAGE, {
+                      variant: 'warning',
+                      persist: false,
+                    })
+                    return
+                  }
+                  replaceInputRef.current?.click()
+                }}
+              >
+                {'Replace file'}
+              </Button>
+            ) : null}
             {String(editor?.media?.contentType ?? '').startsWith('image/') ? (
-              <>
-                <Button
-                  size="small"
-                  onClick={() => replaceInputRef.current?.click()}
-                >
-                  {'Replace file'}
-                </Button>
-                <Button size="small" onClick={() => setImageEditorOpen(true)}>
-                  {'Edit image'}
-                </Button>
-              </>
+              <Button size="small" onClick={() => setImageEditorOpen(true)}>
+                {'Edit image'}
+              </Button>
             ) : null}
           </Stack>
           <Box
             component="input"
             ref={replaceInputRef}
             type="file"
-            accept="image/*"
+            // Narrowed to the asset's own family, so the picker cannot offer a
+            // file the route is about to refuse.
+            accept={uploadAcceptForKind(
+              mediaUploadKind(
+                normalizeUploadContentType(
+                  String(editor?.media?.contentType ?? ''),
+                  '',
+                ),
+              ),
+              { video: videoUploadsOpen },
+            )}
             onChange={handleReplaceFile}
             sx={{ display: 'none' }}
           />
@@ -4166,6 +4447,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         )
                       })}
                     </Box>
+                  ) : null}
+                  {editor &&
+                  !editor.scopeUnset &&
+                  scopeToStore(editor.visibleTo).problem ? (
+                    <Typography variant="caption" color="error">
+                      {scopeToStore(editor.visibleTo).problem}
+                    </Typography>
                   ) : null}
                 </>
               ) : (

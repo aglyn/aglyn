@@ -142,7 +142,8 @@ const TEAMMATE = 'teammate-uid'
 
 /** The roster the membership seam answers from; a uid not here is a stranger. */
 let roster: Record<string, Record<string, unknown>> = {}
-let org: Record<string, unknown> = {}
+/** The org document both variants read; Starter is the lowest plan carrying the CRM suite. */
+let org: Record<string, unknown> = { plan: 'starter' }
 
 async function call(
   handler: typeof crmTaskSaveHandler,
@@ -204,7 +205,7 @@ const stored = (): Array<Record<string, any>> =>
 beforeEach(() => {
   store = {}
   autoId = 0
-  org = {}
+  org = { plan: 'starter' }
   roster = {
     [WRITER]: { role: 'editor' },
     [TEAMMATE]: { role: 'editor' },
@@ -339,7 +340,7 @@ describe('crm/task-save', () => {
   })
 
   it('stamps the whole org when the org has widened its default scope', async () => {
-    org = { defaultResourceScope: 'org' }
+    org = { plan: 'starter', defaultResourceScope: 'org' }
     await call(crmTaskSaveHandler, { body: { hostId: HOST_ID, task: task() } })
     expect(stored()[0]?.visibleTo).toEqual(['org'])
   })
@@ -697,8 +698,10 @@ describe('crm/task-save at the organization level (AGL-2637)', () => {
       orgId: ORG_ID,
       orgWide: true,
       role: 'admin',
-      permissions: { 'data.manage': false },
+      permissions: {},
     })
+    // The permission catalog is what answers `data.manage` (AGL-2843).
+    memberHasOrgPermission.mockResolvedValue(false)
     const revoked = await call(crmTaskSaveHandler, { body: { orgId: ORG_ID, task: task() } })
     expect(revoked.status).toBe(403)
     expect(stored()).toEqual([])
@@ -730,9 +733,10 @@ describe('crm/task-save at the organization level (AGL-2637)', () => {
   })
 
   it("files a task from a site named beside the org, stamped as that site's console would", async () => {
-    // No membership on the roster at all: the org variant reads the org
-    // gate, not a site role.
-    roster = { [TEAMMATE]: { role: 'editor' } }
+    // No site role on the roster: the org variant reads the org gate — the
+    // caller's org-wide membership and the permission catalog — never a
+    // site role.
+    roster = { [WRITER]: { role: 'admin', allHosts: true }, [TEAMMATE]: { role: 'editor' } }
     const { status } = await call(crmTaskSaveHandler, {
       body: { orgId: ORG_ID, hostId: HOST_ID, task: task({ assigneeUid: TEAMMATE }) },
     })
@@ -832,8 +836,12 @@ describe('crm/task-save at the organization level (AGL-2637)', () => {
       })
       expect(store[`${TASKS}/t-1`].assigneeUid).toBe('third-uid')
       expect(store[`${TASKS}/t-org`].assigneeUid).toBe('third-uid')
-      // One roster question for one assignee across three tasks.
-      expect(resolveOrgMembership).toHaveBeenCalledTimes(1)
+      // One roster question for one assignee across three tasks, beside the
+      // org gate's one for the caller's own `data.manage` (AGL-2843).
+      expect(
+        resolveOrgMembership.mock.calls.filter(([uid]) => uid === 'third-uid'),
+      ).toHaveLength(1)
+      expect(resolveOrgMembership).toHaveBeenCalledTimes(2)
       expect(notifyUsers).toHaveBeenCalledTimes(2)
     })
 
@@ -962,5 +970,151 @@ describe('crm/task-complete at the organization level (AGL-2637)', () => {
       ).status,
     ).toBe(400)
     expect(store[`${TASKS}/t-1`].status).toBe('open')
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787). A record's tasks are the CRM suite's, included from
+ * Starter. `authorizeCrmWriter` asks once it knows the caller, for every
+ * route it serves (a save, a completion, and each one's organization form
+ * and batch), and it asks of the workspace, so staff acting inside a Free
+ * one are refused as a member is.
+ */
+describe('the plan (AGL-2787)', () => {
+  const expectRefused = (answer: { status: number; body: any }) => {
+    expect(answer.status).toBe(403)
+    expect(answer.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(answer.body.error).toMatch(/part of the CRM/)
+    expect(answer.body.error).toMatch(/Included from Starter/)
+  }
+  /** A support engineer's token, with no membership in the workspace. */
+  const asStaff = () => {
+    verifyIdToken.mockResolvedValue({ uid: 'staff-uid', staff: true })
+    roster = {}
+    resolveOrgPermissions.mockResolvedValue({
+      orgId: ORG_ID,
+      orgWide: false,
+      role: null,
+      permissions: {},
+    })
+  }
+
+  beforeEach(() => {
+    org = { plan: 'free' }
+    recomputeCrmNextTaskAt.mockClear()
+    store[`${TASKS}/t-1`] = {
+      title: 'Send the deck',
+      kind: 'email',
+      priority: 'high',
+      dueAtMs: 1757062800000,
+      notes: '',
+      assigneeUid: TEAMMATE,
+      status: 'open',
+      completedAtMs: null,
+      visibleTo: ['host:site-1'],
+      hostId: HOST_ID,
+      createdByUid: WRITER,
+    }
+  })
+
+  describe('crm/task-save', () => {
+    it('refuses a Free workspace under a site, saving and notifying nothing', async () => {
+      expectRefused(
+        await call(crmTaskSaveHandler, {
+          body: { hostId: HOST_ID, task: task({ assigneeUid: TEAMMATE }) },
+        }),
+      )
+      expectRefused(
+        await call(crmTaskSaveHandler, {
+          body: { hostId: HOST_ID, taskId: 't-1', task: task({ title: 'Touched' }) },
+        }),
+      )
+      expect(stored()).toHaveLength(1)
+      expect(store[`${TASKS}/t-1`].title).toBe('Send the deck')
+      expect(notifyUsers).not.toHaveBeenCalled()
+      expect(recomputeCrmNextTaskAt).not.toHaveBeenCalled()
+    })
+
+    it('refuses a Free workspace at the organization level, one task or a batch', async () => {
+      expectRefused(await call(crmTaskSaveHandler, { body: { orgId: ORG_ID, task: task() } }))
+      expectRefused(
+        await call(crmTaskSaveHandler, {
+          body: { orgId: ORG_ID, tasks: [{ taskId: 't-1', task: task({ title: 'Touched' }) }] },
+        }),
+      )
+      expect(stored()).toHaveLength(1)
+      expect(store[`${TASKS}/t-1`].title).toBe('Send the deck')
+      expect(notifyUsers).not.toHaveBeenCalled()
+    })
+
+    it('refuses staff acting inside a Free workspace the same way, at either level', async () => {
+      asStaff()
+      expectRefused(
+        await call(crmTaskSaveHandler, {
+          body: { hostId: HOST_ID, task: task({ assigneeUid: null }) },
+        }),
+      )
+      expectRefused(
+        await call(crmTaskSaveHandler, {
+          body: { orgId: ORG_ID, task: task({ assigneeUid: null }) },
+        }),
+      )
+      expect(stored()).toHaveLength(1)
+    })
+
+    it('tells a viewer about the role, not the plan', async () => {
+      roster[WRITER] = { role: 'viewer' }
+      const { status, body } = await call(crmTaskSaveHandler, {
+        body: { hostId: HOST_ID, task: task() },
+      })
+      expect(status).toBe(403)
+      expect(body).toEqual({ error: 'Your organization role does not allow editing the CRM.' })
+    })
+  })
+
+  describe('crm/task-complete', () => {
+    it('refuses a Free workspace under a site, completing and announcing nothing', async () => {
+      expectRefused(
+        await call(crmTaskCompleteHandler, { body: { hostId: HOST_ID, taskId: 't-1' } }),
+      )
+      expect(store[`${TASKS}/t-1`].status).toBe('open')
+      expect(emitHostEvent).not.toHaveBeenCalled()
+      expect(recomputeCrmNextTaskAt).not.toHaveBeenCalled()
+    })
+
+    it('refuses a Free workspace at the organization level, one task or a batch', async () => {
+      expectRefused(
+        await call(crmTaskCompleteHandler, { body: { orgId: ORG_ID, taskId: 't-1' } }),
+      )
+      expectRefused(
+        await call(crmTaskCompleteHandler, { body: { orgId: ORG_ID, taskIds: ['t-1'] } }),
+      )
+      expect(store[`${TASKS}/t-1`].status).toBe('open')
+      expect(emitHostEvent).not.toHaveBeenCalled()
+    })
+
+    it('refuses staff acting inside a Free workspace the same way, at either level', async () => {
+      asStaff()
+      expectRefused(
+        await call(crmTaskCompleteHandler, { body: { hostId: HOST_ID, taskId: 't-1' } }),
+      )
+      expectRefused(
+        await call(crmTaskCompleteHandler, { body: { orgId: ORG_ID, taskId: 't-1' } }),
+      )
+      expect(store[`${TASKS}/t-1`].status).toBe('open')
+      expect(emitHostEvent).not.toHaveBeenCalled()
+    })
+  })
+
+  it('admits Starter, the lowest plan that carries the suite, to both routes', async () => {
+    org = { plan: 'starter' }
+    const saved = await call(crmTaskSaveHandler, { body: { hostId: HOST_ID, task: task() } })
+    expect(saved.status).toBe(200)
+    const completed = await call(crmTaskCompleteHandler, {
+      body: { hostId: HOST_ID, taskId: 't-1' },
+    })
+    expect(completed.status).toBe(200)
+    expect(store[`${TASKS}/t-1`].status).toBe('done')
+    expect(emitHostEvent).toHaveBeenCalledTimes(1)
   })
 })

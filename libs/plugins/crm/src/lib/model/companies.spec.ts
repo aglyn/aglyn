@@ -16,32 +16,19 @@
  */
 
 /**
- * The rules a company write and a contact–company link obey (AGL-2597).
+ * The rules a company write obeys (AGL-2597): what a company draft is stored
+ * as, and which company an address suggests.
  *
- * Three writers touch the same association — the company page, the contact
- * page and the delete — and the facet and its `companyIds` mirror have to
- * stay in step across all of them. These pin the rule itself, with the
- * Firestore sentinels replaced by tagged values so an assertion can say
- * WHICH operation was chosen and not merely that one was.
+ * A contact's link to a company is the server's to write (AGL-2804); its
+ * planner is pinned in `@aglyn/aglyn`'s CRM spec, and the writes built from
+ * it in the routes' own specs.
  */
 
-import { readContactCompanyLink } from '@aglyn/aglyn'
 import {
-  companyDetachUpdate,
   companyDraftFields,
-  contactCompanyLinkUpdate,
-  contactCompanyLinkWrites,
   EMPTY_COMPANY_DRAFT,
   suggestCompanyForEmail,
 } from './companies'
-
-jest.mock('firebase/firestore', () => ({
-  arrayUnion: (...values: unknown[]) => ({ op: 'arrayUnion', values }),
-  arrayRemove: (...values: unknown[]) => ({ op: 'arrayRemove', values }),
-  deleteField: () => ({ op: 'delete' }),
-  serverTimestamp: () => ({ op: 'serverTimestamp' }),
-  increment: (by: number) => ({ op: 'increment', by }),
-}))
 
 const COMPANIES = [
   { id: 'c-acme', name: 'Acme', domain: 'acme.com' },
@@ -164,146 +151,5 @@ describe('companyDraftFields', () => {
       website: 'javascript:alert(1)',
     })
     expect(result).toMatchObject({ ok: false })
-  })
-})
-
-/** A contact held by two sites, one of which has filed them under Acme. */
-const contactAt = (
-  companyId: string | undefined,
-  others: Record<string, string | undefined> = {},
-) => ({
-  email: 'jane@acme.com',
-  companyIds: [companyId, ...Object.values(others)].filter(Boolean),
-  facets: {
-    'g-1': { sources: {}, interactions: [], companyId },
-    ...Object.fromEntries(
-      Object.entries(others).map(([group, id]) => [
-        group,
-        { sources: {}, interactions: [], companyId: id },
-      ]),
-    ),
-  },
-})
-
-describe('contactCompanyLinkUpdate', () => {
-  it('is a no-op when the facet already says what was asked', () => {
-    expect(contactCompanyLinkUpdate(contactAt('c-acme'), 'g-1', 'c-acme')).toBeNull()
-    expect(contactCompanyLinkUpdate(contactAt(undefined), 'g-1', null)).toBeNull()
-  })
-
-  it('links through a dotted facet path and an arrayUnion on the mirror', () => {
-    const update = contactCompanyLinkUpdate(contactAt(undefined), 'g-1', 'c-acme')
-    expect(update).toEqual({
-      'facets.g-1.companyId': 'c-acme',
-      companyIds: { op: 'arrayUnion', values: ['c-acme'] },
-      updatedAt: { op: 'serverTimestamp' },
-    })
-    // Never a nested object: that would replace every other holder's facet.
-    expect(update && 'facets' in update).toBe(false)
-  })
-
-  it('moves between companies by rewriting the mirror, dropping the old id', () => {
-    const update = contactCompanyLinkUpdate(contactAt('c-acme'), 'g-1', 'c-globex')
-    expect(update).toMatchObject({
-      'facets.g-1.companyId': 'c-globex',
-      companyIds: ['c-globex'],
-    })
-  })
-
-  it('keeps an old id in the mirror while another holder still names it', () => {
-    // Site g-2 also filed Jane under Acme; g-1 moving her must not take
-    // g-2's link out of the query index.
-    const update = contactCompanyLinkUpdate(
-      contactAt('c-acme', { 'g-2': 'c-acme' }),
-      'g-1',
-      'c-globex',
-    )
-    expect(update).toMatchObject({
-      'facets.g-1.companyId': 'c-globex',
-      companyIds: ['c-acme', 'c-globex'],
-    })
-  })
-
-  it('unlinks with a facet delete and an arrayRemove, unless held elsewhere', () => {
-    expect(contactCompanyLinkUpdate(contactAt('c-acme'), 'g-1', null)).toEqual({
-      'facets.g-1.companyId': { op: 'delete' },
-      companyIds: { op: 'arrayRemove', values: ['c-acme'] },
-      updatedAt: { op: 'serverTimestamp' },
-    })
-    const shared = contactCompanyLinkUpdate(
-      contactAt('c-acme', { 'g-2': 'c-acme' }),
-      'g-1',
-      null,
-    )
-    expect(shared).toEqual({
-      'facets.g-1.companyId': { op: 'delete' },
-      updatedAt: { op: 'serverTimestamp' },
-    })
-  })
-})
-
-/**
- * The batch a surface commits (AGL-2613): the contact's patch, the name
- * echoed beside the link, and one `increment` per company whose count moves.
- */
-describe('contactCompanyLinkWrites', () => {
-  const linkOf = (contact: Record<string, unknown>) =>
-    readContactCompanyLink(contact, 'g-1')
-
-  it('is a no-op when nothing changes', () => {
-    expect(contactCompanyLinkWrites(linkOf(contactAt('c-acme')), 'g-1', 'c-acme', 'Acme')).toBeNull()
-  })
-
-  it('links, echoes the name where the list and the search read it, and counts', () => {
-    const writes = contactCompanyLinkWrites(linkOf(contactAt(undefined)), 'g-1', 'c-acme', 'Acme')
-    expect(writes?.contact).toEqual({
-      'facets.g-1.companyId': 'c-acme',
-      'facets.g-1.companyName': 'Acme',
-      companyName: 'Acme',
-      companyIds: { op: 'arrayUnion', values: ['c-acme'] },
-      updatedAt: { op: 'serverTimestamp' },
-    })
-    expect(writes?.companies).toEqual([
-      { id: 'c-acme', update: { contactsCount: { op: 'increment', by: 1 } } },
-    ])
-    expect(writes?.counts).toEqual([{ companyId: 'c-acme', delta: 1 }])
-  })
-
-  it('moves the count from the old company to the new one', () => {
-    const writes = contactCompanyLinkWrites(linkOf(contactAt('c-acme')), 'g-1', 'c-globex', 'Globex')
-    expect(writes?.companies).toEqual([
-      { id: 'c-acme', update: { contactsCount: { op: 'increment', by: -1 } } },
-      { id: 'c-globex', update: { contactsCount: { op: 'increment', by: 1 } } },
-    ])
-  })
-
-  it('clears the name with the link on an unlink, and leaves it alone when not told', () => {
-    const cleared = contactCompanyLinkWrites(linkOf(contactAt('c-acme')), 'g-1', null, null)
-    expect(cleared?.contact).toMatchObject({
-      'facets.g-1.companyId': { op: 'delete' },
-      'facets.g-1.companyName': { op: 'delete' },
-      companyName: { op: 'delete' },
-      companyIds: { op: 'arrayRemove', values: ['c-acme'] },
-    })
-    const kept = contactCompanyLinkWrites(linkOf(contactAt('c-acme')), 'g-1', null)
-    expect(kept?.contact).not.toHaveProperty('companyName')
-    expect(kept?.contact).not.toHaveProperty('facets.g-1.companyName')
-  })
-})
-
-describe('companyDetachUpdate', () => {
-  it('removes the id from the mirror and clears EVERY facet naming it', () => {
-    const update = companyDetachUpdate(
-      contactAt('c-acme', { 'g-2': 'c-acme', 'g-3': 'c-globex' }),
-      'c-acme',
-    )
-    expect(update).toEqual({
-      companyIds: { op: 'arrayRemove', values: ['c-acme'] },
-      'facets.g-1.companyId': { op: 'delete' },
-      'facets.g-2.companyId': { op: 'delete' },
-      updatedAt: { op: 'serverTimestamp' },
-    })
-    // g-3's link to a different company is not touched.
-    expect('facets.g-3.companyId' in update).toBe(false)
   })
 })

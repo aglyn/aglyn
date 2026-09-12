@@ -34,6 +34,10 @@ import {
   composeAuthorFallbackPage,
   composeAuthorTemplatePage,
 } from '@aglyn/tenant-runtime/compose-author-page'
+import {
+  collectSocialImageFacts,
+  getSocialImageAssetFacts,
+} from '@aglyn/tenant-runtime/social-image-facts'
 import getTemplateScreenIds, {
   getTemplateScreenRouting,
 } from '@aglyn/tenant-runtime/template-screens'
@@ -900,6 +904,10 @@ const loadPageDataCached = cache(
           // Collection entries blocks — mirroring commerce PDP templates.
           const templated = await composeCollectionTemplatePage({
             hostId,
+            // The site default is the card's last source, so its document is
+            // read in the page's batch with the entry's and the template's
+            // (AGL-2850).
+            host: hostRes.host,
             content,
           })
           if (templated) {
@@ -917,6 +925,9 @@ const loadPageDataCached = cache(
                   // Entry JSON-LD + metadata read this (the client renders
                   // the composed nodes because they are present).
                   content,
+                  ...(templated.socialImageFacts
+                    ? { socialImageFacts: templated.socialImageFacts }
+                    : {}),
                   enabledPlugins: collectionEnabledPlugins,
                   ...templatedEnriched.props,
                   ...blockingPluginsFor(
@@ -952,6 +963,9 @@ const loadPageDataCached = cache(
                 data: { host: hostRes.host },
                 nodes: fallback?.nodes ?? null,
                 content,
+                ...(fallback?.socialImageFacts
+                  ? { socialImageFacts: fallback.socialImageFacts }
+                  : {}),
                 ...(fallback && fallbackEnriched
                   ? {
                       enabledPlugins: collectionEnabledPlugins,
@@ -1060,6 +1074,9 @@ const loadPageDataCached = cache(
                   },
                   enabledPlugins: authorEnabledPlugins,
                   ...authorEnriched.props,
+                  ...(composedAuthor.socialImageFacts
+                    ? { socialImageFacts: composedAuthor.socialImageFacts }
+                    : {}),
                   ...blockingPluginsFor(
                     composedAuthor.nodes,
                     authorEnabledPlugins,
@@ -1122,6 +1139,13 @@ const loadPageDataCached = cache(
     // in the static HTML — the client unlocks via /api/protection/unlock.
     const protection = (screenRes.screen as any)?.protection
     if (protection?.passwordHash) {
+      // The nodes stay withheld, but the head still shares this page's card.
+      // No composition runs for its assets' documents to join, so this page
+      // reads them on its own: one projected read, fail-open (AGL-2850).
+      const socialImageFacts = await getSocialImageAssetFacts({
+        hostId,
+        images: [screenRes.screen.seo?.image, hostRes.host.seo?.image],
+      })
       return {
         props: JSON.parse(
           JSON.stringify({
@@ -1134,6 +1158,7 @@ const loadPageDataCached = cache(
             showBranding:
               !Aglyn.resolveOrgEntitlements(orgRes.org).features
                 .removeBranding,
+            ...(socialImageFacts ? { socialImageFacts } : {}),
           }),
         ),
         revalidate: 60,
@@ -1245,11 +1270,19 @@ const loadPageDataCached = cache(
     // `await` below ever sees it. This marks it handled without consuming it.
     enabledPluginsPromise.catch(() => undefined)
 
+    // The card the head shares: the screen's image, then the site default.
+    // Their documents join the composition's one facts batch (AGL-2850), so
+    // describing the card as its assets are now costs no read of its own.
+    const card = collectSocialImageFacts([
+      screenRes.screen.seo?.image,
+      hostRes.host.seo?.image,
+    ])
     const denormalized = await composeScreenNodes({
       host: hostRes.host as any,
       hostId,
       screenId,
       screen: screenRes.screen,
+      socialImages: card.socialImages,
     })
     timer.mark('composeScreenNodes')
     if (!denormalized) {
@@ -1337,6 +1370,7 @@ const loadPageDataCached = cache(
       showBranding,
       branding,
       ...enriched.props,
+      ...card.collected(),
       // The full composed document, before the AGL-1285 prune in `page.tsx`:
       // a component inside a withheld panel still belongs to this page.
       ...blockingPluginsFor(denormalized, enabledPlugins, enriched),
@@ -1535,6 +1569,7 @@ export async function loadNotFoundScreen(
           {
             routedElsewhere: routing.listRoutes,
             unrouted: routing.templateScreenIds,
+            collectionListings: routing.collectionListings,
           },
         ),
       }),

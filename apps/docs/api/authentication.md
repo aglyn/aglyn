@@ -49,7 +49,7 @@ A missing, malformed, revoked, or expired key returns `401`:
 ```
 
 If the organization's plan doesn't include API access, requests return `403`
-`plan_required` — the API is a [Business and Advanced feature](overview.md). A key
+`plan_required` — the API is included on [Business and above](overview.md). A key
 whose organization has been downgraded stops working without being revoked.
 
 ## Scopes
@@ -60,7 +60,7 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | Scope | Grants |
 | --- | --- |
 | `datasets:read` | List datasets, read records. |
-| `datasets:write` | Create, update, and delete records. |
+| `datasets:write` | Create, update, and delete datasets and their records. |
 | `contacts:read` | List and read contacts. |
 | `contacts:write` | Add contacts, edit their name, tags and notes, and delete them. Never changes the email a contact is identified by, or where it came from. |
 | `sites:read` | List sites and read their details. |
@@ -97,7 +97,7 @@ from. See [contacts](resources/contacts.md#read-only-fields).
 Several resources are **read-only** over the API, and the missing write scope is
 deliberate in each case rather than an oversight:
 
-- **Cancelling and refunding an order**, and **products**, move money and stock.
+- **Canceling and refunding an order**, and **products**, move money and stock.
   `orders:write` stops precisely at the line where they begin: it records shipments,
   which change no money and no stock. A cancel returns held inventory and a refund
   returns money, each under its own transaction with its own decisions, so both stay

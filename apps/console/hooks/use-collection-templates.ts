@@ -20,9 +20,11 @@ import { useMemo } from 'react'
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import {
   collectCollectionTemplateRoutes,
+  collectionListingTargets,
   collectionListRoutesByScreenId,
   collectionListTemplateScreenIds,
   collectionTemplateScreenIds,
+  type CollectionListingTarget,
   type CollectionTemplateRoute,
 } from '../constants/collection-templates'
 
@@ -42,10 +44,16 @@ export interface UseCollectionTemplatesResult {
    * routing-map override every screen-link surface resolves through.
    */
   listRoutesByScreenId: Record<string, string>
+  /**
+   * Every content collection's listing page, keyed by collection id
+   * (AGL-2799) — the targets a link picker offers beside the screens.
+   */
+  listingTargets: Record<string, CollectionListingTarget>
 }
 
 /**
- * Which of this host's screens are collection templates, and what they render.
+ * Which of this host's screens are collection templates, and what they render
+ * — and, from the same read, where each content collection's listing lives.
  *
  * A template screen is not a page of the site (AGL-1267) and does not spend
  * the plan's screen allowance (AGL-1173) — two questions with the same answer,
@@ -68,6 +76,7 @@ export function useCollectionTemplates(
       listTemplateScreenIds: collectionListTemplateScreenIds(data),
       routesByScreenId: collectCollectionTemplateRoutes(data),
       listRoutesByScreenId: collectionListRoutesByScreenId(data),
+      listingTargets: collectionListingTargets(data),
     }),
     [data],
   )

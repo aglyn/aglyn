@@ -19,6 +19,12 @@ organization that has widened its default sharing sees every task everywhere. A 
 also the one CRM record that can belong to **no site at all** — see
 [Organization tasks](#organization-tasks).
 
+:::info Plan availability
+Tasks are part of the **CRM**, included from **Starter**. On Free the section is shown
+locked, with the rest of the CRM. See
+[What each plan includes](./overview.md#what-each-plan-includes).
+:::
+
 ## The tasks page
 
 The **Tasks** section is one list with six views, chosen from the control above it:

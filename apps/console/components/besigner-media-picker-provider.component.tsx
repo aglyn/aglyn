@@ -22,6 +22,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { doc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
+import BesignerMediaAssetFactsProvider from './besigner-media-asset-facts-provider.component'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface BesignerMediaPickerProviderProps {
@@ -82,7 +83,13 @@ export function BesignerMediaPickerProvider(
 
   return (
     <MediaPickerContext.Provider value={value}>
-      {children}
+      {/* The canvas's images and films answer from their DAM documents
+          (AGL-2838, AGL-2856). Mounted here because every besigner surface
+          mounts this provider with its site, and the designer's media reads
+          already come from it. */}
+      <BesignerMediaAssetFactsProvider hostId={hostId}>
+        {children}
+      </BesignerMediaAssetFactsProvider>
       <MediaPickerDialog
         hostId={hostId}
         open={open}
@@ -118,19 +125,21 @@ export function BesignerMediaPickerProvider(
           // because only the call site can see the placement's current alt
           // and its `decorative` switch.
           // The pixel dimensions ride along too (AGL-2486), for the same
-          // reason and by the same route: the tenant renderer never reads a
-          // media document, so the only way an `<img>` can carry intrinsic
-          // `width`/`height` — and reserve its box before the bytes land — is
-          // for the pick to copy them onto the node. Handed over raw; the
-          // call site decides which prop names they land under, because only
-          // it knows what the element declares.
+          // reason and by the same route: the tenant renderer never reads an
+          // image's media document, so the only way an `<img>` can carry
+          // intrinsic `width`/`height` — and reserve its box before the bytes
+          // land — is for the pick to copy them onto the node. Handed over
+          // raw; the call site decides which prop names they land under,
+          // because only it knows what the element declares.
           // A video's measurements and its generated poster ride the same
           // route (AGL-2749), handed over as the document's own records
           // rather than flattened: `video.width`/`video.height` are what the
           // uploader's browser reported and `media.width`/`media.height` are
           // what the server read from the bytes, and the two are kept apart
           // on the document precisely so a reader knows which it has.
-          // `videoMediaProps` at the call site decides what to store.
+          // `videoMediaProps` at the call site decides what to store, and the
+          // published page lays the film's current records over it, so a
+          // replace reaches the page (AGL-2807).
           if (src)
             pendingPick.current?.(src, {
               alt: media.alt,

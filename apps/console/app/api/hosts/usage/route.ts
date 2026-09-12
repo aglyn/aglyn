@@ -25,6 +25,7 @@ import {
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { countBillableScreens } from '../resources/count-billable-screens'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Read-only usage counters that the client cannot compute correctly
@@ -131,6 +132,10 @@ async function handler(request: Request): Promise<Response> {
       { status: 200 },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Usage lookup failed' }, { status: 500 })
   }

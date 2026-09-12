@@ -41,6 +41,11 @@ import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
 import { seedCrmFixtures } from './lib/crm-fixtures.mjs'
+import {
+  FREE_PLAN_FIXTURE,
+  seedFreePlanWorkspace,
+} from './lib/crm-free-plan-fixtures.mjs'
+import { E2E_ORG_RELEASE_FLAGS } from './lib/e2e-release-flags.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
 
 if (
@@ -270,6 +275,11 @@ await put(firestore.collection('orgs').doc(orgId), {
     'workflows',
   ],
   subscription: { status: 'active' },
+  // Release flags granted to this org alone, through the per-org override
+  // every gate reads (AGL-1635) — `release_video_uploads`, without which the
+  // DAM e2e's films are refused (AGL-2830). The merge-set keeps an override
+  // another script stored and converges these keys on every run.
+  releaseFlags: E2E_ORG_RELEASE_FLAGS,
   createdAt: now,
 })
 await put(
@@ -1208,6 +1218,18 @@ await seedCrmFixtures({
     written += 1
   },
 })
+// A workspace on FREE (AGL-2809): its own non-staff owner, org, site, three
+// captured people and a company, so the CRM plan gate has a workspace to
+// refuse. `crm-free-plan.e2e.mjs` re-writes it before it runs.
+await seedFreePlanWorkspace({
+  firestore,
+  auth,
+  password: E2E_PASSWORD,
+  write: async (ref, data) => {
+    await ref.set(data)
+    written += 1
+  },
+})
 // A notification (AGL-259/267 taxonomy) so the notifications page's
 // feed and category mute switches have content.
 await put(
@@ -1309,5 +1331,8 @@ console.log(
     `org=${ownerOrgId} (impersonation success path). ` +
     `Unverified owner=${E2E_UNVERIFIED_OWNER_EMAIL} ` +
     `(uid ${E2E_UNVERIFIED_OWNER_UID}) org=${unverifiedOwnerOrgId} ` +
-    `(AGL-480 gate-exemption path).`,
+    `(AGL-480 gate-exemption path). ` +
+    `Free-plan owner=${FREE_PLAN_FIXTURE.ownerEmail} ` +
+    `(uid ${FREE_PLAN_FIXTURE.ownerUid}) org=${FREE_PLAN_FIXTURE.orgId} ` +
+    `host=${FREE_PLAN_FIXTURE.hostId} (CRM plan gate).`,
 )

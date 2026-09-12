@@ -62,13 +62,14 @@ export interface ArtifactDependent {
   name: string
   versionId?: string
   /**
-   * HOW it references the artifact — screens only (AGL-703).
+   * HOW it references the artifact — screens and collection listings
+   * (AGL-703, AGL-2806).
    *
    * A component's dependents all break the same way and a layout's do too, so
    * one sentence covers each. A screen's do not: a dead link, a re-parented
    * child, and a collection that has lost the screen it renders through are
    * three different outcomes, and exactly one of them takes a page off the
-   * site. See {@link consequenceNote}.
+   * site. See {@link consequenceNote}. A collection listing's are all links.
    */
   relation?: 'link' | 'child' | 'template'
 }
@@ -89,7 +90,7 @@ export interface ArtifactUsageScan {
 }
 
 /** The kinds this copy covers. */
-export type ArtifactUsageKind = 'component' | 'layout' | 'screen'
+export type ArtifactUsageKind = 'component' | 'layout' | 'screen' | 'collection'
 
 /** Coerce whatever the response carried; anything but `true` is incomplete. */
 export const scanIsComplete = (value: unknown): boolean => value === true
@@ -116,6 +117,15 @@ export const consequenceNote = (
     return (
       'Nothing goes down: those screens keep serving, rendering without the ' +
       'shared chrome until they are bound to another layout.'
+    )
+  }
+  if (kind === 'collection') {
+    // Never "nothing goes down": the collection's own listing page does. The
+    // pages linking to it keep serving, and the link itself renders with no
+    // address (AGL-1893) until it is pointed somewhere else.
+    return (
+      'Pages that link to its listing keep rendering, but those links stop ' +
+      'working until you point them somewhere else.'
     )
   }
   return screenConsequenceNote(dependents)
@@ -174,7 +184,9 @@ export const deleteConfirmationLead = (
     ? 'It disappears from Your components.'
     : kind === 'layout'
       ? 'It disappears from Layouts.'
-      : 'It disappears from Screens and its published path stops resolving.')
+      : kind === 'collection'
+        ? 'It disappears from Content and its listing page stops resolving.'
+        : 'It disappears from Screens and its published path stops resolving.')
 
 /** Shown while the scan is still running. Never a blank space. */
 export const SCAN_PENDING_NOTE = ' Checking where it is used…'

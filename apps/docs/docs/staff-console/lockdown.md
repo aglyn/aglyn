@@ -726,7 +726,7 @@ apart. In full:
 
 **A takedown stops new delivery. It is not a recall.** Say that to a
 complainant in those words. "Stopped within 15 seconds at origin, up to an
-hour at the edge for an already-cached image" is what safe-harbour
+hour at the edge for an already-cached image" is what safe-harbor
 "expeditious" contemplates, and it is *not* the same promise as "the file is
 gone". Treat any public asset with real traffic as already distributed.
 
@@ -1276,7 +1276,7 @@ What that read is, and is not:
 - **Stripe does email the customer on a failed payment.** That toggle is ON,
   along with trial-ending, upcoming-renewal, expiring-card and bank-debit
   failure notices (the last was turned ON on 2026-08-24). This matters because
-  `system-email-catalog.ts` catalogues `stripe-payment-failed` as
+  `system-email-catalog.ts` catalogs `stripe-payment-failed` as
   `deliveredBy: 'stripe'` precisely because the code cannot see the toggle;
   Aglyn composes no failed-payment email of its own, and the in-app
   notification it does send is suppressed entirely by a muted `billing`

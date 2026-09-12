@@ -16,6 +16,11 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { readStoredVisitorConsent } from '@aglyn/aglyn/app-utils/visitor-consent'
+import {
+  wistiaMediaId,
+  wistiaPlayerSrc,
+} from '@aglyn/aglyn/app-utils/wistia-embed'
 import { mdiPlay, mdiVideo } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
@@ -30,6 +35,8 @@ import {
 } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { useVideoPlaybackBeacon } from './video-playback-beacon'
+import { VideoPlayerFrame } from './video-player-frame'
 
 /**
  * The lightbox, behind a lazy boundary rather than a plain import (AGL-2744).
@@ -108,6 +115,10 @@ export interface VideoProps {
    * Where the video comes from. Either a **media reference** —
    * `media:{scope}/{mediaId}`, what "Browse media" stores (AGL-1215) — or any
    * URL. `resolveMediaSrc` decides, exactly as it does for an image.
+   *
+   * A Wistia link is read differently (AGL-2826): the element keeps only the
+   * media id and plays Wistia's own player, which loads when a visitor
+   * presses play and never before. See `wistia-embed.ts`.
    */
   src?: string
   /**
@@ -152,8 +163,10 @@ export interface VideoProps {
   uploadDate?: string
   /**
    * Running time in seconds. Copied off the media document when the DAM's
-   * video pipeline publishes one (`Aglyn.videoMediaProps`), typed by the
-   * author otherwise, and omitted from the schema when neither happened.
+   * video pipeline publishes one (`Aglyn.videoMediaProps`) and read from the
+   * asset again when the page is composed, so a replace reaches it
+   * (AGL-2807); typed by the author otherwise, and omitted from the schema
+   * when neither happened.
    */
   durationSeconds?: number
   /**
@@ -164,6 +177,10 @@ export interface VideoProps {
    * inline player it was authored against. Requires a poster — there is
    * nothing to click without one — and falls back to inline playback when
    * there is none, rather than rendering a button with no face.
+   *
+   * A Wistia video waits for a press whether this is on or off; the switch
+   * decides only where its player opens, in the dialog or in place of the
+   * poster.
    */
   lightbox?: boolean
   /** Captions file — a WebVTT (`.vtt`) URL or media reference. */
@@ -192,7 +209,9 @@ export interface VideoProps {
   /**
    * The asset's own pixel dimensions, copied off the media document when the
    * video was picked (AGL-2741) — the same pair, by the same route and for
-   * the same reason, as `image.tsx`.
+   * the same reason, as `image.tsx` — and read from the asset again when the
+   * page is composed, so a replace with a different shape resizes the player
+   * (AGL-2807).
    *
    * NOT author controls, which is why neither appears in the schema below.
    * They describe the file; the CSS `width`/`height` above describe the
@@ -226,8 +245,8 @@ export interface VideoProps {
 }
 
 /**
- * Video element (AGL-162, AGL-2741): plays a media-library upload or any URL,
- * poster first.
+ * Video element (AGL-162, AGL-2741): plays a media-library upload, any URL or
+ * a Wistia video (AGL-2826), poster first.
  *
  * The default is now to download NOTHING until a visitor asks. A poster is an
  * image — a few tens of kilobytes through the DAM's WebP variants, edge-cached
@@ -284,7 +303,23 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   // whichever attribute asked for it, so every field it can write to has to
   // understand the same value.
   const { hostId } = Aglyn.useSite()
-  const src = Aglyn.resolveMediaSrc(storedSrc, { hostId })
+  /**
+   * The delivery copy, not the master (AGL-2753).
+   *
+   * `videoDeliverySrc` is `resolveMediaSrc` plus `?r=auto`, which asks the CDN
+   * for the best encoding it holds instead of naming one. The element cannot
+   * name one: renditions are produced out of band by
+   * `tools/scripts/generate-video-renditions.mjs`, minutes or days after the
+   * upload, so at pick time an asset usually has none and a copied list would
+   * be empty for exactly the videos it exists to serve. Asking rather than
+   * naming is what lets an encoding made tomorrow reach a video placed today,
+   * with no re-pick and nothing rewritten in a published document.
+   *
+   * Nothing here is conditional on the asset having renditions, because the
+   * URL degrades to the master by construction — which is the file this
+   * served before, so a page cannot get worse by adopting it.
+   */
+  const src = Aglyn.videoDeliverySrc(storedSrc, { hostId })
   // Two candidates, one rule, shared with the page's `thumbnailUrl`: the
   // author's own poster wins, and the DAM's generated frame is used only when
   // the node records that one exists (AGL-2749).
@@ -330,33 +365,70 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    * The trigger still RENDERS as a button, because what an author sees on the
    * canvas has to be what a visitor gets.
    */
-  const { editorInert } = Aglyn.useScreenLink(undefined)
-  if (!src) {
-    return (
-      <Box
-        ref={ref}
-        {...rest}
-        sx={[
-          {
-            width: width || '100%',
-            height: height || 180,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: radius != null ? `${radius}px` : undefined,
-            color: 'text.secondary',
-            fontSize: 12,
-            fontFamily: 'system-ui, sans-serif',
-          },
-          ...nodeSx,
-        ]}
-      >
-        {'Video — set a source URL'}
-      </Box>
+  const { editorInert, suppressNavigation } = Aglyn.useScreenLink(undefined)
+  /**
+   * What a play is counted against (AGL-2781): the site, the asset the STORED
+   * value names, and whether this surface is an editor. Handed to the
+   * lightbox as data rather than as handlers, because a play there belongs to
+   * one open of the dialog and only the dialog knows when that begins.
+   */
+  const playback = { hostId, src: storedSrc, suppressed: suppressNavigation }
+  const playbackHandlers = useVideoPlaybackBeacon(playback)
+  /**
+   * A Wistia video (AGL-2826), and the player address a press produced.
+   *
+   * Nothing of Wistia's renders before that press. The poster is a button, as
+   * it is for the lightbox, so a visitor who only looks at the page makes no
+   * request to Wistia and is handed no storage by it. `playerSrc` stays empty
+   * until the press, and setting it is what brings the frame in.
+   */
+  const wistiaId = wistiaMediaId(storedSrc)
+  const [playerSrc, setPlayerSrc] = useState<string>()
+  /**
+   * The press. Consent is read here and not during render: the record lives
+   * in this browser's storage, which a cached page cannot vary on, and a
+   * visitor may answer the banner between the first paint and the click.
+   *
+   * Wistia records the viewing only when this visitor's analytics consent is
+   * on record. A visitor without that record — still deciding, refused,
+   * opted out by GPC, or visiting a site that runs no consent banner — gets
+   * the player with `doNotTrack`.
+   */
+  const playWistia = useCallback(() => {
+    setPlayerSrc(
+      wistiaPlayerSrc(storedSrc, {
+        doNotTrack: !readStoredVisitorConsent(hostId)?.analytics,
+        muted: Boolean(muted),
+        loop: Boolean(loop),
+      }),
     )
-  }
+  }, [storedSrc, hostId, muted, loop])
+  /** The labeled box the element shows when it has nothing it can play. */
+  const placeholder = (label: string) => (
+    <Box
+      ref={ref}
+      {...rest}
+      sx={[
+        {
+          width: width || '100%',
+          height: height || 180,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          border: '1px dashed',
+          borderColor: 'divider',
+          borderRadius: radius != null ? `${radius}px` : undefined,
+          color: 'text.secondary',
+          fontSize: 12,
+          fontFamily: 'system-ui, sans-serif',
+        },
+        ...nodeSx,
+      ]}
+    >
+      {label}
+    </Box>
+  )
+  if (!src) return placeholder('Video — set a source URL')
   /**
    * The reserved box, as a ratio rather than a size.
    *
@@ -386,14 +458,62 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     />
   ) : null
   /**
+   * A Wistia video with no poster has nothing to press, and the alternative —
+   * loading the player up front — is the request this element exists to
+   * withhold. So it says what it needs instead.
+   */
+  if (wistiaId && !poster) {
+    return placeholder('Video — add a poster image to play this Wistia video')
+  }
+  /**
+   * The Wistia player after a press, in place of the poster, when the lightbox
+   * is off. The wrapper is the same element the poster sat in, so the node's
+   * styles and ref stay where they were and only its contents change.
+   */
+  if (wistiaId && !lightbox && playerSrc) {
+    return (
+      <Box
+        ref={ref}
+        {...rest}
+        sx={[
+          {
+            display: 'block',
+            position: 'relative',
+            width: width || '100%',
+            height: height || 'auto',
+          },
+          ...nodeSx,
+        ]}
+      >
+        <VideoPlayerFrame
+          src={playerSrc}
+          title={title}
+          aspectRatio={aspectRatio}
+          height={height}
+          radius={radius}
+          focusOnMount
+        />
+      </Box>
+    )
+  }
+  /**
    * Poster-first, dialog on click (AGL-2744).
    *
    * Requires a poster, and falls back to the inline player without one rather
    * than rendering a button with no face. That is not a limitation to work
    * around — a lightbox trigger with nothing to show is a blank rectangle
    * that claims to be a film.
+   *
+   * A Wistia video always takes this branch (AGL-2826). With the lightbox off
+   * its press swaps the player in above, and the lazy dialog is never armed,
+   * because nothing is going to open it.
    */
-  if (lightbox && poster) {
+  if ((lightbox || wistiaId) && poster) {
+    const playsInPlace = Boolean(wistiaId) && !lightbox
+    const press = () => {
+      if (wistiaId) playWistia()
+      if (lightbox) openLightbox()
+    }
     return (
       <Box
         ref={ref}
@@ -414,13 +534,14 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
           // Inert on the canvas: a focus-trapping dialog opened inside the
           // editor would take the author's keyboard away mid-edit, and the
           // click there means "select this node". Same shape as the Drawer's
-          // `editorInert ? undefined : handler`.
-          onClick={editorInert ? undefined : openLightbox}
+          // `editorInert ? undefined : handler`. It is also why a hosted
+          // player never loads into the canvas.
+          onClick={editorInert ? undefined : press}
           // Arming on hover and on focus, not on click, is what makes the
           // dialog open on the same frame as the press — and it costs a
           // visitor who never approaches the poster nothing at all.
-          onPointerEnter={editorInert ? undefined : arm}
-          onFocus={editorInert ? undefined : arm}
+          onPointerEnter={editorInert || playsInPlace ? undefined : arm}
+          onFocus={editorInert || playsInPlace ? undefined : arm}
           // The button IS the play control, so it says so. Without a title it
           // still announces its purpose rather than reading as an image.
           aria-label={title ? `Play video: ${title}` : 'Play video'}
@@ -540,6 +661,8 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
               loop={loop}
               muted={muted}
               captions={track}
+              playback={playback}
+              embedSrc={wistiaId ? playerSrc : undefined}
             />
           </Suspense>
         ) : null}
@@ -561,6 +684,11 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
       playsInline={playsInline !== false}
       preload={resolveVideoPreload({ preload, poster, autoPlay })}
       {...rest}
+      // After the spread, so a stray prop from the tree cannot unwire the
+      // counters.
+      onPlay={playbackHandlers.onPlay}
+      onTimeUpdate={playbackHandlers.onTimeUpdate}
+      onEnded={playbackHandlers.onEnded}
       sx={[
         {
           display: 'block',
@@ -606,7 +734,9 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       name: 'src',
       description:
         'Pick the film from your media library with "Browse media", or ' +
-        'paste the URL of a video hosted somewhere else.',
+        'paste the URL of a video hosted somewhere else. A Wistia media ' +
+        "link plays in Wistia's player, which loads only when a visitor " +
+        'presses play.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Video source',
     },
@@ -615,7 +745,8 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       description:
         'The still shown before anyone presses play. Videos from your media ' +
         'library already have one; pick a different image here to override ' +
-        'it. A poster is what keeps the video off the wire until it is asked for.',
+        'it. A poster is what keeps the video off the wire until it is asked for. ' +
+        'A Wistia video needs one: it is the button a visitor presses.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Poster image',
     },
@@ -657,7 +788,8 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       description:
         'Show the poster as a play button and open the film full size in a ' +
         'dialog. Needs a poster image; without one the player stays in the ' +
-        'page.',
+        'page. A Wistia video waits for a press either way, and plays in ' +
+        'place of the poster when this is off.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Open in a lightbox',
     },

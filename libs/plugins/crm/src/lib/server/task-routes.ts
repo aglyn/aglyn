@@ -57,6 +57,7 @@ import {
   type CrmRouteScope,
   readCrmRouteScope,
 } from './org-caller'
+import { crmSuiteRefusal } from './suite-gate'
 
 /**
  * The two things a task does that a browser must not do alone (AGL-2599).
@@ -101,7 +102,14 @@ import {
  * request as a whole is refused only for what refuses every task alike.
  */
 
-export type Refusal = { ok: false; status: number; body: { error: string } }
+export type Refusal = {
+  ok: false
+  status: number
+  body: { error: string; reason?: string; code?: string }
+}
+
+/** What the suite gate names when a task route refuses a plan without it. */
+const TASKS_ACT = "Working a record's tasks"
 
 export interface Writer {
   ok: true
@@ -124,6 +132,17 @@ const ORG_REFUSAL =
   'Editing tasks at the organization level requires the "Manage data" ' +
   'permission across the whole workspace.'
 
+export interface CrmWriterOptions {
+  /**
+   * The act a plan without the CRM is refused for, named the way
+   * `crmSuiteRefusalMessage` takes it. `null` for a route that asks the plan
+   * itself, once it knows what the request writes, so the refusal can name
+   * that act — a contact update names the first field it carries. Tasks
+   * when unsaid.
+   */
+  suiteAct?: string | null
+}
+
 /**
  * Who is asking, and whether they may write this CRM at all.
  *
@@ -137,13 +156,18 @@ const ORG_REFUSAL =
 export async function authorizeCrmWriter(
   req: PluginApiRequest,
   scope: CrmRouteScope,
+  options: CrmWriterOptions = {},
 ): Promise<Writer | Refusal> {
+  const suiteAct = options.suiteAct === undefined ? TASKS_ACT : options.suiteAct
   if (scope.level === 'org') {
     const caller = await authorizeOrgCaller(req, scope.orgId, {
       needs: 'data.manage',
       refusal: ORG_REFUSAL,
     })
     if (caller.ok === false) return refuse(caller.status, caller.error)
+    // The plan after the person (AGL-2787): see `suite-gate.ts`.
+    const suite = suiteAct ? crmSuiteRefusal(caller.org, suiteAct) : null
+    if (suite) return { ok: false, status: suite.status, body: suite.body }
     return {
       ok: true,
       uid: caller.uid,
@@ -193,6 +217,8 @@ export async function authorizeCrmWriter(
       )
     }
   }
+  const suite = suiteAct ? crmSuiteRefusal(org, suiteAct) : null
+  if (suite) return { ok: false, status: suite.status, body: suite.body }
   return {
     ok: true,
     uid: decoded.uid,

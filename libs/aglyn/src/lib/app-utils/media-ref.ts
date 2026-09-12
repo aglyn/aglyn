@@ -56,31 +56,43 @@
  *    tokens live in exactly this position and resolve at render. A media
  *    reference is the same kind of thing, and reads that way to an author.
  *
- * ## The optional content pin (AGL-2685)
+ * ## The content pin names bytes, and no URL is built from it (AGL-2798)
  *
  * A reference may carry the asset's content hash — `media:{scope}/{id}@{hash}`
- * — and when it does, {@link resolveMediaSrc} emits the CDN's immutable URL
- * form, which is cached for a year instead of a minute.
+ * (AGL-2685). It parses, it round-trips and the where-used scan matches it,
+ * but {@link resolveMediaSrc} ignores it: a pinned reference resolves to the
+ * same stable URL as an unpinned one.
  *
- * This was refused for a long time, and the refusal was right at the time.
- * The reference names the asset so that a **replace** propagates; a hash is a
- * snapshot of bytes, and the immutable URL 404s the moment it goes stale, so
- * pinning one into a published document meant the first replace broke every
- * screen holding it. What changed is the handler: a stale hash now REDIRECTS
- * to the stable URL rather than 404ing, so a pin that has gone stale costs one
- * extra hop and nothing else. The pin is an optimisation that degrades, not a
- * commitment that breaks.
+ * The pin used to resolve to the CDN's content-hashed form,
+ * `/api/media/cdn/{scope}/{id}/{hash}`, which is served `immutable` for a
+ * year. The case for it was that a stale hash 302s to the stable URL, so a
+ * replace would cost one extra hop. That hop only happens when a request
+ * reaches the handler, and an immutable response is precisely the one nothing
+ * asks about again: Vercel's edge stores it and answers from its copy
+ * (measured on production, `MISS` then `HIT`), and every browser that fetched
+ * it keeps its own. A page naming that URL showed the replaced bytes for as
+ * long as either copy lived, and a replace has to reach every place the asset
+ * is used.
  *
- * Two properties follow, and both are load-bearing:
+ * The two ways to keep the year-long URL were weighed and refused:
  *
- * 1. **The pin is optional at every layer.** Every reference written before
- *    this carries no hash, resolves to the stable URL, and is exactly as
- *    correct as it was. There is no migration, and the backfill that adds
- *    pins (`tools/scripts/backfill-media-content-pins.mjs`) is an optimisation
- *    pass, not a repair.
- * 2. **A stale pin is never wrong, only slower.** Which is why nothing here
- *    validates a hash against the asset — this module cannot read a media
- *    document, and a pin it cannot check is one the CDN resolves for it.
+ * 1. **Purge the edge on replace.** A purge cannot reach a browser's copy,
+ *    and it puts a credentialled call to a third-party API on the replace
+ *    path that has to fail soft — the argument `media-takedown-reach.ts`
+ *    makes about takedowns.
+ * 2. **Re-pin every stored reference on replace.** A write fan-out into
+ *    published versions, found by a where-used scan that caps its own work,
+ *    and it still leaves every copy of the old URL outside our documents — a
+ *    sent email, a feed reader, a hotlink — on the year-long promise.
+ *
+ * The stable URL is revalidated rather than trusted: a 60-second browser
+ * window, an ETag answered with a 304, an hour at the edge. A replace reaches
+ * it on every surface within that bound with nothing to re-publish, which is
+ * how every reference written before pins existed has always behaved.
+ *
+ * References that already carry a pin keep it. Nothing strips one, and a hash
+ * recording which bytes an author placed stays available to anything that
+ * wants to check them; {@link mediaNodeSrc} simply mints no new ones.
  *
  * ## What is still NOT stored
  *
@@ -344,11 +356,10 @@ export function resolveMediaSrc(
   const ref = parseMediaRef(value)
   if (!ref) return undefined
   const scope = hostQualifiedScope(ref.scope, options?.hostId)
-  const stable = `${MEDIA_CDN_ROUTE}/${scope}/${ref.mediaId}`
-  // A pinned reference resolves to the CDN's immutable URL — a year in the
-  // browser instead of a minute (AGL-2685). Safe to emit without checking the
-  // hash: a stale one redirects here, to this exact stable URL.
-  return ref.contentHash ? `${stable}/${ref.contentHash}` : stable
+  // The stable URL, pinned or not (AGL-2798). The content-hashed form is held
+  // for a year by the edge and by every browser that fetched it, where no
+  // replace can reach — see the module note.
+  return `${MEDIA_CDN_ROUTE}/${scope}/${ref.mediaId}`
 }
 
 /**
@@ -661,23 +672,18 @@ export function isFirstPartyMediaSrc(value: unknown): value is string {
  * has to be plumbed through the media APIs.
  *
  * A content-hashed path (`…/{mediaId}/{hash}`) yields the reference for the
- * asset it names; the hash in the path is discarded. The pin, when there is
- * one, comes from the media document's CURRENT `contentHash` — see
- * {@link mediaNodeSrc} — never from whatever a stored path snapshotted.
+ * asset it names, and the hash is discarded: a reference names the ASSET, so
+ * that a replace reaches it (AGL-2798).
  */
 export function mediaRefFromCdnPath(
   cdnPath: string | undefined | null,
-  contentHash?: string | undefined | null,
 ): string | undefined {
   if (!cdnPath) return undefined
   const marker = `${MEDIA_CDN_ROUTE}/`
   const at = cdnPath.indexOf(marker)
   if (at === -1) return undefined
   const [scope, mediaId] = cdnPath.slice(at + marker.length).split('/')
-  // A hash in the PATH is still discarded — the caller's `contentHash` is the
-  // media document's current one, where a third path segment is whatever the
-  // stored string happened to snapshot.
-  return formatMediaRef(scope, mediaId, contentHash)
+  return formatMediaRef(scope, mediaId)
 }
 
 /**
@@ -730,22 +736,19 @@ export function mediaRefPattern(mediaId: string): RegExp {
  * restricted asset; {@link resolveMediaSrc} overrides it wherever the real
  * rendering host IS known.
  *
- * `media.contentHash` rides along the same way the pixel dimensions do
- * (AGL-2486): the pick is the one moment a surface holds the media DOCUMENT,
- * and the tenant renderer never reads one. Absent — a legacy upload, or a
- * caller that does not carry the field — simply means no pin, which is the
- * behaviour every reference had before AGL-2685.
+ * No content pin is written, even when `media.contentHash` is present
+ * (AGL-2798). A pin changes no URL a reference renders, so writing one would
+ * put a value into the document that nothing reads, and hand the next reader
+ * a reason to turn it back into the year-long URL no replace can reach. The
+ * field stays in the accepted shape because callers hand over the whole media
+ * document.
  */
 export function mediaNodeSrc(media: {
   url?: string | null
   cdnPath?: string | null
   contentHash?: string | null
 }): string | undefined {
-  return (
-    mediaRefFromCdnPath(media.cdnPath, media.contentHash) ??
-    media.url ??
-    undefined
-  )
+  return mediaRefFromCdnPath(media.cdnPath) ?? media.url ?? undefined
 }
 
 /**
@@ -773,6 +776,30 @@ export const MEDIA_CDN_POSTER_PARAM = 'poster'
 
 /** Selects a video rendition by key. See {@link isMediaRenditionKey}. */
 export const MEDIA_CDN_RENDITION_PARAM = 'r'
+
+/**
+ * The `?r=` value meaning "the best delivery copy you have" (AGL-2753).
+ *
+ * A key names ONE encoding, which a caller can only ask for if it knows the
+ * asset has it. Nothing that renders a page knows that: renditions are
+ * produced out of band by `tools/scripts/generate-video-renditions.mjs`,
+ * minutes or days after the upload, and a published page is cached HTML that
+ * neither regenerates when an encoding lands nor varies on a visitor's
+ * `Accept`. So a placement made today can never name a rendition made
+ * tomorrow, and the encodings would be produced and never served.
+ *
+ * This sentinel moves the choice to the one place that already holds the
+ * document: `serveMediaCdn` reads it on every asset request anyway. The page
+ * emits one URL that says what it WANTS rather than what exists, and an asset
+ * with no renditions answers it with the master — the same degradation an
+ * unknown `?r=` has always had, reached deliberately instead of by accident.
+ *
+ * ⚠️ Sentinel and key share a namespace, so {@link parseMediaRendition}
+ * refuses a stored entry keyed `auto`. Without that refusal a producer could
+ * mint one and make the sentinel unreachable — the negotiated form silently
+ * pinned to whichever encoding happened to claim the name.
+ */
+export const MEDIA_CDN_RENDITION_AUTO = 'auto'
 
 /**
  * Object-path suffix for a video's poster still. The width variants sit
@@ -851,6 +878,10 @@ export function parseMediaRendition(value: unknown): MediaVideoRendition | null 
   const ext = entry['ext']
   const contentType = entry['contentType']
   if (!isMediaRenditionKey(key)) return null
+  // The negotiation sentinel is not a name an encoding may take: it is
+  // resolved before the by-key lookup, so an entry claiming it would be
+  // unreachable AND would shadow the request every page makes (AGL-2753).
+  if (key === MEDIA_CDN_RENDITION_AUTO) return null
   if (typeof ext !== 'string' || !RENDITION_EXT.test(ext)) return null
   if (typeof contentType !== 'string' || !/^video\/[\w.+-]{1,64}$/.test(contentType)) {
     return null
@@ -934,11 +965,11 @@ function withMediaCdnQuery(
  *
  * ⚠️ Deliberately the PREFIX test and not {@link isMediaCdnPath}, which is
  * the strict validator two functions above. The strict form refuses the
- * PINNED shape — `/api/media/cdn/{scope}/{id}/{hash}` — because its media-id
- * segment then contains a `/`, and a pinned reference is exactly what
- * `resolveMediaSrc` emits for every asset the picker has written since
- * AGL-2685. Using it here would silently return undefined for the newest
- * half of the corpus.
+ * content-hashed shape — `/api/media/cdn/{scope}/{id}/{hash}` — because its
+ * media-id segment then contains a `/`. No reference resolves to that shape
+ * (AGL-2798), but a stored PATH can still hold one: it passes through
+ * {@link resolveMediaSrc} untouched and the CDN still answers it, so refusing
+ * it here would drop the poster and renditions of an asset that serves.
  *
  * Nothing is lost by being looser: the strict grammar is a SUBSET of this
  * prefix, and everything the prefix additionally admits is a same-origin
@@ -1002,6 +1033,38 @@ export function mediaRenditionSrc(
   const src = resolveMediaSrc(value, options)
   if (!derivedObjectEligible(src)) return undefined
   return withMediaCdnQuery(src, [[MEDIA_CDN_RENDITION_PARAM, key]])
+}
+
+/**
+ * The URL a player should actually load for a video (AGL-2753).
+ *
+ * This is {@link resolveMediaSrc} plus one query parameter, and the parameter
+ * is the entire feature: it asks the CDN for the best delivery copy it has
+ * rather than naming one, so a rendition encoded LONG after the video was
+ * placed on a page reaches that page with no re-pick, no node backfill and no
+ * document read on the render path. See {@link MEDIA_CDN_RENDITION_AUTO} for
+ * why the choice has to live at the CDN.
+ *
+ * ⚠️ Unlike {@link mediaPosterSrc} this NEVER returns undefined for a value
+ * that resolved. A poster may legitimately have no URL — the element simply
+ * renders without one — but a video with no URL is a dead player, so anything
+ * this cannot improve is passed through exactly as `resolveMediaSrc` left it.
+ * An author-typed hotlink and a raw Storage URL therefore come back untouched:
+ * they are not this platform's objects and have no renditions to ask for.
+ *
+ * Safe on an asset that has none. `?r=` degrades to the master by design —
+ * "the same video in more bytes" — which is precisely what every video served
+ * before this existed, so a page that adopts this URL cannot regress.
+ */
+export function videoDeliverySrc(
+  value: string | undefined | null,
+  options?: ResolveMediaSrcOptions,
+): string | undefined {
+  const src = resolveMediaSrc(value, options)
+  if (!derivedObjectEligible(src)) return src
+  return withMediaCdnQuery(src, [
+    [MEDIA_CDN_RENDITION_PARAM, MEDIA_CDN_RENDITION_AUTO],
+  ])
 }
 
 /**

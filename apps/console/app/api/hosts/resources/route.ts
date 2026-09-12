@@ -50,6 +50,7 @@ import {
   readScreenSources,
 } from './count-billable-screens'
 import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Is a redirect destination an INTERNAL path? (AGL-1881.)
@@ -1014,6 +1015,10 @@ async function handler(request: Request): Promise<Response> {
     }
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error: any) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     if (error?.code === 6 /* ALREADY_EXISTS */) {
       return Response.json({ error: 'That id already exists' }, { status: 409 })
     }

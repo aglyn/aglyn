@@ -32,6 +32,7 @@ import ConsoleMediaPickerProvider from '../../../../../components/console-media-
 import { useEnabledPluginIds } from '../../../../../components/console-plugins-gate.component'
 import FeatureGate from '../../../../../components/feature-gate.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import PluginHubRail from '../../../../../components/plugin-hub-rail.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
@@ -202,6 +203,7 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
         isStaff,
         org,
         orgReady,
+        featureFlag: resolved?.extension.featureFlag,
       }),
     [resolved, basePath, flags, isStaff, org, orgReady],
   )
@@ -211,9 +213,15 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
    * plugin page for the reason the site route holds it: the page is
    * `lazy()`, and a redirect inside it cannot fire until a chunk about to be
    * thrown away has downloaded and mounted.
+   *
+   * Held until the org has settled (AGL-2851): a landing is a claim about the
+   * plan, and an unsettled org locks nothing, so a plan without the CRM would
+   * be sent into a section before the notice beside the rail could speak.
    */
   const sectionRedirect =
-    resolved && !resolved.section ? hubLandingHref(resolvedSections) : undefined
+    resolved && !resolved.section && orgReady
+      ? hubLandingHref(resolvedSections)
+      : undefined
   useEffect(() => {
     if (sectionRedirect) router.replace(sectionRedirect)
   }, [sectionRedirect, router])
@@ -315,34 +323,38 @@ const OrgCrmPage: NextPageWithLayout<Record<string, never>> = () => {
     // is not shown its upgrade path.
     <Alert severity="warning">{refusedExtensionNotice(title)}</Alert>
   ) : surfaceEntitlement === 'blocked' ? (
-    <Alert
-      severity="info"
-      action={
-        orgSlug ? (
-          <AppLink
-            componentVariant="button"
-            size="small"
-            color="inherit"
-            href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}${
-              upgradeAnchor ? `#${upgradeAnchor}` : ''
-            }`}
-          >
-            {upgradeAnchor === 'addons' ? 'View add-ons' : 'View plans'}
-          </AppLink>
-        ) : undefined
-      }
-    >
-      {extensionEntitlement === 'blocked'
-        ? upgradeNoticeMessage(
-            resolved?.extension.upgradeNotice,
-            title,
-            resolved?.extension.featureFlag,
-          )
-        : blockedExtensionNotice(
-            resolved?.section?.label ?? title,
-            resolved?.section?.featureFlag,
-          )}
-    </Alert>
+    // Beside the rail (AGL-2851): what the plan leaves out is drawn locked
+    // where the reader is, on a bare `/crm` as on a section or a record.
+    <PluginHubRail sections={resolvedSections}>
+      <Alert
+        severity="info"
+        action={
+          orgSlug ? (
+            <AppLink
+              componentVariant="button"
+              size="small"
+              color="inherit"
+              href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}${
+                upgradeAnchor ? `#${upgradeAnchor}` : ''
+              }`}
+            >
+              {upgradeAnchor === 'addons' ? 'View add-ons' : 'View plans'}
+            </AppLink>
+          ) : undefined
+        }
+      >
+        {extensionEntitlement === 'blocked'
+          ? upgradeNoticeMessage(
+              resolved?.extension.upgradeNotice,
+              title,
+              resolved?.extension.featureFlag,
+            )
+          : blockedExtensionNotice(
+              resolved?.section?.label ?? title,
+              resolved?.section?.featureFlag,
+            )}
+      </Alert>
+    </PluginHubRail>
   ) : (
     <Suspense
       fallback={

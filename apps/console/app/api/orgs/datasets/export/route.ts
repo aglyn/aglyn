@@ -32,6 +32,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
+import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 /**
  * Records read per round trip. Not a cap — the stream keeps paging until
@@ -256,7 +257,11 @@ async function handler(request: Request): Promise<Response> {
         'Cache-Control': 'no-store, private',
       },
     })
-  } catch {
+  } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     return json({ error: 'Export failed' }, 500)
   }
 }

@@ -424,7 +424,12 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'delivery counters and the send-time consent record: that one is denied ' +
     'outright by the rules, and conflating the two breaks this drawer.',
   emailTemplates: 'Transactional email templates, edited in the console.',
-  leads: 'Captured leads, triaged and deleted in the inbox console page.',
+  leads:
+    'Captured leads, worked in the CRM Leads section — status, owner and ' +
+    'notes — and deleted there. Create and update are excluded from the ' +
+    'catch-all and re-granted by a dedicated block that also asks the plan ' +
+    'for the CRM suite (AGL-2801); read and delete stay with the catch-all. ' +
+    'The capture doors write leads through the Admin SDK.',
   formSubmissions:
     'Create is denied (AGL-1668) because the row is what the meter counts; ' +
     'update and delete stay open because the inbox marks a submission read ' +

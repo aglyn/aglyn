@@ -40,6 +40,8 @@ let mockPermissions: Record<string, unknown> = {
   orgWide: true,
   hostRole: 'editor',
 }
+/** The workspace's plan, as both variants read it off the org document. */
+let mockPlan = 'agency'
 const mockVerifyIdToken = jest.fn(async () => mockDecoded)
 const mockEnsure = jest.fn(async (_db: unknown, _orgId: string, options?: { rotate?: boolean }) =>
   options?.rotate
@@ -61,8 +63,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: async (hostId: string) =>
-    hostId === HOST ? { orgId: ORG, org: { $id: ORG, plan: 'agency' } } : null,
-  getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG, plan: 'agency' } : null),
+    hostId === HOST ? { orgId: ORG, org: { $id: ORG, plan: mockPlan } } : null,
+  getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG, plan: mockPlan } : null),
   resolveOrgMembership: async () => ({ member: mockMember }),
   memberHasOrgPermission: async () => mockPermitted,
   ensureCrmInboundToken: (...args: unknown[]) => (mockEnsure as any)(...args),
@@ -113,12 +115,29 @@ beforeEach(() => {
     orgWide: true,
     hostRole: 'editor',
   }
+  mockPlan = 'agency'
   delete process.env['CRM_INBOUND_DOMAIN']
 })
 
 describe('crm/inbound-address', () => {
   it('is registered under the name the client posts to', () => {
     expect(CRM_INBOUND_ADDRESS_ROUTE).toBe('crm/inbound-address')
+  })
+
+  it('answers a refused token 401 and a certificate outage 500 at the site level (AGL-2852)', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    ;(mockVerifyIdToken as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('expired'), { code: 'auth/id-token-expired' }),
+    )
+    expect((await call({ hostId: HOST })).status).toBe(401)
+    ;(mockVerifyIdToken as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('Error fetching public keys for Google certs'), {
+        code: 'auth/argument-error',
+      }),
+    )
+    expect((await call({ hostId: HOST })).status).toBe(500)
+    expect(mockEnsure).not.toHaveBeenCalled()
+    logged.mockRestore()
   })
 
   it('refuses anything but a POST, a body with no scope, and a caller with no token', async () => {
@@ -213,5 +232,63 @@ describe('crm/inbound-address', () => {
       expect(answer.rotated).toBe(true)
       expect(mockLogOrgActivity).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787). The first ask mints the capture token, so reading the
+ * address is a write, and it belongs to the CRM suite, included from
+ * Starter. The plan is asked after the caller and after the rotation
+ * permission, and of the workspace, so staff reading inside a Free one are
+ * refused as a member is.
+ */
+describe('the plan (AGL-2787)', () => {
+  const expectRefused = ({ status, answer }: { status: number; answer: any }) => {
+    expect(status).toBe(403)
+    expect(answer).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(answer.error).toMatch(/part of the CRM/)
+    expect(answer.error).toMatch(/Included from Starter/)
+  }
+
+  beforeEach(() => {
+    mockPlan = 'free'
+  })
+
+  it('refuses a Free workspace under a site, minting no token, for a read and an owner’s rotation alike', async () => {
+    expectRefused(await call({ hostId: HOST }))
+    mockMember = { role: 'owner' }
+    expectRefused(await call({ hostId: HOST, rotate: true }))
+    expect(mockEnsure).not.toHaveBeenCalled()
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('refuses a Free workspace at the organization level, for a read and an owner’s rotation alike', async () => {
+    expectRefused(await call({ orgId: ORG }))
+    mockPermissions = { ...mockPermissions, role: 'owner', isOwner: true }
+    expectRefused(await call({ orgId: ORG, rotate: true }))
+    expect(mockEnsure).not.toHaveBeenCalled()
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff reading inside a Free workspace the same way, at either level', async () => {
+    mockDecoded = { uid: 'staff-1', email: 'staff@aglyn.com', staff: true }
+    mockMember = null
+    mockPermissions = { ...mockPermissions, orgWide: false, permissions: {} }
+    expectRefused(await call({ hostId: HOST }))
+    expectRefused(await call({ orgId: ORG }))
+    expect(mockEnsure).not.toHaveBeenCalled()
+  })
+
+  it('tells an editor asking to rotate about the rotation, not the plan', async () => {
+    const { status, answer } = await call({ hostId: HOST, rotate: true })
+    expect(status).toBe(403)
+    expect(answer).toEqual({ error: CRM_INBOUND_ROTATE_REFUSAL })
+  })
+
+  it('admits Starter, the lowest plan that carries the suite, at both levels', async () => {
+    mockPlan = 'starter'
+    expect((await call({ hostId: HOST })).status).toBe(200)
+    expect((await call({ orgId: ORG })).status).toBe(200)
+    expect(mockEnsure).toHaveBeenCalledTimes(2)
   })
 })

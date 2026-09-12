@@ -70,7 +70,7 @@ scripts — is stripped when the edit is committed. Links keep their address and
 nothing else.
 
 :::info Formatting is not styling
-Rich text says a word is *emphasised*; it does not say what emphasis looks like.
+Rich text says a word is *emphasized*; it does not say what emphasis looks like.
 Color, size, weight and spacing come from your theme and the
 [Styles panel](responsive-styling.md), which is what keeps a site looking like one
 site. If you find yourself wanting to color a single word, that is the

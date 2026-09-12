@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { expandRepeatables, hasRepeatableNodes } from './expand-repeatables'
+import {
+  expandRepeatables,
+  hasRepeatableNodes,
+  repeatDatasetKeys,
+} from './expand-repeatables'
 
 const baseNodes = () =>
   ({
@@ -203,5 +207,43 @@ describe('hasRepeatableNodes (AGL-1440)', () => {
     expect(hasRepeatableNodes({})).toBe(false)
     expect(hasRepeatableNodes({ a: null } as any)).toBe(false)
     expect(hasRepeatableNodes(undefined as any)).toBe(false)
+  })
+})
+
+/**
+ * The keys the tenant compose reads (AGL-2773): a page loads the datasets it
+ * repeats over, by the key each repeat names, so this must return exactly the
+ * keys `expandRepeatables` will look up — no more, which costs a read, and no
+ * fewer, which renders a template row where the author put a list.
+ */
+describe('repeatDatasetKeys', () => {
+  it('names each repeated dataset once, trimmed and sorted', () => {
+    const nodes = {
+      root: { $id: 'root', componentId: 'div', nodes: ['a', 'b', 'c'] },
+      a: { $id: 'a', componentId: 'muiStack', props: { repeatDataset: 'Team' } },
+      b: { $id: 'b', componentId: 'muiStack', props: { repeatDataset: ' Menu ' } },
+      c: { $id: 'c', componentId: 'muiStack', props: { repeatDataset: 'Team' } },
+    } as any
+    expect(repeatDatasetKeys(nodes)).toEqual(['Menu', 'Team'])
+  })
+
+  it('names nothing for every shape expandRepeatables refuses', () => {
+    for (const repeatDataset of ['', '   ', 42, null, undefined, {}]) {
+      const nodes = baseNodes()
+      nodes.list.props.repeatDataset = repeatDataset
+      expect(repeatDatasetKeys(nodes)).toEqual([])
+    }
+  })
+
+  it('agrees with hasRepeatableNodes on the tree it is given', () => {
+    expect(repeatDatasetKeys(baseNodes()).length > 0).toBe(
+      hasRepeatableNodes(baseNodes()),
+    )
+  })
+
+  it('tolerates an empty or malformed node map', () => {
+    expect(repeatDatasetKeys({})).toEqual([])
+    expect(repeatDatasetKeys({ a: null } as any)).toEqual([])
+    expect(repeatDatasetKeys(undefined)).toEqual([])
   })
 })

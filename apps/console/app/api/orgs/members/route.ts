@@ -46,6 +46,7 @@ import {
   resolveOrgMembership,
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // `author` (AGL-2334) is assignable per site like every other host role —
 // a capability the rules enforce but no door writes is not a feature.
@@ -426,6 +427,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     // The `hostAccess` branch of this route admits a site COLLABORATOR and
     // metered nothing (AGL-2068): it gates on `isOrgWideMember`, which is
     // false for exactly that shape, so the manager quota above was skipped and

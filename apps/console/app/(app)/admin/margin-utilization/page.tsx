@@ -285,7 +285,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
               <Stack spacing={2}>
                 <Typography variant="body2" color="text.secondary">
                   Consumption of each included band, the resulting cost, and the
-                  realised margin — for every organization, worst first. Four
+                  realized margin — for every organization, worst first. Four
                   Firestore reads per organization, which is why nothing is read
                   until this is pressed.
                 </Typography>

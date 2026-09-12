@@ -79,9 +79,30 @@ describe('/api/billing/usage-config', () => {
   })
 
   it('rejects a token the SDK cannot verify', async () => {
-    mockVerifyIdToken.mockRejectedValue(new Error('bad token'))
+    // What firebase-admin throws for a token that does not verify.
+    mockVerifyIdToken.mockRejectedValue(
+      Object.assign(new Error('Firebase ID token has invalid signature.'), {
+        code: 'auth/argument-error',
+      }),
+    )
     const response = await GET(request('forged'))
     expect(response.status).toBe(401)
+  })
+
+  it('answers 500 when the check itself could not run (AGL-2796)', async () => {
+    // firebase-admin reports its Google cert fetch failing under the same code
+    // as a forged token. A 401 here would tell the caller their credential is
+    // bad during an outage that has nothing to do with it.
+    const silenced = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockVerifyIdToken.mockRejectedValue(
+      Object.assign(
+        new Error('Error fetching public keys for Google certs: connect ETIMEDOUT'),
+        { code: 'auth/argument-error' },
+      ),
+    )
+    const response = await GET(request('valid'))
+    expect(response.status).toBe(500)
+    silenced.mockRestore()
   })
 
   it('answers null while the switch is unset — the shipped default', async () => {

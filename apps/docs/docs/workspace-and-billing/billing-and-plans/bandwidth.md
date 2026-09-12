@@ -90,15 +90,25 @@ The reverse is much faster still: an upgrade releases within roughly a minute.
 
 ## Reducing bandwidth
 
-Most bandwidth on a content site is images.
+Your meter counts **page views**, not what a page weighs. Every counted view moves it by the
+same fixed amount (see [How usage is counted](#how-usage-is-counted)), so using less of the
+allowance means having fewer views counted.
 
-- Turn on **CDN delivery** — it is on every plan — so images are served in WebP at
-  the size the visitor's screen asks for. See
-  [Media library & CDN](../../content-and-data/media/overview.md#deliver-over-cdn).
-- Replace oversized hero images. A 4 MB photograph scaled down in the browser still costs
-  4 MB of bandwidth every time someone loads the page.
-- Check **Analytics → Traffic** for a page that is unexpectedly popular; a single embedded
-  video or a hotlinked asset can dominate a month.
+- Check **Analytics → Traffic** for a page that is unexpectedly popular. Views of that page
+  are what move the meter.
+- Stop counting your own visits while you check your pages, with `?aglyn_internal=1` (see
+  [Which views are counted](#which-views-are-counted)). Previews and the design canvas are
+  never counted.
+- If the traffic is real and you need more room, the lever is a plan with a larger band.
+
+What a page contains does not change the meter:
+
+- **Images.** A 4 MB photograph costs your visitors load time, not allowance. Serving a
+  smaller image through
+  [CDN delivery](../../content-and-data/media/overview.md#deliver-over-cdn) makes the page
+  faster; it does not stretch your band.
+- **Video.** Playing, pausing and seeking an embedded video are not page views, so plays do
+  not move the meter, however long the video is or however many times it is watched.
 
 ---
 
@@ -169,7 +179,7 @@ mentions only one of them is incomplete.
 | Latency | Minutes | Minutes |
 | Visitor sees | The "Over the monthly traffic limit" notice | The "This site is temporarily unavailable" notice, **on Free only** |
 
-The abuse ceiling exists for runaway traffic — a scraper, a hotlinked asset, a loop. On a
+The abuse ceiling exists for runaway traffic — a scraper or a loop. On a
 plan that meters overage it **flags the site and pages staff but changes nothing a visitor
 sees**, because that traffic is billed rather than refused. Only on a plan that cannot
 meter (Free) does it degrade what is served.

@@ -75,6 +75,8 @@ import {
   type EmailDeliveryRecord,
   readEmailDeliveryHistory,
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { crmSuiteRefusal } from './suite-gate'
 
 /** The route key, as `registerCrmConsoleApi` registers it. */
 export const CONTACT_EMAIL_HISTORY_ROUTE = 'crm/contact-email-history'
@@ -133,8 +135,12 @@ async function authorizeCrmReader(
   let decoded: { uid: string; staff?: unknown }
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-  } catch {
-    return refuse(401, 'Unauthenticated')
+  } catch (error) {
+    // A refused credential is the caller's 401; a failure to check one is
+    // ours and keeps a 5xx (AGL-2852).
+    if (isRefusedIdToken(error)) return refuse(401, 'Unauthenticated')
+    console.error('[crm] contact-email-history could not verify the reader', error)
+    return refuse(500, 'The sign-in could not be checked. Try again.')
   }
   const staff = decoded.staff === true
   const resolved = await getOrgForHost(hostId).catch(() => null)
@@ -265,6 +271,12 @@ export const contactEmailHistoryHandler: PluginApiHandler = async (req, res) => 
   const reader = await authorizeCrmReader(req, hostId)
   if (reader.ok === false) {
     res.status(reader.status).json({ error: reader.error })
+    return
+  }
+  // The plan after the reader, before any contact or log is read (AGL-2851).
+  const suite = crmSuiteRefusal(reader.org, "A contact's campaign email history")
+  if (suite) {
+    res.status(suite.status).json(suite.body)
     return
   }
   try {

@@ -68,7 +68,7 @@ const SECTIONS: ReadonlyArray<{
   // person who needs it is often not a publisher at all.
   {
     id: 'licences',
-    label: 'Licences',
+    label: 'Licenses',
     route: Route.ORG_MARKETPLACE_LICENCES,
     seller: false,
   },

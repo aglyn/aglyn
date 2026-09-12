@@ -30,7 +30,7 @@ import { PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 export type ReleaseFlagKey =
-  | 'release_contacts'
+  | 'release_crm'
   | 'release_bookings'
   | 'release_events'
   | 'release_data_store'
@@ -47,6 +47,7 @@ export type ReleaseFlagKey =
   | 'release_native_checkout'
   | 'release_edit_bar'
   | 'release_assist'
+  | 'release_video_uploads'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -71,11 +72,11 @@ export interface ReleaseFlagDefinition {
  */
 export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   {
-    key: 'release_contacts',
-    label: 'Contacts CRM',
+    key: 'release_crm',
+    label: 'CRM',
     description:
-      'Unified contacts list, segments and profile drawer (Contacts CRM v1).',
-    defaultEnabled: false,
+      'The CRM: contacts, leads, companies, deals, tasks, reports and fields.',
+    defaultEnabled: true,
     navTabId: 'nav-tab-contacts',
   },
   {
@@ -240,6 +241,20 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'all and sends customer site content to Anthropic on the key plus a ' +
       'Pro entitlement alone. Setting the key in production therefore makes ' +
       'Anthropic a subprocessor whether or not this flag is ever flipped.',
+    defaultEnabled: false,
+  },
+  // Ingress only, and with no staff preview on the server: a video a staff
+  // session uploads into a customer's library serves on that customer's pages
+  // like any other, so a grant goes to the org through its override.
+  // `apps/console/utils/server/video-uploads.ts` holds the gate.
+  {
+    key: 'release_video_uploads',
+    label: 'Video uploads',
+    description:
+      'New video in the media library, on every upload path (AGL-2830). ' +
+      'Off: refused with 403 video_uploads_paused, as DAM video delivery is ' +
+      'not yet metered or bounded per org (AGL-2810, AGL-2812). Images, ' +
+      'documents and stored videos are unaffected.',
     defaultEnabled: false,
   },
 ]

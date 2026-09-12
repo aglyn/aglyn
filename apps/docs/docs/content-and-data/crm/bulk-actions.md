@@ -14,6 +14,14 @@ in Texas" first and ticking the header checkbox acts on exactly those. Each
 section's bar offers what that record can do; every bar has **Export CSV**,
 **Export all…** and **Clear**.
 
+:::info Plan availability
+Bulk actions are part of the **CRM**, included from **Starter**. On Free every CRM
+section is shown locked, and no bar is offered. The complete contacts and leads files
+that **Export all…** writes are on every plan under
+[Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
+See [What each plan includes](./overview.md#what-each-plan-includes).
+:::
+
 ## Two exports, and the difference matters
 
 - **Export CSV** writes the rows on screen — the selection, or the page the
@@ -49,7 +57,7 @@ workspace's, enforced on the server rather than in the browser.
 | **Add tag** | Type a tag; it is added to every selected contact that does not already have it. Tags are lowercased, the same as on a contact's profile. A contact already holding 20 tags is skipped and named. |
 | **Remove tag** | Type a tag; it is removed from every selected contact that has it. Contacts without it are left alone. |
 | **Set owner** | Pick a team member. Every selected contact is assigned to them. Choose **Nobody** to clear the owner. |
-| **Set stage** | Pick a lifecycle stage — subscriber, lead, marketing qualified, sales qualified, opportunity, customer, evangelist or other. |
+| **Set stage** | Pick a lifecycle stage — subscriber, lead, marketing qualified, sales qualified, opportunity, customer, evangelist or other. Each contact is moved through the server, one at a time, so every move fires [Contact changed stage](./automations.md#the-events) exactly as a move on the contact's page does; a contact already at that stage fires nothing. A contact the move is refused for is named. |
 | **Set company** | Pick a [company](./companies.md) — the same picker a contact's record has, with a **Create** row for a name nobody has filed yet. Every selected contact is linked to it, and its name is written to their records. Leave the picker empty to unlink the selection. A contact already at that company is left alone. |
 | **Add to list** | Put the selected contacts on an [email audience](../../marketing-and-automation/email-campaigns/overview.md#email-lists). This runs the same check the audience's own page runs — see below. |
 | **Export CSV** | Download the selected rows as `contacts-selected.csv` — the same file the table's own **Export CSV** writes over the whole page. See [the contacts file](#the-contacts-file). |

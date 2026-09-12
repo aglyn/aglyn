@@ -812,7 +812,7 @@ letting them choose "report spam", and a complaint costs you far more than a
 slower cadence does. Campaigns leave on a sending domain of this site's own, so
 that complaint lands on your reputation and nobody else's.
 
-Nothing is cancelled. A message that arrives too soon **waits** — the person
+Nothing is canceled. A message that arrives too soon **waits** — the person
 stays on every audience they were on, and the next one due reaches them. A
 reminder or an alert that was held is retried once enough time has passed.
 

@@ -274,10 +274,12 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
      * People, by name, email, phone number or company (AGL-2596). The phone
      * and the company name are top-level echoes of the viewing holder's
      * facet, written by every path that sets them, precisely so this read —
-     * which never resolves a facet — can hit them. Ungated by plan: every
-     * tier has an audience band. Gated by the CALLER instead: the dialog
-     * supplies `orgDataTokens` only when the Contacts surface is released
-     * for the viewer and they hold `data.manage`, which is the read rule.
+     * which never resolves a facet — can hit them. Gated by the CALLER: the
+     * dialog supplies `orgDataTokens` only when the Contacts surface is
+     * released for the viewer and they hold `data.manage`, which is the read
+     * rule. And by the PLAN, like every CRM group here: the CRM is included
+     * from Starter (AGL-2851), so a workspace without `features.crm` is
+     * never read for it.
      */
     id: 'contacts',
     group: 'Contacts',
@@ -287,6 +289,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     nameField: 'name',
     fallbackNameField: 'email',
     extraFields: ['email', 'phone', 'companyName'],
+    featureKey: 'crm',
   },
   {
     /*
@@ -304,6 +307,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     fallbackNameField: 'email',
     extraFields: ['email'],
     surface: 'crm',
+    featureKey: 'crm',
     /*
      * And every site's leads at the org hub (AGL-2662), which is where the
      * org-level Leads list already shows them. Read a site at a time for
@@ -328,6 +332,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     collection: 'companies',
     nameField: 'name',
     extraFields: ['domain'],
+    featureKey: 'crm',
   },
   {
     id: 'deals',
@@ -336,6 +341,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     scopeKind: 'orgData',
     collection: 'deals',
     nameField: 'title',
+    featureKey: 'crm',
   },
   {
     /*
@@ -356,6 +362,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     collection: CRM_COLLECTIONS.tasks,
     nameField: 'title',
     extraFields: ['notes'],
+    featureKey: 'crm',
   },
   {
     id: 'activities',
@@ -369,6 +376,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     nameField: 'subject',
     fallbackNameField: 'body',
     extraFields: ['body', 'outcome'],
+    featureKey: 'crm',
   },
   {
     id: 'components',

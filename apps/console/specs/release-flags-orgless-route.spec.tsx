@@ -53,7 +53,7 @@ import { join } from 'node:path'
 import type { ReleaseFlagValue } from '@aglyn/aglyn'
 
 const ORG_ID = 'org-fallback'
-const FLAG = 'release_contacts'
+const FLAG = 'release_crm'
 
 const route = { pathname: '/', subdomainSlug: null as string | null }
 let mockFlagValue: ReleaseFlagValue

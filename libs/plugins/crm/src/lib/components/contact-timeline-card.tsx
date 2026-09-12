@@ -49,6 +49,7 @@ import {
   useActivityWindow,
   useCanEditActivity,
 } from './activity-queries'
+import { CrmSuiteLockedButton } from './crm-suite-lock'
 import { LogActivityDialog } from './log-activity-dialog'
 import { useContactCampaignEmails } from './use-contact-campaign-emails'
 
@@ -223,6 +224,12 @@ export interface ContactTimelineCardProps {
    * no links, never a guessed one.
    */
   campaignHref?: (email: ContactCampaignEmail) => string | null
+  /**
+   * The org's plan lacks the CRM (AGL-2788), which the shell mounts no CRM
+   * page for (AGL-2851). The history still draws; logging an activity stands
+   * locked, and one already logged cannot be edited.
+   */
+  suiteLocked?: boolean
 }
 
 /**
@@ -259,7 +266,7 @@ export interface ContactTimelineCardProps {
  * activity" rather than "more history".
  */
 export function ContactTimelineCard(props: ContactTimelineCardProps) {
-  const { hostId, org, contactId, contact, campaignHref } = props
+  const { hostId, org, contactId, contact, campaignHref, suiteLocked = false } = props
   const scope = useActivityScope(hostId, org)
   /*
    * THIS holder's captured history, and only the visits this group may see.
@@ -346,15 +353,21 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
         header={'Timeline'}
         help={pluginDocsHelp('contactActivities', { anchor: '#four-kinds-of-history' })}
         actions={
-          <Button
-            size="small"
-            variant="contained"
-            color="primary"
-            onClick={openNew}
-            disabled={!activities.ready}
-          >
-            {'Log activity'}
-          </Button>
+          suiteLocked ? (
+            <CrmSuiteLockedButton variant="contained" color="primary">
+              {'Log activity'}
+            </CrmSuiteLockedButton>
+          ) : (
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              onClick={openNew}
+              disabled={!activities.ready}
+            >
+              {'Log activity'}
+            </Button>
+          )
         }
         contentGutterX
         contentGutterY
@@ -385,15 +398,21 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
               label={'No history yet'}
               description={'What this person does on the site, the campaigns they are sent, and what you log about them, shows here.'}
               action={
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="primary"
-                  onClick={openNew}
-                  disabled={!activities.ready}
-                >
-                  {'Log activity'}
-                </Button>
+                suiteLocked ? (
+                  <CrmSuiteLockedButton variant="contained" color="primary">
+                    {'Log activity'}
+                  </CrmSuiteLockedButton>
+                ) : (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="primary"
+                    onClick={openNew}
+                    disabled={!activities.ready}
+                  >
+                    {'Log activity'}
+                  </Button>
+                )
               }
             />
             )
@@ -421,7 +440,7 @@ export function ContactTimelineCard(props: ContactTimelineCardProps) {
                   onEdit={openEdit}
                   subject={loggedChip}
                   nowMs={nowMs}
-                  editable={canEdit(entry.activity)}
+                  editable={!suiteLocked && canEdit(entry.activity)}
                 />
               ),
             )

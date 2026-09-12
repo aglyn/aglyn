@@ -25,6 +25,7 @@ import {
   CRM_EMAIL_USAGE_COLLECTION,
   crmEmailUsageDayKey,
   emailSendsOverage,
+  planLabelGrantingFeature,
   priceEmailSendOverage,
   resolveHostCollaboratorCap,
   resolveOrgEntitlements,
@@ -709,6 +710,8 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     ? recordsParts.contacts + recordsParts.companies + recordsParts.deals
     : null
   const recordsQuota = checkCrmRecordsQuota(org, crmRecordsCount ?? 0)
+  /** Whether the plan carries the CRM, which decides what the band is called. */
+  const crmIncluded = entitlements.features.crm
   /*
    * API requests past the plan's included band, priced.
    *
@@ -747,7 +750,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const emailOveragePrice = priceEmailSendOverage(org, emailOverage)
   // ...unless the invoice is withholding it (AGL-1658). AGL-1604 stopped the
   // usage cron putting `contactsOverageUsd` into `billedCents` while
-  // `release_contacts` is off for the org, and this caption kept quoting the
+  // `release_crm` is off for the org, and this caption kept quoting the
   // dollar figure — the same defect with the sign reversed, on the page a
   // customer reads before deciding to stay.
   //
@@ -763,12 +766,13 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // Billing text must follow what is billed, not who is looking.
   //
   // Gated on `ready` — before Remote Config activation every flag reads its
-  // registry default (`release_contacts` is default-off), so an unguarded
-  // caption would assert "not billed" for one paint on an org that IS billed.
+  // registry default, which is no org's verdict, so an unguarded caption
+  // would make a claim about money for one paint that the org's own verdict
+  // may contradict.
   // A billing claim is not made until the verdict that decides it has settled;
   // the head-count meter above renders throughout.
   const { released: contactsBilled, ready: releaseFlagsReady } =
-    useReleaseFlag('release_contacts')
+    useReleaseFlag('release_crm')
   // The overage caption is confined to a plan that can be charged for the
   // excess (`overageRateUsd` non-null) and to a settled flag verdict; the
   // breakdown caption above it renders regardless, because the parts are a
@@ -804,8 +808,16 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         limit={entitlements.dataStorageMbPerOrg}
         unit="MB"
       />
+      {/*
+        THE BAND, NAMED FOR WHAT THE PLAN HAS (AGL-2851). With the CRM it is
+        the CRM's records band. Without it — Free — the same count still
+        caps capture: past it a site adds no new person. Free has no CRM, so
+        the meter names the stored records the cap counts rather than a CRM
+        the plan cannot open, and the caption says what the cap stops and
+        where working those people is sold.
+      */}
       <UsageMeter
-        label="CRM records (organization)"
+        label={crmIncluded ? 'CRM records (organization)' : 'Stored records (organization)'}
         used={crmRecordsCount}
         limit={entitlements.contactsPerHost}
         help={docsHelp('billing', { anchor: '#crm-records' })}
@@ -823,9 +835,14 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           color="text.secondary"
           sx={{ display: 'block', mt: -1.5, mb: showRecordsOverage ? 0.5 : 2 }}
         >
-          {`Contacts ${recordsParts.contacts.toLocaleString()} · ` +
-            `Companies ${recordsParts.companies.toLocaleString()} · ` +
-            `Deals ${recordsParts.deals.toLocaleString()}`}
+          {crmIncluded
+            ? `Contacts ${recordsParts.contacts.toLocaleString()} · ` +
+              `Companies ${recordsParts.companies.toLocaleString()} · ` +
+              `Deals ${recordsParts.deals.toLocaleString()}`
+            : 'At this limit your sites stop adding new people. Working with ' +
+              `them is part of the CRM, included from ${
+                planLabelGrantingFeature('crm') ?? 'a paid plan'
+              }.`}
         </Typography>
       ) : null}
       {showRecordsOverage ? (

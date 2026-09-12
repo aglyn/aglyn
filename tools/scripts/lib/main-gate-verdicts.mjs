@@ -47,11 +47,12 @@
 //
 // ── WHY AN ABSENT `main-gate/full` IS NOT A FAILURE ────────────────────────
 //
-// `fast` runs on every push to `main` (AGL-2534); `full` runs only on the
-// hourly cron, which GitHub delivers at roughly 11%. So most shas legitimately
-// carry `fast` and no `full`. Demanding both would make this check refuse
-// almost every promotion, for a reason that says nothing about the code.
-// An absent `full` is therefore never a refusal.
+// `fast` grades every push to `main` (AGL-2534); `full` grades the newest push,
+// one sweep at a time (AGL-2836). So a sha that landed while a sweep was
+// running, or whose own sweep is still in flight, legitimately carries `fast`
+// and no `full`. Demanding both would stall a promotion on queue timing, for a
+// reason that says nothing about the code. An absent `full` is therefore never
+// a refusal.
 //
 // ── WHY AN ABSENT `main-gate/full` IS NOT GREEN EITHER (AGL-2564) ──────────
 //

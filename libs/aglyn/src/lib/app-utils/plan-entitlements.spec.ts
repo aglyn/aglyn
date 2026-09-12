@@ -794,8 +794,8 @@ describe('plan entitlements', () => {
     const table: Array<[OrgPlan, keyof typeof PLAN_ENTITLEMENTS.free.features, boolean]> = [
       ['free', 'workflows', false],
       ['free', 'dataStore', false],
-      // The CRM suite starts at Starter (AGL-2611); Free keeps the contacts
-      // list through the band, not through this flag.
+      // The CRM starts at Starter (AGL-2611). Free has none of it (AGL-2851);
+      // what its capture writes is capped by the band, not by this flag.
       ['free', 'crm', false],
       ['starter', 'crm', true],
       ['enterprise', 'crm', true],
@@ -1021,7 +1021,7 @@ describe('plan entitlements', () => {
     // than metered — unlike the records band beside it.
     expect(checkCrmEmailQuota({ plan: 'agency' } as any, 1_000, noon).allowed).toBe(false)
     expect(checkCrmEmailQuota({ plan: 'agency' } as any, 999, noon).allowed).toBe(true)
-    // Free has no suite and no cap to spend: refused at zero.
+    // Free has no CRM and no cap to spend: refused at zero.
     const free = checkCrmEmailQuota({ plan: 'free' } as any, 0, noon)
     expect(free.allowed).toBe(false)
     expect(free.included).toBe(0)

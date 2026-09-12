@@ -27,6 +27,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Download everything the workspace holds (AGL-1974).
@@ -145,6 +146,10 @@ async function handler(request: Request): Promise<Response> {
       },
     })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[orgs/export-data] failed', error)
     return Response.json({ error: 'Preparing the export failed' }, { status: 500 })
   }

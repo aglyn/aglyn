@@ -104,6 +104,7 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -112,6 +113,7 @@ import {
   dealEventPayload,
 } from './model/deal-board-model'
 import { authorizeOrgCaller, readCrmRouteScope } from './server/org-caller'
+import { crmSuiteRefusal } from './server/suite-gate'
 
 /** The most a lost reason may carry — a sentence or two, not a post-mortem. */
 export const LOST_REASON_MAX = 500
@@ -174,8 +176,12 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     let uid: string
     try {
       uid = (await firebaseAdmin.app().auth().verifyIdToken(idToken)).uid
-    } catch {
-      return res.status(401).json({ error: 'Unauthenticated' })
+    } catch (error) {
+      // A refused credential is the caller's 401; a failure to check one is
+      // ours and keeps a 5xx (AGL-2852).
+      if (isRefusedIdToken(error)) return res.status(401).json({ error: 'Unauthenticated' })
+      console.error('[crm] deal-stage could not verify the caller', error)
+      return res.status(500).json({ error: 'The sign-in could not be checked. Try again.' })
     }
 
     const owner = await getOrgForHost(routeScope.hostId).catch(() => null)
@@ -202,6 +208,10 @@ export const crmDealStageHandler: PluginApiHandler = async (req, res) => {
     orgId = owner.orgId
     org = owner.org as Record<string, unknown>
   }
+
+  // Deals are the CRM suite's, at either level (AGL-2787).
+  const suite = crmSuiteRefusal(org, 'Moving a deal through its pipeline')
+  if (suite) return res.status(suite.status).json(suite.body)
 
   const firestore = firebaseAdmin.app().firestore()
   const orgRef = firestore.collection('orgs').doc(orgId)

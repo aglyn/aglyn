@@ -31,8 +31,9 @@
  * **outside the repo**: the marketing pricing table is besigner-published
  * content, served from Firestore, and no build step can read it. So the
  * numbers below are a TRANSCRIPTION of what the public page serves — first
- * fetched **2026-08-19**, and re-transcribed row by row from the republish of
- * **2026-09-07** (screen `v0clP6xQl-`, version `zj-21jtrPG`) — and their
+ * fetched **2026-08-19**, re-transcribed row by row from the republish of
+ * **2026-09-07** (screen `v0clP6xQl-`, version `zj-21jtrPG`), and with the
+ * CRM rows taken from version `uMk4E9o739` of **2026-09-11** — and their
  * whole job is to be a fixed point that does NOT move when the constants do.
  * Deriving them from `PLAN_ENTITLEMENTS` would make the file assert `x === x`
  * and prove nothing at all.
@@ -65,6 +66,7 @@ import { METERED_MARKUP, METERED_UNIT_RATES_USD } from '../utils/usage-metering'
 import {
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  RELEASE_FLAGS,
   SELF_SERVE_PLANS,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -109,6 +111,22 @@ function flagColumn(flag: string): boolean[] {
   return PUBLISHED_COLUMNS.map(
     (plan) =>
       (PLAN_ENTITLEMENTS[plan].features as Record<string, boolean>)[flag],
+  )
+}
+
+/**
+ * `—` on a CRM row. A plan without `features.crm` opens no part of the CRM
+ * (2026-09-11, AGL-2851), so the page names no CRM figure for it, whatever
+ * band the plan still carries. Unlike `NONE`, this dash is not a zero.
+ */
+const NO_CRM = '—'
+
+/** A CRM row: the plan's figure where it carries the CRM, a dash where not. */
+function crmColumn(key: string): Array<number | typeof NO_CRM> {
+  return PUBLISHED_COLUMNS.map((plan) =>
+    PLAN_ENTITLEMENTS[plan].features.crm
+      ? (PLAN_ENTITLEMENTS[plan] as unknown as Record<string, number>)[key]
+      : NO_CRM,
   )
 }
 
@@ -426,24 +444,41 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * `prices` block below. That rate is what makes the bound METER rather
      * than wall: without it `checkCrmRecordsQuota` refuses past the band.
      */
-    it('CRM records included — 100 · 1k · 10k · 50k · 100k · 150k · 500k', () => {
-      const PUBLISHED: Row = [100, 1000, 10000, 50000, 100000, 150000, 500000]
-      expect(quotaColumn('contactsPerHost')).toEqual(PUBLISHED)
-      // Every self-serve cell is finite, which is the property the cost model
-      // needs; only Enterprise's "Talk to us" is unbounded.
-      for (const value of PUBLISHED) expect(Number.isFinite(value)).toBe(true)
+    it('CRM records included — — · 1k · 10k · 50k · 100k · 150k · 500k', () => {
+      const PUBLISHED = [NO_CRM, 1000, 10000, 50000, 100000, 150000, 500000]
+      expect(crmColumn('contactsPerHost')).toEqual(PUBLISHED)
+      // Every band is finite, the one Free keeps included, which is the
+      // property the cost model needs; only Enterprise's "Talk to us" is
+      // unbounded.
+      for (const value of quotaColumn('contactsPerHost')) {
+        expect(Number.isFinite(value)).toBe(true)
+      }
+    })
+
+    it("Free's records cell is the CRM it cannot open, not a band of zero", () => {
+      // The page dashes the cell because Free opens no CRM for the band to
+      // fill. The band itself still holds: people a Free site's forms capture
+      // count against a hard 100-record wall with no rate past it. Reading
+      // the dash as a zero and "fixing" the entitlement to match would move
+      // enforcement that no pricing decision moved.
+      expect(PLAN_ENTITLEMENTS.free.features.crm).toBe(false)
+      expect(PLAN_ENTITLEMENTS.free.contactsPerHost).toBe(100)
+      expect(PLAN_PRICING.free.extraContactsUsdPer1k).toBeNull()
     })
 
     /**
-     * TWO ROWS THE PAGE GAINED ON 2026-09-07, with the CRM launch.
+     * THE CRM ROW AND ONE-TO-ONE EMAIL, BELOW THE RECORDS BAND.
      *
-     * The suite — leads, companies, deals and tasks — is included from
+     * The CRM (contacts, leads, companies, deals and tasks) is included from
      * Starter rather than Pro: the field prices a CRM seat at $14–25 a month,
-     * so Starter with the suite included is the competitive entry, and gating
+     * so Starter with the CRM included is the competitive entry, and gating
      * a tier higher hands the small-business buyer to a free CRM elsewhere.
-     * Free keeps the Contacts section, which is the capture projection its
-     * email audiences read, and sees the rest locked. The Starter card sells
-     * this where it used to sell 500 campaign emails.
+     * The Starter card sells this where it used to sell 500 campaign emails.
+     *
+     * The CRM is paid-only (2026-09-11, AGL-2851): a Free workspace opens no
+     * part of it, Leads included. So the page carries one CRM row, with a
+     * dash for Free there and on the records band above it, transcribed from
+     * screen `v0clP6xQl-` version `uMk4E9o739` (AGL-2831).
      *
      * One-to-one email is a hard daily pace per organization with no overage
      * rate on any tier — `checkCrmEmailQuota` refuses the send past it — set
@@ -451,17 +486,33 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * annual price with the whole day spent (`tier-margin-floor.spec.ts`),
      * not at a usability figure.
      */
-    it('CRM suite: leads, companies, deals & tasks — ✓ from Starter', () => {
-      expect(flagColumn('crm')).toEqual([
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-      ] satisfies TickRow)
-      expect(PLAN_ENTITLEMENTS.enterprise.features.crm).toBe(true)
+    describe('CRM: contacts, leads, companies, deals & tasks — — · ✓ from Starter', () => {
+      const PUBLISHED = [NO_CRM, '✓', '✓', '✓', '✓', '✓', '✓']
+
+      it('ticks exactly the plans that carry `features.crm`', () => {
+        expect(flagColumn('crm').map((crm) => (crm ? '✓' : NO_CRM))).toEqual(
+          PUBLISHED,
+        )
+        expect(PLAN_ENTITLEMENTS.enterprise.features.crm).toBe(true)
+      })
+
+      it('dashes both CRM rows on the same plans', () => {
+        // One rule renders the two rows: a plan without `features.crm` names
+        // no CRM figure. A plan that gains or loses the CRM moves both.
+        expect(crmColumn('contactsPerHost').map((cell) => cell === NO_CRM)).toEqual(
+          flagColumn('crm').map((crm) => !crm),
+        )
+      })
+
+      it('ticks a CRM a paying workspace can open, because the CRM is released', () => {
+        // With the CRM's release flag off by default, no workspace would
+        // reach the CRM and every tick in this row would promise a locked
+        // section (AGL-2772).
+        expect(
+          RELEASE_FLAGS.find((flag) => flag.key === 'release_crm')
+            ?.defaultEnabled,
+        ).toBe(true)
+      })
     })
 
     it('One-to-one emails / day — — · 50 · 150 · 200 · 300 · 500 · 1,000', () => {
@@ -541,19 +592,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * A ROW THE PAGE DOES NOT CARRY AT ALL.
-     *
-     * Sending identity was not a published axis when `/pricing` was drawn, so
-     * there is no cell here to be ahead of — the whole row is new. It is
-     * pinned anyway, and for the same reason the email bands are: the gap
-     * between what the code sells and what the page says has to be visible as
-     * data, or the republish it is waiting on is remembered by nobody.
-     *
-     * Delete this block, and the `EXPECTED_MISSING` entry in
-     * `tools/marketing/build-pricing-tables.mts`, once the four responsive
-     * frames carry the row.
+     * Sending identity is a row of its own, beside the campaign band rather
+     * than beside "Custom domain & SSL", which is the site's public web
+     * address and authorizes nothing about mail. The page carries it (screen
+     * `v0clP6xQl-`, row `Kg15_-jaFq` on version `uMk4E9o739`) and so do the
+     * four responsive frames (AGL-2679): — · — · ✓ from Pro.
      */
-    describe('Send email from your own domain — a row the page has never had', () => {
+    describe('Send email from your own domain — — · — · ✓ from Pro', () => {
       it('starts at Pro, and Free and Starter do not carry it', () => {
         expect(flagColumn('customSendingDomain')).toEqual([
           false,

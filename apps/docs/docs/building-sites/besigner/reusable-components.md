@@ -82,15 +82,17 @@ This is what stops a hero from being rebuilt on every page. Only the words diffe
 | Text | Single-line text |
 | Long text | Multi-line text |
 | Image | Image picker |
-| Link | Screen picker, or an external URL |
+| Link | Screen picker (screens and collection listings), or an external URL |
 | Number | Number |
 | Yes / no | Toggle |
 
 A **Link** property is a screen picker at both ends — in the dialog's **Default** column and
 in each instance's Attributes panel — exactly like a Button's own **Link to screen** field.
 It stores the screen's id, not its address, so the link keeps working when that screen's slug
-or parent changes. Choose **External URL or path…** for anything that is not one of your
-screens; a typed address is used verbatim and does not follow a rename.
+or parent changes. The picker also lists each content collection's listing page, such as
+**Blog (/blog) — collection listing**; picking one stores the collection, so the link follows
+that collection's slug the same way. Choose **External URL or path…** for anything that is
+neither; a typed address is used verbatim and does not follow a rename.
 
 Link properties written before the picker existed hold a typed address. They keep working
 unchanged — but they are still typed addresses, so pick the screen again if you want them to
@@ -125,8 +127,8 @@ read the published component.
 1. **Save properties** — the dialog confirms *"Properties saved. Publish to make them
    available on live pages."*
 2. **File ▸ Publish to sites** (labeled **Publish again** when the version you have open
-   is already the published one) — *"Published. Every screen using this component picks
-   it up within a minute — you do not need to republish them."*
+   is already the published one) — *"Published. Every screen using this component is
+   refreshing now — you do not need to republish them."*
 
 Publishing the component is enough. You do not republish the pages that use it.
 

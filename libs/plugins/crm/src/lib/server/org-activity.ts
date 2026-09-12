@@ -54,6 +54,7 @@ import {
   type CrmOrgActivityKind,
 } from '../constants/api-routes'
 import { authorizeOrgCaller } from './org-caller'
+import { crmSuiteRefusal } from './suite-gate'
 
 export const CRM_ORG_ACTIVITY_ROUTE = CRM_API_ROUTES.orgActivity
 
@@ -109,6 +110,12 @@ export const crmOrgActivityHandler: PluginApiHandler = async (req, res) => {
     })
     if (caller.ok === false) {
       res.status(caller.status).json({ error: caller.error })
+      return
+    }
+    // The plan after the caller, before the line is written (AGL-2851).
+    const suite = crmSuiteRefusal(caller.org, "Logging a CRM act to the organization's feed")
+    if (suite) {
+      res.status(suite.status).json(suite.body)
       return
     }
     await logOrgActivity(orgId, { uid: caller.uid, email: caller.email }, action, {

@@ -16,6 +16,7 @@
  */
 
 import {
+  checkEntitlement,
   consentGroupForHost,
   contactCsvRowFromDoc,
   contactPrimaryGroup,
@@ -29,6 +30,7 @@ import {
   MAX_SCOPE_HOSTS,
   memberCanSee,
   memberScopeTokens,
+  planLabelGrantingFeature,
   pluginRequestFromWeb,
   type CrmExportOptions,
   type CrmExportResource,
@@ -43,6 +45,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Documents read per round trip. Not a cap — the stream keeps paging until
@@ -160,9 +163,17 @@ async function handler(request: Request): Promise<Response> {
     const member = membership?.member
     if (!member && !staff) return json({ error: 'Not found' }, 404)
 
-    // The surface is release-flagged, so the route is too: an export door
-    // standing open on a hub nobody can reach is a door.
-    if (!staff && !(await isServerReleaseFlagOnForOrg('release_contacts', orgId))) {
+    /*
+     * THE PEOPLE FILES ARE EVERY WORKSPACE'S (AGL-2839, AGL-2851).
+     *
+     * Exporting the contacts and leads a workspace holds is an obligation,
+     * not a CRM feature — a Free workspace takes them from its Privacy
+     * settings — so neither the release flag nor the plan is asked of those
+     * two. The CRM's own records, companies, deals and tasks, are asked
+     * both: the flag here, and the plan once the org has been read.
+     */
+    const peopleFile = resource === 'contacts' || resource === 'leads'
+    if (!peopleFile && !staff && !(await isServerReleaseFlagOnForOrg('release_crm', orgId))) {
       return json({ error: 'Not available' }, 404)
     }
     // The permission the CRM's own rules read for. Reading is not writing,
@@ -185,6 +196,23 @@ async function handler(request: Request): Promise<Response> {
       org,
     })
     if (locked) return locked
+
+    // The CRM's own records on a plan without the CRM, staff included: the
+    // refusal every `crm/*` route gives, after the caller is known.
+    if (!peopleFile && !checkEntitlement(org as never, 'crm')) {
+      const plan = planLabelGrantingFeature('crm')
+      return json(
+        {
+          error:
+            `Exporting ${resource} is part of the CRM, which is not included in ` +
+            'your current plan. Manage your plan and add-ons from Billing.' +
+            (plan ? ` Included from ${plan}.` : ''),
+          reason: 'plan_required',
+          code: 'crm',
+        },
+        403,
+      )
+    }
 
     const orgWide = staff || isOrgWideMember(member)
     // `array-contains-any` takes at most thirty values, which is also the
@@ -482,7 +510,11 @@ async function handler(request: Request): Promise<Response> {
         'Cache-Control': 'no-store, private',
       },
     })
-  } catch {
+  } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     return json({ error: 'Export failed' }, 500)
   }
 }

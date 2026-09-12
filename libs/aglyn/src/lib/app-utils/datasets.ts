@@ -215,6 +215,56 @@ export function buildDatasetRecordValues(
   return values
 }
 
+/**
+ * The name a dataset is shown under: `displayName`, which is what every create
+ * path writes (AGL-536), then the pre-migration `name`. Blank when the document
+ * carries neither.
+ */
+export function datasetDisplayName(
+  dataset: { displayName?: unknown; name?: unknown } | null | undefined,
+): string {
+  for (const candidate of [dataset?.displayName, dataset?.name]) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim()
+    }
+  }
+  return ''
+}
+
+/** One entry in a dataset select: stored by id, shown by name. */
+export interface DatasetPickerOption {
+  id: string
+  name: string
+}
+
+/**
+ * The options a dataset select offers, sorted by the label shown.
+ *
+ * Deleted datasets are left out. Each is labeled by
+ * {@link datasetDisplayName}; one whose document carries no name at all is
+ * offered under its id, because a select that hides it leaves a dataset that
+ * cannot be picked.
+ */
+export function datasetPickerOptions(
+  docs:
+    | ReadonlyArray<{
+        $id?: string
+        deletedAt?: unknown
+        displayName?: unknown
+        name?: unknown
+      }>
+    | null
+    | undefined,
+): DatasetPickerOption[] {
+  return (docs ?? [])
+    .filter((dataset) => !dataset.deletedAt && dataset.$id)
+    .map((dataset) => ({
+      id: dataset.$id as string,
+      name: datasetDisplayName(dataset) || (dataset.$id as string),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 /** Records sorted by their editor order (then id for stability). */
 export function sortDatasetRecords<T extends HostDatasetRecord>(
   records: T[],

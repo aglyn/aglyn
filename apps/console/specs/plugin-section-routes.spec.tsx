@@ -178,10 +178,10 @@ import { ReleaseFlagsProvider } from '../hooks/use-release-flags'
 
 /**
  * Two REAL flags, so the `navTabId` → flag lookup under test is the shipped
- * one rather than a fixture: `nav-tab-contacts` is `release_contacts` and
+ * one rather than a fixture: `nav-tab-contacts` is `release_crm` and
  * `nav-tab-bookings` is `release_bookings` in `RELEASE_FLAGS`.
  */
-const PARENT_FLAG = 'release_contacts'
+const PARENT_FLAG = 'release_crm'
 const SECTION_FLAG = 'release_bookings'
 
 beforeEach(() => {

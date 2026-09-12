@@ -227,15 +227,15 @@ range):
 | 2 | no verdict | Main Gate has not graded the tip at all, normally a race with a very recent push. Warns |
 | 3 | **unexamined** | the tip passed `main-gate/fast` only, and no full sweep has ever run on it, so nobody has run its tests. Warns |
 
-An absent `full` never blocks, and that is deliberate: it runs on a cron GitHub
-delivers a fraction of the time, so most shas legitimately carry `fast` and no
-`full`, and demanding both would refuse nearly every promotion for a reason
-that says nothing about the code. It used to print identically to a passing
-sweep, which is how `d1cbc338f` shipped a three-spec tests regression under a
-green tick on 2026-09-03 (AGL-2564). Exit 3 gives that case its own words. It
-also names the newest commit in the range a sweep did pass on, so you can see
-how much of what you are shipping is unexamined — decide knowingly, or run the
-full gate yourself first.
+An absent `full` never blocks, and that is deliberate: the sweep grades the
+newest push, so a tip that landed while a sweep ran, or whose own sweep is still
+in flight, legitimately carries `fast` and no `full` (AGL-2836), and demanding
+both would stall a promotion on queue timing rather than on the code. It used to
+print identically to a passing sweep, which is how `d1cbc338f` shipped a
+three-spec tests regression under a green tick on 2026-09-03 (AGL-2564). Exit 3
+gives that case its own words. It also names the newest commit in the range a
+sweep did pass on, so you can see how much of what you are shipping is
+unexamined — decide knowingly, or wait for the sweep on the tip to finish.
 
 #### Is `tools/gate.sh` still required?
 
@@ -263,9 +263,79 @@ is merged. Tagging after the fact means a tag asserts something stronger:
 That is what makes "what shipped in v1.0.0-beta.3?" answerable a year later.
 
 `release:tag` refuses unless the tag is new, the version at that commit is ahead
-of the newest existing tag, and `CHANGELOG.md` there documents it. The second
-guard catches the commonest real mistake — promoting a batch that did not
+of the release that precedes it, and `CHANGELOG.md` there documents it. The
+second guard catches the commonest real mistake — promoting a batch that did not
 include the `chore(release)` commit.
+
+#### Backfilling a tag that was missed
+
+Because this step is run by hand, it is also the step that gets skipped. On
+2026-09-10 `v1.0.0-beta.114` and `v1.0.0-beta.115` were both cut, promoted and
+served, and neither was tagged — which breaks "what shipped in
+`v1.0.0-beta.115`?" for exactly those releases while leaving the series looking
+merely gappy.
+
+```bash
+npm run release:tag -- --at <sha>                  # report only
+npm run release:tag -- --at <sha> --write --push
+```
+
+On top of the three ordinary guards, `--at` requires the commit to be an
+**ancestor of `origin/production`** (so it was merged there), to sit on that
+branch's **first-parent line** (so it is a promotion, not a branch merge that a
+promotion swallowed), to be a **merge commit**, and to carry **no other release
+tag**. The "version is ahead" guard compares against the newest tag **reachable
+from that commit** rather than the newest tag in the repo — otherwise a correct
+backfill would be refused for sitting behind a release cut after it.
+
+##### Merged is not served, and git cannot tell them apart
+
+Those guards prove the commit was **promoted**. They do not prove the tag's
+actual claim, which is that the tree was *built and served* — and the difference
+is the entire hazard of backfilling.
+
+`v1.0.0-beta.5` is the worked example. It merged to `production` as `f2bac3cd1`
+and is **deliberately untagged**: both `console:build:production` and
+`tenant:build:production` errored on Vercel after the merge, so the aliases kept
+serving the previous READY build and that tree never reached a user.
+`v1.0.0-beta.6` carries the fix and is tagged. Every guard above passes on
+`f2bac3cd1` and the tag would still be false.
+
+So **a gap is not automatically a defect to close.** Back-filling one to make the
+sequence look continuous would make every tag mean merely "merged", which is the
+weaker claim the scheme exists to avoid.
+
+On the forward path you settle this by running `verify-production-aliases.mjs`
+against the live aliases at tag time. That tool reads *current* state, so it can
+say nothing about a historical commit. `--write` under `--at` therefore refuses
+without an explicit attestation, which is recorded in the annotation rather than
+assumed:
+
+```bash
+npm run release:tag -- --at <sha> --write \
+  --served 'vercel: console+tenant READY for <deployment-id>, <date>'
+```
+
+If you cannot establish that it served, **leave the gap**.
+
+**Most gaps in the tag series are not missed tags.** A version cut on `main`
+whose promotion was superseded by the next batch never reached production, so no
+commit carries it and there is nothing to tag — the gap is the honest record. To
+tell the two apart, ask whether any commit on `production` carries the version:
+
+```bash
+git log origin/production --first-parent --format='%H' \
+  | while read -r sha; do
+      printf '%s %s\n' "$(git show "$sha:package.json" | sed -n 's/.*"version": "\([^"]*\)".*/\1/p' | head -1)" "$sha"
+    done
+```
+
+One shape `--at` will not decide for you: before the monotonic guard existed a
+promotion could reach production without the bump, so the same version shipped
+as more than one tree — `1.0.0-beta.18` was served by PRs #920, #921 and #922.
+Every guard passes on all three and tagging one makes the others refuse. Which
+tree deserves the number is a judgment about history, not something a guard can
+read off the graph.
 
 ### 3.5 — Read the ledger of what this batch owes
 
@@ -284,6 +354,12 @@ means a deploy is genuinely missing, exit 2 means it could not be checked, and
 neither is clean. The same script runs in CI as `Promotion deploys`: a warning
 on the promotion PR, where the deploys are not yet due, and a failure on the
 push to `production`, where they are.
+
+CI passes `--every-target`, which verifies all three targets whether or not
+the range touched them. Without it, a deploy one promotion skipped is owed by
+exactly one push: the next promotion's range touches no rules file, verifies
+nothing, and passes with live rules still behind (AGL-2791). Add the flag by
+hand when you want the whole answer rather than this range's share of it.
 
 ### 4 — Deploy the security rules the batch contains
 
@@ -536,8 +612,14 @@ and the wrong one for a release.
 
 ## `main` is gated continuously
 
-`.github/workflows/main-gate.yml` gates `main` on a timer — typecheck plus every
-guard every 15 minutes, and the full sweep including production builds hourly.
+`.github/workflows/main-gate.yml` gates every push to `main`. The fast half
+(typecheck, `docs:typecheck` and every guard) grades each pushed commit. The
+full sweep (`main-gate-full.yml`: lint, the tests in four shards and the three
+production builds) grades the newest commit: one sweep runs at a time, and a
+push that lands while it runs waits, with only the newest waiting push kept.
+Replayed over the pushes from 2026-09-04 to 2026-09-11, that puts a push a
+median 12 and at most 22 minutes from a sweep covering it, where the hourly
+debounce it replaced measured a median 53 and a p90 of 189 (AGL-2836).
 
 The verdict lands as a **commit status on the SHA that was gated**, so a red
 belongs to the commit that caused it and shows beside that commit in the branch
@@ -568,10 +650,10 @@ and `tools-guards.yml` moved their push trigger from `main` to `production` on
 2026-08-20 because with many agents landing continuously they ran dozens of
 times an hour and every red became noise.
 
-A timer is the way out of that trade rather than around it — N commits collapse
-into one run and one verdict, so the notification rate follows the cadence
-instead of the commit rate. It does not replace this gate. It keeps `main` in a
-state where running this gate is uneventful.
+The fast half alerts once per distinct failing set on each pushed sha, and the
+full sweep grades the newest push, so a burst of commits costs one sweep and one
+full verdict. It does not replace this gate. It keeps `main` in a state where
+running this gate is uneventful.
 
 ## The changelog range
 

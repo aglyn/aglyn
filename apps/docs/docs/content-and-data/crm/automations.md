@@ -19,7 +19,7 @@ announces nothing; what each event carries is in
 | In the trigger picker | Fires when | Read more |
 | --- | --- | --- |
 | **Contact created** | A capture on your site made a **new** contact. A repeat visit by somebody already on the list is an interaction, not a new contact. The event carries the `lifecycleStage` the capture set — `lead` for a form or a booking request, `subscriber` for a sign-up or a newsletter opt-in, `customer` for an order — so a filter can pick the form captures out of the sign-ups — and `formId` when the capture came through a form, so a condition can pick one form's people out of every other door's. | [CRM events](../../marketing-and-automation/workflows-and-actions/actions-builder.md#crm-events) |
-| **Contact changed stage** | A contact's lifecycle stage was moved — from the contact's page, or by another automation. Setting the stage a contact already has fires nothing. | [Lifecycle stages](./contact-record.md#lifecycle-stages) |
+| **Contact changed stage** | A contact's lifecycle stage was moved — from the contact's page, from **Set stage** on the contacts table, or by another automation. Setting the stage a contact already has fires nothing. | [Lifecycle stages](./contact-record.md#lifecycle-stages) |
 | **Deal moved** | A deal moved between open stages, or was reopened. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
 | **Deal won** | A deal was marked won. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
 | **Deal lost** | A deal was marked lost; the reason given travels with the event. | [Moving, winning and losing](./deals.md#moving-winning-and-losing) |
@@ -33,11 +33,11 @@ editor.
 ## The steps
 
 :::info Plan availability
-The five CRM steps are part of the **CRM suite**, included from **Starter**. On a
+The five CRM steps are part of the **CRM**, included from **Starter**. On a
 workspace whose plan does not include it, a step that reaches the CRM does nothing and
 the run history records why — the plan that carries the steps is named — the same way a
 webhook step reports the plan it needs. See
-[The CRM suite](../../workspace-and-billing/billing-and-plans/overview.md#the-crm-suite).
+[The CRM](../../workspace-and-billing/billing-and-plans/overview.md#the-crm-suite).
 :::
 
 Five server steps act on the CRM: **Set the contact's lifecycle stage**, **Tag
@@ -79,7 +79,7 @@ welcome sequence shows on the person's history beside the calls a rep made.
 
 Nothing is logged when the step writes to somebody else — an internal alert sent
 to your own address through the **To** field — or when the address belongs to
-nobody this site can see. The row needs the CRM suite like the five steps above,
+nobody this site can see. The row needs the CRM like the five steps above,
 and a record already at the activity ceiling gets the email without the entry.
 Automated email is metered as usage and is not counted against the
 [one-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email)

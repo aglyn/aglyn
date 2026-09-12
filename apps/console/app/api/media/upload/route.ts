@@ -33,6 +33,7 @@ import {
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
+import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
   deleteMediaWithTombstone,
   emailUnverifiedResponse,
@@ -57,6 +58,7 @@ import {
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
 } from '../../../../utils/media-upload-limits'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // Base64 JSON payloads (AGL-162 caps). NOTE (AGL-1317): on Vercel the
 // platform rejects request bodies over 4.5MB with a 413 before this
@@ -169,6 +171,16 @@ async function handler(request: Request): Promise<Response> {
     const isImage = isImageUploadType(contentType)
     if (!isAllowedUploadType(contentType)) {
       return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
+    }
+    // Video ingress is behind a release flag (AGL-2830). Asked before the body
+    // is decoded, so a refused video costs no inspection, digest, deny-list
+    // read or quota read.
+    {
+      const refusal = await videoUploadPausedRefusal({
+        contentType,
+        orgId: scope.orgId,
+      })
+      if (refusal) return refusal
     }
     const uploaded = Buffer.from(data, 'base64')
     /**
@@ -472,6 +484,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ mediaId, url }, { status: 200 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Upload failed' }, { status: 500 })
   }

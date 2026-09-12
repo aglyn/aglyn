@@ -22,13 +22,12 @@ name: Tenant production smoke
 # ---------------------------------------------------------------------------
 # WHY HERE, AND NOT IN THE THREE PLACES THAT LOOK CLOSER
 # ---------------------------------------------------------------------------
-# Main Gate's `full` job. It already runs the production builds, so the smoke
-# looks like one more step. It is not, because `full` is DEBOUNCED: `sweep-due`
-# asks whether the last sweep has aged out and skips otherwise, and the
-# measured delivery of its cron backstop was 6 runs of 24. A check that is
-# absent from most shas is not a gate, and `promotion-verdict.yml` says so in
-# its own words — a tip with `fast` green and no `full` grades as exit 3, a
-# WARNING that explicitly does not block. Putting the smoke there would let a
+# Main Gate's `full` sweep. It already runs the production builds, so the smoke
+# looks like one more step. It is not, because `full` grades the newest push
+# rather than every sha (AGL-2836), and before that it was debounced to an hour.
+# A check absent from some shas is not a gate, and `promotion-verdict.yml` says
+# so in its own words — a tip with `fast` green and no `full` grades as exit 3,
+# a WARNING that explicitly does not block. Putting the smoke there would let a
 # promotion carry an unrun smoke exactly as `d1cbc338f` carried unrun tests.
 #
 # `promotion-verdict.yml`. Right moment, wrong job. That workflow is a READER:

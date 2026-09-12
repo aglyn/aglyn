@@ -102,8 +102,8 @@ export const CRM_RECORD_COLLECTIONS = [
  *
  * One sentence in one place, because a reader who is refused in the drawer
  * and then reads the list must be told the same thing, and the remedy is the
- * same wherever the refusal lands: only Free has a band with no rate, so
- * "upgrade" is the whole of the answer.
+ * same wherever the refusal lands: a band refuses only on a plan that puts
+ * no overage rate past it, so "upgrade" is the whole of the answer.
  */
 export const CRM_RECORDS_BAND_FULL_MESSAGE =
   'CRM records limit reached — this record was not added. Upgrade in ' +
@@ -1610,6 +1610,35 @@ export function readContactCompanyLink(
       : [],
     heldElsewhere: [...heldElsewhere],
   }
+}
+
+/**
+ * Every holder whose facet names this company, in no order.
+ *
+ * What a company's DELETION clears. Unlike a link change, which is one
+ * holder's, a deletion takes the record away from every holder at once: a
+ * facet still naming it would be a link to nothing, on a surface its holder
+ * has no reason to revisit. Nothing else about another holder's facet is
+ * read.
+ */
+export function contactGroupsNamingCompany(
+  contact: Record<string, unknown> | null | undefined,
+  companyId: string,
+): string[] {
+  const facets = (contact ?? {})[CONTACT_FACETS_FIELD]
+  if (!companyId || !facets || typeof facets !== 'object' || Array.isArray(facets)) {
+    return []
+  }
+  return Object.entries(facets as Record<string, unknown>)
+    .filter(([, facet]) =>
+      Boolean(
+        facet &&
+          typeof facet === 'object' &&
+          !Array.isArray(facet) &&
+          (facet as Record<string, unknown>)['companyId'] === companyId,
+      ),
+    )
+    .map(([groupId]) => groupId)
 }
 
 /**

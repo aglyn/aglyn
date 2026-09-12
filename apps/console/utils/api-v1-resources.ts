@@ -95,6 +95,7 @@ import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-emai
 import { createHash, randomUUID } from 'crypto'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
+import { ensureCustomFieldTypes } from './ensure-custom-field-types'
 import { handleActivities } from './api-v1/crm-activities'
 import { handleCompanies } from './api-v1/crm-companies'
 import { handleDeals } from './api-v1/crm-deals'
@@ -125,15 +126,19 @@ import {
   directUploadMaxBytes,
   isAllowedUploadType,
   isImageUploadType,
+  isVideoUploadType,
   normalizeUploadContentType,
   requiresFileUploadEntitlement,
   UPLOAD_TYPES_MESSAGE,
+  VIDEO_UPLOADS_PAUSED_CODE,
+  VIDEO_UPLOADS_PAUSED_MESSAGE,
 } from './media-upload-limits'
 import {
   isSvgUploadType,
   sanitizeSvgBuffer,
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
 import { resolveOrgMediaBand } from './server/media-storage-band'
+import { videoUploadsOpenForOrg } from './server/video-uploads'
 import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
 import {
   claimHostForOrg,
@@ -546,6 +551,8 @@ async function createRecord(
   recordsRef: FirebaseFirestore.CollectionReference,
 ): Promise<Response> {
   const model = effectiveDatasetModel(datasetSnap.data() ?? {})
+  // A plugin's field validator only runs once its plugin has registered it.
+  await ensureCustomFieldTypes(model)
   const body = await readJsonBody(request)
   const coerced = coerceDocumentValues(model, (body.values as Record<string, unknown>) ?? {})
   const errors = validateDocument(model, coerced)
@@ -676,6 +683,8 @@ async function updateRecord(
   if (!snap.exists) return ApiErrors.notFound({ message: 'No such record', headers: ctx.headers })
 
   const model = effectiveDatasetModel(datasetSnap.data() ?? {})
+  // A plugin's field validator only runs once its plugin has registered it.
+  await ensureCustomFieldTypes(model)
   const body = await readJsonBody(request)
   // PATCH merges the supplied fields over the stored values.
   const merged = {
@@ -1066,9 +1075,9 @@ async function handleSites(
  * 10 an hour. A publish is a human-scale event even when a machine triggers
  * it: an integration that finishes a nightly catalogue sync publishes once,
  * and one that publishes after every record write does not want this endpoint
- * at all — it wants the 60-second window it already has, which is still
- * underneath as the backstop and is why a `429` here costs correctness
- * nothing. Ten leaves room for a bad afternoon of manual retries and still
+ * at all — it wants the hour-long cache window it already has, which is still
+ * underneath as the backstop and is why a `429` here delays a change rather
+ * than losing it. Ten leaves room for a bad afternoon of manual retries and still
  * caps the worst case at 2,500 dropped pages per site per hour, against the
  * ~1.2M reads a minute the documented 120/min per-key limit would have
  * allowed on its own.
@@ -1090,8 +1099,8 @@ export const PUBLISH_WINDOW_MS = 60 * 60 * 1000
  *
  * `POST /v1/datasets/{id}/records` wrote and called nothing else. What made a
  * live site show the new data was time, and only time: `getDatasets` is cached
- * for `DATASETS_TTL_SECONDS` (60) behind `tenantDataTag(hostId)`, and the
- * tenant catch-all page is `revalidate = 60`. Time-based ISR is
+ * for `DATASETS_TTL_SECONDS` (an hour) behind `tenantDataTag(hostId)`, and the
+ * tenant catch-all page is `revalidate = 3600`. Time-based ISR is
  * stale-while-revalidate, so the visitor AFTER the window can still be served
  * the old copy and the change appears on the visit after that. An integration
  * could therefore own a site's data and never publish it — the cache expiring
@@ -1203,8 +1212,9 @@ async function handlePublish(
       reason: result.reason === 'ok' ? null : result.reason,
       pages: result.revalidated.length,
       // The tenant's own 250-path cap (AGL-1161). A site above it is refreshed
-      // in part, and the remainder catches up on the 60-second window — worth
-      // saying, because the caller is the one deciding whether to poll.
+      // in part, and the remainder catches up when its hour-long ISR window
+      // lapses — worth saying, because the caller is the one deciding whether
+      // to poll.
       pagesDropped: result.pathsDropped,
     },
     { headers: ctx.headers },
@@ -2054,6 +2064,21 @@ async function createMedia(
     })
   }
 
+  // Video ingress is behind a release flag (AGL-2830). Above the idempotency
+  // claim with the other refusals about the file itself, so a key sent with a
+  // refused video is still unused when the flag opens, and before the body is
+  // decoded, so a refused video costs no inspection or digest.
+  if (
+    isVideoUploadType(contentType) &&
+    !(await videoUploadsOpenForOrg(ctx.orgId))
+  ) {
+    return ApiErrors.forbidden({
+      message: VIDEO_UPLOADS_PAUSED_MESSAGE,
+      code: VIDEO_UPLOADS_PAUSED_CODE,
+      headers: ctx.headers,
+    })
+  }
+
   // Strict base64. `Buffer.from(x, 'base64')` is famously permissive — it
   // silently drops anything it cannot decode — so a typo'd payload would
   // otherwise be stored as a short, corrupt file that reports success.
@@ -2750,6 +2775,7 @@ function readContactInput(
 
   return Object.keys(errors).length ? { errors } : { values }
 }
+
 
 /**
  * The two references a contact's CRM profile can carry, checked for
@@ -3740,19 +3766,21 @@ export async function handleUsage(
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
 /**
- * The resources the CRM SUITE entitlement gates (AGL-2611). Contacts are not
- * among them: the contacts list ships on every plan, banded, and its API
- * has been open since AGL-899.
+ * The resources the CRM entitlement gates (AGL-2611, AGL-2851): the whole
+ * CRM, which is included from Starter. A Free workspace has none of it, so
+ * none of these answers a read or a write for an org without `features.crm`.
  */
 const CRM_SUITE_RESOURCES: ReadonlySet<string> = new Set([
+  // The people, on every verb (AGL-2851). A capture still records them on
+  // every plan; reading and changing them is the CRM.
+  'contacts',
   'companies',
   'pipelines',
   'deals',
   'tasks',
   'activities',
-  // A site's leads are captured on every plan; their working state — a
-  // status, an owner, the conversion — is the suite's, and so is the API
-  // onto them (AGL-2627).
+  // A site's leads: captured on every plan, read and worked in the CRM
+  // (AGL-2627).
   'leads',
   // The letters a team sends from a record (AGL-2658) — the CRM's, like the
   // one-to-one send they are written for.
@@ -3766,17 +3794,17 @@ export async function dispatchResource(
   segments: string[],
 ): Promise<Response> {
   const url = new URL(request.url)
-  // The plan question before the scope one, in front of the five handlers
+  // The plan question before the scope one, in front of the CRM's handlers
   // rather than inside each: `crm:*` is mintable on a Business key whose org
-  // was later moved to a plan without the suite by a staff override, and a
+  // was later moved to a plan without the CRM by a staff override, and a
   // scope that still answered would be the shell's "extensions cannot bypass
   // entitlements" promise broken over the wire. Same shape as the
   // `dataStore` refusal on datasets.
   if (CRM_SUITE_RESOURCES.has(segments[0]) && !checkEntitlement(ctx.org, 'crm')) {
     return ApiErrors.planRequired({
       message:
-        'The CRM suite — companies, pipelines, deals, tasks, activities, ' +
-        'leads and email templates — is not included in this organization’s plan',
+        'The CRM — contacts, leads, companies, deals, tasks, pipelines, ' +
+        'activities and email templates — is not included in this organization’s plan',
       code: 'crm',
       headers: ctx.headers,
     })

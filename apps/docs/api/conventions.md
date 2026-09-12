@@ -85,7 +85,7 @@ these endpoints, and it will look like it worked.
 Filters are per-resource — each resource page lists the params it accepts — but they
 behave the same way everywhere:
 
-- **An unknown param is ignored**, not rejected. `?colour=red` on any list is the
+- **An unknown param is ignored**, not rejected. `?color=red` on any list is the
   unfiltered list. Check the resource page rather than assuming a filter took effect.
 - **An empty value means the filter is absent.** `?email=`, `?tag=` and `?read=` all
   give the unfiltered list, so a client that serializes an unset field doesn't have to

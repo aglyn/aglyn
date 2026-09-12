@@ -30,6 +30,7 @@ graph TD
     M["members/#lcub;uid#rcub;<br/>role · allHosts · hostAccess map"]
     I["invites/#lcub;inviteId#rcub;<br/>email · role · host access"]
     U["usage/#lcub;yyyymm#rcub;<br/>storage · views · cost rollups"]
+    DS["datasets/#lcub;datasetId#rcub;<br/>model · visibleTo · records"]
   end
 
   SLUG["orgSlugs/#lcub;slug#rcub;<br/>(public read — subdomain resolution)"] --> O
@@ -38,7 +39,7 @@ graph TD
 
   subgraph HOST ["hosts/#lcub;hostId#rcub; (top-level, globally unique id)"]
     H["host doc<br/>orgId · memberRoles projection"]
-    HC["screens · layouts · contacts<br/>media · datasets · redirects …"]
+    HC["screens · layouts · contacts<br/>media · redirects …"]
   end
 
   O -- "hosts directory" --> H

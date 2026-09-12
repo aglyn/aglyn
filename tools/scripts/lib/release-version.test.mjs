@@ -41,9 +41,11 @@ import {
   insertRelease,
   mainVersionVerdict,
   maxBump,
+  newestVersion,
   nextVersion,
   parseCommit,
   parseVersion,
+  predecessorVerdict,
   renderRelease,
   summarizeCommits,
   tagForVersion,
@@ -363,6 +365,114 @@ describe('mainVersionVerdict (AGL-2594)', () => {
     assert.equal(verdict.state, 'unknown')
     assert.match(verdict.lines.join('\n'), /git fetch origin main/)
     assert.doesNotMatch(verdict.lines.join('\n'), /WARNING/)
+  })
+})
+
+describe('newestVersion', () => {
+  it('picks by semver precedence, not string order', () => {
+    // The reason this is not `[...v].sort().pop()`: beta.9 sorts after
+    // beta.114 as a string, and picking it would make the predecessor guard
+    // compare against the wrong release.
+    assert.equal(
+      newestVersion(['1.0.0-beta.9', '1.0.0-beta.114', '1.0.0-beta.86']),
+      '1.0.0-beta.114',
+    )
+    assert.equal(newestVersion(['1.0.0-beta.114', '1.0.0']), '1.0.0')
+  })
+
+  it('is null for an empty list and skips holes', () => {
+    assert.equal(newestVersion([]), null)
+    assert.equal(newestVersion([null, undefined]), null)
+    assert.equal(newestVersion([null, '1.0.0-beta.5']), '1.0.0-beta.5')
+  })
+})
+
+describe('predecessorVerdict (AGL-2765)', () => {
+  it('passes when the version is ahead of the newest preceding release', () => {
+    const verdict = predecessorVerdict({
+      version: '1.0.0-beta.116',
+      reachableVersions: ['1.0.0-beta.113', '1.0.0-beta.112'],
+    })
+    assert.equal(verdict.ok, true)
+    assert.equal(verdict.predecessor, '1.0.0-beta.113')
+    assert.deepEqual(verdict.lines, [])
+  })
+
+  it('refuses a version that merely EQUALS the release before it', () => {
+    // The promoted-without-the-bump mistake: production still carries the old
+    // number, so the "new" tag would name the same tree as the last release.
+    const verdict = predecessorVerdict({
+      version: '1.0.0-beta.113',
+      reachableVersions: ['1.0.0-beta.113'],
+    })
+    assert.equal(verdict.ok, false)
+    assert.match(verdict.lines.join('\n'), /not ahead of v1\.0\.0-beta\.113/)
+    assert.match(verdict.lines.join('\n'), /chore\(release\)` commit/)
+  })
+
+  it('refuses a version behind the release before it', () => {
+    assert.equal(
+      predecessorVerdict({
+        version: '1.0.0-beta.112',
+        reachableVersions: ['1.0.0-beta.113'],
+      }).ok,
+      false,
+    )
+  })
+
+  // THE BACKFILL CASE, and the whole reason this is a function rather than a
+  // comparison against `git tag --sort=-v:refname | head -1`.
+  //
+  // v1.0.0-beta.114 shipped and was never tagged; by the time anyone noticed,
+  // v1.0.0-beta.116 existed. Against every tag in the repo, beta.114 is behind
+  // and the guard refuses a tag that is perfectly correct. Against the tags
+  // that PRECEDE it on production, beta.113 is the predecessor and it passes.
+  it('accepts a backfill that is behind the newest tag but ahead of its own predecessor', () => {
+    const everyTag = [
+      '1.0.0-beta.113',
+      '1.0.0-beta.116',
+      '1.0.0-beta.112',
+      '1.0.0-beta.110',
+    ]
+    assert.equal(
+      predecessorVerdict({
+        version: '1.0.0-beta.114',
+        reachableVersions: everyTag,
+      }).ok,
+      false,
+      'against every tag in the repo the backfill is refused',
+    )
+
+    const reachableFromThatCommit = ['1.0.0-beta.113', '1.0.0-beta.112']
+    const verdict = predecessorVerdict({
+      version: '1.0.0-beta.114',
+      reachableVersions: reachableFromThatCommit,
+    })
+    assert.equal(verdict.ok, true)
+    assert.equal(verdict.predecessor, '1.0.0-beta.113')
+  })
+
+  // Narrowing the set must not narrow the guard. A backfill whose predecessor
+  // already carries its number is still refused — the duplicate-tree check is
+  // the part that has to survive.
+  it('still refuses a duplicate when the set is narrowed to ancestors', () => {
+    assert.equal(
+      predecessorVerdict({
+        version: '1.0.0-beta.114',
+        reachableVersions: ['1.0.0-beta.114', '1.0.0-beta.113'],
+      }).ok,
+      false,
+    )
+  })
+
+  it('treats an empty set as the first release, and says so', () => {
+    const verdict = predecessorVerdict({
+      version: '1.0.0-beta.1',
+      reachableVersions: [],
+    })
+    assert.equal(verdict.ok, true)
+    assert.equal(verdict.predecessor, null)
+    assert.match(verdict.lines.join('\n'), /first release in the series/)
   })
 })
 

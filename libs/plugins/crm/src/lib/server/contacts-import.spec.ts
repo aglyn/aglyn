@@ -46,6 +46,8 @@ let members: Record<string, unknown>[] = []
 let fieldDefinitions: Record<string, unknown>[] = []
 let companies: Record<string, Record<string, unknown>> = {}
 let companySeq = 0
+/** The site's org document; Starter is the lowest plan carrying the CRM suite. */
+let org: Record<string, unknown> = { plan: 'starter' }
 const upsert = jest.fn()
 const listMembers = jest.fn(async () => members)
 
@@ -60,6 +62,8 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   registerPluginApiRoute: jest.fn(),
+  // The plan tables the suite gate reads, first so no module below is shadowed.
+  ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm-import'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/name-search'),
@@ -131,7 +135,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       firestore: () => firestoreHandle,
     }),
   },
-  getOrgForHost: async () => ({ orgId: ORG_ID, org: {} }),
+  getOrgForHost: async () => ({ orgId: ORG_ID, org }),
   resolveOrgMembership: async () => membership,
   memberHasOrgPermission: async () => manageData,
   listOrgMembers: (...args: unknown[]) => listMembers(...(args as [])),
@@ -215,6 +219,7 @@ beforeEach(() => {
   fieldDefinitions = []
   companies = {}
   companySeq = 0
+  org = { plan: 'starter' }
   upsert.mockReset()
   upsert.mockImplementation(async () => ({ contactId: 'c-new', created: true }))
   listMembers.mockClear()
@@ -474,5 +479,54 @@ describe('custom fields', () => {
       'custom:theirs': 1,
       'custom:ghost': 1,
     })
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787). Every CSV import is the CRM suite's, included from
+ * Starter. `resolveImportContext` asks once it knows who is calling, so
+ * staff importing into a Free workspace are refused as a member is, and a
+ * member the permission refuses is told about the permission.
+ */
+describe('the plan (AGL-2787)', () => {
+  const ROW = { email: 'a@b.co', companyName: 'Acme Widgets', ownerEmail: 'sam@team.co' }
+
+  it('refuses a Free workspace before any row reaches the door', async () => {
+    org = { plan: 'free' }
+    const out = await importRows([ROW])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(out.body.error).toMatch(/part of the CRM/)
+    expect(out.body.error).toMatch(/Included from Starter/)
+    expect(upsert).not.toHaveBeenCalled()
+    expect(companies).toEqual({})
+    expect(listMembers).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff importing into a Free workspace the same way', async () => {
+    org = { plan: 'free' }
+    decodedToken = { uid: 'staff-uid', staff: true }
+    hostRoles = {}
+    membership = null
+    const out = await importRows([ROW])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(upsert).not.toHaveBeenCalled()
+  })
+
+  it('tells a member without data.manage about the permission, not the plan', async () => {
+    org = { plan: 'free' }
+    manageData = false
+    const out = await importRows([ROW])
+    expect(out.code).toBe(403)
+    expect(out.body.error).toMatch(/does not allow managing contacts/)
+    expect(out.body).not.toHaveProperty('reason')
+  })
+
+  it('admits Starter, the lowest plan that carries the suite', async () => {
+    org = { plan: 'starter' }
+    const out = await importRows([{ email: 'a@b.co' }])
+    expect(out.code).toBe(200)
+    expect(upsert).toHaveBeenCalledTimes(1)
   })
 })

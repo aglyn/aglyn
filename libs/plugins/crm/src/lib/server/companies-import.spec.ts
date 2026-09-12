@@ -39,7 +39,8 @@ let membership: { orgId: string; member: Record<string, unknown> } | null = {
 }
 let manageData = true
 let members: Record<string, unknown>[] = []
-let org: Record<string, unknown> = {}
+/** The site's org document; Starter is the lowest plan carrying the CRM suite. */
+let org: Record<string, unknown> = { plan: 'starter' }
 let crmRecordsCount = 0
 let companies: Record<string, Record<string, unknown>> = {}
 let companySeq = 0
@@ -211,7 +212,7 @@ beforeEach(() => {
   membership = { orgId: ORG_ID, member: { $id: 'editor-uid', role: 'editor' } }
   manageData = true
   members = []
-  org = {}
+  org = { plan: 'starter' }
   crmRecordsCount = 0
   companies = {}
   companySeq = 0
@@ -399,8 +400,8 @@ describe('custom fields (AGL-2661)', () => {
 
 describe('the records band', () => {
   it('counts once per request, refuses the creates past a hard band by name, and still updates', async () => {
-    // Free: a hard band of 100, of which 99 are used — one create fits.
-    org = { plan: 'free' }
+    // A Free workspace granted the suite still hard-bands at 100; 99 are used, so one create fits.
+    org = { plan: 'free', entitlements: { features: { crm: true } } }
     crmRecordsCount = 99
     companies['c-acme'] = { name: 'Acme', nameLower: 'acme', visibleTo: ['host:site-1'] }
     const out = await importRows([
@@ -411,5 +412,43 @@ describe('the records band', () => {
     expect(out.body).toMatchObject({ created: 1, merged: 1 })
     expect(out.body.skipped).toEqual([{ index: 1, name: 'Initech', reason: 'records-band' }])
     expect(crmRecordsQuotaForOrg).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787): the companies file is the CRM suite's to import,
+ * included from Starter, and refused for a Free workspace whoever is asking
+ * — before a row is matched, filed or counted against the band.
+ */
+describe('the plan (AGL-2787)', () => {
+  it('refuses a Free workspace, filing, updating and counting nothing', async () => {
+    org = { plan: 'free' }
+    companies['c-acme'] = { name: 'Acme', nameLower: 'acme', visibleTo: ['host:site-1'] }
+    const out = await importRows([{ name: 'Globex' }, { name: 'Acme', industry: 'Software' }])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(out.body.error).toMatch(/part of the CRM/)
+    expect(out.body.error).toMatch(/Included from Starter/)
+    expect(stored()).toHaveLength(1)
+    expect(updates).toEqual([])
+    expect(crmRecordsQuotaForOrg).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff importing into a Free workspace the same way', async () => {
+    org = { plan: 'free' }
+    decodedToken = { uid: 'staff-uid', staff: true }
+    hostRoles = {}
+    manageData = false
+    const out = await importRows([{ name: 'Acme' }])
+    expect(out.code).toBe(403)
+    expect(out.body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(stored()).toEqual([])
+  })
+
+  it('admits Starter, the lowest plan that carries the suite', async () => {
+    org = { plan: 'starter' }
+    const out = await importRows([{ name: 'Acme' }])
+    expect(out.code).toBe(200)
+    expect(out.body.created).toBe(1)
   })
 })

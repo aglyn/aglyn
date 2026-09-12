@@ -6,12 +6,6 @@ description: Ask the built-in AI helper how to do anything in Aglyn — it answe
 
 # Aglyn Assist
 
-:::caution Rolling out
-Aglyn Assist is being rolled out and may not be switched on for your workspace
-yet. Nothing needs configuring — the helper appears in the console as the
-rollout reaches you.
-:::
-
 **Aglyn Assist** is the chat helper in the bottom-right corner of every console
 page. Ask it how to do something — publish a screen, connect a domain, set up
 shipping, invite a teammate — and it answers from this documentation, linking
@@ -34,6 +28,8 @@ the exact docs section and the console page where you do it.
 Aglyn Assist answers and directs — it doesn't change anything in your
 workspace. It can't edit your site, publish, or update settings, so there's
 nothing it can do by accident; you stay in control of every change.
+
+![The Aglyn Assist panel header with its help tooltip open, linking to the documentation](/img/getting-started/assist-panel-help-tip.png)
 
 ## Answers for beginners and developers
 

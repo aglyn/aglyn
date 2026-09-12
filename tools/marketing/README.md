@@ -6,7 +6,7 @@ on Aglyn**). These are authoring inputs for the besigner, not application code
 
 | File | What it is |
 | -- | -- |
-| `product-page-skeleton.md` | The `/product/*` page contract: 8 sections, 74 text slots, in document order, plus the invariants (Container geometry, the heading-variant trap, the measured type scale). Derived by reading the built `/product/besigner` document live. |
+| `product-page-skeleton.md` | The `/product/*` page contract: 8 sections in document order (74 text slots with a seven-card Explore grid; the Explore count follows the copy), plus the invariants (Container geometry, the heading-variant trap, the measured type scale). Derived by reading the built `/product/besigner` document live. |
 | `apply-page-copy.js` | Pours one `product-copy/copy-<page>.json` into a freshly-pasted copy of that skeleton, in the besigner's page context. Verifies every section's slot count and writes **nothing** on a mismatch. |
 | `verify-applier.mjs` | `node tools/marketing/verify-applier.mjs` — drives the applier over all eight pages against a stub canvas that models the REAL write semantics. |
 | `product-copy/copy-<page>.json` | Copy and structure extracted verbatim from the Figma frames, one file per product page, plus a `claimsToVerify` list per page. |
@@ -70,9 +70,9 @@ those eight checks and leaves the write count at 74.
 
 ## Explore link cards are not bound by the skeleton
 
-The seven `muiScreenLink` cards carry `children`, `renderAs`, `color` and
+The `muiScreenLink` cards carry `children`, `renderAs`, `color` and
 `variant` — and **no `screenId`**, including on the built `/product/besigner`
-reference page. Pasting the skeleton therefore gives you seven dead links.
+reference page. Pasting the skeleton therefore gives you a grid of dead links.
 Bind them as part of the pour, deriving ids from the screens table at apply
 time, and refuse rather than guess if a card's label has no match.
 

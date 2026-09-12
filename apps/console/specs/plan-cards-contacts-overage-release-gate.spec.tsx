@@ -24,12 +24,12 @@
  * A plan card quotes what the invoice will actually carry.
  *
  * AGL-1604 stopped the usage cron putting `contactsOverageUsd` into
- * `billedCents` while `release_contacts` is off for the org, and AGL-1658
+ * `billedCents` while `release_crm` is off for the org, and AGL-1658
  * stopped the usage caption quoting a dollar figure the invoice was
  * withholding. The PLAN CARDS were the surface nobody swept: every paid tier
  * printed a flat `(+$1/1k over)` beside its contacts band with no flag check
  * at all — a rate quoted as active on the card a customer reads to *choose* a
- * tier, while `release_contacts` is `defaultEnabled: false` and the overage
+ * tier, for an org whose `release_crm` verdict is off and whose overage
  * goes uninvoiced.
  *
  * Confirmed against the live page 2026-09-01: `aglyn.com/pricing` publishes
@@ -49,15 +49,13 @@
  *     a phantom charge for a phantom wall — "1,000 contacts" reads as a cap,
  *     and contacts over the band are not capped, they are simply not charged
  *     yet. `/pricing` publishes the rate and `billing-and-plans/overview.md`
- *     tells the same customer it applies once Contacts opens, so the card has
- *     to agree with both.
+ *     bills it past every paid band, so the card has to agree with both.
  *
  *  3. AN UNSETTLED VERDICT MAKES NO CLAIM. Before Remote Config activates,
- *     every flag reads its registry default and `release_contacts` is
- *     default-off — so a card that rendered the unbilled wording on
- *     `ready: false` would tell a staff-granted org (AGL-1635) that it is not
- *     billed, for one paint, when it is. No rate at all is the only honest
- *     third state.
+ *     every flag reads its registry default, which is no org's verdict — so
+ *     a card that rendered either wording on `ready: false` could tell an org
+ *     (AGL-1635) the opposite of what it is billed, for one paint. No rate at
+ *     all is the only honest third state.
  */
 
 import {
@@ -144,7 +142,7 @@ jest.mock('firebase/remote-config', () => ({
   },
   getValue: (_config: unknown, key: string) => ({
     asString: () =>
-      key === 'release_contacts' ? JSON.stringify(mockFlagValue) : '',
+      key === 'release_crm' ? JSON.stringify(mockFlagValue) : '',
   }),
 }))
 
@@ -231,7 +229,7 @@ describe('plan cards, contacts overage release gate', () => {
     // Globally off, granted to this one org (AGL-1635). `report-usage` bills
     // it, so the card has to say so — the override outranks the rollout.
     mockFlagValue = { enabled: false }
-    mockOrgOverrides = { release_contacts: true }
+    mockOrgOverrides = { release_crm: true }
     mount()
     await waitFor(settled)
     expect(billedNow().length).toBeGreaterThan(0)
@@ -240,7 +238,7 @@ describe('plan cards, contacts overage release gate', () => {
 
   it('follows a per-org force-OFF even while the rollout is on', async () => {
     mockFlagValue = { enabled: true }
-    mockOrgOverrides = { release_contacts: false }
+    mockOrgOverrides = { release_crm: false }
     mount()
     await waitFor(settled)
     expect(billedLater().length).toBeGreaterThan(0)

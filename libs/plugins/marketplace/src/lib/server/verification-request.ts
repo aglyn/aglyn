@@ -17,6 +17,7 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   VERIFICATION_BLOCK_MESSAGES,
@@ -149,7 +150,11 @@ export const verificationRequestHandler: PluginApiHandler = async (req, res) => 
     }
     return res.status(200).json({ ok: true, state: 'pending' })
   } catch (error) {
+    // Only a refused credential is the caller's 401. The same try reads the
+    // listing and runs the transaction, and a failure there — or in checking
+    // the token at all — is ours and keeps a 5xx, so it pages (AGL-2852).
+    if (isRefusedIdToken(error)) return res.status(401).json({ error: 'Unauthenticated' })
     console.error('verification-request failed', error)
-    return res.status(401).json({ error: 'Unauthenticated' })
+    return res.status(500).json({ error: 'The verification request could not be saved' })
   }
 }

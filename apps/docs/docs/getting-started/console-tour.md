@@ -87,11 +87,6 @@ Tabs such as **Data**, **Products**, **Logic**, **Automation**, **Inbox**, **Boo
 and appear only where that plugin is enabled for your workspace (they're inserted after
 **Analytics**). If a section these docs describe isn't in your tab strip, that's usually
 why — enable the plugin under **Organization → Plugins**.
-
-**CRM** is the exception: it's a release-flagged feature still
-[rolling out](../content-and-data/crm/overview.md), so there is no switch for it
-under **Organization → Plugins** and looking for one is a dead end. It appears on its
-own once the rollout reaches your workspace.
 :::
 
 **Billing is not a site section.** Plan cards and usage meters are workspace-wide and live
@@ -124,7 +119,7 @@ Each card carries:
 | Pill | Hover tells you |
 | --- | --- |
 | **Live** (green) | How many pages are published — "12 published pages." |
-| **Draft** (grey outline) | "Nothing published yet — visitors see the placeholder." |
+| **Draft** (gray outline) | "Nothing published yet — visitors see the placeholder." |
 | **Maintenance** (amber) | "Every path serves the maintenance screen." |
 | **Suspended** (red) | "This site is serving a lockdown notice instead of content." |
 
@@ -207,7 +202,7 @@ and in through a card action.
 
 Organization-wide settings (name, workspace URL) live under
 **Organization → Settings**, which also holds Profile, API keys, Branding,
-Single sign-on, Ownership and Delete. Turning plugins on and off for the
+Single sign-on, Privacy, Ownership and Delete. Turning plugins on and off for the
 workspace is its own section, **Organization → Plugins** — **Marketplace** is
 for finding and installing new ones, not for administering what you already run:
 

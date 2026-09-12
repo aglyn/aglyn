@@ -97,6 +97,9 @@ Open the record — a contact's page under **CRM › Contacts**, a company's und
 **Log activity**. The activity is filed against that record; there is no picker,
 because what you are looking at is what the activity is about.
 
+Logging an activity is part of the **CRM**, included from **Starter**. On Free the CRM
+is shown locked, so there is no record page to log from.
+
 | Field | What it is |
 | --- | --- |
 | **Kind** | Call, Email, Meeting, Note or Other. |
@@ -121,7 +124,7 @@ person books with another address; a booking taken from the widget with no recor
 attached is matched to a contact by the booker's address. When the service asks
 for it, a **Follow up after &lt;service&gt;** [task](tasks.md) is filed beside the
 meeting, due one business day after the slot. Nothing is filed on a site where the
-CRM is switched off.
+CRM is switched off, or for a workspace whose plan does not include the CRM.
 
 ## Click to call {#click-to-call}
 
@@ -142,7 +145,9 @@ already set to **Call** and the record already bound, so logging what was
 said is one button and one sentence. It is there whether or not the record
 has a number: a call placed from your own mobile is still a call to log.
 The kind is a starting point, not a lock — change it in the dialog if the
-conversation turned out to be something else.
+conversation turned out to be something else. Calling and logging a call are part of
+the **CRM**, included from **Starter**; on Free the record pages that carry them are
+locked with the rest of the CRM.
 
 ## Sending an email
 
@@ -150,6 +155,8 @@ A contact's, a lead's and a deal's page each carry **Send email**: one message,
 from you, to the person the record is about. It is a letter, not a campaign —
 there is no audience, no designed layout and no unsubscribe footer — and it is
 logged on the timeline the moment it leaves, with its delivery state following.
+One-to-one email is part of the **CRM**, included from **Starter**; on Free the record
+pages that send it are locked with the rest of the CRM.
 
 | Field | What it is |
 | --- | --- |

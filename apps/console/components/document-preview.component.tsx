@@ -23,6 +23,8 @@ import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 // the plugin-manager barrel is server-reachable and this hook is not.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
+// Deep, not the designer barrel: Preview renders no besigner.
+import { useMediaAssetFactsOverlay } from '@aglyn/besigner-ui/hooks/use-media-asset-facts-overlay'
 import {
   getGoogleFontsUrl,
   ThemeProvider,
@@ -57,6 +59,7 @@ import {
   readPreviewState,
 } from '../constants/preview-state'
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
+import BesignerMediaAssetFactsProvider from './besigner-media-asset-facts-provider.component'
 import { useDeclareDocumentSubject } from './document-subject'
 
 const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
@@ -181,7 +184,7 @@ export interface DocumentPreviewProps {
  * deployment — the previous "preview" for a screen row opened a Vercel URL,
  * which 404s for anything not yet deployed.
  */
-export function DocumentPreview(props: DocumentPreviewProps) {
+function DocumentPreviewSurface(props: DocumentPreviewProps) {
   const { ids } = props
   const firestore = useFirestore()
   const [missing, setMissing] = useState(false)
@@ -206,6 +209,11 @@ export function DocumentPreview(props: DocumentPreviewProps) {
   // has to agree with the tenant about both.
   const [formDesigns, setFormDesigns] = useState<
     Record<string, Aglyn.PlacedFormDesign> | undefined
+  >(undefined)
+  // The snapshot as composed and denormalized, before the placed assets'
+  // current DAM facts are laid over it (AGL-2849, AGL-2856).
+  const [composed, setComposed] = useState<
+    Record<string, unknown> | undefined
   >(undefined)
   // Consent-banner region simulation (AGL-1498); see ConsentSimulation.
   const [consentSim, setConsentSim] = useState<ConsentSimulation>('off')
@@ -533,7 +541,7 @@ export function DocumentPreview(props: DocumentPreviewProps) {
       }
       setMissing(false)
       setHostTheme(state.theme)
-      Aglyn.canvas.setNodes(
+      setComposed(
         Aglyn.canvas.processNodesToDenormalized(
           Aglyn.composeReusableComponentNodes(
             state.nodes as any,
@@ -561,6 +569,17 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
   }, [hostId, kind, docId, versionId, definitions, formDesigns])
+
+  // A placed asset's shape, and a film's length and poster, as its DAM
+  // document records them NOW (AGL-2849, AGL-2856), laid over the tree Preview
+  // renders. The tenant's composition takes the same step last, on the tree a
+  // published page ships, so a replace shows here as it shows to a visitor.
+  // Until the asset's document answers, and if the read fails, the snapshot
+  // renders as stored.
+  const shownNodes = useMediaAssetFactsOverlay(composed)
+  useEffect(() => {
+    if (shownNodes) Aglyn.canvas.setNodes(shownNodes as any)
+  }, [shownNodes])
 
   // Interactions parity (AGL-830): mount the registered site runtimes exactly
   // like the tenant page, each fed the page-props slice it rebuilds
@@ -827,4 +846,19 @@ export function DocumentPreview(props: DocumentPreviewProps) {
   )
 }
 
-export default observer(DocumentPreview)
+const ObservedDocumentPreviewSurface = observer(DocumentPreviewSurface)
+
+/**
+ * Preview, with the site's placed images and films answering from their DAM
+ * documents (AGL-2849, AGL-2856) through the provider the besigner canvas
+ * mounts.
+ */
+export function DocumentPreview(props: DocumentPreviewProps) {
+  return (
+    <BesignerMediaAssetFactsProvider hostId={props.ids?.hostId ?? ''}>
+      <ObservedDocumentPreviewSurface {...props} />
+    </BesignerMediaAssetFactsProvider>
+  )
+}
+
+export default DocumentPreview

@@ -233,6 +233,71 @@ service cloud.firestore {
         'video', 'poster', 'posterError', 'videoRenditions']);
     }
 
+    /**
+     * Whether an org's plan carries the CRM SUITE (AGL-2801): the rules'
+     * restatement of `resolveOrgEntitlements(org).features.crm`, which
+     * `checkEntitlement(org, 'crm')` answers everywhere else.
+     *
+     * The CRM is included from Starter, and a Free workspace has none of it
+     * (the 2026-09-11 pricing decision, AGL-2851). The console locks the
+     * CRM on a plan without it and the CRM's routes refuse such a plan;
+     * these functions are the same answer for the collections the console
+     * writes client-direct.
+     *
+     * Three facts, in the resolver's order of precedence:
+     *
+     *  1. A per-org `entitlements.features.crm` wins either way — a staff
+     *     grant opens the suite on Free, a revocation closes it on a paid
+     *     plan.
+     *  2. Otherwise the PLAN decides, and only a plan in the list below
+     *     carries the suite. A missing or unknown plan is Free, as
+     *     `resolveEffectivePlan` says.
+     *  3. A plan whose subscription has died is Free until the billing
+     *     webhook restores it: the mirrored `billingStatus` first, then the
+     *     legacy inline `subscription.status`, as `subscriptionStatusOf`
+     *     reads them.
+     *
+     * CEL has no constants and cannot import the plan table, so both lists
+     * are the resolver's, retyped. `crm-suite-rules-drift.spec.ts` parses
+     * them out of this file and fails when either disagrees with
+     * `PLAN_ENTITLEMENTS` or `resolveEffectivePlan`.
+     *
+     * A missing org document carries nothing. The read is one document per
+     * evaluated write, and every rule that asks this asks it LAST, so a
+     * write refused for its role or its scope never pays for it.
+     */
+    function orgCarriesCrmSuite(orgId) {
+      return orgId != null &&
+        exists(/databases/$(database)/documents/orgs/$(orgId)) &&
+        crmSuiteCarried(get(/databases/$(database)/documents/orgs/$(orgId)).data);
+    }
+    function crmSuiteCarried(org) {
+      return crmSuiteOverride(org) == true ||
+        (crmSuiteOverride(org) == null &&
+          org.get('plan', 'free') in
+            ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+          !(orgSubscriptionStatus(org) in
+            ['canceled', 'unpaid', 'incomplete', 'incomplete_expired']));
+    }
+    function crmSuiteOverride(org) {
+      return org.get('entitlements', {}) is map &&
+          org.get('entitlements', {}).get('features', {}) is map
+        ? org.get('entitlements', {}).get('features', {}).get('crm', null)
+        : null;
+    }
+    function orgSubscriptionStatus(org) {
+      return org.get('billingStatus', '') is string && org.get('billingStatus', '') != ''
+        ? org.get('billingStatus', '')
+        : (org.get('subscription', {}) is map
+          ? org.get('subscription', {}).get('status', '')
+          : '');
+    }
+    /** `orgCarriesCrmSuite`, for the org that owns a site. */
+    function hostOrgCarriesCrmSuite(hostId) {
+      return orgCarriesCrmSuite(
+        get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', null));
+    }
+
     // ------------------------------------------------------------------
     // Organizations (AGL-233/235, docs/MULTI_TENANT_FIRESTORE.md): the
     // org is the tenant boundary. Authorization resolves from the single
@@ -932,6 +997,46 @@ service cloud.firestore {
           .affectedKeys().hasAny(['visibleTo']);
       }
       /**
+       * The one update a client may still make to a contact (AGL-2804): a
+       * holder letting the person go.
+       *
+       * A contact keeps each holder's records in `facets.{groupId}`, and no
+       * rule can look inside that map for one holder. The holder is a
+       * dynamic key; a dotted write to any field of a facet reads in the
+       * document's diff as `facets` changing; and a diff of the map itself
+       * names the holder, never the field. So a rule cannot tell a lifecycle
+       * stage from a phone number, and a plan check on the CRM suite's fields
+       * would be a check on nothing. Every edit to a facet is therefore the
+       * server's — `crm/contact-update` and `crm/contact-stage`, which ask the
+       * plan about the fields a save carries — and what is left to a client
+       * is the detach "Remove from this site" performs:
+       *
+       *  - the keys it touches are the ones a detach touches — a holder's
+       *    facet, its consent entries, its scope token and its capture
+       *    attribution — and nothing a capture, a merge or a save writes;
+       *  - `facets` only LOSES holders: no facet is added, and none that
+       *    stays is changed in the same write;
+       *  - `marketingConsentByHost` only LOSES entries (AGL-2821). An entry
+       *    is the stored basis list enrollment carries across as the
+       *    person's own opt-in, and a client that could add or change one
+       *    could mint an opt-in nobody gave.
+       *
+       * Deleting the document outright is the delete rule's question.
+       */
+      function contactUpdateOnlyLetsGo() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'facets', 'marketingConsentByHost', 'visibleTo', 'capturedByHostIds',
+            'updatedAt']) &&
+          request.resource.data.get('facets', {}).diff(resource.data.get('facets', {}))
+            .addedKeys().size() == 0 &&
+          request.resource.data.get('facets', {}).diff(resource.data.get('facets', {}))
+            .changedKeys().size() == 0 &&
+          request.resource.data.get('marketingConsentByHost', {})
+            .diff(resource.data.get('marketingConsentByHost', {})).addedKeys().size() == 0 &&
+          request.resource.data.get('marketingConsentByHost', {})
+            .diff(resource.data.get('marketingConsentByHost', {})).changedKeys().size() == 0;
+      }
+      /**
        * Create-time twin of `canReadScoped` — it reads `request.resource`
        * because `resource` does not exist yet. Stops a scoped member
        * creating a resource they would immediately be unable to see, or
@@ -1039,13 +1144,32 @@ service cloud.firestore {
        * destroyed by a caller who is the last thing holding it, and every
        * other case has to be an update. A privacy ERASURE is not this path
        * and goes through the Admin SDK, which these rules do not gate.
+       *
+       * A CONTACT IS CREATED BY THE SERVER (AGL-2819). Every door that brings
+       * a person in — a capture, the create route, an import, a lead's
+       * conversion — is an Admin-SDK path that judges the audience band,
+       * dedupes on the address and asks the plan for a person added by hand,
+       * so a client create is refused. Staff keep theirs, for support.
+       *
+       * AN UPDATE ONLY LETS A HOLDER GO (AGL-2804). Each holder's records
+       * live in a facet no rule can look inside for one holder, so the
+       * profile, the owner, the stage, the company, the custom values, the
+       * files, the tags and the campaign filing are written by the CRM's
+       * routes, which ask the plan; a client update may only drop a holder's
+       * half. See `contactUpdateOnlyLetsGo()`.
+       *
+       * THE PLAN, LAST (AGL-2851). Dropping a holder is the CRM's "Remove
+       * from this site", and the CRM is included from Starter, so the update
+       * also asks `orgCarriesCrmSuite(orgId)`, as every CRM collection's
+       * client writes do. The delete does not: removing a workspace's own
+       * record stays open on every plan.
        */
       match /contacts/{contactId} {
         allow read: if isStaff() || canReadScopedPeople();
-        allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped());
+        allow create: if isStaff();
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+           contactUpdateOnlyLetsGo() && orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() ||
           (canWriteScopedOrgData() &&
            resource.data.visibleTo.hasOnly(
@@ -1058,12 +1182,17 @@ service cloud.firestore {
       // the tags, capture sources, order thresholds and engagement windows
       // that pick a slice of the CRM out. Reading it is reading about the
       // contacts, so it answers to the same authority they do.
+      //
+      // A segment is saved from the CRM's Contacts list, so its create and
+      // update ask the plan last, as the contact update above does (AGL-2851).
+      // Its read and delete do not.
       match /contactSegments/{segmentId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped());
+          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+            orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       /**
@@ -1107,16 +1236,27 @@ service cloud.firestore {
        * member from widening their own record to the org or narrowing an
        * org-wide one away from everybody else, as it does on every scoped
        * collection above.
+       *
+       * THE PLAN, LAST (AGL-2801, AGL-2851). Every create and update below —
+       * here and in the saved views and email templates after them — also
+       * asks `orgCarriesCrmSuite(orgId)`, as the contact update and the
+       * segment writes above do: these collections are the CRM, included
+       * from Starter, and a Free workspace writes none of it from a client.
+       * Reads and deletes do not ask, because exporting and removing a
+       * workspace's own records stay open on every plan, and the clause
+       * comes last so a write refused for its role or its scope never pays
+       * for the org read.
        */
       // The organizations behind the people: a domain, an address, an
       // owner, and the deals and tasks filed against them.
       match /companies/{companyId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped() && crmMediaIdsOk());
+          (canWriteOrgData() && canCreateScoped() && crmMediaIdsOk() &&
+            orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
-            crmMediaIdsOk());
+            crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       // The stages a deal moves through. Read whole and sorted in memory,
@@ -1125,9 +1265,10 @@ service cloud.firestore {
       match /pipelines/{pipelineId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped());
+          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+            orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       // A deal names the contact and company it is with, an amount and a
@@ -1135,10 +1276,11 @@ service cloud.firestore {
       match /deals/{dealId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped() && crmMediaIdsOk());
+          (canWriteOrgData() && canCreateScoped() && crmMediaIdsOk() &&
+            orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
-            crmMediaIdsOk());
+            crmMediaIdsOk() && orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       // What the team owes a person: a call, an email, a meeting or a to-do
@@ -1146,9 +1288,10 @@ service cloud.firestore {
       match /crmTasks/{taskId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped());
+          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+            orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       // What a person LOGGED against a contact, company or deal — as against
@@ -1156,9 +1299,10 @@ service cloud.firestore {
       match /crmActivities/{activityId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped());
+          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+            orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       // The custom fields a holder keeps on a person, a company or a deal
@@ -1171,9 +1315,10 @@ service cloud.firestore {
       match /contactFields/{fieldId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped());
+          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+            orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       /**
@@ -1198,12 +1343,14 @@ service cloud.firestore {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
           (canWriteOrgData() && canCreateScoped() &&
-           request.resource.data.createdByUid == request.auth.uid);
+           request.resource.data.createdByUid == request.auth.uid &&
+           orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
           (canWriteScopedOrgData() &&
            (isOrgWideMember() ||
             (resource.data.createdByUid == request.auth.uid &&
-             scopeUnchanged())));
+             scopeUnchanged())) &&
+           orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() ||
           (canWriteScopedOrgData() &&
            (isOrgWideMember() ||
@@ -1235,14 +1382,16 @@ service cloud.firestore {
           (canWriteOrgData() && canCreateScoped() &&
            request.resource.data.createdByUid == request.auth.uid &&
            (request.resource.data.get('visibility', 'shared') != 'personal' ||
-            request.resource.data.get('ownerUid', null) == request.auth.uid));
+            request.resource.data.get('ownerUid', null) == request.auth.uid) &&
+           orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
           (canWriteScopedOrgData() &&
            (isOrgWideMember() ||
             (scopeUnchanged() &&
              request.resource.data.createdByUid == resource.data.createdByUid &&
              (resource.data.get('visibility', 'shared') != 'personal' ||
-              resource.data.get('ownerUid', null) == request.auth.uid))));
+              resource.data.get('ownerUid', null) == request.auth.uid))) &&
+           orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() ||
           (canWriteScopedOrgData() &&
            (isOrgWideMember() ||
@@ -2955,7 +3104,7 @@ service cloud.firestore {
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
-              'flowEnrollments']));
+              'flowEnrollments', 'leads']));
         // `campaigns` joins all THREE lists. Each document is one email SEND,
         // and every field on it is written server-side: `campaign-send.ts`
         // stamps the audience, the consent and suppression populations and the
@@ -3169,7 +3318,7 @@ service cloud.firestore {
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
-              'flowEnrollments']));
+              'flowEnrollments', 'leads']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -3218,6 +3367,25 @@ service cloud.firestore {
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
               'flowEnrollments']));
+      }
+      // A site's leads (AGL-2801, AGL-2851). A capture door files one on
+      // every plan — a form, a sign-up, a booking, an import — through the
+      // Admin SDK, which these rules do not gate. What the console writes
+      // client-direct is a lead's WORKING state, its status, owner and notes
+      // in the CRM's Leads section, and the CRM is included from Starter: a
+      // workspace whose plan does not carry it creates and changes no lead
+      // from a client.
+      //
+      // The catch-all's create and update lists name `leads`, and this block
+      // re-grants both on the catch-all's own terms plus the plan: sibling
+      // matches are OR'd and the looser one wins, so without the exclusions
+      // this block would narrow nothing. Read and delete stay with the
+      // catch-all on every plan: an export reads a lead, and removing one is
+      // the workspace's own act.
+      match /leads/{leadId} {
+        allow create, update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            hostOrgCarriesCrmSuite(hostId));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

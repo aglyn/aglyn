@@ -279,6 +279,8 @@ export * from './sanitize-svg'
 export * from './media-folders'
 export * from './media-metadata'
 export * from './media-ref'
+// After `media-ref`, whose reference grammar it reads stored URLs with.
+export * from './paid-media-source'
 export * from './author-css'
 // The isomorphic HTML rule (AGL-1901), after the CSS one it depends on.
 export * from './author-html'

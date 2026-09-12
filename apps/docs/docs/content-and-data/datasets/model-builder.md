@@ -6,8 +6,8 @@ description: Define a dataset model with typed fields and edit records in the ty
 
 # Build a data model
 
-A **model** is the shape of a dataset — its fields and their types. Records are validated
-against it, so your data stays clean.
+A **model** is the shape of a dataset — its fields and their types. Records you add or
+import in the console, or write through the REST API, are validated against it.
 
 :::info Plan availability
 **Starter** and above. Free plans have no data store; add-ons raise the dataset cap.
@@ -19,8 +19,9 @@ against it, so your data stays clean.
 
 1. In **Data**, create a dataset and open the **schema dialog**.
 2. Add **typed fields** — text, number, date, reference, and more.
-3. Save. The model is stored on the dataset, and records are validated against it on
-   the way in.
+3. Save. The model is stored on the dataset. The console and the REST API validate
+   records against it; form submissions and automation steps store values as text
+   without checking them.
 
 ### Display name vs reference ID
 

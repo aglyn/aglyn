@@ -16,6 +16,7 @@
  */
 
 import {
+  checkEntitlement,
   consentGroupForHost,
   CRM_COLLECTIONS,
   type CrmActivity,
@@ -121,6 +122,11 @@ export type CrmBookingRecordOutcome =
       reason:
         /** The CRM plugin does not run on this site. */
         | 'crm-off'
+        /**
+         * The org's plan does not carry the CRM suite, whose activities and
+         * tasks these are (AGL-2787).
+         */
+        | 'not-entitled'
         /** Neither the reference nor the address named a record. */
         | 'no-record'
         /** A meeting for this booking is already on the timeline. */
@@ -244,6 +250,9 @@ export async function recordCrmBooking(
         : input.host
     if (!isHostPluginEnabled(input.org ?? null, host, CRM_PLUGIN_ID)) {
       return { filed: false, reason: 'crm-off' }
+    }
+    if (!checkEntitlement(input.org as Parameters<typeof checkEntitlement>[0], 'crm')) {
+      return { filed: false, reason: 'not-entitled' }
     }
 
     const orgRef = firestore.collection('orgs').doc(orgId)

@@ -68,12 +68,14 @@ import {
   resolveOrgMembership,
   writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   authorizeOrgCaller,
   type CrmRouteScope,
   orgHostIds,
   readCrmRouteScope,
 } from './org-caller'
+import { crmSuiteRefusal } from './suite-gate'
 
 /**
  * `POST /api/crm/email-send` — one email to one person, from their record
@@ -257,8 +259,12 @@ async function authorizeSender(
   let decoded: { uid: string; email?: string; name?: string; staff?: unknown }
   try {
     decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-  } catch {
-    return refuse(401, 'Unauthenticated')
+  } catch (error) {
+    // A refused credential is the caller's 401; a failure to check one is
+    // ours and keeps a 5xx (AGL-2852).
+    if (isRefusedIdToken(error)) return refuse(401, 'Unauthenticated')
+    console.error('[crm] email-send could not verify the sender', error)
+    return refuse(500, 'The sign-in could not be checked. Try again.')
   }
   const resolved = await getOrgForHost(hostId).catch(() => null)
   if (!resolved) return refuse(404, 'Unknown site')
@@ -569,6 +575,14 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
         : await authorizeSender(req, routeScope.hostId)
     if (sender.ok === false) return answer(res, sender)
     const { orgId, org } = sender
+    /*
+     * THE PLAN, before the pace and the cap (AGL-2787). One-to-one email is
+     * the suite's; a plan without the suite is refused as such, rather than
+     * reaching the daily cap and being told about a zero it has no way to
+     * raise short of the upgrade this names.
+     */
+    const suite = crmSuiteRefusal(org, 'Emailing one person from their record')
+    if (suite) return answer(res, { ok: false, status: suite.status, body: suite.body })
 
     /*
      * THE PER-USER PACE, on its own key. The console dispatcher already

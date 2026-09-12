@@ -51,6 +51,10 @@ import {
   isTransientBeaconCode,
   type BeaconCheck,
 } from '@aglyn/aglyn/server'
+// The scheme list the beacon and the CSP collector share (AGL-2786). A
+// subpath, not the `/server` barrel: specs that stub that barrel with a
+// hand-built factory would silently turn this into `undefined`.
+import { isForeignScriptStack } from '@aglyn/aglyn/app-utils/foreign-script'
 
 import {
   readBeaconHeartbeat,
@@ -90,8 +94,30 @@ function scrubUrl(value: unknown): string {
 }
 
 /**
+ * Was this stack thrown with no code of ours on it, and was all of it seen?
+ *
+ * Every frame under a scheme no deployment of ours serves (AGL-2786) — an
+ * in-app webview's bridge, an extension's content script. The beacon drops
+ * these before sending; this is the half that also covers a bundle already
+ * cached in a visitor's tab, which keeps posting whatever its copy of the rule
+ * missed for as long as the tab lives.
+ *
+ * Only a stack that arrived WHOLE is judged. One at the clamp may be the head
+ * of a longer stack, and the tail it lost could hold the frame that makes the
+ * error ours.
+ *
+ * The beacon's other tell — every frame is the document — is deliberately not
+ * applied here. This side has no page to compare against, and our own inline
+ * code's handled errors carry the document's URL too.
+ */
+function isForeignOnlyStack(stack: string): boolean {
+  return stack.length > 0 && stack.length < MAX_STACK && isForeignScriptStack(stack)
+}
+
+/**
  * The events in a posted payload, clamped and capped. Anything malformed is
- * simply dropped — this endpoint never argues with a browser.
+ * simply dropped — this endpoint never argues with a browser — and so is an
+ * error none of our code threw (see {@link isForeignOnlyStack}).
  */
 export function parseClientErrorEvents(payload: unknown): ClientErrorEvent[] {
   const events = (payload as { events?: unknown })?.events
@@ -102,10 +128,12 @@ export function parseClientErrorEvents(payload: unknown): ClientErrorEvent[] {
     const event = entry as Record<string, unknown>
     const message = clampString(event.message, MAX_MESSAGE)
     if (!message) continue
+    const stack = clampString(event.stack, MAX_STACK)
+    if (isForeignOnlyStack(stack)) continue
     parsed.push({
       kind: clampString(event.kind, 32) || 'error',
       message,
-      stack: clampString(event.stack, MAX_STACK) || undefined,
+      stack: stack || undefined,
       source: scrubUrl(event.source) || undefined,
       line: typeof event.line === 'number' ? Math.trunc(event.line) : undefined,
       url: scrubUrl(event.url) || undefined,

@@ -23,17 +23,6 @@ opens at the **organization** level, over every site at once, at
 `…/contacts` address, under a site or under the organization — still opens the
 hub.
 
-:::caution Rolling out
-The **CRM** tab in the console isn't available yet — it's a release-flagged
-feature, so there's no CRM tab in your workspace and nothing to switch on under
-**Organization → Plugins**.
-
-Capture is already running, though. Contacts are ingested from forms, member
-sign-ups, orders and bookings **today**, and you can read them over the
-[REST API](/api/resources/contacts) in the meantime — nothing is lost while you
-wait. Records-band overage is **not billed** while the page is unavailable.
-:::
-
 ![The Contacts section of the CRM: the contacts table with two rows selected and the bulk bar offering Add tag, Set stage, Set owner, Add to list, Export CSV and Remove](/img/contacts/crm-contacts.png)
 
 ```mermaid
@@ -90,10 +79,10 @@ Duplicate signals from the same person are unified into one contact. A person
 your site has met but not yet qualified is also a [lead](./leads.md); converting
 the lead joins the same contact rather than making a second one.
 
-Every tier includes a **CRM records band** — one number for contacts, companies and
-deals together. Only the Free tier's band is a hard limit; paid tiers never drop a
-record, and growth past the band meters as overage. That overage is **not billed while
-the CRM is unavailable**. See
+Every plan with the CRM includes a **CRM records band** — one number for contacts,
+companies and deals together. Paid tiers never drop a record: growth past the band
+meters as overage on the monthly invoice. Free has no CRM, but the same count caps what
+its sites capture — past 100 records a site adds no new person. See
 [CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records)
 under Billing & plans.
 
@@ -101,15 +90,30 @@ under Billing & plans.
 
 | | Free | Starter and above |
 | --- | --- | --- |
-| **Contacts** — the list, tags, notes, segments, CSV import and export, bulk actions | Yes, banded at 100 records | Yes, banded by tier and metered past the band |
-| **The CRM suite** — Leads, Companies, Deals, Tasks, Reports and Fields; the two CRM dashboard cards; the CRM automation steps; the `crm:*` REST resources | Shown in the rail with a lock; opening a section names the plan that includes it | Yes |
+| **The CRM** — Leads, Contacts, Companies, Deals, Tasks, Reports, Fields and Settings; working a lead — status, owner, notes, conversion and import; on Contacts, **New contact**, **Import CSV**, saved views, and every edit to a contact — profile, tags, notes, owner, lifecycle stage, company, custom fields, tasks, deals, files, logged calls and activities and merges — one record at a time or from the bulk bar; CSV export and **Erase this person** from the CRM's own pages; the two CRM dashboard cards; the CRM automation steps; the CRM's REST API resources | None. The **CRM** tab stays in the navigation, and every section is shown locked beside the upgrade notice | Yes |
 | **One-to-one email** from a record | None | A daily cap by tier — see [One-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email) |
+| **Capture** — form submissions, member sign-ups, orders and bookings updating the person in Contacts, and a lead from a form whose lead routing is on | Yes, up to the 100-record band | Yes |
+| **Privacy requests** — exporting every contact and every lead, and erasing a person, from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests) | Yes | Yes |
 
-The contacts list is on every plan because it is the audience your email campaigns
-read; the suite is what a sales team builds on that list. A record's **activity log**
-is bounded on every plan at **5,000 logged activities per record** — a call a day for
-fourteen years — after which the log dialog, the automation step and the API refuse
-another entry on that record with a message saying so.
+The CRM is for a plan that includes it, from **Starter**, while the subscription is
+live. On Free — and on a paid plan whose subscription has ended — the **CRM** tab stays
+in the navigation, every section is drawn locked in the rail beside a notice that the
+CRM is not included in your current plan, with **View plans**, and a bare `…/crm` shows
+that notice. Nothing in the CRM can be read or changed there: not in the console, not
+through its routes, and not over the REST API, whose CRM resources refuse with
+`plan_required`.
+
+Capture does not wait for the plan. Every form submission, sign-up, order or booking
+that carries an email address updates the person in Contacts, and a form files a
+[lead](./leads.md#what-makes-a-lead) only when its lead routing is on — exactly as on a
+paid plan. Those records are kept, up to Free's 100-record band, and are there when the
+plan includes the CRM. Workspace owners and admins can export them, or erase a person,
+from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests)
+on every plan.
+
+A record's **activity log** is bounded at **5,000 logged activities per record** — a
+call a day for fourteen years — after which the log dialog, the automation step and the
+API refuse another entry on that record with a message saying so.
 
 ## The contacts page
 
@@ -131,6 +135,11 @@ you:
   site; see [Bulk actions](./bulk-actions.md).
 - **Export to CSV**, and **Import CSV** — see below.
 
+The Contacts section is part of the [CRM](#what-each-plan-includes), included from
+Starter. On Free it is shown locked in the rail with the rest of the CRM; the people
+your sites capture are still kept, and can be exported from
+[Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
+
 Under the list, a **Recent activity** feed shows the newest calls, emails,
 meetings and notes anyone on the team has logged against any record.
 
@@ -139,6 +148,7 @@ meetings and notes anyone on the team has logged against any record.
 **Import CSV** on the Contacts section brings a spreadsheet of people in — map its
 columns to contact fields, preview the first rows, and import in batches with a report
 of what was added, updated and skipped. See [Import contacts from CSV](./import.md).
+Importing is part of the [CRM](#what-each-plan-includes), included from Starter.
 
 ## Segments
 

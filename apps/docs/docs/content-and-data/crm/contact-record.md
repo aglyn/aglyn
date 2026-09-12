@@ -11,6 +11,18 @@ profile your team keeps on them, where they came from, what they are filed
 under, and what the site recorded about them. You can add a person by hand,
 and edit every part of that profile from their own page.
 
+:::info Plan availability
+The contact record is part of the **CRM**, included from **Starter**: reading a
+contact, adding one by hand, and every edit to one — their name, phone, job title and
+address, tags and notes, owner, lifecycle stage and company, custom fields, tasks,
+deals, files, logged calls and activities, one-to-one email and merging two records.
+On Free the Contacts section is shown locked, with the rest of the CRM. The people your
+sites capture are still kept, and workspace owners and admins can export them, or erase
+a person, from
+[Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
+See [What each plan includes](./overview.md#what-each-plan-includes).
+:::
+
 ![A contact record in the CRM: the header with the person's name, stage and owner, and the Properties, Custom fields, Timeline, Deals and Tasks cards](/img/contacts/crm-record.png)
 
 ## Adding a contact by hand
@@ -32,9 +44,12 @@ list — the list itself stays exactly where it was.
 | **Opted in to marketing email** | Tick it only if the person actually agreed. Adding a contact is never itself consent, and the checkbox says so. |
 
 If the email already belongs to a contact, nothing is duplicated: what you
-typed **merges** into the existing record and the page tells you so. On the
-Free plan, a full audience band refuses the new record with the same wording
-the list shows; upgrade in Billing to keep adding.
+typed **merges** into the existing record and the page tells you so. On a plan
+whose records band is a hard limit, a full band refuses the new record with the
+same wording the list shows.
+
+Adding a contact by hand is part of the CRM, included from Starter. On Free the
+Contacts section is shown locked, with the rest of the CRM.
 
 ## The record page
 
@@ -104,7 +119,10 @@ from *every* site in the workspace, whoever captured them, and it cannot be
 undone. Only a workspace admin or owner can do it; for everyone else the item
 is present but disabled, and its tooltip says who can. It is offered on a
 site's hub and on the
-[organization's](./overview.md#at-the-organization-level) alike.
+[organization's](./overview.md#at-the-organization-level) alike. The same erasure
+can be filed by address, without opening a record, from
+[Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests)
+— on every plan, including Free, where the CRM is locked.
 
 Choosing it opens a dialog that lists exactly what will happen, and asks you to
 type the person's email address back before it files anything:

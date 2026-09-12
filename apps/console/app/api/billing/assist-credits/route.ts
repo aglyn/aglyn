@@ -26,6 +26,7 @@ import {
   isImpersonationSession,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — a READ-ONLY billing surface that writes nothing,
 // same posture as billing/usage-budget beside it. AGL-1501 keeps
@@ -106,6 +107,10 @@ async function handler(request: Request): Promise<Response> {
       ),
     })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[assist-credits] read failed', orgId, error)
     // The meter's "not yet metered" state, not a zero — a failed read must
     // not render as "you have used none of your credits".

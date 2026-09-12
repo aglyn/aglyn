@@ -27,6 +27,7 @@ import {
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
   type OrgBandwidthCap,
+  checkDatasetQuota,
   planMetersInfraOverage,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -331,9 +332,10 @@ async function handler(request: Request): Promise<Response> {
        * `dataStorageMbPerOrg`, all `0` on free — are already skipped by
        * `!(check.limit > 0)` in the check loop below, so "80% of your 0
        * included API requests" was never reachable. What free DOES have a
-       * real band for is sites, screens, media storage, contacts, form
-       * submissions and bandwidth, and those are exactly the warnings the
-       * product promises a free customer.
+       * real band for, and this sweep warns on, is sites, screens, media
+       * storage and bandwidth. Two more of free's bands have no check below
+       * at all: form submissions, and the CRM records band, which capture
+       * still fills on free although free has no CRM (AGL-2851).
        *
        * COST: a plan-less org now costs what any other org costs — one host
        * page plus counter reads and an analytics range per host. Free is
@@ -700,7 +702,9 @@ async function handler(request: Request): Promise<Response> {
           key: 'datasets',
           label: 'datasets',
           used: datasetCount,
-          limit: entitlements.maxDatasetsPerOrg,
+          // The limit a create is refused at: included plus bought, clamped
+          // to the plan's maximum — the number the console banner shows too.
+          limit: checkDatasetQuota(orgData as never, datasetCount).limit,
         },
         {
           key: 'dataStorage',

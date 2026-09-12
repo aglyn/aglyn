@@ -78,7 +78,7 @@ import { digestTimeZone } from '../daily-digest/route'
  * The task's ASSIGNEE, and nobody else — an unassigned task is a deliberate
  * choice in the drawer, as the digest reads it. Only a member who may open
  * the CRM (`data.manage`, resolved through their custom role), only in an
- * org whose plan carries the suite and whose `release_contacts` flag is
+ * org whose plan carries the suite and whose `release_crm` flag is
  * on: the plan gate is the digest's own (`crmDigestEntitled`), so a plan
  * that gets no digest gets no reminders either. The recipient's
  * operational-category mute (`notificationPrefs.content`) governs the WHOLE
@@ -182,8 +182,8 @@ async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
     return { ...quiet, skipped: 'not-entitled' }
   }
   const flagOn = isReleaseFlagOnForOrg(
-    'release_contacts',
-    ctx.flagValues['release_contacts'],
+    'release_crm',
+    ctx.flagValues['release_crm'],
     orgId,
     parseOrgReleaseFlagOverrides(org['releaseFlags']),
     resolveEffectivePlan(org),

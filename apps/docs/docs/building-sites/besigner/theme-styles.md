@@ -6,7 +6,7 @@ description: Style from your site's theme instead of typing pixels, so a brand c
 
 # Text styles & theme tokens
 
-Every site has a **theme** — a named set of type sizes, weights, colours,
+Every site has a **theme** — a named set of type sizes, weights, colors,
 spacing steps and shadows. The styles panel offers those names wherever one
 exists, and picking a name is almost always the better answer than typing a
 number.
@@ -59,12 +59,12 @@ Your own theme may differ; the panel always lists what **your** site defines.
 Font weights are named too — Light, Regular, Medium, Semi bold, Bold, Extra
 bold and Black — and each row shows the number it resolves to.
 
-## Colours, spacing and shadows
+## Colors, spacing and shadows
 
 The same rule runs through the rest of the panel:
 
-- **Colours** — pick from your theme's palette rather than pasting a hex code.
-  A palette colour follows a rebrand; `#00B0FF` does not.
+- **Colors** — pick from your theme's palette rather than pasting a hex code.
+  A palette color follows a rebrand; `#00B0FF` does not.
 - **Spacing, Gap, Margin and Padding** — the ladder (None, Extra small, Small,
   Medium, Large…) are multiples of your theme's spacing unit. `Small` stays
   correct if that unit changes.

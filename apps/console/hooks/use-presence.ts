@@ -30,6 +30,8 @@ import { FIREBASE_CLIENT_APP_NAME } from '@aglyn/tenant-feature-instance'
 import {
   APP_CHECK_KEY_MISSING_MESSAGE,
   appCheckSiteKey,
+  authEmulatorUrl,
+  databaseEmulatorHost,
 } from '@aglyn/tenant-feature-instance'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -1409,7 +1411,8 @@ export function usePresence(options: {
         const auth = presenceAuth(presenceApp)
         if (FIREBASE_AUTH_EMULATOR_ENABLED) {
           try {
-            connectAuthEmulator(auth, 'http://localhost:9099', {
+            // The emulator the server was started with (AGL-2834).
+            connectAuthEmulator(auth, authEmulatorUrl(), {
               disableWarnings: true,
             })
           } catch {
@@ -1432,7 +1435,9 @@ export function usePresence(options: {
         const database = getDatabase(presenceApp)
         if (FIREBASE_DATABASE_EMULATOR_ENABLED) {
           try {
-            connectDatabaseEmulator(database, 'localhost', 9000)
+            // The emulator the server was started with (AGL-2834).
+            const emulator = databaseEmulatorHost()
+            connectDatabaseEmulator(database, emulator.host, emulator.port)
           } catch {
             // Already connected on a previous mount.
           }

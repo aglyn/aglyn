@@ -195,6 +195,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     verifyApiKey: async () => ({ orgId: 'org-1', keyId: 'key-1', scopes: mockScopes }),
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,
+    // The release-flag verdict the video gate reads (AGL-2830), declared with
+    // the cases that close it at the bottom of the file.
+    isServerReleaseFlagOnForOrg: async (key: string, orgId: unknown) => {
+      mockVideoUploads.calls.push([key, orgId])
+      return mockVideoUploads.open
+    },
     consumeRateLimit: async () => ({
       allowed: true,
       limit: 120,
@@ -550,5 +556,70 @@ describe('the media:write gate (AGL-2463)', () => {
     const picker = readSource('apps/console/components/org-api-keys-card.component.tsx')
     expect(scopes).toContain("'media:write'")
     expect(picker).toContain("scope: 'media:write'")
+  })
+})
+
+/**
+ * `POST /v1/media` with video ingress paused (AGL-2830), the state the flag
+ * ships in. The refusal sits above the idempotency claim, so a key sent with a
+ * refused video is still unused when the flag opens — asserted by retrying
+ * with the same key rather than inferred from the ordering.
+ */
+const mockVideoUploads: { open: boolean; calls: Array<[string, unknown]> } = {
+  open: false,
+  calls: [],
+}
+
+const mp4 = (sizeBytes = 2048) => ({
+  fileName: 'launch.mp4',
+  contentType: 'video/mp4',
+  data: bytes(sizeBytes, 'video/mp4'),
+})
+
+describe('POST /v1/media refuses a video while uploads are paused (AGL-2830)', () => {
+  beforeEach(() => {
+    mockVideoUploads.open = false
+    mockVideoUploads.calls = []
+  })
+
+  it('answers 403 forbidden with code video_uploads_paused, and nothing lands', async () => {
+    const response = await upload(mp4())
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.error.type).toBe('forbidden')
+    expect(body.error.code).toBe('video_uploads_paused')
+    expect(body.error.message).toMatch(/^Video uploads are paused\./)
+    expect(mockObjects.size).toBe(0)
+    expect([...mockDocs.keys()].filter((k) => k.startsWith(ORG_MEDIA))).toHaveLength(0)
+    expect(mockDocs.get(ORG_COUNTER)).toBeUndefined()
+  })
+
+  it('refuses on a site library too', async () => {
+    const response = await upload(mp4(), 'sites/host-1/media')
+    expect(response.status).toBe(403)
+    expect(mockObjects.size).toBe(0)
+  })
+
+  it('asks the video flag for the organization the key belongs to', async () => {
+    await upload(mp4())
+    expect(mockVideoUploads.calls).toEqual([['release_video_uploads', 'org-1']])
+  })
+
+  it('still uploads an image while video is paused, without reading the flag', async () => {
+    const response = await upload(png(1024))
+    expect(response.status).toBe(201)
+    expect(mockVideoUploads.calls).toEqual([])
+  })
+
+  it('leaves the Idempotency-Key unused, so the same key uploads once the flag opens', async () => {
+    const refused = await upload(mp4(), 'media', 'key-video')
+    expect(refused.status).toBe(403)
+
+    mockVideoUploads.open = true
+    const retried = await upload(mp4(), 'media', 'key-video')
+
+    expect(retried.status).toBe(201)
+    expect(originals()).toHaveLength(1)
   })
 })

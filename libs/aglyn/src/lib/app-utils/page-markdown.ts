@@ -59,6 +59,11 @@
 import { NODE_ROOT_ID } from '../canvas-manager/canvas-manager'
 import { authorHtmlToMarkdown, inlineAuthorHtmlToMarkdown } from './author-html-markdown'
 import { absoluteMediaSrc } from './media-ref'
+import {
+  SAFE_HREF_PATTERN,
+  resolveScreenHref,
+  splitLinkValue,
+} from './screen-link-value'
 
 /** The node shape this serializer reads; keeps callers free of the full type. */
 export interface PageMarkdownNode {
@@ -311,20 +316,41 @@ function walk(
  * template answers at the collection's slug, template screens answer nowhere).
  * Emitting `href` alone would publish, in Markdown, the dead links AGL-1998
  * removed from the HTML.
+ *
+ * `splitLinkValue` + `resolveScreenHref` rather than a local reading of the
+ * two props, because WHICH SLOT a screen reference arrives in is not fixed
+ * (AGL-1335): a `Link`-typed component prop is bound to whichever of
+ * `screenId`/`href` the author reached for, and a value in the `href` slot
+ * carries the stored `screen:<id>` spelling. Reading `screenId` alone published
+ * that token verbatim as a link target on every page built from a prop-fed
+ * CTA — ten of them on aglyn.com, unfollowable by the agents `/llms.txt` sends
+ * here (AGL-2740). These are the same two functions `useLinkTarget` resolves
+ * the HTML with, so the two representations of a page cannot drift again.
+ *
+ * An authored screen id that the map has lost resolves to NO link, exactly as
+ * the HTML renders it: falling back to the stored `href` there would re-publish
+ * the dead path AGL-1998 removed, which is the failure this function's own
+ * contract exists to prevent.
  */
 function screenLinkHref(
   props: Record<string, unknown>,
   context?: PageMarkdownContext,
 ): string {
-  const screenId = props['screenId']
-  if (typeof screenId === 'string' && screenId) {
-    const path = context?.screenRoutes?.[screenId]
-    if (typeof path === 'string' && path) {
-      return absoluteHref(path.startsWith('/') ? path : `/${path}`, context)
-    }
+  const target = splitLinkValue(
+    typeof props['screenId'] === 'string' ? props['screenId'] : undefined,
+    typeof props['href'] === 'string' ? props['href'] : undefined,
+  )
+  if (target.screenId) {
+    const path = resolveScreenHref(context?.screenRoutes ?? undefined, target.screenId)
+    return path ? absoluteHref(path, context) : ''
   }
-  const href = props['href']
-  return typeof href === 'string' ? absoluteHref(href, context) : ''
+  // The same protocol guard the linking elements apply. A `javascript:` href
+  // is inert in a Markdown body, but it is still a target an agent may be
+  // asked to follow, and a representation that offers one the page refuses to
+  // render is describing a different document.
+  return target.href && SAFE_HREF_PATTERN.test(target.href)
+    ? absoluteHref(target.href, context)
+    : ''
 }
 
 /**

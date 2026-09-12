@@ -33,6 +33,8 @@
  *     — and the company name is echoed to the top for the search.
  *  4. THE ANSWER. `created` from a fresh row, `created: false` from a merge
  *     onto an existing address, and the list's own band sentence as a 409.
+ *  5. THE PLAN (AGL-2787). A contact typed in by hand is the CRM suite's: a
+ *     workspace whose plan does not carry it is a 403, staff included.
  *
  * NO STRIPE PATH IS EXERCISED and no production data is read.
  */
@@ -57,6 +59,8 @@ const mockUpdate = jest.fn(async () => undefined)
 /** The org's companies, by id, as the picker's choice is checked against them. */
 let mockCompanies: Record<string, Record<string, unknown>> = {}
 const mockLogActivity = jest.fn(async () => undefined)
+/** The site's org document; Starter is the lowest plan carrying the CRM suite. */
+let mockOrg: Record<string, unknown> = { plan: 'starter' }
 
 jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
@@ -95,7 +99,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: async (hostId: string) =>
-    hostId === 'host-1' ? { orgId: 'org-1', org: { plan: 'starter' } } : null,
+    hostId === 'host-1' ? { orgId: 'org-1', org: mockOrg } : null,
   resolveOrgMembership: async () =>
     mockMember ? { orgId: 'org-1', member: mockMember } : null,
   memberHasOrgPermission: async () => mockHasPermission,
@@ -168,6 +172,7 @@ beforeEach(() => {
   mockMember = { $id: 'user-1', role: 'editor', allHosts: true }
   mockHasPermission = true
   mockUpsertResult = { contactId: 'con-new', created: true }
+  mockOrg = { plan: 'starter' }
   mockCompanies = {
     'co-acme': { name: 'Acme Corporation', visibleTo: ['host:host-1'] },
     'co-hidden': { name: 'Other client', visibleTo: ['host:host-9'] },
@@ -377,5 +382,51 @@ describe('the answer', () => {
     mockUpsertResult = { refused: 'error' }
     const { status } = await post(GOOD)
     expect(status).toBe(500)
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787). A person added by hand is the CRM suite's, included
+ * from Starter. The route asks once it knows the caller, and it asks of the
+ * workspace, so staff acting inside a Free one get the answer a member does.
+ */
+describe('the plan (AGL-2787)', () => {
+  it('refuses a Free workspace, adding, writing and logging nothing', async () => {
+    mockOrg = { plan: 'free' }
+    const { status, payload } = await post(GOOD)
+    expect(status).toBe(403)
+    expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(payload.error).toMatch(/part of the CRM/)
+    expect(payload.error).toMatch(/Included from Starter/)
+    expect(mockUpsert).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(mockLogActivity).not.toHaveBeenCalled()
+  })
+
+  it('refuses staff acting inside a Free workspace the same way', async () => {
+    mockOrg = { plan: 'free' }
+    mockDecoded = { uid: 'staff-1', staff: true }
+    mockMember = null
+    const { status, payload } = await post(GOOD)
+    expect(status).toBe(403)
+    expect(payload).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(payload.error).toMatch(/part of the CRM/)
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('tells a member without data.manage about the permission, not the plan', async () => {
+    mockOrg = { plan: 'free' }
+    mockHasPermission = false
+    const { status, payload } = await post(GOOD)
+    expect(status).toBe(403)
+    expect(payload.error).toMatch(/data\.manage/)
+    expect(payload).not.toHaveProperty('reason')
+  })
+
+  it('admits Starter, the lowest plan that carries the suite', async () => {
+    mockOrg = { plan: 'starter' }
+    const { status } = await post(GOOD)
+    expect(status).toBe(201)
+    expect(mockUpsert).toHaveBeenCalledTimes(1)
   })
 })

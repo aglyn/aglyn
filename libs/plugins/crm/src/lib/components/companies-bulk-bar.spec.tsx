@@ -97,6 +97,32 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   }),
 }))
 
+/** Every post the bar made to a CRM route, and what the delete route answers per company. */
+let posted: Array<{ route: string; payload: Record<string, any> }> = []
+let deleteAnswers: Record<string, Record<string, unknown>> = {}
+let deleteRefusals: Record<string, string> = {}
+jest.mock('./use-crm-api', () => ({
+  useCrmApi: () => async (route: string, payload: Record<string, any>) => {
+    posted.push({ route, payload })
+    const companyId = String(payload['companyId'] ?? '')
+    if (route === 'company-delete' && deleteRefusals[companyId]) {
+      return {
+        response: { ok: false, status: 403 },
+        payload: { error: deleteRefusals[companyId] },
+      }
+    }
+    return {
+      response: { ok: true, status: 200 },
+      payload:
+        route === 'company-delete'
+          ? { ok: true, deleted: true, detached: 0, moreRemain: false, ...deleteAnswers[companyId] }
+          : { ok: true },
+    }
+  },
+}))
+const deletes = () =>
+  posted.filter((call) => call.route === 'company-delete').map((call) => call.payload)
+
 const downloads: Array<{ name: string; body: string }> = []
 jest.mock('../model/contacts-csv', () => ({
   downloadTextFile: (name: string, _type: string, body: string) =>
@@ -146,6 +172,9 @@ beforeEach(() => {
   linked = {}
   logged = []
   notices = []
+  posted = []
+  deleteAnswers = {}
+  deleteRefusals = {}
   confirmAnswer = 'proceed'
   downloads.length = 0
 })
@@ -207,18 +236,19 @@ describe('the file', () => {
   })
 })
 
+/**
+ * Delete is `crm/company-delete` per company (AGL-2804): the unlink clears
+ * each holder's facet that named the company, which is the server's to
+ * write, so the browser deletes no company and writes no contact.
+ */
 describe('deleting the selection', () => {
-  it('detaches each company’s contacts, deletes it, and logs one line per company', async () => {
-    linked = { c1: 2 }
+  it('deletes each company through the route, and logs one line per company', async () => {
+    deleteAnswers = { c1: { deleted: true, detached: 2, moreRemain: false } }
     const { onSelectedChange } = mount(['c1', 'c2'])
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(notices).toEqual(['Deleted 2 companies']))
-    expect(ops.map((op) => `${op.kind} ${op.path}`)).toEqual([
-      'update orgs/org-1/contacts/c1-0',
-      'update orgs/org-1/contacts/c1-1',
-      'delete orgs/org-1/companies/c1',
-      'delete orgs/org-1/companies/c2',
-    ])
+    expect(deletes()).toEqual([{ companyId: 'c1' }, { companyId: 'c2' }])
+    expect(ops).toEqual([])
     expect(logged).toEqual([
       { action: 'Deleted company', target: { type: 'company', id: 'c1', name: 'Acme' } },
       { action: 'Deleted company', target: { type: 'company', id: 'c2', name: 'Globex' } },
@@ -227,13 +257,25 @@ describe('deleting the selection', () => {
   })
 
   it('names a company past the detach bound, keeps it, and leaves it selected', async () => {
-    linked = { c1: 501 }
+    deleteAnswers = { c1: { deleted: false, detached: 500, moreRemain: true } }
     const { onSelectedChange } = mount(['c1', 'c2'])
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(notices).toEqual(['Deleted 1 company']))
-    expect(ops.some((op) => op.kind === 'delete' && op.path.endsWith('/c1'))).toBe(false)
     expect(screen.getByText(/Acme — 500 contacts were unlinked and more remain/)).toBeTruthy()
     expect(onSelectedChange).toHaveBeenCalledWith(['c1'])
+    expect(logged).toEqual([
+      { action: 'Deleted company', target: { type: 'company', id: 'c2', name: 'Globex' } },
+    ])
+    expect(ops).toEqual([])
+  })
+
+  it("names a company the route refused, in the route's own sentence", async () => {
+    deleteRefusals = { c1: 'Your access is limited to specific sites.' }
+    mount(['c1'])
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText(/Acme — Your access is limited to specific sites\./)).toBeTruthy()
+    expect(logged).toEqual([])
+    expect(ops).toEqual([])
   })
 
   it('writes nothing when the confirm is cancelled', async () => {
@@ -241,6 +283,7 @@ describe('deleting the selection', () => {
     mount(['c1'])
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(deletes()).toEqual([])
     expect(ops).toEqual([])
     expect(logged).toEqual([])
   })

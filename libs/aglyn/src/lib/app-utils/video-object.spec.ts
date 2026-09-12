@@ -77,9 +77,9 @@ describe('videoObjectJsonLd', () => {
     )
   })
 
-  it('never emits `embedUrl` — this element is not an embed', () => {
-    // `embedUrl` names a PLAYER page, which is what the separate Video embed
-    // element renders and this one never does.
+  it('never emits `embedUrl` for a film this site serves', () => {
+    // `embedUrl` names a PLAYER page. A library film is a file, and a
+    // crawler told it is a player would go looking for one.
     expect(build(complete)).not.toHaveProperty('embedUrl')
   })
 
@@ -165,6 +165,52 @@ describe('pageVideoObjects', () => {
     expect(
       pageVideoObjects({ a: { componentId: 'image', props: {} } }),
     ).toEqual([])
+  })
+})
+
+describe('a Wistia video (AGL-2826)', () => {
+  const wistia = {
+    ...complete,
+    src: 'https://aglyn.wistia.com/medias/e4a27b971d',
+    durationSeconds: 60,
+  }
+
+  it('publishes the player page as embedUrl, beside a DAM thumbnail', () => {
+    expect(build(wistia)).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'VideoObject',
+      name: 'The 60-second tour',
+      description: 'What Aglyn does, end to end.',
+      thumbnailUrl: `${ORIGIN}/api/media/cdn/host1/still?w=1280`,
+      uploadDate: '2026-09-01',
+      embedUrl: 'https://fast.wistia.net/embed/iframe/e4a27b971d',
+      duration: 'PT1M',
+    })
+  })
+
+  it('never calls the pasted media page a content file', () => {
+    // The link is Wistia's HTML page. As `contentUrl` it would tell a crawler
+    // to fetch a film from an address that serves a web page.
+    expect(build(wistia)).not.toHaveProperty('contentUrl')
+  })
+
+  it('rebuilds the embed address rather than publishing the pasted one', () => {
+    expect(
+      build({
+        ...wistia,
+        src: 'https://fast.wistia.com/embed/iframe/e4a27b971d?autoPlay=true',
+      }),
+    ).toMatchObject({
+      embedUrl: 'https://fast.wistia.net/embed/iframe/e4a27b971d',
+    })
+  })
+
+  it('still needs an authored poster, since Wistia generates none here', () => {
+    // `posterFromSource` means the DAM captured a frame, and a Wistia link is
+    // not a DAM reference, so it can never vouch for a thumbnail.
+    expect(
+      build({ ...wistia, poster: undefined, posterFromSource: true }),
+    ).toBeUndefined()
   })
 })
 

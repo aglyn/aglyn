@@ -88,7 +88,7 @@ import { consoleOrigin } from '../../_lib/usage-alert-email'
  * member who reaches the site it was captured on. Only members who may open
  * the CRM (`data.manage`, resolved through their custom role the way the task
  * routes resolve it), and only in an org whose plan carries the suite and
- * whose `release_contacts` flag is on: a digest about a surface the reader
+ * whose `release_crm` flag is on: a digest about a surface the reader
  * cannot open is a reminder to pay, not a reminder to call.
  *
  * Two switches on the recipient's own account are honored. The **Daily CRM
@@ -264,8 +264,8 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
     return { ...quiet, skipped: 'not-entitled' }
   }
   const flagOn = isReleaseFlagOnForOrg(
-    'release_contacts',
-    ctx.flagValues['release_contacts'],
+    'release_crm',
+    ctx.flagValues['release_crm'],
     orgId,
     parseOrgReleaseFlagOverrides(org['releaseFlags']),
     resolveEffectivePlan(org),

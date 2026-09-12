@@ -992,7 +992,7 @@ async function handler(request: Request): Promise<Response> {
       // below still say "contacts" because they are the vocabulary every
       // reader of this document keys on; the quantity behind them widened.
       const contactQuota = checkCrmRecordsQuota(orgData, crmRecordsCount)
-      // Records-band overage is WITHHELD while `release_contacts` is off
+      // Records-band overage is WITHHELD while `release_crm` is off
       // (AGL-1604). The flag gates one surface — the console CRM and its nav
       // tab — while ingestion and `GET /v1/contacts` keep running. So
       // records accrue, the band is crossed, and the org has no console way to
@@ -1020,8 +1020,8 @@ async function handler(request: Request): Promise<Response> {
       // this costs no extra read, unlike `isServerReleaseFlagOnForOrg`, which
       // would re-fetch the same document once per org.
       const contactsOverageBilled = isReleaseFlagOnForOrg(
-        'release_contacts',
-        releaseFlagValues['release_contacts'],
+        'release_crm',
+        releaseFlagValues['release_crm'],
         orgId,
         parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
         // Tier targeting included (AGL-2486), from the same `orgData` as the

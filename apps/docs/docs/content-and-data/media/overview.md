@@ -22,7 +22,8 @@ flowchart LR
 
 :::info Plan availability
 **Free** with storage quotas. **CDN delivery** with WebP variants is on **every
-plan**, free included; large video uploads and higher storage are gated by plan.
+plan**, free included; document uploads and higher storage are gated by plan. Video
+uploads are paused on every plan for now — see [Upload](#upload).
 :::
 
 ## Organize
@@ -70,7 +71,9 @@ plan**, free included; large video uploads and higher storage are gated by plan.
     members with organization-wide access.
   - **Download file** — always, public or private. See
     [Download the original file](#download-file).
-  - **Replace file** — images only.
+  - **Replace file** — for any file, not only images. The new file has to be the same
+    kind as the one it replaces (a picture for a picture, a video for a video, a
+    document for a document), because every page that uses it keeps the same link.
   - **Details** and **Delete**.
 
   **Copy URL** gives you a full absolute URL on the site's own domain, ready to paste
@@ -143,15 +146,25 @@ same thing. The exact caps are in
 
 ## Upload
 
-- Upload **images**, **video** (MP4, WebM, QuickTime), **PDFs**, **ZIP archives** and
-  **documents** (Word, Excel, PowerPoint, CSV, RTF, plain text, Markdown and JSON).
-  Click **Upload media**, or **drag files straight from your desktop onto the library**
-  — dropped files land in the folder you have open.
+- Upload **images**, **PDFs**, **ZIP archives** and **documents** (Word, Excel,
+  PowerPoint, CSV, RTF, plain text, Markdown and JSON). Click **Upload media**, or
+  **drag files straight from your desktop onto the library** — dropped files land in
+  the folder you have open.
+- **Video uploads are paused.** New MP4, WebM and QuickTime files are not accepted on
+  any plan for now, from the console or the API, and a video's file cannot be
+  replaced. Videos already in your library keep playing, and the **Video** element can
+  still use them. While the pause lasts, the library shows a **Video uploads paused**
+  chip beside **Upload media**.
 - Documents and archives are stored and served exactly as you uploaded them — nothing
   is opened, extracted or converted. Macro-enabled Office files (`.docm`, `.xlsm`,
   `.pptm`) are not accepted.
-- Rename, **replace the file** behind an asset, and edit images in place. Replace is
-  available from the asset's details drawer and straight from the card's overflow menu.
+- Rename, **replace the file** behind an asset, and edit images in place. Replace works
+  for images, PDFs, archives and documents alike, and for video once video uploads
+  resume — it is available from the asset's details drawer and straight from the card's
+  overflow menu, and it keeps the asset's link, folder, tags, alt text, custom fields
+  and sharing exactly as they were. Swapping one kind of file for another is not
+  allowed: upload that as a new file. Cropping, rotating and resizing stay images-only,
+  for the obvious reason.
 
 ### Size and plan limits
 
@@ -162,7 +175,7 @@ same thing. The exact caps are in
 | Documents (Word, Excel, CSV, RTF, text, Markdown, JSON) | 25 MB per file | **Pro and above** |
 | Presentations (PowerPoint) | 50 MB per file | **Pro and above** |
 | ZIP archives | 50 MB per file | **Pro and above** |
-| Video | 200 MB per file | **Pro and above** |
+| Video | 200 MB per file | **Paused** on every plan |
 
 Any file over 3 MB automatically uses **signed-URL uploads**, so big files go straight to
 storage without tying up the console. Folders nest up to **5 levels** deep.
@@ -246,7 +259,9 @@ A media URL is keyed to the **asset**, not to its bytes or its location. That me
 link you copied stays correct when you:
 
 - **Replace the file** — every screen, layout, and content entry that embeds it serves
-  the new image immediately, with no re-linking.
+  the new file immediately, with no re-linking. A replaced video also drops the poster
+  frame and any encoded versions of the old footage, so nothing left over is served
+  under the new file's link.
 - **Move it between folders** — organizing your library never breaks a live page.
 
 So replacing a logo across a whole site is one upload, not a hunt for every reference.
@@ -300,7 +315,7 @@ describes **this file**, and it says one of exactly three things:
 
 | Line | Dot | What it means |
 | --- | --- | --- |
-| **Served from storage · no CDN, no variants** | grey | This asset has no CDN path — a plan without the media CDN, or an asset stored before you had it. |
+| **Served from storage · no CDN, no variants** | gray | This asset has no CDN path — a plan without the media CDN, or an asset stored before you had it. |
 | **CDN · variants 320 / 640 / 1280** | green | On the CDN, with those WebP widths generated for it. The widths listed are the ones this file actually has. |
 | **CDN · no responsive variants for this file** | green | On the CDN, serving the original bytes only. |
 
@@ -317,8 +332,8 @@ The line reads the asset, not your plan: a paid plan does not make a line say
 ## Who an asset is shared with
 
 Workspace media is shared across every site by default. The **Shared with** control
-narrows that, with the same three choices as datasets — **All sites**, **This site only**,
-or **Selected sites…**. You'll find it in three places:
+narrows that, with the same two choices as datasets — **All sites** or
+**Selected sites…**. You'll find it in three places:
 
 - on a single asset, in its details drawer;
 - on a **selection** — tick several files and use **Shared with…** in the toolbar;
@@ -334,8 +349,9 @@ Only workspace owners and admins can change sharing.
 A new folder starts shared with **All sites**, so it appears everywhere the moment you
 create it — or with the site you were working in, if your workspace has been set to make
 new resources site-scoped by default. That default is **Default sharing for new data and
-media**, at the top of the workspace's **Media** page; it applies to new datasets as well
-as new files, and changes nothing that already exists. If the **Shared with** dialog ever opens on
+media**, at the top of the workspace's **Media** page; it applies to new files and changes
+nothing that already exists. A dataset created on a **Data** page starts shared with
+**All sites** either way. If the **Shared with** dialog ever opens on
 "Not shared with any site", that folder or file has no sharing stored at all: it is hidden
 from every site, and any file inside it turns up under **No folder** there. Pick a value
 and save to fix it.
@@ -371,7 +387,9 @@ A private file:
   working too. That is the part people expect and the part that is easy to get wrong:
   a switch that only stopped *new* links would leave the one already in circulation
   serving the file forever,
-- **cannot be placed on a page**; the picker refuses it and says why,
+- **cannot be placed on a page**; the picker refuses it and says why. The one place a
+  private file can be added is a product's
+  [members videos and digital downloads](#members-videos-are-private),
 - is viewable and downloadable in the console by people who can already see it, through a
   **temporary link that stops working after about fifteen minutes**.
 
@@ -404,6 +422,33 @@ One thing none of this reaches: **bytes somebody already downloaded.** Revoking 
 stops the file being fetched again; it cannot recall a copy that is already on someone's
 disk, in a browser cache or in a web archive. Nothing anyone sells can, and a product that
 implied otherwise would be the more dangerous thing to trust.
+
+### Members videos are private files {#members-videos-are-private}
+
+A video you add to a product as a **members video** is a private file, because a private
+file is the only kind whose links can expire:
+
+- **Adding a video makes it private.** If the file is public, Aglyn asks first and lists
+  anywhere else it is used, such as a trailer on a public page. Making it private stops it
+  showing there, and any public link to it that was already shared stops working.
+- **Buyers get links that expire.** When a buyer presses play, the store checks the purchase
+  and gives the player a link that works for **four hours**. If a long sitting outlives the
+  link, the player asks for a new one, which checks the purchase again, and carries on from
+  the same second. A buyer who has lost access sees the sign-in prompt instead.
+- **A public members video does not play.** If the file is public, because it was published
+  again or added some other way, buyers cannot play it. The product editor marks it
+  **Public** and offers **Make private**.
+- **A file a product still sells cannot be published.** **Publish file** refuses while any
+  product lists the file as a members video or a digital download, and names the product.
+  Remove the file from the product first.
+
+A members video added as a link to another site is served by that site, so Aglyn cannot make
+its links expire. The product editor marks it **Hosted elsewhere**.
+
+Files a product sells as **digital downloads** work the same way. Adding one makes it private
+after the same check, and the download link in a buyer's receipt hands over a link to the file
+that works for **one hour**. A file that is still public is refused rather than handed out,
+and a refused download does not count against the order's download limit.
 
 ## Approved image hosts {#approved-image-hosts}
 
@@ -476,7 +521,7 @@ and both URL forms. See [the Media API resource](/api/resources/media), includin
 ## Components
 
 - **Image** — place and bind images from the library.
-- **Video** — embed uploaded video.
+- **Video** — embed a video that is already in your library.
 - **Favicon picker** — choose the site favicon from your media.
 - **App icon picker** — choose the square mark your site installs with.
 

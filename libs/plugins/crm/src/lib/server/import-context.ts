@@ -52,6 +52,7 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { crmSuiteRefusal } from './suite-gate'
 
 /** Everything an import needs about who is asking, or the refusal to send back. */
 export type ImportContext =
@@ -136,6 +137,10 @@ export async function resolveImportContext(req: ImportRequest): Promise<ImportCo
       },
     }
   }
+  // Every file this context serves — contacts, companies, deals, tasks and
+  // leads — is the CRM's to import, whoever is asking (AGL-2787).
+  const suite = crmSuiteRefusal(org, 'Importing from a CSV file')
+  if (suite) return { ok: false, status: suite.status, body: suite.body }
   const group = await consentGroupForSite(hostId)
   return {
     ok: true,

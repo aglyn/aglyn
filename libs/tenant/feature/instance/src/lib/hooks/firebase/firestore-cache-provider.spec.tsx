@@ -66,6 +66,17 @@ jest.mock('firebase/firestore', () => {
   }
 })
 
+// The prune reads this page's storage; here only the call is observed.
+const mockPruneBrowserSharedClientState = jest.fn(
+  async (_appName?: string, _projectId?: string) => undefined,
+)
+jest.mock('./firestore-shared-client-state', () => ({
+  __esModule: true,
+  ...jest.requireActual('./firestore-shared-client-state'),
+  pruneBrowserSharedClientState: (appName?: string, projectId?: string) =>
+    mockPruneBrowserSharedClientState(appName, projectId),
+}))
+
 // `nx test` leaks the root `.env` into the worker, and the emulator branch
 // carries no `localCache` at all — so pin the production branch rather than
 // inherit whichever way the ambient environment happens to fall.
@@ -156,5 +167,29 @@ describe('the Firestore local cache the provider constructs, per host class', ()
     const settings = firestoreSettingsFor('ephemeral')
     expect(settings.localCache?.kind).not.toBe('persistent')
     expect(settings.localCache).toBeDefined()
+  })
+})
+
+describe('the multi-tab record prune the provider starts, per host class (AGL-2845)', () => {
+  beforeEach(() => {
+    mockPruneBrowserSharedClientState.mockClear()
+  })
+
+  it('prunes once the durable cache is initialized, under this app and project', () => {
+    // A helper nothing calls is the AGL-1354 failure; the SDK never sweeps
+    // these records itself, so an unreached prune is an unbounded one.
+    firestoreSettingsFor('durable')
+
+    expect(mockPruneBrowserSharedClientState).toHaveBeenCalledTimes(1)
+    expect(mockPruneBrowserSharedClientState).toHaveBeenCalledWith(
+      `agl1456-firestore-${appCounter - 1}`,
+      'aglyn-main',
+    )
+  })
+
+  it('never prunes on a custom console domain, whose memory cache strands nothing', () => {
+    firestoreSettingsFor('ephemeral')
+
+    expect(mockPruneBrowserSharedClientState).not.toHaveBeenCalled()
   })
 })

@@ -18,10 +18,14 @@
 import {
   RELEASE_FLAGS,
   type ConsoleNavSection,
+  type OrgFeatureFlags,
   type ReleaseFlagKey,
   type ResolvedConsoleNavSection,
 } from '@aglyn/aglyn'
-import { resolveExtensionEntitlement } from './extension-entitlement'
+import {
+  composeExtensionEntitlements,
+  resolveExtensionEntitlement,
+} from './extension-entitlement'
 
 /**
  * The release flag a nav tab id names, if any — the gate the nav strip
@@ -43,6 +47,13 @@ export interface HubSectionVerdicts {
   /** The org billing doc the entitlement is judged from, and whether it settled. */
   org: unknown
   orgReady: boolean
+  /**
+   * The entitlement the hub's EXTENSION declares, when it declares one. A
+   * section inside a surface the plan lacks is locked whatever it declares
+   * itself, so the rail never draws a section open beside the notice that
+   * refuses it.
+   */
+  featureFlag?: keyof OrgFeatureFlags
 }
 
 /**
@@ -57,8 +68,10 @@ export interface HubSectionVerdicts {
  * plugin cannot compute this for itself, because release flags are
  * `scope:app`, and a rail that guessed would link into the shell's own
  * "coming soon" notice. `locked` is the entitlement verdict and nothing
- * else — `blocked`, never `pending` — so an unsettled org draws no lock, the
- * same three-state care the page body takes.
+ * else — the extension's flag and the section's own, composed the way the
+ * page body composes them — `blocked`, never `pending`, so an unsettled org
+ * draws no lock, the same three-state care the page body takes. Staff draw
+ * the locks a member draws: the plan is a fact about the workspace.
  */
 export function resolveHubSections(
   sections: readonly ConsoleNavSection[] | undefined,
@@ -66,7 +79,8 @@ export function resolveHubSections(
   verdicts: HubSectionVerdicts,
 ): readonly ResolvedConsoleNavSection[] | undefined {
   if (!sections?.length || !basePath) return undefined
-  const { flags, isStaff, org, orgReady } = verdicts
+  const { flags, isStaff, org, orgReady, featureFlag } = verdicts
+  const surface = resolveExtensionEntitlement(featureFlag, org, orgReady)
   return sections.map((section) => {
     const flagKey = releaseFlagForNavTab(section.navTabId)
     return {
@@ -75,8 +89,10 @@ export function resolveHubSections(
       href: `${basePath}/${section.id}`,
       visible: flagKey ? flags[flagKey].released || isStaff : true,
       locked:
-        resolveExtensionEntitlement(section.featureFlag, org, orgReady) ===
-        'blocked',
+        composeExtensionEntitlements(
+          surface,
+          resolveExtensionEntitlement(section.featureFlag, org, orgReady),
+        ) === 'blocked',
     }
   })
 }
@@ -86,11 +102,13 @@ export function resolveHubSections(
  * released, and on the plan (AGL-2501, AGL-2611).
  *
  * Skipping past a flagged-off or locked first section is the rule: a bare
- * `/crm` on a plan without the sales suite lands on the contacts list it
- * does have rather than on an upgrade notice, and a redirect into a section
- * the gate would refuse answers the nav tab with a "coming soon" notice.
- * `undefined` when nothing is open to this reader, which the shell renders
- * as the hub itself rather than looping.
+ * hub URL on a plan that lacks its first section lands on the next section
+ * the plan has rather than on an upgrade notice, and a redirect into a
+ * section the gate would refuse answers the nav tab with a "coming soon"
+ * notice.
+ * `undefined` when nothing is open to this reader — every section locked,
+ * as the whole CRM is on a plan without it — which the shell renders as the
+ * hub's upgrade notice beside the rail rather than looping.
  */
 export function hubLandingHref(
   sections: readonly ResolvedConsoleNavSection[] | undefined,

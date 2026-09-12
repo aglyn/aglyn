@@ -56,6 +56,11 @@ import {
   EntitlementUpsell,
   useCommerceEntitlement,
 } from './entitlement-gate.component'
+import {
+  MembersVideosField,
+  PaidDownloadAddButton,
+  PaidMediaProtection,
+} from './paid-media'
 
 /**
  * What each picker in this dialog will offer.
@@ -1047,6 +1052,12 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                   {file.fileName}
                   {file.version ? ` · v${file.version}` : ''}
                 </Typography>
+                <PaidMediaProtection
+                  url={file.url}
+                  hostId={hostId}
+                  productId={product?.$id}
+                  kind="download"
+                />
                 <TextField
                   label="Version"
                   value={file.version ?? ''}
@@ -1077,21 +1088,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               </Stack>
             ))}
             <Stack direction="row" spacing={2}>
-              <Button
-                size="small"
-                onClick={() =>
-                  void pick((media) =>
-                    update({
-                      digitalFiles: [
-                        ...(current.digitalFiles ?? []),
-                        { url: media.url, fileName: media.fileName ?? 'download' },
-                      ],
-                    }),
-                  )
+              {/* Paid downloads are private files delivered through expiring
+                  links (AGL-2847); adding one makes the file private. */}
+              <PaidDownloadAddButton
+                hostId={hostId}
+                productId={product?.$id}
+                onAdd={(file) =>
+                  update({ digitalFiles: [...(current.digitalFiles ?? []), file] })
                 }
-              >
-                {'Add file (media library)'}
-              </Button>
+              />
               <TextField
                 label="Download limit"
                 placeholder="Unlimited"
@@ -1115,42 +1120,14 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               {'Buyers always download the current files — uploading a new ' +
                 'version re-delivers to everyone.'}
             </Typography>
-            {(current.gatedVideos ?? []).map((video, index) => (
-              <Stack key={index} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                  {`🎬 ${video.title || video.url}`}
-                </Typography>
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={() =>
-                    update({
-                      gatedVideos: (current.gatedVideos ?? []).filter(
-                        (_item, itemIndex) => itemIndex !== index,
-                      ),
-                    })
-                  }
-                >
-                  {'✕'}
-                </Button>
-              </Stack>
-            ))}
-            <Button
-              size="small"
-              sx={{ alignSelf: 'flex-start' }}
-              onClick={() =>
-                void pick((media) =>
-                  update({
-                    gatedVideos: [
-                      ...(current.gatedVideos ?? []),
-                      { url: media.url, title: media.fileName ?? '' },
-                    ],
-                  }),
-                )
-              }
-            >
-              {'Add members video'}
-            </Button>
+            {/* Members videos are private files delivered through expiring
+                links (AGL-2814); adding one makes the file private. */}
+            <MembersVideosField
+              hostId={hostId}
+              productId={product?.$id}
+              videos={current.gatedVideos ?? []}
+              onChange={(gatedVideos) => update({ gatedVideos })}
+            />
           </>
         ) : null}
 

@@ -130,64 +130,6 @@ export const FLAG_DOC_PAGES: Partial<
         'An aggregate guide: it opens with a `:::info Plan availability` admonition for COMMERCE itself, which is shipped and paid-for and has nothing to do with this flag. A whole-file price check here would fail on that admonition forever, and defanging it would remove the guard from the pages that need it.',
     },
   ],
-  // AGL-1601 / AGL-1603 / AGL-1604. The flag gates the console PAGE only —
-  // ingestion, `GET /v1/contacts` and the audience-band meter all run — so
-  // every disclosure below says the page is unavailable, not the feature.
-  release_contacts: [
-    {
-      path: 'docs/content-and-data/crm/overview.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'api/resources/contacts.md',
-      // The surface is the CRM hub now (AGL-2595), and the page names it by
-      // that name: the flag still gates only the console page, so the
-      // disclosure is that the console's CRM is rolling out while the API
-      // is live.
-      disclosure: [/console's \*\*CRM\*\*[\s\S]{0,80}rolling out/],
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'docs/getting-started/console-tour.md',
-      // AGL-1603's worst item: the page offered a remedy (enable the plugin
-      // under Organization → Plugins) that CANNOT work for a Remote Config
-      // flag. Both halves are asserted — the qualification and the dead end.
-      disclosure: [
-        /\*\*CRM\*\* is the exception[\s\S]{0,200}rolling out/,
-        /dead end/i,
-      ],
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'docs/intro.md',
-      disclosure: [/the CRM \(rolling out\)/i],
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'The docs home carries a general "Plan availability" callout explaining the docs convention; it is not a claim about Contacts.',
-    },
-    {
-      path: 'docs/whats-new.md',
-      disclosure: [
-        // The hub's own entry at the top of the page and the older CRM
-        // entry lower down both carry the marker; either form satisfies it.
-        /\[(?:The CRM hub|CRM)\][^\n]*\n?[^\n]*\*\(rolling out\)\*/,
-        // The release note still quotes the real overage rates. That is
-        // allowed only while it says, next to them, that nobody is billed.
-        /per 1,000\/month[\s\S]{0,400}not billed yet/i,
-      ],
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'A changelog prices the whole product; the Contacts rates specifically are covered by the windowed "not billed yet" disclosure above.',
-    },
-    {
-      path: 'docs/workspace-and-billing/billing-and-plans/overview.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: false,
-      priceClaimNote:
-        'The billing page IS the price list — the plan table and audience bands are real numbers matching plan-entitlements.ts. The Rolling out admonition carries the qualification that paid audience overage is not billed while the page is dark.',
-    },
-  ],
 
   // AGL-1302 follow-on. The template AGL-1603 was told to copy.
   release_edit_bar: [
@@ -205,12 +147,48 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
   // AGL-1860. The flag closes the console PANEL and the chat ROUTE together
-  // (a released-off feature 404s), so the one page about it is a page about
-  // something nobody can open yet — the admonition treatment, whole-file.
+  // (a released-off feature 404s), and the one page about it is ABOUT the
+  // feature — the admonition treatment, whole-file. While
+  // PUBLISHED_ON_IN_PRODUCTION declares the flag ON, the spec reads this entry
+  // the other way: the admonition must be absent.
   release_assist: [
     {
       path: 'docs/getting-started/aglyn-assist.md',
       disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+  ],
+
+  // AGL-2830. The flag reopens video INGRESS only: a video already stored keeps
+  // serving whichever way it points. So no page here is ABOUT the flag, and
+  // each discloses the pause beside its own upload claim. The windows tie the
+  // disclosure to that claim, so deleting it fails even while the word
+  // "paused" survives somewhere else on the page.
+  release_video_uploads: [
+    {
+      path: 'docs/content-and-data/media/overview.md',
+      disclosure: [
+        /## Upload[\s\S]{0,600}\*\*Video uploads are paused\.\*\*/,
+        /\| Video \| 200 MB per file \| \*\*Paused\*\* on every plan \|/,
+      ],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The media library page carries a `:::info Plan availability` admonition and a per-plan size table for images, documents and storage, which ship on their own plan gates. A whole-file check would fail on those forever.',
+    },
+    {
+      path: 'api/resources/media.md',
+      disclosure: [
+        /\*\*Video uploads are paused\.\*\*[\s\S]{0,120}video_uploads_paused/,
+      ],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The media API page documents the whole resource: reads, image and document uploads, and the storage quota. A plan claim on it belongs to those, not to this flag.',
+    },
+    {
+      path: 'docs/building-sites/besigner/video.md',
+      disclosure: [
+        /## Choosing the film[\s\S]{0,500}:::note Video uploads are paused/,
+      ],
       checkNoPriceClaim: true,
     },
   ],
@@ -223,6 +201,61 @@ export const FLAG_DOC_PAGES: Partial<
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
 export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {}
+
+/**
+ * Where a published-ON verdict was read, and why it holds. Every field is
+ * something a reviewer can check against the Firebase console, so none of
+ * them is optional.
+ */
+export interface PublishedOnEvidence {
+  /** The production Remote Config template version that publishes the flag. */
+  readonly templateVersion: number
+  /** When that version was published, as `YYYY-MM-DD`. */
+  readonly publishedAt: string
+  /**
+   * The parameter value that version publishes, verbatim. The spec parses it
+   * with the gate's own parser and requires it to turn the flag on for every
+   * workspace on every plan: a percentage or a tier list is still a rollout,
+   * and a page about a rollout still owes the reader its disclosure.
+   */
+  readonly publishedValue: string
+  /** Why the in-repo default and the template seed stay OFF regardless. */
+  readonly defaultStaysOff: string
+  /** What had to be true before production could publish the flag ON. */
+  readonly precondition: string
+}
+
+/**
+ * Flags production publishes ON while their in-repo default stays OFF
+ * (AGL-2784).
+ *
+ * `defaultEnabled` is only the fallback for an unreachable Remote Config, and
+ * the template seeds the same value, so neither says whether a customer can
+ * open the feature. Usually that gap never matters, because shipping a flag
+ * means flipping its default. A flag whose default is kept OFF on purpose —
+ * so that a code change can never be what releases it — ships by publishing
+ * Remote Config instead, and without a declaration here the spec reads the
+ * default and requires that flag's pages to say it is still rolling out.
+ *
+ * A key here counts as ON for disclosure: its pages must carry no rolling-out
+ * disclosure, and none is required of them. Its FLAG_DOC_PAGES entry stays,
+ * because that entry is what points the stale-marker half at those pages.
+ * Only a registry key that is OFF by default belongs here; the spec refuses
+ * any other.
+ */
+export const PUBLISHED_ON_IN_PRODUCTION: Partial<
+  Record<ReleaseFlagKey, PublishedOnEvidence>
+> = {
+  release_assist: {
+    templateVersion: 8,
+    publishedAt: '2026-08-23',
+    publishedValue: '{"enabled":true,"rolloutPercent":0}',
+    defaultStaysOff:
+      'Flipping the default in code has to be a failing test rather than a quiet deploy: assist-anthropic-subprocessor-gate.spec.ts pins both defaultEnabled and the template seed to false, so the flag can only be released by publishing Remote Config.',
+    precondition:
+      'AGL-1909: Anthropic has to be a published subprocessor before Assist sends it customer content. The published subprocessors page (/legal/subprocessors) lists Anthropic for the Assist helper.',
+  },
+}
 
 /** Every flag whose in-repo default (and seeded Remote Config value) is OFF. */
 export const OFF_BY_DEFAULT_FLAG_KEYS: readonly ReleaseFlagKey[] =

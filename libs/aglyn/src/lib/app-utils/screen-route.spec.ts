@@ -30,6 +30,9 @@ import {
   screenSlugHasPathSeparator,
   wouldCreateScreenCycle,
 } from './screen-route'
+import { collectionListUrl } from './collection-entries'
+import { isScreenLinkBroken } from './screen-link-context'
+import { resolveScreenHref } from './screen-link-value'
 
 describe('normalizeScreenSlug', () => {
   it('normalizes the root path', () => {
@@ -440,5 +443,82 @@ describe('linkableScreenRoutes', () => {
       unrouted: ['blogEntryTmpl'],
     })
     expect(source).toEqual(raw)
+  })
+})
+
+/**
+ * Every content collection's LISTING page as a link target (AGL-2799).
+ *
+ * The table the pickers and the renderer share held screens only, so a
+ * listing no screen renders had no entry at all, and aglyn.com's drawer linked
+ * `/blog` as a typed address. A listing is keyed by its collection's id and
+ * addressed by the one listing-URL builder.
+ */
+describe('linkableScreenRoutes — collection listings (AGL-2799)', () => {
+  const raw = {
+    home: '/',
+    blogListTmpl: 'blog-list-template',
+    changelog: 'changelog',
+  }
+
+  it('adds each listing under its collection id, beside the screens', () => {
+    const routes = linkableScreenRoutes(raw, {
+      routedElsewhere: { blogListTmpl: 'blog' },
+      collectionListings: { blog: 'blog', yQuEudFcgR: 'newsroom' },
+    })
+    expect(routes?.['collection:blog']).toBe('blog')
+    expect(routes?.['collection:yQuEudFcgR']).toBe('newsroom')
+    expect(routes?.blogListTmpl).toBe('blog')
+    expect(routes?.home).toBe('/')
+    expect(routes?.changelog).toBe('changelog')
+  })
+
+  it('resolves to the address the listing-URL builder gives the listing', () => {
+    const routes = linkableScreenRoutes(raw, {
+      collectionListings: { blog: 'blog' },
+    })
+    // The builder the sitemap, the pager and the canonical link use, so a
+    // link cannot give the listing an address the rest of the site does not.
+    expect(resolveScreenHref(routes, 'collection:blog')).toBe(
+      collectionListUrl({ collectionSlug: 'blog' }),
+    )
+    expect(resolveScreenHref(routes, 'collection:blog')).toBe('/blog')
+  })
+
+  it('follows a renamed slug, because the key is the collection id', () => {
+    const before = linkableScreenRoutes(raw, {
+      collectionListings: { blog: 'blog' },
+    })
+    const after = linkableScreenRoutes(raw, {
+      collectionListings: { blog: 'articles' },
+    })
+    expect(resolveScreenHref(before, 'collection:blog')).toBe('/blog')
+    expect(resolveScreenHref(after, 'collection:blog')).toBe('/articles')
+  })
+
+  it('has no entry for a collection that is gone or has no slug, which reads as broken', () => {
+    const routes = linkableScreenRoutes(raw, {
+      collectionListings: { blog: 'blog', drafts: '', slash: '/' },
+    })
+    expect(routes?.['collection:blog']).toBe('blog')
+    expect(routes).not.toHaveProperty('collection:drafts')
+    expect(routes).not.toHaveProperty('collection:slash')
+    expect(routes).not.toHaveProperty('collection:gone')
+    expect(isScreenLinkBroken(routes, 'collection:gone')).toBe(true)
+    expect(isScreenLinkBroken(routes, 'collection:drafts')).toBe(true)
+    expect(isScreenLinkBroken(routes, 'collection:blog')).toBe(false)
+  })
+
+  it('normalizes a slug spelled as a path', () => {
+    const routes = linkableScreenRoutes(raw, {
+      collectionListings: { blog: ' /blog/ ' },
+    })
+    expect(routes?.['collection:blog']).toBe('blog')
+  })
+
+  it('gives a site with a blog and no published screen a table to resolve against', () => {
+    expect(
+      linkableScreenRoutes(undefined, { collectionListings: { blog: 'blog' } }),
+    ).toEqual({ 'collection:blog': 'blog' })
   })
 })

@@ -147,7 +147,7 @@ checkbox group needs at least one box ticked.
 ### Labels and placeholders
 
 Every field has a **Label** — the visible name of the input, and the one screen
-readers announce. A field can also carry a **Placeholder**: a grey example
+readers announce. A field can also carry a **Placeholder**: a gray example
 inside the empty input, such as `you@company.com` or "Tell us about your setup".
 Set one and the label moves above the box so both are readable at once; leave it
 empty and the label keeps its floating behavior.
@@ -170,8 +170,10 @@ Build a feedback survey with four fields:
 4. A **Multiline** field named `comments` for anything else.
 
 Submissions land in the inbox like any other form — a visitor who ticks two
-checkboxes submits `topics: Products, Pricing`, and the rating arrives as a
-number you can chart from a bound [dataset](../datasets/overview.md).
+checkboxes submits `topics: Products, Pricing`, and the rating arrives as `4`.
+Like every form value it is stored as text, including in a bound
+[dataset](../datasets/overview.md), whose filters and sorts still compare it as a
+number.
 
 ## After submit
 

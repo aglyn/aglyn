@@ -39,6 +39,7 @@ import {
 } from '../resources/count-billable-screens'
 import { announceLivePaths } from '../../../../utils/server/announce-live-paths'
 import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
 const HOST_WRITER_ROLES = new Set(['admin', 'editor'])
@@ -501,6 +502,10 @@ async function handler(request: Request): Promise<Response> {
     }
     return response
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Screen conversion failed' }, { status: 500 })
   }

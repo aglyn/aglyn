@@ -27,9 +27,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Stack, Typography } from '@mui/material'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactPrimaryGroup } from '../model/contact-record'
 import {
@@ -63,19 +64,24 @@ export interface ContactCustomFieldsCardProps
  * Every active definition draws the control its type calls for, seeded
  * from the viewing group's facet — `facets.{group}.custom.{key}` — and
  * never from another holder's, because a value is one business's knowledge
- * of a person. Save writes ONLY the keys that changed, each at its own
- * dotted path with `updateDoc`: a nested `custom` object would replace the
- * map and take every key this card did not touch out with it, and a save of
- * every key would turn a one-field edit into a write of ten.
+ * of a person.
  *
- * A cleared control writes `null`, the explicit "cleared" the model keeps
- * the key present with, rather than deleting the field: a `where` on the
- * key can still find the contact, and an export still shows the column.
+ * Save sends ONLY the keys that changed to `crm/contact-update` (AGL-2804):
+ * the values are the holder's facet, which the server writes, judging each
+ * against its definition and writing it at its own dotted path — a nested
+ * `custom` object would replace the map and take every key this card did
+ * not touch out with it — and refusing a plan without the CRM. A
+ * refusal is shown in the route's own words, with the draft kept.
+ *
+ * A cleared control sends `null`, the explicit "cleared" the model keeps the
+ * key present with, rather than deleting the field: a `where` on the key can
+ * still find the contact, and an export still shows the column.
  */
 export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
   const { hostId, org, contactId, contact, basePath } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const contactUpdate = useContactUpdate(hostId ?? null)
   const { scope, consentGroup: viewingGroup } = useCrmScope({ hostId, org })
   const orgId = scope?.[1] ?? null
   const { active, ready } = useContactFieldDefinitions(orgId)
@@ -107,7 +113,7 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
     setDraft((current) => ({ ...current, [key]: value }))
   }, [])
 
-  /** The keys whose draft differs from what is stored — what Save writes. */
+  /** The keys whose draft differs from what is stored — what Save sends. */
   const changed = useMemo(() => crmCustomDraftChanges(stored, draft), [draft, stored])
   const clearingRequired =
     crmCustomDraftMissingRequired(active, stored, draft, 'edit').length > 0
@@ -122,17 +128,7 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
           unreadable: contact === undefined && ownRead.status === 'error',
           fromCache: contact === undefined && ownRead.fromCache,
         },
-        async () => {
-          await updateDoc(doc(firestore, scope[0], scope[1], 'contacts', contactId), {
-            ...Object.fromEntries(
-              changed.map(([key, value]) => [
-                Aglyn.contactFacetPath(consentGroup.groupId, `custom.${key}`),
-                value,
-              ]),
-            ),
-            updatedAt: new Date(),
-          })
-        },
+        () => contactUpdate.updateOne(contactId, { custom: Object.fromEntries(changed) }),
       )
       if (!verdict.ok) {
         return void enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
@@ -141,7 +137,10 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
       enqueueSnackbar('Contact saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', { variant: 'error', allowDuplicate: true })
+      enqueueSnackbar(
+        error instanceof Error && error.message ? error.message : 'An error has occurred',
+        { variant: 'error', allowDuplicate: true },
+      )
     } finally {
       setSaving(false)
     }
@@ -152,9 +151,8 @@ export function ContactCustomFieldsCard(props: ContactCustomFieldsCardProps) {
     contact,
     ownRead.status,
     ownRead.fromCache,
-    firestore,
+    contactUpdate,
     contactId,
-    consentGroup.groupId,
     enqueueSnackbar,
   ])
 

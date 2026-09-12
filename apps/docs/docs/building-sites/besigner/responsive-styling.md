@@ -59,8 +59,8 @@ it again.
 Switching a style off is a **canvas** setting, like the device preview:
 it is never saved, it never reaches Preview or your published site, and
 reloading the editor brings every declaration back. It also follows the
-scopes below — switching off a colour in the **Hover** state leaves the
-default colour applying, and one switched off while styling *SM* is back
+scopes below — switching off a color in the **Hover** state leaves the
+default color applying, and one switched off while styling *SM* is back
 on at *all screen sizes*.
 
 ## Style hover, focus and other states {#interaction-states}

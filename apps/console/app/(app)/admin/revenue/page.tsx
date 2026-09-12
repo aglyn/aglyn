@@ -616,8 +616,8 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                   Subtracting them would measure two different instants, so a
                   subscription that collected in the period and has since ended
                   shows up as cash with no contracted counterpart — and the
-                  difference would look like a modelling failure every time.
-                  That case is known and modelled, not unexplained, so this page
+                  difference would look like a modeling failure every time.
+                  That case is known and modeled, not unexplained, so this page
                   declines to compute a residual rather than label it one. A
                   past period&apos;s contracted base is not recoverable: org
                   records carry only current state and nothing snapshots MRR per

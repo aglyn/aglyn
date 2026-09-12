@@ -65,6 +65,7 @@ import {
   viewScreenBlock,
   visibleAssistText,
 } from '../../_lib/assist-view-context'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Aglyn Assist chat proxy (AGL-1860, phase 1 — capability levels 1–2).
@@ -603,6 +604,27 @@ async function docsOnlyResponse(args: DocsOnlyArgs): Promise<Response> {
   })
 }
 
+/**
+ * What the reader is told when the model provider refuses or fails a request
+ * (AGL-2815). Never the provider's own words: the panel renders this straight
+ * into the answer, and those words describe our account with the vendor — a
+ * key, a rate limit, a balance — and name the vendor to a white-label org's
+ * users. The provider's status and payload are logged where this is called.
+ */
+function upstreamFailureCopy(
+  status: number | null,
+  errorType: string | undefined,
+): string {
+  const busy =
+    status === 429 ||
+    status === 529 ||
+    errorType === 'rate_limit_error' ||
+    errorType === 'overloaded_error'
+  return busy
+    ? 'The assistant is busy right now — try again in a moment.'
+    : 'The assistant request failed — try again.'
+}
+
 async function handler(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -974,9 +996,10 @@ async function handler(request: Request): Promise<Response> {
       )
       return Response.json(
         {
-          error:
-            (errorPayload as { error?: { message?: string } } | null)?.error
-              ?.message ?? 'Assistant request failed',
+          error: upstreamFailureCopy(
+            upstream.status,
+            (errorPayload as { error?: { type?: string } } | null)?.error?.type,
+          ),
         },
         { status: 502 },
       )
@@ -1048,8 +1071,9 @@ async function handler(request: Request): Promise<Response> {
                     stopReason) ||
                   null
               } else if (event.type === 'error') {
-                const error = event.error as { message?: string } | undefined
-                emit({ type: 'error', error: error?.message ?? 'Assistant stream failed' })
+                const error = event.error as { type?: string; message?: string } | undefined
+                console.error('assist upstream stream error', error)
+                emit({ type: 'error', error: upstreamFailureCopy(null, error?.type) })
               }
             }
           }
@@ -1173,6 +1197,10 @@ async function handler(request: Request): Promise<Response> {
       },
     })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Assistant request failed' }, { status: 500 })
   }

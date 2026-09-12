@@ -31,6 +31,7 @@ import {
   revokeHostAccess,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // The site-collaborator door. `author` (AGL-2334) is the role the agency
 // guide's worked example asks for — "a client who may edit content but not
@@ -297,6 +298,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     // A seat refusal raised from inside the grant transaction is a 403, not a
     // fault (AGL-2068) — losing it to the 500 below would tell the admin the
     // product broke when it in fact held the line.

@@ -74,7 +74,7 @@ true:
   another site, or package a template, and the choreography arrives with it,
   bound to the copy rather than the original;
 - it **is removed with the element** — deleting a button takes its click
-  behaviour with it, leaving nothing pointing at something that is gone;
+  behavior with it, leaving nothing pointing at something that is gone;
 - it is **unsaved work until you save**, like any other edit, rather than
   going live the moment the dialog closes.
 

@@ -23,6 +23,7 @@ import composeScreenNodes, {
 import { resolveBuiltInPageLayoutId } from './built-in-page-layout'
 import type { CollectionContent } from './get-collection-content'
 import getScreen from './get-screen'
+import { collectSocialImageFacts } from './social-image-facts'
 
 type CollectionDoc = NonNullable<CollectionContent['collection']>
 
@@ -96,6 +97,12 @@ export interface ComposedCollectionPage {
   /** Template screen doc with the entry/collection SEO merged in. */
   screen: Record<string, any>
   nodes: Record<string, any>
+  /**
+   * The current pair of each asset the head's card may name (AGL-2850): the
+   * entry's cover, the template's image, the site default. Read in the
+   * composition's batch, and absent when it answered for none of them.
+   */
+  socialImageFacts?: Aglyn.SocialImageAssetFacts
 }
 
 /**
@@ -110,6 +117,12 @@ export interface ComposedCollectionPage {
 export async function composeCollectionTemplatePage(options: {
   hostId: string
   content: CollectionContent
+  /**
+   * The site, whose default card the head falls back to after the entry's
+   * cover and the template's image (AGL-2850). Its document is read in this
+   * page's batch with theirs.
+   */
+  host?: Aglyn.AglynHost | null
 }): Promise<ComposedCollectionPage | null> {
   const { hostId, content } = options
   const collection = content.collection
@@ -138,10 +151,18 @@ export async function composeCollectionTemplatePage(options: {
         ),
       }
     : collectionTokens(collection, content.category, content.pagination)
+  // The head's card on this page, in its order: the entry's cover, the
+  // template's own image, then the site default (AGL-2850).
+  const card = collectSocialImageFacts([
+    entry?.coverImage,
+    (templateRes.screen as any).seo?.image,
+    options.host?.seo?.image,
+  ])
   const nodes = await composeScreenNodes({
     hostId,
     screenId,
     screen: templateRes.screen,
+    socialImages: card.socialImages,
     tokens,
     // List pages hand their already-fetched entries to the Collection
     // entries block; entry pages carry the routed entry (AGL-582, Related
@@ -213,6 +234,7 @@ export async function composeCollectionTemplatePage(options: {
   return {
     screen: { ...(templateRes.screen as any), seo },
     nodes,
+    ...card.collected(),
   }
 }
 
@@ -227,7 +249,7 @@ export async function composeCollectionFallbackPage(options: {
   hostId: string
   host: Aglyn.AglynHost
   content: CollectionContent
-}): Promise<{ nodes: Record<string, any> } | null> {
+}): Promise<Omit<ComposedCollectionPage, 'screen'> | null> {
   const { hostId, host, content } = options
   const collection = content.collection
   if (!collection) return null
@@ -249,10 +271,17 @@ export async function composeCollectionFallbackPage(options: {
       // asset will not serve.
       hostId,
     })
+    // The head's card on a page with no template: the entry's cover, then the
+    // site default (AGL-2850).
+    const card = collectSocialImageFacts([
+      content.entry?.coverImage,
+      host?.seo?.image,
+    ])
     const nodes = await composeNodesWithChrome({
       hostId,
       layoutId,
       screenNodes,
+      socialImages: card.socialImages,
       // Entry routes resolve with an EMPTY entries list (the loader only
       // fetched the one entry), so hand the routed entry over and let the
       // Related posts block fetch the list on demand (AGL-582); list
@@ -280,7 +309,7 @@ export async function composeCollectionFallbackPage(options: {
               : {}),
           },
     })
-    return nodes ? { nodes } : null
+    return nodes ? { nodes, ...card.collected() } : null
   } catch (error) {
     console.error(error)
     return null

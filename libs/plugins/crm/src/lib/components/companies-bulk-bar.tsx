@@ -23,9 +23,10 @@
  * Tag or untag them, hand them to an owner, take them into a spreadsheet,
  * or delete them. The patches come from `companies-bulk-writes.ts` and go
  * through the shared runner; the delete is the record page's own
- * detach-then-delete, per company, one after another — a company past the
- * detach bound is left standing and NAMED, the way the page says it, so a
- * second delete continues where this one stopped.
+ * `crm/company-delete`, per company, one after another — the route unlinks a
+ * company's contacts before it goes, and a company past the detach bound is
+ * left standing and NAMED, the way the page says it, so a second delete
+ * continues where this one stopped.
  *
  * ## The delete is logged, per company
  *
@@ -55,7 +56,7 @@ import {
   companiesCsv,
 } from '../model/companies-csv'
 import { COMPANY_DETACH_LIMIT } from '../model/companies'
-import { deleteCompanyDetaching } from '../model/company-delete'
+import { deleteCompanyThroughRoute } from '../model/company-delete'
 import { normalizeBulkTag } from '../model/contacts-bulk-writes'
 import { downloadTextFile } from '../model/contacts-csv'
 import {
@@ -71,6 +72,7 @@ import {
   countNoun,
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
+import { useCrmApi } from './use-crm-api'
 
 export interface CompaniesBulkBarProps {
   /**
@@ -127,6 +129,7 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
   const firestore = useFirestore()
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId ?? undefined)
+  const callCrm = useCrmApi(hostId)
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'company' })
 
   const selectedRows = useMemo(() => {
@@ -205,7 +208,7 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
           selectedRows,
           (row) => String(row.name || row.$id),
           async (row) => {
-            const result = await deleteCompanyDetaching(firestore, scope, row.$id)
+            const result = await deleteCompanyThroughRoute(callCrm, row.$id)
             if (!result.deleted) {
               throw new Error(
                 `${COMPANY_DETACH_LIMIT.toLocaleString()} contacts were unlinked ` +
@@ -229,7 +232,7 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
         .filter((row) => refused.has(String(row.name || row.$id)))
         .map((row) => row.$id),
     )
-  }, [scope, selectedRows, confirm, apply, firestore, logActivity, onSelectedChange])
+  }, [scope, selectedRows, confirm, apply, callCrm, logActivity, onSelectedChange])
 
   return (
     <CrmBulkBarFrame

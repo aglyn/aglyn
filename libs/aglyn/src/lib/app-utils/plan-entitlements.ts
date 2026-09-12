@@ -292,9 +292,9 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: 0,
     redirectsPerHost: 0,
     contactsPerHost: 100,
-    // No one-to-one email on Free, for the reason the tier has no CRM suite
-    // below: the send lives on a record's page, and the pages Free reaches
-    // do not compose mail. Zero here is what `checkCrmEmailQuota` refuses
+    // No one-to-one email on Free, which has no CRM (below): the send lives
+    // on a record's page, and Free opens no record. Zero here is what
+    // `checkCrmEmailQuota` refuses
     // against, so a per-org grant of `features.crm` alone still sends
     // nothing until the band is raised with it.
     crmEmailsPerDay: 0,
@@ -339,11 +339,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: false,
       videoMedia: false,
       bookings: false,
-      // The CRM suite starts at Starter (AGL-2611). Free keeps the Contacts
-      // section — the capture projection every plan's email audiences read
-      // — banded at 100 records; what it does not get is the sales hub
-      // built on that list: leads, companies, deals, tasks, reports,
-      // fields, the CRM automation steps and the `crm:*` REST resources.
+      // The CRM starts at Starter (AGL-2611), whole, and Free has none of it
+      // (AGL-2851): no Leads, Contacts, Companies, Deals, Tasks, Reports,
+      // Fields or Settings, no CRM automation step and no CRM REST resource.
+      // What Free's sites capture still counts against its 100-record band,
+      // and exporting and erasing those people stay on every plan.
       // The Drive pricing decision of 2026-09-05 records why Starter and
       // not Pro: the field prices a CRM seat at $14–25 a month, so Starter
       // with the suite included is the competitive entry, and gating a
@@ -474,7 +474,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       dataStore: true,
       videoMedia: false,
       bookings: true,
-      // The whole CRM suite, from the first paid tier (AGL-2611). At 100% of
+      // The whole CRM, from the first paid tier (AGL-2611). At 100% of
       // its band and its one-to-one email cap this costs $1.73 a month
       // against a $16 annual price — the Drive pricing decision of
       // 2026-09-05 has the arithmetic — and it is the upgrade motive from
@@ -4043,7 +4043,7 @@ export function crmEmailUsageDayKey(now: Date = new Date()): string {
 export interface CrmEmailQuotaResult {
   /** Whether ONE MORE send is inside today's cap. Enterprise always allows. */
   allowed: boolean
-  /** The plan's daily cap; 0 where the tier has no CRM suite. */
+  /** The plan's daily cap; 0 where the tier has no CRM. */
   included: number
   /** Sends already counted today. */
   used: number
@@ -4059,9 +4059,10 @@ export interface CrmEmailQuotaResult {
  *
  * A HARD cap with no overage rate, on every tier — the one respect in which
  * it differs from the API meter it is shaped after. `allowed` is therefore
- * `used < included` outright, `UNLIMITED` on Enterprise makes it true at any
- * count, and 0 on Free makes it false at zero, so a per-org `features.crm`
- * grant does not send until `crmEmailsPerDay` is raised beside it.
+ * `used < included` outright. Every paid tier's cap is finite, Enterprise's
+ * 2,000 included, and 0 on Free makes it false at zero, so a per-org
+ * `features.crm` grant does not send until `crmEmailsPerDay` is raised
+ * beside it.
  *
  * ## The contract for the send route
  *

@@ -91,7 +91,15 @@ async function handler(request: Request): Promise<Response> {
   // re-checking a verdict after a verifier bump needed a shell and the
   // production secret — for a job whose entire purpose is finding what nobody
   // had a reason to look for.
-  const actor = await authorizeMaintenanceActor(headers)
+  let actor: Awaited<ReturnType<typeof authorizeMaintenanceActor>>
+  try {
+    actor = await authorizeMaintenanceActor(headers)
+  } catch (error) {
+    // A staff token that could not be checked at all: an outage, not a
+    // refusal, so it answers 500 rather than 401 (AGL-2816).
+    console.error('[admin/reverify-plugin-versions] token verification failed', error)
+    return Response.json({ error: 'Could not check your sign-in' }, { status: 500 })
+  }
   if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }

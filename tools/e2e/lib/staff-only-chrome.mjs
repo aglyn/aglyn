@@ -34,11 +34,51 @@
 // customer's console renders, because the customer branch of that same gate
 // drops the tab outright.
 
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 /** What the app marks staff-only chrome with. Keep in step with the spec. */
 export const STAFF_ONLY_ATTRIBUTE = 'data-staff-only'
 export const STAFF_ONLY_SELECTOR = `[${STAFF_ONLY_ATTRIBUTE}]`
 
 const HIDE_RULE = `${STAFF_ONLY_SELECTOR} { display: none !important; }`
+
+const RELEASE_FLAG_REGISTRY = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../libs/aglyn/src/lib/app-utils/release-flags.ts',
+)
+
+/**
+ * The release flags that gate a console nav tab AND ship off — the only
+ * chrome a staff account sees that a customer's console drops.
+ *
+ * Read from the registry's source because this module runs under plain node
+ * and cannot import TypeScript. A text read can drift from the real array, so
+ * apps/console/specs/nav-staff-only-marker.spec.ts runs this function and
+ * holds its answer to `RELEASE_FLAGS` itself: a registry reshaped past this
+ * reader fails there, not halfway through a capture run.
+ */
+export function flaggedOffNavTabKeys(
+  source = readFileSync(RELEASE_FLAG_REGISTRY, 'utf8'),
+) {
+  const start = source.indexOf('export const RELEASE_FLAGS')
+  const end = source.indexOf('export const RELEASE_FLAG_KEYS', start)
+  if (start < 0 || end < 0) {
+    throw new Error(`cannot find RELEASE_FLAGS in ${RELEASE_FLAG_REGISTRY}`)
+  }
+  return source
+    .slice(start, end)
+    .split(/\n {2}\{\n/)
+    .slice(1)
+    .filter(
+      (entry) =>
+        /^\s*defaultEnabled: false,/m.test(entry) &&
+        /^\s*navTabId: '/m.test(entry),
+    )
+    .map((entry) => entry.match(/^\s*key: '([a-z_]+)'/m)?.[1])
+    .filter(Boolean)
+}
 
 /**
  * Hides staff-only chrome from the first paint of every page in the context.
@@ -109,16 +149,20 @@ export async function assertNoStaffOnlyChrome(page, label) {
  *
  * `assertNoStaffOnlyChrome` passing means "nothing staff-only is showing",
  * which is also what it says when the marker is gone from the app entirely —
- * the exact failure that lets the leak back in. So: open a page that MUST
- * carry one (any host-scoped console page, while `release_contacts` is
- * flagged off) and require a match.
+ * the exact failure that lets the leak back in. So while some flag with a nav
+ * tab ships off, open a host-scoped page that MUST carry its marker and
+ * require a match.
  *
- * When Contacts ships, this throws. That is the intended moment to check
- * whether any host tab is still flagged off and re-point the canary —
- * apps/console/specs/nav-staff-only-marker.spec.ts fails at the same time and
- * says the same thing.
+ * While no such flag exists there is no staff-only chrome for a capture to
+ * leak, and no page that must carry a marker either, so the browser check
+ * stands down and returns no keys. It re-arms itself the moment a flagged tab
+ * ships off — nobody has to re-point it — and the declaration side,
+ * apps/console/specs/nav-staff-only-marker.spec.ts, keeps proving that the
+ * gate marks a flagged-off tab in the meantime.
  */
 export async function preflightStaffOnlyChrome(page, { url, waitFor, timeout }) {
+  const expected = flaggedOffNavTabKeys()
+  if (!expected.length) return []
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout })
   await page.waitForSelector(`text=${waitFor}`, { timeout })
   // The staff claim lands on a forced token refresh, so the flagged tabs are
@@ -128,9 +172,10 @@ export async function preflightStaffOnlyChrome(page, { url, waitFor, timeout }) 
     timeout,
   })
   const found = await readStaffOnlyChrome(page)
-  if (!found.length) {
+  if (!found.some((node) => expected.includes(node.key))) {
     throw new Error(
-      `staff-only chrome guard found no ${STAFF_ONLY_SELECTOR} on ${url}. ` +
+      `staff-only chrome guard found no ${STAFF_ONLY_SELECTOR} for ` +
+        `${expected.join(', ')} on ${url}. ` +
         'Either the capture account lost its staff claim, or the marker moved ' +
         '— fix it before capturing, or the run will publish whatever staff ' +
         'see (AGL-1600).',

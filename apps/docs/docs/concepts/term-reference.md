@@ -30,6 +30,12 @@ them all alphabetically within each group.
 
 ## Platform & accounts
 
+### Aglyn
+
+The platform these docs cover — the console you build in and the sites you
+publish. Pronounced **AG-lin** — "ag" as in *agriculture*, with the stress on
+the first syllable (IPA `/ˈæɡlɪn/`).
+
 ### Organization (org)
 
 The account entity: one subscription, one team roster, one plugin
@@ -401,7 +407,7 @@ publicly listed. → [Publisher handbook](../developers/plugins/publishing/publi
 ### Dataset
 
 A structured, org-scoped data collection with a typed schema — the backing
-store for dynamic content, forms, and commerce.
+store for dynamic content and forms.
 → [Datasets](../content-and-data/datasets/overview.md)
 
 ### Record

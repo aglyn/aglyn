@@ -120,6 +120,32 @@ describe('authorHtmlToMarkdown', () => {
     expect(authorHtmlToMarkdown('<a>Unlinked</a>')).toBe('Unlinked')
   })
 
+  it('refuses a href whose scheme the page itself refuses (AGL-2740)', () => {
+    /*
+      A Custom HTML fragment is stored unsanitized and cleaned at render, so
+      this converter never sees the sanitizer run. `screen:` is a stored LINK
+      VALUE, not a navigable scheme: the page drops the attribute, so emitting
+      it here would put an unfollowable target in the agent's copy.
+    */
+    expect(authorHtmlToMarkdown('<a href="screen:v0clP6xQl-">See pricing</a>')).toBe(
+      'See pricing',
+    )
+    expect(authorHtmlToMarkdown('<a href="javascript:alert(1)">Click</a>')).toBe(
+      'Click',
+    )
+  })
+
+  it('keeps the schemes the sanitizer does allow', () => {
+    // The rule is the sanitizer's own, so it must not narrow to http(s):
+    // `sms:` and `ftp:` render as links on the page and must here too.
+    expect(authorHtmlToMarkdown('<a href="sms:+15551234">Text us</a>')).toBe(
+      '[Text us](sms:+15551234)',
+    )
+    expect(authorHtmlToMarkdown('<a href="mailto:a@b.test">Mail</a>')).toBe(
+      '[Mail](mailto:a@b.test)',
+    )
+  })
+
   it('resolves a media reference on an image', () => {
     const out = authorHtmlToMarkdown('<img src="/api/media/cdn/x.png" alt="A cat">', {
       origin: 'https://example.test',

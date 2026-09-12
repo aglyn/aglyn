@@ -446,3 +446,70 @@ describe('the door at the organization level', () => {
     expect((await call({ ...org, contactId: 'nope' })).status).toBe(404)
   })
 })
+
+/**
+ * BY ADDRESS ALONE (AGL-2839). The workspace's Privacy settings file an
+ * erasure for any person by the address typed twice, with no record — on any
+ * plan, because the CRM that lists records is included from Starter and
+ * erasure is every workspace's obligation. The sweep, the suppressions and
+ * the markers are the ones a record's request gets; the org line names no
+ * record, and nothing carries the address but the pending request.
+ */
+describe('filing by address alone', () => {
+  const byAddress = { orgId: ORG, email: EMAIL, confirmEmail: EMAIL }
+
+  it('files the request with no record, sweeps every site of the org, and marks what it holds', async () => {
+    seed()
+    const { status, body } = await call(byAddress)
+    expect(status).toBe(200)
+    expect(body).toMatchObject({ ok: true, alreadyPending: false })
+    const request = docs.get(`personErasures/${ORG}__${KEY}`)
+    expect(request).toMatchObject({ orgId: ORG, status: 'pending', email: EMAIL, personKey: KEY })
+    expect(request).not.toHaveProperty('contactId')
+    expect(request).not.toHaveProperty('leadId')
+    expect(mockSuppress.mock.calls.map((entry) => (entry as any)[0].hostId).sort()).toEqual(['h1', 'h2'])
+    expect(docs.get(`orgs/${ORG}/contacts/c1`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
+    expect(docs.get(`hosts/h2/leads/${KEY}`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
+    expect(docs.get(`hosts/other/leads/${KEY}`)?.['erasureRequestedAtMs']).toBeUndefined()
+    expect(mockLogOrgActivity).toHaveBeenCalledWith(ORG, expect.anything(), 'Requested privacy erasure', {
+      type: 'org',
+    })
+    expect(JSON.stringify(audit)).not.toContain(EMAIL)
+    expect(audit[0].after).toMatchObject({ from: 'address' })
+  })
+
+  it('files for a person the workspace holds no record of', async () => {
+    docs.set(`hosts/${HOST}`, { orgId: ORG })
+    const { status } = await call({ orgId: ORG, email: 'stranger@example.com', confirmEmail: 'stranger@example.com' })
+    expect(status).toBe(200)
+    expect([...docs.keys()].some((key) => key.startsWith(`personErasures/${ORG}__`))).toBe(true)
+  })
+
+  it('refuses a second typing that does not match, and an address it cannot use, filing nothing', async () => {
+    seed()
+    expect((await call({ ...byAddress, confirmEmail: 'jane@example.org' })).status).toBe(400)
+    expect((await call({ ...byAddress, confirmEmail: undefined })).status).toBe(400)
+    expect((await call({ orgId: ORG, email: 'not an address', confirmEmail: 'not an address' })).status).toBe(400)
+    expect(docs.has(`personErasures/${ORG}__${KEY}`)).toBe(false)
+    expect(mockSuppress).not.toHaveBeenCalled()
+  })
+
+  it('refuses an org-wide editor, as it refuses one filing from a record', async () => {
+    seed()
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: ORG,
+      role: 'editor',
+      isOwner: false,
+      permissions: { 'data.manage': true },
+      orgWide: true,
+      hostRole: 'editor',
+    })
+    expect((await call(byAddress)).status).toBe(403)
+    expect(docs.has(`personErasures/${ORG}__${KEY}`)).toBe(false)
+  })
+
+  it('still needs a record under a site', async () => {
+    seed()
+    expect((await call({ hostId: HOST, email: EMAIL, confirmEmail: EMAIL })).status).toBe(400)
+  })
+})

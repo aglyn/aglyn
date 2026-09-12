@@ -411,3 +411,89 @@ describe('a Screen Link whose screen is unpublished (AGL-1893)', () => {
     expect(getComputedStyle(el).opacity).toBe('0.5')
   })
 })
+
+/**
+ * A Screen Link to a collection's listing page (AGL-2799).
+ *
+ * aglyn.com's drawer linked its blog as a typed `/blog` because no picker
+ * offered the listing. A listing link stores the collection's id, and the
+ * routing map carries the listing under that key, so the element resolves it
+ * the way it resolves a screen: through `useLinkTarget`, following a rename,
+ * and dead — with the AGL-1893 marker — once the collection is gone.
+ */
+describe('a Screen Link to a collection listing (AGL-2799)', () => {
+  const ROUTES = { pricing: 'pricing', 'collection:blog': 'blog' }
+
+  const renderOn = (value: any, ui: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={value}>
+        {ui}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('links to the listing on the live site', () => {
+    renderOn(
+      { screens: ROUTES },
+      <ScreenLink renderAs="link" screenId="collection:blog">
+        {'Blog'}
+      </ScreenLink>,
+    )
+    expect(screen.getByRole('link', { name: 'Blog' }).getAttribute('href')).toBe(
+      '/blog',
+    )
+  })
+
+  it('follows the collection to a renamed slug', () => {
+    renderOn(
+      { screens: { ...ROUTES, 'collection:blog': 'articles' } },
+      <ScreenLink renderAs="link" screenId="collection:blog">
+        {'Blog'}
+      </ScreenLink>,
+    )
+    expect(screen.getByRole('link', { name: 'Blog' }).getAttribute('href')).toBe(
+      '/articles',
+    )
+  })
+
+  it('resolves the listing when a component prop lands it in the URL field', () => {
+    renderOn(
+      { screens: ROUTES },
+      <ScreenLink renderAs="link" href="collection:blog">
+        {'Blog'}
+      </ScreenLink>,
+    )
+    expect(screen.getByRole('link', { name: 'Blog' }).getAttribute('href')).toBe(
+      '/blog',
+    )
+  })
+
+  it('renders no link, and marks itself, once the collection is gone', () => {
+    // The typed address beside it must not be followed instead: the author
+    // asked for the listing, and a stale path is what AGL-1998 removed.
+    renderOn(
+      { screens: ROUTES },
+      <ScreenLink renderAs="link" screenId="collection:gone" href="/blog">
+        {'Blog'}
+      </ScreenLink>,
+    )
+    expect(screen.queryByRole('link')).toBeNull()
+    const el = screen.getByText('Blog').closest('button, a, span') as HTMLElement
+    expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(true)
+  })
+
+  it('does not flag a listing link on the canvas before the collections load', () => {
+    // The host's screens have arrived and its collections have not: the map
+    // knows nothing about listings yet, so nothing about this one is wrong.
+    renderOn(
+      {
+        screens: { pricing: 'pricing' },
+        suppressNavigation: true,
+        editorInert: true,
+      },
+      <ScreenLink screenId="collection:blog">{'Blog'}</ScreenLink>,
+    )
+    const el = screen.getByText('Blog').closest('button, a, span') as HTMLElement
+    expect(el.getAttribute('title')).toBeNull()
+    expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(false)
+  })
+})

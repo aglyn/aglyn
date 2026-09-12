@@ -132,13 +132,18 @@ try {
   // By name, not .first(): components sort by displayName, so an unrelated
   // fixture from another harness would otherwise be the one opened — and
   // the assertions below would silently check the wrong document.
-  const openButton = page.locator(
-    'button[aria-label="Open E2E Editable in besigner"]',
+  const rowMenu = page.locator(
+    'button[aria-label="More actions for E2E Editable"]',
   )
-  await openButton.waitFor({ state: 'visible', timeout: TIMEOUT_MS })
+  await rowMenu.waitFor({ state: 'visible', timeout: TIMEOUT_MS })
+  // Preview is the list's one inline action. Every other row action, the
+  // editor included, sits behind the row's overflow menu (AGL-2501).
+  await rowMenu.click()
+  const openItem = page.getByRole('menuitem', { name: 'Edit in besigner' })
+  await openItem.waitFor({ state: 'visible', timeout: TIMEOUT_MS })
   check('components list offers the editor', true)
 
-  await openButton.click()
+  await openItem.click()
   await page.waitForURL(/\/components\/.+\/versions\/.+\/besigner/, {
     timeout: TIMEOUT_MS,
   })
@@ -200,12 +205,37 @@ try {
   // Let the editor take its base stamp before the remote write lands.
   await page.waitForTimeout(3000)
 
-  await hostRef
+  // A colleague's save has to carry something this canvas does not already
+  // hold. A write that only moves `updatedAt` leaves every node equal to the
+  // baseline, and the guard reads that as nothing to reload for — pausing
+  // saving over a save this session already contains is the false alarm
+  // AGL-2486 removed. So: a new element, and the parent that now lists it.
+  const homeVersion = hostRef
     .collection('screens')
     .doc('seed-home')
     .collection('versions')
     .doc(String(homeVersionId))
-    .update({ updatedAt: new Date() })
+  const storedNodes = (await homeVersion.get()).get('nodes') ?? {}
+  const remoteNodeId = `e2e-remote-${Date.now().toString(36)}`
+  // The root is the node nothing parents, whatever the seed calls it.
+  const [rootId, root] =
+    Object.entries(storedNodes).find(([, node]) => !node?.parentId) ?? []
+  await homeVersion.update({
+    nodes: {
+      ...storedNodes,
+      [String(rootId)]: {
+        ...(root ?? {}),
+        nodes: [...(root?.nodes ?? []), remoteNodeId],
+      },
+      [remoteNodeId]: {
+        $id: remoteNodeId,
+        componentId: 'muiButton',
+        parentId: rootId,
+        props: { children: 'Added by another editor' },
+      },
+    },
+    updatedAt: new Date(),
+  })
 
   const warned = await page
     .getByText('Someone else saved this screen', { exact: false })
@@ -213,6 +243,10 @@ try {
     .then(() => true)
     .catch(() => false)
   check('concurrent edit surfaces a warning', warned)
+
+  // The seeded screen is shared with every other harness, and this spec is
+  // meant to be re-runnable on its own: put the document back as it was.
+  await homeVersion.update({ nodes: storedNodes, updatedAt: new Date() })
 
   const relevantErrors = consoleErrors.filter(
     (text) =>

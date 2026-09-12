@@ -451,7 +451,7 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
   // four-way shard matrix since AGL-2505, and upload-artifact rejects a
   // duplicate name within a run — so its name has to carry the shard index.
   const workflows = [
-    ['main-gate.yml', /name: nx-test-log-main-gate-full\b/],
+    ['main-gate-full.yml', /name: nx-test-log-main-gate-full\b/],
     [
       'nx-ci.yml',
       /name: nx-test-log-nx-ci-shard-\$\{\{ matrix\.shard \}\}/,

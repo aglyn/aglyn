@@ -16,6 +16,14 @@ Leads live under the site that captured them, so each site's list is its own.
 Open **CRM → Leads** in the console, or use **Open in CRM** on a lead row in
 the Inbox's **Site Members & Leads** section.
 
+:::info Plan availability
+Leads are part of the **CRM**, included from **Starter**. On Free the section is shown
+locked, with the rest of the CRM. Leads are still filed on Free, exactly as described
+below, and kept; workspace owners and admins can export every lead, or erase a person,
+from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
+See [What each plan includes](./overview.md#what-each-plan-includes).
+:::
+
 ## What makes a lead
 
 Every capture lands in [Contacts](./contact-record.md) — one row per person,
@@ -28,6 +36,10 @@ describes what happened. A **lead** is created in addition, and only by a
 - a **form** whose own page has **Also create a lead from the address someone
   gives this form** switched on. A form without it still updates the contact
   at stage Lead; it just files nothing here.
+
+The plan changes none of this. On Free too, a form files a lead only when its lead
+routing is on, and the lead is kept, though the Leads section that lists it is locked
+with the rest of the CRM.
 
 So Contacts is the address book and Leads is the working list. The Leads
 section opens with which surfaces create leads on this site — sign-ups,
@@ -258,6 +270,9 @@ what it keeps and what it does not reach are listed in
 Anyone who can open the CRM can work leads — that is the workspace's
 **data** permission, the same one that guards contacts. Converting a lead
 also requires a role on the site the lead belongs to.
+
+Leads are part of the **CRM**, included from **Starter**. On Free the Leads section is
+shown locked, with the rest of the CRM.
 
 ## Related
 

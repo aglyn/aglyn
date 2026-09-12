@@ -36,7 +36,7 @@ const CrmTasksDueCard = lazy(
  * CRM feature plugin (AGL-395, the hub since AGL-2595). Console-only — its
  * records live in Firestore and have no canvas element, so there is no UI
  * bundle. The console half declares the CRM nav + hub through the
- * ConsoleExtension registry (release_contacts gate via the nav tab); the
+ * ConsoleExtension registry (release_crm gate via the nav tab); the
  * contacts section reads the `contactsPerHost` quota off the shell-passed
  * `org`.
  *
@@ -86,6 +86,18 @@ export function registerCrmConsole(): void {
      */
     permission: 'data.manage',
     /*
+     * WHAT the workspace must have bought (AGL-2851). The CRM is included
+     * from Starter and a Free workspace has none of it, so the flag is
+     * declared once, here, and the shell refuses every surface this
+     * registers on a plan without it: the hub body at both mounts, every
+     * section and record beneath it, drawn locked beside the upgrade notice,
+     * and the dashboard cards. The nav tab stays, as every plan-locked tab
+     * does, because it is the way to that notice. The CRM's routes, `/v1`
+     * and the Firestore rules ask the same question where the data is
+     * (`server/suite-gate.ts`).
+     */
+    featureFlag: 'crm',
+    /*
      * Dashboard cards (AGL-2599, AGL-2604): the site dashboard's `hostDashboard`
      * slot composes this extension's permission over each, so a card appears
      * only where the CRM is enabled and only for a reader who may open it —
@@ -96,11 +108,9 @@ export function registerCrmConsole(): void {
      * renders nothing on a workspace that has never made a task; the glance
      * card is four server-counted figures, each a link into the hub.
      *
-     * Both carry `featureFlag: 'crm'` of their own (AGL-2611): the extension
-     * declares none, because its contacts list is on every plan, but these
-     * two read the tasks and the pipeline a plan without the suite does not
-     * have, so the slot leaves them out on such a plan — absent, not upsold,
-     * the treatment every gated card gets.
+     * Both name `features.crm`, as the extension does (AGL-2611, AGL-2851):
+     * the slot composes the two, so a plan without the CRM gets neither card
+     * — absent, not upsold, the treatment every gated card gets.
      *
      * The same two cards again on the organization's `orgDashboard` slot
      * (AGL-2636) — the org's sites page — under the same flag, with the same
@@ -150,7 +160,7 @@ export function registerCrmConsole(): void {
         // Sections as ROUTES (AGL-2595): each is a real URL the shell
         // resolves and gates, so the page mounts the one being read and a
         // bare `/crm` lands on the first. Every section inherits this
-        // item's `release_contacts` gate.
+        // item's `release_crm` gate.
         sections: CRM_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-contacts',
         icon: { path: mdiCardAccountDetailsOutline.path },

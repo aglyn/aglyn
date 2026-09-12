@@ -274,6 +274,14 @@ export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
  */
 const featureGroups = (
   brand: string,
+  /**
+   * Whether video uploads are open for the org (AGL-2830). The row sells the
+   * `videoMedia` entitlement, which stays a plan inclusion either way, but
+   * "Video & file uploads" ticked on a paid tier promises something no plan
+   * can buy while the pause is on. Defaults open, so the flat `FEATURE_ROWS`
+   * list keeps the entitlement's own name.
+   */
+  options: { videoUploads: boolean } = { videoUploads: true },
 ): Array<{
   title: string
   rows: Array<{ key: FeatureKey; label: string }>
@@ -289,7 +297,12 @@ const featureGroups = (
       { key: 'multilingual', label: 'Multilingual sites' },
       { key: 'redirects', label: 'URL redirects' },
       { key: 'siteExport', label: 'Site backup & restore' },
-      { key: 'videoMedia', label: 'Video & file uploads' },
+      {
+        key: 'videoMedia',
+        label: options.videoUploads
+          ? 'Video & file uploads'
+          : 'File uploads (video uploads paused)',
+      },
       { key: 'mediaCdn', label: 'CDN delivery & responsive images' },
     ],
   },
@@ -301,12 +314,9 @@ const featureGroups = (
       { key: 'actions', label: 'Actions builder' },
       { key: 'dataStore', label: 'Datasets & dynamic data' },
       { key: 'bookings', label: 'Appointment bookings' },
-      // The CRM SUITE (AGL-2611) — everything built on the contacts list,
-      // which itself ships on every plan through the records band above.
-      // Named for what it adds, so a Free reader comparing cards sees the
-      // sales hub as the step up rather than "CRM" ticked against a plan
-      // that already shows them a Contacts section.
-      { key: 'crm', label: 'CRM suite: leads, companies, deals & tasks' },
+      // The CRM (AGL-2611, AGL-2851), whole: included from Starter, and none
+      // of it on Free. The wording is the published compare table's row.
+      { key: 'crm', label: 'CRM: contacts, leads, companies, deals & tasks' },
       { key: 'marketingOverlays', label: 'Announcement bar & popups' },
       { key: 'customSendingDomain', label: 'Send email from your own domain' },
       { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
@@ -477,7 +487,7 @@ export interface BillingPlanCardsProps {
  * and the meter disagree about one org.
  */
 function useContactsOverageBilled(): boolean | null {
-  const { released, ready } = useReleaseFlag('release_contacts')
+  const { released, ready } = useReleaseFlag('release_crm')
   return ready ? released : null
 }
 
@@ -518,23 +528,23 @@ function headlineLimits(
   /*
    * The audience band is the one row here whose rate is gated on a RELEASE
    * FLAG rather than on the plan, so `per` is wrong for it (AGL-1604/1658).
-   * `report-usage` withholds the contacts overage while `release_contacts` is
-   * off, and the flag is default-off — so a bare "(+$1/1k over)" quotes a
-   * charge that no invoice carries, on the card a customer reads to choose a
-   * tier. That is the same defect the usage caption already fixed, one surface
-   * over.
+   * `report-usage` withholds the contacts overage while `release_crm` is
+   * off for the org. The flag is on for every workspace, but a staff override
+   * can still hold one org off, and for that org a bare "(+$1/1k over)" quotes
+   * a charge no invoice carries, on the card it reads to choose a tier. That is
+   * the same defect the usage caption already fixed, one surface over.
    *
    * The rate itself STAYS. It is a real published rate — `/pricing` lists it
-   * per tier and `billing-and-plans/overview.md` tells the same customer it
-   * applies once Contacts opens — so deleting it would swap a phantom charge
-   * for a phantom wall. Only the tense is wrong, and only the tense changes.
+   * per tier and `billing-and-plans/overview.md` bills it past every paid
+   * band — so deleting it would swap a phantom charge for a phantom wall. Only the tense is wrong, and only the tense changes.
    *
    * THREE states, because "not settled yet" is not either answer. Before
-   * Remote Config activates, every flag reads its registry default and
-   * `release_contacts` is default-off — so an unguarded card would assert the
-   * unbilled wording for one paint on a staff-granted org that IS billed
-   * (AGL-1635). `null` prints no rate rather than guessing one: a billing
-   * claim is not made until the verdict that decides it has settled.
+   * Remote Config activates, every flag reads its registry default, and a
+   * default is no org's verdict — an unguarded card would assert the billed
+   * wording for one paint on an org an override holds off, or the unbilled
+   * wording on a staff-granted org that IS billed (AGL-1635). `null` prints
+   * no rate rather than guessing one: a billing claim is not made until the
+   * verdict that decides it has settled.
    */
   const contactsPer = (rate: number | null | undefined) => {
     if (rate == null || contactsOverageBilled == null) return ''
@@ -562,10 +572,15 @@ function headlineLimits(
     }${per(pricing.extraCollaboratorMonthlyUsd, '/extra')}`,
     // Contacts, companies and deals against ONE band (AGL-2611); the
     // persisted key still says contacts, the customer never sees that word
-    // alone here.
-    `${quotaCount(entitlements.contactsPerHost)} CRM records${contactsPer(
-      pricing.extraContactsUsdPer1k,
-    )}`,
+    // alone here. Named only on a plan that has the CRM (AGL-2851): Free has
+    // none of it, so its card names no CRM records.
+    ...(entitlements.features.crm
+      ? [
+          `${quotaCount(entitlements.contactsPerHost)} CRM records${contactsPer(
+            pricing.extraContactsUsdPer1k,
+          )}`,
+        ]
+      : []),
     /*
      * One-to-one email from a CRM record (AGL-2611): a daily PACE with no
      * overage rate on any tier, so no suffix — a rate here would advertise
@@ -634,8 +649,9 @@ function upgradeGains(
   from: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   to: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   brand: string,
+  options: { videoUploads: boolean } = { videoUploads: true },
 ): string[] {
-  return featureGroups(brand)
+  return featureGroups(brand, options)
     .flatMap((group) => group.rows)
     .filter((row) => !from.features[row.key] && to.features[row.key])
     .map((row) => row.label)
@@ -652,8 +668,9 @@ function upgradeGains(
 function keyFeatures(
   entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   brand: string,
+  options: { videoUploads: boolean } = { videoUploads: true },
 ): string[] {
-  return featureGroups(brand)
+  return featureGroups(brand, options)
     .flatMap((group) => group.rows)
     .filter((row) => entitlements.features[row.key])
     .map((row) => row.label)
@@ -668,10 +685,14 @@ function keyFeatures(
  * a flag nobody sells above you is correctly absent rather than listed as a
  * loss, and nothing here is a feature that does not exist to be bought.
  */
-function missingFromTier(plan: OrgPlan, brand: string): string[] {
+function missingFromTier(
+  plan: OrgPlan,
+  brand: string,
+  options: { videoUploads: boolean } = { videoUploads: true },
+): string[] {
   const mine = PLAN_ENTITLEMENTS[plan]
   const above = PLAN_ORDER.slice(PLAN_ORDER.indexOf(plan) + 1)
-  return featureGroups(brand)
+  return featureGroups(brand, options)
     .flatMap((group) => group.rows)
     .filter(
       (row) =>
@@ -875,6 +896,11 @@ function FocusedTierView(props: {
     onCompare,
   } = props
   const contactsOverageBilled = useContactsOverageBilled()
+  // `released`, not `visible`, for the reason `useContactsOverageBilled`
+  // gives: plan copy follows what the org can use, not who is reading.
+  const featureLabels = {
+    videoUploads: useReleaseFlag('release_video_uploads').released,
+  }
   const current = PLAN_ENTITLEMENTS[currentTier]
   const price = (tier: OrgPlan) =>
     interval === 'year'
@@ -906,6 +932,7 @@ function FocusedTierView(props: {
               PLAN_ENTITLEMENTS[leftward as OrgPlan],
               PLAN_ENTITLEMENTS[rung as OrgPlan],
               brand,
+              featureLabels,
             )
           : []
         const tickRows = adds
@@ -921,7 +948,11 @@ function FocusedTierView(props: {
             ? ENTERPRISE_HIGHLIGHTS.slice(0, 5).map(
                 (highlight) => highlight.label,
               )
-            : keyFeatures(PLAN_ENTITLEMENTS[rung as OrgPlan], brand)
+            : keyFeatures(
+                PLAN_ENTITLEMENTS[rung as OrgPlan],
+                brand,
+                featureLabels,
+              )
         return (
           <Grid key={String(rung)} size={{ xs: 12, md: span }}>
             <Card
@@ -1143,7 +1174,7 @@ function FocusedTierView(props: {
                 </Stack>
 
                 {role === 'current' &&
-                missingFromTier(currentTier, brand).length ? (
+                missingFromTier(currentTier, brand, featureLabels).length ? (
                   <>
                     <Divider sx={{ my: 1.5 }} />
                     <Typography
@@ -1154,7 +1185,7 @@ function FocusedTierView(props: {
                       {'Not in your plan'}
                     </Typography>
                     <Stack spacing={0.75} sx={{ mt: 0.75 }}>
-                      {capped(missingFromTier(currentTier, brand)).shown.map(
+                      {capped(missingFromTier(currentTier, brand, featureLabels)).shown.map(
                         (line) => (
                           <Stack
                             key={line}
@@ -1176,14 +1207,14 @@ function FocusedTierView(props: {
                           </Stack>
                         ),
                       )}
-                      {capped(missingFromTier(currentTier, brand)).more ? (
+                      {capped(missingFromTier(currentTier, brand, featureLabels)).more ? (
                         <Typography
                           variant="body2"
                           color="text.secondary"
                           sx={{ pl: 4 }}
                         >
                           {`and ${
-                            capped(missingFromTier(currentTier, brand)).more
+                            capped(missingFromTier(currentTier, brand, featureLabels)).more
                           } more`}
                         </Typography>
                       ) : null}
@@ -1398,19 +1429,22 @@ function PlanCardBody({
         {'Unlimited member accounts'}
       </Typography>
       {/* Audience band (AGL-890): paid tiers meter overage — but only once
-          `release_contacts` is on. Same three-state rule and same reasoning as
+          `release_crm` is on. Same three-state rule and same reasoning as
           `contactsPer` in `headlineLimits`: the rate stays, the tense follows
           what `report-usage` actually invoices, and an unsettled verdict
           prints no rate at all. */}
-      <Typography variant="body2">
-        {`${quotaCount(entitlements.contactsPerHost)} CRM records`}
-        {pricing.extraContactsUsdPer1k != null &&
-        contactsOverageBilled != null
-          ? contactsOverageBilled
-            ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
-            : ` (+$${pricing.extraContactsUsdPer1k}/1k over once the CRM opens)`
-          : ''}
-      </Typography>
+      {/* Free has no CRM (AGL-2851), so its column names no CRM records. */}
+      {entitlements.features.crm ? (
+        <Typography variant="body2">
+          {`${quotaCount(entitlements.contactsPerHost)} CRM records`}
+          {pricing.extraContactsUsdPer1k != null &&
+          contactsOverageBilled != null
+            ? contactsOverageBilled
+              ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
+              : ` (+$${pricing.extraContactsUsdPer1k}/1k over once the CRM opens)`
+            : ''}
+        </Typography>
+      ) : null}
       {/* One-to-one email from a CRM record (AGL-2611) — a daily pace
           with no overage on any tier, so no rate follows it; Free's
           zero reads as the absence it is. */}
@@ -1554,7 +1588,10 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
   // their own product name on the grid that sells them the tier.
   const { branding } = useBranding()
   const taglines = planTaglines(branding.productName)
-  const groups = featureGroups(branding.productName)
+  // `released`, not `visible`: see `featureGroups` (AGL-2830).
+  const groups = featureGroups(branding.productName, {
+    videoUploads: useReleaseFlag('release_video_uploads').released,
+  })
   // An enterprise org sits above the ladder: nothing in the grid is its
   // "current" plan, and nothing there is an upgrade for it either.
   const currentIndex = enterprise || !plan ? -1 : PLAN_ORDER.indexOf(plan)

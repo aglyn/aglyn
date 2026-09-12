@@ -1110,8 +1110,8 @@ export const middleware: NextMiddleware = async (req, event) => {
    * a published page could point — an injected `<iframe>` could load a
    * pixel-perfect login form from anywhere.
    *
-   * The platform's own embeds are a short, closed set — the two video players
-   * the Video block can construct, the marketplace plugin sandbox, the payment
+   * The platform's own embeds are a short, closed set — the video players the
+   * Video elements can construct, the marketplace plugin sandbox, the payment
    * frames, the admin bar's edit-access probe — so what remains is what a
    * customer's site legitimately embeds, which is the owner's list. Both halves
    * live with `tenantFrameSrcDirective`.

@@ -73,7 +73,7 @@ describe('crm dashboard widgets', () => {
     }
   })
 
-  it('gates every dashboard card on the CRM suite, narrower than the extension (AGL-2611)', () => {
+  it('gates every dashboard card on the CRM, as the extension is gated (AGL-2611, AGL-2851)', () => {
     registerCrmConsole()
     const widgets = registered()?.widgets ?? []
     expect(widgets).toHaveLength(4)
@@ -82,8 +82,8 @@ describe('crm dashboard widgets', () => {
         `${widget.slot}/${widget.widgetId}: crm`,
       )
     }
-    // The extension itself declares none — its contacts list is on every
-    // plan — so the cards' own flag is what keeps them off a Free dashboard.
-    expect(registered()?.featureFlag).toBeUndefined()
+    // The extension declares the same flag and the slot composes the two, so
+    // a Free dashboard gets neither card whichever gate is read.
+    expect(registered()?.featureFlag).toBe('crm')
   })
 })

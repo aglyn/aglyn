@@ -646,40 +646,27 @@ describe('form survey fields (AGL-544)', () => {
     })
   })
 
-  describe('dataset binding by id (AGL-556)', () => {
-    it('sends datasetId, with the legacy name riding along', async () => {
-      const { form } = renderForm(<FormField fieldName="comments" />, {
-        datasetId: 'ds-1',
-        datasetName: 'Survey responses',
-      })
-      fireEvent.change(form.querySelector('input[name="comments"]') as Element, {
-        target: { value: 'Hi' },
-      })
-      fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-      const body = submittedBody(fetchMock)
-      expect(body.datasetId).toBe('ds-1')
-      expect(body.dataset).toBe('Survey responses')
-    })
+  /**
+   * The dataset a submission writes to is the page's decision, not the
+   * request's (AGL-2773). Compose signs each form's binding into
+   * `datasetBindingToken`; the form sends that and nothing that names a
+   * dataset or a field map, because a server that read either from the body
+   * let any request write to any dataset the site could see.
+   */
+  describe('dataset binding (AGL-556, AGL-2773)', () => {
+    const TOKEN = 'v1.signed-binding.signature'
 
-    it('sends only the legacy name for pre-556 nodes', async () => {
-      const { form } = renderForm(<FormField fieldName="comments" />, {
-        datasetName: 'Survey responses',
-      })
-      fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-      const body = submittedBody(fetchMock)
-      expect(body.datasetId).toBeUndefined()
-      expect(body.dataset).toBe('Survey responses')
-    })
-
-    it('collects field → schema-field mappings without leaking them into fields', async () => {
+    it("sends the page's signed binding and nothing that names a dataset", async () => {
       const { form } = renderForm(
         <>
           <FormField fieldName="stars" datasetFieldId="satisfaction" />
           <FormField fieldName="feedback" />
         </>,
-        { datasetId: 'ds-1' },
+        {
+          datasetId: 'ds-1',
+          datasetName: 'Survey responses',
+          datasetBindingToken: TOKEN,
+        },
       )
       fireEvent.change(form.querySelector('input[name="stars"]') as Element, {
         target: { value: '5' },
@@ -691,34 +678,45 @@ describe('form survey fields (AGL-544)', () => {
       fireEvent.submit(form)
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
       const body = submittedBody(fetchMock)
-      expect(body.fieldMap).toEqual({ stars: 'satisfaction' })
+      expect(body.datasetBinding).toBe(TOKEN)
+      expect(body).not.toHaveProperty('datasetId')
+      expect(body).not.toHaveProperty('dataset')
+      expect(body).not.toHaveProperty('fieldMap')
+      // The mapping inputs stay internal to the form.
       expect(body.fields).toEqual({ stars: '5', feedback: 'Great' })
     })
 
-    it('omits fieldMap entirely when no field is mapped', async () => {
+    it('sends no binding for a form the page did not sign', async () => {
       const { form } = renderForm(<FormField fieldName="comments" />, {
         datasetId: 'ds-1',
       })
       fireEvent.submit(form)
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-      expect(submittedBody(fetchMock).fieldMap).toBeUndefined()
+      expect(submittedBody(fetchMock)).not.toHaveProperty('datasetBinding')
     })
 
-    it('maps every survey field type, including the rating', async () => {
+    it('keeps the signed binding off the rendered form element', () => {
+      const { form } = renderForm(<FormField fieldName="comments" />, {
+        datasetId: 'ds-1',
+        datasetBindingToken: TOKEN,
+      })
+      expect(form.outerHTML).not.toContain(TOKEN)
+      expect(form.outerHTML).not.toContain('ds-1')
+    })
+
+    it("keeps a rating's mapping input out of the submitted fields", async () => {
       const { form } = renderForm(
         <FormField
           fieldName="stars"
           fieldType="rating"
           datasetFieldId="satisfaction"
         />,
-        { datasetId: 'ds-1' },
+        { datasetBindingToken: TOKEN },
       )
       fireEvent.click(screen.getByRole('radio', { name: '4 Stars' }))
       fireEvent.submit(form)
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-      const body = submittedBody(fetchMock)
-      expect(body.fields).toEqual({ stars: '4' })
-      expect(body.fieldMap).toEqual({ stars: 'satisfaction' })
+      expect(submittedBody(fetchMock).fields).toEqual({ stars: '4' })
     })
 
     it('exposes the dataset picker by id and keeps the legacy name field conditional', () => {

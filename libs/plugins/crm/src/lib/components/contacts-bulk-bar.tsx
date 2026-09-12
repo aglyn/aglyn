@@ -22,10 +22,7 @@
  * The table's selection is opt-in and this is what it is for: a chosen set
  * of people, and one act over all of them. Tag or untag them, hand them to
  * an owner, move them along the funnel, put them on an email audience, take
- * them into a spreadsheet, or let them go from this site's CRM. Each act is
- * the profile drawer's own write for one person, repeated — the patches come
- * from `contacts-bulk-writes.ts`, so the bar cannot spell a facet path
- * differently from the drawer.
+ * them into a spreadsheet, or let them go from this site's CRM.
  *
  * ## The chrome is the shared frame
  *
@@ -34,15 +31,27 @@
  * Clear at the end, and whatever the last action could not do is listed by
  * name in an alert under it — and the companies, deals and tasks bars were
  * built on that shape as `CrmBulkBarFrame` and `useCrmBulkApply` (AGL-2621).
- * The contacts bar now stands on the same two (AGL-2635): what is its own is
- * the actions, the dialog's field, the audience door, and the writers.
+ * The contacts bar stands on the same two (AGL-2635): what is its own is the
+ * actions, the dialog's field, the audience door, and how each act is sent.
+ *
+ * ## Each act goes where its field is written (AGL-2804)
+ *
+ * A contact's tags, owner and company live in the holder's facet, which is
+ * the server's to write — the rules cannot tell one field of a facet from
+ * another — so each of those acts is ONE request to `crm/contact-update` for
+ * the rows it reaches (`contacts-bulk-writes.ts` decides which), sent in
+ * pieces the route accepts. A stage move is `crm/contact-stage`, row by row:
+ * a move is what an automation listens for, and only the route that
+ * performed it can announce it. Letting the rows go is the one act written
+ * client-direct, because a holder dropping its own facet is the one facet
+ * change the rules leave the browser.
  *
  * ## A refused row is named
  *
- * The writes go in batches with a per-row fallback, and whatever the store
- * refused comes back by address into the alert under the bar — not into a
- * count, and not into the console. A merchant who tagged four hundred people
- * and got three hundred and ninety-eight needs the two addresses.
+ * Whatever the server or the store refused comes back by address into the
+ * alert under the bar — not into a count, and not into the console. A
+ * merchant who tagged four hundred people and got three hundred and
+ * ninety-eight needs the two addresses.
  *
  * ## Add to list goes through the audience's own door
  *
@@ -53,38 +62,36 @@
 
 import {
   type AglynOrgBilling,
-  COMPANY_CONTACTS_COUNT_FIELD,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
   type ConsentGroup,
   type ContactLifecycleStage,
-  CRM_COLLECTIONS,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { Button, MenuItem, TextField } from '@mui/material'
-import {
-  deleteDoc,
-  doc,
-  increment,
-  updateDoc,
-  writeBatch,
-} from 'firebase/firestore'
+import { deleteDoc, doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useOrgMemberOptions } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useOrgMemberOptions,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
+import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { CRM_CONTACT_UPDATE_MAX, type ContactUpdateFields } from '../model/contact-update'
+import { setContactStage } from '../model/crm-api'
 import {
-  companyCountDeltas,
+  contactBulkAddressOf,
   normalizeBulkTag,
   planAddTag,
   planDetach,
   planRemoveTag,
   planSetCompany,
-  planSetFacetField,
-  type ContactBulkPlan,
   type ContactBulkRow,
-  type ContactBulkWrite,
+  type ContactBulkSelection,
   type ContactBulkSkip,
+  type ContactBulkWrite,
 } from '../model/contacts-bulk-writes'
 import {
   type ContactCsvOptions,
@@ -92,7 +99,12 @@ import {
   contactsCsv,
   downloadTextFile,
 } from '../model/contacts-csv'
-import { runCrmBulkWrites } from '../model/crm-bulk-writes'
+import {
+  type CrmBulkOutcome,
+  runCrmBulkBatch,
+  runCrmBulkCalls,
+  runCrmBulkWrites,
+} from '../model/crm-bulk-writes'
 import AddToListDialog from './add-to-list-dialog'
 import {
   CompanyPicker,
@@ -107,6 +119,7 @@ import {
   countNoun,
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
+import { CrmSuiteLockedButton } from './crm-suite-lock'
 
 export interface ContactsBulkBarProps {
   /** The site the list is read under, or `null` at the organization level. */
@@ -116,10 +129,10 @@ export interface ContactsBulkBarProps {
   /** `['orgs', orgId]`, or `null` while the org is unresolved. */
   scope: readonly [string, string] | null
   /**
-   * The holder these rows are being read AS — whose facet the writes land
-   * in. `null` at the organization level (AGL-2630), where each row's own
-   * holder (`groupId`) takes the write instead, and "Remove from this site"
-   * is not offered because there is no site to remove from.
+   * The holder these rows are being read AS — whose facet the acts land in.
+   * `null` at the organization level (AGL-2630), where each row's own holder
+   * (`groupId`) takes the act instead, and "Remove from this site" is not
+   * offered because there is no site to remove from.
    */
   consentGroup: ConsentGroup | null
   /** The table's rows, already projected through the holder's facet. */
@@ -132,6 +145,13 @@ export interface ContactsBulkBarProps {
    * format (AGL-2621).
    */
   csv?: ContactCsvOptions
+  /**
+   * The org's plan lacks the CRM (AGL-2788), which the shell mounts no CRM
+   * page for (AGL-2851). The owner, the stage and the company stand locked;
+   * tags, the exports, the audience door and removing people from a site
+   * draw no lock of their own.
+   */
+  suiteLocked?: boolean
 }
 
 const NOUN: CrmBulkNoun = { singular: 'contact', plural: 'contacts' }
@@ -166,6 +186,9 @@ const doneSentence = (action: PendingAction | 'detach', done: number): string =>
   }
 }
 
+/** The report's line for a row an act left out on purpose. */
+const skippedLine = (row: ContactBulkSkip) => ({ label: row.email, reason: row.reason })
+
 /**
  * The bar, or nothing.
  *
@@ -181,11 +204,22 @@ export function ContactsBulkBar(props: ContactsBulkBarProps) {
 ContactsBulkBar.displayName = 'ContactsBulkBar'
 
 function ContactsBulkBarBody(props: ContactsBulkBarProps) {
-  const { hostId, org, scope, consentGroup, rows, selected, onSelectedChange, csv } =
-    props
+  const {
+    hostId,
+    org,
+    scope,
+    consentGroup,
+    rows,
+    selected,
+    onSelectedChange,
+    csv,
+    suiteLocked = false,
+  } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { confirm } = useConfirmationContext()
   const { busy, report, apply, dismissReport } = useCrmBulkApply({ recordKind: 'contact' })
+  const contactUpdate = useContactUpdate(hostId)
 
   const selectedRows = useMemo(() => {
     const chosen = new Set(selected)
@@ -221,35 +255,12 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
   }
 
   /**
-   * The Firestore writers the runner drives — a batch, and a single write.
-   *
-   * The bar's own pair rather than `crmBulkWriters`, because a write that
-   * moves a company's contacts count carries the delta, and the count lands
-   * in the SAME commit as the contact: summed per company across a batch, so
-   * four hundred people set to Acme are one `increment` on Acme, and applied
-   * on its own for the one row a per-row retry writes.
+   * The Firestore writers for the one act written client-direct: letting the
+   * rows go, a batch at a time and a row at a time for a batch that failed.
    */
   const writers = useMemo(() => {
     const refFor = (id: string) =>
       doc(firestore, scope?.[0] ?? 'orgs', scope?.[1] ?? '', 'contacts', id)
-    const companyRef = (id: string) =>
-      doc(
-        firestore,
-        scope?.[0] ?? 'orgs',
-        scope?.[1] ?? '',
-        CRM_COLLECTIONS.companies,
-        id,
-      )
-    const stageCounts = (
-      batch: ReturnType<typeof writeBatch>,
-      writes: readonly ContactBulkWrite[],
-    ) => {
-      for (const [companyId, delta] of companyCountDeltas(writes)) {
-        batch.update(companyRef(companyId), {
-          [COMPANY_CONTACTS_COUNT_FIELD]: increment(delta),
-        })
-      }
-    }
     return {
       commitBatch: async (writes: readonly ContactBulkWrite[]) => {
         const batch = writeBatch(firestore)
@@ -257,94 +268,107 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
           if (write.kind === 'delete') batch.delete(refFor(write.id))
           else batch.update(refFor(write.id), write.data)
         }
-        stageCounts(batch, writes)
         await batch.commit()
       },
       commitOne: async (write: ContactBulkWrite) => {
-        if (write.kind === 'delete') return void (await deleteDoc(refFor(write.id)))
-        if (!write.companyCounts?.length) {
-          return void (await updateDoc(refFor(write.id), write.data))
-        }
-        const batch = writeBatch(firestore)
-        batch.update(refFor(write.id), write.data)
-        stageCounts(batch, [write])
-        await batch.commit()
+        if (write.kind === 'delete') await deleteDoc(refFor(write.id))
+        else await updateDoc(refFor(write.id), write.data)
       },
     }
   }, [firestore, scope])
 
-  /** Apply a plan through the shared runner, with every refusal named by address. */
-  const runPlan = useCallback(
-    (action: PendingAction | 'detach', plan: ContactBulkPlan) =>
-      apply({
-        attempted: plan.writes.length,
-        skipped: plan.skipped.map((row) => ({ label: row.email, reason: row.reason })),
-        job: () => runCrmBulkWrites(writers, plan.writes, (write) => write.email),
-        done: (count) => doneSentence(action, count),
-      }),
-    [apply, writers],
+  /** One act's request for the rows it reaches, in the pieces the route accepts. */
+  const saveThroughRoute = useCallback(
+    (targets: readonly ContactBulkRow[], set: ContactUpdateFields) =>
+      runCrmBulkBatch(
+        targets,
+        (row) => row.$id,
+        contactBulkAddressOf,
+        (piece) => contactUpdate.updateMany(piece.map((row) => row.$id), set),
+        CRM_CONTACT_UPDATE_MAX,
+      ),
+    [contactUpdate],
   )
 
   const handleApply = useCallback(async () => {
     if (!pending || !scope) return
-    const nowMs = Date.now()
     /*
-     * ONE PLAN PER HOLDER. Under a site every selected row is written into
-     * the viewing group's facet. At the organization level (AGL-2630) the
-     * rows were each flattened through their own primary holder, and the
-     * write goes back to the same facet — so the selection is partitioned
-     * by holder, planned once per holder, and the plans are merged. A row
-     * nobody holds yet has no facet to write, and says so.
+     * A row no site holds has no facet to write. Under a site every selected
+     * row is the viewing group's; at the organization level (AGL-2630) each
+     * row was flattened through its own primary holder and is written back
+     * through it, so a row nobody holds yet is left out and says so.
      */
-    const byGroup = new Map<string, typeof selectedRows>()
+    const held: ContactBulkRow[] = []
     const unheld: ContactBulkSkip[] = []
     for (const row of selectedRows) {
-      const groupId = consentGroup?.groupId ?? row.groupId ?? ''
-      if (!groupId) {
+      if (consentGroup || row.groupId) held.push(row)
+      else {
         unheld.push({
-          email: String(row.email || row.$id),
+          email: contactBulkAddressOf(row),
           reason: 'no site holds this contact yet',
         })
-        continue
       }
-      byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), row])
     }
-    const planFor = (rows: typeof selectedRows, groupId: string): ContactBulkPlan | null => {
+
+    const planned = ((): { selection: ContactBulkSelection; job: () => Promise<CrmBulkOutcome> } | null => {
       if (pending === 'add-tag' || pending === 'remove-tag') {
         const tag = normalizeBulkTag(value)
         if (!tag) return null
-        return pending === 'add-tag'
-          ? planAddTag(rows, groupId, tag, nowMs)
-          : planRemoveTag(rows, groupId, tag, nowMs)
+        const selection =
+          pending === 'add-tag' ? planAddTag(held, tag) : planRemoveTag(held, tag)
+        const set: ContactUpdateFields =
+          pending === 'add-tag' ? { addTag: tag } : { removeTag: tag }
+        return { selection, job: () => saveThroughRoute(selection.rows, set) }
       }
       if (pending === 'owner') {
-        return planSetFacetField(rows, groupId, 'ownerUid', value || null, nowMs)
+        return {
+          selection: { rows: held, skipped: [] },
+          job: () => saveThroughRoute(held, { ownerUid: value }),
+        }
       }
-      if (pending === 'stage') {
-        if (!value) return null
-        return planSetFacetField(
-          rows,
-          groupId,
-          'lifecycleStage',
-          value as ContactLifecycleStage,
-          nowMs,
-        )
+      if (pending === 'company') {
+        const companyId = company?.id ?? null
+        const selection = planSetCompany(held, companyId)
+        return { selection, job: () => saveThroughRoute(selection.rows, { companyId }) }
       }
-      if (pending === 'company') return planSetCompany(rows, groupId, company, nowMs)
-      return null
-    }
-    const plan: ContactBulkPlan = { writes: [], skipped: [...unheld] }
-    for (const [groupId, rows] of byGroup) {
-      const part = planFor(rows, groupId)
-      if (!part) return
-      plan.writes.push(...part.writes)
-      plan.skipped.push(...part.skipped)
-    }
-    if (!byGroup.size && !unheld.length) return
+      if (!value) return null
+      const stage = value as ContactLifecycleStage
+      return {
+        selection: { rows: held, skipped: [] },
+        /*
+         * One row at a time through the one writer of a contact's stage, on
+         * the site that holds the row: the mounted site, or at the
+         * organization level the row's own holder's.
+         */
+        job: () =>
+          runCrmBulkCalls(held, contactBulkAddressOf, async (row) => {
+            const site = hostId ?? (row.holderHostId || null)
+            if (!site) throw new Error('no site holds this contact yet')
+            await setContactStage(user, site, row.$id, stage)
+          }),
+      }
+    })()
+    if (!planned) return
     const action = pending
     setPending(null)
-    await runPlan(action, plan)
-  }, [pending, scope, consentGroup, value, company, selectedRows, runPlan])
+    await apply({
+      attempted: planned.selection.rows.length,
+      skipped: [...unheld, ...planned.selection.skipped].map(skippedLine),
+      job: planned.job,
+      done: (count) => doneSentence(action, count),
+    })
+  }, [
+    pending,
+    scope,
+    selectedRows,
+    consentGroup,
+    value,
+    company,
+    saveThroughRoute,
+    hostId,
+    user,
+    apply,
+  ])
 
   const handleExport = useCallback(() => {
     downloadTextFile(
@@ -373,19 +397,22 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    const outcome = await runPlan(
-      'detach',
-      planDetach(selectedRows, consentGroup, Date.now()),
-    )
+    const plan = planDetach(selectedRows, consentGroup, Date.now())
+    const outcome = await apply({
+      attempted: plan.writes.length,
+      skipped: plan.skipped.map(skippedLine),
+      job: () => runCrmBulkWrites(writers, plan.writes, (write) => write.email),
+      done: (done) => doneSentence('detach', done),
+    })
     // The rows that went are gone from the table; the refused ones stay
     // selected, so the reader can see which they are and try again.
     const refused = new Set(outcome.refused.map((row) => row.label))
     onSelectedChange(
       selectedRows
-        .filter((row) => refused.has(String(row.email || row.$id)))
+        .filter((row) => refused.has(contactBulkAddressOf(row)))
         .map((row) => row.$id),
     )
-  }, [scope, selectedRows, confirm, runPlan, consentGroup, onSelectedChange])
+  }, [scope, selectedRows, confirm, apply, writers, consentGroup, onSelectedChange])
 
   const emails = selectedRows
     .map((row) => String(row.email ?? '').trim())
@@ -496,15 +523,29 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
       >
         {'Remove tag'}
       </Button>
-      <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
-        {'Set owner'}
-      </Button>
-      <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
-        {'Set stage'}
-      </Button>
-      <Button size="small" disabled={busy || !scope} onClick={() => openAction('company')}>
-        {'Set company'}
-      </Button>
+      {suiteLocked ? (
+        <>
+          <CrmSuiteLockedButton>{'Set owner'}</CrmSuiteLockedButton>
+          <CrmSuiteLockedButton>{'Set stage'}</CrmSuiteLockedButton>
+          <CrmSuiteLockedButton>{'Set company'}</CrmSuiteLockedButton>
+        </>
+      ) : (
+        <>
+          <Button size="small" disabled={busy || !scope} onClick={() => openAction('owner')}>
+            {'Set owner'}
+          </Button>
+          <Button size="small" disabled={busy || !scope} onClick={() => openAction('stage')}>
+            {'Set stage'}
+          </Button>
+          <Button
+            size="small"
+            disabled={busy || !scope}
+            onClick={() => openAction('company')}
+          >
+            {'Set company'}
+          </Button>
+        </>
+      )}
       <Button
         size="small"
         disabled={busy || !scope || !emails.length || !createHostId}

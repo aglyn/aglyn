@@ -195,14 +195,19 @@ budget for that when you size a batch.
 | --- | --- |
 | Images (`image/*`, including SVG) | 15 MB |
 | PDF, Word, Excel, CSV, text, Markdown, JSON, ZIP | 10 MB |
-| Video (`mp4`, `webm`, `quicktime`) | 25 MB |
+| Video (`mp4`, `webm`, `quicktime`) | 25 MB, while video uploads are paused: see below |
 | PowerPoint | 10 MB |
 
 Anything outside the allowed types returns `415 unsupported_media_type`; anything past
 its ceiling returns `413 payload_too_large`. The size is measured on the **decoded**
 bytes, not on anything you declare.
 
-Video and document uploads need a plan that includes them; images do not.
+Document uploads need a plan that includes them; images do not.
+
+**Video uploads are paused.** A video returns `403 forbidden` with
+`code: "video_uploads_paused"` on every plan, and nothing is stored. The refusal comes
+before your `Idempotency-Key` is claimed, so the same key still works once video
+uploads resume.
 
 #### What we check, and what we don't {#upload-checks}
 
@@ -211,7 +216,7 @@ platform vetted it":
 
 - **We check the declared content type against an allowlist** and refuse the rest.
 - **We measure the real decoded size** against the per-type ceiling.
-- **We check that the bytes match the type you declared.** A file labelled
+- **We check that the bytes match the type you declared.** A file labeled
   `application/pdf` has to start with a PDF header, a `.docx` has to be a ZIP, a
   `image/png` has to carry a PNG signature. A mismatch is refused with `415`
   (`type_mismatch`). Text types — `text/plain`, `text/csv`, `text/markdown`,
@@ -309,6 +314,7 @@ Prefix the filename with the id: `fileName` is not unique across folders, and a 
 | `400` | `bad_request` | `data` is not valid base64. |
 | `403` | `insufficient_scope` | Key lacks `media:read`, or `media:write` to upload. |
 | `403` | `plan_required` | `code: "storage_quota"` — the upload would cross your storage band. Or the file type needs a higher plan. |
+| `403` | `forbidden` | `code: "video_uploads_paused"` — video uploads are paused on every plan. Nothing is stored. |
 | `404` | `not_found` | Unknown or unowned site; unknown or deleted file. |
 | `405` | `method_not_allowed` | A method the path doesn't take — `POST` is accepted on the collection, never on `/media/{id}`. |
 | `413` | `payload_too_large` | Past the [ceiling](#upload-limits) for that type. |

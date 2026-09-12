@@ -49,8 +49,8 @@ describe('composeExtensionEntitlements (AGL-2611)', () => {
   })
 
   it('is the extension flag AND the section flag, from real plan rows', () => {
-    // Free carries neither `redirects` nor `crm`; Starter carries both; the
-    // CRM's own case is an unflagged extension over a `crm`-flagged section.
+    // Free carries neither `redirects` nor `crm`; Starter carries both. An
+    // unflagged extension over a `crm`-flagged section.
     const free = { plan: 'free' }
     const starter = { plan: 'starter' }
     const verdict = (org: unknown, ready: boolean) =>

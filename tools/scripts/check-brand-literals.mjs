@@ -43,6 +43,7 @@ import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compareToBaseline, findBrandLiterals } from './lib/brand-literals.mjs'
+import { inScope, scopeBaseline, scopeFromArgv, scopeNote } from './lib/guard-scope.mjs'
 import { remedy } from './lib/ratchet-baseline.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -174,7 +175,24 @@ function trackedFiles() {
     .filter((path) => existsSync(path))
 }
 
-const files = trackedFiles()
+let scope
+try {
+  scope = scopeFromArgv(args)
+} catch (error) {
+  console.error(error.message)
+  process.exit(2)
+}
+if (scope && write) {
+  console.error(
+    '--write refuses a --files-from scope: a baseline written from a partial ' +
+      'sweep would drop every row outside it.',
+  )
+  process.exit(2)
+}
+
+const files = trackedFiles().filter((file) =>
+  inScope(scope, relative(REPO_ROOT, file).split(sep).join('/')),
+)
 
 const exemptProse = new Set(GENERATED_DOCS_PROSE)
 const proseSeen = new Set()
@@ -202,7 +220,9 @@ for (const file of files) {
  * The directory rule this replaced failed exactly that way and stayed silent
  * about it, so the list is checked against what the sweep actually saw.
  */
-const missingProse = GENERATED_DOCS_PROSE.filter((path) => !proseSeen.has(path))
+const missingProse = scope
+  ? []
+  : GENERATED_DOCS_PROSE.filter((path) => !proseSeen.has(path))
 if (missingProse.length) {
   console.error(
     'FAIL: GENERATED_DOCS_PROSE exempts paths the sweep never reached:\n' +
@@ -235,12 +255,12 @@ try {
   process.exit(1)
 }
 
-const verdict = compareToBaseline(counts, baseline)
+const verdict = compareToBaseline(counts, scopeBaseline(baseline, scope))
 const total = Object.values(counts).reduce((a, b) => a + b, 0)
 
 if (asJson) {
   process.stdout.write(
-    `${JSON.stringify({ total, files: Object.keys(counts).length, ...verdict, counts: sortedCounts }, null, 2)}\n`,
+    `${JSON.stringify({ total, files: Object.keys(counts).length, scoped: scope !== null, ...verdict, counts: sortedCounts }, null, 2)}\n`,
   )
 } else if (list) {
   for (const [path, found] of Object.entries(occurrences).sort((a, b) =>
@@ -253,13 +273,14 @@ if (asJson) {
 } else {
   console.log(
     `brand literal census · ${files.length} files swept · ` +
-      `${total} occurrences in ${Object.keys(counts).length} files`,
+      `${total} occurrences in ${Object.keys(counts).length} files` +
+      (scope ? ` · ${scopeNote(scope)}` : ''),
   )
   // Guard the premise. A walk that reached nothing would report zero
   // regressions and read as a pass — the failure mode this repo keeps hitting
   // (AGL-1776, AGL-2004). Anything near zero means the sweep is broken, not
-  // that the repo is clean.
-  if (files.length < 3000) {
+  // that the repo is clean. A scope is small on purpose, so it is exempt.
+  if (!scope && files.length < 3000) {
     console.error(
       `\nFAIL: swept only ${files.length} files — the walk is not reaching ` +
         'the corpus, so a clean verdict would be meaningless.',

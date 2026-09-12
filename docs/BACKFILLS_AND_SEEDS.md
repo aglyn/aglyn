@@ -2,7 +2,7 @@
 
 `tools/scripts` holds 146 scripts. Most are named by `package.json`, a
 workflow or `tools/gate.sh`, so what they are for is answered by what runs
-them. The 26 shaped as one-shots — `backfill-*`, `migrate-*`, `seed-*`,
+them. The 25 shaped as one-shots — `backfill-*`, `migrate-*`, `seed-*`,
 `bootstrap-*` — are not, and exactly one (`seed-e2e.mjs`, as
 `npm run seed:e2e`) is wired to anything at all.
 
@@ -99,8 +99,7 @@ automation references is the expected state for all of them.
 
 | Script | State | What to know |
 | --- | --- | --- |
-| `backfill-media-content-pins.mjs` | Repeatable | Stamps each stored media reference with its asset's current `contentHash`, so it resolves to the CDN's immutable URL (a year in the browser) instead of the stable one (a minute). **An optimisation, never a repair** — an unpinned reference renders exactly as it always has, and a stale pin redirects rather than breaking, which is what makes writing one safe. Every reference the picker has written since AGL-2685 is already pinned; this is the corpus that predates it. `--media=<id>` re-pins one asset, which is the tidy-up after a **replace**. Pure `repinString` / `repinValue`, both driven by `--self-test`. |
-| `generate-video-renditions.mjs` | Repeatable, **never run automatically** | Produces the compressed delivery renditions a video advertises in `videoRenditions`, which the CDN serves as `?r={key}` (AGL-2745). Needs `ffmpeg`/`ffprobe` on PATH; report-only by default. This is the PRODUCER a hosted transcoder would replace, and it is a script on purpose: the Transcoder API is $0.030 per HD output minute per stream with no free tier, and Cloud Run with a static ffmpeg is near-free but a new deployable service a Vercel promotion does not ship. 720p H.264 with `+faststart` by default; `--webm` adds VP9. Skips any source not taller than the target, replaces `videoRenditions` rather than merging it, and backfills the AGL-2742 `video` metadata from `ffprobe` while the file is on disk. |
+| `generate-video-renditions.mjs` | Repeatable, **never run automatically** | Produces the compressed delivery renditions a video advertises in `videoRenditions`, which the CDN serves as `?r={key}` (AGL-2745). A published page asks for `?r=auto` instead of naming one (AGL-2753) — it cannot know which encodings exist, since this runs long after the video was placed — and the CDN picks from the document it already reads on that request, falling back to the master for an asset this has never been run for. Needs `ffmpeg`/`ffprobe` on PATH; report-only by default. This is the PRODUCER a hosted transcoder would replace, and it is a script on purpose: the Transcoder API is $0.030 per HD output minute per stream with no free tier, and Cloud Run with a static ffmpeg is near-free but a new deployable service a Vercel promotion does not ship. 720p H.264 with `+faststart` by default; `--webm` adds VP9. Skips any source not taller than the target, and backfills the AGL-2742 `video` metadata from `ffprobe` while the file is on disk. `videoRenditions` is rewritten as this run's encodings plus every rendition the document already records whose object is still in the bucket, in profile order, so a later `--webm` pass keeps the MP4 an earlier pass made and an entry whose object is gone is never kept advertised (AGL-2800). `--self-test` checks that rule without touching a project. |
 | `backfill-media-variants.mjs` | ⚠️ Outstanding | Generates the WebP variants an asset advertises. It reads the source width from `dimensions.width`, which media documents do not carry — they store `width` at the top level — so the source width is always absent and the documented "an 800px logo is skipped, not upscaled" rule never fires. Nothing is upscaled in fact, but it writes more objects than it reports and labels them with widths the source never had. |
 
 ## Besigner and canvas
@@ -124,7 +123,13 @@ what makes a script worth LOOKING at under either, and is never on its own a
 reason to delete one: almost everything in the tables above has none.
 
 **A script cannot do the work it claims.** The standard AGL-1839 set when it
-deleted `backfill-contacts.mjs`. Four went this way:
+deleted `backfill-contacts.mjs`. Five went this way:
+
+- `backfill-media-content-pins.mjs` — stamped each stored media reference
+  with its asset's content hash so it would resolve to the CDN's immutable
+  URL. No reference resolves to that URL since AGL-2798, because an edge and
+  a browser keep an immutable response for a year where no replace can reach
+  it, so a stamped pin changes nothing a page renders.
 
 - `backfill-orgs.mjs` and `migrate-org-data.mjs` — both read a schema
   AGL-238/445/446 retired, so neither can find input again. The first still

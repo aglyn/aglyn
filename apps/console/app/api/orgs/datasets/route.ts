@@ -41,6 +41,8 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { ensureCustomFieldTypes } from '../../../../utils/ensure-custom-field-types'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * `dataStorageMbPerOrg` for this route, rendered as the console's 403.
@@ -294,6 +296,9 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Unknown dataset' }, { status: 404 })
       }
       const model = effectiveDatasetModel(datasetSnapshot.data() as any)
+      // Before either validation below: a plugin's field validator only runs
+      // once its plugin's server entry has registered it.
+      await ensureCustomFieldTypes(model)
       const recordsRef = datasetRef.collection('records')
       const recordCount = (await recordsRef.count().get()).data().count
       const overRecordQuota = (limit: number) =>
@@ -481,6 +486,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Dataset operation failed' }, { status: 500 })
   }

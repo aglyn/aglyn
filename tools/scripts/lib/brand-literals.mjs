@@ -108,15 +108,7 @@
  * the walker structurally could not see.
  */
 
-import { createRequire } from 'node:module'
-
-/**
- * `typescript` ships CommonJS. A `createRequire` bound to this module resolves
- * it from the repo's own `node_modules` however the script was invoked, which
- * a bare `import ts from 'typescript'` does not when the caller runs from
- * elsewhere.
- */
-const ts = createRequire(import.meta.url)('typescript')
+import { copySpans, lineOf } from './copy-spans.mjs'
 
 /**
  * The brand as it appears in prose. Capitalised: a lowercase `aglyn` in a
@@ -156,66 +148,12 @@ export const BRAND_WORD = 'Aglyn'
  */
 const IDENTIFIER_BEFORE = /[@/.\-\w]$/
 const IDENTIFIER_AFTER = /^(?:[/\-_A-Za-z]|\.[A-Za-z0-9])/
-
-/**
- * The node kinds that carry text a human reads.
- *
- * The template parts are separate kinds rather than one `TemplateExpression`
- * on purpose: `` `Hello ${name}, welcome to Aglyn` `` is a `TemplateHead` and
- * a `TemplateTail` with an expression between them, and collecting the parts
- * means an interpolated value is never scanned as if it were copy.
- *
- * `JsxText` is the AGL-2350 addition. JSX **attribute** values need no entry —
- * `<img alt="Aglyn logo" />` is an ordinary `StringLiteral` and has always
- * been counted.
- */
-const COPY_KINDS = new Set([
-  ts.SyntaxKind.StringLiteral,
-  ts.SyntaxKind.NoSubstitutionTemplateLiteral,
-  ts.SyntaxKind.TemplateHead,
-  ts.SyntaxKind.TemplateMiddle,
-  ts.SyntaxKind.TemplateTail,
-  ts.SyntaxKind.JsxText,
-])
-
-/**
- * Which dialect to parse as.
- *
- * `.ts` must NOT be parsed as `.tsx`: the two disagree about `<T>value`, which
- * is a type assertion in one and an unclosed JSX element in the other. Getting
- * that wrong would not throw — the parser recovers — it would quietly reshape
- * the tree, which is precisely the class of silent misreading this rewrite
- * exists to end.
- *
- * `ScriptKind.JS` parses JSX, so a `.js`/`.mjs`/`.cjs` file carrying JSX is
- * covered without a separate case.
- */
-function scriptKindFor(path) {
-  if (path.endsWith('.tsx')) return ts.ScriptKind.TSX
-  if (path.endsWith('.ts') || path.endsWith('.mts') || path.endsWith('.cts'))
-    return ts.ScriptKind.TS
-  if (path.endsWith('.jsx')) return ts.ScriptKind.JSX
-  return ts.ScriptKind.JS
-}
-
-/**
- * Where a node's own text begins.
- *
- * For an ordinary token that means skipping the leading trivia the parser
- * hangs off `pos`. `JsxText` is the exception and must use `pos` directly: it
- * has no trivia, its content is significant whitespace, and `skipTrivia` would
- * read a `//` occurring in prose as the start of a line comment and skip the
- * rest of the line — reintroducing the comment-stripper desync in the one node
- * kind added to cure it.
- */
-function textStart(source, node) {
-  return node.kind === ts.SyntaxKind.JsxText
-    ? node.pos
-    : ts.skipTrivia(source, node.pos)
-}
-
 /**
  * Occurrences of the brand word in user-visible copy, with line numbers.
+ *
+ * The spans come from `copy-spans.mjs`, which owns the parse and the decision
+ * about which node kinds are copy; what stays here is the part specific to the
+ * brand — the identifier rules that keep `Aglyn.app` and `@aglyn/aglyn` out.
  *
  * @param {string} source file contents
  * @param {string} [path] file name, which selects the dialect. Defaults to a
@@ -224,39 +162,27 @@ function textStart(source, node) {
  * @returns {{ line: number, text: string }[]}
  */
 export function findBrandLiterals(source, path = 'source.tsx') {
-  const file = ts.createSourceFile(
-    path,
-    source,
-    ts.ScriptTarget.Latest,
-    /* setParentNodes */ false,
-    scriptKindFor(path),
-  )
+  const { file, spans } = copySpans(source, path)
   const found = []
 
-  const visit = (node) => {
-    if (COPY_KINDS.has(node.kind)) {
-      const start = textStart(file.text, node)
-      const text = file.text.slice(start, node.end)
-      let offset = 0
-      for (;;) {
-        const at = text.indexOf(BRAND_WORD, offset)
-        if (at === -1) break
-        offset = at + BRAND_WORD.length
-        const before = text.slice(Math.max(0, at - 1), at)
-        // TWO characters, so `Aglyn.app` stays an identifier while `Aglyn.` at
-        // the end of a sentence is the copy it plainly is.
-        const after = text.slice(offset, offset + 2)
-        if (IDENTIFIER_BEFORE.test(before)) continue
-        if (IDENTIFIER_AFTER.test(after)) continue
-        found.push({
-          line: file.getLineAndCharacterOfPosition(start + at).line + 1,
-          text: text.trim().slice(0, 120),
-        })
-      }
+  for (const { text, start } of spans) {
+    let offset = 0
+    for (;;) {
+      const at = text.indexOf(BRAND_WORD, offset)
+      if (at === -1) break
+      offset = at + BRAND_WORD.length
+      const before = text.slice(Math.max(0, at - 1), at)
+      // TWO characters, so `Aglyn.app` stays an identifier while `Aglyn.` at
+      // the end of a sentence is the copy it plainly is.
+      const after = text.slice(offset, offset + 2)
+      if (IDENTIFIER_BEFORE.test(before)) continue
+      if (IDENTIFIER_AFTER.test(after)) continue
+      found.push({
+        line: lineOf(file, start + at),
+        text: text.trim().slice(0, 120),
+      })
     }
-    ts.forEachChild(node, visit)
   }
-  ts.forEachChild(file, visit)
 
   return found.sort((a, b) => a.line - b.line)
 }

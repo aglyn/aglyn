@@ -23,6 +23,7 @@ import composeScreenNodes, {
 } from './compose-screen-nodes'
 import type { AuthorContent } from './get-author-content'
 import getScreen from './get-screen'
+import { collectSocialImageFacts } from './social-image-facts'
 
 /**
  * The host field naming the screen every author page renders through
@@ -74,6 +75,12 @@ export interface ComposedAuthorPage {
   /** The template screen doc, when one is designated; null for the built-in. */
   screen: Record<string, any> | null
   nodes: Record<string, any>
+  /**
+   * The current pair of each picture the head's card may name (AGL-2850): the
+   * author's share card, then their portrait. Read in the composition's
+   * batch, and absent when it answered for neither.
+   */
+  socialImageFacts?: Aglyn.SocialImageAssetFacts
 }
 
 /** The tokens and entry context both compose paths share. */
@@ -87,6 +94,12 @@ function authorComposeContext(content: AuthorContent) {
     totalPages: content.totalPages,
   })
   return {
+    /**
+     * The pictures the head builds the card from, in its order: the share
+     * card, then the portrait (AGL-2850). The author head reads the record
+     * alone and never the site default, so the host's image is not one.
+     */
+    cardImages: [content.author?.seoImage, content.author?.image],
     tokens: {
       ...Aglyn.contentAuthorTokens(content.author, {
         entryCount: content.totalEntries,
@@ -149,13 +162,15 @@ export async function composeAuthorTemplatePage(options: {
       allowTemplate: true,
     })
     if (!templateRes.screen) return null
-    const { tokens, collection } = authorComposeContext(content)
+    const { cardImages, tokens, collection } = authorComposeContext(content)
+    const card = collectSocialImageFacts(cardImages)
     const nodes = await composeScreenNodes({
       hostId,
       screenId,
       screen: templateRes.screen,
       tokens,
       collection,
+      socialImages: card.socialImages,
     })
     if (!nodes) return null
     /*
@@ -175,6 +190,7 @@ export async function composeAuthorTemplatePage(options: {
     return {
       screen: templateRes.screen as Record<string, any>,
       nodes: Aglyn.expandContentAuthorProfile(nodes, content.author),
+      ...card.collected(),
     }
   } catch (error) {
     console.error('author template composition failed', error)
@@ -203,10 +219,12 @@ export async function composeAuthorFallbackPage(options: {
   const { hostId, host, content } = options
   try {
     const layoutId = await resolveBuiltInPageLayoutId({ hostId, host })
-    const { tokens, collection } = authorComposeContext(content)
+    const { cardImages, tokens, collection } = authorComposeContext(content)
+    const card = collectSocialImageFacts(cardImages)
     const nodes = await composeNodesWithChrome({
       hostId,
       layoutId,
+      socialImages: card.socialImages,
       screenNodes: buildAuthorPageNodes({
         slug: content.slug,
         name: content.name,
@@ -220,7 +238,7 @@ export async function composeAuthorFallbackPage(options: {
       collection,
       host: host as Aglyn.HostTokenSource,
     })
-    return nodes ? { screen: null, nodes } : null
+    return nodes ? { screen: null, nodes, ...card.collected() } : null
   } catch (error) {
     console.error('author page composition failed', error)
     return null

@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { DEVICE_LIST_LIMIT, readDeviceRows } from '../../_lib/device-registry'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — a read-only view of the caller's OWN sign-in history,
 // and the one page somebody is sent to BY a security email. A lockdown that
@@ -92,6 +93,10 @@ async function handler(request: Request): Promise<Response> {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {
+    // A refused credential is a 401, not a fault of ours (AGL-1993). Null
+    // for anything else, so a real failure keeps the answer below.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[account/devices]', error)
     return Response.json({ error: 'Sign-in history failed' }, { status: 500 })
   }

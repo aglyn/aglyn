@@ -26,8 +26,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import { useCallback, useRef } from 'react'
 import type { MouseEventHandler, ReactNode } from 'react'
 import { MdiIcon } from './mdi-icon/mdi-icon'
+
+/** The one part of a Popper.js instance a help tip calls. */
+interface PlacedPopper {
+  update(): unknown
+}
 
 /** Content shape accepted anywhere a help affordance can attach (AGL-600/601). */
 export interface HelpTipContent {
@@ -60,8 +66,30 @@ export function HelpTip(props: HelpTipProps) {
     ariaLabel ??
     (typeof title === 'string' ? `Help: ${title}` : 'Help')
 
+  // Popper places the tooltip when it opens, and recomputes only on scroll, on
+  // a window resize, or when the popper component itself re-renders. The
+  // content can still grow after that — a console excerpt is a chunk fetched
+  // on first open (AGL-2706) — and a tip placed at its title-only width then
+  // widens from where it was put, off the screen at the right edge (AGL-2855).
+  // So the open content reports its own size changes to the popper.
+  const popper = useRef<PlacedPopper | null>(null)
+  const setPopper = useCallback((instance: PlacedPopper | null) => {
+    popper.current = instance
+  }, [])
+  const contentObserver = useRef<ResizeObserver | null>(null)
+  const observeContent = useCallback((node: HTMLDivElement | null) => {
+    contentObserver.current?.disconnect()
+    contentObserver.current = null
+    // No ResizeObserver means no layout to follow (jsdom).
+    if (!node || typeof ResizeObserver === 'undefined') return
+    contentObserver.current = new ResizeObserver(() => {
+      void popper.current?.update()
+    })
+    contentObserver.current.observe(node)
+  }, [])
+
   const content = (
-    <Stack spacing={0.5} sx={{ p: 0.5, maxWidth: 280 }}>
+    <Stack ref={observeContent} spacing={0.5} sx={{ p: 0.5, maxWidth: 280 }}>
       {title ? (
         <Typography variant="subtitle2" component="span">
           {title}
@@ -100,7 +128,12 @@ export function HelpTip(props: HelpTipProps) {
   )
 
   return (
-    <Tooltip arrow enterDelay={150} title={content}>
+    <Tooltip
+      arrow
+      enterDelay={150}
+      title={content}
+      slotProps={{ popper: { popperRef: setPopper } }}
+    >
       {href ? (
         <IconButton
           component="a"

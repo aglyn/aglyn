@@ -79,7 +79,7 @@ export function SiteSecurityCards(props: SiteSecurityCardsProps) {
         hostId={hostId}
         field="approvedFrameHosts"
         header="Approved embeds"
-        description="Other sites your pages may embed in a frame — a map, a booking widget, a player we don't build in. YouTube, Vimeo and checkout already work without being listed."
+        description="Other sites your pages may embed in a frame — a map, a booking widget, a player we don't build in. YouTube, Vimeo, Wistia and checkout already work without being listed."
         emptyHint="No external embeds approved. The built-in video, plugin and checkout embeds still work."
         placeholder="calendar.example.com"
         privacyNote="An embedded page sees the IP address of everyone who visits yours, and can set its own cookies in their browser."

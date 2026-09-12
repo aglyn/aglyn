@@ -229,9 +229,21 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     hostIds: [hostId],
     declared: false,
   }),
+  // The real paid-media resolver (AGL-2847). This file's files are hotlinks,
+  // which it passes through, so the download verdicts stay the ones measured.
+  createPaidMediaDeliveryIo: jest.requireActual(
+    '@aglyn/tenant-data-admin/server/paid-media-delivery',
+  ).createPaidMediaDeliveryIo,
+  resolvePaidMediaDelivery: jest.requireActual(
+    '@aglyn/tenant-data-admin/server/paid-media-delivery',
+  ).resolvePaidMediaDelivery,
+  PAID_DOWNLOAD_LINK_TTL_MS: jest.requireActual(
+    '@aglyn/tenant-data-admin/server/media-signing',
+  ).PAID_DOWNLOAD_LINK_TTL_MS,
   firebaseAdmin: {
     app: () => ({
       firestore: () => fakeFirestore,
+      storage: () => ({ bucket: () => ({ name: 'aglyn-test.appspot.com' }) }),
       auth: () => ({ verifyIdToken: async () => ({ uid: 'admin-1' }) }),
     }),
     firestore: {

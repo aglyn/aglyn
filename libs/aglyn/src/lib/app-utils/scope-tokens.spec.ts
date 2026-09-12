@@ -32,6 +32,7 @@ import {
   type ScopeToken,
   parseScopeToken,
   scopeForHosts,
+  scopeToStore,
   scopeTokensForHost,
   storedScope,
   visibleToHost,
@@ -164,6 +165,41 @@ describe('normalizeVisibleTo', () => {
       hostScopeToken(`h${i}`)
     )
     expect(normalizeVisibleTo(atCap)).toHaveLength(MAX_SCOPE_HOSTS)
+  })
+})
+
+/**
+ * A save that cannot store its selection must say why and store nothing
+ * (AGL-2773). Substituting the org token for `normalizeVisibleTo`'s null
+ * shares the resource with every site.
+ */
+describe('scopeToStore', () => {
+  it('passes a storable scope through, normalized', () => {
+    expect(scopeToStore(['host:h1', 'host:h1'])).toEqual({
+      scope: ['host:h1'],
+      problem: null,
+    })
+    expect(scopeToStore([ORG_SCOPE_TOKEN, 'host:h1'])).toEqual({
+      scope: [ORG_SCOPE_TOKEN],
+      problem: null,
+    })
+  })
+
+  it('refuses an empty selection, and never answers with the org token', () => {
+    for (const input of [[], ['nonsense'], undefined, null]) {
+      const result = scopeToStore(input)
+      expect(result.scope).toBeNull()
+      expect(result.problem).toMatch(/at least one site/)
+    }
+  })
+
+  it('refuses a selection over the cap, naming the cap', () => {
+    const tooMany = Array.from({ length: MAX_SCOPE_HOSTS + 1 }, (_, i) =>
+      hostScopeToken(`h${i}`)
+    )
+    const result = scopeToStore(tooMany)
+    expect(result.scope).toBeNull()
+    expect(result.problem).toContain(`${MAX_SCOPE_HOSTS} sites or fewer`)
   })
 })
 

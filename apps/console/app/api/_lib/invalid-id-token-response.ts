@@ -52,16 +52,17 @@
  * user during one and page nobody. The message is the only signal
  * firebase-admin gives, so it is used, and pinned by a test.
  *
- * ## WHY IT LIVES HERE and not beside `verifyConsoleIdToken` in the lib
+ * ## Where the classification lives
  *
- * It belongs, conceptually, next to the auth wrapper in
- * `libs/tenant/data/admin/.../firebase-admin.ts`. It is here instead because
- * 178 console specs replace `@aglyn/tenant-data-admin` with a hand-built
- * `jest.mock` factory, and a factory that does not list a symbol makes it
- * `undefined` rather than failing loudly. A new export there red-lines 46
- * suites that have nothing to do with this change, and — worse — the ones
- * that stub it as a no-op would silently stop testing the refusal at all.
- * A module nothing mocks keeps the behaviour real in every one of them.
+ * `isRefusedIdToken`, in `@aglyn/tenant-data-admin/server/id-token-refusal`
+ * (AGL-2852) — beside the auth wrapper it belongs with, as an entry point of
+ * its own rather than an export of the `@aglyn/tenant-data-admin` barrel.
+ * 178 console specs replace that barrel with a hand-built `jest.mock`
+ * factory, and a factory that does not list a symbol makes it `undefined`
+ * rather than failing loudly; no factory replaces the entry point, so the
+ * behavior stays real in every one of them, and the plugin handlers that
+ * verify a token classify through the same code. This file is the console
+ * routes' half of it: the `Response` a route returns.
  *
  * ## What callers must NOT do with this
  *
@@ -78,33 +79,7 @@
  * stops them being false 5xx in the runtime log a drain would grade by status.
  *==========================================*/
 
-/**
- * Codes that mean the CREDENTIAL is bad. Anything absent from this set is
- * treated as an infrastructure failure and keeps its 500 — see the note.
- */
-const INVALID_CREDENTIAL_CODES: ReadonlySet<string> = new Set([
-  // The JWT itself did not check out: bad signature, malformed, wrong
-  // audience or issuer, unknown `kid`, absent/oversized `sub`.
-  'auth/argument-error',
-  'auth/id-token-expired',
-  'auth/session-cookie-expired',
-  // Revoked or locked out. `assertIdTokenNotRevoked` (AGL-1881) raises these
-  // two with codes matching the SDK's, so both arms agree.
-  'auth/id-token-revoked',
-  'auth/session-cookie-revoked',
-  'auth/user-disabled',
-  // The account behind a well-formed token is gone. Fail-closed, and it is a
-  // statement about the credential, not about our health.
-  'auth/user-not-found',
-  // A token minted in a different GCIP tenant than the pool verifying it.
-  'auth/mismatching-tenant-id',
-])
-
-/**
- * firebase-admin reports its own public-key fetch failing as
- * `auth/argument-error`. That is an OUTAGE, not a bad token — see the note.
- */
-const KEY_FETCH_FAILURE = /error fetching public keys/i
+import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * The 401 a refused credential deserves, or null when the failure is ours and
@@ -114,15 +89,7 @@ const KEY_FETCH_FAILURE = /error fetching public keys/i
  * and cannot accidentally mask a real fault.
  */
 export function invalidIdTokenResponse(error: unknown): Response | null {
-  const code = (error as { code?: unknown })?.code
-  if (typeof code !== 'string') return null
-  if (!INVALID_CREDENTIAL_CODES.has(code)) return null
-  if (code === 'auth/argument-error') {
-    const message = (error as { message?: unknown })?.message
-    if (typeof message === 'string' && KEY_FETCH_FAILURE.test(message)) {
-      return null
-    }
-  }
+  if (!isRefusedIdToken(error)) return null
   // Byte-identical to the body a missing Authorization header already gets.
   // Never say WHICH code matched.
   return Response.json({ error: 'Unauthenticated' }, { status: 401 })

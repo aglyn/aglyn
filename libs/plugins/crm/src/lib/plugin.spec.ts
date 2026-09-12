@@ -87,34 +87,90 @@ describe('crm plugin', () => {
       'fields',
       'settings',
     ])
-    // The bare `/contacts` lands on the first section, so the people list
-    // has to be first: it is the v1 page every existing link points at.
+    // The bare `/contacts` lands on the first section a reader may open, so
+    // on every plan that opens the CRM the people list has to be first: it
+    // is the v1 page every existing link points at.
     expect(sections?.[0]?.label).toBe('Contacts')
     // Settings is where a settings entry sits in every hub — after the work
     // (AGL-2613). The rail decides where a bare `/crm` lands, so a settings
     // page anywhere but last would be a landing page for somebody.
     expect(sections?.[sections.length - 1]?.label).toBe('Settings')
     // No section declares its own flag — all of them ship with the surface
-    // and inherit `release_contacts` from the nav item.
+    // and inherit `release_crm` from the nav item.
     expect(sections?.every((section) => !section.navTabId)).toBe(true)
   })
 
   /**
-   * The plan splits the rail (AGL-2611): contacts on every plan, the suite
-   * from Starter. Declared per SECTION and not on the extension, because an
-   * extension flag would lock the contacts list with the rest.
+   * The CRM is paid-only (AGL-2851), so the plan is asked once, of the whole
+   * hub: declared on the extension, the shell refuses every surface it
+   * registers on a plan without the CRM — the hub body, every section and
+   * record, the dashboard cards. No section declares a flag of its own; one
+   * could only narrow a gate that already covers it.
    */
-  it('gates every section but contacts on the CRM suite, and the extension on nothing', () => {
+  it('gates the extension on the CRM, and no section on a flag of its own', () => {
     registerCrmConsole()
     const extension = registered()
-    expect(extension?.featureFlag).toBeUndefined()
+    expect(extension?.featureFlag).toBe('crm')
     const sections = extension?.navItems?.[0]?.sections ?? []
-    expect(sections.find((section) => section.id === 'contacts')?.featureFlag).toBeUndefined()
-    for (const section of sections.filter((entry) => entry.id !== 'contacts')) {
-      expect(`${section.id}: ${section.featureFlag}`).toBe(`${section.id}: crm`)
-    }
+    expect(sections.filter((section) => section.featureFlag != null)).toEqual([])
     // …and the flag really splits the plans the way the decision says.
     expect(Aglyn.PLAN_ENTITLEMENTS.free.features.crm).toBe(false)
     expect(Aglyn.PLAN_ENTITLEMENTS.starter.features.crm).toBe(true)
+  })
+})
+
+/**
+ * THE CRM RAIL AS IT SHIPS, BY PLAN (AGL-2851).
+ *
+ * The sections as registered, judged the way the console shell judges them:
+ * a section is locked when `checkEntitlement` refuses the flag its extension
+ * declares or the flag it declares itself, and a bare `/crm` lands on the
+ * first section left open — on none, when every one is locked, which the
+ * shell answers with the upgrade notice. Every section is visible to every
+ * reader, because none declares a release flag of its own. Asserted here
+ * because an app never imports a plugin; the console's `plugin-hub-sections`
+ * spec pins the shell's half on a fixture of this shape.
+ */
+describe('the CRM rail as it ships, by plan (AGL-2851)', () => {
+  const refuses = (org: unknown, flag: Aglyn.ConsoleNavSection['featureFlag']) =>
+    flag != null && Aglyn.checkEntitlement(org as never, flag) !== true
+  const rail = (org: unknown) => {
+    registerCrmConsole()
+    const extension = registered()
+    return (extension?.navItems?.[0]?.sections ?? []).map((section) => ({
+      id: section.id,
+      locked: refuses(org, extension?.featureFlag) || refuses(org, section.featureFlag),
+    }))
+  }
+  const lockedIds = (org: unknown) =>
+    rail(org)
+      .filter((section) => section.locked)
+      .map((section) => section.id)
+  const landing = (org: unknown) => rail(org).find((section) => !section.locked)?.id
+
+  it('locks every section on Free, Leads included, and lands nowhere', () => {
+    const free = { $id: 'org-1', plan: 'free' }
+    expect(lockedIds(free)).toEqual([
+      'contacts',
+      'leads',
+      'companies',
+      'deals',
+      'tasks',
+      'reports',
+      'fields',
+      'settings',
+    ])
+    expect(landing(free)).toBeUndefined()
+  })
+
+  it('opens every section on Starter and lands a bare /crm on Contacts', () => {
+    const starter = { $id: 'org-1', plan: 'starter', subscription: { status: 'active' } }
+    expect(lockedIds(starter)).toEqual([])
+    expect(landing(starter)).toBe('contacts')
+  })
+
+  it('reads a dead subscription as Free and a per-org grant on Free as the CRM', () => {
+    expect(landing({ plan: 'pro', billingStatus: 'canceled' })).toBeUndefined()
+    expect(landing({ plan: 'free', entitlements: { features: { crm: true } } })).toBe('contacts')
   })
 })

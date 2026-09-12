@@ -1,0 +1,6 @@
+{
+  "apps/console/app/(app)/[orgSlug]/marketplace/(sections)/licences/page.tsx": 1,
+  "apps/console/app/(app)/admin/plugin-reviews/[listingId]/page.tsx": 1,
+  "apps/console/constants/marketplace-sections.ts": 3,
+  "apps/console/constants/plugin-review-checklist.ts": 1
+}

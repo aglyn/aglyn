@@ -80,6 +80,33 @@ const LIBRARY = readFileSync(LIBRARY_PATH, 'utf8')
 const naive = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
+/**
+ * The library with the false comment opener PUT BACK — and why it has to be.
+ *
+ * AGL-1479's subject was a literal in this file: the replace chooser's
+ * `accept="image/*"`, whose `*` + `/` a naive stripper reads as a comment
+ * terminator's twin and runs from for thousands of characters. AGL-2732 lifted
+ * replace off images, so the attribute is derived now and the literal is gone —
+ * good for the product, and it takes the specimen with it.
+ *
+ * Deleting the tests with it would be the wrong reading. What is under test is
+ * the STRIPPER, not the attribute: any file input written `image/*` reopens the
+ * trap, `UPLOAD_ACCEPT_ATTRIBUTE` still begins with exactly that string, and
+ * the four sibling specs that silently deleted 16 KB of their own subject are
+ * still one such literal away from doing it again.
+ *
+ * So the specimen is re-injected onto the hidden input it used to sit on,
+ * rather than mocked up in a toy file: the span it opens has to run through
+ * REAL markup — the empty state below the input, which AGL-2501's comment
+ * already shortened once — for the measurement below to mean anything.
+ */
+const TRAPPED = (() => {
+  const at = LIBRARY.indexOf('ref={cardReplaceInputRef}')
+  if (at < 0) throw new Error('the file input moved — retarget me')
+  const lineStart = LIBRARY.lastIndexOf('\n', at) + 1
+  return `${LIBRARY.slice(0, lineStart)}          accept="image/*"\n${LIBRARY.slice(lineStart)}`
+})()
+
 describe('the stripper keeps its input (AGL-1479)', () => {
   it.each(GUARDED)('%s survives within the bound', (label, path) => {
     const source = readFileSync(path, 'utf8')
@@ -122,11 +149,11 @@ describe('the two openers that are not comments (AGL-1479)', () => {
    * next `*` + `/`, which is 442 lines later.
    */
   it('THE DEFECT: a MIME type does not open a comment', () => {
-    expect(LIBRARY).toContain('accept="image/*"')
-    expect(code(LIBRARY, 'library')).toContain('accept="image/*"')
+    expect(TRAPPED).toContain('accept="image/*"')
+    expect(code(TRAPPED, 'trapped')).toContain('accept="image/*"')
 
-    const lost = LIBRARY.length - naive(LIBRARY).length
-    const keptLoss = LIBRARY.length - code(LIBRARY, 'library').length
+    const lost = TRAPPED.length - naive(TRAPPED).length
+    const keptLoss = TRAPPED.length - code(TRAPPED, 'trapped').length
     /*
       The gap between them IS the hole, and it is not a rounding error.
 
@@ -183,18 +210,22 @@ describe('the two openers that are not comments (AGL-1479)', () => {
  * present, which is the only thing it was ever asked to notice.
  */
 describe('a restored subject now fails the assertion it should (AGL-1479)', () => {
-  /** The forbidden shape, put back exactly where the hole used to swallow it. */
+  /**
+   * The forbidden shape, put back exactly where the hole used to swallow it —
+   * which means inside {@link TRAPPED}, since the hole is what the re-injected
+   * MIME type opens. Immediately after it, so the picker sits at the START of
+   * the swallowed span rather than somewhere it might survive by luck.
+   */
   const RESTORED = (() => {
-    const at = LIBRARY.indexOf('accept="image/*"')
-    if (at < 0) throw new Error('the MIME type moved — retarget me')
-    const after = LIBRARY.indexOf('\n', at) + 1
-    return `${LIBRARY.slice(0, after)}
+    const at = TRAPPED.indexOf('accept="image/*"')
+    const after = TRAPPED.indexOf('\n', at) + 1
+    return `${TRAPPED.slice(0, after)}
         {folderList.map((folder) => (
           <MenuItem key={folder.id} value={folder.id}>
             {folder.name}
           </MenuItem>
         ))}
-${LIBRARY.slice(after)}`
+${TRAPPED.slice(after)}`
   })()
 
   /** The assertion, as `media-move-wiring.spec.ts` spells it. */

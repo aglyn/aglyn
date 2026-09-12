@@ -17,11 +17,12 @@
 import { renderHook } from '@testing-library/react'
 import {
   collectCollectionTemplateRoutes,
+  collectionListingTargets,
   collectionListRoutesByScreenId,
   collectionListTemplateScreenIds,
   collectionTemplateScreenIds,
 } from '../constants/collection-templates'
-import useScreenLinkRoutes from './use-screen-link-routes'
+import useScreenLinkRoutes, { screenLinkLabels } from './use-screen-link-routes'
 
 /**
  * The real derivation, not a hand-written fake — the whole defect was two
@@ -34,6 +35,7 @@ const templatesFor = (collections: Array<Record<string, unknown>>) => ({
   listTemplateScreenIds: collectionListTemplateScreenIds(collections),
   routesByScreenId: collectCollectionTemplateRoutes(collections),
   listRoutesByScreenId: collectionListRoutesByScreenId(collections),
+  listingTargets: collectionListingTargets(collections),
 })
 
 /** The live aglyn.com shape (AGL-1998). */
@@ -114,5 +116,90 @@ describe('useScreenLinkRoutes (AGL-1998)', () => {
     // `ScreenLinkContext` reads undefined as "nothing has arrived yet"; `{}`
     // would render every link on the canvas dead while the host loads.
     expect(result.current).toBeUndefined()
+  })
+})
+
+/**
+ * Collection listings in the picker's table, and what they are called
+ * (AGL-2799).
+ *
+ * Through the real collectors, for the reason `templatesFor` gives: the Blog
+ * link in aglyn.com's drawer was a typed `/blog` because this table had no row
+ * a listing could occupy.
+ */
+describe('useScreenLinkRoutes — collection listings (AGL-2799)', () => {
+  const COLLECTIONS: Array<Record<string, unknown>> = [
+    {
+      $id: 'blog',
+      slug: 'blog',
+      displayName: 'Blog',
+      listScreenId: 'blogListTmpl',
+      entryScreenId: 'blogEntryTmpl',
+    },
+    { $id: 'yQuEudFcgR', slug: 'newsroom', displayName: 'Press' },
+    { $id: 'notes', slug: 'notes' },
+    { $id: 'shoes', slug: 'shoes', kind: 'catalog', displayName: 'Shoes' },
+    { $id: 'drafts', displayName: 'Drafts' },
+  ]
+
+  it('offers every content collection’s listing, keyed by collection id', () => {
+    const { result } = renderHook(() =>
+      useScreenLinkRoutes({
+        templates: templatesFor(COLLECTIONS),
+        routingMap: ROUTING_MAP,
+      }),
+    )
+
+    expect(result.current?.['collection:blog']).toBe('blog')
+    expect(result.current?.['collection:yQuEudFcgR']).toBe('newsroom')
+    // No list template required: the built-in listing is a page too.
+    expect(result.current?.['collection:notes']).toBe('notes')
+    // A catalog lists at `/collections/{slug}`; no slug lists nowhere.
+    expect(result.current).not.toHaveProperty('collection:shoes')
+    expect(result.current).not.toHaveProperty('collection:drafts')
+    // And the screens are what they were.
+    expect(result.current?.blogListTmpl).toBe('blog')
+    expect(result.current?.home).toBe('/')
+  })
+
+  it('names each listing after its collection, under the key the table holds it by', () => {
+    expect(
+      screenLinkLabels(
+        [
+          { $id: 'home', displayName: 'Home' },
+          { $id: 'blogListTmpl', displayName: 'Blog — List Template' },
+        ],
+        templatesFor(COLLECTIONS),
+      ),
+    ).toEqual({
+      home: 'Home',
+      blogListTmpl: 'Blog — List Template',
+      'collection:blog': 'Blog',
+      'collection:yQuEudFcgR': 'Press',
+      // Unnamed, it is called by its slug — never by its document id.
+      'collection:notes': 'notes',
+    })
+  })
+
+  it('keeps working for a templates result that carries no listings', () => {
+    // The shape several besigner page specs mock `useCollectionTemplates` with.
+    const withoutListings = {
+      templateScreenIds: new Set<string>(),
+      listTemplateScreenIds: new Set<string>(),
+      routesByScreenId: new Map(),
+      listRoutesByScreenId: {},
+    } as unknown as Parameters<typeof useScreenLinkRoutes>[0]['templates']
+
+    const { result } = renderHook(() =>
+      useScreenLinkRoutes({
+        templates: withoutListings,
+        routingMap: { home: '/' },
+      }),
+    )
+
+    expect(result.current).toEqual({ home: '/' })
+    expect(
+      screenLinkLabels([{ $id: 'home', displayName: 'Home' }], {}),
+    ).toEqual({ home: 'Home' })
   })
 })

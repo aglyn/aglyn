@@ -148,7 +148,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   getOrgForHost: (...args: unknown[]) => getOrgForHost(...args),
   getHostDocAdmin: (...args: unknown[]) => getHostDocAdmin(...args),
-  getOrgDoc: async (orgId: string) => (orgId === ORG_ID ? { $id: ORG_ID, plan: PLAN } : null),
+  getOrgDoc: async (orgId: string) => (orgId === ORG_ID ? orgDoc : null),
   logOrgActivity: (...args: unknown[]) => logOrgActivity(...args),
   resolveOrgMembership: (...args: unknown[]) => resolveOrgMembership(...args),
   memberHasOrgPermission: (...args: unknown[]) => memberHasOrgPermission(...args),
@@ -228,6 +228,8 @@ const DEAL = `orgs/${ORG_ID}/deals/deal-1`
 const LEAD = `hosts/${HOST_ID}/leads/lead-1`
 /** A plan that carries the suite; the cap is read off the real table. */
 const PLAN = 'starter'
+/** The org document the organization variant reads. */
+let orgDoc: Record<string, unknown> = { $id: ORG_ID, plan: PLAN }
 const INCLUDED = resolveOrgEntitlements({ plan: PLAN } as never).crmEmailsPerDay
 /** Today's counter document, the one the reservation reads and raises. */
 const USAGE = `orgs/${ORG_ID}/crmEmailUsage/${crmEmailUsageDayKey()}`
@@ -290,6 +292,7 @@ beforeEach(() => {
   }
   verifyIdToken.mockResolvedValue({ uid: 'u-rep', email: 'Rep@Acme.com', name: 'Rep Ada' })
   getOrgForHost.mockResolvedValue({ orgId: ORG_ID, org: { plan: PLAN } })
+  orgDoc = { $id: ORG_ID, plan: PLAN }
   resolveOrgMembership.mockResolvedValue({
     member: { role: 'editor', hostAccess: { [HOST_ID]: true } },
   })
@@ -356,6 +359,23 @@ describe('the request', () => {
     expectNothingSent()
   })
 
+  it('answers a refused token 401 and a certificate outage 500, before any read (AGL-2852)', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error('revoked'), { code: 'auth/id-token-revoked' }),
+    )
+    expect((await call(MESSAGE)).status).toBe(401)
+    verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error('Error fetching public keys for Google certs'), {
+        code: 'auth/argument-error',
+      }),
+    )
+    expect((await call(MESSAGE)).status).toBe(500)
+    expect(getOrgForHost).not.toHaveBeenCalled()
+    expectNothingSent()
+    logged.mockRestore()
+  })
+
   it('refuses without a token, before any read', async () => {
     const { status } = await call(MESSAGE, { token: null })
     expect(status).toBe(401)
@@ -384,6 +404,61 @@ describe('the request', () => {
     const { status } = await call(MESSAGE)
     expect(status).toBe(403)
     expectNothingSent()
+  })
+})
+
+/**
+ * THE PLAN (AGL-2787), asked once the sender is authorized and before the
+ * pace and the cap. One-to-one email is the CRM suite's, included from
+ * Starter; a plan without the suite is told so rather than reaching a daily
+ * cap of zero. It is asked of the workspace, so staff are refused alike.
+ */
+describe('the plan (AGL-2787)', () => {
+  const FREE_SITE = { orgId: ORG_ID, org: { plan: 'free' } }
+  const expectRefused = ({ status, body }: { status: number; body: any }) => {
+    expect(status).toBe(403)
+    expect(body).toMatchObject({ reason: 'plan_required', code: 'crm' })
+    expect(body.error).toMatch(/part of the CRM/)
+    expect(body.error).toMatch(/Included from Starter/)
+  }
+
+  it('refuses a Free workspace under a site, before the pace is spent or a slot reserved', async () => {
+    getOrgForHost.mockResolvedValue(FREE_SITE)
+    expectRefused(await call(MESSAGE))
+    expect(consumeRateLimit).not.toHaveBeenCalled()
+    expect(runTransaction).not.toHaveBeenCalled()
+    expectNothingSent()
+  })
+
+  it('refuses staff sending inside a Free workspace the same way', async () => {
+    getOrgForHost.mockResolvedValue(FREE_SITE)
+    verifyIdToken.mockResolvedValue({ uid: 'staff-1', email: 'support@example.test', staff: true })
+    resolveOrgMembership.mockResolvedValue(null)
+    expectRefused(await call(MESSAGE))
+    expectNothingSent()
+  })
+
+  it('refuses a Free workspace at the organization level, logging no org line', async () => {
+    orgDoc = { $id: ORG_ID, plan: 'free' }
+    expectRefused(await call(MESSAGE, { scope: { orgId: ORG_ID, hostId: HOST_ID } }))
+    expect(consumeRateLimit).not.toHaveBeenCalled()
+    expectNothingSent()
+    expect(logOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('tells a member without data.manage about the permission, not the plan', async () => {
+    getOrgForHost.mockResolvedValue(FREE_SITE)
+    memberHasOrgPermission.mockResolvedValue(false)
+    const { status, body } = await call(MESSAGE)
+    expect(status).toBe(403)
+    expect(body.error).toContain('data.manage')
+    expect(body).not.toHaveProperty('reason')
+  })
+
+  it('admits Starter, the lowest plan that carries the suite, at both levels', async () => {
+    expect((await call(MESSAGE)).status).toBe(200)
+    expect((await call(MESSAGE, { scope: { orgId: ORG_ID, hostId: HOST_ID } })).status).toBe(200)
+    expect(sendEmail).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -568,7 +643,11 @@ describe('the daily cap (AGL-2611), reserved in a transaction (AGL-2645)', () =>
   })
 
   it('tells a plan with no one-to-one email to upgrade, at zero', async () => {
-    getOrgForHost.mockResolvedValue({ orgId: ORG_ID, org: { plan: 'free' } })
+    // A Free workspace granted the suite per org still has a zero one-to-one email cap.
+    getOrgForHost.mockResolvedValue({
+      orgId: ORG_ID,
+      org: { plan: 'free', entitlements: { features: { crm: true } } },
+    })
     const { status, body } = await call(MESSAGE)
     expect(status).toBe(409)
     expect(body).toMatchObject({ error: CRM_EMAIL_NOT_INCLUDED_MESSAGE, included: 0 })

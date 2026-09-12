@@ -230,6 +230,37 @@ describe('artifact delete copy respects what the scan actually read', () => {
     )
   })
 
+  /**
+   * COLLECTION LISTINGS (AGL-2806) — the kind whose own page does go.
+   *
+   * The listing at `/{slug}` is deleted with the collection, so the "nothing
+   * goes down" the component and layout sentences open with would be false
+   * here. What a dependent loses is the link: the page holding it keeps
+   * rendering, and the link renders with no address.
+   */
+  it('never promises nothing goes down for a collection, and says what its links lose', () => {
+    const outcomes = [
+      deleteConfirmationNote(null, 'collection'),
+      deleteConfirmationNote({ dependents: [], complete: false }, 'collection'),
+      deleteConfirmationNote(
+        { dependents: [dependent('Home', 'link')], complete: true },
+        'collection',
+      ),
+    ]
+    for (const note of outcomes) {
+      expect(note).not.toMatch(/nothing goes down/i)
+      expect(note).toMatch(/link to its listing keep rendering/i)
+      expect(note).toMatch(/links stop working/i)
+    }
+  })
+
+  it('names Content and the listing page in the collection lead', () => {
+    expect(deleteConfirmationLead('collection', 'Blog')).toContain('"Blog"')
+    expect(deleteConfirmationLead('collection', 'Blog')).toMatch(
+      /listing page stops resolving/i,
+    )
+  })
+
   it('names the artifact in the lead so the dialog is about one thing', () => {
     expect(deleteConfirmationLead('component', 'Site nav')).toContain(
       '"Site nav"',
