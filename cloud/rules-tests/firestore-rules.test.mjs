@@ -9350,14 +9350,14 @@ describe('an email template is every editor\'s when shared and its owner\'s when
  * being checked as carefully as a path would have been.
  */
 /**
- * THE CRM SUITE IS THE PLAN'S IN THE DATABASE TOO (AGL-2801).
+ * THE CRM IS THE PLAN'S IN THE DATABASE TOO (AGL-2801, AGL-2851).
  *
- * The CRM suite is included from Starter. The companion collections above,
- * the saved views, the email templates and a lead's working state are the
- * suite, so on a workspace whose plan does not carry it a create and an
- * update are refused — while a read and a delete, the workspace's own
- * records, are not. A lead is the exception on delete (AGL-2790): a plan
- * without the suite reads its leads and removes none of them. The plan
+ * The CRM is included from Starter, and a Free workspace has none of it. The
+ * companion collections above, the saved views, the email templates, a
+ * segment, a contact's client update and a lead's working state are the CRM,
+ * so on a workspace whose plan does not carry it a create and an update are
+ * refused — while a read and a delete, the workspace's own records, are not:
+ * an export reads them, and a removal stays the workspace's. The plan
  * question is `resolveOrgEntitlements`', restated: a per-org grant or
  * revocation wins, a missing plan is Free, and a paid plan whose subscription
  * died is Free until billing restores it.
@@ -9492,31 +9492,72 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
     )
   })
 
-  it("refuses a Free workspace a lead's working state and its removal, and keeps its read (AGL-2790)", async () => {
+  it("refuses a Free workspace a lead's working state, and keeps its read and delete", async () => {
     await setOrg({ plan: 'free' })
     await mustDeny(
       'an editor setting a lead status on Free',
       updateDoc(lead(EDITOR, 'lead-held'), { status: 'contacted' }),
     )
     await mustDeny(
+      'the owner setting a lead status on Free',
+      updateDoc(lead(OWNER, 'lead-held'), { status: 'contacted' }),
+    )
+    await mustDeny(
       'an editor creating a lead on Free',
       setDoc(lead(EDITOR, 'lead-new'), { email: 'new@example.test' }),
     )
-    await mustDeny('an editor deleting a lead on Free', deleteDoc(lead(EDITOR, 'lead-held')))
-    await mustDeny('the owner deleting a lead on Free', deleteDoc(lead(OWNER, 'lead-held')))
     await mustAllow('an editor reading a lead on Free', getDoc(lead(EDITOR, 'lead-held')))
+    await mustAllow('an editor deleting a lead on Free', deleteDoc(lead(EDITOR, 'lead-held')))
   })
 
-  it("keeps a lead's authoring on a plan with the suite", async () => {
+  it("admits a lead's authoring on Starter", async () => {
+    await setOrg({ plan: 'starter' })
     await mustAllow(
-      'an editor creating a lead on Pro',
+      'an editor creating a lead on Starter',
       setDoc(lead(EDITOR, 'lead-new'), { email: 'new@example.test' }),
     )
     await mustAllow(
-      'an editor setting a lead status on Pro',
+      'an editor setting a lead status on Starter',
       updateDoc(lead(EDITOR, 'lead-new'), { status: 'contacted' }),
     )
-    await mustAllow('an editor deleting a lead on Pro', deleteDoc(lead(EDITOR, 'lead-new')))
+    await mustAllow('an editor deleting a lead on Starter', deleteDoc(lead(EDITOR, 'lead-new')))
+  })
+
+  /** A saved segment, stamped org-wide as the Contacts list saves one. */
+  const segment = (uid, id) => doc(authed(uid), 'orgs', ORG, 'contactSegments', id)
+  const seedSegment = () =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'contactSegments', 'seg-held'), {
+        name: 'VIPs', tags: ['vip'], visibleTo: ['org'],
+      })
+    })
+
+  it("refuses a Free workspace a segment's create and update, and keeps its read and delete (AGL-2851)", async () => {
+    await seedSegment()
+    await setOrg({ plan: 'free' })
+    await mustDeny(
+      'the owner saving a segment on Free',
+      setDoc(segment(OWNER, 'seg-new'), { name: 'Wholesale', tags: ['wholesale'], visibleTo: ['org'] }),
+    )
+    await mustDeny(
+      'the owner renaming a segment on Free',
+      updateDoc(segment(OWNER, 'seg-held'), { name: 'Top customers' }),
+    )
+    await mustAllow('the owner reading a segment on Free', getDoc(segment(OWNER, 'seg-held')))
+    await mustAllow('the owner deleting a segment on Free', deleteDoc(segment(OWNER, 'seg-held')))
+  })
+
+  it('admits Starter to save and rename a segment (AGL-2851)', async () => {
+    await seedSegment()
+    await setOrg({ plan: 'starter' })
+    await mustAllow(
+      'the owner saving a segment on Starter',
+      setDoc(segment(OWNER, 'seg-new'), { name: 'Wholesale', tags: ['wholesale'], visibleTo: ['org'] }),
+    )
+    await mustAllow(
+      'the owner renaming a segment on Starter',
+      updateDoc(segment(OWNER, 'seg-held'), { name: 'Top customers' }),
+    )
   })
 })
 
@@ -9613,8 +9654,10 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
     })
   }
 
-  it('refuses the fields Free keeps as well — the server writes those on every plan', async () => {
-    await setOrg({ plan: 'free' })
+  // On Starter, where the plan admits the update and only the facet clause
+  // can refuse it.
+  it('refuses the profile fields as well — the server writes those', async () => {
+    await setOrg({ plan: 'starter' })
     for (const [label, patch] of [
       [
         'a phone number and its search echo',
@@ -9629,26 +9672,33 @@ describe("a contact's facets are the server's to write (AGL-2804)", () => {
     }
   })
 
+  /** Site B's half of the shared contact, dropped as "Remove from this site" drops it. */
+  const letSiteBGo = () =>
+    updateDoc(contact(OWNER), {
+      'facets.host-b': deleteField(),
+      'marketingConsentByHost.host-b': deleteField(),
+      visibleTo: arrayRemove('host:host-b'),
+      capturedByHostIds: arrayRemove('host-b'),
+      updatedAt: serverTimestamp(),
+    })
+
   /**
-   * THE CONTROL: the one update a client still makes. Every refusal above
-   * would pass against a rule that denied contact updates outright, which
-   * would take "Remove from this site" away from every workspace.
+   * THE CONTROL: the one update a client still makes, on a plan that carries
+   * the CRM. Every refusal above would pass against a rule that denied
+   * contact updates outright, which would take "Remove from this site" away
+   * from every paying workspace.
    */
-  it('lets a holder go, on Free and on Starter', async () => {
-    for (const plan of ['free', 'starter']) {
-      await setOrg({ plan })
-      await mustAllow(
-        `the owner removing site B's half of a shared contact on ${plan}`,
-        updateDoc(contact(OWNER), {
-          'facets.host-b': deleteField(),
-          'marketingConsentByHost.host-b': deleteField(),
-          visibleTo: arrayRemove('host:host-b'),
-          capturedByHostIds: arrayRemove('host-b'),
-          updatedAt: serverTimestamp(),
-        }),
-      )
-      await seedSiteB()
-    }
+  it('lets a holder go on Starter', async () => {
+    await setOrg({ plan: 'starter' })
+    await mustAllow("the owner removing site B's half of a shared contact on Starter", letSiteBGo())
+  })
+
+  // "Remove from this site" is a CRM act, and the CRM is included from Starter (AGL-2851).
+  it('refuses a holder going on Free, and on a paid plan whose subscription died', async () => {
+    await setOrg({ plan: 'free' })
+    await mustDeny("the owner removing site B's half of a shared contact on Free", letSiteBGo())
+    await setOrg({ plan: 'pro', billingStatus: 'canceled' })
+    await mustDeny("the owner removing site B's half on a canceled Pro subscription", letSiteBGo())
   })
 
   it('refuses a holder going in the same write as an edit to a holder that stays', async () => {

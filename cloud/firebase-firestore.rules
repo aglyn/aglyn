@@ -238,11 +238,11 @@ service cloud.firestore {
      * restatement of `resolveOrgEntitlements(org).features.crm`, which
      * `checkEntitlement(org, 'crm')` answers everywhere else.
      *
-     * The 2026-09-05 pricing decision includes the suite from Starter and
-     * keeps the contacts list on Free. The console locks the suite's
-     * surfaces on a plan without it and the suite's routes refuse such a
-     * plan; these functions are the same answer for the collections the
-     * console writes client-direct.
+     * The CRM is included from Starter, and a Free workspace has none of it
+     * (the 2026-09-11 pricing decision, AGL-2851). The console locks the
+     * CRM on a plan without it and the CRM's routes refuse such a plan;
+     * these functions are the same answer for the collections the console
+     * writes client-direct.
      *
      * Three facts, in the resolver's order of precedence:
      *
@@ -1155,15 +1155,21 @@ service cloud.firestore {
        * live in a facet no rule can look inside for one holder, so the
        * profile, the owner, the stage, the company, the custom values, the
        * files, the tags and the campaign filing are written by the CRM's
-       * routes, which ask the plan about the fields a save carries; a client
-       * update may only drop a holder's half. See `contactUpdateOnlyLetsGo()`.
+       * routes, which ask the plan; a client update may only drop a holder's
+       * half. See `contactUpdateOnlyLetsGo()`.
+       *
+       * THE PLAN, LAST (AGL-2851). Dropping a holder is the CRM's "Remove
+       * from this site", and the CRM is included from Starter, so the update
+       * also asks `orgCarriesCrmSuite(orgId)`, as every CRM collection's
+       * client writes do. The delete does not: removing a workspace's own
+       * record stays open on every plan.
        */
       match /contacts/{contactId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
-           contactUpdateOnlyLetsGo());
+           contactUpdateOnlyLetsGo() && orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() ||
           (canWriteScopedOrgData() &&
            resource.data.visibleTo.hasOnly(
@@ -1176,12 +1182,17 @@ service cloud.firestore {
       // the tags, capture sources, order thresholds and engagement windows
       // that pick a slice of the CRM out. Reading it is reading about the
       // contacts, so it answers to the same authority they do.
+      //
+      // A segment is saved from the CRM's Contacts list, so its create and
+      // update ask the plan last, as the contact update above does (AGL-2851).
+      // Its read and delete do not.
       match /contactSegments/{segmentId} {
         allow read: if isStaff() || canReadScopedPeople();
         allow create: if isStaff() ||
-          (canWriteOrgData() && canCreateScoped());
+          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+            orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
       /**
@@ -1226,14 +1237,15 @@ service cloud.firestore {
        * org-wide one away from everybody else, as it does on every scoped
        * collection above.
        *
-       * THE PLAN, LAST (AGL-2801). Every create and update below — here and
-       * in the saved views and email templates after them — also asks
-       * `orgCarriesCrmSuite(orgId)`: these collections are the CRM suite,
-       * included from Starter, and a Free workspace keeps only the contacts
-       * list above. Reads and deletes do not ask, because reading and
-       * removing a workspace's own records stay open on every plan, and the
-       * clause comes last so a write refused for its role or its scope
-       * never pays for the org read.
+       * THE PLAN, LAST (AGL-2801, AGL-2851). Every create and update below —
+       * here and in the saved views and email templates after them — also
+       * asks `orgCarriesCrmSuite(orgId)`, as the contact update and the
+       * segment writes above do: these collections are the CRM, included
+       * from Starter, and a Free workspace writes none of it from a client.
+       * Reads and deletes do not ask, because exporting and removing a
+       * workspace's own records stay open on every plan, and the clause
+       * comes last so a write refused for its role or its scope never pays
+       * for the org read.
        */
       // The organizations behind the people: a domain, an address, an
       // owner, and the deals and tasks filed against them.
@@ -3354,24 +3366,24 @@ service cloud.firestore {
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
-              'flowEnrollments', 'leads']));
+              'flowEnrollments']));
       }
-      // A site's leads (AGL-2801, AGL-2790). A capture door files one on
+      // A site's leads (AGL-2801, AGL-2851). A capture door files one on
       // every plan — a form, a sign-up, a booking, an import — through the
-      // Admin SDK, which these rules do not gate, and a person's erasure
-      // removes one the same way. What the console writes client-direct is a
-      // lead's WORKING state — its status, owner and notes in the CRM's Leads
-      // section — and that, like removing a lead, is the CRM suite's,
-      // included from Starter. A plan without the suite reads its leads and
-      // changes none of them.
+      // Admin SDK, which these rules do not gate. What the console writes
+      // client-direct is a lead's WORKING state, its status, owner and notes
+      // in the CRM's Leads section, and the CRM is included from Starter: a
+      // workspace whose plan does not carry it creates and changes no lead
+      // from a client.
       //
-      // All three catch-all lists name `leads`, and this block re-grants
-      // create, update and delete on the catch-all's own terms plus the plan:
-      // sibling matches are OR'd and the looser one wins, so without the
-      // exclusions this block would narrow nothing. Read stays with the
-      // catch-all, because reading a lead stays open on every plan.
+      // The catch-all's create and update lists name `leads`, and this block
+      // re-grants both on the catch-all's own terms plus the plan: sibling
+      // matches are OR'd and the looser one wins, so without the exclusions
+      // this block would narrow nothing. Read and delete stay with the
+      // catch-all on every plan: an export reads a lead, and removing one is
+      // the workspace's own act.
       match /leads/{leadId} {
-        allow create, update, delete: if isStaff() ||
+        allow create, update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             hostOrgCarriesCrmSuite(hostId));
       }

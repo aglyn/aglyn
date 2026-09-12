@@ -129,6 +129,20 @@ describe('every client-written suite collection asks the plan (AGL-2801)', () =>
     expect(allowStatement(block, 'delete')).not.toContain('orgCarriesCrmSuite')
   })
 
+  it("asks on a contact's client update and a segment's create and update, and not on their reads or deletes (AGL-2851)", () => {
+    const contacts = rawBlockBody(orgs, 'match /contacts/<contactId> {')
+    expect(allowStatement(contacts, 'update')).toContain('orgCarriesCrmSuite(orgId)')
+    expect(allowStatement(contacts, 'read')).not.toContain('orgCarriesCrmSuite')
+    expect(allowStatement(contacts, 'delete')).not.toContain('orgCarriesCrmSuite')
+    // A client create is refused outright; only staff reach it.
+    expect(allowStatement(contacts, 'create')).toBe('allow create: if isStaff()')
+    const segments = rawBlockBody(orgs, 'match /contactSegments/<segmentId> {')
+    expect(allowStatement(segments, 'create')).toContain('orgCarriesCrmSuite(orgId)')
+    expect(allowStatement(segments, 'update')).toContain('orgCarriesCrmSuite(orgId)')
+    expect(allowStatement(segments, 'read')).not.toContain('orgCarriesCrmSuite')
+    expect(allowStatement(segments, 'delete')).not.toContain('orgCarriesCrmSuite')
+  })
+
   it("asks for a lead's create and update under its site, and the catch-all cannot re-grant them", () => {
     const hosts = rawBlockBody(RULES, 'match /hosts/<hostId> {')
     const leads = rawBlockBody(hosts, 'match /leads/<leadId> {')
