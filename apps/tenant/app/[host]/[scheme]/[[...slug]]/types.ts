@@ -33,6 +33,15 @@ export interface Props {
   }
   nodes: Record<Aglyn.NodeId, Aglyn.NodeSchema> | null
   /**
+   * What each library asset the page's social card may name records NOW
+   * (AGL-2850): its DAM document's pixel pair, keyed by the reference as
+   * stored. Read in the composition's facts batch and handed to
+   * `resolveSocialImage`, which prefers it to the pair stored beside the
+   * reference. Only the head reads it, so `page.tsx` keeps it out of the
+   * client's payload.
+   */
+  socialImageFacts?: Aglyn.SocialImageAssetFacts
+  /**
    * Data a site-page resolver or enricher already loaded on the server for
    * this page, keyed by plugin (AGL-659). Reaches blocks through
    * `SiteContext.pageData` so they can render primary content during SSR

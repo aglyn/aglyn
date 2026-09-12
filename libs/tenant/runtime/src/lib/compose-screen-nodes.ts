@@ -35,6 +35,11 @@ import getPluginInstalls from './get-plugin-installs'
 import getVariables, { getFunctions, getWorkflows } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
 import getScreenVersion from './get-screen-version'
+import {
+  type ComposeSocialImages,
+  socialImageAssetFacts,
+  socialImageRefs,
+} from './social-image-facts'
 import { stampFormDatasetBindings } from './stamp-form-dataset-bindings'
 
 /**
@@ -301,8 +306,9 @@ async function expandCollectionEntryBlocks(
  * Shared post-version composition (AGL-551, extracted from
  * `composeScreenNodes`): layout chrome, reusable components, repeatables,
  * collection entries, bindings, function definitions, plugin installs,
- * named tokens, denormalize, and last each placed image's and film's current
- * facts. The screen path and the collection-fallback
+ * named tokens, denormalize, and last the current facts of each placed image
+ * and film, and of the social card the page is shared as. The screen path and
+ * the collection-fallback
  * path (which has no screen doc) build identical trees through this one
  * pipeline.
  */
@@ -345,6 +351,12 @@ export async function composeNodesWithChrome(options: {
    * data we already have in hand.
    */
   host?: Aglyn.HostTokenSource | null
+  /**
+   * The social card the head shares this page as (AGL-2850). The documents of
+   * the assets it names are read in the same batch as the images and films
+   * the tree places.
+   */
+  socialImages?: ComposeSocialImages
 }): Promise<Record<string, any>> {
   const { hostId, layoutId } = options
 
@@ -620,14 +632,28 @@ export async function composeNodesWithChrome(options: {
    * (a logo, a footer mark), so it would buy a second read on almost every
    * page. The late read costs its own round trip after the chrome reads, paid
    * each time a page is composed, which for a published page is its ISR
-   * regeneration. A tree with no library asset issues none.
+   * regeneration. A tree with no library asset, on a page whose social card
+   * names none, issues none.
+   *
+   * THE SOCIAL CARD'S ASSETS JOIN THE SAME READ (AGL-2850), ahead of the
+   * placements. A placement the cap leaves out keeps its pick-time pair, which
+   * for an image is a reservation the decoded picture corrects. Nothing
+   * corrects a card's pair, because a crawler lays the card out from it before
+   * fetching the image, and a card names at most three documents.
    */
+  const socialImages = options.socialImages
+  const cardRefs = socialImages ? socialImageRefs(socialImages.images) : []
   const refs = mediaAssetRefs(denormalized)
-  if (!refs.length) return denormalized
-  return applyMediaAssetFacts(
-    denormalized,
-    await getMediaAssetFacts({ hostId, refs }),
-  )
+  if (!refs.length && !cardRefs.length) return denormalized
+  const facts = await getMediaAssetFacts({
+    hostId,
+    refs: [...cardRefs, ...refs],
+  })
+  if (socialImages) {
+    const cardFacts = socialImageAssetFacts(socialImages.images, facts)
+    if (cardFacts) socialImages.onFacts(cardFacts)
+  }
+  return applyMediaAssetFacts(denormalized, facts)
 }
 
 /**
@@ -651,6 +677,8 @@ export async function composeScreenNodes(options: {
   versionId?: string
   /** The host document, for `host.*` tokens (AGL-1022). */
   host?: Aglyn.HostTokenSource | null
+  /** The social card the head shares this page as (AGL-2850). */
+  socialImages?: ComposeSocialImages
 }): Promise<Record<string, any> | null> {
   const { hostId, screenId, screen } = options
 
@@ -722,6 +750,7 @@ export async function composeScreenNodes(options: {
     tokens: options.tokens,
     collection: options.collection,
     host: options.host,
+    socialImages: options.socialImages,
   })
   void composed.catch(() => undefined)
 

@@ -52,12 +52,18 @@ export interface SocialImageCardProps {
  *    patch means a cleared field is simply dropped and the OLD image stays.
  *    Writing straight to the host doc is what makes "Remove" actually remove.
  *
- * The pixel dimensions are copied off the media record at pick time so the
- * head can emit `og:image:width`/`height` without a per-render lookup — see
- * `resolveSocialImage`. Since AGL-2417 the DESCRIPTION rides along the same
- * way: defaulted from the chosen asset's own alt and editable here, because
- * until then no tenant page emitted `og:image:alt` at all and every shared
- * card announced itself to a screen reader as an undescribed image.
+ * The pixel dimensions are copied off the media record at pick time, and
+ * since AGL-2850 they are the head's FALLBACK rather than its answer: a
+ * replace rewrites the asset's pair and cannot reach this copy, so the page's
+ * composition reads the asset's document — in the batch it already issues for
+ * the pictures the page places — and the head emits what that records. What
+ * is written here is what a card falls back to when the document records no
+ * usable pair. See `resolveSocialImage`.
+ *
+ * Since AGL-2417 the DESCRIPTION rides along the same way: defaulted from the
+ * chosen asset's own alt and editable here, because until then no tenant page
+ * emitted `og:image:alt` at all and every shared card announced itself to a
+ * screen reader as an undescribed image.
  */
 export function SocialImageCard(props: SocialImageCardProps) {
   const { hostId, embedded } = props

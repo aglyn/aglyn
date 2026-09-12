@@ -221,7 +221,12 @@ export interface AglynHost extends AglynDocument {
      * `undefined` and would leave a default nobody could remove (AGL-1191).
      */
     image?: string
-    /** Copied from the media record at pick time; see `resolveSocialImage`. */
+    /**
+     * Copied from the media record at pick time, and the FALLBACK rather than
+     * the answer: a replace rewrites the asset's pair and cannot reach this
+     * copy, so the head prefers what the asset's document records when the
+     * page is composed (AGL-2850). See `resolveSocialImage`.
+     */
     imageWidth?: number
     imageHeight?: number
     /**
@@ -971,7 +976,12 @@ export interface AglynScreen extends AglynDocument {
      * goes back to inheriting the site default.
      */
     image?: string
-    /** Copied from the media record at pick time; see `resolveSocialImage`. */
+    /**
+     * Copied from the media record at pick time, and the FALLBACK rather than
+     * the answer: a replace rewrites the asset's pair and cannot reach this
+     * copy, so the head prefers what the asset's document records when the
+     * page is composed (AGL-2850). See `resolveSocialImage`.
+     */
     imageWidth?: number
     imageHeight?: number
     /**
