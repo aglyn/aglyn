@@ -514,7 +514,7 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     region: 'United States',
     purpose:
       "Advertising measurement and retargeting on Aglyn's own surfaces — the marketing site, the console and the docs — and on a customer site whose owner has enabled the advertising question and configured a pixel",
-    publishedOn: '2026-08-20',
+    publishedOn: '2026-08-27',
     reason:
       'The Meta Pixel loader in `libs/aglyn/src/lib/app-utils/advertising-tags.ts`, mounted on a tenant page by the tenant runtime, on the console by `apps/console/components/advertising-tags.component.tsx`, and on the docs site by its standalone copy in `apps/docs/src/advertising-tags.ts`. Disclosed by CAPABILITY rather than by rollout, which is the standing rule — the code can load it, so the document says so.',
     dataReceived:
