@@ -5,7 +5,7 @@
   "frameName": "Pricing — Widescreen",
   "frameSize": {
     "width": 1920,
-    "height": 6765
+    "height": 7155
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -47,14 +47,14 @@
         },
         {
           "figmaNodeId": "572:1223",
-          "name": "Every plan includes the full platform — Besigner, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves.",
+          "name": "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves.",
           "widthPx": 680,
           "records": [
             {
               "figmaNodeId": "572:1223",
               "name": null,
               "cells": [
-                "Every plan includes the full platform — Besigner, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves."
+                "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves."
               ]
             }
           ]
@@ -83,7 +83,7 @@
       "name": "Plans",
       "order": 1,
       "widthPx": 1920,
-      "heightPx": 906,
+      "heightPx": 936,
       "groups": [
         {
           "figmaNodeId": "572:1230",
@@ -168,7 +168,8 @@
                 "Custom domain & SSL",
                 "Remove Aglyn branding",
                 "Commerce · 100 products",
-                "Workflows & bookings"
+                "Workflows & bookings",
+                "CRM: contacts, leads, companies, deals & tasks"
               ]
             },
             {
@@ -210,7 +211,8 @@
                 "Versioning & AI assist",
                 "Video, POS & marketplace",
                 "Site export & analytics",
-                "2,500 products / site"
+                "2,500 products / site",
+                "5,000 campaign emails/mo"
               ]
             },
             {
@@ -251,7 +253,8 @@
                 "API access · 100k req/mo",
                 "A/B testing & webhooks",
                 "Multilingual & scheduling",
-                "Full commerce + POS"
+                "Full commerce + POS",
+                "25,000 campaign emails/mo"
               ]
             }
           ]
@@ -281,7 +284,7 @@
               "name": "Frame",
               "cells": [
                 "For high-growth stores and multi-site teams that have outgrown Business.",
-                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 290 GB bandwidth"
+                "15 sites · 75 collaborators · 1% commerce fees · 300k API requests/mo · 25,000 products per site · 290 GB bandwidth · 40,000 campaign emails/mo"
               ]
             },
             {
@@ -304,7 +307,7 @@
               "name": "Frame",
               "cells": [
                 "For high-volume organizations that need headroom on every limit.",
-                "25 sites · 100 collaborators · 0% commerce fees · 1M API requests/mo · unlimited products · priority scale & limits"
+                "25 sites · 100 collaborators · 0% commerce fees · 1M API requests/mo · unlimited products · priority scale & limits · 65,000 campaign emails/mo"
               ]
             },
             {
@@ -327,7 +330,7 @@
               "name": "Frame",
               "cells": [
                 "For agencies and resellers running whole client portfolios under one roof.",
-                "100 sites · 250 collaborators · full white-label incl. custom console domain · 5M API requests/mo · unlimited records & variables · 20 POS registers"
+                "100 sites · 250 collaborators · full white-label incl. custom console domain · 5M API requests/mo · unlimited records & variables · 20 POS registers per site · 130,000 campaign emails/mo"
               ]
             },
             {
@@ -350,7 +353,7 @@
               "name": "Frame",
               "cells": [
                 "For large organizations with bespoke requirements — volume pricing available.",
-                "Unlimited scale · 0% platform fees · white-label · SSO · SLA & dedicated support · custom contracts"
+                "Scale as you grow · 0% transaction fees · white-label · SSO · dedicated support · custom contracts · campaign email volume by agreement"
               ]
             },
             {
@@ -371,7 +374,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 1920,
-      "heightPx": 2793,
+      "heightPx": 2909,
       "groups": [
         {
           "figmaNodeId": "572:1423",
@@ -382,9 +385,9 @@
               "figmaNodeId": "572:1423",
               "name": "hh",
               "cells": [
-                "COMPARE ALL FEATURES",
-                "Every plan, feature by feature",
-                "Prices shown monthly (USD). Every plan includes the full Besigner builder and platform."
+                "COMPARE PLANS",
+                "What each plan actually includes.",
+                "The numbers below are the limits the platform enforces, not a summary of them."
               ]
             }
           ]
@@ -824,7 +827,7 @@
               "figmaNodeId": "572:1949",
               "name": "row",
               "cells": [
-                "Form submissions / mo",
+                "Form submissions / mo, per site",
                 "20",
                 "200",
                 "1,000",
@@ -839,8 +842,8 @@
               "figmaNodeId": "572:1968",
               "name": "row",
               "cells": [
-                "Contacts included",
-                "100",
+                "CRM records included (contacts, companies & deals)",
+                "—",
                 "1,000",
                 "10,000",
                 "50,000",
@@ -851,10 +854,40 @@
               ]
             },
             {
+              "figmaNodeId": "1932:2316",
+              "name": "row",
+              "cells": [
+                "CRM: contacts, leads, companies, deals & tasks",
+                "—",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "1943:2276",
+              "name": "row",
+              "cells": [
+                "One-to-one emails / day",
+                "—",
+                "50",
+                "150",
+                "200",
+                "300",
+                "500",
+                "1,000",
+                "Talk to us"
+              ]
+            },
+            {
               "figmaNodeId": "572:1987",
               "name": "row",
               "cells": [
-                "Email sends / mo",
+                "Campaign emails / mo",
                 "—",
                 "—",
                 "5,000",
@@ -936,7 +969,7 @@
               "figmaNodeId": "572:2065",
               "name": "row",
               "cells": [
-                "POS registers",
+                "POS registers per site",
                 "—",
                 "—",
                 "1",
@@ -1227,7 +1260,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 1920,
-      "heightPx": 1074,
+      "heightPx": 1106,
       "groups": [
         {
           "figmaNodeId": "572:2415",
@@ -1238,9 +1271,9 @@
               "figmaNodeId": "572:2415",
               "name": "hh",
               "cells": [
-                "USAGE-BASED PRICING",
-                "Scale past your plan, only pay for what you use",
-                "Add capacity a la carte at rates that improve as you move up. No surprise bills — everything is metered and itemized on your invoice."
+                "USAGE PRICING",
+                "What it costs to go past a plan limit.",
+                "Plans include a set amount of everything. These are the per-unit rates for what you use beyond it, so the bill is something you can work out in advance."
               ]
             }
           ]
@@ -1268,13 +1301,13 @@
               "figmaNodeId": "572:2439",
               "name": "row",
               "cells": [
-                "Extra site / host",
-                "+$10/mo",
-                "+$8/mo",
-                "+$5/mo",
-                "+$8/mo",
-                "+$8/mo",
-                "+$8/mo",
+                "Extra site, per month",
+                "$10",
+                "$8",
+                "$5",
+                "$8",
+                "$8",
+                "$8",
                 "Custom"
               ]
             },
@@ -1282,13 +1315,13 @@
               "figmaNodeId": "572:2456",
               "name": "row",
               "cells": [
-                "Extra team seat",
-                "+$5/mo",
-                "+$4/mo",
-                "+$3/mo",
-                "+$2/mo",
-                "+$2/mo",
-                "+$2/mo",
+                "Extra team seat, per month",
+                "$5",
+                "$4",
+                "$3",
+                "$2",
+                "$2",
+                "$2",
                 "Custom"
               ]
             },
@@ -1296,13 +1329,13 @@
               "figmaNodeId": "572:2473",
               "name": "row",
               "cells": [
-                "Extra site collaborator",
-                "+$3/mo",
-                "+$2/mo",
-                "+$1/mo",
-                "+$1/mo",
-                "+$1/mo",
-                "+$1/mo",
+                "Extra site collaborator, per month",
+                "$3",
+                "$2",
+                "$1",
+                "$1",
+                "$1",
+                "$1",
                 "Custom"
               ]
             },
@@ -1310,13 +1343,13 @@
               "figmaNodeId": "572:2490",
               "name": "row",
               "cells": [
-                "Extra dataset",
-                "+$2/mo",
-                "+$2/mo",
-                "+$1/mo",
-                "+$1/mo",
-                "+$1/mo",
-                "+$1/mo",
+                "Extra dataset, per month",
+                "$2",
+                "$2",
+                "$1",
+                "$1",
+                "$1",
+                "$1",
                 "Custom"
               ]
             },
@@ -1324,13 +1357,13 @@
               "figmaNodeId": "572:2507",
               "name": "row",
               "cells": [
-                "Extra data storage",
-                "$0.36 / GB-mo",
-                "$0.36 / GB-mo",
-                "$0.36 / GB-mo",
-                "$0.36 / GB-mo",
-                "$0.36 / GB-mo",
-                "$0.36 / GB-mo",
+                "Extra dataset storage, per GB-month",
+                "$0.36",
+                "$0.36",
+                "$0.36",
+                "$0.36",
+                "$0.36",
+                "$0.36",
                 "Custom"
               ]
             },
@@ -1338,13 +1371,13 @@
               "figmaNodeId": "572:2524",
               "name": "row",
               "cells": [
-                "API requests over limit",
+                "API requests, per 1,000 over limit",
                 "—",
                 "—",
-                "+$0.50 / 1k",
-                "+$0.35 / 1k",
-                "+$0.20 / 1k",
-                "+$0.15 / 1k",
+                "$0.50",
+                "$0.35",
+                "$0.20",
+                "$0.15",
                 "Custom"
               ]
             },
@@ -1352,13 +1385,13 @@
               "figmaNodeId": "572:2541",
               "name": "row",
               "cells": [
-                "Contacts over included band",
-                "+$1 / 1k",
-                "+$0.75 / 1k",
-                "+$0.50 / 1k",
-                "+$0.40 / 1k",
-                "+$0.40 / 1k",
-                "+$0.40 / 1k",
+                "CRM records, per 1,000 over the included band",
+                "$1",
+                "$0.75",
+                "$0.50",
+                "$0.40",
+                "$0.40",
+                "$0.40",
                 "Custom"
               ]
             }
@@ -1373,7 +1406,7 @@
               "figmaNodeId": "572:2563",
               "name": "h",
               "cells": [
-                "Event Calendar (add-on)",
+                "Event Calendar",
                 "$9 / mo"
               ]
             },
@@ -1381,14 +1414,14 @@
               "figmaNodeId": "572:2566",
               "name": null,
               "cells": [
-                "First-party event calendar with RSVPs, per organization."
+                "An organization-wide events calendar. It is not part of any plan — this add-on is the only way to turn it on."
               ]
             },
             {
               "figmaNodeId": "572:2568",
               "name": "h",
               "cells": [
-                "POS Pro register",
+                "Extra POS register",
                 "$89 / mo"
               ]
             },
@@ -1396,7 +1429,7 @@
               "figmaNodeId": "572:2571",
               "name": null,
               "cells": [
-                "Add extra point-of-sale registers or locations, each."
+                "Plans already include registers — 1 on Pro, 2 on Business, 3 on Scale, 5 on Advanced, 20 on Agency. This adds one beyond that."
               ]
             }
           ]
@@ -1437,8 +1470,8 @@
               "name": "r",
               "cells": [
                 "Page views (bandwidth + reads)",
-                "$0.10 / 1k views",
-                "$0.13 / 1k views"
+                "$0.161538 / 1k views",
+                "$0.21 / 1k views"
               ]
             },
             {
@@ -1468,7 +1501,7 @@
       "name": "FAQ",
       "order": 4,
       "widthPx": 1920,
-      "heightPx": 665,
+      "heightPx": 737,
       "groups": [
         {
           "figmaNodeId": "572:2607",
@@ -1510,7 +1543,7 @@
               "name": "qa",
               "cells": [
                 "What happens if I exceed a plan limit?",
-                "Storage and API calls keep working: usage past your allowance is metered at the rates in the usage table and itemized on your invoice. Sites, seats, and datasets stop at your limit until you buy an add-on or upgrade."
+                "On paid plans you’re not cut off. Add extra sites, seats, and datasets at the rates in the usage table — they’re added to your subscription and itemized on your invoice. Free-plan limits are hard caps."
               ]
             },
             {
@@ -1518,7 +1551,7 @@
               "name": "qa",
               "cells": [
                 "How do transaction fees work?",
-                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing — 0–5% depending on plan and digital vs. physical goods. It steps down as you move up — 1% on Scale, 0% from Advanced up."
+                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing — 0–5% depending on plan and what you sell: physical goods on the lower rate, digital products and services (bookings included) on the higher one. It steps down as you move up — 1% on Scale, 0% from Advanced up."
               ]
             },
             {
@@ -1534,7 +1567,7 @@
               "name": "qa",
               "cells": [
                 "Can I change or cancel anytime?",
-                "Upgrade, downgrade, or cancel whenever you like from the billing page. Plan changes prorate automatically."
+                "Upgrade, downgrade, or cancel whenever you like from the billing page. Upgrades and downgrades are prorated as a charge or credit on your next invoice, and a canceled plan stays active until the end of the billing period you’ve already paid for."
               ]
             },
             {
@@ -1550,7 +1583,7 @@
               "name": "qa",
               "cells": [
                 "Do you offer SSO or an SLA?",
-                "Both are coming for Enterprise contracts: SAML / OIDC single sign-on, an uptime SLA with a public status page, and priority support. Contact sales to plan around them."
+                "SAML / OIDC single sign-on is available on Enterprise today — you set it up yourself in the console after proving your domain. Enterprise also includes dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA during public beta."
               ]
             }
           ]
