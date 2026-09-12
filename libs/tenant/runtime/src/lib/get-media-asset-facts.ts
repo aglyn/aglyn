@@ -55,7 +55,10 @@ export const MEDIA_ASSET_FACTS_PER_RENDER = 100
  * `MEDIA_ASSET_FACT_FIELDS`, however many elements and scope spellings place
  * it, and a document is read once however many nodes name it. Firestore bills
  * per document, so the cost of a composition is the number of distinct assets
- * it places, up to {@link MEDIA_ASSET_FACTS_PER_RENDER}.
+ * it places and its social card names, counted together and once each, up to
+ * {@link MEDIA_ASSET_FACTS_PER_RENDER}. A card names at most three of them (an
+ * entry's cover, a screen's image, the site default), and none the page does
+ * not already place when the card is one of its own pictures.
  *
  * ## Why this read is not behind the render cache
  *

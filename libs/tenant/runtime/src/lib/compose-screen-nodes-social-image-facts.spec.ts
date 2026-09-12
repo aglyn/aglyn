@@ -299,4 +299,40 @@ describe("a page's social card is read with its placements (AGL-2850)", () => {
     expect(mockGetAll).not.toHaveBeenCalled()
     expect(onFacts).not.toHaveBeenCalled()
   })
+
+  /**
+   * WHAT THE CARD COSTS, COUNTED (AGL-2850).
+   *
+   * Firestore bills per document, so the cost of describing a card is the
+   * number of documents it adds to the read the page already issues, measured
+   * against the same page composed without one. The busiest card a surface
+   * builds names three references — a collection entry's cover, the template
+   * screen's image, the site default — which is the ceiling this counts, and a
+   * card naming a picture the page also places adds nothing at all.
+   *
+   * The queries matter as much as the documents: a card must not turn one
+   * round trip into two, which is what a per-node or per-surface read would
+   * do on a path that runs at every ISR regeneration.
+   */
+  it('costs at most three documents and never a second query', async () => {
+    const ENTRY_COVER = 'media:site1/entry-cover'
+    mockDocs.set(`hosts/site1/media/entry-cover`, { width: 1400, height: 700 })
+    const cost = async (images: ReadonlyArray<string | null | undefined>) => {
+      mockGetAll.mockClear()
+      await compose(PLACING_PHOTO, images)
+      return {
+        queries: mockGetAll.mock.calls.length,
+        documents: pathsRead(mockGetAll.mock.calls[0] ?? []).length,
+      }
+    }
+    const withoutCard = await cost([])
+    expect(withoutCard).toEqual({ queries: 1, documents: 1 })
+    // The busiest card: an entry's cover, the template's image, the default.
+    expect(await cost([ENTRY_COVER, SCREEN_CARD, HOST_CARD])).toEqual({
+      queries: 1,
+      documents: withoutCard.documents + 3,
+    })
+    // A card that IS one of the page's own pictures is already in the read.
+    expect(await cost([PHOTO])).toEqual(withoutCard)
+  })
 })
