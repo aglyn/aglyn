@@ -19,6 +19,7 @@ import type { SitePageResolver } from '@aglyn/aglyn/server'
 import { hostCollectionKind } from '@aglyn/aglyn/server'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
+import { collectSocialImageFacts } from '@aglyn/tenant-runtime/social-image-facts'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { toPublicProductDetail } from './product'
@@ -82,10 +83,18 @@ export const commerceSitePageResolver: SitePageResolver = async ({
           console.error('product review aggregate failed', error)
           return { reviews: [], aggregate: { count: 0, average: 0 } }
         })
+        // The head shares this page as the template's image, then the site
+        // default, so their documents are read in the template's own batch
+        // (AGL-2850).
+        const card = collectSocialImageFacts([
+          (templateRes.screen as any).seo?.image,
+          hostRes.host?.seo?.image,
+        ])
         const templateNodes = await composeScreenNodes({
           hostId,
           screenId: pdpScreenId,
           screen: templateRes.screen,
+          socialImages: card.socialImages,
           tokens: {
             'product.name': product.name,
             'product.description': product.description ?? '',
@@ -150,6 +159,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                   },
                 },
                 nodes: templateNodes,
+                ...card.collected(),
               }),
             ),
             revalidate: 60,
@@ -186,10 +196,17 @@ export const commerceSitePageResolver: SitePageResolver = async ({
         allowTemplate: true,
       })
       if (templateRes.screen) {
+        // As on the PDP above: the template's image, then the site default
+        // (AGL-2850).
+        const card = collectSocialImageFacts([
+          (templateRes.screen as any).seo?.image,
+          hostRes.host?.seo?.image,
+        ])
         const templateNodes = await composeScreenNodes({
           hostId,
           screenId: collectionScreenId,
           screen: templateRes.screen,
+          socialImages: card.socialImages,
           tokens: {
             'collection.name': shopCollection.name,
             'collection.description': shopCollection.description ?? '',
@@ -222,6 +239,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                   },
                 },
                 nodes: templateNodes,
+                ...card.collected(),
               }),
             ),
             revalidate: 60,

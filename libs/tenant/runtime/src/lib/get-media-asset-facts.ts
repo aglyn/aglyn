@@ -51,15 +51,19 @@ const MEDIA_ASSET_FACT_FIELDS = [
  * A backstop sized well above what pages place, not a budget they are
  * expected to approach. A page placing more keeps the pick-time copy on the
  * rest, which is how every one of them rendered before these facts were read.
- * Which ones are read is decided by the order `mediaAssetRefs` lists them:
- * films, then images, each from the top of the page down.
+ * Which ones are read is decided by the order the composition hands them
+ * over: the social card's references first (AGL-2850), then the placements in
+ * the order `mediaAssetRefs` lists them, films, then images, each from the top
+ * of the page down.
  */
 export const MEDIA_ASSET_FACTS_PER_RENDER = 100
 
 /**
- * The current facts of each placed image and film this page may be shown,
- * keyed by `mediaAssetFactsKey` (AGL-2807, AGL-2833). `media-asset-facts.ts`
- * in `@aglyn/aglyn` owns what is done with them.
+ * The current facts of each placed image and film this page may be shown, and
+ * of each asset its social card names, keyed by `mediaAssetFactsKey`
+ * (AGL-2807, AGL-2833, AGL-2850). `media-asset-facts.ts` in `@aglyn/aglyn`
+ * owns what is done with a placement's, and `social-image-facts.ts` beside
+ * this reader owns a card's.
  *
  * ## One read for the whole page
  *
