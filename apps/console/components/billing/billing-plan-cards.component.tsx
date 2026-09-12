@@ -314,12 +314,9 @@ const featureGroups = (
       { key: 'actions', label: 'Actions builder' },
       { key: 'dataStore', label: 'Datasets & dynamic data' },
       { key: 'bookings', label: 'Appointment bookings' },
-      // The CRM SUITE (AGL-2611, AGL-2790) — contacts and everything built on
-      // them, and working the leads a site captures. Free reads its leads and
-      // nothing else, so the row names what the step up adds rather than
-      // ticking "CRM" against a plan that already shows a Leads section. The
-      // wording is the published compare table's suite row, word for word.
-      { key: 'crm', label: 'CRM suite: contacts, companies, deals & tasks' },
+      // The CRM (AGL-2611, AGL-2851), whole: included from Starter, and none
+      // of it on Free. The wording is the published compare table's row.
+      { key: 'crm', label: 'CRM: contacts, leads, companies, deals & tasks' },
       { key: 'marketingOverlays', label: 'Announcement bar & popups' },
       { key: 'customSendingDomain', label: 'Send email from your own domain' },
       { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
@@ -575,10 +572,15 @@ function headlineLimits(
     }${per(pricing.extraCollaboratorMonthlyUsd, '/extra')}`,
     // Contacts, companies and deals against ONE band (AGL-2611); the
     // persisted key still says contacts, the customer never sees that word
-    // alone here.
-    `${quotaCount(entitlements.contactsPerHost)} CRM records${contactsPer(
-      pricing.extraContactsUsdPer1k,
-    )}`,
+    // alone here. Named only on a plan that has the CRM (AGL-2851): Free has
+    // none of it, so its card names no CRM records.
+    ...(entitlements.features.crm
+      ? [
+          `${quotaCount(entitlements.contactsPerHost)} CRM records${contactsPer(
+            pricing.extraContactsUsdPer1k,
+          )}`,
+        ]
+      : []),
     /*
      * One-to-one email from a CRM record (AGL-2611): a daily PACE with no
      * overage rate on any tier, so no suffix — a rate here would advertise
@@ -1431,15 +1433,18 @@ function PlanCardBody({
           `contactsPer` in `headlineLimits`: the rate stays, the tense follows
           what `report-usage` actually invoices, and an unsettled verdict
           prints no rate at all. */}
-      <Typography variant="body2">
-        {`${quotaCount(entitlements.contactsPerHost)} CRM records`}
-        {pricing.extraContactsUsdPer1k != null &&
-        contactsOverageBilled != null
-          ? contactsOverageBilled
-            ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
-            : ` (+$${pricing.extraContactsUsdPer1k}/1k over once the CRM opens)`
-          : ''}
-      </Typography>
+      {/* Free has no CRM (AGL-2851), so its column names no CRM records. */}
+      {entitlements.features.crm ? (
+        <Typography variant="body2">
+          {`${quotaCount(entitlements.contactsPerHost)} CRM records`}
+          {pricing.extraContactsUsdPer1k != null &&
+          contactsOverageBilled != null
+            ? contactsOverageBilled
+              ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
+              : ` (+$${pricing.extraContactsUsdPer1k}/1k over once the CRM opens)`
+            : ''}
+        </Typography>
+      ) : null}
       {/* One-to-one email from a CRM record (AGL-2611) — a daily pace
           with no overage on any tier, so no rate follows it; Free's
           zero reads as the absence it is. */}

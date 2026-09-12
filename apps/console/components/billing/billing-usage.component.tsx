@@ -25,6 +25,7 @@ import {
   CRM_EMAIL_USAGE_COLLECTION,
   crmEmailUsageDayKey,
   emailSendsOverage,
+  planLabelGrantingFeature,
   priceEmailSendOverage,
   resolveHostCollaboratorCap,
   resolveOrgEntitlements,
@@ -709,6 +710,8 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     ? recordsParts.contacts + recordsParts.companies + recordsParts.deals
     : null
   const recordsQuota = checkCrmRecordsQuota(org, crmRecordsCount ?? 0)
+  /** Whether the plan carries the CRM, which decides what the band is called. */
+  const crmIncluded = entitlements.features.crm
   /*
    * API requests past the plan's included band, priced.
    *
@@ -805,8 +808,16 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         limit={entitlements.dataStorageMbPerOrg}
         unit="MB"
       />
+      {/*
+        THE BAND, NAMED FOR WHAT THE PLAN HAS (AGL-2851). With the CRM it is
+        the CRM's records band. Without it — Free — the same count still
+        caps capture: past it a site adds no new person. Free has no CRM, so
+        the meter names the stored records the cap counts rather than a CRM
+        the plan cannot open, and the caption says what the cap stops and
+        where working those people is sold.
+      */}
       <UsageMeter
-        label="CRM records (organization)"
+        label={crmIncluded ? 'CRM records (organization)' : 'Stored records (organization)'}
         used={crmRecordsCount}
         limit={entitlements.contactsPerHost}
         help={docsHelp('billing', { anchor: '#crm-records' })}
@@ -824,9 +835,14 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           color="text.secondary"
           sx={{ display: 'block', mt: -1.5, mb: showRecordsOverage ? 0.5 : 2 }}
         >
-          {`Contacts ${recordsParts.contacts.toLocaleString()} · ` +
-            `Companies ${recordsParts.companies.toLocaleString()} · ` +
-            `Deals ${recordsParts.deals.toLocaleString()}`}
+          {crmIncluded
+            ? `Contacts ${recordsParts.contacts.toLocaleString()} · ` +
+              `Companies ${recordsParts.companies.toLocaleString()} · ` +
+              `Deals ${recordsParts.deals.toLocaleString()}`
+            : 'At this limit your sites stop adding new people. Working with ' +
+              `them is part of the CRM, included from ${
+                planLabelGrantingFeature('crm') ?? 'a paid plan'
+              }.`}
         </Typography>
       ) : null}
       {showRecordsOverage ? (
