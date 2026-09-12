@@ -51,7 +51,6 @@ describe('isOutboundCredential', () => {
       'VERCEL_TOKEN',
       'VERCEL_OIDC_TOKEN',
       'RESEND_API_KEY',
-      'RESEND_DOMAINS_API_KEY',
       'RESEND_READ_API_KEY',
       'RESEND_WEBHOOK_SECRET',
       'GA4_API_SECRET',
@@ -107,6 +106,29 @@ describe('emulatedServeEnvironment', () => {
     assert.equal(env.RESEND_API_KEY, '')
     assert.equal(env.TOKEN_SIGNING_SECRET, 'placeholder')
     assert.deepEqual(blanked, ['STRIPE_SECRET_KEY', 'VERCEL_TOKEN'])
+  })
+
+  it('keeps the emulator hosts and the NEXT_PUBLIC_ twins a serve script sets, over a file', () => {
+    // The scripts name the emulators the caller exported and mirror the ones
+    // the page connects to (AGL-2834). A private stack splits in two if a
+    // file's default port wins here, or if a host reads as a credential.
+    const inherited = {
+      FIRESTORE_EMULATOR_HOST: 'localhost:18082',
+      NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST: 'localhost:18082',
+      FIREBASE_AUTH_EMULATOR_HOST: 'localhost:19099',
+      NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST: 'localhost:19099',
+      FIREBASE_DATABASE_EMULATOR_HOST: 'localhost:19000',
+      NEXT_PUBLIC_FIREBASE_DATABASE_EMULATOR_HOST: 'localhost:19000',
+      FIREBASE_STORAGE_EMULATOR_HOST: 'localhost:19199',
+    }
+    const { env, blanked } = emulatedServeEnvironment(inherited, [
+      file({
+        FIRESTORE_EMULATOR_HOST: 'localhost:8082',
+        NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST: 'localhost:8082',
+      }),
+    ])
+    for (const [name, value] of Object.entries(inherited)) assert.equal(env[name], value, name)
+    assert.deepEqual(blanked, [])
   })
 })
 

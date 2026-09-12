@@ -12,6 +12,10 @@ firebase-debug.*.log*
 
 # Firebase config
 
+# Private-port emulator configs, which `tools/scripts/emulator-config.mjs`
+# writes here because firebase-tools refuses rules outside a config's directory.
+/firebase.e2e.offset-*.json
+
 # Uncomment this if you'd like others to create their own Firebase project.
 # For a team working on the same Firebase project(s), it is recommended to leave
 # it commented so all members can deploy to the same project(s) in .firebaserc.

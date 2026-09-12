@@ -20,15 +20,19 @@
  * NOW rather than as it was when it was picked (AGL-2807).
  *
  * The film-only face of `media-asset-facts.ts`, which owns the rule, the
- * reasons for it, and the same overlay for images (AGL-2833). Everything here
- * is that module restricted to Video nodes: an image in the map is neither
- * listed nor rewritten. It serves a caller that lays only a film's facts over
- * a tree.
+ * reasons for it, where a document is read from, which reads answer, and the
+ * same overlay for images (AGL-2833). Everything here is that module
+ * restricted to Video nodes: an image in the map is neither listed nor
+ * rewritten, and an answer carries a film's records only. It serves a caller
+ * that lays only a film's facts over a tree.
  */
 
 import {
   applyMediaAssetFacts,
+  type MediaAssetDocument,
   type MediaAssetFacts,
+  mediaAssetDocumentPath,
+  mediaAssetFactsFromDocument,
   mediaAssetFactsKey,
   mediaAssetRefs,
 } from './media-asset-facts'
@@ -38,6 +42,9 @@ import { VIDEO_COMPONENT_ID } from './video-object'
 /** What a readable film's media document records, as the overlay consumes it. */
 export type VideoAssetFacts = Pick<MediaAssetFacts, 'video' | 'poster'>
 
+/** A film's media document, read the way every placed asset's is. */
+export type VideoAssetDocument = MediaAssetDocument
+
 /**
  * The key a film's facts are filed under: the reference's own scope and id.
  * One key for either element, see {@link mediaAssetFactsKey}.
@@ -46,6 +53,31 @@ export function videoAssetFactsKey(
   ref: Pick<MediaRef, 'scope' | 'mediaId'>,
 ): string {
   return mediaAssetFactsKey(ref)
+}
+
+/**
+ * Where a film's media document lives. One path for either element, see
+ * {@link mediaAssetDocumentPath}.
+ */
+export function videoAssetDocumentPath(
+  ref: Pick<MediaRef, 'scope' | 'mediaId'>,
+): string | null {
+  return mediaAssetDocumentPath(ref)
+}
+
+/**
+ * The film facts one read of a document yields for a placement rendered on
+ * `hostId`'s pages, or `undefined` when the placement keeps its stored props.
+ * Whether the read answers at all is {@link mediaAssetFactsFromDocument}'s
+ * verdict, the one the composition reaches for every asset a page places.
+ */
+export function videoAssetFactsFromDocument(
+  document: VideoAssetDocument | null | undefined,
+  ref: Pick<MediaRef, 'scope'>,
+  hostId: string,
+): VideoAssetFacts | undefined {
+  const facts = mediaAssetFactsFromDocument(document, ref, hostId)
+  return facts && { video: facts.video, poster: facts.poster }
 }
 
 /**

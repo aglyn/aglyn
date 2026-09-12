@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import { pipeline } from 'node:stream/promises'
 import {
   isLockdownActive,
-  isOrgWideScope,
   type LockdownState,
   MEDIA_CDN_POSTER_PARAM,
   MEDIA_CDN_RENDITION_AUTO,
@@ -30,12 +30,19 @@ import {
   normalizeHostLockdown,
   normalizeOrgLockdown,
   parseMediaRenditions,
-  visibleToHost,
 } from '@aglyn/aglyn/server'
+// By path, and out of every barrel: see the module note in `media-cdn-scope`.
+import {
+  MEDIA_CDN_SEGMENT,
+  type MediaCdnScope,
+  mediaCdnScopeRefusal,
+  parseMediaCdnScope,
+} from '@aglyn/aglyn/app-utils/media-cdn-scope'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { getPlatformLockdown } from './lockdown'
+import { mediaCdnRateLimitRefusal } from './media-cdn-rate-limit'
 import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 import { mediaStoragePathInScope } from './media-storage-path'
@@ -49,7 +56,23 @@ import { mediaStoragePathInScope } from './media-storage-path'
  */
 export { MEDIA_CDN_VARIANT_WIDTHS } from '@aglyn/aglyn/server'
 
-const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
+/**
+ * The scope grammar and the refusal this handler enforces (AGL-1043).
+ *
+ * Re-exported, not defined: the pure rule lives in `@aglyn/aglyn`'s
+ * `media-cdn-scope`, so the readers that must reach this handler's verdict —
+ * the composition's video facts and the besigner canvas — call the functions
+ * it calls.
+ */
+export {
+  mediaCdnAllows,
+  type MediaCdnScope,
+  type MediaCdnScopeRefusal,
+  mediaCdnScopeRefusal,
+  parseMediaCdnScope,
+} from '@aglyn/aglyn/app-utils/media-cdn-scope'
+
+const SEGMENT = MEDIA_CDN_SEGMENT
 
 /**
  * The query string to carry onto the stable URL when a stale content pin
@@ -309,95 +332,6 @@ export function mediaCdnContentSecurityPolicy(contentType: string): string {
   return MEDIA_CDN_ACTIVE_DOCUMENT_TYPES.has(type)
     ? MEDIA_CDN_ACTIVE_DOCUMENT_CSP
     : MEDIA_CDN_BASE_CSP
-}
-
-/**
- * The parsed CDN scope segment (AGL-1043). Shapes:
- *
- * - `{hostId}` — that host's own library
- * - `org:{orgId}` — the org library, ORG-WIDE assets only
- * - `org:{orgId}:{hostId}` — an org asset in one site's context
- *
- * The host is in the URL rather than sniffed from the `Host` header on
- * purpose. A header is the requester's CHOICE: anyone holding a restricted
- * asset's id could fetch it through a domain that IS permitted and get the
- * bytes, so header-based enforcement stops accidents while looking like a
- * boundary. Here the decision is a pure function of (URL, doc), and since
- * the cache key IS the URL, one host's answer can never reach another.
- */
-export interface MediaCdnScope {
-  isOrg: boolean
-  scopeId: string
-  /** Only on the `org:{orgId}:{hostId}` form. */
-  contextHostId?: string
-}
-
-export function parseMediaCdnScope(
-  scopeSegment: string,
-): MediaCdnScope | null {
-  if (!scopeSegment.startsWith('org:')) {
-    return SEGMENT.test(scopeSegment)
-      ? { isOrg: false, scopeId: scopeSegment }
-      : null
-  }
-  const parts = scopeSegment.slice('org:'.length).split(':')
-  if (parts.length > 2) return null
-  const [scopeId, contextHostId] = parts
-  if (!SEGMENT.test(scopeId ?? '')) return null
-  if (contextHostId !== undefined && !SEGMENT.test(contextHostId)) return null
-  return {
-    isOrg: true,
-    scopeId,
-    ...(contextHostId ? { contextHostId } : {}),
-  }
-}
-
-/**
- * The three ways an org asset can be refused under a CDN URL.
- *
- * They are one 404 on the wire — whether a restricted asset exists is not
- * something an anonymous caller has standing to learn — and three different
- * faults to whoever is looking at the broken page:
- *
- * - `restricted` — the asset carries a scope and this URL is not in it. The
- *   URL is what is wrong: a restricted asset has to be requested through the
- *   form that names the site (`hostQualifiedCdnPath`), and the same asset
- *   serves normally from the site it is shared with.
- * - `unscoped` — no `visibleTo` at all, so the asset is undeliverable under
- *   EVERY URL form there is. The document is what is wrong, and it means a
- *   creation path wrote it without a scope: `newResourceScopeFields` is what
- *   stops that at compile time, and the scope backfill is what repairs the
- *   documents already written (`docs/SCOPE_DRIFT.md`).
- * - `no-sites` — a stored empty array: somebody chose nobody. Equally
- *   undeliverable, and NOT repairable by the backfill, which leaves an empty
- *   array alone rather than widening a resource nobody asked to widen — so
- *   this one needs a person either way.
- */
-export type MediaCdnScopeRefusal = 'restricted' | 'unscoped' | 'no-sites'
-
-/** Why the asset is refused under this URL; `null` when it is not. */
-export function mediaCdnScopeRefusal(
-  scope: MediaCdnScope,
-  visibleTo: unknown,
-): MediaCdnScopeRefusal | null {
-  // Host-library assets are private by construction and carry no
-  // `visibleTo`, so only the org branch is scoped at all.
-  if (!scope.isOrg) return null
-  if (!Array.isArray(visibleTo)) return 'unscoped'
-  if (!visibleTo.length) return 'no-sites'
-  const scoped = visibleTo as string[]
-  const allowed = scope.contextHostId
-    ? visibleToHost(scoped, scope.contextHostId)
-    : isOrgWideScope(scoped)
-  return allowed ? null : 'restricted'
-}
-
-/** Whether the asset may be served under this URL. */
-export function mediaCdnAllows(
-  scope: MediaCdnScope,
-  visibleTo: unknown,
-): boolean {
-  return mediaCdnScopeRefusal(scope, visibleTo) === null
 }
 
 /**
@@ -907,6 +841,55 @@ export function parseMediaCdnRange(
 }
 
 /**
+ * Whether a delivery ended early only because its client stopped reading
+ * (AGL-2810).
+ *
+ * A `<video>` element abandons its opening request once it has buffered
+ * enough, and abandons another on every seek, so this is the ordinary way a
+ * streamed response ends early — and it is not a delivery failure, so it is
+ * neither logged nor answered.
+ *
+ * `pipeline` reports it as a premature close, and reports a Storage read that
+ * closed early the same way. The response tells them apart: a client that
+ * canceled destroyed it without an error, while a failed read makes
+ * `pipeline` destroy it WITH the read's error.
+ */
+function mediaCdnClientWentAway(
+  error: unknown,
+  res: { errored?: Error | null },
+): boolean {
+  return (
+    (error as { code?: unknown } | null)?.code === 'ERR_STREAM_PREMATURE_CLOSE' &&
+    !res.errored
+  )
+}
+
+/**
+ * The headers that describe the file, removed from an answer that will not
+ * carry it.
+ *
+ * A failure found after the representation was chosen would otherwise go out
+ * under the file's own headers: a `Content-Length` of the whole object on a
+ * short JSON body leaves the client waiting for bytes that never come, a
+ * `video/mp4` type misdescribes the body outright, and the validator would
+ * attach the file's identity to an error. `no-store` because the answer is
+ * about this request, not the URL.
+ */
+function clearMediaCdnRepresentation(res: NextApiResponse): void {
+  for (const header of [
+    'Content-Type',
+    'Content-Length',
+    'Content-Range',
+    'Content-Disposition',
+    'Accept-Ranges',
+    'ETag',
+  ]) {
+    res.removeHeader(header)
+  }
+  res.setHeader('Cache-Control', 'no-store')
+}
+
+/**
  * CDN media delivery (AGL-175 / AGL-829). Two URL shapes resolve the same
  * asset by `mediaId`, so delivery never depends on the object's storage
  * location (folder moves don't change the URL):
@@ -937,6 +920,11 @@ export function parseMediaCdnRange(
  * `firebasestorage.googleapis.com` URLs (S8): a `<video>` seek is a Range
  * request, and a server that ignores it forces the player to re-download
  * the whole file.
+ *
+ * The body streams (AGL-2810): each chunk leaves as Storage produces it, so no
+ * file is held whole in function memory. A GET that will read the file is
+ * first counted against its caller (AGL-2812); see
+ * {@link mediaCdnRateLimitRefusal}.
  */
 export async function serveMediaCdn(
   req: NextApiRequest,
@@ -1357,9 +1345,32 @@ export async function serveMediaCdn(
           ? `${basePath}__w${width}.webp`
           : basePath
     const file = bucket.file(objectPath)
+    // The caller's count (AGL-2812), asked here and nowhere earlier: past every
+    // gate and the 304 exit, where the Storage reads begin. It starts before the
+    // metadata read and is awaited after it, so the two run together. It never
+    // rejects, and answers `null` whenever it could not count.
+    const callerCount =
+      req.method === 'GET'
+        ? mediaCdnRateLimitRefusal({
+            headers: req.headers,
+            remoteAddress: req.socket?.remoteAddress,
+            rateClass: mediaCdnEdgeCacheable(docServedType) ? 'image' : 'non-image',
+          })
+        : null
     const [metadata] = await file.getMetadata().catch(() => [null as any])
     if (!metadata) {
       res.status(404).json({ error: 'Not found' })
+      return
+    }
+    const refused = await callerCount
+    if (refused) {
+      // The file's validator and cache policy are already set. A refusal is
+      // about this caller rather than the URL, so no cache may keep it: an
+      // edge holding a 429 would refuse every visitor to that image for an
+      // hour.
+      clearMediaCdnRepresentation(res)
+      res.setHeader('Retry-After', String(refused.retryAfterSeconds))
+      res.status(429).json({ error: 'Too many requests' })
       return
     }
 
@@ -1492,6 +1503,10 @@ export async function serveMediaCdn(
     // serves, not user-facing totals (billing accuracy is AGL-41's job).
     // Hot-doc note: a single day-doc caps at ~1 write/sec sustained;
     // acceptable at current traffic, shard or sample if an asset gets hot.
+    //
+    // Written before the first byte, so `bytes` is what this request asked
+    // the origin to send. A client that abandons the stream receives less;
+    // the figure is the ceiling on what left, not a count of what arrived.
     const day = new Date().toISOString().slice(0, 10)
     void firestore
       .collection(isOrg ? 'orgs' : 'hosts')
@@ -1521,16 +1536,28 @@ export async function serveMediaCdn(
     // `start`/`end` are inclusive in `createReadStream`, matching the parsed
     // range — GCS is asked for exactly the requested bytes and nothing is
     // over-read from Storage on a partial serve.
-    await new Promise<void>((resolve, reject) => {
-      file
-        .createReadStream(partial ? { start: range.start, end: range.end } : {})
-        .on('error', reject)
-        .on('end', resolve)
-        .pipe(res)
-    })
+    //
+    // The response streams (AGL-2810): each chunk leaves as Storage produces
+    // it, and the next is read only once the client has taken the last, so a
+    // file is never held in function memory whatever its size. `pipeline`
+    // rather than `pipe` because streaming needs teardown in both directions,
+    // which `pipe` does not give — a failed Storage read must fail the
+    // response, and a client that stops reading must stop the Storage read.
+    await pipeline(
+      file.createReadStream(partial ? { start: range.start, end: range.end } : {}),
+      res,
+    )
   } catch (error) {
+    if (mediaCdnClientWentAway(error, res)) return
     console.error('serveMediaCdn failed', scopeSegment, mediaId, error)
-    if (!res.headersSent) res.status(500).json({ error: 'Delivery failed' })
-    else res.end()
+    if (!res.headersSent) {
+      clearMediaCdnRepresentation(res)
+      res.status(500).json({ error: 'Delivery failed' })
+    } else {
+      // The status line has already left, so the body is the only place the
+      // failure can surface. A destroyed response is a broken transfer to the
+      // client; ending it would pass a truncated file off as a whole one.
+      res.destroy(error instanceof Error ? error : new Error(String(error)))
+    }
   }
 }

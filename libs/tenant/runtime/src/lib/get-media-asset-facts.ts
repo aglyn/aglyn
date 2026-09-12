@@ -15,35 +15,19 @@
  * limitations under the License.
  */
 
-import { hostQualifiedScope, type MediaRef } from '@aglyn/aglyn/server'
-// By path rather than through a barrel: the overlay is server-only, and every
-// `@aglyn/aglyn` barrel re-exports `app-utils/server` into published pages.
+import type { MediaRef } from '@aglyn/aglyn/server'
+// By path rather than through a barrel: every `@aglyn/aglyn` barrel
+// re-exports `app-utils/server` into published pages, and the overlay stays
+// out of them.
 import {
+  MEDIA_ASSET_FACT_FIELDS,
+  type MediaAssetDocument,
   type MediaAssetFacts,
+  mediaAssetDocumentPath,
+  mediaAssetFactsFromDocument,
   mediaAssetFactsKey,
 } from '@aglyn/aglyn/app-utils/media-asset-facts'
-import {
-  firebaseAdmin,
-  mediaCdnScopeRefusal,
-  parseMediaCdnScope,
-} from '@aglyn/tenant-data-admin'
-
-/**
- * Every field the facts are decided from, and the projection sent to
- * Firestore: ONE list. `width` and `height` (an image's) and `video` and
- * `poster` (a film's) are the facts. The other three are the gates
- * `serveMediaCdn` applies before it will serve an asset at all, so a page
- * never publishes the shape of a file its own URL refuses.
- */
-const MEDIA_ASSET_FACT_FIELDS = [
-  'width',
-  'height',
-  'video',
-  'poster',
-  'deletedAt',
-  'private',
-  'visibleTo',
-] as const
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
  * How many documents ONE composition reads facts for.
@@ -67,11 +51,11 @@ export const MEDIA_ASSET_FACTS_PER_RENDER = 100
  *
  * ## One read for the whole page
  *
- * Every document goes out in ONE projected `getAll`, however many elements
- * and scope spellings place it, and a document is read once however many
- * nodes name it. Firestore bills per document, so the cost of a composition
- * is the number of distinct assets it places, up to
- * {@link MEDIA_ASSET_FACTS_PER_RENDER}.
+ * Every document goes out in ONE `getAll`, projected to
+ * `MEDIA_ASSET_FACT_FIELDS`, however many elements and scope spellings place
+ * it, and a document is read once however many nodes name it. Firestore bills
+ * per document, so the cost of a composition is the number of distinct assets
+ * it places, up to {@link MEDIA_ASSET_FACTS_PER_RENDER}.
  *
  * ## Why this read is not behind the render cache
  *
@@ -84,13 +68,15 @@ export const MEDIA_ASSET_FACTS_PER_RENDER = 100
  *
  * ## What it answers for, and what it leaves to the node
  *
- * An entry exists only for an asset whose document was read, is live, is not
- * private, and is visible to this site under the host-qualified scope the page
- * renders: the verdict the CDN reaches when the browser asks for the bytes.
- * Anything else gets no entry and keeps its stored props, and so does every
- * asset when the read fails. That is fail-open like every other compose read,
- * because a Firestore fault must not strip the images and players on a live
- * page of their shape.
+ * `mediaAssetFactsFromDocument` decides, per placement, from the projected
+ * document: an entry exists only for an asset that is live, not private, and
+ * visible to this site under the host-qualified scope the page renders, the
+ * verdict the CDN reaches when the browser asks for the bytes. The console's
+ * canvas and Preview decide through the same function, so the editor and the
+ * page agree about which assets answer. Anything else gets no entry and keeps
+ * its stored props, and so does every asset when the read fails. That is
+ * fail-open like every other compose read, because a Firestore fault must not
+ * strip the images and players on a live page of their shape.
  */
 export async function getMediaAssetFacts(options: {
   hostId: string
@@ -101,9 +87,8 @@ export async function getMediaAssetFacts(options: {
   /** One read per DOCUMENT, however many scope spellings place it. */
   const documents = new Map<string, MediaRef[]>()
   for (const ref of refs) {
-    const scope = parseMediaCdnScope(ref.scope)
-    if (!scope) continue
-    const path = `${scope.isOrg ? 'orgs' : 'hosts'}/${scope.scopeId}/media/${ref.mediaId}`
+    const path = mediaAssetDocumentPath(ref)
+    if (!path) continue
     const placements = documents.get(path)
     if (placements) placements.push(ref)
     else if (documents.size < MEDIA_ASSET_FACTS_PER_RENDER) {
@@ -120,21 +105,13 @@ export async function getMediaAssetFacts(options: {
     )
     snapshots.forEach((snapshot, index) => {
       if (!snapshot.exists) return
-      if (snapshot.get('deletedAt') || snapshot.get('private') === true) return
+      const document: MediaAssetDocument = {}
+      for (const field of MEDIA_ASSET_FACT_FIELDS) {
+        document[field] = snapshot.get(field)
+      }
       for (const ref of documents.get(paths[index]) ?? []) {
-        // The URL the page renders names the site doing the rendering
-        // (`resolveMediaSrc`), so visibility is asked of THAT scope: the one
-        // the CDN will be asked about when the browser requests the file.
-        const served = parseMediaCdnScope(hostQualifiedScope(ref.scope, hostId))
-        if (!served || mediaCdnScopeRefusal(served, snapshot.get('visibleTo'))) {
-          continue
-        }
-        facts.set(mediaAssetFactsKey(ref), {
-          width: snapshot.get('width'),
-          height: snapshot.get('height'),
-          video: snapshot.get('video'),
-          poster: snapshot.get('poster'),
-        })
+        const found = mediaAssetFactsFromDocument(document, ref, hostId)
+        if (found) facts.set(mediaAssetFactsKey(ref), found)
       }
     })
     return facts

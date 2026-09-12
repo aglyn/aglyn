@@ -28,9 +28,12 @@
 import {
   applyMediaAssetFacts,
   type MediaAssetFacts,
+  mediaAssetDocumentPath,
+  mediaAssetFactsFromDocument,
   mediaAssetFactsKey,
   mediaAssetRefs,
 } from './media-asset-facts'
+import { hostScopeToken } from './scope-tokens'
 
 const ROOT = '_@_'
 const PHOTO = 'media:site1/photo'
@@ -258,5 +261,80 @@ describe('mediaAssetRefs', () => {
   it('is empty for a page with no library asset, and for no page at all', () => {
     expect(mediaAssetRefs({ a: { componentId: 'text', props: {} } })).toEqual([])
     expect(mediaAssetRefs(null)).toEqual([])
+  })
+})
+
+/**
+ * Every surface that reads a placed asset's document decides through these
+ * two: the composition for the page, and the console for the canvas and
+ * Preview (AGL-2838, AGL-2849, AGL-2856). A film's view of both is pinned in
+ * `video-asset-facts.spec.ts`; these pin an image's.
+ */
+describe('where an asset is read from, and what the read answers', () => {
+  it("reads an org asset from the org library and a site asset from the site's own", () => {
+    expect(mediaAssetDocumentPath({ scope: 'org:acme', mediaId: 'photo' })).toBe(
+      'orgs/acme/media/photo',
+    )
+    expect(
+      mediaAssetDocumentPath({ scope: 'org:acme:site9', mediaId: 'photo' }),
+    ).toBe('orgs/acme/media/photo')
+    expect(mediaAssetDocumentPath({ scope: 'site1', mediaId: 'photo' })).toBe(
+      'hosts/site1/media/photo',
+    )
+    expect(
+      mediaAssetDocumentPath({ scope: 'not a scope', mediaId: 'photo' }),
+    ).toBeNull()
+  })
+
+  it("answers with an image's pair, which the overlay then reserves", () => {
+    const answer = mediaAssetFactsFromDocument(REPLACED, { scope: 'site1' }, 'site1')
+    expect(answer).toEqual(REPLACED)
+    expect(shipped(PICKED, answered(answer as MediaAssetFacts))).toMatchObject({
+      intrinsicWidth: 480,
+      intrinsicHeight: 480,
+    })
+  })
+
+  it('carries the facts and none of the gates they were decided from', () => {
+    const answer = mediaAssetFactsFromDocument(
+      { ...REPLACED, visibleTo: ['org'], private: false, deletedAt: null },
+      { scope: 'org:acme' },
+      'site1',
+    )
+    expect(answer).toEqual(REPLACED)
+    expect(answer).not.toHaveProperty('visibleTo')
+    expect(answer).not.toHaveProperty('private')
+    expect(answer).not.toHaveProperty('deletedAt')
+  })
+
+  it('answers nothing for an image that is gone, deleted or private', () => {
+    expect(
+      mediaAssetFactsFromDocument(undefined, { scope: 'site1' }, 'site1'),
+    ).toBeUndefined()
+    expect(
+      mediaAssetFactsFromDocument({ ...REPLACED, deletedAt: 1 }, { scope: 'site1' }, 'site1'),
+    ).toBeUndefined()
+    expect(
+      mediaAssetFactsFromDocument({ ...REPLACED, private: true }, { scope: 'site1' }, 'site1'),
+    ).toBeUndefined()
+  })
+
+  it('refuses an org image with no scope, or shared with no site, as the CDN does', () => {
+    expect(
+      mediaAssetFactsFromDocument(REPLACED, { scope: 'org:acme' }, 'site1'),
+    ).toBeUndefined()
+    expect(
+      mediaAssetFactsFromDocument({ ...REPLACED, visibleTo: [] }, { scope: 'org:acme' }, 'site1'),
+    ).toBeUndefined()
+  })
+
+  it('asks visibility of the site rendering the image, not the scope it was stored with', () => {
+    const restricted = { ...REPLACED, visibleTo: [hostScopeToken('site9')] }
+    expect(
+      mediaAssetFactsFromDocument(restricted, { scope: 'org:acme:site9' }, 'site1'),
+    ).toBeUndefined()
+    expect(
+      mediaAssetFactsFromDocument(restricted, { scope: 'org:acme' }, 'site9'),
+    ).toEqual(REPLACED)
   })
 })

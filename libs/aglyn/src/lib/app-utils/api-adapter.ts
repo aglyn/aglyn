@@ -38,8 +38,9 @@ export type LegacyApiHandler = (req: any, res: any) => unknown
  * router. This module lets an App Router `route.ts` invoke them from a Web
  * `Request`, so the tenant's API surface moves to the App Router with **zero
  * changes to plugin handlers** (they still run unchanged on the console's
- * Pages Router too). The response collector is a real `Writable` so the
- * streaming media handler's `stream.pipe(res)` works as-is.
+ * Pages Router too). The response collector is a real `Writable`, so a
+ * handler that pipes a read stream into `res` streams its body to the client
+ * rather than handing it over whole — see {@link PluginResponseCollector}.
  */
 
 /**
@@ -131,35 +132,173 @@ export async function pluginRequestFromWeb(
   }
 }
 
+type WriteCallback = (error?: Error | null) => void
+
+/** A promise and the function that settles it. */
+function signal(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined
+  const promise = new Promise<void>((settle) => {
+    resolve = settle
+  })
+  return { promise, resolve }
+}
+
+/** Statuses a `Response` may not carry a body on (Fetch §2.2.4). */
+const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304])
+
 /**
- * A `PluginApiResponse` that buffers the node-style handler's output and
- * finalizes to a Web `Response`. Extends `Writable` so a handler that pipes
- * a read stream into `res` (the media CDN) works unchanged; `status`/`json`/
- * `send`/`redirect` cover the buffered handlers and every plugin handler.
+ * A `PluginApiResponse` that turns a node-style handler's output into a Web
+ * `Response`, in one of two shapes.
+ *
+ * - **A complete body** — `json`, `send`, `redirect`, or `end()` with nothing
+ *   written. It is kept whole and becomes a buffered `Response` once the
+ *   handler returns, which is the shape every plugin handler relies on.
+ * - **A streamed body** — anything written through the `Writable` side:
+ *   `write()`, `stream.pipe(res)`, `pipeline(source, res)`. The `Response` is
+ *   handed back at the FIRST chunk, carrying the status and headers set by
+ *   then, and its body is a `ReadableStream` the client pulls one chunk at a
+ *   time (AGL-2810).
+ *
+ * ## Why a streamed body is never collected
+ *
+ * The media CDN pipes whole Storage objects into `res`. Collected, each
+ * request held its entire file in function memory — briefly twice, while the
+ * chunks were concatenated — and sent nothing until the last byte had been
+ * read, so a player's opening `bytes=0-` on a large video pulled the whole
+ * file before playback could start.
+ *
+ * ## Backpressure
+ *
+ * The body stream holds one chunk. A write is acknowledged only when the
+ * client has taken the chunk before it, so `pipe`/`pipeline` pause the source
+ * while the client is slow and a response never holds more than a few chunks
+ * in memory, whatever the size of the file behind it.
+ *
+ * ## Failure after the first chunk
+ *
+ * Once the status line is gone the only honest signal left is to fail the
+ * body. `destroy(error)` errors the stream, so the client sees a broken
+ * transfer. Closing it instead would present a truncated file as complete —
+ * which, for a video player, is a corrupt file it has no reason to doubt.
+ *
+ * ## A client that stops reading
+ *
+ * Canceling the body destroys this writer, and `pipeline` answers a
+ * destination that closed early by destroying its source. An abandoned
+ * response therefore stops reading from Storage instead of leaving the read
+ * open behind a client that has gone.
  */
 class PluginResponseCollector extends Writable implements PluginApiResponse {
   private statusCode = 200
   private readonly outHeaders: Record<string, string | number | readonly string[]> =
     {}
-  private readonly chunks: Buffer[] = []
-  private readonly finished: Promise<void>
+  /** What `json`/`send` produced, when nothing was streamed. */
+  private completeBody: Buffer | null = null
+  private body: ReadableStream<Uint8Array> | null = null
+  private controller: ReadableStreamDefaultController<Uint8Array> | null = null
+  /** The acknowledgement for the chunk the client has not taken yet. */
+  private awaitingPull: WriteCallback | null = null
+  /** Set by `_final`: the body ended, so a later teardown is not a failure. */
+  private bodyEnded = false
+  private readonly ended = signal()
+  private readonly firstChunk = signal()
   headersSent = false
 
   constructor() {
     super()
-    this.finished = new Promise<void>((resolve) => this.once('finish', resolve))
+    this.once('finish', this.ended.resolve)
+    // `close` as well as `finish`: a writer destroyed before it wrote or
+    // ended must still let `toResponse` return rather than wait forever.
+    this.once('close', this.ended.resolve)
+    // A streamed failure reaches the client through the body (`_destroy`).
+    // Without a listener, `destroy(error)` would also emit an `error` event
+    // nothing handles, and an unhandled `error` takes the process down.
+    this.on('error', () => undefined)
+  }
+
+  /** True once a chunk has been written, so the `Response` is committed. */
+  get streaming(): boolean {
+    return this.body !== null
+  }
+
+  /** Settles at the first streamed chunk. */
+  get firstChunkWritten(): Promise<void> {
+    return this.firstChunk.promise
   }
 
   override _write(
     chunk: unknown,
-    _encoding: BufferEncoding,
-    callback: (error?: Error | null) => void,
+    encoding: BufferEncoding,
+    callback: WriteCallback,
   ): void {
     this.headersSent = true
-    this.chunks.push(
-      Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array),
-    )
+    const controller = this.controller ?? this.openBody()
+    try {
+      controller.enqueue(
+        chunk instanceof Uint8Array ? chunk : Buffer.from(String(chunk), encoding),
+      )
+    } catch (error) {
+      // The client already canceled or the body already failed: the write
+      // fails the way a write to a closed socket does.
+      callback(error instanceof Error ? error : new Error(String(error)))
+      return
+    }
+    if ((controller.desiredSize ?? 0) > 0) callback()
+    else this.awaitingPull = callback
+  }
+
+  override _final(callback: WriteCallback): void {
+    this.bodyEnded = true
+    try {
+      this.controller?.close()
+    } catch {
+      // Canceled by the client; nothing is waiting for the end.
+    }
     callback()
+  }
+
+  override _destroy(error: Error | null, callback: WriteCallback): void {
+    this.awaitingPull = null
+    if (this.controller && !this.bodyEnded) {
+      try {
+        this.controller.error(
+          error ?? new Error('Response body closed before it ended'),
+        )
+      } catch {
+        // Already closed or errored.
+      }
+    }
+    callback(error)
+  }
+
+  /** Commits the response: the status and headers set so far are final. */
+  private openBody(): ReadableStreamDefaultController<Uint8Array> {
+    const started: { controller?: ReadableStreamDefaultController<Uint8Array> } =
+      {}
+    this.body = new ReadableStream<Uint8Array>(
+      {
+        start: (controller) => {
+          started.controller = controller
+        },
+        pull: () => {
+          const acknowledge = this.awaitingPull
+          this.awaitingPull = null
+          acknowledge?.()
+        },
+        cancel: () => {
+          this.awaitingPull = null
+          this.destroy()
+        },
+      },
+      { highWaterMark: 1 },
+    )
+    // `start` runs synchronously inside the constructor (Streams §4.2.4).
+    if (!started.controller) {
+      throw new Error('ReadableStream did not start synchronously')
+    }
+    this.controller = started.controller
+    this.firstChunk.resolve()
+    return started.controller
   }
 
   status(code: number): this {
@@ -171,17 +310,21 @@ class PluginResponseCollector extends Writable implements PluginApiResponse {
     this.outHeaders[name.toLowerCase()] = value
   }
 
+  removeHeader(name: string): void {
+    delete this.outHeaders[name.toLowerCase()]
+  }
+
   json(body: unknown): void {
     if (this.outHeaders['content-type'] === undefined) {
       this.setHeader('content-type', 'application/json; charset=utf-8')
     }
-    this.end(Buffer.from(JSON.stringify(body)))
+    this.endWith(Buffer.from(JSON.stringify(body)))
   }
 
   send(body: unknown): void {
     if (body === undefined || body === null) return void this.end()
-    if (Buffer.isBuffer(body)) return void this.end(body)
-    if (typeof body === 'string') return void this.end(Buffer.from(body))
+    if (Buffer.isBuffer(body)) return void this.endWith(body)
+    if (typeof body === 'string') return void this.endWith(Buffer.from(body))
     return this.json(body)
   }
 
@@ -193,10 +336,25 @@ class PluginResponseCollector extends Writable implements PluginApiResponse {
     this.end()
   }
 
-  /** Awaits the stream `finish` (fired by `end()` / a completed `pipe`). */
+  /**
+   * Ends the response with a complete body. After a streamed chunk the body
+   * is already a stream, so the bytes can only join it.
+   */
+  private endWith(body: Buffer): void {
+    if (this.body) {
+      this.end(body)
+      return
+    }
+    this.completeBody = body
+    this.end()
+  }
+
+  /**
+   * The Web `Response`, as soon as it is decided: at the first streamed chunk,
+   * or once the handler has ended the response with a complete body.
+   */
   async toResponse(): Promise<Response> {
-    await this.finished
-    const body = this.chunks.length ? Buffer.concat(this.chunks) : null
+    await Promise.race([this.ended.promise, this.firstChunk.promise])
     const headers = new Headers()
     for (const [key, value] of Object.entries(this.outHeaders)) {
       if (Array.isArray(value)) {
@@ -205,12 +363,19 @@ class PluginResponseCollector extends Writable implements PluginApiResponse {
         headers.set(key, String(value))
       }
     }
-    const bodyless =
-      this.statusCode === 204 || this.statusCode === 304 || body?.length === 0
-    return new Response(bodyless ? null : (body as BodyInit | null), {
-      status: this.statusCode,
-      headers,
-    })
+    const bodyless = NULL_BODY_STATUSES.has(this.statusCode)
+    if (this.body) {
+      if (bodyless) {
+        void this.body.cancel()
+        return new Response(null, { status: this.statusCode, headers })
+      }
+      return new Response(this.body, { status: this.statusCode, headers })
+    }
+    const body = this.completeBody
+    return new Response(
+      bodyless || !body || body.length === 0 ? null : (body as BodyInit),
+      { status: this.statusCode, headers },
+    )
   }
 }
 
@@ -220,6 +385,12 @@ class PluginResponseCollector extends Writable implements PluginApiResponse {
  * files that dispatch to plugin handlers or the shared `serveMediaCdn` /
  * `servePluginFetch` handlers. Runs on the Node.js runtime (streams,
  * firebase-admin) — not edge.
+ *
+ * A handler that responds with a complete body is awaited to the end, and a
+ * throw before it responds rejects exactly as it always has. A handler that
+ * streams gets its `Response` back at the first chunk while it keeps writing;
+ * if it fails after that, the body fails with it (see
+ * {@link PluginResponseCollector}).
  */
 export async function runLegacyHandler(
   handler: LegacyApiHandler,
@@ -228,6 +399,21 @@ export async function runLegacyHandler(
 ): Promise<Response> {
   const req = await pluginRequestFromWeb(request, params)
   const res = new PluginResponseCollector()
-  await handler(req, res)
+  const failure: { error?: unknown; failed: boolean } = { failed: false }
+  const handled = (async (): Promise<void> => {
+    try {
+      await handler(req, res)
+    } catch (error) {
+      if (res.streaming) {
+        // The status line is already out, so only the body can carry this.
+        res.destroy(error instanceof Error ? error : new Error(String(error)))
+        return
+      }
+      failure.failed = true
+      failure.error = error
+    }
+  })()
+  await Promise.race([handled, res.firstChunkWritten])
+  if (failure.failed) throw failure.error
   return res.toResponse()
 }

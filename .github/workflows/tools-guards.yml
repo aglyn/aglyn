@@ -345,6 +345,16 @@ jobs:
       # only the proxy measurement pointed at it. Pure node.
       - run: npm run test:front-door
 
+      # test:emulator-config  Does a private-port emulator config name its
+      # rules files (AGL-2858)? firebase-tools resolves every rules and indexes
+      # path in a config against the directory of that config, and refuses a
+      # path that leads out of it. A config can parse, with every port moved,
+      # and still name no rules file: an absolute path is doubled by the join,
+      # and a `../` path is refused. This runs `emulator-config.mjs` from a
+      # copy of the repo layout and reads each path it writes back the way
+      # firebase-tools does. Pure node.
+      - run: npm run test:emulator-config
+
       # test:render-errors  Is a PAGE ROUTE throwing (AGL-2709)? The half the
       # front door does not close: Next serves the cached ISR document while
       # every regeneration underneath it fails, so a 200 is a statement about
