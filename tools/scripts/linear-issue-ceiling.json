@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 2860,
+  "highest": 2862,
   "verifiedAt": "2026-09-12",
-  "verifiedBy": "Read from Linear on 2026-09-12 (UTC): the Aglyn team listed newest-first by createdAt with archived issues included. The newest issue is AGL-2860, above AGL-2859 and AGL-2858, so 2860 is the highest the workspace has assigned. Raised from 2858 because creating the worktree-serve issue returned AGL-2860 from the workspace, after reading it -- the number comes from what the workspace assigned, never from what a failing check reported as missing.",
+  "verifiedBy": "Read from Linear on 2026-09-12 (UTC): the Aglyn team listed newest-first by createdAt with archived issues included. AGL-2861 was the newest the workspace had assigned; creating the besigner-e2e issue then returned AGL-2862, so 2862 is the highest that exists. The number comes from what the workspace assigned, never from what a failing check reported as missing.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",
