@@ -18,8 +18,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   gradePromotion,
+  isReleaseSubject,
   OK,
   REFUSE,
+  releaseBumpProof,
   UNVERIFIED,
   UNEXAMINED,
 } from './main-gate-verdicts.mjs'
@@ -174,4 +176,177 @@ test('the tip is the LAST entry, so ordering is load-bearing', () => {
   ]
   assert.equal(gradePromotion(range).code, OK)
   assert.equal(gradePromotion([...range].reverse()).code, REFUSE)
+})
+
+// ── A release bump on a pinned branch (AGL-2890) ─────────────────────────────
+
+const PARENT = 'ed297ab2dbd27c6b92cd947451e8ce7444f9e5c4'
+const BUMP = 'cf69301862e1ba4ac38345cdd7bdf4c58881363f'
+const bump = (contexts = [], releaseBumpOf = PARENT) => ({
+  sha: BUMP,
+  subject: 'chore(release): v1.0.0-beta.120 (AGL-2089)',
+  contexts,
+  releaseBumpOf,
+})
+
+test('THE PR #1042 SHAPE: a proven release bump with no status is graded by its parent', () => {
+  // 2026-09-13. The pinned branch's tip was the bump, which Main Gate never
+  // sees, and every such promotion graded "no verdict" while its parent had
+  // passed a full sweep (run 34782331379).
+  const r = gradePromotion([
+    commit('1cf03cbeb', [fast('failure'), full('failure')], 'an ancestor red'),
+    commit(PARENT, [fast('success'), full('success')], 'the pinned tip'),
+    bump(),
+  ])
+  assert.equal(r.code, OK)
+  assert.equal(r.tip.sha, BUMP)
+  assert.equal(r.graded.sha, PARENT)
+  assert.match(r.reason, /the tip cf6930186 is a release bump/)
+  assert.match(r.reason, /its parent grades it: ed297ab2d passed a full sweep/)
+  // The ancestor red is still reported, exactly as without a bump.
+  assert.deepEqual(
+    r.reds.map((x) => x.commit.sha),
+    ['1cf03cbeb'],
+  )
+})
+
+test('a release bump over a RED parent is refused', () => {
+  const r = gradePromotion([
+    commit(PARENT, [fast('success'), full('failure')]),
+    bump(),
+  ])
+  assert.equal(r.code, REFUSE)
+  assert.match(r.reason, /ed297ab2d is RED: main-gate\/full/)
+})
+
+test('a release bump over a parent the full sweep never reached is UNEXAMINED', () => {
+  const r = gradePromotion([commit(PARENT, [fast('success')]), bump()])
+  assert.equal(r.code, UNEXAMINED)
+  assert.equal(r.sweep, 'absent')
+})
+
+test('a release bump that Main Gate DID grade is graded on its own statuses', () => {
+  // The short path pushes the bump to `main` first, so the bump carries its
+  // own verdict, and that verdict describes the exact tree being shipped.
+  const r = gradePromotion([
+    commit(PARENT, [fast('success'), full('success')]),
+    bump([fast('success')]),
+  ])
+  assert.equal(r.code, UNEXAMINED)
+  assert.equal(r.graded.sha, BUMP)
+  assert.match(r.reason, /^the tip cf6930186 is green/)
+})
+
+test('an UNPROVEN bump still carries no verdict, whatever its subject says', () => {
+  // `releaseBumpOf` is set only when git proved the diff. A subject alone is
+  // not evidence, so without it nothing stands in.
+  const r = gradePromotion([
+    commit(PARENT, [fast('success'), full('success')]),
+    bump([], null),
+  ])
+  assert.equal(r.code, UNVERIFIED)
+  assert.equal(r.graded.sha, BUMP)
+  assert.match(r.reason, /no Main Gate status/)
+})
+
+test('a bump whose parent is outside the range is not graded by anything else', () => {
+  const r = gradePromotion([
+    commit('aaaaaaaaa', [fast('success'), full('success')]),
+    bump([], 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'),
+  ])
+  assert.equal(r.code, UNVERIFIED)
+})
+
+const manifest = (version, scripts = { test: 'nx test' }) =>
+  `${JSON.stringify({ name: 'aglyn', version, license: 'Apache-2.0', scripts }, null, 2)}\n`
+const lockfile = (version, dependency = '1.2.3') =>
+  `${JSON.stringify(
+    {
+      name: 'aglyn',
+      version,
+      lockfileVersion: 3,
+      packages: {
+        '': { name: 'aglyn', version, license: 'Apache-2.0' },
+        'node_modules/left-pad': { version: dependency },
+      },
+    },
+    null,
+    2,
+  )}\n`
+const proven = (overrides = {}) =>
+  releaseBumpProof({
+    subject: 'chore(release): v1.0.0-beta.120 (AGL-2089)',
+    parents: [PARENT],
+    files: ['CHANGELOG.md', 'package-lock.json', 'package.json'],
+    packageBefore: manifest('1.0.0-beta.119'),
+    packageAfter: manifest('1.0.0-beta.120'),
+    lockBefore: lockfile('1.0.0-beta.119'),
+    lockAfter: lockfile('1.0.0-beta.120'),
+    ...overrides,
+  })
+
+test('the bump release-prepare writes is proven', () => {
+  assert.deepEqual(proven(), {
+    ok: true,
+    why: 'only the version fields and CHANGELOG.md change',
+  })
+})
+
+test('a bump that leaves the lockfile alone is still only a version change', () => {
+  const r = proven({ files: ['CHANGELOG.md', 'package.json'] })
+  assert.equal(r.ok, true)
+})
+
+test('the proof refuses anything it cannot show is a version change', () => {
+  const cases = [
+    [{ subject: 'fix(ui): v1.0.0 of the table (AGL-2884)' }, /subject/],
+    [
+      {
+        subject:
+          'chore(release): carry a fix into the v1.0.0-beta.38 notes (AGL-2089)',
+      },
+      /subject/,
+    ],
+    [{ parents: [PARENT, BUMP] }, /exactly one parent/],
+    [{ parents: [] }, /exactly one parent/],
+    [
+      { files: ['CHANGELOG.md', 'package.json', 'apps/console/app/page.tsx'] },
+      /apps\/console\/app\/page\.tsx/,
+    ],
+    [{ files: ['CHANGELOG.md'] }, /does not change package\.json/],
+    [{ packageAfter: manifest('1.0.0-beta.119') }, /keeps its version/],
+    [
+      {
+        packageAfter: manifest('1.0.0-beta.120', {
+          test: 'nx test',
+          postinstall: 'curl evil',
+        }),
+      },
+      /changes more than its version/,
+    ],
+    [
+      { lockAfter: lockfile('1.0.0-beta.120', '9.9.9') },
+      /package-lock\.json changes more/,
+    ],
+    [{ packageBefore: null }, /could not be read/],
+    [{ lockAfter: '{ not json' }, /package-lock\.json could not be read/],
+  ]
+  for (const [overrides, why] of cases) {
+    const r = proven(overrides)
+    assert.equal(r.ok, false, JSON.stringify(overrides))
+    assert.match(r.why, why)
+  }
+})
+
+test('only the subject release-prepare writes reads as a release bump', () => {
+  assert.equal(
+    isReleaseSubject('chore(release): v1.0.0-beta.120 (AGL-2089)'),
+    true,
+  )
+  assert.equal(isReleaseSubject('chore(release): v1.0.0'), true)
+  assert.equal(isReleaseSubject('chore(release): v1.0.0-beta.120'), true)
+  assert.equal(isReleaseSubject('chore(release): v1.0'), false)
+  assert.equal(isReleaseSubject('chore(release)!: v2.0.0'), false)
+  assert.equal(isReleaseSubject('chore(release): v1.0.0beta'), false)
+  assert.equal(isReleaseSubject(undefined), false)
 })

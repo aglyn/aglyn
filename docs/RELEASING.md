@@ -288,6 +288,18 @@ gives that case its own words. It also names the newest commit in the range a
 sweep did pass on, so you can see how much of what you are shipping is
 unexamined — decide knowingly, or wait for the sweep on the tip to finish.
 
+**A bump cut on a pinned release branch is graded by its parent** (AGL-2890).
+The PR's head is then the `chore(release)` commit, which reaches `main` only
+through the back-merge, so Main Gate never writes a status on it. Every such
+promotion used to grade exit 2, with advice to re-run once a push was graded,
+and no push ever would be. When git proves the bump changes nothing but the
+version fields of `package.json` and `package-lock.json` and `CHANGELOG.md`,
+and the bump carries no gate status of its own, the verdict is its parent's.
+The reason line says so, naming both commits. A bump that changes anything else,
+or that Main Gate did grade because it was pushed to `main` first, is graded
+on its own statuses as before. The PR's required checks run on the bump either
+way.
+
 #### Is `tools/gate.sh` still required?
 
 **No — CI now runs the same things**, and since AGL-2505 it does so in about

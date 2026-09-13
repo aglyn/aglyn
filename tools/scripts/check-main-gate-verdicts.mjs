@@ -28,6 +28,8 @@ import { execFileSync } from 'node:child_process'
 import {
   gradePromotion,
   gateContexts,
+  isReleaseSubject,
+  releaseBumpProof,
   REFUSE,
   UNVERIFIED,
   UNEXAMINED,
@@ -43,9 +45,13 @@ const flag = (name, fallback) => {
   return hit ? hit.slice(name.length + 3) : fallback
 }
 
+// The buffer is sized for `git show <sha>:package-lock.json`, which is past the
+// 1 MB default. A read that overflowed would fail the release-bump proof below
+// rather than pass it, but it would fail it for no reason.
 const sh = (cmd, argv) =>
   execFileSync(cmd, argv, {
     encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim()
 
@@ -102,6 +108,54 @@ const commits = rows.map((row) => {
   }
 })
 
+/** A git read that answers `null` instead of throwing, for the proof below. */
+function gitOrNull(argv) {
+  try {
+    return sh('git', argv)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * On a pinned release branch the tip is the `chore(release)` bump, which Main
+ * Gate never grades (AGL-2890). When git proves the bump changes only version
+ * fields and CHANGELOG.md, its parent's verdict may stand in; the grader still
+ * refuses the substitution when the tip carries a gate status of its own.
+ * Returns the note to print when a release-looking tip failed the proof.
+ */
+function markReleaseBump(tip) {
+  if (!tip || !isReleaseSubject(tip.subject)) return null
+  const parents = (
+    gitOrNull(['rev-list', '--parents', '-n', '1', tip.sha]) ?? ''
+  )
+    .split(' ')
+    .slice(1)
+    .filter(Boolean)
+  const parent = parents.length === 1 ? parents[0] : null
+  const show = (sha, path) =>
+    sha ? gitOrNull(['show', `${sha}:${path}`]) : null
+  const proof = releaseBumpProof({
+    subject: tip.subject,
+    parents,
+    files: parent
+      ? (gitOrNull(['diff', '--name-only', parent, tip.sha]) ?? '')
+          .split('\n')
+          .filter(Boolean)
+      : [],
+    packageBefore: show(parent, 'package.json'),
+    packageAfter: show(tip.sha, 'package.json'),
+    lockBefore: show(parent, 'package-lock.json'),
+    lockAfter: show(tip.sha, 'package-lock.json'),
+  })
+  if (proof.ok) {
+    tip.releaseBumpOf = parent
+    return null
+  }
+  return `the tip is titled as a release bump but is graded on its own statuses: ${proof.why}`
+}
+
+const bumpNote = markReleaseBump(commits[commits.length - 1])
 const verdict = gradePromotion(commits)
 
 const line = (c) => {
@@ -116,6 +170,7 @@ process.stdout.write(
   `Main Gate verdicts for ${range} (${commits.length} commit(s))\n\n`,
 )
 for (const c of commits) process.stdout.write(`${line(c)}\n`)
+if (bumpNote) process.stdout.write(`\n${bumpNote}\n`)
 process.stdout.write(`\n${verdict.reason}\n`)
 
 if (verdict.reds.length > 0) {
