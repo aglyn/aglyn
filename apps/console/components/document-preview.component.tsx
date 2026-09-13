@@ -215,11 +215,22 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   const [composed, setComposed] = useState<
     Record<string, unknown> | undefined
   >(undefined)
+  /**
+   * The site document, read once per preview (AGL-2881).
+   *
+   * `{{host.*}}` tokens resolve from it, as the published page resolves them
+   * from the same document, and the consent simulator reads the site's config
+   * off the same read. `undefined` while the read is outstanding, which holds
+   * the first paint the way the definitions do, so a token never flashes as
+   * written. `null` when the read failed, timed out or found nothing: the
+   * tokens then render as written, because an absent site has no values and a
+   * blank would hide that a variable is there.
+   */
+  const [hostDoc, setHostDoc] = useState<
+    Record<string, unknown> | null | undefined
+  >(undefined)
   // Consent-banner region simulation (AGL-1498); see ConsentSimulation.
   const [consentSim, setConsentSim] = useState<ConsentSimulation>('off')
-  const [consentHost, setConsentHost] = useState<Aglyn.VisitorConsentHost | null>(
-    null,
-  )
   // A click made inside the simulation. Carries the ADVERTISING answer as well
   // as the status (AGL-2486): `ConsentBannerUi` reports both through
   // `onDecision`, and dropping the second argument meant ticking the
@@ -297,28 +308,16 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   // a tab that has navigated elsewhere.
   useDeclareDocumentSubject(docId, subjectName)
 
-  // The host's consent config (GA id + mode), read lazily the first time the
-  // simulator is switched on — the default 'off' costs nothing.
-  useEffect(() => {
-    if (consentSim === 'off' || !hostId || !firestore || consentHost) {
-      return undefined
-    }
-    let cancelled = false
-    firestoreOneShotRetry(
-      () => getDoc(firestoreDoc(firestore, 'hosts', hostId)),
-      'consent-host',
-    )
-      .then((snapshot) => {
-        if (cancelled) return
-        setConsentHost((snapshot.data() as Aglyn.VisitorConsentHost) ?? {})
-      })
-      .catch(() => {
-        if (!cancelled) setConsentHost({})
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [consentSim, hostId, firestore, consentHost])
+  // The host's consent config (GA id + mode), off the site read, once the
+  // simulator is switched on. A read that failed simulates a site with no
+  // consent configured.
+  const consentHost = useMemo<Aglyn.VisitorConsentHost | null>(
+    () =>
+      consentSim === 'off' || hostDoc === undefined
+        ? null
+        : ((hostDoc ?? {}) as Aglyn.VisitorConsentHost),
+    [consentSim, hostDoc],
+  )
 
   // The simulated visitor state, from the SAME resolution rules the tenant
   // hook applies — posture from `resolveConsentPosture`, implied recorded in
@@ -477,6 +476,23 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         console.error(error)
         if (!cancelled) setFormDesigns({})
       })
+
+    // The site document (AGL-2881), read beside them for the same reason: the
+    // first paint waits on it, and the tenant composes with it.
+    firestoreOneShotRetry(
+      () => getDoc(firestoreDoc(firestore, 'hosts', hostId)),
+      'host',
+    )
+      .then((snapshot) => {
+        if (cancelled) return
+        setHostDoc(
+          (snapshot.data() as Record<string, unknown> | undefined) ?? null,
+        )
+      })
+      .catch((error) => {
+        console.error(error)
+        if (!cancelled) setHostDoc(null)
+      })
     // A read that never SETTLES is the case the `.catch` above cannot cover,
     // and it is the one that produced "Preview opens a tab that never
     // finishes loading": with `definitions` still `undefined` the apply
@@ -511,6 +527,16 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         )
         return {}
       })
+      // The site read gates the same apply, under the same ceiling.
+      setHostDoc((current) => {
+        if (current !== undefined) return current
+        console.warn(
+          `[preview] the host read did not settle within ` +
+            `${DEFINITIONS_TIMEOUT_MS}ms — rendering host variables as ` +
+            'written rather than holding a blank page.',
+        )
+        return null
+      })
     }, DEFINITIONS_TIMEOUT_MS)
     return () => {
       cancelled = true
@@ -523,8 +549,9 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
     // Wait for the definitions read to settle before the first paint. Grafting
     // with a "loading" empty map would render the placeholder and then swap it
     // for the real nav a beat later — a visible flash of chrome that the live
-    // site never shows.
-    if (!definitions || !formDesigns) return
+    // site never shows. The site read holds it for the same reason: a host
+    // variable drawn as its token and then as its value is that flash again.
+    if (!definitions || !formDesigns || hostDoc === undefined) return
     const previewableFormDesigns =
       kind === 'form' && docId && docId in formDesigns
         ? Object.fromEntries(
@@ -541,21 +568,29 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
       }
       setMissing(false)
       setHostTheme(state.theme)
+      const grafted = Aglyn.composeReusableComponentNodes(
+        state.nodes as any,
+        definitions as any,
+        // Placed forms resolve here too, in the SAME call the tenant makes
+        // — one graft that expands a component inside a form design and a
+        // form inside a component, in either nesting order.
+        //
+        // Except the form being PREVIEWED. `checkFormContract` requires a
+        // form design's `form` node to name its own form, so previewing a
+        // form finds itself in the map — and would render the published
+        // version in place of the draft this preview exists to show.
+        [Aglyn.placedFormPlacement(previewableFormDesigns as any)],
+      )
       setComposed(
         Aglyn.canvas.processNodesToDenormalized(
-          Aglyn.composeReusableComponentNodes(
-            state.nodes as any,
-            definitions as any,
-            // Placed forms resolve here too, in the SAME call the tenant makes
-            // — one graft that expands a component inside a form design and a
-            // form inside a component, in either nesting order.
-            //
-            // Except the form being PREVIEWED. `checkFormContract` requires a
-            // form design's `form` node to name its own form, so previewing a
-            // form finds itself in the map — and would render the published
-            // version in place of the draft this preview exists to show.
-            [Aglyn.placedFormPlacement(previewableFormDesigns as any)],
-          ) as any,
+          // Host variables (AGL-2881) resolve over the GRAFTED tree, through
+          // the function the tenant composes with, so a token inside a
+          // component, a form or the layout chrome fills in as the page's
+          // own do — and a field the site has not set renders as nothing,
+          // exactly as it does for a visitor.
+          (hostDoc
+            ? Aglyn.resolveNodesHostTokens(grafted as any, hostDoc)
+            : grafted) as any,
         ),
       )
     }
@@ -568,7 +603,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [hostId, kind, docId, versionId, definitions, formDesigns])
+  }, [hostId, kind, docId, versionId, definitions, formDesigns, hostDoc])
 
   // A placed asset's shape, and a film's length and poster, as its DAM
   // document records them NOW (AGL-2849, AGL-2856), laid over the tree Preview
