@@ -57,6 +57,7 @@ import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
   normalizeBindingTokens,
+  readYesNoValue,
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   ScreenLinkContext,
@@ -121,6 +122,12 @@ import {
   ScreenLinkField,
   SCREEN_LINK_FIELD_COMPONENT,
 } from './screen-link-field.component'
+import {
+  PropertyBindingField,
+  type PropertyBindingControl,
+  PROPERTY_BINDING_FIELD_COMPONENT,
+  withPropertyBinding,
+} from './property-binding-field.component'
 import { besignerDocsUrl } from '../utils/docs-help'
 import { numericTextValue } from '../utils/numeric-text-value'
 import ElementInfoDetails from './element-info-details.component'
@@ -319,6 +326,10 @@ export const elementPropsComponentMapper = {
   // A placed plugin's declared settings as real fields (AGL-1049); the
   // attributes memo rewrites the plugin's JSON attribute to it.
   [PLUGIN_SETTINGS_FIELD_COMPONENT]: PluginSettingsField,
+  // A field with no text box inside a component editor, wrapped so it can be
+  // bound to one of the component's properties; the attributes memo wraps
+  // them (see `withPropertyBinding`).
+  [PROPERTY_BINDING_FIELD_COMPONENT]: PropertyBindingField,
 }
 
 /**
@@ -357,6 +368,34 @@ export function withNumericValueParse<T extends Record<string, unknown>>(
 }
 
 /**
+ * A Yes / no property's stored value as its dropdown shows it: `'true'`,
+ * `'false'`, or nothing chosen.
+ *
+ * Read with the spellings every Yes / no reader accepts, so an instance that
+ * stored the string `'false'` shows No rather than a blank dropdown. Unset is
+ * `undefined` rather than `''`: an empty string matches no option, and the
+ * dropdown would warn about a value it cannot show.
+ */
+export function formatYesNoPropValue(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined
+  const truth = readYesNoValue(value)
+  return truth === undefined ? undefined : truth ? 'true' : 'false'
+}
+
+/**
+ * The dropdown's choice as the instance stores it: a real boolean, or unset.
+ *
+ * Unset is the whole point of the field — it is how a page hands the choice
+ * back to the component's default — so everything that is not Yes or No,
+ * including the clear button's `null`, removes the value.
+ */
+export function parseYesNoPropValue(value: unknown): boolean | undefined {
+  if (value === 'true' || value === true) return true
+  if (value === 'false' || value === false) return false
+  return undefined
+}
+
+/**
  * One Attributes field per prop a reusable component declares (AGL-1247),
  * so the same hero can carry different copy on eleven pages instead of
  * being copied onto each.
@@ -388,7 +427,27 @@ export function buildInstancePropFields(
       }
       switch (prop.type) {
         case 'boolean':
-          return { ...base, component: FieldComponentType.CHECKBOX }
+          // Yes, No, or the component's default — three answers, which a
+          // checkbox cannot give. Unticked read as No on a page rendering a
+          // default of Yes, and once ticked the field had no way back to
+          // the default at all. The corner ✕ is that way back here.
+          return {
+            ...base,
+            component: FieldComponentType.SELECT,
+            options: [
+              { value: 'true', label: 'Yes' },
+              { value: 'false', label: 'No' },
+            ],
+            placeholder: `Use the component default (${
+              readYesNoValue(prop.defaultValue) === true ? 'Yes' : 'No'
+            })`,
+            description: undefined,
+            clearable: true,
+            FieldProps: {
+              format: formatYesNoPropValue,
+              parse: parseYesNoPropValue,
+            },
+          }
         case 'number':
           return {
             ...base,
@@ -1167,6 +1226,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
      */
     const hasFormattedText = isFormattedText(node)
 
+    // The props of the component being edited, set ONLY inside a component
+    // editor — the same "am I editing a definition" signal the insert picker
+    // keys `{{prop.*}}` off. It decides whether a field with no text box can
+    // be bound to a property, and whether the visibility directives below
+    // are offered.
+    const { componentProps: editedComponentProps } =
+      useContext(BindingPickerContext)
+
     const attributes = useMemo(() => {
       // Every described attribute gets a help tooltip beside the field
       // (AGL-600) — the definition's own description, no docs link since
@@ -1334,21 +1401,40 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           }
         }
         return field
-      }).filter((field) => {
-        // Unknown editor types must degrade to a skipped attribute, never
-        // kill the whole form: the renderer throws on unregistered
-        // components, which blanked the email designer's attributes panel
-        // when COLOR_PICKER wasn't mapped (AGL-584).
-        const known = (field.component as string) in elementPropsComponentMapper
-        if (!known && process.env.NODE_ENV !== 'production') {
-          console.warn(
-            `[ElementPropsForm] attribute "${field.name}" uses unregistered ` +
-              `editor "${field.component}" — skipped; register it in ` +
-              'elementPropsComponentMapper.',
-          )
-        }
-        return known
       })
+        .map((field, index) =>
+          // One field in, one out, so `index` still names the attribute as
+          // the schema DECLARED it. The rewrites above change `component` —
+          // a Screen picker is a plain select by now — and what a field can
+          // be bound to follows what it holds, not how it is drawn.
+          withPropertyBinding(field, {
+            declaredComponent: rawAttributes?.[index]?.component,
+            componentProps: editedComponentProps,
+            control: (
+              elementPropsComponentMapper as Record<
+                string,
+                PropertyBindingControl
+              >
+            )[field.component as string],
+            tokenLabelContext,
+          }),
+        )
+        .filter((field) => {
+          // Unknown editor types must degrade to a skipped attribute, never
+          // kill the whole form: the renderer throws on unregistered
+          // components, which blanked the email designer's attributes panel
+          // when COLOR_PICKER wasn't mapped (AGL-584).
+          const known =
+            (field.component as string) in elementPropsComponentMapper
+          if (!known && process.env.NODE_ENV !== 'production') {
+            console.warn(
+              `[ElementPropsForm] attribute "${field.name}" uses unregistered ` +
+                `editor "${field.component}" — skipped; register it in ` +
+                'elementPropsComponentMapper.',
+            )
+          }
+          return known
+        })
     }, [
       hasFormattedText,
       rawAttributes,
@@ -1368,6 +1454,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       ancestorDatasetId,
       insertOptions,
       tokenLabelContext,
+      editedComponentProps,
     ])
 
     // Reusable-component flows (AGL-35): actions appear only when the host
@@ -1398,8 +1485,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // Visibility directives (AGL-1314), inside a component editor only —
     // `componentProps` is the same "am I editing a definition" signal the
     // insert picker keys `{{prop.*}}` off.
-    const { componentProps: editedComponentProps } =
-      useContext(BindingPickerContext)
     const visibilityFields = useMemo(
       () =>
         editedComponentProps

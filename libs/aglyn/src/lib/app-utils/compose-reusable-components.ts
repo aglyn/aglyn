@@ -474,6 +474,82 @@ export function getInstanceEffectivePropText(
 }
 
 /**
+ * Whether a declared prop's value says yes, no, or nothing at all.
+ *
+ * The spellings a visibility directive accepts, because the value travels the
+ * same textual path to get here: `false`, `'false'`, `'0'`, `'off'`, `'no'` and
+ * `''` all read as no. `undefined` means there is nothing to read — the value
+ * is absent, or is still an unsubstituted token.
+ */
+export function readYesNoValue(value: unknown): boolean | undefined {
+  return directiveTruth(value)
+}
+
+/**
+ * The declared-prop substitution for a set of nodes, with each binding handed
+ * to the element as the type its property declares.
+ *
+ * The substitution itself is textual — {@link buildPropTokens} stringifies
+ * every value and `resolveNamedTokens` splices it into string props. That is
+ * right for copy and wrong for a switch: an element reading `lightbox` takes
+ * the string `'false'` for a yes. So a prop whose stored value is EXACTLY one
+ * token naming a declared `boolean` prop is read back through
+ * {@link readYesNoValue} and handed on as a real `true` or `false`.
+ *
+ * Exact match only, for the reason {@link matchComponentPropToken} gives: a
+ * value that merely contains a token is text with a value inside it, and it
+ * stays text. An undeclared name is never typed either — it never substitutes,
+ * so there is no value to read.
+ *
+ * A binding still holding its token after substitution — a component editor
+ * drawing a prop that has no default — reads as `false`. That is what a page
+ * that sets nothing renders: an unset Yes/no property with no default
+ * substitutes `''`, and `''` is a no.
+ *
+ * Top-level props only. The binding a panel field offers writes that field's
+ * own prop; a token nested in an item list is content the component spelled
+ * out, and it keeps the textual treatment every nested value gets.
+ *
+ * Inputs are never mutated, and a map with no typed binding comes back exactly
+ * as the substitution left it.
+ */
+export function resolveComponentPropTokens<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: NormalizedNodes<N>,
+  declared: ReusableComponentProp[] | undefined | null,
+  tokens: Record<string, string> | null | undefined,
+): NormalizedNodes<N> {
+  const substituted = resolveNamedTokens(nodes, tokens)
+  const yesNo = new Set<string>()
+  for (const prop of declared ?? []) {
+    if (prop?.name && prop.type === 'boolean') yesNo.add(prop.name)
+  }
+  if (!yesNo.size) return substituted
+  let typed: NormalizedNodes<N> | undefined
+  for (const [id, node] of Object.entries(nodes ?? {})) {
+    const raw = node?.props as Record<string, unknown> | undefined
+    if (!raw || typeof raw !== 'object') continue
+    let patch: Record<string, unknown> | undefined
+    for (const [key, value] of Object.entries(raw)) {
+      const name = matchComponentPropToken(value)
+      if (!name || !yesNo.has(name)) continue
+      const resolved = (
+        substituted[id]?.props as Record<string, unknown> | undefined
+      )?.[key]
+      patch = { ...patch, [key]: readYesNoValue(resolved) === true }
+    }
+    if (!patch) continue
+    typed = typed ?? { ...substituted }
+    typed[id] = {
+      ...substituted[id],
+      props: { ...(substituted[id]?.props as object), ...patch },
+    } as N
+  }
+  return typed ?? substituted
+}
+
+/**
  * Token map for one instance: each declared prop resolved to that
  * instance's override, or to the definition's default where it set none.
  *
@@ -952,7 +1028,9 @@ export function composeReusableComponentNodes<
       //
       // The value lands in a real string prop and compose runs graft →
       // repeatables → `resolveNodesBindings`, so a `{{var:id}}` typed into
-      // an override still resolves downstream for free.
+      // an override still resolves downstream for free. A field bound to a
+      // Yes/no prop is the exception, and receives a real boolean — see
+      // `resolveComponentPropTokens`.
       //
       // Visibility directives (AGL-1314) are evaluated on the result, never
       // before: they read `{{prop.*}}` like everything else, so pruning
@@ -961,8 +1039,9 @@ export function composeReusableComponentNodes<
       Object.assign(
         next,
         pruneHiddenNodes(
-          resolveNamedTokens(
+          resolveComponentPropTokens(
             grafted,
+            definition.props,
             buildPropTokens(definition.props, instanceNode.props),
           ),
           prefixId(definition.rootId),
@@ -1315,8 +1394,9 @@ export function detachInstanceSubtree<
   return Object.assign(
     next,
     pruneHiddenNodes(
-      resolveNamedTokens(
+      resolveComponentPropTokens(
         copied,
+        definition.props,
         buildPropTokens(definition.props, instanceNode.props),
       ),
       instanceId,

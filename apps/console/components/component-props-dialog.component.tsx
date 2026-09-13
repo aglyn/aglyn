@@ -18,7 +18,7 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
-import { COMPONENT_PROP_NAME_PATTERN } from '@aglyn/aglyn'
+import { COMPONENT_PROP_NAME_PATTERN, readYesNoValue } from '@aglyn/aglyn'
 import { mdiDelete, mdiPlus } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ScreenLinkValuePicker } from '@aglyn/besigner-ui'
@@ -49,6 +49,34 @@ const TYPE_OPTIONS: Array<{
   { value: 'number', label: 'Number' },
   { value: 'boolean', label: 'Yes / no' },
 ]
+
+/**
+ * Kinds whose default is free text in one shape or another — a word, a
+ * number, an image address, a link — so a default typed under one still
+ * means something under another.
+ */
+const TEXT_SHAPED_TYPES: ReadonlySet<Aglyn.ReusableComponentPropType> = new Set(
+  ['text', 'richText', 'image', 'href', 'number'],
+)
+
+/**
+ * The patch that changes a property's type, keeping the default only where it
+ * still means something.
+ *
+ * A headline typed as the default of a Text property is not a yes or a no:
+ * carried into a Yes / no property it would read as Yes, which nobody chose.
+ * So a default survives a change between text-shaped kinds and is dropped on
+ * any change into or out of the others, leaving that kind's own "not set".
+ */
+export function retypeComponentProp(
+  prop: Aglyn.ReusableComponentProp,
+  type: Aglyn.ReusableComponentPropType,
+): Partial<Aglyn.ReusableComponentProp> {
+  const from = prop.type ?? 'text'
+  if (from === type) return { type }
+  const keepsDefault = TEXT_SHAPED_TYPES.has(from) && TEXT_SHAPED_TYPES.has(type)
+  return { type, ...(keepsDefault ? {} : { defaultValue: undefined }) }
+}
 
 export interface ComponentPropsDialogProps {
   open: boolean
@@ -174,10 +202,13 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
                 size="small"
                 value={prop.type ?? 'text'}
                 onChange={(event) =>
-                  update(index, {
-                    type: event.target
-                      .value as Aglyn.ReusableComponentPropType,
-                  })
+                  update(
+                    index,
+                    retypeComponentProp(
+                      prop,
+                      event.target.value as Aglyn.ReusableComponentPropType,
+                    ),
+                  )
                 }
                 sx={{ minWidth: 130 }}
               >
@@ -213,6 +244,26 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
                     }
                   />
                 </Box>
+              ) : prop.type === 'boolean' ? (
+                // A yes or a no, never a typed word: the default is read with
+                // the same spellings every Yes / no reader uses, so a default
+                // typed as `off` before this was a dropdown still shows No.
+                <TextField
+                  select
+                  label="Default"
+                  size="small"
+                  value={
+                    readYesNoValue(prop.defaultValue) === true ? 'true' : 'false'
+                  }
+                  helperText="Used where a page sets nothing"
+                  onChange={(event) =>
+                    update(index, { defaultValue: event.target.value })
+                  }
+                  sx={{ flex: 1 }}
+                >
+                  <MenuItem value="true">{'Yes'}</MenuItem>
+                  <MenuItem value="false">{'No'}</MenuItem>
+                </TextField>
               ) : (
                 <TextField
                   label="Default"

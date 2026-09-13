@@ -28,6 +28,7 @@ import {
   createDevicePinnedTheme,
   resolveSxForDeviceWidth,
 } from '../utils/device-preview-styles'
+import BindingPickerContext from '../contexts/binding-picker-context'
 import CanvasRevealContext from '../contexts/canvas-reveal-context'
 import ElementLeafComponent, { denormalizeTree } from './node-leaf'
 import * as Aglyn from '@aglyn/aglyn'
@@ -1053,5 +1054,60 @@ describe('placed form preview', () => {
 
     const canvasIds = Object.keys(Aglyn.canvas.toJSON()?.nodes ?? {})
     expect(canvasIds.some((id) => id.startsWith('cmp__form1__'))).toBe(false)
+  })
+})
+
+/**
+ * The component editor draws a field bound to a Yes / no property with a
+ * real yes or no (AGL-2871).
+ *
+ * `hidden` stands in for any boolean attribute: React omits it for `false`
+ * and writes it for any non-empty string — which is exactly how a bound
+ * switch reading its token's text would behave, and why the text alone could
+ * never draw a "no".
+ */
+describe('a Yes / no binding in the component editor (AGL-2871)', () => {
+  const boundNode = {
+    $id: 'bound-leaf',
+    type: 'node',
+    componentId: 'div',
+    props: { hidden: '{{prop.hideIt}}' },
+    sx: {},
+    nodes: [],
+  } as any
+
+  const drawn = (componentProps: Aglyn.ReusableComponentProp[]) => {
+    // The render's own container, not the document: one test draws twice.
+    const { container } = render(
+      <BindingPickerContext.Provider value={{ componentProps }}>
+        <ElementLeafComponent node={boundNode} />
+      </BindingPickerContext.Provider>,
+    )
+    return container.querySelector(
+      '[data-aglyn="leaf:bound-leaf"]',
+    ) as HTMLElement
+  }
+
+  it("draws the property's default, a no as a no", () => {
+    expect(
+      drawn([{ name: 'hideIt', type: 'boolean', defaultValue: 'false' }])
+        .hasAttribute('hidden'),
+    ).toBe(false)
+    expect(
+      drawn([{ name: 'hideIt', type: 'boolean', defaultValue: 'true' }])
+        .hasAttribute('hidden'),
+    ).toBe(true)
+  })
+
+  it('draws a property with no default as the no a page that sets nothing renders', () => {
+    expect(
+      drawn([{ name: 'hideIt', type: 'boolean' }]).hasAttribute('hidden'),
+    ).toBe(false)
+  })
+
+  it('negative control: a text property keeps its token, which reads as a yes', () => {
+    expect(
+      drawn([{ name: 'hideIt', type: 'text' }]).hasAttribute('hidden'),
+    ).toBe(true)
   })
 })

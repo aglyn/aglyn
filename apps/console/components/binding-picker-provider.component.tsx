@@ -35,6 +35,9 @@ export interface BindingPickerProviderProps {
   children?: JSX.Children
 }
 
+/** One shared empty list, so a component with no props keeps a stable identity. */
+const EMPTY_COMPONENT_PROPS: ReusableComponentProp[] = []
+
 /**
  * Feeds the designer's "Insert binding" menu (AGL-100) with the host's
  * variables and functions. Function tokens template every parameter name
@@ -94,9 +97,16 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
         : null,
     [firestore, hostId, componentId, versionId],
   )
+  // An empty list, not `undefined`, for a component that has declared nothing
+  // yet: `undefined` is how every other editor says "not a component", and a
+  // new component is still one — its switches offer a binding and explain
+  // where properties come from, rather than hiding the feature until the
+  // first property exists.
   const componentProps = Array.isArray(componentVersionDoc?.props)
     ? (componentVersionDoc.props as ReusableComponentProp[])
-    : undefined
+    : componentId && versionId
+      ? EMPTY_COMPONENT_PROPS
+      : undefined
 
   const value = useMemo(() => {
     // Inserted tokens carry doc ids (AGL-186) so they survive renames;

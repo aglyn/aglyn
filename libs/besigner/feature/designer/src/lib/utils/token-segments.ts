@@ -180,6 +180,7 @@ export type TokenGroup =
   | 'entry'
   | 'collection'
   | 'dataset'
+  | 'property'
   | 'unknown'
 
 /**
@@ -266,6 +267,23 @@ export function resolveTokenLabel(
       label: entry?.label ?? inner,
       group: 'collection',
       known: Boolean(entry),
+    }
+  }
+
+  /*
+   * A component's own property (AGL-1335), named the way the Attributes panel
+   * names it. Known only where the picker offers it — inside the component
+   * that declares it — because that is the only place the token substitutes:
+   * the same pill on an ordinary screen, or naming a property since removed,
+   * resolves to nothing on the page and says so in warning colors.
+   */
+  const propertyMatch = /^prop\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(inner)
+  if (propertyMatch) {
+    const option = optionByToken(`{{${inner}}}`)
+    return {
+      label: option?.label ?? (propertyMatch[1] as string),
+      group: 'property',
+      known: Boolean(option),
     }
   }
 

@@ -84,7 +84,7 @@ This is what stops a hero from being rebuilt on every page. Only the words diffe
 | Image | Image picker |
 | Link | Screen picker (screens and collection listings), or an external URL |
 | Number | Number |
-| Yes / no | Toggle |
+| Yes / no | **Yes** or **No**, or left to the component's default |
 
 A **Link** property is a screen picker at both ends — in the dialog's **Default** column and
 in each instance's Attributes panel — exactly like a Button's own **Link to screen** field.
@@ -119,6 +119,12 @@ typing the token.
 A Link property can be bound into either of a linking element's two fields — **Link to
 screen** or **External URL** — and resolves the same way in both.
 
+Switches and checkboxes have a `{}` too, beside their help icon, and it lists the
+component's **Yes / no** properties. Bind a Video's **Open in a lightbox** to one, and each
+page decides whether its film opens in a lightbox or plays in place. A bound field shows the
+property's name where the switch was; click it to pick a different property or remove the
+binding.
+
 ### Save, then publish
 
 **Saving properties is not publishing them.** A save writes the working version; live pages
@@ -142,7 +148,8 @@ The component's default shows as the field's **placeholder**, with the exact def
 spelled out underneath. Leave a field empty and that default is what renders — so clearing
 a field restores the component's own copy rather than collapsing the section to nothing.
 
-An empty field counts as unset. `0` and **no** are real values and survive.
+An empty field counts as unset. `0` and **no** are real values and survive. A Yes / no field
+offers **Yes** and **No**, and its ✕ hands the choice back to the component's default.
 
 ### Restyle one instance
 

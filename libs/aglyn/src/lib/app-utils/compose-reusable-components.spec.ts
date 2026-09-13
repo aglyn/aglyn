@@ -30,7 +30,9 @@ import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
   nodesReferenceComponent,
+  readYesNoValue,
   replaceSubtreeWithInstance,
+  resolveComponentPropTokens,
   resolveInstanceIconPath,
   resolveInstanceLeafBinding,
   REUSABLE_INSTANCE_COMPONENT_ID,
@@ -2867,5 +2869,210 @@ describe('buildComponentDefaultTokens', () => {
         { name: 'kept', defaultValue: 'yes' },
       ] as never),
     ).toEqual({ 'prop.kept': 'yes' })
+  })
+})
+
+/**
+ * A switch or checkbox bound to a Yes / no property (AGL-2871).
+ *
+ * Substitution is textual, so the value reaches the graft as `'true'` or
+ * `'false'` — and an element reading `lightbox` takes any non-empty string for
+ * a yes. The contract pinned here is that a field holding EXACTLY one token for
+ * a declared Yes / no property receives a real boolean, read with the same
+ * spellings the visibility directives accept, while everything that is text
+ * stays text.
+ */
+describe('a field bound to a Yes / no property (AGL-2871)', () => {
+  /** A film whose lightbox, controls and autoplay each page decides. */
+  const film = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['video', 'note'] },
+      video: {
+        $id: 'video',
+        componentId: 'video',
+        parentId: 'root',
+        props: {
+          src: '{{prop.source}}',
+          lightbox: '{{prop.playInLightbox}}',
+          controls: '{{prop.showControls}}',
+          // Whitespace inside the braces is the same binding.
+          autoPlay: '{{ prop.autoplay }}',
+          muted: true,
+        },
+      },
+      note: {
+        $id: 'note',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: 'Opens in a lightbox: {{prop.playInLightbox}}' },
+      },
+    },
+    props: [
+      {
+        name: 'source',
+        type: 'text',
+        defaultValue: 'https://cdn.example.com/a.mp4',
+      },
+      { name: 'playInLightbox', type: 'boolean' },
+      { name: 'showControls', type: 'boolean', defaultValue: 'true' },
+      { name: 'autoplay', type: 'boolean', defaultValue: 'false' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'film', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  const videoProps = (propValues?: Record<string, unknown>) =>
+    composeReusableComponentNodes(page(propValues), { film })['cmp__a__video']
+      .props
+
+  it('hands the element a real boolean, not the string a switch reads as yes', () => {
+    expect(videoProps({ playInLightbox: false }).lightbox).toBe(false)
+    expect(videoProps({ playInLightbox: true }).lightbox).toBe(true)
+  })
+
+  it('reads every spelling of no a stored value can arrive in', () => {
+    for (const no of [false, 'false', 'FALSE', '0', 'off', 'no']) {
+      expect(videoProps({ playInLightbox: no }).lightbox).toBe(false)
+    }
+    for (const yes of [true, 'true', 'yes', 'on', '1']) {
+      expect(videoProps({ playInLightbox: yes }).lightbox).toBe(true)
+    }
+  })
+
+  it("applies the property's default where the page sets nothing", () => {
+    const props = videoProps()
+    expect(props.controls).toBe(true)
+    expect(props.autoPlay).toBe(false)
+    // No default: an unset Yes / no substitutes `''`, which is a no.
+    expect(props.lightbox).toBe(false)
+  })
+
+  it('treats a cleared value as unset, so the default comes back', () => {
+    expect(videoProps({ showControls: '' }).controls).toBe(true)
+    // ...while a real no on the page beats a default of yes.
+    expect(videoProps({ showControls: false }).controls).toBe(false)
+  })
+
+  it('leaves text that mentions the property as text', () => {
+    const composed = composeReusableComponentNodes(
+      page({ playInLightbox: true }),
+      { film },
+    )
+    expect(composed['cmp__a__note'].props.children).toBe(
+      'Opens in a lightbox: true',
+    )
+    expect(composed['cmp__a__video'].props.src).toBe(
+      'https://cdn.example.com/a.mp4',
+    )
+  })
+
+  it('keeps a value the component set itself', () => {
+    expect(videoProps({ playInLightbox: true }).muted).toBe(true)
+  })
+
+  it('never mutates the definition it read the bindings from', () => {
+    videoProps({ playInLightbox: true })
+    expect(film.nodes.video.props.lightbox).toBe('{{prop.playInLightbox}}')
+  })
+
+  it('negative control: a property that is not Yes / no substitutes as text', () => {
+    const textual = {
+      ...film,
+      props: film.props.map((prop: any) =>
+        prop.name === 'playInLightbox' ? { ...prop, type: 'text' } : prop,
+      ),
+    }
+    const composed = composeReusableComponentNodes(
+      page({ playInLightbox: 'false' }),
+      { film: textual },
+    )
+    expect(composed['cmp__a__video'].props.lightbox).toBe('false')
+  })
+
+  it('negative control: a token nobody declared is left verbatim', () => {
+    const undeclared = {
+      ...film,
+      props: film.props.filter((prop: any) => prop.name !== 'playInLightbox'),
+    }
+    const composed = composeReusableComponentNodes(
+      page({ playInLightbox: true }),
+      { film: undeclared },
+    )
+    expect(composed['cmp__a__video'].props.lightbox).toBe(
+      '{{prop.playInLightbox}}',
+    )
+  })
+
+  it('detaches into the booleans the instance was rendering', () => {
+    let counter = 0
+    const detached = detachInstanceSubtree(
+      page({ playInLightbox: 'true' }),
+      'a',
+      film,
+      () => `n${++counter}`,
+    )
+    const video = (Object.values(detached) as any[]).find(
+      (node) => node?.componentId === 'video',
+    )
+    expect(video.props).toMatchObject({
+      lightbox: true,
+      controls: true,
+      autoPlay: false,
+    })
+  })
+
+  describe('resolveComponentPropTokens', () => {
+    const nodes = {
+      v: {
+        $id: 'v',
+        componentId: 'video',
+        props: {
+          lightbox: '{{prop.playInLightbox}}',
+          title: '{{prop.title}}',
+        },
+      },
+    } as any
+    const declared = [
+      { name: 'playInLightbox', type: 'boolean' },
+      { name: 'title', type: 'text' },
+    ] as any
+
+    it('reads a binding still holding its token as a no, as a page that sets nothing would', () => {
+      // A component editor drawing a property with no default substitutes
+      // nothing, so the token is still there when the type is read.
+      const resolved = resolveComponentPropTokens(nodes, declared, undefined)
+      expect(resolved['v'].props.lightbox).toBe(false)
+      // Text keeps its token, which is how an unfilled slot stays visible.
+      expect(resolved['v'].props.title).toBe('{{prop.title}}')
+    })
+
+    it('returns the substitution untouched when nothing is bound to a Yes / no', () => {
+      const plain = { t: { $id: 't', props: { children: 'Hi' } } } as any
+      expect(resolveComponentPropTokens(plain, declared, {})).toBe(plain)
+    })
+  })
+
+  describe('readYesNoValue', () => {
+    it('shares the spellings the visibility directives accept', () => {
+      expect(readYesNoValue('off')).toBe(false)
+      expect(readYesNoValue('')).toBe(false)
+      expect(readYesNoValue('Yes')).toBe(true)
+      expect(readYesNoValue(0)).toBe(false)
+    })
+
+    it('has no answer for an absent value or an unsubstituted token', () => {
+      expect(readYesNoValue(undefined)).toBeUndefined()
+      expect(readYesNoValue(null)).toBeUndefined()
+      expect(readYesNoValue('{{prop.flag}}')).toBeUndefined()
+    })
   })
 })

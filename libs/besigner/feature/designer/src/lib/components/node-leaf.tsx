@@ -26,7 +26,7 @@ import {
   NODE_ROOT_ID,
   placedFormPlacement,
   resolveBindings,
-  resolveNamedTokens,
+  resolveComponentPropTokens,
   REUSABLE_INSTANCE_COMPONENT_ID,
 } from '@aglyn/aglyn'
 import {
@@ -285,12 +285,12 @@ export const NodeLeaf = observer(
       [componentProps],
     )
     const renderNode = useMemo(() => {
-      const hasDefaults = Object.keys(defaultPropTokens).length > 0
+      const hasDeclaredProps = Boolean(componentProps?.length)
       if (
         !boundProps.length ||
         (!Object.keys(variables ?? {}).length &&
           !Object.keys(functions ?? {}).length &&
-          !hasDefaults)
+          !hasDeclaredProps)
       ) {
         return node
       }
@@ -312,19 +312,32 @@ export const NodeLeaf = observer(
               )
       }
       const next = { ...node, props: resolved }
-      // The raw-token view stays raw: an author who turned resolution OFF
-      // asked to see the tokens, and a default is a resolved value like any
-      // other.
-      if (resolveFlag === false || !hasDefaults) return next
+      if (!hasDeclaredProps) return next
       // Through the same substitution a placed instance uses, keyed by this
       // node alone — one code path deciding what a token becomes, never two
       // that could disagree.
+      //
+      // The raw-token view substitutes no defaults: an author who turned
+      // resolution OFF asked to see the tokens, and a default is a resolved
+      // value like any other. A field bound to a Yes/no property still
+      // receives a yes or a no there, because a switch has no way to show a
+      // token and reads the token's text as a yes.
       return (
-        resolveNamedTokens({ [String(node?.$id)]: next as any }, defaultPropTokens)[
-          String(node?.$id)
-        ] ?? next
+        resolveComponentPropTokens(
+          { [String(node?.$id)]: next as any },
+          componentProps,
+          resolveFlag === false ? undefined : defaultPropTokens,
+        )[String(node?.$id)] ?? next
       )
-    }, [node, boundProps, resolveFlag, variables, functions, defaultPropTokens])
+    }, [
+      node,
+      boundProps,
+      resolveFlag,
+      variables,
+      functions,
+      componentProps,
+      defaultPropTokens,
+    ])
 
     // Classes switched off for comparison (AGL-2486). Composed onto the SAME
     // render copy the binding resolution builds, never onto the canvas node:

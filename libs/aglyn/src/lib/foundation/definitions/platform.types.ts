@@ -1051,9 +1051,13 @@ export interface AglynScreenVersion<N = AglynNodeSchema>
 export type ComponentDefUid = string
 
 /**
- * Value kind of a declared component prop (AGL-1247), which decides only
- * how the Attributes panel edits it — every kind substitutes as text, so
- * the graft stays a string replacement over the definition's props.
+ * Value kind of a declared component prop (AGL-1247), which decides how the
+ * Attributes panel edits it and which fields inside the component can be bound
+ * to it. Every kind substitutes as text, so the graft stays a string
+ * replacement over the definition's props — except that a field bound to
+ * nothing but a `boolean` prop receives a real `true` or `false`
+ * (`resolveComponentPropTokens`), because a switch cannot read `'false'` as a
+ * no.
  */
 export type ReusableComponentPropType =
   | 'text'

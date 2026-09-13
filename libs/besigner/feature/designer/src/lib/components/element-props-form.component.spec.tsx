@@ -19,6 +19,7 @@ import { PLUGIN_SETTINGS_FIELD_COMPONENT } from './plugin-settings-field.compone
 import { MARKDOWN_ATTRIBUTE_FIELD_COMPONENT } from './markdown-attribute-field.component'
 import { TOKEN_TEXT_FIELD_COMPONENT } from './token-text-field.component'
 import { SCREEN_LINK_FIELD_COMPONENT } from './screen-link-field.component'
+import { PROPERTY_BINDING_FIELD_COMPONENT } from './property-binding-field.component'
 import { act, renderHook } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -158,6 +159,7 @@ describe('elementPropsComponentMapper coverage (AGL-584)', () => {
     TOKEN_TEXT_FIELD_COMPONENT,
     PLUGIN_SETTINGS_FIELD_COMPONENT,
     MARKDOWN_ATTRIBUTE_FIELD_COMPONENT,
+    PROPERTY_BINDING_FIELD_COMPONENT,
   ])(
     'registers the internal editor %s that an attribute rewrites to',
     (key) => {
@@ -207,7 +209,57 @@ describe('buildInstancePropFields (AGL-1247)', () => {
     expect(fields[0].component).toBe(TOKEN_TEXT_FIELD_COMPONENT)
     expect(fields[2]).toMatchObject({ multiline: true })
     expect(fields[3]).toMatchObject({ type: 'number' })
-    expect(fields[4].component).toBe(Aglyn.FieldComponentType.CHECKBOX)
+    expect(fields[4].component).toBe(Aglyn.FieldComponentType.SELECT)
+  })
+
+  /**
+   * A Yes / no property has THREE answers on a page — yes, no, or whatever the
+   * component defaults to (AGL-2871). A checkbox can show two, so it showed
+   * unticked on a page rendering a default of yes, and once ticked it could
+   * never hand the choice back to the component.
+   */
+  describe('a Yes / no property', () => {
+    const [yesNo] = buildInstancePropFields([
+      { name: 'playInLightbox', type: 'boolean', defaultValue: 'true' },
+    ]) as Array<Record<string, any>>
+
+    it('offers Yes and No, and names the default it falls back to', () => {
+      expect(yesNo['options']).toEqual([
+        { value: 'true', label: 'Yes' },
+        { value: 'false', label: 'No' },
+      ])
+      expect(yesNo['placeholder']).toBe('Use the component default (Yes)')
+      // The way back to the default: the corner ✕.
+      expect(yesNo['clearable']).toBe(true)
+    })
+
+    it('names No as the default where the component declares none', () => {
+      const [unset] = buildInstancePropFields([
+        { name: 'hideMedia', type: 'boolean' },
+      ]) as Array<Record<string, any>>
+      expect(unset['placeholder']).toBe('Use the component default (No)')
+    })
+
+    it('stores a real boolean, and nothing at all for the default', () => {
+      const { parse, format } = yesNo['FieldProps']
+      expect(parse('true')).toBe(true)
+      expect(parse('false')).toBe(false)
+      expect(parse(null)).toBeUndefined()
+      expect(parse('')).toBeUndefined()
+      expect(format(true)).toBe('true')
+      // A value stored as text still shows as the answer it spells.
+      expect(format('false')).toBe('false')
+      expect(format('off')).toBe('false')
+      expect(format(undefined)).toBeUndefined()
+      expect(format('')).toBeUndefined()
+    })
+
+    it('round-trips: what it stores, it shows again unchanged', () => {
+      const { parse, format } = yesNo['FieldProps']
+      for (const value of [true, false, undefined]) {
+        expect(parse(format(value))).toBe(value)
+      }
+    })
   })
 
   it('shows the definition default as the placeholder, and labels', () => {

@@ -81,6 +81,7 @@ export {
   FIELD_MUTED_CLASS,
   FIELD_MUTED_STYLES,
   FieldMuteButton,
+  type FieldBindAction,
   type FieldMuteAction,
   default as FormFieldGrid,
   type FormFieldGridProps,
