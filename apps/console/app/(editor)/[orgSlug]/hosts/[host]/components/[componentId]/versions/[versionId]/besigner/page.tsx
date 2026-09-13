@@ -46,7 +46,6 @@ import {
 import {
   ICON_VARIANT_MODIFY_ADD,
   ICON_VARIANT_MODIFY_SAVE,
-  ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
@@ -630,6 +629,18 @@ function ComponentBesignerPage(props) {
   }, [saveWorkingDraft, user, enqueueSnackbar])
 
   /**
+   * SAVE DRAFT — one action, wherever it is reached from (AGL-2868).
+   *
+   * The toolbar and File ▸ Save draft both call this. On the version the
+   * sites are serving it writes the shared working draft; on any other
+   * version it writes that version, which is already somewhere to work
+   * without touching the live sites. Two controls under one name must never
+   * write two different documents — whichever one an author checks afterwards
+   * has to be the one the other control wrote.
+   */
+  const saveDraft = editingLiveVersion ? handleSaveDraft : handleSave
+
+  /**
    * Do the live sites already match this version?
    *
    * A component is live only once its tree has been promoted onto the PARENT
@@ -822,14 +833,14 @@ function ComponentBesignerPage(props) {
                         children: 'File',
                         items: [
                           {
+                            // Named for the action, never for the canvas's
+                            // state: an entry reading "Up to Date" is not one
+                            // anybody recognizes as the way to save. A click
+                            // with nothing to store still answers.
                             id: 'center-nav-file-save',
-                            icon: saveAvailable
-                              ? { path: ICON_VARIANT_MODIFY_SAVE.path }
-                              : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
-                            children: saveAvailable
-                              ? 'Save draft'
-                              : 'Up to Date',
-                            onClick: handleSave,
+                            icon: { path: ICON_VARIANT_MODIFY_SAVE.path },
+                            children: 'Save draft',
+                            onClick: saveDraft,
                           },
                           {
                             /*
@@ -962,9 +973,7 @@ function ComponentBesignerPage(props) {
                           onPreview={handlePreview}
                           detailsUrl={listUrl}
                           presence={<PresenceAvatars presence={presence} />}
-                          onSave={
-                            editingLiveVersion ? handleSaveDraft : handleSave
-                          }
+                          onSave={saveDraft}
                           onSaveAndPublish={handleSaveAndPublish}
                           // A component is live only once its tree has been promoted onto
                           // the PARENT document — the pointer alone is not enough, which
