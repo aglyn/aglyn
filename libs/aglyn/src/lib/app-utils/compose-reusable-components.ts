@@ -44,6 +44,18 @@ const isStyleRecord = (value: unknown): value is Record<string, unknown> =>
   Object.keys(value).length > 0
 
 /**
+ * Space-separated class lists joined in order, each name once, or `undefined`
+ * when no list holds a name. A value that is not a string contributes nothing.
+ */
+function joinClassNames(...lists: unknown[]): string | undefined {
+  const names = lists
+    .filter((list): list is string => typeof list === 'string')
+    .flatMap((list) => list.split(/\s+/))
+    .filter(Boolean)
+  return names.length ? [...new Set(names)].join(' ') : undefined
+}
+
+/**
  * Every per-instance style override an instance node carries, keyed the way
  * it is stored (AGL-1332): {@link STYLE_OVERRIDES_ROOT_KEY} for the
  * component root, and a DEFINITION-internal node id for each overridden
@@ -1055,6 +1067,29 @@ export function composeReusableComponentNodes<
           const value = (instanceNode.props as Record<string, unknown>)?.[key]
           if (value !== undefined) carried[key] = value
         }
+        /*
+         * Classes from BOTH nodes, the component root's first.
+         *
+         * A class names the element for the site's stylesheet and for the
+         * runtime: ⋮ ▸ Start hidden writes `aglyn-hidden` into the placement's
+         * `props.className`, and the show/hide steps toggle that class on the
+         * element answering to the placement's id, which after the merge is
+         * this one. Keeping either list alone drops the other author's names,
+         * so the two are joined, each name once, in `props` and on the node.
+         */
+        const propsClassName = joinClassNames(
+          (graftedRoot.props as Record<string, unknown> | undefined)?.[
+            'className'
+          ],
+          (instanceNode.props as Record<string, unknown> | undefined)?.[
+            'className'
+          ],
+        )
+        if (propsClassName) carried['className'] = propsClassName
+        const nodeClassName = joinClassNames(
+          (graftedRoot as { className?: unknown }).className,
+          (instanceNode as { className?: unknown }).className,
+        )
         // The override slices and the reference are DOCUMENT state living on
         // the node beside `sx`, not props — the renderer never spreads them at
         // an element — so they ride along rather than being consumed and
@@ -1080,6 +1115,7 @@ export function composeReusableComponentNodes<
           ...(graftedRoot.props !== undefined || Object.keys(carried).length
             ? { props: { ...(graftedRoot.props as object), ...carried } }
             : {}),
+          ...(nodeClassName ? { className: nodeClassName } : {}),
           // Absent rather than empty, like `props` above: a node the author
           // gave no choreography is one that carries no such key anywhere
           // else in the pipeline.

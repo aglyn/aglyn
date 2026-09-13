@@ -268,6 +268,74 @@ describe('the hierarchy eye across the merge (AGL-2873)', () => {
   })
 })
 
+/**
+ * Classes across the merge (AGL-2875).
+ *
+ * A class names the element for the site's stylesheet and for the runtime,
+ * and ⋮ ▸ Start hidden is one: it writes `aglyn-hidden` into the placement's
+ * `props.className`, which the published page hides from the first paint and
+ * the show/hide steps toggle. Both authors' names have to reach the element
+ * the placement became.
+ */
+describe('classes across the merge (AGL-2875)', () => {
+  const definition = (root: Record<string, unknown> = {}) =>
+    ({
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'section', nodes: [], ...root },
+      },
+    }) as any
+
+  const compose = (
+    placement: Record<string, unknown>,
+    root?: Record<string, unknown>,
+  ) =>
+    composeReusableComponentNodes(
+      {
+        a: {
+          ...instance('a', 'card'),
+          ...placement,
+          props: { refId: 'card', ...(placement['props'] as object) },
+        },
+      } as any,
+      { card: definition(root) },
+    )['a'] as any
+
+  it('carries Start hidden from the placement onto the element it became', () => {
+    expect(compose({ props: { className: 'aglyn-hidden' } }).props.className).toBe(
+      'aglyn-hidden',
+    )
+  })
+
+  it("joins the placement's classes after the component root's, each name once", () => {
+    const merged = compose(
+      { props: { className: 'promo-card  aglyn-hidden' } },
+      { props: { className: 'card promo-card' } },
+    )
+    expect(merged.props.className).toBe('card promo-card aglyn-hidden')
+  })
+
+  it('joins the node-level class list the same way', () => {
+    expect(
+      compose({ className: 'from-page' }, { className: 'from-component' })
+        .className,
+    ).toBe('from-component from-page')
+  })
+
+  it("keeps the component's own classes under a placement that set none", () => {
+    const merged = compose({}, { props: { className: 'card' }, className: 'x' })
+    expect(merged.props.className).toBe('card')
+    expect(merged.className).toBe('x')
+  })
+
+  it('materializes no class list when neither side has one', () => {
+    const merged = compose({})
+    expect('className' in merged).toBe(false)
+    // Nor a `props` bag to hold one: neither node had anything to put there.
+    expect(merged.props).toBeUndefined()
+  })
+})
+
 describe('replaceSubtreeWithInstance', () => {
   /** `App Bar` → brand + a link, sitting in a layout beside a footer. */
   const layout = () =>

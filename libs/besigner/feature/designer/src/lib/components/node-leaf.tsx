@@ -365,6 +365,16 @@ export const NodeLeaf = observer(
       const props = (node?.props ?? {}) as { refId?: string }
       const definition = props.refId ? definitions?.[props.refId] : undefined
       if (!definition?.nodes || !definition?.rootId) return undefined
+      // Plain snapshot: props are MobX observables and the graft reads nested
+      // `propValues` off them. The placement's classes stay out of it, as its
+      // `sx` does: this leaf already renders both on the element around the
+      // preview, and the graft joins a placement's classes onto the root it
+      // becomes. Handed them here, the preview's root would apply every class
+      // a second time, and keep `aglyn-hidden` collapsed inside a placement
+      // the canvas has revealed for designing.
+      const { className: _placementClasses, ...snapshotProps } = JSON.parse(
+        JSON.stringify(node.props ?? {}),
+      ) as Record<string, unknown>
       // Reuse the real graft so the canvas resolves `{{prop.*}}` exactly as
       // the published page will — one substitution path, not a second one
       // that could disagree about which value wins.
@@ -373,9 +383,7 @@ export const NodeLeaf = observer(
           [node.$id]: {
             $id: node.$id,
             componentId: REUSABLE_INSTANCE_COMPONENT_ID,
-            // Plain snapshot: props are MobX observables and the graft
-            // reads nested `propValues` off them.
-            props: JSON.parse(JSON.stringify(node.props ?? {})),
+            props: snapshotProps,
             // Root style overrides (AGL-1306) ride the same snapshot so
             // the canvas renders the SAME merged root sx the published
             // page will — the graft is the one merge point.

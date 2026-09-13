@@ -239,6 +239,7 @@ const SCREEN_NODES = {
       'heroPlacement',
       'shownHeroPlacement',
       'ghostPlacement',
+      'startHiddenPlacement',
     ],
   },
   promo: section('promo', ROOT, { hidden: true }),
@@ -247,6 +248,10 @@ const SCREEN_NODES = {
   heroPlacement: placement('heroPlacement', 'hero', { hidden: true }),
   shownHeroPlacement: placement('shownHeroPlacement', 'hero'),
   ghostPlacement: placement('ghostPlacement', 'ghost'),
+  // ⋮ ▸ Start hidden until an interaction shows it, as the menu stores it.
+  startHiddenPlacement: placement('startHiddenPlacement', 'hero', {
+    props: { refId: 'hero', name: 'hero', className: 'aglyn-hidden' },
+  }),
 }
 
 let shipped: Props['nodes']
@@ -354,5 +359,23 @@ describe('the hierarchy eye on the published page (AGL-2873)', () => {
   it('hides a placed component whose definition hid its own root', () => {
     expect(ownDisplay('ghostPlacement')).toBe('none')
     expect(isOffPage('cmp__ghostPlacement__ghostCopy')).toBe(true)
+  })
+})
+
+/**
+ * ⋮ ▸ Start hidden on a placed component (AGL-2875).
+ *
+ * The other way an author hides an element: `aglyn-hidden` in the node's
+ * classes, which the page's own stylesheet hides from the first paint until an
+ * interaction shows it. On a placement the class has to survive the merge
+ * that puts the component's root in the placement's place.
+ */
+describe('start hidden on the published page (AGL-2875)', () => {
+  it('starts a placed component hidden, on the element the show/hide steps address', () => {
+    const element = leaf('startHiddenPlacement')
+    expect(element.classList.contains('aglyn-hidden')).toBe(true)
+    expect(ownDisplay('startHiddenPlacement')).toBe('none')
+    // The same component placed without the class stays on the page.
+    expect(isOffPage('shownHeroPlacement')).toBe(false)
   })
 })
