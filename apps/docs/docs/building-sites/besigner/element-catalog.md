@@ -207,6 +207,7 @@ The **FAQ** preset drops three complete panels at once.
 | Element | What it's for |
 | --- | --- |
 | **Screen Link** | A link that targets a screen — or a content collection's listing page — by id, so it survives slug renames. Renders as a button or as a text link. See [Linking to a collection listing](#linking-to-a-collection-listing). |
+| **Link Container** | A box that is itself one link, so a whole card is the click target. See [Link Container](#link-container) below. |
 | **App bar** / **Toolbar Content** | The site header frame. The app bar is the band; **Toolbar Content** is the row inside it that holds the brand, the links and the actions, and it may only be dropped into an app bar. |
 | **Nav menu** / **Mega menu** | Dropdown and full-width navigation menus. |
 | **Drawer** / **Menu Button** | A panel that slides in from the **left, right, top or bottom**. Open it with a Menu Button or an interaction. **Width** applies to left/right drawers; top and bottom sheets span the viewport, and the control is hidden for them. The **Mobile Nav** preset wires a hamburger, a drawer and a desktop link row in one insert. |
@@ -258,6 +259,25 @@ count it.
 The same entries appear everywhere the Screen picker does — **Button**, **Image**, **Link
 Container**, **Tabs** links, an **Accordion Summary**'s header link, a form's redirect, and a
 component's **Link** property.
+
+### Link Container {#link-container}
+
+Put an icon, a heading and a description inside a **Link Container** and the whole box goes
+to its **Screen** or **External URL**. Keep other links out of it: a link inside a link is
+invalid, and browsers move the inner one out of the box. Use **Typography** for the title.
+
+A screen reader names a link by reading the text inside it. A box holding only an icon, or an
+image with no alt text, has nothing to read, so it is announced as just "link". Until that is
+fixed, the **Accessible label** field shows a warning. Fix it with one of these:
+
+- **Accessible label** — what a screen reader says for the link, such as *Datasets product
+  page*. Leave it empty when the box has text inside, which already names the link. It takes
+  a [binding](../bindings/overview.md) like any text field.
+- **Duplicate of another link** — for a box that repeats a link right beside it, like the
+  arrow on a card whose title already links to the same page. Screen readers and the Tab key
+  skip the box, so those visitors reach the page once, from the title. A click or tap on the
+  arrow still works. Leave it off when the box is the only link to its destination, or
+  keyboard users can't get there.
 
 ### Tabs
 

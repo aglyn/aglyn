@@ -369,6 +369,41 @@ export function withNumericValueParse<T extends Record<string, unknown>>(
 }
 
 /**
+ * The field, with its `resolveProps` handed the element it edits as a fourth
+ * argument (see {@link Aglyn.AttributeFieldContext}).
+ *
+ * data-driven-forms calls `resolveProps` with the field's value and the form's
+ * values, which are the element's own props. A warning about the element as a
+ * whole also needs what is inside it — a Link Container holding only an icon
+ * renders an unnamed link (AGL-2886) — and nothing else tells a field which
+ * element on the canvas it belongs to.
+ *
+ * The context is read when the field renders, not when this runs, so the
+ * lookup answers from the live canvas rather than from a copy taken when the
+ * element was selected. A field that declares no `resolveProps` is returned
+ * untouched.
+ */
+export function withAttributeFieldContext<T extends Record<string, unknown>>(
+  field: T,
+  context: Aglyn.AttributeFieldContext | undefined,
+): T {
+  const resolveProps = field['resolveProps']
+  if (!context || typeof resolveProps !== 'function') return field
+  return {
+    ...field,
+    resolveProps: (
+      ...args: Parameters<Aglyn.AttributeResolveProps>
+    ): ReturnType<Aglyn.AttributeResolveProps> =>
+      (resolveProps as Aglyn.AttributeResolveProps)(
+        args[0],
+        args[1],
+        args[2],
+        context,
+      ),
+  }
+}
+
+/**
  * A Yes / no property's stored value as its dropdown shows it: `'true'`,
  * `'false'`, or nothing chosen.
  *
@@ -1349,6 +1384,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const { componentProps: editedComponentProps } =
       useContext(BindingPickerContext)
 
+    // What an attribute's `resolveProps` may read beyond the element's props:
+    // the element itself and the canvas lookup for what is inside it.
+    const fieldContext = useMemo<Aglyn.AttributeFieldContext | undefined>(
+      () =>
+        node ? { node, getNode: (id: string) => canvas.getNode(id) } : undefined,
+      [node],
+    )
+
     const attributes = useMemo(() => {
       // Every described attribute gets a help tooltip beside the field
       // (AGL-600) — the definition's own description, no docs link since
@@ -1534,6 +1577,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             tokenLabelContext,
           }),
         )
+        // Every rewrite above spreads the field, so a declared `resolveProps`
+        // is still on it here to be handed the element.
+        .map((field) => withAttributeFieldContext(field, fieldContext))
         .filter((field) => {
           // Unknown editor types must degrade to a skipped attribute, never
           // kill the whole form: the renderer throws on unregistered
@@ -1570,6 +1616,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       insertOptions,
       tokenLabelContext,
       editedComponentProps,
+      fieldContext,
     ])
 
     // Reusable-component flows (AGL-35): actions appear only when the host

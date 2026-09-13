@@ -30,10 +30,10 @@ export interface BindingPreviewControlsProps
   extends Partial<MuiIconButtonProps> {}
 
 /**
- * WYSIWYG bindings toggle (AGL-97): the canvas resolves variable and
- * function binding tokens live by default; this switches to raw tokens
- * for editing clarity. Hidden when the host app provides no
- * variables/functions to resolve with.
+ * WYSIWYG bindings toggle (AGL-97): the canvas resolves variable, function
+ * and host variable tokens live by default; this switches to raw tokens for
+ * editing clarity. Hidden when the host app provides nothing to resolve
+ * with — no variables, no functions, and no site for `{{host.*}}` (AGL-2881).
  */
 const BindingPreviewControlsComponent = forwardRef<
   any,
@@ -42,7 +42,7 @@ const BindingPreviewControlsComponent = forwardRef<
   const { ...rest } = props
   const [resolveFlag, setResolveFlag] =
     useAglynBesignerFlag('resolveBindings')
-  const { variables, functions } = useContext(BindingPickerContext)
+  const { variables, functions, host } = useContext(BindingPickerContext)
   const showingRaw = resolveFlag === false
 
   const handleToggle = useCallback(() => {
@@ -51,7 +51,8 @@ const BindingPreviewControlsComponent = forwardRef<
 
   if (
     !Object.keys(variables ?? {}).length &&
-    !Object.keys(functions ?? {}).length
+    !Object.keys(functions ?? {}).length &&
+    !host
   ) {
     return null
   }

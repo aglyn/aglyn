@@ -19,6 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import { enrichGatedScreenPage } from '@aglyn/tenant-runtime/enrich-gated-page'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
+import { getHostDocAdmin } from '@aglyn/tenant-data-admin'
 import { hostHasContentGating } from './gate'
 import { requireActiveMember } from './membership'
 
@@ -52,10 +53,19 @@ export const membershipContentHandler: PluginApiHandler = async (req, res) => {
     if (!screenRes.screen) {
       return res.status(404).json({ error: 'Unknown screen' })
     }
+    // The site document (AGL-2883): the tree's host variables fill in from
+    // it, and the enricher slice below reads the same copy. A failed read
+    // composes with no site, which renders those variables as nothing — the
+    // member's content without its business name still beats no content.
+    const host = await getHostDocAdmin(hostId).catch((error) => {
+      console.error(error)
+      return null
+    })
     const nodes = await composeScreenNodes({
       hostId,
       screenId,
       screen: screenRes.screen,
+      host,
     })
     if (!nodes) return res.status(404).json({ error: 'No published version' })
     // The page's behavior travels with its nodes (AGL-2510). The loader ships
@@ -67,6 +77,7 @@ export const membershipContentHandler: PluginApiHandler = async (req, res) => {
       screenId,
       screen: screenRes.screen,
       nodes,
+      ...(host ? { host } : {}),
     })
     return res.status(200).json({ nodes, ...enriched })
   } catch (error) {

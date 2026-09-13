@@ -18,6 +18,7 @@
 import {
   COLLECTION_TOKEN_CATALOG,
   ENTRY_TOKEN_CATALOG,
+  hostTokenDefinition,
   humanizeDatasetFieldId,
 } from '@aglyn/aglyn'
 
@@ -181,6 +182,7 @@ export type TokenGroup =
   | 'collection'
   | 'dataset'
   | 'property'
+  | 'host'
   | 'unknown'
 
 /**
@@ -284,6 +286,22 @@ export function resolveTokenLabel(
       label: option?.label ?? (propertyMatch[1] as string),
       group: 'property',
       known: Boolean(option),
+    }
+  }
+
+  /*
+   * A host variable (AGL-1022), named from the registry that resolves it
+   * (AGL-2881), so the pill reads "Business name" wherever the token sits and
+   * every surface agrees on what exists. A name the registry does not declare
+   * renders nothing on the page, and says so in warning colors.
+   */
+  const hostMatch = /^host\.([a-zA-Z][a-zA-Z0-9_]*)$/.exec(inner)
+  if (hostMatch) {
+    const definition = hostTokenDefinition(hostMatch[1] as string)
+    return {
+      label: definition?.label ?? inner,
+      group: 'host',
+      known: Boolean(definition),
     }
   }
 

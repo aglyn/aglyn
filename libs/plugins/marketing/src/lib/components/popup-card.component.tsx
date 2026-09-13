@@ -45,6 +45,11 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import OverlayStatsRow from './overlay-stats-row.component'
+import {
+  OVERLAY_COPY_HELPER_TEXT,
+  shownAsTypedHelperText,
+  useOverlayCopyEditor,
+} from './use-overlay-copy-editor'
 
 export interface PopupCardProps {
   hostId: string
@@ -69,7 +74,9 @@ const fromLocalInput = (value: string) =>
 /**
  * Promotional popup editor (AGL-196): one popup per host, persisted on the
  * host doc; the tenant render handles triggers, scheduling, and
- * frequency capping. marketingOverlays-gated (Starter+).
+ * frequency capping. marketingOverlays-gated (Starter+). The headline and
+ * body are edited through `useOverlayCopyEditor`, like the bar's text
+ * (AGL-2885).
  */
 export function PopupCard(props: PopupCardProps) {
   const { hostId } = props
@@ -107,9 +114,29 @@ export function PopupCard(props: PopupCardProps) {
 
   // The console media browser is provided by the shell (AGL-395).
   const { pickMedia } = useMediaPicker()
-  const dirty = JSON.stringify(draft) !== savedKey
+  // The headline and body are held in their stored form; the fields show them
+  // as typed.
+  const copy = useOverlayCopyEditor({
+    hostId,
+    host,
+    usesTokens:
+      entitled &&
+      [saved.headline, saved.body, draft.headline, draft.body].some((text) =>
+        text?.includes('{{'),
+      ),
+  })
+  // Compared as it would be stored, so a name typed before the variables
+  // arrived still counts as the change it becomes on save.
+  const dirty =
+    JSON.stringify({
+      ...draft,
+      headline: copy.stored(draft.headline),
+      body: copy.stored(draft.body),
+    }) !== savedKey
   const patch = (partial: Partial<HostPopup>) =>
     setDraft((previous) => ({ ...previous, ...partial }))
+  const headlineShownAsTyped = copy.shownAsTyped(draft.headline)
+  const bodyShownAsTyped = copy.shownAsTyped(draft.body)
 
   const handleSave = async () => {
     const dequeue = queueLoading()
@@ -141,8 +168,8 @@ export function PopupCard(props: PopupCardProps) {
           await updateDoc(doc(firestore, 'hosts', hostId), {
             popup: {
               enabled: Boolean(draft.enabled),
-              headline: (draft.headline ?? '').slice(0, 120),
-              body: (draft.body ?? '').slice(0, 1000),
+              headline: copy.storedWithin(draft.headline, 120),
+              body: copy.storedWithin(draft.body, 1000),
               imageUrl: (draft.imageUrl ?? '').trim(),
               // AGL-1896. Capped at the same length the media library saves
               // alt through, so a value defaulted from an asset and a value
@@ -215,16 +242,25 @@ export function PopupCard(props: PopupCardProps) {
           <TextField
             label="Headline"
             size="small"
-            value={draft.headline ?? ''}
-            onChange={(event) => patch({ headline: event.target.value })}
+            value={copy.editable(draft.headline)}
+            onChange={(event) =>
+              patch({ headline: copy.stored(event.target.value) })
+            }
+            error={headlineShownAsTyped.length > 0}
+            helperText={shownAsTypedHelperText(headlineShownAsTyped)}
             fullWidth
           />
           <TextField
             label="Body"
             size="small"
-            value={draft.body ?? ''}
-            onChange={(event) => patch({ body: event.target.value })}
-            helperText="Supports variable bindings"
+            value={copy.editable(draft.body)}
+            onChange={(event) =>
+              patch({ body: copy.stored(event.target.value) })
+            }
+            error={bodyShownAsTyped.length > 0}
+            helperText={
+              shownAsTypedHelperText(bodyShownAsTyped) ?? OVERLAY_COPY_HELPER_TEXT
+            }
             multiline
             minRows={2}
             fullWidth
@@ -372,7 +408,11 @@ export function PopupCard(props: PopupCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={!dirty || (Boolean(draft.enabled) && !draft.body?.trim())}
+            disabled={
+              !dirty ||
+              (Boolean(draft.enabled) && !draft.body?.trim()) ||
+              copy.pending(draft.headline, draft.body)
+            }
             onClick={handleSave}
             sx={{ alignSelf: 'flex-start' }}
           >

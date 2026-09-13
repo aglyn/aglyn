@@ -45,6 +45,7 @@ import {
   useCallback,
   useMemo,
 } from 'react'
+import { CanvasHostTokensProvider } from '../contexts/canvas-host-tokens-context'
 import CanvasRevealContext, {
   CanvasMutedClassesContext,
 } from '../contexts/canvas-reveal-context'
@@ -216,7 +217,9 @@ const ThemedElementContainer = ({ children }) => {
       <CanvasRevealContext.Provider value={revealedNodeIds}>
         <CanvasMutedClassesContext.Provider value={mutedClasses}>
           <LeafSxTransformContext.Provider value={sxTransform}>
-            {children}
+            {/* The site whose host variables every leaf fills in (AGL-2881),
+                decided once for the editable document and its chrome alike. */}
+            <CanvasHostTokensProvider>{children}</CanvasHostTokensProvider>
           </LeafSxTransformContext.Provider>
         </CanvasMutedClassesContext.Provider>
       </CanvasRevealContext.Provider>

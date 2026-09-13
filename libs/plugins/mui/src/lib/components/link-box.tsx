@@ -23,6 +23,11 @@ import type { SxProps } from '@mui/material/styles'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import {
+  linkContainerA11yProps,
+  linkContainerLabelFieldProps,
+  REDUNDANT_ATTRIBUTE,
+} from './link-box-accessible-name'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'muiLinkBox'
@@ -34,6 +39,13 @@ export interface LinkBoxProps {
   href?: string
   /** Opens in a new tab. External destinations only. */
   newTab?: boolean
+  /** The link's name for assistive tech, when its content supplies none. */
+  ariaLabel?: string
+  /**
+   * The box repeats a link beside it to the same destination, so it is
+   * hidden from assistive tech and left out of the tab order.
+   */
+  redundant?: boolean
   /**
    * Authored node styles, handed over by the renderer rather than typed into
    * an attribute. Declared because the merge below reads it: undeclared, no
@@ -57,9 +69,24 @@ export interface LinkBoxProps {
  * invalid HTML and browsers unnest it, which silently moves half the tile
  * back out of the link. Convert an inner Screen Link to plain Text when you
  * wrap it in one of these.
+ *
+ * The link is named by the text inside it, so a box holding only an icon
+ * needs `ariaLabel` — or `redundant`, when a link beside it already goes to
+ * the same place (AGL-2886). Both land on the anchor in every branch below,
+ * so the canvas carries the same attributes the published page does.
  */
 const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
-  const { screenId, href: externalHref, newTab, children, sx, ...rest } = props
+  const {
+    screenId,
+    href: externalHref,
+    newTab,
+    ariaLabel,
+    redundant,
+    children,
+    sx,
+    ...rest
+  } = props
+  const a11y = linkContainerA11yProps(ariaLabel, redundant)
   // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
   // Spreading `rest` with `sx` still inside it would REPLACE the baseline
   // below rather than merge with it, so every styled tile would quietly lose
@@ -89,6 +116,7 @@ const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
         ref={ref}
         component="a"
         {...rest}
+        {...a11y}
         sx={[
           { display: 'block', color: 'inherit', textDecoration: 'none' },
           ...nodeSx,
@@ -111,6 +139,7 @@ const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
         ? { target: '_blank', rel: 'noopener noreferrer' }
         : {})}
       {...rest}
+      {...a11y}
       // `display: block` so the anchor takes the tile's box, and no anchor
       // chrome — authors then style it exactly as they would a Box. This is
       // only the floor: node styles come after it and win.
@@ -124,6 +153,9 @@ const LinkBox = forwardRef<HTMLElement, LinkBoxProps>((props, ref) => {
   )
 })
 LinkBox.displayName = 'AglynLinkBox'
+
+/** A label is announced by nothing once the link is hidden as a duplicate. */
+const NOT_REDUNDANT = { when: REDUNDANT_ATTRIBUTE, is: true, notMatch: true }
 
 export const schema: Aglyn.ComponentSchema<LinkBoxProps> = {
   $id: ID,
@@ -163,6 +195,32 @@ export const schema: Aglyn.ComponentSchema<LinkBoxProps> = {
         'history.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Open in a new tab',
+    },
+    {
+      name: 'ariaLabel',
+      label: 'Accessible label',
+      description:
+        'Names this link for screen readers. Needed when the box holds only ' +
+        'an icon, or an image with no alt text, which is otherwise announced ' +
+        'as just "link". Leave it empty when there is text inside: that text ' +
+        'already names the link.',
+      // A text field, so the Attributes panel takes a binding here as it
+      // does in every other text attribute.
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      condition: NOT_REDUNDANT,
+      // Warns while nothing names the link (AGL-2886).
+      resolveProps: linkContainerLabelFieldProps,
+    },
+    {
+      name: REDUNDANT_ATTRIBUTE,
+      label: 'Duplicate of another link',
+      description:
+        'Turn on when another link beside this box goes to the same place, ' +
+        'such as the arrow on a card whose title is already a link. Screen ' +
+        'readers and the Tab key then skip this box, so those visitors meet ' +
+        'the destination once, and a click or tap still follows it. Leave it ' +
+        'off when this is the only link to where it goes.',
+      component: Aglyn.FieldComponentType.SWITCH,
     },
   ],
 }

@@ -95,6 +95,9 @@ export const commerceSitePageResolver: SitePageResolver = async ({
           screenId: pdpScreenId,
           screen: templateRes.screen,
           socialImages: card.socialImages,
+          // The template's host variables, and its layout's, fill in from
+          // this site as they do on every other page (AGL-2883).
+          host: hostRes.host,
           tokens: {
             'product.name': product.name,
             'product.description': product.description ?? '',
@@ -207,6 +210,8 @@ export const commerceSitePageResolver: SitePageResolver = async ({
           screenId: collectionScreenId,
           screen: templateRes.screen,
           socialImages: card.socialImages,
+          // As on the PDP above (AGL-2883).
+          host: hostRes.host,
           tokens: {
             'collection.name': shopCollection.name,
             'collection.description': shopCollection.description ?? '',

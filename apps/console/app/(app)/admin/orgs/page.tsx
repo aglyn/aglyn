@@ -524,6 +524,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                    * against whatever a column happens to render.
                    */
                   filterMode="server"
+                  // The route answers the search box as well as the column
+                  // filter, so the box stays.
+                  quickFilter
                   onFilterModelChange={(model) => {
                     onQuickFilter((model.quickFilterValues ?? []).join(' '))
                     setFilter(gridFilterRequest(model))

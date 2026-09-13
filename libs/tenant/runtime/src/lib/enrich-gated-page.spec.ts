@@ -121,4 +121,25 @@ describe('enrichGatedScreenPage (AGL-2510)', () => {
     expect(props).toEqual({})
     spy.mockRestore()
   })
+
+  /**
+   * Both gated routes read the site document to compose the tree, so its host
+   * variables fill in (AGL-2883), and hand that copy on rather than paying for
+   * the same document twice.
+   */
+  it('works from the site document its caller already read', async () => {
+    const host = { $id: 'host-1', screens: { 'members-only': 'club/lounge' } }
+
+    await enrichGatedScreenPage({
+      hostId: 'host-1',
+      screenId: 'members-only',
+      screen: {},
+      nodes: NODES,
+      host,
+    })
+
+    expect(mockHostDoc).not.toHaveBeenCalled()
+    expect(seen[0].host).toBe(host)
+    expect(seen[0].path).toBe('club/lounge')
+  })
 })

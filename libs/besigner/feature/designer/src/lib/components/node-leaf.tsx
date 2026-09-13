@@ -50,6 +50,7 @@ import ComponentPromotionContext from '../contexts/component-promotion-context'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import { useNodeWithMediaAssetFacts } from '../hooks/use-media-asset-facts-overlay'
+import useNodeWithHostTokens from '../hooks/use-node-with-host-tokens'
 import {
   isNodeHiddenOnSite,
   isNodeRevealedOnCanvas,
@@ -59,17 +60,20 @@ import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
 
 /**
- * The plain `Leaf`, drawing a placed image or film with its DAM asset's
- * current facts (AGL-2838, AGL-2856).
+ * The plain `Leaf`, drawing a node the way the published page composes it: its
+ * host variables filled in from the site being edited (AGL-2881), and a placed
+ * image or film with its DAM asset's current facts (AGL-2838, AGL-2856).
  *
  * For the nodes the canvas renders that are not canvas nodes — a component
  * instance's definition, a placed form's design, the layout chrome — and so
- * never reach `NodeLeaf`. An asset inside one of them still has to show the
- * shape the published page gives it, and a film its poster.
+ * never reach `NodeLeaf`. A footer's `{{host.businessName}}` still has to read
+ * as the site's name, an asset inside one of them still has to show the shape
+ * the published page gives it, and a film its poster.
  */
 export const MediaFactsLeaf = forwardRef<any, LeafProps>((props, ref) => {
   const { node, ...rest } = props
-  const shown = useNodeWithMediaAssetFacts(node)
+  const withHostTokens = useNodeWithHostTokens(node)
+  const shown = useNodeWithMediaAssetFacts(withHostTokens)
   return <Leaf ref={ref} node={shown} {...rest} />
 })
 MediaFactsLeaf.displayName = 'MediaFactsLeaf'
@@ -348,13 +352,22 @@ export const NodeLeaf = observer(
       defaultIconPaths,
     ])
 
+    // Host variables (AGL-2881), filled in on the same render copy and after
+    // the bindings and the component's own defaults, which is the order the
+    // published page composes in: a default that names the host resolves
+    // too. The raw-token view reaches this leaf as no site at all
+    // (`CanvasHostTokensProvider`), so its tokens stay as written. Keyed by
+    // `boundProps`, which follows the observable props this copy reads.
+    const hostResolvedNode = useNodeWithHostTokens(renderNode, boundProps)
+
     // Classes switched off for comparison (AGL-2486). Composed onto the SAME
     // render copy the binding resolution builds, never onto the canvas node:
     // selection, the hierarchy and every save keep reading the element's real
     // class list, and the canvas paints without the switched-off names.
     const renderNodeUnclassed = useMemo(
-      () => stripMutedClasses(renderNode as never, node?.$id, mutedClasses),
-      [renderNode, node, mutedClasses],
+      () =>
+        stripMutedClasses(hostResolvedNode as never, node?.$id, mutedClasses),
+      [hostResolvedNode, node, mutedClasses],
     )
 
     // A placed asset's shape, and a film's length and poster, as its DAM

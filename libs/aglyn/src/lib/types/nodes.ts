@@ -522,6 +522,38 @@ export type ComponentFactory<
 
 export type { ComponentsLinealOrder }
 
+/**
+ * What the Attributes panel knows about the element a field edits, handed to
+ * an attribute's `resolveProps` as its fourth argument.
+ *
+ * data-driven-forms gives a field its own value and the form's values, which
+ * are the element's props and nothing else. A rule about the element as a
+ * whole needs more than that: whether a Link Container holds anything that
+ * names its link depends on the elements inside it. So the panel adds the
+ * node, and a lookup for the ids listed in its `nodes`.
+ *
+ * Absent wherever a field is drawn outside that panel, including a unit test
+ * calling the function directly, so a `resolveProps` that reads it has to
+ * treat a missing context as having nothing to say.
+ */
+export interface AttributeFieldContext {
+  /** The element the Attributes panel is editing. */
+  node: NodeSchema<any>
+  /** An element of the same document by id, such as a child in `nodes`. */
+  getNode: (id: NodeId) => NodeSchema<any> | undefined
+}
+
+/**
+ * An attribute's `resolveProps`: the three arguments data-driven-forms
+ * passes, then the {@link AttributeFieldContext} the Attributes panel adds.
+ */
+export type AttributeResolveProps = (
+  ...args: [
+    ...Parameters<ResolvePropsFunction>,
+    context?: AttributeFieldContext,
+  ]
+) => ReturnType<ResolvePropsFunction>
+
 // @TODO ⚠️ Refactor for better adoption of hast
 export interface AttributeSchema extends Dictionary<any> {
   name: string
@@ -534,7 +566,7 @@ export interface AttributeSchema extends Dictionary<any> {
   clearedValue?: any
   clearOnUnmount?: boolean
   actions?: FieldActions
-  resolveProps?: ResolvePropsFunction
+  resolveProps?: AttributeResolveProps
   description?: string
 }
 

@@ -713,6 +713,9 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                  * and the grid compares whatever a column happens to draw.
                  */
                 filterMode="server"
+                // The route answers the search box as well as the column
+                // filter, so the box stays.
+                quickFilter
                 onFilterModelChange={(model) => {
                   applyQuery(
                     (model.quickFilterValues ?? []).join(' ').trim(),

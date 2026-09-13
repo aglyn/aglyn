@@ -163,6 +163,9 @@ export async function composeCollectionTemplatePage(options: {
     screenId,
     screen: templateRes.screen,
     socialImages: card.socialImages,
+    // The site the template renders for, so its host variables — and its
+    // layout's — fill in as they do on every other page (AGL-2883).
+    host: options.host,
     tokens,
     // List pages hand their already-fetched entries to the Collection
     // entries block; entry pages carry the routed entry (AGL-582, Related
@@ -282,6 +285,8 @@ export async function composeCollectionFallbackPage(options: {
       layoutId,
       screenNodes,
       socialImages: card.socialImages,
+      // The layout's host variables fill in from this site (AGL-2883).
+      host,
       // Entry routes resolve with an EMPTY entries list (the loader only
       // fetched the one entry), so hand the routed entry over and let the
       // Related posts block fetch the list on demand (AGL-582); list

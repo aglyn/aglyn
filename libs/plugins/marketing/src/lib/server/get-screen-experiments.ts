@@ -37,6 +37,13 @@ export async function getScreenExperiments(options: {
   hostId: string
   screenId: string
   screen: Aglyn.AglynScreen
+  /**
+   * The site the page renders for (AGL-2883). A variant tree is swapped in
+   * for the published one on the client, so its host variables fill in from
+   * the same site document, or a visitor bucketed into a variant would read
+   * nothing where everyone else reads the business name.
+   */
+  host?: Aglyn.HostTokenSource | null
 }): Promise<ScreenExperiment[]> {
   const experiments: ScreenExperiment[] = []
   try {
@@ -77,6 +84,7 @@ export async function getScreenExperiments(options: {
           screenId: options.screenId,
           screen: options.screen,
           versionId,
+          host: options.host,
         })
       }
       experiments.push({

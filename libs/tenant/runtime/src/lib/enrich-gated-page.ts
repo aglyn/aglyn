@@ -56,11 +56,16 @@ export async function enrichGatedScreenPage(options: {
   screenId: string
   screen: any
   nodes: any
+  /**
+   * The site document, when the caller already read it to compose `nodes`
+   * (AGL-2883). Read here when absent.
+   */
+  host?: Record<string, unknown> | null
 }): Promise<Record<string, unknown>> {
   const { hostId, screenId, screen, nodes } = options
   try {
     const [host, orgRes] = await Promise.all([
-      getHostDocAdmin(hostId),
+      options.host !== undefined ? options.host : getHostDocAdmin(hostId),
       getOrgForHost(hostId),
     ])
     const routing = ((host as { screens?: Record<string, string> })?.screens ??

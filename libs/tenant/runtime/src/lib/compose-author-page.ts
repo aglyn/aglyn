@@ -171,6 +171,9 @@ export async function composeAuthorTemplatePage(options: {
       tokens,
       collection,
       socialImages: card.socialImages,
+      // The designated screen's host variables, and its layout's, fill in
+      // from this site, as the built-in author page's already do (AGL-2883).
+      host: host as Aglyn.HostTokenSource,
     })
     if (!nodes) return null
     /*

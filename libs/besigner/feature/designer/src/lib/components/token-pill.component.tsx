@@ -49,6 +49,8 @@ const PILL_GROUP_STYLES: Record<string, { bgcolor: string; color: string }> = {
   dataset: { bgcolor: 'grey.700', color: 'common.white' },
   // A value each page supplies, like a variable is one the site supplies.
   property: { bgcolor: 'tertiary.main', color: 'tertiary.contrastText' },
+  // A value the site supplies from its own settings (AGL-2881).
+  host: { bgcolor: 'tertiary.main', color: 'tertiary.contrastText' },
   // Unresolvable referent (deleted variable, unknown grammar): warning.
   unknown: { bgcolor: 'warning.main', color: 'warning.contrastText' },
 }

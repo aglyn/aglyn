@@ -9,6 +9,37 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.120 — 2026-09-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.119...v1.0.0-beta.120)
+
+### Added
+
+- **mui:** a Link Container takes an accessible label, or is marked a duplicate link ([AGL-2886](https://linear.app/aglyn/issue/AGL-2886))
+- **besigner:** an attribute's resolveProps is handed the element it edits ([AGL-2886](https://linear.app/aglyn/issue/AGL-2886))
+- **console:** the entries table sorts, filters and opens newest published first ([AGL-2853](https://linear.app/aglyn/issue/AGL-2853))
+- **instance:** a paged window sorted by a field that drops no document lacking it ([AGL-2853](https://linear.app/aglyn/issue/AGL-2853))
+
+### Fixed
+
+- **instance:** the sorted-window example queries entries under their collection ([AGL-2853](https://linear.app/aglyn/issue/AGL-2853))
+- **marketing:** overlay editors store a typed variable name in the form a page fills in ([AGL-2885](https://linear.app/aglyn/issue/AGL-2885), [AGL-194](https://linear.app/aglyn/issue/AGL-194))
+- **marketing:** overlay copy fills the site's details in, on every path that shows it ([AGL-2887](https://linear.app/aglyn/issue/AGL-2887))
+- **console:** the empty entries grid names a filter only when one is set ([AGL-2853](https://linear.app/aglyn/issue/AGL-2853))
+- **ui:** a server-filtered table shows no search box its handler never reads ([AGL-2884](https://linear.app/aglyn/issue/AGL-2884))
+- **tenant:** every published page fills its host variables in from its site ([AGL-2883](https://linear.app/aglyn/issue/AGL-2883))
+- **console:** the preview fills host variables in from the site it previews ([AGL-2881](https://linear.app/aglyn/issue/AGL-2881))
+- **besigner:** a host variable's pill names it instead of warning it is broken ([AGL-2881](https://linear.app/aglyn/issue/AGL-2881))
+- **besigner:** the canvas draws host variables as the published page resolves them ([AGL-2881](https://linear.app/aglyn/issue/AGL-2881))
+- **host:** a host token named after an Object builtin resolves to nothing ([AGL-2882](https://linear.app/aglyn/issue/AGL-2882))
+
+### Documentation
+
+- **besigner:** the Link Container, and naming a link that holds only an icon ([AGL-2886](https://linear.app/aglyn/issue/AGL-2886))
+- **marketing:** what overlay copy fills in, and why a bare name token shows as typed ([AGL-2885](https://linear.app/aglyn/issue/AGL-2885), [AGL-194](https://linear.app/aglyn/issue/AGL-194))
+- **content:** sorting and filtering the entries table ([AGL-2853](https://linear.app/aglyn/issue/AGL-2853))
+- **bindings:** the site's own details, and what the canvas and Preview show for them ([AGL-2881](https://linear.app/aglyn/issue/AGL-2881))
+
 ## v1.0.0-beta.119 — 2026-09-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.118...v1.0.0-beta.119)

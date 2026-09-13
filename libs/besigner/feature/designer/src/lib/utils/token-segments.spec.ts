@@ -334,4 +334,32 @@ describe('resolveTokenLabel (AGL-586)', () => {
       known: false,
     })
   })
+
+  /**
+   * A host variable, named from the registry that resolves it (AGL-2881). The
+   * site fills it in on every page, so it is known wherever it sits and needs
+   * no picker option to prove it; only a name the registry does not declare is
+   * a binding that renders nothing.
+   */
+  it('names a host variable from the registry, and flags a name it does not declare', () => {
+    expect(resolveTokenLabel('{{host.businessName}}', {})).toEqual({
+      label: 'Business name',
+      group: 'host',
+      known: true,
+    })
+    expect(resolveTokenLabel('{{ host.supportEmail }}', {}).label).toBe(
+      'Support email',
+    )
+    expect(resolveTokenLabel('{{host.nonsense}}', {})).toEqual({
+      label: 'host.nonsense',
+      group: 'host',
+      known: false,
+    })
+    // Inherited by the registry's object, declared by nobody.
+    expect(resolveTokenLabel('{{host.constructor}}', {})).toEqual({
+      label: 'host.constructor',
+      group: 'host',
+      known: false,
+    })
+  })
 })

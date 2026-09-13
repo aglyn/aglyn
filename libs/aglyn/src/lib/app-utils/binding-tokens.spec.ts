@@ -17,6 +17,7 @@
 
 import {
   displayBindingTokens,
+  editableBindingTokens,
   formatFunctionIdToken,
   formatVariableIdToken,
   keyById,
@@ -171,6 +172,62 @@ describe('displayBindingTokens (AGL-186)', () => {
     expect(
       displayBindingTokens('{{fn:Sum(3)}}', {}, editorFunctions),
     ).toBe('{{fn:Sum(3)}}')
+  })
+})
+
+describe('editableBindingTokens (AGL-2885)', () => {
+  /** Keyed by name, as `normalizeBindingTokens` reads it. */
+  const editorVariables = {
+    saleEndsAt: { name: 'saleEndsAt', $id: 'aB3xK9m2Qw' },
+  }
+
+  it('shows a variable token as the name an author types', () => {
+    expect(
+      editableBindingTokens('Sale ends {{var:aB3xK9m2Qw}}', editorVariables),
+    ).toBe('Sale ends {{saleEndsAt}}')
+  })
+
+  it('round-trips: normalizing the editable form restores the stored one', () => {
+    const stored = 'Ends {{var:aB3xK9m2Qw}}, then {{var:gone123456}}'
+    expect(
+      normalizeBindingTokens(
+        editableBindingTokens(stored, editorVariables),
+        editorVariables,
+      ),
+    ).toBe(stored)
+  })
+
+  it("keeps a deleted variable's token in id form, never a label", () => {
+    // On a published page `{{var:gone}}` renders as nothing; a
+    // `{{missing binding}}` saved in its place would render as typed.
+    expect(editableBindingTokens('{{var:gone123456}}', editorVariables)).toBe(
+      '{{var:gone123456}}',
+    )
+  })
+
+  it('keeps the id form when the name leads to a different variable', () => {
+    // Two variables once shared a name, and the lookup kept the other one:
+    // rewriting this token to that name would re-point it on save.
+    const shadowed = {
+      saleEndsAt: { name: 'saleEndsAt', $id: 'newer00001' },
+      older00001: { name: 'saleEndsAt', $id: 'older00001' },
+    }
+    expect(editableBindingTokens('{{var:older00001}}', shadowed)).toBe(
+      '{{var:older00001}}',
+    )
+  })
+
+  it('keeps the id form for a name a typed token cannot carry', () => {
+    const variables = { 'sale ends': { name: 'sale ends', $id: 'spaced0001' } }
+    expect(editableBindingTokens('{{var:spaced0001}}', variables)).toBe(
+      '{{var:spaced0001}}',
+    )
+  })
+
+  it('leaves function tokens and typed names alone', () => {
+    expect(
+      editableBindingTokens('{{fn:9fnAbC12Xy(1)}} {{typedName}}', editorVariables),
+    ).toBe('{{fn:9fnAbC12Xy(1)}} {{typedName}}')
   })
 })
 
