@@ -153,18 +153,26 @@ jest.mock('firebase/firestore', () => {
       __doc: true,
       parent: { path: segments.slice(0, -1).join('/') },
     }),
-    query: (base: { __path?: string }, ...constraints: any[]) => ({
-      __path: base?.__path ?? '(unknown)',
-      __constraints: constraints,
-      __limit: Math.max(
-        0,
-        ...constraints
-          .filter((item) => item?.__constraint === 'limit')
-          .map((item) => Number(item.args[0])),
-      ),
-      type: 'query',
-      path: base?.__path,
-    }),
+    // Composes like the real one: a query built on a query keeps its base's
+    // constraints, which is how a filter reaches the ordered walk.
+    query: (
+      base: { __path?: string; __constraints?: any[] },
+      ...constraints: any[]
+    ) => {
+      const all = [...(base?.__constraints ?? []), ...constraints]
+      return {
+        __path: base?.__path ?? '(unknown)',
+        __constraints: all,
+        __limit: Math.max(
+          0,
+          ...all
+            .filter((item) => item?.__constraint === 'limit')
+            .map((item) => Number(item.args[0])),
+        ),
+        type: 'query',
+        path: base?.__path,
+      }
+    },
     limit: marker('limit'),
     where: marker('where'),
     orderBy: marker('orderBy'),
@@ -362,14 +370,30 @@ jest.mock('next/navigation', () => ({
 /** `require` after the mocks — the modules must see every factory. */
 const {
   ContentScopeProvider,
+  useContentScope,
 } = require('../components/content/content-scope.context')
 const CollectionEntriesPage =
   require('../components/content/collection-entries-page.component').default
 const EntryDetailPage =
   require('../components/content/entry-detail-page.component').default
 
-const List = () => (
+/**
+ * Sets the scope's filter the way the grid's filter panel does, without
+ * driving MUI's panel: the panel's own wiring is the grid's, and what this
+ * suite meters is the query the filter becomes.
+ */
+const FilterProbe = ({ filter }: { filter: Record<string, string> }) => {
+  const { setEntryFilter } = useContentScope()
+  return (
+    <button type="button" onClick={() => setEntryFilter(filter)}>
+      {'apply filter'}
+    </button>
+  )
+}
+
+const List = ({ filter }: { filter?: Record<string, string> } = {}) => (
   <ContentScopeProvider>
+    {filter ? <FilterProbe filter={filter} /> : null}
     <CollectionEntriesPage />
   </ContentScopeProvider>
 )
@@ -557,6 +581,37 @@ describe('the walk names its order, and nothing re-sorts the page', () => {
     // Twenty-five entries, each exactly once.
     expect(seen).toHaveLength(25)
     expect(new Set(seen).size).toBe(25)
+  })
+})
+
+describe('a filter is the query, not a pass over the page', () => {
+  /** The `where` clauses the entries queries carried. */
+  const entriesPredicates = () =>
+    mockQueries
+      .filter((item) => item.__path === ENTRIES_PATH)
+      .flatMap((item) => item.__constraints ?? [])
+      .filter((constraint: any) => constraint?.__constraint === 'where')
+      .map((constraint: any) => constraint.args.join(' '))
+
+  it('reaches entries past the first page, in the sort, at the same cost', () => {
+    // Two of the three published entries sit past the tenth by name, so a
+    // filter over the rows already read would find one.
+    publishEntries([3, 12, 21])
+    render(<List filter={{ field: 'status', op: 'equals', value: 'published' }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'apply filter' }))
+
+    expect(renderedTitles()).toEqual(['Entry 21', 'Entry 12', 'Entry 03'])
+    expect(entriesPredicates()).toContain('status == published')
+    expect(Math.max(...entriesCeilings())).toBe(WINDOW)
+  })
+
+  it('keeps the table when nothing matches, and says the FILTER matched nothing', () => {
+    render(<List filter={{ field: 'status', op: 'equals', value: 'scheduled' }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'apply filter' }))
+
+    expect(screen.getByText('No entries match this filter')).toBeTruthy()
+    // Not the empty-collection state, which has no table to clear a filter in.
+    expect(screen.queryByText('No entries yet')).toBeNull()
   })
 })
 

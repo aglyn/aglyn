@@ -1914,8 +1914,20 @@ export function CollectionEntriesPage() {
                                   columnVisibilityModel: { categoryId: false },
                                 },
                               }}
-                              noRowsLabel="No entries match this filter"
-                              noRowsDescription="Clear the filter to see every entry in this collection."
+                              // The empty grid only speaks of a filter when
+                              // one is set: an unfiltered read that failed, or
+                              // a page emptied underneath the reader, is not a
+                              // filter matching nothing.
+                              noRowsLabel={
+                                entryFilter
+                                  ? 'No entries match this filter'
+                                  : 'No entries to show'
+                              }
+                              noRowsDescription={
+                                entryFilter
+                                  ? 'Clear the filter to see every entry in this collection.'
+                                  : undefined
+                              }
                               // Paged by the footer below, so the grid must
                               // not also slice.
                               hideFooter
