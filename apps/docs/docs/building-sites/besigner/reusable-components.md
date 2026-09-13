@@ -127,14 +127,16 @@ binding.
 
 ### Save, then publish
 
-**Saving properties is not publishing them.** A save writes the working version; live pages
-read the published component.
+**Saving is not publishing.** Live pages read the published component.
 
 1. **Save properties** — the dialog confirms *"Properties saved. Publish to make them
    available on live pages."*
-2. **File ▸ Publish to sites** (labeled **Publish again** when the version you have open
-   is already the published one) — *"Published. Every screen using this component is
-   refreshing now — you do not need to republish them."*
+2. **Save draft**, in the toolbar or the File menu, keeps canvas work unpublished. On the
+   published version it is a draft stored with the site, offered to whoever opens the
+   component next with **Open draft** and **Discard**.
+3. **Save & publish**, in the toolbar's save menu or the File menu — *"Published. Every
+   screen using this component is refreshing now — you do not need to republish them."*
+   If a saved draft is on offer, open or discard it first.
 
 Publishing the component is enough. You do not republish the pages that use it.
 
