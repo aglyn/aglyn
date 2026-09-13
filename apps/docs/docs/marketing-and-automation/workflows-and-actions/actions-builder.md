@@ -140,7 +140,8 @@ triggers, a **Test** button that exercises the server-side steps immediately.
 Steps run in order and mix **in-page effects** with **server-side work**:
 
 - **Basic in-page effects (all plans)**: open/close/toggle a menu or drawer, show/hide or
-  toggle an element, add/remove/toggle a CSS class, make the navigation sticky, redirect,
+  toggle an element, add/remove/toggle a CSS class, set or remove an ARIA or data
+  attribute, scroll to an element, play a video, make the navigation sticky, redirect,
   show a site alert. These are pure DOM choreography — they run everywhere and are never
   metered.
 - **Advanced in-page effects (Pro+)**: show a popup or bar from your Marketing overlays,

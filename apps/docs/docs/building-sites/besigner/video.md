@@ -71,6 +71,12 @@ Wistia records a viewing only for a visitor whose analytics consent your site ha
 record, and plays with its tracking off for everyone else. Type the running time into
 **Duration (seconds)**, because a Wistia link does not carry it.
 
+## Starting the film from a button {#video-play-from-a-button}
+
+A button elsewhere on the page can start the film: give the button the interaction
+*When clicked → [Play a video](interactions-and-custom-html.md#play-video-step)* and
+pick this Video. It does what pressing the poster does.
+
 ## The three fields a search result needs {#video-seo}
 
 **Video title**, **Video description** and **Publication date** are what let search
