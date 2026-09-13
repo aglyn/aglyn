@@ -61,11 +61,16 @@ import {
   TableBody,
   TableCell,
   TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material'
+import {
+  getGridSingleSelectOperators,
+  type GridColDef,
+  type GridFilterModel,
+  type GridSortModel,
+} from '@mui/x-data-grid'
 import { deleteDoc, deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -80,9 +85,16 @@ import HostDisplayNameComponent from '../host-display-name.component'
 import HubTabs from '../hub-tabs.component'
 import DashboardLayout from '../layouts/dashboard.layout'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { gridFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -105,8 +117,7 @@ import {
 import {
   CONTENT_MAX_WIDTH,
   TABLE_HEAD_HEIGHT,
-  TABLE_PAGE_SIZE_OPTIONS,
-  TABLE_ROWS_PER_PAGE_LABEL,
+  TABLE_ROW_HEIGHT,
 } from '../../constants/shared'
 import useBranding from '../../hooks/use-branding'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
@@ -117,6 +128,10 @@ import {
   slugify,
   useContentScope,
 } from './content-scope.context'
+import {
+  ENTRY_STATUS_OPTIONS,
+  entryListSortFromModel,
+} from './entry-list-query'
 
 /**
  * Entries tab id (AGL-2486); `?tab=entries` deep links land here. The value
@@ -137,6 +152,15 @@ const AUTHORS_TAB_ID = 'authors'
  * without someone editing one number.
  */
 const TOOLBAR_CONTROL_HEIGHT = 40
+
+/**
+ * The one operator a single-choice filter offers: `is`. The entries query
+ * serves equality, and `not` or `is any of` would read as supported while
+ * matching nothing the translator builds.
+ */
+const SINGLE_CHOICE_OPERATORS = getGridSingleSelectOperators().filter(
+  (operator) => operator.value === 'is',
+)
 
 /**
  * The collections list and one collection's entries (AGL-2498).
@@ -167,6 +191,11 @@ export function CollectionEntriesPage() {
     setEntryPage,
     entriesPerPage,
     setEntriesPerPage,
+    entrySort,
+    setEntrySort,
+    entryFilter,
+    setEntryFilter,
+    categories,
     authors,
     hostDoc,
     screenOptions,
@@ -552,14 +581,14 @@ export function CollectionEntriesPage() {
    *
    * The window belongs to the SCOPE: the footer below and the Firestore read
    * behind it are one control, so `page` and `pageSize` are the query's own —
-   * `usePagedCollection`, opened at `TABLE_PAGE_SIZE_DEFAULT`, the smallest
-   * option the console offers, by the rule that every paginated list defaults
-   * to its minimum. Paging a slice of an array the provider already read
-   * would leave this footer in charge of nothing: the rows past that read
+   * `useSortedPagedCollection`, opened at `TABLE_PAGE_SIZE_DEFAULT`, the
+   * smallest option the console offers, by the rule that every paginated list
+   * defaults to its minimum. Paging a slice of an array the provider already
+   * read would leave this footer in charge of nothing: the rows past that read
    * would still be unreachable, and every one of them still billed.
    *
-   * A different collection is a different list, and the hook resets the page
-   * with the subject — page 3 of the last collection means nothing here.
+   * A different collection, sort or filter is a different list, and the hook
+   * resets the page with it — page 3 of the last one means nothing here.
    */
   /*
     Deleting the last entry on the last page strands the reader past the end:
@@ -603,7 +632,8 @@ export function CollectionEntriesPage() {
    * button that 409s. The server owns the truth: `entries` is ONE PAGE of the
    * collection, so this understates a long one, while the route counts them
    * for real. It cannot understate the only thing the gate turns on — a
-   * collection with any entries at all has them on its first page.
+   * collection with any entries at all has them on its first UNFILTERED page,
+   * which is why opening the dialog clears the table's filter.
    */
   const deleteDenial = selected
     ? Aglyn.collectionDeleteDenial({
@@ -966,6 +996,253 @@ export function CollectionEntriesPage() {
   const openEntry = useCallback(
     (entry: any) => router.push(entryHref(String(entry.$id))),
     [router, entryHref],
+  )
+
+  /*
+    Five equal text links (EDIT · UNPUBLISH · SCHEDULE · VIEW · DELETE) put the
+    one irreversible action a few pixels from the four routine ones. The
+    console settled this in AGL-701: secondary and destructive row actions go
+    in the overflow menu, which tints the destructive item and cannot be hit
+    without opening it first.
+  */
+  const entryActions = useCallback(
+    (entry: any): RowActionsMenuItem[] => {
+      const published = entry.status === 'published'
+      const actions: RowActionsMenuItem[] = [
+        {
+          key: 'edit',
+          label: 'Edit',
+          icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+          onClick: () => openEntry(entry),
+        },
+        {
+          key: 'publish',
+          label: published ? 'Unpublish' : 'Publish',
+          icon: (
+            <MdiIcon
+              path={published ? mdiPublishOff.path : mdiPublish.path}
+              size={0.8}
+            />
+          ),
+          onClick: () => void togglePublish(entry),
+        },
+        {
+          key: 'published-date',
+          /*
+            Named in the PAST TENSE, and the whole point of the wording.
+            `publishedAt` (when it went out) and `publishAt` (when it is due
+            to) are one letter apart, and a "Publish date…" sitting beside
+            "Schedule…" would be read as the same feature by anybody who had
+            not written both.
+          */
+          label: 'Edit published date…',
+          icon: <MdiIcon path={mdiCalendarEdit.path} size={0.8} />,
+          onClick: () => openPublishDate(entry),
+        },
+        {
+          key: 'schedule',
+          label: 'Schedule…',
+          icon: <MdiIcon path={mdiCalendarClock.path} size={0.8} />,
+          onClick: () => openScheduler(entry),
+        },
+      ]
+      if (published && siteBase) {
+        actions.push({
+          key: 'view',
+          label: 'View on site',
+          icon: <MdiIcon path={mdiOpenInNew.path} size={0.8} />,
+          onClick: () =>
+            void window.open(
+              `${siteBase}/${selected?.slug}/${entry.slug}`,
+              '_blank',
+              'noreferrer',
+            ),
+        })
+      }
+      actions.push({
+        key: 'delete',
+        label: 'Delete',
+        destructive: true,
+        icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+        onClick: () => void deleteEntry(entry),
+      })
+      return actions
+    },
+    [
+      openEntry,
+      togglePublish,
+      openPublishDate,
+      openScheduler,
+      deleteEntry,
+      siteBase,
+      selected?.slug,
+    ],
+  )
+
+  /**
+   * The entries table, in the grid every console list uses (AGL-2853).
+   *
+   * Four data columns sort, and the query does the sorting — see the scope's
+   * window. Status and category filter, each as a single choice from the
+   * values the collection can hold, because both are matched by equality on
+   * the stored value and a free-text box would invite a spelling nothing
+   * stores. Category is a filter without a column: the panel lists columns,
+   * hidden ones included, so it is declared as a permanently hidden one.
+   */
+  const entryColumns = useMemo<GridColDef[]>(
+    () => [
+      {
+        field: 'title',
+        headerName: 'Title',
+        flex: 1,
+        minWidth: 220,
+        sortingOrder: ['asc', 'desc'],
+        filterable: false,
+        renderCell: ({ row }: { row: any }) => (
+          <Stack
+            sx={{
+              justifyContent: 'center',
+              height: '100%',
+              minWidth: 0,
+              lineHeight: 1.25,
+            }}
+          >
+            <Typography
+              variant="body2"
+              noWrap
+              title={row.title}
+              sx={{ fontWeight: 500, lineHeight: 1.25 }}
+            >
+              {row.title}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              sx={{ lineHeight: 1.25 }}
+            >
+              {`/${selected?.slug}/${row.slug}`}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: 'status',
+        headerName: 'Status',
+        width: 130,
+        sortingOrder: ['asc', 'desc'],
+        type: 'singleSelect',
+        valueOptions: [...ENTRY_STATUS_OPTIONS],
+        filterOperators: SINGLE_CHOICE_OPERATORS,
+        renderCell: ({ row }: { row: any }) => (
+          /*
+            Outlined, and the label is the status word alone. A filled chip
+            carrying a full timestamp was the heaviest thing on a page of
+            otherwise quiet rows, and it repeated identically down every one.
+          */
+          <Chip
+            label={row.status ?? 'draft'}
+            variant="outlined"
+            color={
+              row.status === 'published'
+                ? 'success'
+                : row.status === 'scheduled'
+                  ? 'info'
+                  : 'default'
+            }
+            size="small"
+          />
+        ),
+      },
+      {
+        field: 'updatedAt',
+        headerName: 'Updated',
+        width: 130,
+        sortingOrder: ['desc', 'asc'],
+        filterable: false,
+        renderCell: ({ row }: { row: any }) => (
+          <Box component="span" title={formatStampFull(row.updatedAt)}>
+            {formatStampShort(row.updatedAt)}
+          </Box>
+        ),
+      },
+      {
+        field: 'publishedAt',
+        headerName: 'Published',
+        width: 130,
+        sortingOrder: ['desc', 'asc'],
+        filterable: false,
+        renderCell: ({ row }: { row: any }) => (
+          <Box
+            component="span"
+            title={
+              formatStampFull(row.publishedAt) ??
+              formatStampFull(row.publishAt)
+            }
+          >
+            {row.publishedAt ? (
+              formatStampShort(row.publishedAt)
+            ) : row.status === 'scheduled' && row.publishAt ? (
+              <Typography variant="body2" color="info.main" component="span">
+                {formatStampShort(row.publishAt)}
+              </Typography>
+            ) : (
+              '—'
+            )}
+          </Box>
+        ),
+      },
+      {
+        field: 'categoryId',
+        headerName: 'Category',
+        type: 'singleSelect',
+        valueOptions: categories.map((category) => ({
+          value: category.id,
+          label: category.name,
+        })),
+        // A collection with no categories has nothing to choose from.
+        filterable: categories.length > 0,
+        filterOperators: SINGLE_CHOICE_OPERATORS,
+        sortable: false,
+        hideable: false,
+      },
+      listActionsColumn(
+        (row) => (
+          <ListRowActions
+            label={String(row.title ?? '')}
+            items={entryActions(row)}
+          />
+        ),
+        { width: 72 },
+      ),
+    ],
+    [selected?.slug, categories, entryActions],
+  )
+
+  const entrySortModel = useMemo<GridSortModel>(
+    () => [{ field: entrySort.field, sort: entrySort.direction }],
+    [entrySort],
+  )
+  /*
+    The filter the provider holds, shown in the panel as the single-select
+    `is` the panel offers. Controlled rather than left to the grid, because the
+    filter outlives the grid: opening an entry unmounts the table, and coming
+    back must show the filter the rows are still narrowed by.
+  */
+  const entryFilterModel = useMemo<GridFilterModel>(
+    () => ({
+      items: entryFilter
+        ? [
+            {
+              id: 'entries',
+              field: entryFilter.field,
+              operator: entryFilter.op === 'equals' ? 'is' : entryFilter.op,
+              value: entryFilter.value,
+            },
+          ]
+        : [],
+    }),
+    [entryFilter],
   )
 
   return (
@@ -1518,6 +1795,11 @@ export function CollectionEntriesPage() {
                                       color="error"
                                       onClick={() => {
                                         setDeleteConfirm('')
+                                        // The dialog's entry check reads the
+                                        // table's first page, which only
+                                        // speaks for the whole collection
+                                        // while no filter narrows it.
+                                        setEntryFilter(null)
                                         // Started beside the open and never
                                         // awaited, so the dialog does not
                                         // wait on the scan (AGL-2806).
@@ -1544,12 +1826,17 @@ export function CollectionEntriesPage() {
                             </Stack>
                           </AccordionDetails>
                         </Accordion>
-                        {/* An empty FIRST page is an empty collection. An
-                            empty later one is a page that has been emptied
-                            underneath the reader, and the effect above walks
-                            them back rather than telling them they have never
-                            written anything. */}
-                        {entries.length === 0 && entryPage === 0 ? (
+                        {/* An empty FIRST page with no filter is an empty
+                            collection. An empty later one is a page that has
+                            been emptied underneath the reader, and the effect
+                            above walks them back rather than telling them they
+                            have never written anything. A FILTERED empty page
+                            keeps the table, because the table is where the
+                            filter is cleared. */}
+                        {entries.length === 0 &&
+                        entryPage === 0 &&
+                        !entryFilter &&
+                        entriesStatus === 'success' ? (
                           <Stack
                             spacing={1.5}
                             sx={{
@@ -1584,294 +1871,65 @@ export function CollectionEntriesPage() {
                             </Button>
                           </Stack>
                         ) : (
-                          <Table size="small">
-                            <TableHead
-                              sx={{
-                                '& .MuiTableCell-head': {
-                                  height: TABLE_HEAD_HEIGHT,
+                          <Stack spacing={1}>
+                            {entriesStatus === 'error' ? (
+                              <Alert severity="error">
+                                {'These entries could not be loaded. Try ' +
+                                  'another sort, or clear the filter.'}
+                              </Alert>
+                            ) : null}
+                            <ListTable
+                              rows={entries}
+                              columns={entryColumns}
+                              rowHeight={TABLE_ROW_HEIGHT}
+                              onOpen={(id) => router.push(entryHref(id))}
+                              loading={entriesStatus === 'loading'}
+                              /*
+                                The grid sorts and filters NOTHING itself: the
+                                query answers both, over the whole collection.
+                                A grid sorting the rows it holds would reorder
+                                one page of ten, and a grid filtering them
+                                would answer "no entries" for a match on page
+                                four.
+                              */
+                              sortingMode="server"
+                              sortModel={entrySortModel}
+                              onSortModelChange={(model) =>
+                                setEntrySort(entryListSortFromModel(model))
+                              }
+                              filterMode="server"
+                              filterModel={entryFilterModel}
+                              onFilterModelChange={(model) => {
+                                // The panel offers the single-select `is`;
+                                // the declaration serves it as `equals`.
+                                const request = gridFilterRequest(model)
+                                setEntryFilter(
+                                  request && request.op === 'is'
+                                    ? { ...request, op: 'equals' }
+                                    : request,
+                                )
+                              }}
+                              initialState={{
+                                columns: {
+                                  columnVisibilityModel: { categoryId: false },
                                 },
                               }}
-                            >
-                              <TableRow>
-                                {/*
-                                  Title takes every spare pixel; the rest are
-                                  sized by their own content. Before this the
-                                  action cluster held a FIXED 381.5px — 43% of
-                                  the table at 1280px and 48.5% at 900px, more
-                                  than the title column ever got.
-                                */}
-                                <TableCell sx={{ width: '100%' }}>
-                                  {'Title'}
-                                </TableCell>
-                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                  {'Status'}
-                                </TableCell>
-                                <TableCell
-                                  sx={{
-                                    whiteSpace: 'nowrap',
-                                    display: { xs: 'none', md: 'table-cell' },
-                                  }}
-                                >
-                                  {'Updated'}
-                                </TableCell>
-                                <TableCell
-                                  sx={{
-                                    whiteSpace: 'nowrap',
-                                    display: { xs: 'none', md: 'table-cell' },
-                                  }}
-                                >
-                                  {'Published'}
-                                </TableCell>
-                                <TableCell align="right" sx={{ width: 56 }}>
-                                  {'Actions'}
-                                </TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {entries.map((entry: any) => {
-                                const published = entry.status === 'published'
-                                /*
-                                  Five equal text links (EDIT · UNPUBLISH ·
-                                  SCHEDULE · VIEW · DELETE) put the one
-                                  irreversible action a few pixels from the four
-                                  routine ones. The console settled this in
-                                  AGL-701: secondary and destructive row actions
-                                  go in the overflow menu, which tints the
-                                  destructive item and cannot be hit without
-                                  opening it first.
-                                */
-                                const actions: RowActionsMenuItem[] = [
-                                  {
-                                    key: 'edit',
-                                    label: 'Edit',
-                                    icon: (
-                                      <MdiIcon
-                                        path={mdiPencilOutline.path}
-                                        size={0.8}
-                                      />
-                                    ),
-                                    onClick: () => openEntry(entry),
-                                  },
-                                  {
-                                    key: 'publish',
-                                    label: published ? 'Unpublish' : 'Publish',
-                                    icon: (
-                                      <MdiIcon
-                                        path={
-                                          published
-                                            ? mdiPublishOff.path
-                                            : mdiPublish.path
-                                        }
-                                        size={0.8}
-                                      />
-                                    ),
-                                    onClick: () => void togglePublish(entry),
-                                  },
-                                  {
-                                    key: 'published-date',
-                                    /*
-                                      Named in the PAST TENSE, and the whole
-                                      point of the wording. `publishedAt` (when
-                                      it went out) and `publishAt` (when it is
-                                      due to) are one letter apart, and a
-                                      "Publish date…" sitting beside "Schedule…"
-                                      would be read as the same feature by
-                                      anybody who had not written both.
-                                    */
-                                    label: 'Edit published date…',
-                                    icon: (
-                                      <MdiIcon
-                                        path={mdiCalendarEdit.path}
-                                        size={0.8}
-                                      />
-                                    ),
-                                    onClick: () => openPublishDate(entry),
-                                  },
-                                  {
-                                    key: 'schedule',
-                                    label: 'Schedule…',
-                                    icon: (
-                                      <MdiIcon
-                                        path={mdiCalendarClock.path}
-                                        size={0.8}
-                                      />
-                                    ),
-                                    onClick: () => openScheduler(entry),
-                                  },
-                                ]
-                                if (published && siteBase) {
-                                  actions.push({
-                                    key: 'view',
-                                    label: 'View on site',
-                                    icon: (
-                                      <MdiIcon
-                                        path={mdiOpenInNew.path}
-                                        size={0.8}
-                                      />
-                                    ),
-                                    onClick: () =>
-                                      void window.open(
-                                        `${siteBase}/${selected?.slug}/${entry.slug}`,
-                                        '_blank',
-                                        'noreferrer',
-                                      ),
-                                  })
-                                }
-                                actions.push({
-                                  key: 'delete',
-                                  label: 'Delete',
-                                  destructive: true,
-                                  icon: (
-                                    <MdiIcon
-                                      path={mdiDeleteOutline.path}
-                                      size={0.8}
-                                    />
-                                  ),
-                                  onClick: () => void deleteEntry(entry),
-                                })
-                                return (
-                                  <TableRow
-                                    key={entry.$id}
-                                    hover
-                                    onClick={() => openEntry(entry)}
-                                    sx={{ cursor: 'pointer' }}
-                                  >
-                                    <TableCell sx={{ width: '100%' }}>
-                                      {/*
-                                        `anywhere` rather than a truncation: a
-                                        slug is one long unbroken token and the
-                                        default break rules cut it mid-word
-                                        instead of wrapping it.
-                                      */}
-                                      <Typography
-                                        variant="body2"
-                                        sx={{
-                                          fontWeight: 500,
-                                          overflowWrap: 'anywhere',
-                                        }}
-                                      >
-                                        {entry.title}
-                                      </Typography>
-                                      <Typography
-                                        variant="caption"
-                                        color="text.secondary"
-                                        component="div"
-                                        sx={{ overflowWrap: 'anywhere' }}
-                                      >
-                                        {`/${selected?.slug}/${entry.slug}`}
-                                      </Typography>
-                                    </TableCell>
-                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                      {/*
-                                        Outlined, and the label is the status
-                                        word alone. A filled chip carrying a
-                                        full timestamp was the heaviest thing on
-                                        a page of otherwise quiet rows, and it
-                                        repeated identically down every one.
-                                      */}
-                                      <Chip
-                                        label={entry.status ?? 'draft'}
-                                        variant="outlined"
-                                        color={
-                                          published
-                                            ? 'success'
-                                            : entry.status === 'scheduled'
-                                              ? 'info'
-                                              : 'default'
-                                        }
-                                        size="small"
-                                      />
-                                    </TableCell>
-                                    <TableCell
-                                      title={formatStampFull(entry.updatedAt)}
-                                      sx={{
-                                        whiteSpace: 'nowrap',
-                                        display: {
-                                          xs: 'none',
-                                          md: 'table-cell',
-                                        },
-                                      }}
-                                    >
-                                      {formatStampShort(entry.updatedAt)}
-                                    </TableCell>
-                                    <TableCell
-                                      title={
-                                        formatStampFull(entry.publishedAt) ??
-                                        formatStampFull(entry.publishAt)
-                                      }
-                                      sx={{
-                                        whiteSpace: 'nowrap',
-                                        display: {
-                                          xs: 'none',
-                                          md: 'table-cell',
-                                        },
-                                      }}
-                                    >
-                                      {entry.publishedAt ? (
-                                        formatStampShort(entry.publishedAt)
-                                      ) : entry.status === 'scheduled' &&
-                                        entry.publishAt ? (
-                                        <Typography
-                                          variant="body2"
-                                          color="info.main"
-                                          component="span"
-                                        >
-                                          {formatStampShort(entry.publishAt)}
-                                        </Typography>
-                                      ) : (
-                                        '—'
-                                      )}
-                                    </TableCell>
-                                    <TableCell
-                                      align="right"
-                                      sx={{ width: 56 }}
-                                      onClick={(event) =>
-                                        event.stopPropagation()
-                                      }
-                                    >
-                                      <RowActionsMenu
-                                        label={entry.title}
-                                        items={actions}
-                                      />
-                                    </TableCell>
-                                  </TableRow>
-                                )
-                              })}
-                            </TableBody>
-                          </Table>
+                              noRowsLabel="No entries match this filter"
+                              noRowsDescription="Clear the filter to see every entry in this collection."
+                              // Paged by the footer below, so the grid must
+                              // not also slice.
+                              hideFooter
+                            />
+                          </Stack>
                         )}
                         {entries.length > 0 || entryPage > 0 ? (
-                          <TablePagination
-                            component="div"
-                            /*
-                              Nobody has paid to learn how many entries the
-                              collection holds, and counting them is the cost
-                              paging exists to avoid. MUI models that: `-1`
-                              renders "1–10 of more than 10" and leaves Next
-                              live. On the LAST page the total stops being
-                              unknown — `page × size + rows` IS it — and
-                              handing MUI the real number there is what
-                              disables Next and stops the count line saying
-                              "more than" at the moment that would be false.
-                            */
-                            count={
-                              entriesHasMore
-                                ? -1
-                                : entryPage * entriesPerPage + entries.length
-                            }
+                          <ListPagination
                             page={entryPage}
-                            onPageChange={(_event, next) =>
-                              setEntryPage(next)
-                            }
-                            rowsPerPage={entriesPerPage}
-                            // Back to the first page with it: the hook does
-                            // that, because page four of a ten-row list does
-                            // not exist once fifty at a time are asked for.
-                            onRowsPerPageChange={(event) =>
-                              setEntriesPerPage(parseInt(event.target.value, 10))
-                            }
-                            rowsPerPageOptions={TABLE_PAGE_SIZE_OPTIONS}
-                            labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
+                            pageSize={entriesPerPage}
+                            rowCount={entries.length}
+                            hasMore={entriesHasMore}
+                            onPageChange={setEntryPage}
+                            onPageSizeChange={setEntriesPerPage}
                           />
                         ) : null}
                       </Stack>

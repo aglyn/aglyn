@@ -18,6 +18,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -52,14 +53,20 @@ import {
   type ReactNode,
 } from 'react'
 import {
-  collectionPage,
   useFirestore,
-  usePagedCollection,
+  useSortedPagedCollection,
   useUser,
+  type CollectionSort,
 } from '@aglyn/tenant-feature-instance'
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../utils/revalidate-live-pages'
+import {
+  ENTRY_LIST_DEFAULT_SORT,
+  entryListBase,
+  entryListEqualityFields,
+  entryListFilterKey,
+} from './entry-list-query'
 import { useHostId, useHostSubdomain } from '../host-id-provider'
 import { buildRoute, Route } from '../../constants/route-links'
 import { hasEntitlement } from '../../constants/entitlements'
@@ -199,7 +206,7 @@ export interface ContentScope {
   selected: any
   /** The raw segment from the URL — a slug, or a legacy document id. */
   routeCollectionKey: string | null
-  /** ONE PAGE of the selected collection's entries, in the order read. */
+  /** ONE PAGE of the selected collection's entries, in `entrySort` order. */
   entries: any[]
   entriesStatus: string
   entriesFromCache: boolean
@@ -210,6 +217,12 @@ export interface ContentScope {
   setEntryPage: (page: number) => void
   entriesPerPage: number
   setEntriesPerPage: (pageSize: number) => void
+  /** The column the entries are sorted by; opens on published, newest first. */
+  entrySort: CollectionSort
+  setEntrySort: (sort: CollectionSort) => void
+  /** The one filter narrowing the entries, or `null`. */
+  entryFilter: ListFilterRequest | null
+  setEntryFilter: (filter: ListFilterRequest | null) => void
   categories: Aglyn.CollectionCategory[]
   authors: Aglyn.ContentAuthorRecord[]
   screenOptions: any[]
@@ -579,33 +592,63 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
   /* ── the entries of the selected collection ────────────────────────── */
 
   /**
-   * ONE PAGE of the collection's entries — the window IS the query.
+   * How the table is sorted and filtered (AGL-2853).
    *
-   * `usePagedCollection` widens the listener to cover page 0..n plus a single
-   * probe row, so the list bills what it draws and the rows past the first
-   * page are reachable by asking for them. A capped read the browser then
-   * sliced is the other shape, and it is wrong twice over: every mount pays
-   * for documents nobody renders, and the entries past the cap are not merely
-   * unrendered but UNREACHABLE, because nothing draws them and nothing asks
-   * for more.
+   * Held HERE rather than on the page, because they are the query's inputs:
+   * the window below is built from them, and a sort that lived on the page
+   * could only reorder the ten rows already read. Held in the provider above
+   * both routes, so opening an entry and coming back returns to the same view.
    *
-   * ## The order is the document NAME, and cannot be a field
+   * The filter belongs to ONE collection. A category id means nothing in the
+   * next collection's taxonomy, so a filter set on one is not carried into
+   * another — the state remembers which collection it was set on, and reads as
+   * no filter anywhere else.
+   */
+  const [entrySort, setEntrySort] = useState<CollectionSort>(
+    ENTRY_LIST_DEFAULT_SORT,
+  )
+  const [entryFilterState, setEntryFilterState] = useState<{
+    collectionId: string | undefined
+    filter: ListFilterRequest | null
+  }>({ collectionId: undefined, filter: null })
+  const entryFilter =
+    entryFilterState.collectionId === selected?.$id
+      ? entryFilterState.filter
+      : null
+  const selectedCollectionId = selected?.$id
+  const setEntryFilter = useCallback(
+    (filter: ListFilterRequest | null) =>
+      setEntryFilterState({ collectionId: selectedCollectionId, filter }),
+    [selectedCollectionId],
+  )
+  const entryFilterKey = entryListFilterKey(entryFilter)
+
+  /**
+   * ONE PAGE of the collection's entries, sorted — the window IS the query.
    *
-   * `collectionPage` carries `orderBy(documentId())`. Ordering on `createdAt`
-   * — the field this list reads by — would not mis-sort it, it would HIDE
-   * rows from it: `orderBy` matches only documents that HAVE the field, and
-   * `/api/hosts/import` writes entries through `cleanDoc`, whose
-   * `IMPORTABLE_FIELDS.entries` allow-list carries no `createdAt` and which
-   * stamps `updatedAt` alone. A restored archive would vanish from its own
-   * collection. A document's name cannot be absent, so id order drops nothing
-   * and the walk is TOTAL.
+   * `useSortedPagedCollection` widens its listener to cover page 0..n plus a
+   * single probe row, so the list bills what it draws and the rows past the
+   * first page are reachable by asking for them. A capped read the browser
+   * then sliced is the other shape, and it is wrong twice over: every mount
+   * pays for documents nobody renders, and the entries past the cap are not
+   * merely unrendered but UNREACHABLE.
+   *
+   * ## The sort is a field, and no entry may drop out of it
+   *
+   * `orderBy` matches only documents that HAVE the field. A draft carries no
+   * `publishedAt` — unpublishing deletes it — and `/api/hosts/import` writes
+   * entries through `cleanDoc`, which carries no `createdAt`. So the walk is
+   * two segments: the entries that have the sorted field, in its order, then
+   * the entries that lack it, found by a scan in name order that opens only
+   * once the first segment has ended. Every entry is on exactly one page of
+   * one sequence, under every sort and every filter. See
+   * `sorted-collection-window.ts` for the walk and its cost.
    *
    * ## The page is handed on in the order it was read
    *
-   * Re-sorting a slice of an id-ordered walk tells the same lie an unordered
-   * cap does: rows would run in one order within a page and another across
-   * pages, and the first page would still not be the first page of anything.
-   * See `collectionPage` for the whole of that reasoning.
+   * Re-sorting a slice in the browser tells the lie an unordered cap does:
+   * rows would run in one order within a page and another across pages. The
+   * order is the query's, and so is every page of it.
    */
   const {
     rows: entries,
@@ -621,21 +664,22 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
      */
     status: entriesStatus,
     fromCache: entriesFromCache,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      collectionPage(
-        collection(
-          firestore,
-          'hosts',
-          hostId,
-          'collections',
-          selected?.$id ?? '-none-',
-          'entries',
-        ),
-        pageLimit,
+  } = useSortedPagedCollection<any>(
+    () =>
+      entryListBase(
+        firestore,
+        hostId,
+        selected?.$id ?? '-none-',
+        entryFilter,
+        entrySort,
       ),
-    [firestore, hostId, selected?.$id],
-    { idField: '$id', pageSize: TABLE_PAGE_SIZE_DEFAULT },
+    entrySort,
+    [firestore, hostId, selected?.$id, entryFilterKey],
+    {
+      idField: '$id',
+      pageSize: TABLE_PAGE_SIZE_DEFAULT,
+      equalityFields: entryListEqualityFields(entryFilter),
+    },
   )
 
   // Category taxonomy (AGL-582): rows on the COLLECTION doc, each a stable
@@ -1113,6 +1157,10 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       setEntryPage,
       entriesPerPage,
       setEntriesPerPage,
+      entrySort,
+      setEntrySort,
+      entryFilter,
+      setEntryFilter,
       categories,
       authors,
       screenOptions,
@@ -1147,6 +1195,9 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       setEntryPage,
       entriesPerPage,
       setEntriesPerPage,
+      entrySort,
+      entryFilter,
+      setEntryFilter,
       categories,
       authors,
       screenOptions,

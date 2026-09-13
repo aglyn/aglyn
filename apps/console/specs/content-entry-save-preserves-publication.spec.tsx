@@ -167,12 +167,15 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   /*
-    The entries WINDOW. `usePagedCollection` asks the builder for one page
-    plus a probe row and hands back the page; this stands in for it so the
-    suite can keep naming the collection it wants without a live listener.
+    The entries WINDOW. `useSortedPagedCollection` walks the collection the
+    provider's base query names, one page plus a probe row, and hands back
+    the page; this stands in for it so the suite can keep naming the
+    collection it wants without a live listener. This mock erases query
+    constraints anyway — the read-cost suite meters the walk, and the
+    emulator spec proves its ordering drops nothing.
   */
-  usePagedCollection: (build: (pageLimit: number) => string) => ({
-    rows: build(11) === 'entries' ? mockEntries.data : [],
+  useSortedPagedCollection: (buildBase: () => string) => ({
+    rows: buildBase() === 'entries' ? mockEntries.data : [],
     hasMore: false,
     page: 0,
     setPage: () => undefined,
@@ -181,10 +184,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: mockEntries.status,
     fromCache: mockEntries.fromCache,
   }),
-  // The ordering the window is read in. This mock erases query constraints
-  // anyway, so the builder is the identity here; the read-cost suite is where
-  // the `orderBy` it carries is asserted.
-  collectionPage: (ref: unknown) => ref,
   useHostResourceApi: () => jest.fn(async () => ({ id: 'created-id' })),
   useUser: () => ({ data: { uid: 'uid-editor', getIdToken: jest.fn() } }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')

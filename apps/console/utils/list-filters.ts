@@ -280,3 +280,35 @@ export const SITE_MEMBER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> =
     createdAt: 'Joined',
   }
 
+/*
+ * Content entries (`hosts/{hostId}/collections/{collectionId}/entries`).
+ *
+ * Both are EQUALITY on the stored value, and that is what keeps the sorted
+ * list total under a filter: an equality narrows the scan that finds the
+ * entries lacking the sort field to the same entries the filter matches, so
+ * the walk behind `useSortedPagedCollection` still reaches all of them. A
+ * range or a word search would need its own ordering and could not share it.
+ *
+ * `status` matches the stored word. An entry with no `status` at all — only a
+ * hand-written import bundle produces one — matches none of the three, and is
+ * still on the unfiltered list.
+ *
+ * `categoryId` matches the stable id the entry editor writes. An entry that
+ * still carries only the legacy free-typed `category` matches no id until a
+ * category is picked for it in the editor.
+ */
+export const ENTRY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
+  { column: 'status', kind: 'exact', path: 'status', operators: ['equals'] },
+  {
+    column: 'categoryId',
+    kind: 'exact',
+    path: 'categoryId',
+    operators: ['equals'],
+  },
+]
+
+/** Headers for entry fields that are filterable without being columns. */
+export const ENTRY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  categoryId: 'Category',
+}
+

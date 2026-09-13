@@ -56,10 +56,6 @@ const FOOTERS: Array<[string, string]> = [
   // The bespoke family.
   ['screens tree', 'apps/console/components/screens-hierarchy-table.component.tsx'],
   ['team list', 'apps/console/components/org-members-card.component.tsx'],
-  [
-    'content entries',
-    'apps/console/components/content/collection-entries-page.component.tsx',
-  ],
   // The shared footer itself — every cursor and window feed renders through
   // it, so it is the one that must not re-decide the options or the label.
   [
@@ -95,6 +91,13 @@ const SHARED_FOOTER: Array<[string, string]> = [
   ['staff lists', 'apps/console/components/staff-list-pagination.component.tsx'],
   ['site collaborators', 'apps/console/components/host-members-card.component.tsx'],
   ['site accounts', 'apps/console/components/site-accounts-card.component.tsx'],
+  // A collection's entries, which left the bespoke family for the console's
+  // grid when the table gained sorting and filtering (AGL-2853). Its window
+  // lives in the content scope; this is the page that draws the footer.
+  [
+    'content entries',
+    'apps/console/components/content/collection-entries-page.component.tsx',
+  ],
   // The console's OWN artifact lists. The sweep that converted the plugin
   // cards never walked `apps/console`, so these three carried the same defect
   // one directory over from the guard that was supposed to cover it.

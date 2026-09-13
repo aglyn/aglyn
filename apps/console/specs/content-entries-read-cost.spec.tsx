@@ -31,12 +31,16 @@
  *  1. THE WINDOW IS THE QUERY. One page plus a single probe row, and the probe
  *     is what makes "there is more" a fact rather than a comparison against
  *     the cap. Paging forward widens by one page, not by a collection.
- *  2. THE WALK NAMES ITS ORDER, and orders on the document NAME. Ordering on
- *     `createdAt` would not mis-sort this list, it would HIDE from it every
- *     entry `/api/hosts/import` wrote — `cleanDoc` stamps `updatedAt` alone.
- *     Nothing re-sorts the page it was handed, either: rows in one order
- *     within a page and another across pages is the same lie an unordered cap
- *     tells.
+ *  2. THE WALK NAMES ITS ORDER, and drops nothing that lacks the field. The
+ *     list opens on `publishedAt`, newest first, and a draft has no
+ *     `publishedAt` — so the dated entries are walked in that order and the
+ *     rest by document NAME after them (AGL-2853). Nothing re-sorts the page
+ *     it was handed, either: rows in one order within a page and another
+ *     across pages is the same lie an unordered cap tells. The double below
+ *     models `orderBy` dropping a document without the field, so these
+ *     assertions can see a walk that stops at the dated entries;
+ *     `content-entries-total-order.emulator.spec.ts` is where a real Firestore
+ *     proves the model right.
  *  3. OPENING AN ENTRY DOES NOT DEPEND ON THE WINDOW. The entry the address
  *     names is read BY KEY, so an entry the current page does not hold still
  *     opens — mounted with the target deliberately off the page, which is the
@@ -105,6 +109,19 @@ const fillCollection = (count: number) => {
   mockEntryDocs.length = 0
   for (let index = 0; index < count; index += 1) {
     mockEntryDocs.push(entryAt(index))
+  }
+}
+
+/** Publishes the entries at `indexes`, each dated by its own index. */
+const publishEntries = (indexes: number[]) => {
+  for (const index of indexes) {
+    Object.assign(mockEntryDocs[index], {
+      status: 'published',
+      publishedAt: {
+        seconds: 1_000 + index,
+        toDate: () => new Date((1_000 + index) * 1000),
+      },
+    })
   }
 }
 
@@ -178,6 +195,13 @@ jest.mock('firebase/firestore', () => {
       const wheres = (ref.__constraints ?? []).filter(
         (item: any) => item?.__constraint === 'where',
       )
+      const orders = (ref.__constraints ?? []).filter(
+        (item: any) => item?.__constraint === 'orderBy',
+      )
+      const sortable = (row: Record<string, any>, field: string) => {
+        const value = field === '__name__' ? row.$id : row[field]
+        return typeof value?.seconds === 'number' ? value.seconds : value
+      }
       const rows = sourceFor(ref.__path)
         .filter((row) =>
           wheres.every((item: any) => {
@@ -185,8 +209,24 @@ jest.mock('firebase/firestore', () => {
             return row[field] === value
           }),
         )
-        // Document-ID order is what Firestore answers an `orderBy(__name__)`
-        // walk in, and the ids here are already in it.
+        // An `orderBy` on a FIELD also filters: a document without the field
+        // is not in the result at all. The name is never missing.
+        .filter((row) =>
+          orders.every(
+            (item: any) =>
+              item.args[0] === '__name__' || row[item.args[0]] !== undefined,
+          ),
+        )
+        .sort((a, b) => {
+          for (const item of orders) {
+            const [field, direction] = item.args
+            const x = sortable(a, field)
+            const y = sortable(b, field)
+            if (x === y) continue
+            return (x < y ? -1 : 1) * (direction === 'desc' ? -1 : 1)
+          }
+          return 0
+        })
         .slice(0, ref.__limit || undefined)
       next({
         docs: rows.map((row) => ({ id: row.$id, data: () => ({ ...row }) })),
@@ -433,27 +473,47 @@ describe('the entries window IS the query', () => {
 })
 
 describe('the walk names its order, and nothing re-sorts the page', () => {
-  it('orders on the document NAME, never on a field a writer may omit', () => {
+  /** The orderings each entries query carried, in the order they were built. */
+  const entriesOrderings = () =>
+    mockQueries
+      .filter((item) => item.__path === ENTRIES_PATH)
+      .map((item) =>
+        (item.__constraints ?? [])
+          .filter((constraint: any) => constraint?.__constraint === 'orderBy')
+          .map((constraint: any) => constraint.args.join(' ')),
+      )
+
+  it('opens on the published date, newest first, with the NAME as tiebreak', () => {
     render(<List />)
 
-    const walk = mockQueries.find(
-      (item) => item.__path === ENTRIES_PATH && item.__limit === WINDOW,
-    )
-    const orderings = (walk?.__constraints ?? [])
-      .filter((item: any) => item?.__constraint === 'orderBy')
-      .map((item: any) => item.args[0])
-    expect(orderings).toEqual(['__name__'])
+    expect(entriesOrderings()[0]).toEqual([
+      'publishedAt desc',
+      '__name__ desc',
+    ])
+  })
+
+  it('walks what the date sort cannot see by NAME, not by a field', () => {
+    // Every entry here is a draft, and a draft carries no `publishedAt`: the
+    // dated walk comes back empty, and the list is still full.
+    render(<List />)
+
+    const orderings = entriesOrderings()
+    expect(orderings).toContainEqual(['__name__'])
     // The field this list reads by, and the one that would hide every
     // imported entry: `cleanDoc` stamps `updatedAt` alone.
-    expect(orderings).not.toContain('createdAt')
+    expect(orderings.flat().some((item) => item.startsWith('createdAt'))).toBe(
+      false,
+    )
+    expect(renderedTitles()).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
+    expect(screen.getByText(/1–10 of more than 10/)).toBeTruthy()
   })
 
   it('renders the page in the order it was read', () => {
     render(<List />)
 
     // The stamps ascend with the ids, so a `createdAt desc` sort in the
-    // browser would put `Entry 09` first. Id order puts `Entry 00` first,
-    // and only one of the two can be true of a walk that pages.
+    // browser would put `Entry 09` first. The name walk puts `Entry 00`
+    // first, and only one of the two can be true of a walk that pages.
     expect(renderedTitles()).toEqual([
       'Entry 00',
       'Entry 01',
@@ -466,6 +526,37 @@ describe('the walk names its order, and nothing re-sorts the page', () => {
       'Entry 08',
       'Entry 09',
     ])
+  })
+
+  it('leads with the newest release and still reaches every draft', () => {
+    publishEntries([3, 12, 21])
+    render(<List />)
+
+    // Dated newest first, then the drafts by name — on ONE page, because
+    // the dated walk ran out inside it.
+    expect(renderedTitles()).toEqual([
+      'Entry 21',
+      'Entry 12',
+      'Entry 03',
+      'Entry 00',
+      'Entry 01',
+      'Entry 02',
+      'Entry 04',
+      'Entry 05',
+      'Entry 06',
+      'Entry 07',
+    ])
+
+    const seen = [...renderedTitles()]
+    for (let page = 1; page < 5; page += 1) {
+      const next = screen.getByRole('button', { name: /next page/i })
+      if ((next as HTMLButtonElement).disabled) break
+      fireEvent.click(next)
+      seen.push(...renderedTitles())
+    }
+    // Twenty-five entries, each exactly once.
+    expect(seen).toHaveLength(25)
+    expect(new Set(seen).size).toBe(25)
   })
 })
 
