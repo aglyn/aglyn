@@ -284,6 +284,17 @@ export interface ListTableProps extends DataTableProps {
   /** Row click → the artifact's detail view. */
   onOpen?: (id: string, row: any) => void
   /**
+   * The toolbar's free-text search box.
+   *
+   * Defaults to shown where the GRID answers it, which is client filtering.
+   * Under `filterMode="server"` the grid applies no filter at all and the
+   * model goes to the caller, so the box defaults to hidden: a list whose
+   * handler reads only the column filter would otherwise offer a search that
+   * narrows nothing, which reads as "no match" rather than "not supported".
+   * Pass it on a server-filtered list whose handler reads `quickFilterValues`.
+   */
+  quickFilter?: boolean
+  /**
    * Present → a checkbox column and a controlled selection. Absent → the
    * navigation-only grid every list had before, checkbox column and all.
    * The row click keeps opening the record either way: a checkbox is the
@@ -300,8 +311,18 @@ export interface ListTableProps extends DataTableProps {
  * reader actually compares.
  */
 export function ListTable(props: ListTableProps) {
-  const { onOpen, sx, initialState, hideFooter, rows, selectable, ...rest } =
-    props
+  const {
+    onOpen,
+    sx,
+    initialState,
+    hideFooter,
+    rows,
+    selectable,
+    quickFilter,
+    slotProps,
+    ...rest
+  } = props
+  const showQuickFilter = quickFilter ?? rest.filterMode !== 'server'
   /*==========================================
    * SELECTION IS OPT-IN, AND NAVIGATION-ONLY IS THE DEFAULT.
    *
@@ -457,8 +478,18 @@ export function ListTable(props: ListTableProps) {
         },
         columns: { ...initialState?.columns },
       }}
+      /*
+       * MERGED with the caller's, for the reason `initialState` is: a caller
+       * setting one slot's props must not drop the shared footer label or the
+       * search box's filter-mode default along with the object they live in.
+       */
       slotProps={{
-        pagination: { labelRowsPerPage: TABLE_ROWS_PER_PAGE_LABEL },
+        ...slotProps,
+        toolbar: { showQuickFilter, ...slotProps?.toolbar },
+        pagination: {
+          labelRowsPerPage: TABLE_ROWS_PER_PAGE_LABEL,
+          ...slotProps?.pagination,
+        },
       }}
       rows={rows}
       hideFooter={hideFooter}

@@ -1692,4 +1692,40 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
       .map((path) => path.replace(`${REPO}/`, ''))
     expect(dead).toEqual([])
   })
+
+  /*
+    The search box has the opposite default (AGL-2884). `ListTable` hides it on
+    a server-filtered list, because most of them read only the column filter
+    and the box would narrow nothing. A list whose handler DOES read
+    `quickFilterValues` says so with `quickFilter`, or it loses a search its
+    route answers.
+  */
+  const PASSES_QUICK_FILTER = /^\s*quickFilter(=\{true\})?\s*$/m
+
+  it('THE CONTROL: some server-filtered list reads the search box', () => {
+    expect(PASSES_QUICK_FILTER.test('  filterMode="server"\n  quickFilter\n')).toBe(
+      true,
+    )
+    expect(PASSES_QUICK_FILTER.test('(model.quickFilterValues ?? [])')).toBe(
+      false,
+    )
+    expect(
+      serverFiltered.some((path) =>
+        readFileSync(path, 'utf8').includes('quickFilterValues'),
+      ),
+    ).toBe(true)
+  })
+
+  it('each one that reads the search box keeps it', () => {
+    const lost = serverFiltered
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8')
+        return (
+          source.includes('quickFilterValues') &&
+          !PASSES_QUICK_FILTER.test(source)
+        )
+      })
+      .map((path) => path.replace(`${REPO}/`, ''))
+    expect(lost).toEqual([])
+  })
 })
