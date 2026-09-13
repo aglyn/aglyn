@@ -178,6 +178,17 @@ function ComponentBesignerPage(props) {
    * live without it having been stored.
    */
   const savedLandedRef = useRef(false)
+  /**
+   * Was the last save REFUSED, as opposed to having nothing to do? (AGL-2877)
+   *
+   * `savedLandedRef` staying false cannot tell the two apart, and they need
+   * opposite handling: nothing-to-save promotes, a refusal must not. Nor can
+   * `remoteChanged`, which is React state and still false in this tick for a
+   * conflict the save itself discovered — without this, a stale-baseline
+   * refusal is followed by writing this canvas onto the definition every page
+   * renders.
+   */
+  const saveRefusedRef = useRef(false)
 
   /**
    * Has this version been SAVED since it was last promoted? (AGL-1152)
@@ -374,6 +385,11 @@ function ComponentBesignerPage(props) {
         ? undefined
         : 'Component saved to this version. Publish it to update the live pages.',
     queueLoading,
+    // The refusal half of `onSaved`: together they let `handleSaveAndPublish`
+    // tell a document that needs no save from one that could not be saved.
+    onSaveRefused: () => {
+      saveRefusedRef.current = true
+    },
     // A definition's root is the promoted node, not the canvas root, so it
     // has to be wrapped or the canvas has no root and renders nothing
     // (AGL-680).
@@ -668,7 +684,11 @@ function ComponentBesignerPage(props) {
     // (AGL-2874).
     if (refuseOverUnopenedDraft('publish')) return
     savedLandedRef.current = false
+    saveRefusedRef.current = false
     await handleSave()
+    // A REFUSED save stops here, before anything is promoted, revalidated or
+    // cleared (AGL-2877). The refusal has already said why.
+    if (saveRefusedRef.current) return
     /**
      * A save that did not write is not a reason to stop (AGL-1483).
      *

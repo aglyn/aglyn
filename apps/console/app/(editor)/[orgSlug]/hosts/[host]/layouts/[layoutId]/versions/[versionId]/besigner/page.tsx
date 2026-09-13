@@ -151,6 +151,17 @@ function LayoutBesignerPage(props) {
   const { doc: hostResult } = useHost({ hostId })
   /** Did the last save actually land? See `onSaved`. */
   const savedLandedRef = useRef(false)
+  /**
+   * Was the last save REFUSED, as opposed to having nothing to do? (AGL-2877)
+   *
+   * `savedLandedRef` staying false cannot tell the two apart, and they need
+   * opposite handling: nothing-to-save promotes, a refusal must not. Nor can
+   * `remoteChanged`, which is React state and still false in this tick for a
+   * conflict the save itself discovered — without this, a stale-baseline
+   * refusal is followed by pointing every screen at a version whose document
+   * never received the edit.
+   */
+  const saveRefusedRef = useRef(false)
   const { doc: layoutResult, setDoc: updateLayoutDoc } = useLayout({
     hostId,
     layoutId,
@@ -312,6 +323,11 @@ function LayoutBesignerPage(props) {
         ? 'Layout saved — the live pages using it are refreshing now'
         : undefined,
     queueLoading,
+    // The refusal half of `onSaved`: together they let `handleSaveAndPublish`
+    // tell a document that needs no save from one that could not be saved.
+    onSaveRefused: () => {
+      saveRefusedRef.current = true
+    },
     // Attribution (AGL-676): `updatedAt` carries no actor, so without this
     // "someone changed this" could never become "Sam changed this".
     onSaved: () => {
@@ -446,7 +462,11 @@ function LayoutBesignerPage(props) {
     // (AGL-2874).
     if (refuseOverUnopenedDraft('publish')) return
     savedLandedRef.current = false
+    saveRefusedRef.current = false
     await handleSave()
+    // A REFUSED save stops here, before anything is promoted, revalidated or
+    // cleared (AGL-2877). The refusal has already said why.
+    if (saveRefusedRef.current) return
     /**
      * A save that did not write is not a reason to stop (AGL-1483).
      *
