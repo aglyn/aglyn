@@ -46,6 +46,7 @@ import {
   seedFreePlanWorkspace,
 } from './lib/crm-free-plan-fixtures.mjs'
 import { E2E_ORG_RELEASE_FLAGS } from './lib/e2e-release-flags.mjs'
+import { readLegalDocumentVersion } from './lib/legal-document-version.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
 
 if (
@@ -231,17 +232,19 @@ const put = async (ref, data) => {
 // The owner has accepted the current terms (AGL-2610). Without this record
 // the console opens every page under the re-acceptance banner — a real
 // customer whose account predates the clickwrap — and every screenshot the
-// e2e harnesses stage carries it. The version mirrors `LEGAL_DOCUMENT_VERSION`
-// in `apps/console/constants/legal-documents.ts`; the fields are the ones
-// `recordLegalAcceptance` writes.
+// e2e harnesses stage carries it. The version is `LEGAL_DOCUMENT_VERSION`,
+// read from `apps/console/constants/legal-documents.ts` so a bump carries the
+// seeded record with it; the fields are the ones `recordLegalAcceptance`
+// writes.
+const legalVersion = readLegalDocumentVersion()
 await put(
   firestore
     .collection('users')
     .doc(E2E_UID)
     .collection('legalAcceptances')
-    .doc('v1'),
+    .doc(legalVersion),
   {
-    version: 'v1',
+    version: legalVersion,
     documents: [],
     method: 'clickwrap',
     context: 'seed-e2e',

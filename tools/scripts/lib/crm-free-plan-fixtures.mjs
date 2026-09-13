@@ -65,6 +65,7 @@
 import { createHash } from 'node:crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { nameSearchFields } from './crm-fixtures.mjs'
+import { readLegalDocumentVersion } from './legal-document-version.mjs'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -179,8 +180,9 @@ export async function seedFreePlanWorkspace(options) {
 
   // The current terms, accepted, as `seed-e2e.mjs` records them for the
   // primary owner — without it every page opens under the re-acceptance banner.
-  await write(userRef.collection('legalAcceptances').doc('v1'), {
-    version: 'v1',
+  const legalVersion = readLegalDocumentVersion()
+  await write(userRef.collection('legalAcceptances').doc(legalVersion), {
+    version: legalVersion,
     documents: [],
     method: 'clickwrap',
     context: 'seed-e2e',
