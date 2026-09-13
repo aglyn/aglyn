@@ -18,6 +18,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import { canvas, hasConcurrentWrite } from '@aglyn/aglyn'
 import type { Firestore } from 'firebase/firestore'
+import isEqual from 'lodash-es/isEqual'
 import { autorun } from 'mobx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -121,6 +122,16 @@ export interface BesignerDraftState {
    * button: the offer and the action have to agree.
    */
   restoreBlockedBy: BesignerDraftRestoreBlock | null
+  /**
+   * A SAVED draft exists that this session has neither opened nor discarded
+   * (AGL-2874).
+   *
+   * True even while the offer is withheld from a shared room, which is why it
+   * is not folded into {@link available}: what it protects is the draft, not
+   * the prompt. A save or publish from a canvas that never took the draft in
+   * must not delete it on the way past.
+   */
+  sharedDraftUnopened: boolean
   /** Puts the draft into the canvas as an undoable, unsaved change. */
   restore: () => void
   /** Drops the offer and the stored draft. */
@@ -133,6 +144,7 @@ const EMPTY_STATE: BesignerDraftState = {
   staleAgainstDocument: false,
   origin: 'browser',
   restoreBlockedBy: null,
+  sharedDraftUnopened: false,
   restore: () => undefined,
   discard: () => undefined,
 }
@@ -191,6 +203,15 @@ export interface UseBesignerDraftOptions {
   /** Current stored-document stamp, in `Aglyn.versionStamp` form. */
   storedStamp: string | null
   /**
+   * The stored document's node map, in stored shape (AGL-2874).
+   *
+   * Lets a draft tell a write that moved the TREE from one that only moved
+   * the stamp — a component's declared properties, a version's layout
+   * binding. Only the first makes restoring a draft a rollback. Omitted, every
+   * stamp change counts, which is the conservative answer.
+   */
+  storedNodes?: unknown
+  /**
    * Other live editing sessions in this room, or null while unknown — see
    * {@link recoverableRoomSessions}, which is how a caller with a presence
    * state derives it (AGL-2486).
@@ -245,7 +266,7 @@ export interface UseBesignerDraftOptions {
 export function useBesignerDraft(
   options: UseBesignerDraftOptions,
 ): BesignerDraftState {
-  const { ids, loaded, dirty, storedStamp, firestore } = options
+  const { ids, loaded, dirty, storedStamp, storedNodes, firestore } = options
   // `??` would fold null into 0 and lose the distinction the whole rule
   // rests on: null is "presence has not answered yet", 0 is "it answered,
   // and you are alone".
@@ -264,6 +285,17 @@ export function useBesignerDraft(
   const [offerOrigin, setOfferOrigin] = useState<BesignerDraftOrigin>('browser')
   /** Guards the read so it happens exactly once per document, before writes. */
   const readKeyRef = useRef<string | null>(null)
+  /**
+   * The same guard for the SHARED draft, kept apart from the local one
+   * because the two become readable at different moments (AGL-2874).
+   *
+   * An editor passes `firestore` only once its PARENT document has said that
+   * this is the live version, and the version document can reach the canvas
+   * before that. With one latch for both, the local read takes it and the
+   * shared draft is never read that session — no offer, and nothing standing
+   * between the draft and a save that overwrites it.
+   */
+  const serverReadKeyRef = useRef<string | null>(null)
   const idsRef = useRef(ids)
   idsRef.current = ids
   const storedStampRef = useRef(storedStamp)
@@ -302,28 +334,32 @@ export function useBesignerDraft(
   // object inline, so a dependency on it would re-run this on every render.
   useEffect(() => {
     const currentIds = idsRef.current
-    if (!key || !currentIds || !loaded) return
-    if (readKeyRef.current === key) return
-    readKeyRef.current = key
-    pruneBesignerDrafts()
-    const local = readBesignerDraft(currentIds)
-    setOffer(
-      local
-        ? {
-            nodes: local.nodes,
-            baseStamp: local.baseStamp,
-            takenAt: local.updatedAt ?? null,
-          }
-        : null,
-    )
-    setOfferOrigin('browser')
-    // The shared draft answers late, and wins when it answers. `readKeyRef`
-    // has already latched, so a slow reply cannot re-offer a draft the author
-    // has meanwhile restored or discarded — the guard covers both reads.
-    if (!firestore) return undefined
+    if (!key || !currentIds || !loaded) return undefined
+    if (readKeyRef.current !== key) {
+      readKeyRef.current = key
+      pruneBesignerDrafts()
+      const local = readBesignerDraft(currentIds)
+      setOffer(
+        local
+          ? {
+              nodes: local.nodes,
+              baseStamp: local.baseStamp,
+              takenAt: local.updatedAt ?? null,
+            }
+          : null,
+      )
+      setOfferOrigin('browser')
+    }
+    // The shared draft answers late, and wins when it answers. It is read at
+    // most once per document too, so a slow reply cannot re-offer a draft
+    // the author has meanwhile restored or discarded.
+    if (!firestore || serverReadKeyRef.current === key) return undefined
+    serverReadKeyRef.current = key
     let live = true
+    let answered = false
     void readServerDraft(firestore, currentIds)
       .then((server) => {
+        answered = true
         if (!live || !server) return
         setOfferOrigin('shared')
         setOffer({
@@ -335,9 +371,14 @@ export function useBesignerDraft(
           takenAt: server.updatedAt,
         })
       })
-      .catch(() => undefined)
+      .catch(() => {
+        answered = true
+      })
     return () => {
       live = false
+      // A read torn down before it answered never happened, so the next run
+      // asks again rather than finding the latch already taken.
+      if (!answered) serverReadKeyRef.current = null
     }
   }, [key, loaded, firestore])
 
@@ -356,9 +397,15 @@ export function useBesignerDraft(
   }, [key, loaded, schedule])
 
   // Returning to the saved state (an undo back to it, or a save landing)
-  // means there is no unsaved work left to protect. Dropping the draft here
-  // is what stops it lingering as a restore point for a document that has
-  // moved past it.
+  // means there is no unsaved work left IN THIS BROWSER to protect. Dropping
+  // the crash net here is what stops it lingering as a restore point for a
+  // document that has moved past it.
+  //
+  // The SHARED draft is not this effect's to drop (AGL-2874). It is work
+  // somebody deliberately saved, and a canvas back at the stored document says
+  // nothing about it: edit anything and undo it, and this runs with the shared
+  // draft still unopened. Deciding about it belongs to Discard, and to a save
+  // or publish of a canvas that took the draft in.
   useEffect(() => {
     const currentIds = idsRef.current
     if (!key || !currentIds || !loaded || dirty) return
@@ -369,9 +416,6 @@ export function useBesignerDraft(
     // never existed.
     flush()
     clearBesignerDraft(currentIds)
-    // Discarding has to reach the SHARED draft too, or the next open — or the
-    // next colleague to join — is offered the very thing just declined.
-    if (firestore) void clearServerDraft(firestore, currentIds)
     wroteRef.current = false
   }, [key, loaded, dirty, flush])
 
@@ -402,8 +446,47 @@ export function useBesignerDraft(
    * it would keep serving the verdict from mount.
    */
   const canvasHasRemoteEdits = canvas.hasRemoteEdits
+  /**
+   * Every stamp the stored document has carried this session while its tree
+   * stayed exactly as it is now (AGL-2874).
+   *
+   * A write that leaves `nodes` alone still moves `updatedAt` — declaring a
+   * component's properties is one — and a draft judged on the stamp alone
+   * becomes unrestorable the moment an author does that, though putting it
+   * back could roll nothing back. A draft taken against any stamp in this set
+   * is a draft of this very tree. Reset whenever the tree itself changes, so
+   * someone else's saved nodes still block it.
+   *
+   * Kept in a ref and brought up to date during render: the answer has to be
+   * right in the same render the new stamp arrives in, or the banner shows a
+   * blocked draft for a frame. Adding a stamp twice changes nothing, so a
+   * repeated render lands in the same place.
+   */
+  const sameTreeStampsRef = useRef<
+    { nodes: unknown; stamps: Set<string> } | undefined
+  >(undefined)
+  if (storedNodes !== undefined && storedStamp) {
+    const current = sameTreeStampsRef.current
+    if (
+      !current ||
+      (current.nodes !== storedNodes && !isEqual(current.nodes, storedNodes))
+    ) {
+      sameTreeStampsRef.current = {
+        nodes: storedNodes,
+        stamps: new Set([storedStamp]),
+      }
+    } else {
+      current.nodes = storedNodes
+      current.stamps.add(storedStamp)
+    }
+  }
+  const draftOfThisTree = Boolean(
+    offer?.baseStamp && sameTreeStampsRef.current?.stamps.has(offer.baseStamp),
+  )
   const staleAgainstDocument = Boolean(
-    offer && hasConcurrentWrite(offer.baseStamp, storedStamp),
+    offer &&
+      hasConcurrentWrite(offer.baseStamp, storedStamp) &&
+      !draftOfThisTree,
   )
   /**
    * Restoring is a WHOLE-MAP replace, and in a shared session that is not a
@@ -481,10 +564,11 @@ export function useBesignerDraft(
     // Whichever store the offer came from. The shared draft is PREFERRED over
     // the local one when both exist, so declining an offer that clearing only
     // localStorage cannot reach leaves the author declining the same thing on
-    // every reload, with no way to stop being asked. It is the same rule the
-    // clean-canvas cleanup already follows.
+    // every reload, with no way to stop being asked.
     if (firestore) void clearServerDraft(firestore, currentIds)
   }, [firestore])
+
+  const sharedDraftUnopened = Boolean(offer && offerOrigin === 'shared')
 
   return useMemo(() => {
     if (!key || !offer) return EMPTY_STATE
@@ -492,13 +576,18 @@ export function useBesignerDraft(
     // deliberately LEFT ON DISK: nothing about the room makes this browser's
     // snapshot wrong, only unofferable, and reaping it here would take away
     // the crash net of the very tab that is still holding the work.
-    if (roomIsShared) return EMPTY_STATE
+    if (roomIsShared) {
+      return sharedDraftUnopened
+        ? { ...EMPTY_STATE, sharedDraftUnopened }
+        : EMPTY_STATE
+    }
     return {
       available: true,
       takenAt: offer.takenAt,
       staleAgainstDocument,
       origin: offerOrigin,
       restoreBlockedBy,
+      sharedDraftUnopened,
       restore,
       discard,
     }
@@ -509,6 +598,7 @@ export function useBesignerDraft(
     roomIsShared,
     staleAgainstDocument,
     restoreBlockedBy,
+    sharedDraftUnopened,
     restore,
     discard,
   ])

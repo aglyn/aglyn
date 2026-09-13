@@ -266,6 +266,7 @@ function LayoutBesignerPage(props) {
     draft,
     handleSave,
     saveWorkingDraft,
+    refuseOverUnopenedDraft,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,
@@ -397,6 +398,8 @@ function LayoutBesignerPage(props) {
    * the screens editor for why this cannot be a write to the version itself.
    */
   const handleSaveDraft = useCallback(async () => {
+    // A saved draft on offer is replaced by the next draft save (AGL-2874).
+    if (refuseOverUnopenedDraft('save')) return
     const wrote = await saveWorkingDraft({
       uid: user?.uid,
       email: user?.email,
@@ -414,7 +417,7 @@ function LayoutBesignerPage(props) {
     // the click, and "Draft saved" four times over an untouched document is
     // how a reader stops believing the message.
     if (wrote === 'unchanged') {
-      enqueueSnackbar('Already saved — the draft is up to date.', {
+      enqueueSnackbar('Already saved — nothing new to save.', {
         variant: 'info',
         persist: false,
       })
@@ -426,7 +429,7 @@ function LayoutBesignerPage(props) {
       variant: 'success',
       persist: false,
     })
-  }, [saveWorkingDraft, user, enqueueSnackbar])
+  }, [refuseOverUnopenedDraft, saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * Does the live site already match this version? Hoisted out of the
@@ -438,6 +441,10 @@ function LayoutBesignerPage(props) {
     layoutPublishedVersionId === versionId && !draftPending && !draft.available
 
   const handleSaveAndPublish = useCallback(async () => {
+    // Publishing a canvas that never took in the saved draft on offer would
+    // push the stored layout live and then clear the draft as published
+    // (AGL-2874).
+    if (refuseOverUnopenedDraft('publish')) return
     savedLandedRef.current = false
     await handleSave()
     /**
@@ -502,16 +509,22 @@ function LayoutBesignerPage(props) {
         enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
       }
     })
-    // Published, so the draft must stop being offered.
-    void clearServerDraft(firestore, {
-      scope: hostId,
-      kind: 'layout',
-      docId: layoutId,
-      versionId,
-    })
+    // Published, so the draft must stop being offered — unless it is one
+    // withheld from a shared room and never opened, which this publish did
+    // not contain (AGL-2874).
+    if (!draft.sharedDraftUnopened) {
+      void clearServerDraft(firestore, {
+        scope: hostId,
+        kind: 'layout',
+        docId: layoutId,
+        versionId,
+      })
+    }
     setDraftPending(false)
   }, [
     firestore,
+    refuseOverUnopenedDraft,
+    draft.sharedDraftUnopened,
     handleSave,
     livePublished,
     remoteChanged,

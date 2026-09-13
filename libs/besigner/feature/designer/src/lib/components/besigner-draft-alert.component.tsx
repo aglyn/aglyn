@@ -91,6 +91,23 @@ export function describeDraftOffer(
         'this browser. '
   switch (draft.restoreBlockedBy) {
     case 'saved-since':
+      /*
+       * A SAVED draft the document has moved past (AGL-2874). The crash-net
+       * sentences below speak of unsaved changes in this browser, and a saved
+       * draft is neither (AGL-2508). What the author needs instead is that it
+       * cannot be opened and that Discard is what stops it being offered.
+       */
+      if (draft.origin === 'shared') {
+        return (
+          `This ${noun} has a saved draft${savedFrom}, but the ${noun} has ` +
+          'been saved since it was taken, so opening it would undo that save ' +
+          '— it can no longer be opened. ' +
+          (remoteChanged
+            ? `Someone else has also saved this ${noun} since it loaded, so ` +
+              'saving is paused until you reload.'
+            : 'Discard it once nobody needs it; nothing else is affected.')
+        )
+      }
       // Whether saving is PAUSED is a different fact from whether the draft
       // may be put back, and only `remoteChanged` can answer it. A draft
       // stranded by a save that landed before this editor even opened blocks

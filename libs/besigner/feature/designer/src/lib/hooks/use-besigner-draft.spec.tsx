@@ -456,6 +456,194 @@ describe('useBesignerDraft saved-draft age (AGL-2868)', () => {
 })
 
 /**
+ * A SAVED DRAFT NOBODY HAS OPENED stays until somebody decides about it
+ * (AGL-2874).
+ *
+ * It is work an author pressed Save draft for, offered with Open draft and
+ * Discard. Before either is pressed, nothing else the editor does may delete
+ * it, strand it, or skip offering it.
+ */
+describe('useBesignerDraft unopened saved draft (AGL-2874)', () => {
+  const IDS: BesignerDraftIds = {
+    scope: 'host-1',
+    kind: 'component',
+    docId: 'component-2',
+    versionId: 'v1',
+  }
+  const DRAFT_NODES = {
+    root: { $id: 'root', componentId: 'div', nodes: ['bound'] },
+    bound: { $id: 'bound', componentId: 'muiTypography', parentId: 'root' },
+  } as never
+  const STORED_NODES = { root: { $id: 'root', componentId: 'div' } }
+  const SAVED_DRAFT = {
+    nodes: DRAFT_NODES,
+    baseStamp: 'ms:100',
+    updatedByUid: 'uid-1',
+    updatedByEmail: 'author@example.com',
+    updatedAt: Date.now() - 60_000,
+  }
+
+  interface HarnessProps {
+    firestore?: unknown
+    dirty?: boolean
+    storedStamp?: string | null
+    storedNodes?: unknown
+    roomSessions?: number | null
+  }
+
+  function setup(initial: HarnessProps = {}) {
+    const seen: BesignerDraftState[] = []
+    const firestore = {} as never
+    function Harness(props: HarnessProps) {
+      const draft = useBesignerDraft({
+        ids: IDS,
+        firestore: ('firestore' in props ? props.firestore : firestore) as never,
+        loaded: true,
+        dirty: props.dirty ?? true,
+        storedStamp: props.storedStamp === undefined ? 'ms:100' : props.storedStamp,
+        storedNodes: props.storedNodes ?? STORED_NODES,
+        roomSessions: props.roomSessions,
+      })
+      seen.push(draft)
+      return <BesignerDraftAlertComponent draft={draft} noun="component" />
+    }
+    const rendered = render(<Harness {...initial} />)
+    return {
+      firestore,
+      state: () => seen[seen.length - 1],
+      rerender: (props: HarnessProps) => rendered.rerender(<Harness {...props} />),
+    }
+  }
+
+  async function settle() {
+    await act(async () => {
+      await Promise.resolve()
+    })
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    mockCanvas.applyNodes.mockClear()
+    mockCanvas.hasRemoteEdits = false
+    mockCanvas.isInitialSame = true
+    mockReadServerDraft.mockReset()
+    mockReadServerDraft.mockResolvedValue(SAVED_DRAFT)
+    mockClearServerDraft.mockClear()
+  })
+
+  it('reads the saved draft even when the live-version verdict arrives after the canvas', async () => {
+    // An editor passes `firestore` once its PARENT document says this is
+    // the live version. The version document reaching the canvas first used
+    // to spend the only read on the local store.
+    const { state, rerender, firestore } = setup({ firestore: undefined })
+    await settle()
+    expect(mockReadServerDraft).not.toHaveBeenCalled()
+
+    rerender({ firestore })
+    await settle()
+
+    expect(mockReadServerDraft).toHaveBeenCalledTimes(1)
+    expect(state().available).toBe(true)
+    expect(state().origin).toBe('shared')
+  })
+
+  it('reads it once, however often the editor re-renders', async () => {
+    const { rerender, firestore } = setup()
+    await settle()
+    rerender({ firestore, dirty: false })
+    rerender({ firestore, dirty: true })
+    await settle()
+
+    expect(mockReadServerDraft).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the draft unopened until it is opened', async () => {
+    const { state } = setup()
+    await settle()
+    expect(state().sharedDraftUnopened).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open draft' }))
+
+    expect(mockCanvas.applyNodes).toHaveBeenCalledWith(DRAFT_NODES)
+    expect(state().sharedDraftUnopened).toBe(false)
+  })
+
+  it('keeps reporting it unopened while a shared room withholds the offer', async () => {
+    // The offer is not shown, but the draft is still somebody's unpublished
+    // work: a save or publish from this canvas must not clear it as published.
+    const { state } = setup({ roomSessions: 1 })
+    await settle()
+
+    expect(state().available).toBe(false)
+    expect(state().sharedDraftUnopened).toBe(true)
+  })
+
+  it('never deletes it when the canvas returns to the saved state', async () => {
+    // Edit, let the crash net take a snapshot, undo back to the stored
+    // document. The crash net goes; the saved draft is not this effect's.
+    mockCanvas.isInitialSame = false
+    const { rerender, firestore } = setup({ dirty: true })
+    await settle()
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'))
+    })
+    expect(localStorage.length).toBeGreaterThan(0)
+
+    mockCanvas.isInitialSame = true
+    rerender({ firestore, dirty: false })
+
+    expect(localStorage.length).toBe(0)
+    expect(mockClearServerDraft).not.toHaveBeenCalled()
+  })
+
+  it('still deletes it when the author discards it', async () => {
+    const { firestore } = setup()
+    await settle()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(mockClearServerDraft).toHaveBeenCalledWith(firestore, IDS)
+  })
+
+  it('stays openable across a write that moved the stamp but not the tree', async () => {
+    // Declaring a component's properties rewrites the version document and
+    // its `updatedAt`, and leaves `nodes` exactly as they were.
+    const { state, rerender, firestore } = setup()
+    await settle()
+    expect(state().restoreBlockedBy).toBeNull()
+
+    rerender({
+      firestore,
+      storedStamp: 'ms:200',
+      // A fresh snapshot: equal content, a different object.
+      storedNodes: JSON.parse(JSON.stringify(STORED_NODES)),
+    })
+
+    expect(state().staleAgainstDocument).toBe(false)
+    expect(state().restoreBlockedBy).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open draft' })).toBeTruthy()
+  })
+
+  it('is blocked once somebody saves the tree itself', async () => {
+    const { state, rerender, firestore } = setup()
+    await settle()
+
+    rerender({
+      firestore,
+      storedStamp: 'ms:300',
+      storedNodes: {
+        root: { $id: 'root', componentId: 'div', nodes: ['theirs'] },
+        theirs: { $id: 'theirs', componentId: 'muiTypography', parentId: 'root' },
+      },
+    })
+
+    expect(state().restoreBlockedBy).toBe('saved-since')
+    expect(screen.queryByRole('button', { name: 'Open draft' })).toBeNull()
+    expect(screen.getByRole('alert').textContent).toMatch(/can no longer be opened/)
+  })
+})
+
+/**
  * WHICH unsaved state the author is looking at (AGL-2508).
  *
  * The banner served one sentence for two different documents. Pressing
@@ -470,11 +658,25 @@ describe('describeDraftOffer origin (AGL-2508)', () => {
     takenAt: Date.now(),
     staleAgainstDocument: false,
     restoreBlockedBy: null,
+    sharedDraftUnopened: false,
     restore: () => undefined,
     discard: () => undefined,
   }
   const shared: BesignerDraftState = { ...base, origin: 'shared' }
   const browser: BesignerDraftState = { ...base, origin: 'browser' }
+
+  it('says a saved draft the document moved past can no longer be opened, not that it is this browser’s', () => {
+    const copy = describeDraftOffer(
+      { ...shared, staleAgainstDocument: true, restoreBlockedBy: 'saved-since' },
+      'component',
+      Date.now(),
+    )
+    expect(copy).toMatch(/saved draft/)
+    expect(copy).toMatch(/can no longer be opened/)
+    expect(copy).toMatch(/Discard/)
+    expect(copy).not.toMatch(/this browser/i)
+    expect(copy).not.toMatch(/unsaved/i)
+  })
 
   it('never calls a SAVED draft unsaved, or blames the browser for it', () => {
     const copy = describeDraftOffer(shared, 'screen', Date.now())

@@ -37,6 +37,7 @@ import {
 } from '../drafts/besigner-draft-store'
 import {
   type ServerDraftWrite,
+  clearServerDraft,
   writeServerDraft,
 } from '../drafts/besigner-server-draft'
 import {
@@ -246,8 +247,30 @@ export interface UseBesignerDocumentResult {
    * Resolves `'failed'` when this document cannot hold a shared draft — no
    * `firestore`, or no draft ids — which is the same answer a rejected write
    * gives, and the caller's handling of both is identical.
+   *
+   * Resolves `'unchanged'` WITHOUT writing when the canvas is clean
+   * (AGL-2874). A clean canvas is the stored document, so there is no draft
+   * to take — and writing one anyway would replace whatever saved draft the
+   * slot holds with a copy of the document it was drafted against.
    */
   saveWorkingDraft: (author?: BesignerDraftAuthor) => Promise<ServerDraftWrite>
+  /**
+   * Refuses, and says why, an action that would leave behind a saved draft
+   * this author has been offered and has not opened (AGL-2874). Returns true
+   * when the caller must stop.
+   *
+   * `'publish'` for Save & publish and a Publish click: publishing stores and
+   * promotes the canvas, and a canvas that never took the draft in would go
+   * live without it — after which the draft is cleared as published. `'save'`
+   * for a draft save, which would overwrite it, and for a save of the
+   * document, which moves the stamp the draft was taken against and leaves
+   * it unopenable.
+   *
+   * Only while the offer is ON SCREEN and can be opened: the refusal points
+   * at the banner's Open draft and Discard, and must never point at buttons
+   * that are not there.
+   */
+  refuseOverUnopenedDraft: (action: 'save' | 'publish') => boolean
   /**
    * Announce a write this editor is about to make to the SAME document
    * outside `handleSave` — component properties are the first (AGL-1247).
@@ -575,10 +598,40 @@ export function useBesignerDocument<TData = unknown>(
     loaded: canvas.didSetInitial,
     dirty: saveAvailable,
     storedStamp: versionStamp(updatedAt),
+    storedNodes: nodes,
     roomSessions,
   })
 
+  const unopenedDraftOnOffer =
+    draft.available &&
+    draft.origin === 'shared' &&
+    draft.restoreBlockedBy === null
+
+  // See `UseBesignerDocumentResult.refuseOverUnopenedDraft`.
+  const refuseOverUnopenedDraft = useCallback(
+    (action: 'save' | 'publish'): boolean => {
+      if (!unopenedDraftOnOffer) return false
+      notify(
+        action === 'publish'
+          ? `This ${noun} has a saved draft you have not opened. Open it to ` +
+              'publish it, or discard it to publish what is on the canvas.'
+          : `This ${noun} has a saved draft you have not opened. Open it to ` +
+              'keep working on it, or discard it, then save.',
+        { variant: 'warning', allowDuplicate: true },
+      )
+      return true
+    },
+    [unopenedDraftOnOffer, noun, notify],
+  )
+
   const handleSave = useCallback(async () => {
+    // Before anything else, including "Already saved": a click on a clean
+    // canvas with a saved draft on offer is most likely a click meant for the
+    // draft, and the answer it needs is where the draft is.
+    if (refuseOverUnopenedDraft('save')) {
+      onSaveRefused?.()
+      return undefined
+    }
     const canvasNodes = canvas.toJSON().nodes as Record<string, unknown>
     const prepared = fromCanvasNodes
       ? fromCanvasNodes(canvasNodes)
@@ -662,6 +715,14 @@ export function useBesignerDocument<TData = unknown>(
       // can never be used to roll a document back to an earlier saved state.
       // That is what the `versioning` entitlement sells.
       if (draftIds) clearBesignerDraft(draftIds)
+      // The SHARED draft goes with it only when the saved canvas is one that
+      // took the draft in — opened here, or written from here (AGL-2874). A
+      // draft this session never opened is somebody's saved work that the
+      // canvas just stored does not contain. Best effort: a save that landed
+      // must not report failure because the tidy-up behind it did.
+      if (draftIds && options.firestore && !draft.sharedDraftUnopened) {
+        void clearServerDraft(options.firestore, draftIds)
+      }
       // Fire-and-forget attribution (AGL-676) — an audit miss must not break
       // the edit that triggered it.
       onSaved?.()
@@ -712,6 +773,9 @@ export function useBesignerDocument<TData = unknown>(
     savedMessage,
     fromCanvasNodes,
     draftIds,
+    refuseOverUnopenedDraft,
+    options.firestore,
+    draft.sharedDraftUnopened,
   ])
 
   // See `UseBesignerDocumentResult.saveWorkingDraft` for why the stamp is
@@ -720,6 +784,10 @@ export function useBesignerDocument<TData = unknown>(
     async (author?: BesignerDraftAuthor): Promise<ServerDraftWrite> => {
       const firestore = options.firestore
       if (!firestore || !draftIds) return 'failed'
+      // Trusting the canvas's own verdict is safe in this direction: an
+      // unconfirmed baseline always reads dirty (AGL-1262), so "clean" here
+      // means the store has confirmed exactly this tree.
+      if (!saveAvailable) return 'unchanged'
       return writeServerDraft(firestore, draftIds, {
         nodes: canvas.toJSON().nodes as Aglyn.ProcessableNodes,
         baseStamp: versionStamp(updatedAt),
@@ -727,7 +795,7 @@ export function useBesignerDocument<TData = unknown>(
         updatedByEmail: author?.email ?? null,
       }).catch(() => 'failed' as const)
     },
-    [options.firestore, draftIds, updatedAt],
+    [options.firestore, draftIds, updatedAt, saveAvailable],
   )
 
   // Same expectation `handleSave` records, for writes that do not go through
@@ -753,6 +821,7 @@ export function useBesignerDocument<TData = unknown>(
     remoteChanged,
     handleSave,
     saveWorkingDraft,
+    refuseOverUnopenedDraft,
     markOwnWrite,
     draft,
     jsonOpen,

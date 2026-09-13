@@ -322,6 +322,7 @@ function FormBesignerPage() {
     draft,
     handleSave,
     saveWorkingDraft,
+    refuseOverUnopenedDraft,
     hasError,
     notFound,
   } = useBesignerDocument({
@@ -511,6 +512,8 @@ function FormBesignerPage() {
    * Saves the working draft rather than the form the sites are serving.
    */
   const handleSaveDraft = useCallback(async () => {
+    // A saved draft on offer is replaced by the next draft save (AGL-2874).
+    if (refuseOverUnopenedDraft('save')) return
     const wrote = await saveWorkingDraft({
       uid: user?.uid,
       email: user?.email,
@@ -527,7 +530,7 @@ function FormBesignerPage() {
     // the one time it matters (AGL-1262) — so the answer has to come from
     // the click.
     if (wrote === 'unchanged') {
-      enqueueSnackbar('Already saved — the draft is up to date.', {
+      enqueueSnackbar('Already saved — nothing new to save.', {
         variant: 'info',
         persist: false,
       })
@@ -538,7 +541,7 @@ function FormBesignerPage() {
       variant: 'success',
       persist: false,
     })
-  }, [saveWorkingDraft, user, enqueueSnackbar])
+  }, [refuseOverUnopenedDraft, saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * SAVE DRAFT — one action, wherever it is reached from (AGL-2868).
@@ -567,6 +570,10 @@ function FormBesignerPage() {
 
   const handleSaveAndPublish = useCallback(async () => {
     if (publishing) return
+    // Publishing a canvas that never took in the saved draft on offer would
+    // push the stored design live and then clear the draft as published
+    // (AGL-2874).
+    if (refuseOverUnopenedDraft('publish')) return
     savedLandedRef.current = false
     await handleSave()
     /**
@@ -603,21 +610,28 @@ function FormBesignerPage() {
       if (remoteChanged) return
     }
     await promoteToSites()
-    void clearServerDraft(firestore, {
-      scope: hostId,
-      kind: 'form',
-      docId: formId,
-      versionId,
-    })
+    // Only a draft this canvas took in is published by this; one withheld
+    // from a shared room and never opened is still somebody's unpublished
+    // work (AGL-2874).
+    if (!draft.sharedDraftUnopened) {
+      void clearServerDraft(firestore, {
+        scope: hostId,
+        kind: 'form',
+        docId: formId,
+        versionId,
+      })
+    }
     setDraftPending(false)
   }, [
     publishing,
+    refuseOverUnopenedDraft,
     handleSave,
     promoteToSites,
     livePublished,
     remoteChanged,
     enqueueSnackbar,
     firestore,
+    draft.sharedDraftUnopened,
     user,
     hostId,
     formId,

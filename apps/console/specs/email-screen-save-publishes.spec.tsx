@@ -193,8 +193,10 @@ jest.mock('@aglyn/besigner-ui', () => ({
     // an already-saved document, which is the step "Save draft" skipped.
     saveAvailable: false,
     remoteChanged: false,
-    draft: { available: false },
+    draft: { available: false, sharedDraftUnopened: false },
     handleSave: mockHandleSave,
+    // No saved draft on offer, so nothing is refused (AGL-2874).
+    refuseOverUnopenedDraft: () => false,
     jsonOpen: false,
     openJsonEditor: () => undefined,
     closeJsonEditor: () => undefined,

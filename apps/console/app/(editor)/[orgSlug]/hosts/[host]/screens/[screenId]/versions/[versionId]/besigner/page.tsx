@@ -421,6 +421,7 @@ function BesignerPage(props) {
     draft,
     handleSave,
     saveWorkingDraft,
+    refuseOverUnopenedDraft,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,
@@ -846,6 +847,8 @@ function BesignerPage(props) {
    * that already contains them would re-apply them.
    */
   const handleSaveDraft = useCallback(async () => {
+    // A saved draft on offer is replaced by the next draft save (AGL-2874).
+    if (refuseOverUnopenedDraft('save')) return
     const wrote = await saveWorkingDraft({
       uid: user?.uid,
       email: user?.email,
@@ -863,7 +866,7 @@ function BesignerPage(props) {
     // the click, and "Draft saved" four times over an untouched document is
     // how a reader stops believing the message.
     if (wrote === 'unchanged') {
-      enqueueSnackbar('Already saved — the draft is up to date.', {
+      enqueueSnackbar('Already saved — nothing new to save.', {
         variant: 'info',
         persist: false,
       })
@@ -875,7 +878,7 @@ function BesignerPage(props) {
       variant: 'success',
       persist: false,
     })
-  }, [saveWorkingDraft, user, enqueueSnackbar])
+  }, [refuseOverUnopenedDraft, saveWorkingDraft, user, enqueueSnackbar])
 
   /**
    * SAVE, THEN MAKE THIS VERSION THE LIVE ONE (AGL-1152).
@@ -905,6 +908,10 @@ function BesignerPage(props) {
     !draft.available
 
   const handleSaveAndPublish = useCallback(async () => {
+    // Publishing a canvas that never took in the saved draft on offer would
+    // push the stored page live and then clear the draft as published
+    // (AGL-2874).
+    if (refuseOverUnopenedDraft('publish')) return
     savedLandedRef.current = false
     saveRefusedRef.current = false
     await handleSave()
@@ -1015,13 +1022,17 @@ function BesignerPage(props) {
     }
     // The draft has been published, so it must stop being offered — otherwise
     // the next open invites the author to restore the state they just moved
-    // past. Best effort, like the cache drop above.
-    void clearServerDraft(firestore, {
-      scope: hostId,
-      kind: 'screen',
-      docId: screenId,
-      versionId,
-    })
+    // past. Best effort, like the cache drop above. Not a draft withheld from
+    // a shared room and never opened: this publish did not contain it
+    // (AGL-2874).
+    if (!draft.sharedDraftUnopened) {
+      void clearServerDraft(firestore, {
+        scope: hostId,
+        kind: 'screen',
+        docId: screenId,
+        versionId,
+      })
+    }
     setDraftPending(false)
     enqueueSnackbar(
       isEmailScreen
@@ -1035,6 +1046,7 @@ function BesignerPage(props) {
       { variant: 'success', persist: false },
     )
   }, [
+    refuseOverUnopenedDraft,
     handleSave,
     isEmailScreen,
     livePublished,
@@ -1042,6 +1054,7 @@ function BesignerPage(props) {
     screenResult?.data?.versionId,
     versionId,
     updateScreenDoc,
+    draft.sharedDraftUnopened,
     user,
     hostId,
     screenId,

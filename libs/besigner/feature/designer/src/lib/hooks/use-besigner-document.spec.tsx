@@ -1162,10 +1162,14 @@ describe('useBesignerDocument', () => {
         mockWriteServerDraft.mockClear()
         mockReadServerDraft.mockClear()
         mockReadServerDraft.mockResolvedValue(null)
+        mockClearServerDraft.mockClear()
         mockCanvas.didSetInitial = true
       })
 
       it('stamps it against the document the restore check compares to', async () => {
+        // There has to be something to draft: a clean canvas is the stored
+        // document, and writes nothing (AGL-2874).
+        setCanvasDirty(true)
         const { result } = setup({
           draft: DRAFT,
           firestore,
@@ -1192,6 +1196,7 @@ describe('useBesignerDocument', () => {
       })
 
       it('offers back the draft it saved, on a document nobody has touched since', async () => {
+        setCanvasDirty(true)
         const first = setup({ draft: DRAFT, firestore, updatedAt: stamp(7) })
         await act(async () => {
           await first.result.current.saveWorkingDraft()
@@ -1217,6 +1222,140 @@ describe('useBesignerDocument', () => {
 
         expect(second.result.current.draft.available).toBe(true)
         expect(second.result.current.draft.restoreBlockedBy).toBeNull()
+      })
+
+      /**
+       * What may not happen to a saved draft that is on offer and has not
+       * been opened (AGL-2874). Each of these used to destroy it: a publish
+       * pushed the stored tree live and then cleared the draft as published,
+       * a draft save from a clean canvas replaced it with the stored tree,
+       * and a save of the document stranded it behind a moved stamp.
+       */
+      describe('while a saved draft is on offer and unopened', () => {
+        const SAVED = {
+          nodes: {
+            root: { $id: 'root', componentId: 'div', nodes: ['bound'] },
+            bound: { $id: 'bound', componentId: 'muiTypography' },
+          },
+          baseStamp: 'ms:7',
+          updatedByUid: 'uid-1',
+          updatedByEmail: 'author@example.com',
+          updatedAt: 1_000,
+        }
+
+        async function offered(overrides: Record<string, unknown> = {}) {
+          mockReadServerDraft.mockResolvedValue(SAVED)
+          const rendered = setup({
+            draft: DRAFT,
+            firestore,
+            updatedAt: stamp(7),
+            ...overrides,
+          })
+          await act(async () => {
+            await Promise.resolve()
+          })
+          return rendered
+        }
+
+        it('refuses a publish, and points at the draft', async () => {
+          const { result, notify } = await offered()
+          expect(result.current.draft.available).toBe(true)
+
+          let refused = false
+          act(() => {
+            refused = result.current.refuseOverUnopenedDraft('publish')
+          })
+
+          expect(refused).toBe(true)
+          expect(notify).toHaveBeenCalledWith(
+            expect.stringMatching(/saved draft you have not opened.*Open it to publish it/),
+            expect.objectContaining({ variant: 'warning' }),
+          )
+        })
+
+        it('refuses a save of the document rather than stranding the draft', async () => {
+          setCanvasDirty(true)
+          const onSaveRefused = jest.fn()
+          const { result, save, notify } = await offered({ onSaveRefused })
+
+          await act(async () => {
+            await result.current.handleSave()
+          })
+
+          expect(save).not.toHaveBeenCalled()
+          expect(onSaveRefused).toHaveBeenCalled()
+          expect(notify).toHaveBeenCalledWith(
+            expect.stringMatching(/saved draft you have not opened/),
+            expect.objectContaining({ variant: 'warning' }),
+          )
+        })
+
+        it('lets everything through once the draft is opened', async () => {
+          const { result } = await offered()
+
+          act(() => result.current.draft.restore())
+
+          let refused = true
+          act(() => {
+            refused = result.current.refuseOverUnopenedDraft('publish')
+          })
+          expect(refused).toBe(false)
+          expect(result.current.draft.sharedDraftUnopened).toBe(false)
+        })
+
+        it('does not refuse a draft that can no longer be opened', async () => {
+          // Nothing points at an Open draft button that is not on screen.
+          const { result } = await offered({ updatedAt: stamp(9) })
+          expect(result.current.draft.restoreBlockedBy).toBe('saved-since')
+
+          let refused = true
+          act(() => {
+            refused = result.current.refuseOverUnopenedDraft('publish')
+          })
+          expect(refused).toBe(false)
+        })
+
+        it('keeps a draft withheld from a shared room when a save lands', async () => {
+          // Nobody here opened it, so the canvas just stored does not contain
+          // it — clearing it now would clear somebody's unpublished work.
+          setCanvasDirty(true)
+          const { result, save } = await offered({ roomSessions: 1 })
+          expect(result.current.draft.available).toBe(false)
+
+          await act(async () => {
+            await result.current.handleSave()
+          })
+
+          expect(save).toHaveBeenCalled()
+          expect(mockClearServerDraft).not.toHaveBeenCalled()
+        })
+      })
+
+      it('writes no draft from a clean canvas', async () => {
+        setCanvasDirty(false)
+        const { result } = setup({ draft: DRAFT, firestore, updatedAt: stamp(7) })
+
+        let wrote: unknown
+        await act(async () => {
+          wrote = await result.current.saveWorkingDraft()
+        })
+
+        expect(wrote).toBe('unchanged')
+        expect(mockWriteServerDraft).not.toHaveBeenCalled()
+      })
+
+      it('clears the working draft once a save stores a canvas that holds it', async () => {
+        // No draft on offer: this session wrote it or opened it, so the
+        // document now carries what the draft was for.
+        setCanvasDirty(true)
+        const { result, save } = setup({ draft: DRAFT, firestore, updatedAt: stamp(7) })
+
+        await act(async () => {
+          await result.current.handleSave()
+        })
+
+        expect(save).toHaveBeenCalled()
+        expect(mockClearServerDraft).toHaveBeenCalledWith(firestore, DRAFT)
       })
     })
   })
