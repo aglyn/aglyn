@@ -187,8 +187,31 @@ function counterDoc(): Record<string, unknown> {
 /** Each test gets its own key, so windows never bleed between them. */
 let keySeq = 0
 
+/**
+ * The pinned clock every test runs on.
+ *
+ * The counter's document id is `(key, window)` and the window comes off the
+ * clock, so two calls either side of a real minute boundary write to two
+ * different documents. {@link counterDoc} returns the FIRST one, and the
+ * second call then reads a counter it never spent — the assertions here
+ * become "did this happen to run mid-minute", which is a coin toss rather
+ * than a statement about durability.
+ *
+ * It is not theoretical: `89058f6bc` ran this suite three times, green twice
+ * and red once on the cold-start case, off a commit that touched only the
+ * Video element.
+ */
+const PINNED_NOW = Date.UTC(2026, 8, 12, 12, 30, 0)
+let clock: jest.SpyInstance<number, []> | undefined
+
+afterEach(() => {
+  clock?.mockRestore()
+  clock = undefined
+})
+
 beforeEach(() => {
   jest.clearAllMocks()
+  clock = jest.spyOn(Date, 'now').mockReturnValue(PINNED_NOW)
   mockRateLimitDocs.clear()
   mockStoreFails = false
   keySeq += 1
