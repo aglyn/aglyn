@@ -552,7 +552,7 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     region: 'United States',
     purpose:
       "Hosting and streaming the platform's own films on its marketing site, loaded only when a visitor presses play",
-    publishedOn: '2026-09-11',
+    publishedOn: '2026-09-13',
     reason:
       "The Wistia player frame the Video element (`libs/plugins/mui/src/lib/components/video.tsx`) loads when a visitor presses play, at an address `libs/aglyn/src/lib/app-utils/wistia-embed.ts` rebuilds from the media id alone. Declared a subprocessor because the platform plays its own films on its marketing site through it. A Wistia link a customer's author pastes on their own site is still that customer's choice, as a YouTube or Vimeo link is, and gets no row of its own.",
     dataReceived:
