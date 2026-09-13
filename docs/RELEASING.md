@@ -137,19 +137,58 @@ ride along, and the PR's range is exactly what `release:prepare` documented.
 
 **The bump is now on a branch `main` has never seen.** Merging the PR puts it
 on `production`; nothing puts it on `main`, and a `main` left that way is wrong
-in two ways (AGL-2594). `test:version-monotonic` goes red on every local guard
-run — "package.json is 1.0.0-beta.70 but production runs 1.0.0-beta.71" — while
-CI stays green only because its checkout lacks the ref the guard compares
-against. And the next promotion PR opens un-mergeable: `production` changed
-`package.json` and `CHANGELOG.md` on a commit `main` does not have, the next
-bump on `main` touches the same lines, and GitHub runs no `pull_request`
-workflows on a conflicted PR at all. Cherry-picking the bump onto `main` does
-not avoid that; it guarantees it.
+in two ways (AGL-2594).
 
-So after the merge and the tag, **merge `production` back into `main`** — a
-merge, so the bump commit becomes an ancestor of `main` and the next PR is a
-clean fast-forward. From a temp worktree; the shared checkout is never reset or
-rebased:
+The first is that `test:version-monotonic` goes red against it, in CI as well
+as locally. The guard compares `package.json` with the copy on
+`origin/production` and with the newest `v*` tag. Every workflow that runs it
+checks out with `fetch-depth: 0`, which fetches every branch and every tag, so
+each job compares against `production` as it stands when that job checks out.
+In the window between the merge and the back-merge, that means:
+
+| where the guard runs | what it grades after the merge | until the back-merge |
+|---|---|---|
+| Main Gate: `fast`, and the full sweep's `lint + guards` | pushes to `main` | **red**, and posted to Slack `#ci` |
+| `tools-guards.yml` on its daily schedule, or on a PR into `main` | `main`, or a merge into it | **red** |
+| `tools-guards.yml` on the promotion PR, and on the push to `production` | the release branch merged into `production` | green: that tree carries the bump |
+| a local guard run (`run-guards.mjs`, `tools/gate.sh`) | the commit it checks | **red** once the merge is fetched |
+
+`nx-ci.yml` does not run the guard. On 2026-09-13 `1cf03cbeb` reached `main`
+three minutes after `v1.0.0-beta.119` merged. Its `fast` job failed with
+"package.json is 1.0.0-beta.118 but production runs 1.0.0-beta.119". Its
+`lint + guards` job, which checked out after the tag was pushed, failed both
+comparisons, adding "v1.0.0-beta.119 is already tagged". Slack was pinged for
+both, and the back-merge, pushed two minutes later, passed `fast`. A red like
+that belongs to the window rather than to the commit it lands on, and it stays
+there: a re-run grades the same tree against a `production` that still carries
+the bump, and the next promotion's verdict lists it among the range's reds.
+
+The second is that the next promotion PR opens un-mergeable: `production`
+changed `package.json` and `CHANGELOG.md` on a commit `main` does not have, the
+next bump on `main` touches the same lines, and GitHub runs no `pull_request`
+workflows on a conflicted PR at all. Cherry-picking the bump onto `main` does
+not avoid that; it guarantees it. A cherry-pick is a new commit carrying the
+same change, so the next PR's merge base still predates both copies, and both
+sides have edited those lines since. The next PR is clean only when the bump
+commit **itself** is an ancestor of `main`, by fast-forward or by merge.
+
+**If `main` has not moved since the branch was cut, there is no window.** Push
+the bump commit to `main` as well, straight from the release branch, before the
+PR merges:
+
+```bash
+git -C /private/tmp/aglyn-release push origin HEAD:main
+```
+
+It fast-forwards, and a `main` that has moved rejects it, so it is safe to try.
+`main` then holds the very commit the PR merges, and the guard allows a `main`
+that is ahead of `production`. That is the position step 1 leaves every bump
+in.
+
+**Otherwise, merge `production` back into `main` the moment the PR merges**,
+before you verify the deploy and before you tag. A merge, so the bump commit
+becomes an ancestor of `main` and the next PR is a clean fast-forward. From a
+temp worktree; the shared checkout is never reset or rebased:
 
 ```bash
 git fetch origin main production
@@ -163,19 +202,31 @@ If the merge stops on `package.json` or `CHANGELOG.md`, keep the higher version
 and both changelog sections, newest first, `git add` those two files by name,
 then `git commit --no-edit` and push.
 
-There is a shorter path when `main` has not moved since the branch was cut:
-push the bump commit straight to `main` before opening the PR
-(`git push origin HEAD:main` from the release branch). It fast-forwards, and a
-`main` that has moved rejects it, so it is safe to try.
+When `main` has moved, that is as short as the window gets. It opens at the
+merge, because the guard and the next PR both read the `production` branch, and
+that branch carries the bump from the moment the PR merges, whether or not the
+build then serves. Nothing after the merge changes what `main` owes, so waiting
+for the deploy check and the tag first would only hold the window open through
+the build and the verification. Nothing before the merge can close it either:
+until then `production` has no bump to bring back. The later steps are
+unaffected. The back-merge pushes only to `main`, while
+`verify-production-aliases.mjs` compares the deployment with `production` and
+`release:tag` tags `origin/production`, so the tag still waits for the
+verification.
 
 `release:tag` checks for this and prints the commands above whenever
 `origin/main` is behind the version it is tagging. It still tags: the tag
-asserts what `production` serves, and that is true whatever `main` says.
+asserts what `production` serves, and that is true whatever `main` says. After
+a back-merge in this order, its `origin/main` line reads `carries this version`,
+or `ahead` once `main` has moved on.
 
 ### 2 — Promote, as usual
 
 Open the `main` → `production` PR, real merge commit, never squash, no
-intermediate branches. Then verify the deploy is live and serving that commit:
+intermediate branches. If the PR comes from a pinned release branch whose bump
+`main` does not have yet, merge `production` back into `main` as soon as the PR
+merges, before anything else in this step ("Cutting the bump on a pinned
+release branch", above). Then verify the deploy is live and serving that commit:
 
 ```bash
 node tools/deploy/verify-production-aliases.mjs

@@ -470,10 +470,12 @@ function main() {
   out.push('  promotion is merged and the deploy is verified.')
   out.push('')
   // A bump cut on a pinned release branch merges to production and nowhere
-  // else. main left without it reds the monotonic guard on every local run
-  // and conflicts the next promotion PR (AGL-2594), so the branch flow has
-  // one more step than the main flow, and it is said here where the bump is
-  // made rather than discovered at the tag.
+  // else. main left without it reds the monotonic guard, in Main Gate as well
+  // as locally, and conflicts the next promotion PR (AGL-2594), so the branch
+  // flow has one more step than the main flow, and it is said here where the
+  // bump is made rather than discovered at the tag. The guard reads the
+  // production branch, so that step is due the moment the PR merges, ahead of
+  // the deploy check and the tag (AGL-2888).
   out.push(
     '  If this bump was cut on a PINNED RELEASE BRANCH rather than on main,',
   )
@@ -487,13 +489,15 @@ function main() {
   )
   out.push('')
   out.push(
-    '    main HAS moved  →  after the promotion merges and the tag is pushed,',
+    '    main HAS moved  →  the moment the promotion merges, before verifying',
   )
-  out.push('      merge origin/production back into main from a temp worktree.')
   out.push(
-    '      release:tag prints the exact commands; so does docs/RELEASING.md',
+    '      the deploy or tagging, merge origin/production back into main from',
   )
-  out.push('      under "Cutting the bump on a pinned release branch".')
+  out.push(
+    '      a temp worktree. docs/RELEASING.md has the exact commands under',
+  )
+  out.push('      "Cutting the bump on a pinned release branch".')
   out.push('')
   out.push(
     '    Never cherry-pick the bump onto main: that guarantees the conflict.',

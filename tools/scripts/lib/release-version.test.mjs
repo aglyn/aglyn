@@ -296,6 +296,13 @@ describe('mainVersionVerdict (AGL-2594)', () => {
     const text = verdict.lines.join('\n')
     assert.match(text, /WARNING: origin\/main does NOT carry v1\.0\.0-beta\.71/)
     assert.match(text, /test:version-monotonic goes RED/)
+    // CI is not spared. Main Gate checks out with fetch-depth 0, so it holds
+    // origin/production and the tags, and 1cf03cbeb's push failed the guard
+    // between the beta.119 merge and its back-merge (AGL-2888).
+    assert.match(text, /in CI as well as/)
+    assert.match(text, /every push to main fails it/)
+    assert.doesNotMatch(text, /CI stays green/)
+    assert.match(text, /owed the moment the promotion merged/)
     assert.match(text, /UN-MERGEABLE \(GitHub: DIRTY\)/)
     // The remediation is a merge from a temp worktree, never a reset or a
     // rebase of the shared checkout, and never a cherry-pick.
