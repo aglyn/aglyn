@@ -179,4 +179,77 @@ describe('component properties driving non-text fields on the published page', (
       })
     })
   })
+
+  describe('a dropdown bound to a Choice, and a Screen picker bound to a Link', () => {
+    /** The marketing card's "See …" link: its style and target per page. */
+    const CARD = {
+      rootId: 'c-root',
+      nodes: {
+        'c-root': { $id: 'c-root', componentId: 'muiStack', nodes: ['c-more'] },
+        'c-more': {
+          $id: 'c-more',
+          componentId: 'muiScreenLink',
+          parentId: 'c-root',
+          props: {
+            children: 'See {{prop.subject}}',
+            screenId: '{{prop.moreLink}}',
+            variant: '{{prop.linkStyle}}',
+          },
+        },
+      },
+      props: [
+        { name: 'subject', type: 'text', defaultValue: 'more' },
+        { name: 'moreLink', type: 'href', defaultValue: 'screen:products' },
+        {
+          name: 'linkStyle',
+          type: 'choice',
+          options: [
+            { value: 'text', label: 'Plain' },
+            { value: 'outlined', label: 'Outlined' },
+          ],
+        },
+      ],
+    }
+
+    const pagePlacingCard = (propValues?: Record<string, unknown>) => ({
+      [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['card'] },
+      card: {
+        $id: 'card',
+        componentId: 'reusableInstance',
+        parentId: ROOT,
+        props: { refId: 'card', ...(propValues ? { propValues } : {}) },
+        nodes: [],
+      },
+    })
+
+    const link = (nodes: Record<string, any>) => nodes['cmp__card__c-more']
+
+    beforeEach(() => {
+      mockGetComponents.mockResolvedValue({ definitions: { card: CARD } })
+    })
+
+    it('ships the style and the target the page chose', async () => {
+      const shipped = link(
+        await compose(
+          pagePlacingCard({
+            subject: 'pricing',
+            moreLink: 'screen:pricing',
+            linkStyle: 'outlined',
+          }),
+        ),
+      )
+      expect(shipped.props).toMatchObject({
+        children: 'See pricing',
+        screenId: 'screen:pricing',
+        variant: 'outlined',
+      })
+    })
+
+    it('ships the element its own style when no page and no default chose one', async () => {
+      const shipped = link(await compose(pagePlacingCard()))
+      // `variant: ''` would reach the button as no style at all.
+      expect('variant' in shipped.props).toBe(false)
+      expect(shipped.props.screenId).toBe('screen:products')
+    })
+  })
 })

@@ -53,9 +53,9 @@ import { TokenPillPopover, tokenPillContainerSx } from './token-pill.component'
  *
  * A free-text attribute has always taken `{{prop.headline}}`: the token is
  * typed, or picked with the `{}` in the box, and substitution does the rest.
- * A switch or a checkbox has no box, so inside a reusable component it could
- * only ever hold the component's own value — and a property of the matching
- * kind had nothing to drive.
+ * A switch, a checkbox or a dropdown has no text to type into, so inside a
+ * reusable component it could only ever hold the component's own value — and
+ * a property of the matching kind had nothing to drive.
  *
  * This wraps such a field, inside a component editor only. Unbound, it is the
  * field exactly as before, with a `{}` among its corner controls. Bound, the
@@ -83,13 +83,40 @@ export const PROPERTY_BINDING_TYPES: Readonly<
 > = {
   [FieldComponentType.SWITCH]: ['boolean'],
   [FieldComponentType.CHECKBOX]: ['boolean'],
+  [FieldComponentType.SELECT]: ['choice'],
+  [FieldComponentType.SCREEN_SELECT]: ['href'],
 }
 
-/** What the property picker is called for each kind, in its empty state. */
+/** What each kind of property is called in the panel's own words. */
 const PROPERTY_KIND_LABEL: Readonly<
   Partial<Record<Aglyn.ReusableComponentPropType, string>>
 > = {
   boolean: 'Yes / no',
+  choice: 'Choice',
+  href: 'Link',
+}
+
+/**
+ * The values of a `choice` property that a dropdown does not offer.
+ *
+ * A choice reaches the dropdown's element as its VALUE, and an element handed
+ * a value outside its own list draws as though nothing were chosen. The
+ * dialog that declares a choice cannot see the dropdowns it will drive, so the
+ * mismatch is only knowable here, where the two meet.
+ */
+export function unofferedChoiceValues(
+  prop: Pick<Aglyn.ReusableComponentProp, 'type' | 'options'> | undefined,
+  fieldOptions: unknown,
+): string[] {
+  if (prop?.type !== 'choice' || !Array.isArray(fieldOptions)) return []
+  const offered = new Set(
+    fieldOptions.map((option) =>
+      String((option as { value?: unknown } | null)?.value ?? ''),
+    ),
+  )
+  return (prop.options ?? [])
+    .map((option) => option?.value)
+    .filter((value): value is string => Boolean(value) && !offered.has(value))
 }
 
 /** A component-mapper entry: a component, or `{ component, ...defaults }`. */
@@ -117,9 +144,10 @@ export interface PropertyBindingOptions {
  *
  * Unchanged outside a component editor, for a field whose kind takes no
  * binding, for a read-only or disabled field (a control that writes an
- * unwritable field is a lie), for a checkbox LIST — its value is an array of
- * choices, not a yes or a no — and whenever the control to fall back to is
- * unknown, since a wrapper with nothing to render would blank the field.
+ * unwritable field is a lie), for a checkbox LIST or a multiple-choice
+ * dropdown — each holds a list, and a property supplies one value — and
+ * whenever the control to fall back to is unknown, since a wrapper with
+ * nothing to render would blank the field.
  */
 export function withPropertyBinding<T extends Record<string, unknown>>(
   field: T,
@@ -134,6 +162,7 @@ export function withPropertyBinding<T extends Record<string, unknown>>(
   if (declaredComponent === FieldComponentType.CHECKBOX && field['options']) {
     return field
   }
+  if (field['isMulti'] || field['multiple']) return field
   const kinds = types
     .map((type) => PROPERTY_KIND_LABEL[type])
     .filter(Boolean)
@@ -143,6 +172,10 @@ export function withPropertyBinding<T extends Record<string, unknown>>(
     component: PROPERTY_BINDING_FIELD_COMPONENT,
     bindingControl: control,
     bindingOptions: componentPropBindingOptions(componentProps, types),
+    bindingProps: componentProps.filter((prop) =>
+      types.includes(prop?.type ?? 'text'),
+    ),
+    bindingKinds: kinds,
     bindingEmptyText:
       `This component has no ${kinds || 'matching'} properties yet. Add one ` +
       'under File ▸ Properties…, then bind it here.',
@@ -239,9 +272,79 @@ export interface PropertyBindingFieldProps {
   helperText?: ReactNode
   bindingControl?: PropertyBindingControl
   bindingOptions?: BindingOption[]
+  /** The declared props this field can be bound to. */
+  bindingProps?: readonly Aglyn.ReusableComponentProp[]
+  /** Those props' kinds in the panel's words, e.g. `Choice`. */
+  bindingKinds?: string
   bindingEmptyText?: string
   tokenLabelContext?: TokenLabelContext
   FormFieldGridProps?: FormFieldGridProps
+}
+
+/**
+ * What a bound field says under the property it follows, and whether that is
+ * a problem.
+ *
+ * Three ways a binding can be wrong while still looking bound, each named in
+ * words an author can act on: the property is gone (it was renamed or
+ * removed, so nothing substitutes), the property is the wrong kind (a token
+ * written some other way than this field's picker), or — for a dropdown —
+ * some of the property's choices are values the dropdown does not offer.
+ */
+export function describePropertyBinding(options: {
+  token: string
+  resolved: ResolvedTokenLabel
+  bindingProps?: readonly Aglyn.ReusableComponentProp[]
+  bindingKinds?: string
+  fieldOptions?: unknown
+}): { text: string; error: boolean } {
+  const { token, resolved, bindingProps, bindingKinds, fieldOptions } = options
+  const name = matchComponentPropToken(token)
+  const prop = (bindingProps ?? []).find((entry) => entry?.name === name)
+  if (!prop) {
+    return resolved.known
+      ? {
+          text:
+            `${resolved.label} is not a ${bindingKinds || 'matching'} ` +
+            'property, so it cannot set this field. Bind one that is, or ' +
+            'remove the binding.',
+          error: true,
+        }
+      : {
+          text:
+            'This component declares no property by that name, so pages ' +
+            'cannot set it. Bind a property it declares, or remove the ' +
+            'binding.',
+          error: true,
+        }
+  }
+  const unoffered = unofferedChoiceValues(prop, fieldOptions)
+  if (unoffered.length) {
+    const offered = (Array.isArray(fieldOptions) ? fieldOptions : [])
+      .map((option) => {
+        const { value, label } = (option ?? {}) as {
+          value?: unknown
+          label?: unknown
+        }
+        const text = String(value ?? '')
+        return label != null && String(label) !== text
+          ? `${String(label)} (${text})`
+          : text
+      })
+      .filter(Boolean)
+    return {
+      text:
+        `This field does not offer ${unoffered.join(', ')}, so a page that ` +
+        `chooses ${unoffered.length === 1 ? 'it' : 'one of those'} gets the ` +
+        `field's own default. Give ${resolved.label} values from: ` +
+        `${offered.join(', ')}.`,
+      error: true,
+    }
+  }
+  return {
+    text: `Each page sets this with the ${resolved.label} property.`,
+    error: false,
+  }
 }
 
 /**
@@ -254,6 +357,8 @@ export function PropertyBindingField(props: PropertyBindingFieldProps) {
   const {
     bindingControl,
     bindingOptions = [],
+    bindingProps,
+    bindingKinds,
     bindingEmptyText,
     tokenLabelContext = {},
     ...fieldProps
@@ -321,6 +426,13 @@ export function PropertyBindingField(props: PropertyBindingFieldProps) {
   )
 
   if (bound && resolved) {
+    const described = describePropertyBinding({
+      token: bound,
+      resolved,
+      bindingProps,
+      bindingKinds,
+      fieldOptions: fieldProps['options'],
+    })
     return (
       <>
         <FormFieldGrid
@@ -331,14 +443,8 @@ export function PropertyBindingField(props: PropertyBindingFieldProps) {
             fullWidth
             label={fieldProps.label}
             value=""
-            helperText={
-              resolved.known
-                ? `Each page sets this with the ${resolved.label} property.`
-                : 'This component declares no property by that name, so ' +
-                  'pages cannot set it. Bind a property it declares, or ' +
-                  'remove the binding.'
-            }
-            error={!resolved.known}
+            helperText={described.text}
+            error={described.error}
             slotProps={{
               inputLabel: { shrink: true },
               input: {

@@ -448,6 +448,30 @@ export function buildInstancePropFields(
               parse: parseYesNoPropValue,
             },
           }
+        case 'choice': {
+          // The component's own answers, by label. Unset is the default
+          // again, the way it is for a Yes / no: the placeholder names it and
+          // the corner ✕ returns to it.
+          const choices = (prop.options ?? [])
+            .filter((option) => option?.value)
+            .map((option) => ({
+              value: option.value,
+              label: option.label || option.value,
+            }))
+          const fallback = choices.find(
+            (option) => option.value === prop.defaultValue,
+          )
+          return {
+            ...base,
+            component: FieldComponentType.SELECT,
+            options: choices,
+            placeholder: fallback
+              ? `Use the component default (${fallback.label})`
+              : 'Not set',
+            description: undefined,
+            clearable: true,
+          }
+        }
         case 'number':
           return {
             ...base,

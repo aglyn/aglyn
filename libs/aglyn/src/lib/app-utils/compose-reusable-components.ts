@@ -20,6 +20,7 @@ import type {
   NodeId,
   ReusableComponentIcon,
   ReusableComponentProp,
+  ReusableComponentPropType,
 } from '../foundation'
 import {
   COMPONENT_NODE_ID_PREFIX,
@@ -491,20 +492,27 @@ export function readYesNoValue(value: unknown): boolean | undefined {
  *
  * The substitution itself is textual — {@link buildPropTokens} stringifies
  * every value and `resolveNamedTokens` splices it into string props. That is
- * right for copy and wrong for a switch: an element reading `lightbox` takes
- * the string `'false'` for a yes. So a prop whose stored value is EXACTLY one
- * token naming a declared `boolean` prop is read back through
- * {@link readYesNoValue} and handed on as a real `true` or `false`.
+ * right for copy and wrong for the fields that do not hold copy. So a prop
+ * whose stored value is EXACTLY one token naming a declared prop is finished
+ * by that prop's type:
+ *
+ * - `boolean` — read back through {@link readYesNoValue} and handed on as a
+ *   real `true` or `false`, because an element reading `lightbox` takes the
+ *   string `'false'` for a yes. Nothing to read is a no: an unset Yes / no
+ *   with no default substitutes `''`, and `''` is a no.
+ * - `choice` — handed on as the chosen value, or REMOVED when there is none,
+ *   so the element falls back to its own default. A dropdown's empty value is
+ *   not one of its options, and an element handed `variant: ''` draws neither
+ *   the component's variant nor its own.
+ *
+ * "Nothing chosen" includes a binding still holding its token after
+ * substitution — a component editor drawing a prop that has no default —
+ * which is then drawn exactly as a page that sets nothing renders it.
  *
  * Exact match only, for the reason {@link matchComponentPropToken} gives: a
  * value that merely contains a token is text with a value inside it, and it
  * stays text. An undeclared name is never typed either — it never substitutes,
  * so there is no value to read.
- *
- * A binding still holding its token after substitution — a component editor
- * drawing a prop that has no default — reads as `false`. That is what a page
- * that sets nothing renders: an unset Yes/no property with no default
- * substitutes `''`, and `''` is a no.
  *
  * Top-level props only. The binding a panel field offers writes that field's
  * own prop; a token nested in an item list is content the component spelled
@@ -521,30 +529,39 @@ export function resolveComponentPropTokens<
   tokens: Record<string, string> | null | undefined,
 ): NormalizedNodes<N> {
   const substituted = resolveNamedTokens(nodes, tokens)
-  const yesNo = new Set<string>()
+  const typedProps = new Map<string, ReusableComponentPropType>()
   for (const prop of declared ?? []) {
-    if (prop?.name && prop.type === 'boolean') yesNo.add(prop.name)
+    if (prop?.name && (prop.type === 'boolean' || prop.type === 'choice')) {
+      typedProps.set(prop.name, prop.type)
+    }
   }
-  if (!yesNo.size) return substituted
+  if (!typedProps.size) return substituted
   let typed: NormalizedNodes<N> | undefined
   for (const [id, node] of Object.entries(nodes ?? {})) {
     const raw = node?.props as Record<string, unknown> | undefined
     if (!raw || typeof raw !== 'object') continue
-    let patch: Record<string, unknown> | undefined
+    let props: Record<string, unknown> | undefined
     for (const [key, value] of Object.entries(raw)) {
       const name = matchComponentPropToken(value)
-      if (!name || !yesNo.has(name)) continue
-      const resolved = (
-        substituted[id]?.props as Record<string, unknown> | undefined
-      )?.[key]
-      patch = { ...patch, [key]: readYesNoValue(resolved) === true }
+      const type = name ? typedProps.get(name) : undefined
+      if (!type) continue
+      props = props ?? {
+        ...(substituted[id]?.props as Record<string, unknown> | undefined),
+      }
+      const resolved = props[key]
+      if (type === 'boolean') {
+        props[key] = readYesNoValue(resolved) === true
+      } else if (
+        typeof resolved !== 'string' ||
+        !resolved.trim() ||
+        matchComponentPropToken(resolved) != null
+      ) {
+        delete props[key]
+      }
     }
-    if (!patch) continue
+    if (!props) continue
     typed = typed ?? { ...substituted }
-    typed[id] = {
-      ...substituted[id],
-      props: { ...(substituted[id]?.props as object), ...patch },
-    } as N
+    typed[id] = { ...substituted[id], props } as N
   }
   return typed ?? substituted
 }
@@ -1029,7 +1046,7 @@ export function composeReusableComponentNodes<
       // The value lands in a real string prop and compose runs graft →
       // repeatables → `resolveNodesBindings`, so a `{{var:id}}` typed into
       // an override still resolves downstream for free. A field bound to a
-      // Yes/no prop is the exception, and receives a real boolean — see
+      // prop that is not text is finished by that prop's type instead — see
       // `resolveComponentPropTokens`.
       //
       // Visibility directives (AGL-1314) are evaluated on the result, never

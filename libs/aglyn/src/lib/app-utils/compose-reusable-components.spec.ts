@@ -3076,3 +3076,146 @@ describe('a field bound to a Yes / no property (AGL-2871)', () => {
     })
   })
 })
+
+/**
+ * A dropdown bound to a Choice property, and a Screen picker bound to a Link
+ * property (AGL-2871).
+ *
+ * A choice arrives as the value the page picked, which the element reads like
+ * any value its own dropdown stored. What is pinned is the case with nothing
+ * picked: a dropdown's empty value is none of its options, so the prop is
+ * removed and the element keeps its own default rather than drawing `''`.
+ */
+describe('a dropdown or Screen picker bound to a property (AGL-2871)', () => {
+  const card = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['chip', 'more'] },
+      chip: {
+        $id: 'chip',
+        componentId: 'muiChip',
+        parentId: 'root',
+        props: { label: 'New', color: '{{prop.tint}}' },
+      },
+      more: {
+        $id: 'more',
+        componentId: 'muiScreenLink',
+        parentId: 'root',
+        props: {
+          children: 'See more',
+          screenId: '{{prop.moreLink}}',
+          variant: '{{prop.linkStyle}}',
+        },
+      },
+    },
+    props: [
+      {
+        name: 'tint',
+        type: 'choice',
+        options: [
+          { value: 'primary', label: 'Blue' },
+          { value: 'secondary', label: 'Magenta' },
+          { value: 'default', label: 'Neutral' },
+        ],
+        defaultValue: 'default',
+      },
+      {
+        name: 'linkStyle',
+        type: 'choice',
+        options: [
+          { value: 'text', label: 'Plain' },
+          { value: 'outlined', label: 'Outlined' },
+        ],
+      },
+      { name: 'moreLink', type: 'href', defaultValue: 'screen:products' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'card', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  const composed = (propValues?: Record<string, unknown>) =>
+    composeReusableComponentNodes(page(propValues), { card })
+
+  it('hands the dropdown the value the page chose', () => {
+    expect(composed({ tint: 'secondary' })['cmp__a__chip'].props.color).toBe(
+      'secondary',
+    )
+    expect(
+      composed({ linkStyle: 'outlined' })['cmp__a__more'].props.variant,
+    ).toBe('outlined')
+  })
+
+  it("falls back to the property's default where the page chose nothing", () => {
+    expect(composed()['cmp__a__chip'].props.color).toBe('default')
+    expect(composed({ tint: '' })['cmp__a__chip'].props.color).toBe('default')
+  })
+
+  it("leaves the element its own default when there is no choice and no default", () => {
+    const more = composed()['cmp__a__more'].props
+    expect('variant' in more).toBe(false)
+    // Everything else on the element is untouched.
+    expect(more.children).toBe('See more')
+  })
+
+  it('carries a Link property into a Screen picker as the reference it holds', () => {
+    expect(composed()['cmp__a__more'].props.screenId).toBe('screen:products')
+    expect(
+      composed({ moreLink: 'screen:pricing' })['cmp__a__more'].props.screenId,
+    ).toBe('screen:pricing')
+    // A typed address arrives verbatim; the linking element sorts the two.
+    expect(
+      composed({ moreLink: 'https://example.com/tour' })['cmp__a__more'].props
+        .screenId,
+    ).toBe('https://example.com/tour')
+  })
+
+  it('draws a component editor with no choice as a page that chose nothing', () => {
+    // No tokens: a property with no default has nothing to substitute.
+    const drawn = resolveComponentPropTokens(card.nodes, card.props, {})
+    expect('variant' in drawn['more'].props).toBe(false)
+    expect('color' in drawn['chip'].props).toBe(false)
+  })
+
+  it('detaches into the choices the instance was rendering', () => {
+    let counter = 0
+    const detached = detachInstanceSubtree(
+      page({ tint: 'primary' }),
+      'a',
+      card,
+      () => `n${++counter}`,
+    )
+    const chip = (Object.values(detached) as any[]).find(
+      (node) => node?.componentId === 'muiChip',
+    )
+    const more = (Object.values(detached) as any[]).find(
+      (node) => node?.componentId === 'muiScreenLink',
+    )
+    expect(chip.props.color).toBe('primary')
+    expect('variant' in more.props).toBe(false)
+  })
+
+  it('negative control: a choice written into text stays text', () => {
+    const labelled = {
+      ...card,
+      nodes: {
+        ...card.nodes,
+        chip: {
+          ...card.nodes.chip,
+          props: { label: 'Tint: {{prop.linkStyle}}' },
+        },
+      },
+    }
+    const chip = composeReusableComponentNodes(page(), { card: labelled })[
+      'cmp__a__chip'
+    ]
+    expect(chip.props.label).toBe('Tint: ')
+  })
+})

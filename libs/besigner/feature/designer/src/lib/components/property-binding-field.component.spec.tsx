@@ -23,6 +23,7 @@ import ElementPropsForm, {
   elementPropsComponentMapper,
 } from './element-props-form.component'
 import {
+  describePropertyBinding,
   PROPERTY_BINDING_FIELD_COMPONENT,
   withPropertyBinding,
 } from './property-binding-field.component'
@@ -200,6 +201,226 @@ describe('binding a switch or checkbox to a property (AGL-2871)', () => {
     expect(
       screen.queryByRole('button', { name: /to a property$/ }),
     ).toBeNull()
+  })
+})
+
+describe('binding a dropdown or a Screen picker to a property (AGL-2871)', () => {
+  let updateNodeProps: jest.SpyInstance
+
+  beforeEach(() => {
+    updateNodeProps = jest
+      .spyOn(Aglyn.canvas, 'updateNodeProps')
+      .mockImplementation((() => undefined) as never)
+  })
+  afterEach(() => {
+    updateNodeProps.mockRestore()
+  })
+
+  /** A Screen Link's own dropdown and Screen picker. */
+  const LINK_ATTRIBUTES = [
+    {
+      name: 'screenId',
+      label: 'Screen',
+      component: Aglyn.FieldComponentType.SCREEN_SELECT,
+    },
+    {
+      name: 'variant',
+      label: 'Variant',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: 'text', label: 'Text' },
+        { value: 'outlined', label: 'Outlined' },
+        { value: 'contained', label: 'Contained' },
+      ],
+    },
+  ]
+
+  const CARD_PROPS: Aglyn.ReusableComponentProp[] = [
+    {
+      name: 'linkStyle',
+      type: 'choice',
+      label: 'Link style',
+      options: [
+        { value: 'text', label: 'Plain' },
+        { value: 'outlined', label: 'Outlined' },
+      ],
+    },
+    { name: 'moreLink', type: 'href', label: 'More link' },
+    { name: 'featured', type: 'boolean', label: 'Featured' },
+  ]
+
+  const mount = (
+    props: Record<string, unknown>,
+    attributes: Array<Record<string, unknown>> = LINK_ATTRIBUTES,
+    componentProps: Aglyn.ReusableComponentProp[] = CARD_PROPS,
+  ) =>
+    render(
+      <BindingPickerContext.Provider value={{ componentProps }}>
+        <ElementPropsForm
+          node={
+            {
+              $id: 'agl2871-link',
+              type: 'node',
+              componentId: 'unregistered-screen-link',
+              props,
+              componentSchema: { attributes },
+              nodes: [],
+            } as never
+          }
+        />
+      </BindingPickerContext.Provider>,
+    )
+
+  const lastCommit = (): Record<string, unknown> => {
+    const calls = updateNodeProps.mock.calls
+    return (calls[calls.length - 1]?.[1] ?? {}) as Record<string, unknown>
+  }
+
+  const bindButton = (label: string) =>
+    screen.findByRole(
+      'button',
+      { name: `Bind ${label} to a property` },
+      { timeout: 10000 },
+    )
+
+  it('offers a dropdown only the Choice properties', async () => {
+    const { unmount } = mount({})
+    fireEvent.click(await bindButton('Variant'))
+
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByText('Link style')).toBeTruthy()
+    expect(within(menu).queryByText('More link')).toBeNull()
+    expect(within(menu).queryByText('Featured')).toBeNull()
+
+    fireEvent.click(within(menu).getByText('Link style'))
+    expect(
+      await screen.findByText('Each page sets this with the Link style property.'),
+    ).toBeTruthy()
+    unmount()
+    expect(lastCommit()['variant']).toBe('{{prop.linkStyle}}')
+  })
+
+  it("binds a Screen Link's Screen picker to a Link property", async () => {
+    const { unmount } = mount({})
+    fireEvent.click(await bindButton('Screen'))
+
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).queryByText('Link style')).toBeNull()
+    fireEvent.click(within(menu).getByText('More link'))
+    unmount()
+    expect(lastCommit()['screenId']).toBe('{{prop.moreLink}}')
+  })
+
+  it('names the values a Choice offers that the dropdown does not', async () => {
+    mount({ variant: '{{prop.linkStyle}}' }, LINK_ATTRIBUTES, [
+      {
+        name: 'linkStyle',
+        type: 'choice',
+        label: 'Link style',
+        options: [
+          { value: 'outlined', label: 'Outlined' },
+          { value: 'pill', label: 'Pill' },
+        ],
+      },
+    ])
+    expect(
+      await screen.findByText(
+        /This field does not offer pill, so a page that chooses it gets the field's own default\. Give Link style values from: Text \(text\), Outlined \(outlined\), Contained \(contained\)\./,
+        undefined,
+        { timeout: 10000 },
+      ),
+    ).toBeTruthy()
+  })
+
+  it('negative control: a multiple-choice dropdown takes no binding', async () => {
+    mount({}, [
+      ...LINK_ATTRIBUTES,
+      {
+        name: 'tags',
+        label: 'Tags',
+        component: Aglyn.FieldComponentType.SELECT,
+        isMulti: true,
+        options: [{ value: 'a', label: 'A' }],
+      },
+    ])
+    // The single dropdown beside it is offered one, so the panel has rendered.
+    await bindButton('Variant')
+    expect(
+      screen.queryByRole('button', { name: 'Bind Tags to a property' }),
+    ).toBeNull()
+  })
+})
+
+describe('describePropertyBinding', () => {
+  const choice: Aglyn.ReusableComponentProp = {
+    name: 'tint',
+    type: 'choice',
+    options: [
+      { value: 'primary', label: 'Blue' },
+      { value: 'pink', label: 'Pink' },
+    ],
+  }
+  const known = { label: 'Tint', group: 'property', known: true } as const
+
+  it('names a property the component no longer declares', () => {
+    expect(
+      describePropertyBinding({
+        token: '{{prop.gone}}',
+        resolved: { label: 'gone', group: 'property', known: false },
+        bindingProps: [choice],
+      }),
+    ).toEqual({
+      text: expect.stringMatching(/declares no property by that name/),
+      error: true,
+    })
+  })
+
+  it('names a declared property of the wrong kind', () => {
+    expect(
+      describePropertyBinding({
+        token: '{{prop.headline}}',
+        resolved: { label: 'Headline', group: 'property', known: true },
+        bindingProps: [choice],
+        bindingKinds: 'Choice',
+      }).text,
+    ).toBe(
+      'Headline is not a Choice property, so it cannot set this field. Bind ' +
+        'one that is, or remove the binding.',
+    )
+  })
+
+  it('lists the choices a dropdown cannot show, and the values it can', () => {
+    expect(
+      describePropertyBinding({
+        token: '{{prop.tint}}',
+        resolved: known,
+        bindingProps: [choice],
+        fieldOptions: [
+          { value: 'primary', label: 'Primary' },
+          { value: 'secondary', label: 'Secondary' },
+        ],
+      }),
+    ).toEqual({
+      text:
+        "This field does not offer pink, so a page that chooses it gets the " +
+        "field's own default. Give Tint values from: Primary (primary), " +
+        'Secondary (secondary).',
+      error: true,
+    })
+  })
+
+  it('says only what the binding does when nothing is wrong', () => {
+    expect(
+      describePropertyBinding({
+        token: '{{ prop.tint }}',
+        resolved: known,
+        bindingProps: [choice],
+        fieldOptions: [{ value: 'primary' }, { value: 'pink' }],
+      }),
+    ).toEqual({
+      text: 'Each page sets this with the Tint property.',
+      error: false,
+    })
   })
 })
 

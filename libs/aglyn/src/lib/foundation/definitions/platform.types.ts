@@ -1055,9 +1055,9 @@ export type ComponentDefUid = string
  * Attributes panel edits it and which fields inside the component can be bound
  * to it. Every kind substitutes as text, so the graft stays a string
  * replacement over the definition's props — except that a field bound to
- * nothing but a `boolean` prop receives a real `true` or `false`
- * (`resolveComponentPropTokens`), because a switch cannot read `'false'` as a
- * no.
+ * nothing but a `boolean` prop receives a real `true` or `false`, and one bound
+ * to a `choice` nobody made is left to the element's own default
+ * (`resolveComponentPropTokens`).
  */
 export type ReusableComponentPropType =
   | 'text'
@@ -1066,6 +1066,21 @@ export type ReusableComponentPropType =
   | 'href'
   | 'number'
   | 'boolean'
+  | 'choice'
+
+/**
+ * One answer a `choice` prop offers (AGL-2871).
+ *
+ * Two halves because two people read it: the page author picks the `label`,
+ * and the field inside the component receives the `value` — which is why a
+ * dropdown bound to the prop needs values it offers itself.
+ */
+export interface ReusableComponentPropOption {
+  /** What a field bound to the prop receives. */
+  value: string
+  /** What the Attributes panel shows; falls back to `value`. */
+  label?: string
+}
 
 /**
  * A prop a reusable component declares (AGL-1247), so one definition can
@@ -1094,6 +1109,11 @@ export interface ReusableComponentProp {
    * unset prop can never collapse a section to empty on a live page.
    */
   defaultValue?: string
+  /**
+   * `choice` only: the answers a page picks from, in the order offered. A
+   * `defaultValue` names one of their values.
+   */
+  options?: ReusableComponentPropOption[]
 }
 
 /**

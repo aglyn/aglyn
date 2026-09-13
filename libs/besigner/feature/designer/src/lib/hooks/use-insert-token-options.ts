@@ -88,6 +88,15 @@ function componentPropDefaultPreview(
       ? 'Defaults to Yes'
       : 'Defaults to No'
   }
+  if (prop.type === 'choice') {
+    // Named by the label a page author picks, not the value a field gets.
+    const choice = (prop.options ?? []).find(
+      (option) => option?.value && option.value === prop.defaultValue,
+    )
+    return choice
+      ? `Defaults to ${choice.label || choice.value}`
+      : 'No default — the field keeps its own until a page chooses'
+  }
   return prop.defaultValue
     ? `Defaults to "${prop.defaultValue}"`
     : 'No default — renders as nothing until a page sets it'

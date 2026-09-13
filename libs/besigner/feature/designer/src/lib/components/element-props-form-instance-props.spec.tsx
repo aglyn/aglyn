@@ -142,7 +142,7 @@ describe("an instance's property fields (AGL-2871)", () => {
       expect((input as HTMLInputElement).value).toBe('No')
     })
 
-    it('hands the choice back to the default with the clear button', async () => {
+    it('hands the choice back to the default with the clear button (Yes / no)', async () => {
       const { unmount } = mount(PROPS, { playInLightbox: false })
       fireEvent.click(
         await screen.findByRole(
@@ -155,6 +155,56 @@ describe("an instance's property fields (AGL-2871)", () => {
       // A commit happened — an absent value is not merely an absent save.
       expect(updateNodeProps).toHaveBeenCalled()
       expect(committedValues()).not.toHaveProperty('playInLightbox')
+    })
+  })
+
+  describe('a Choice property', () => {
+    const PROPS: Aglyn.ReusableComponentProp[] = [
+      {
+        name: 'tint',
+        type: 'choice',
+        label: 'Chip tint',
+        options: [
+          { value: 'primary', label: 'Blue' },
+          { value: 'secondary', label: 'Magenta' },
+          { value: 'default' },
+        ],
+        defaultValue: 'secondary',
+      },
+    ]
+
+    it("offers the component's answers by label, and names the default", async () => {
+      mount(PROPS)
+      const input = await openDropdown('Chip tint')
+      expect(input.getAttribute('placeholder')).toBe(
+        'Use the component default (Magenta)',
+      )
+      // An answer with no label is offered by its value.
+      expect(
+        screen.getAllByRole('option').map((option) => option.textContent),
+      ).toEqual(['Blue', 'Magenta', 'default'])
+    })
+
+    it('stores the VALUE the bound field receives, not the label', async () => {
+      const { unmount } = mount(PROPS)
+      await openDropdown('Chip tint')
+      fireEvent.click(screen.getByRole('option', { name: 'Blue' }))
+      unmount()
+      expect(committedValues()['tint']).toBe('primary')
+    })
+
+    it('hands the choice back to the default with the clear button', async () => {
+      const { unmount } = mount(PROPS, { tint: 'primary' })
+      fireEvent.click(
+        await screen.findByRole(
+          'button',
+          { name: 'Clear Chip tint' },
+          { timeout: 10000 },
+        ),
+      )
+      unmount()
+      expect(updateNodeProps).toHaveBeenCalled()
+      expect(committedValues()).not.toHaveProperty('tint')
     })
   })
 })
