@@ -397,6 +397,46 @@ export function parseYesNoPropValue(value: unknown): boolean | undefined {
 }
 
 /**
+ * The path each icon picker's companion prop should hold once these values
+ * are saved: `iconId` → `iconPath`, `startIconId` → `startIconPath`
+ * (AGL-1212).
+ *
+ * The id stays the source of truth and the path travels with the document,
+ * because the catalog is ~2.9 MB, only picker surfaces load it, and a
+ * published page has to draw the icon without it.
+ *
+ * The lookup runs on every save of the panel, and the panel saves edits to
+ * every other attribute too — from the moment it opens, before the picker has
+ * finished loading the catalog (AGL-2879). So a miss is not evidence the icon
+ * has no path: for an id that did NOT change it keeps the path already
+ * stored. For a changed id the lookup decides, and a miss clears the path,
+ * because the old icon's path is never the new icon's.
+ */
+export function iconPathsForSave(
+  attributes: readonly Aglyn.AglynAttributeSchema[] | undefined | null,
+  values: Record<string, unknown>,
+  stored: Record<string, unknown> | undefined | null,
+): Record<string, string | undefined> {
+  const paths: Record<string, string | undefined> = {}
+  for (const attribute of attributes ?? []) {
+    if (attribute?.component !== FieldComponentType.ICON_PICKER) continue
+    const pathProp = iconPathPropName(attribute.name)
+    if (pathProp === attribute.name) continue
+    const pickedId = values[attribute.name]
+    if (typeof pickedId !== 'string' || !pickedId) {
+      paths[pathProp] = undefined
+      continue
+    }
+    const unchanged = pickedId === stored?.[attribute.name]
+    const storedPath = stored?.[pathProp]
+    paths[pathProp] =
+      getMdiIconPath(pickedId) ??
+      (unchanged && typeof storedPath === 'string' ? storedPath : undefined)
+  }
+  return paths
+}
+
+/**
  * An icon property's stored pick as the icon picker shows it: the icon's id,
  * or `''` for nothing picked.
  */
@@ -1920,23 +1960,16 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           }
           normalized[REUSABLE_INSTANCE_PROP_VALUES_KEY] = nextOverrides
         }
-        // Denormalize each picked icon's SVG path next to its id (AGL-1212).
-        // The catalog is ~2.9 MB and only picker surfaces load it, so a render
-        // surface that had to look the id up got `DEFAULT_ICON` — a real path,
-        // so every published icon painted a "help" glyph. Resolving here means
-        // the id stays the source of truth while the path travels with the
-        // document. This runs where the picker already loaded the catalog; a
-        // miss writes `undefined` and leaves the renderer's own fallback.
-        for (const attribute of node?.componentSchema?.attributes ?? []) {
-          if (attribute.component !== FieldComponentType.ICON_PICKER) {
-            continue
-          }
-          const pathProp = iconPathPropName(attribute.name)
-          if (pathProp === attribute.name) continue
-          const pickedId = normalized[attribute.name]
-          normalized[pathProp] =
-            typeof pickedId === 'string' ? getMdiIconPath(pickedId) : undefined
-        }
+        // Denormalize each picked icon's SVG path next to its id (AGL-1212) —
+        // see `iconPathsForSave` for why a miss does not always clear it.
+        Object.assign(
+          normalized,
+          iconPathsForSave(
+            node?.componentSchema?.attributes,
+            normalized,
+            node?.props as Record<string, unknown> | undefined,
+          ),
+        )
         canvas.updateNodeProps(node, normalized)
       },
       [node, bindingVariables, bindingFunctions, numericFieldNames],
