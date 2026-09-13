@@ -46,21 +46,21 @@
  * that moves every time the thing it would identify changes. `v1` is an opaque
  * revision id we own.
  *
- * TO PUBLISH A CHANGE, BEFORE LAUNCH: publish first, re-capture from the live
- * page, and update the hashes here — LEAVING `LEGAL_DOCUMENT_VERSION` AT `v1`.
- * No v2 exists until Aglyn has released. See the 2026-08-24 entry in the
- * changelog below for the full reasoning; the short form is that a version can
- * only supersede a version somebody accepted, and nobody has.
- * Archive the re-captured bytes over `Acceptance-Snapshots/v1/<key>.txt` in
- * the same pass — the archive is resolved by the CURRENT version folder, so a
- * moved hash and an unmoved archive is the one combination that breaks.
+ * TO PUBLISH A CHANGE: publish first, re-capture from the live page, then bump
+ * `LEGAL_DOCUMENT_VERSION`, archive the new capture under the new version
+ * folder in Drive, and update the hashes here, all in one pass. Acceptances
+ * are on record, so every change to a pinned document is a bump; re-pinning
+ * inside an unchanged label (the 2026-08-24 entry below) belonged to the
+ * pre-launch window and ended with the `v2` of 2026-09-13. You cannot quietly
+ * skip the archive — `npm run check:legal-snapshots` fetches the archived text
+ * for whatever version this constant names, re-hashes it, and fails if it
+ * disagrees.
  *
- * AFTER LAUNCH: bump `LEGAL_DOCUMENT_VERSION`, archive the new capture under
- * the new version folder in Drive, and update the hashes here together. You
- * cannot quietly skip that step — `npm run check:legal-snapshots` fetches the
- * archived text for whatever version this constant names, re-hashes it, and
- * fails if it disagrees, so a version can never come to mean two different
- * documents once one has been agreed to.
+ * ⚠️ A NEW VERSION REACHES ONLY THE RECORDS IT OUTRANKS.
+ * `compareLegalDocumentVersions` orders `v<N>` numerically, so an acceptance
+ * stored under a number at or above this constant reads as current and raises
+ * no banner. Records written before the 2026-08-20 collapse (below) carry
+ * labels up to `v6`; the 2026-09-13 entry says what that means for `v2`.
  *
  * ⚠️ Neither path adds `constants/legal/v2/`. The snapshot TEXT left this repo
  * on 2026-08-20 and lives in the shared drive at
@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v1'
+export const LEGAL_DOCUMENT_VERSION = 'v2'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -458,6 +458,45 @@ export interface LegalDocumentManifestEntry {
  * control, reproducing 15286 bytes / 42ea82… byte-for-byte before this set was
  * taken.
  *
+ * v2 (2026-09-13, AGL-2844 + AGL-2832): the first bump since the 2026-08-20
+ * collapse, and the first to put the re-acceptance banner in front of the
+ * accounts that accepted `v1`.
+ *
+ * ⚠️ THIS IS THE SECOND USE OF THE LABEL `v2`. The v2 at the top of this
+ * changelog (2026-08-13) belongs to the pre-collapse ladder, and the label was
+ * reused deliberately (`docs/DECISION_LOG.md`, 2026-09-13). What that does:
+ * an acceptance stored as `v2` before the collapse pins the 2026-08-13 text
+ * (terms 32985 bytes / `063f48…`, privacy 10631 bytes / `42db0b…`, still
+ * produced by `git show a0044aed2:apps/console/constants/legal/v2/<key>.txt`),
+ * but `evaluateLegalAcceptance` matches it to THIS `v2` by id and raises no
+ * banner, and `recordLegalAcceptance` cannot add a second `v2` record beside
+ * it. An acceptance stored as `v3`–`v6` outranks this label and is not asked
+ * either. On such a record, the `sha256` it carries is what says which text
+ * was agreed to, not the label.
+ *
+ *   - AGL-2844, Privacy §3: the service-provider bullet adds "video hosting"
+ *     to its list, and a sentence that films on the platform's own marketing
+ *     site are hosted and streamed by Wistia, whose player loads only when the
+ *     visitor presses play. The Subprocessors page (the Wistia, Inc. row and
+ *     its change-log entry) and the Cookie Policy (the player's own storage)
+ *     published in the same sitting; neither is acceptance-pinned, so neither
+ *     has a hash here.
+ *   - AGL-2832, Terms §4.1: the plan list names all seven self-serve plans, in
+ *     `SELF_SERVE_PLANS` order: Free, Starter, Pro, Business, Scale, Advanced,
+ *     Agency. It had left out Scale and Agency. Enterprise stays unnamed; it
+ *     is quoted per deal, and the list reads "currently including".
+ *
+ * Both documents move "Last updated" to September 13, 2026; the Terms keep
+ * "Effective date: August 5, 2026", as the 2026-08-24 pass did.
+ *
+ * Publication-first: both pages were published, the live pages confirmed
+ * serving the new text, and only then were these captured — terms 39062
+ * bytes, privacy 15426 bytes. Neither document was untouched, so no control
+ * could run after publication. The method was proven before it instead: the
+ * live terms page reproduced its previous pin (39042 bytes / `0fba3a…`)
+ * byte-for-byte, and each new capture differs from the pre-publication capture
+ * of the same page by exactly the published edits.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -473,11 +512,11 @@ export interface LegalDocumentManifestEntry {
  * required for any change, and the superseded snapshot's value is that the
  * recorded `sha256` can still be resolved out of history.
  *
- * That is why the changelog above runs v1…v6 and then reads `v1` again for
- * 2026-08-24: the numbered entries are the pre-collapse ladder, kept as the
- * publication history of the TEXT, while the live label has been `v1` since
- * 2026-08-20 and stays `v1` until launch. A dated entry with no new number is
- * the collapse working, not a missing bump.
+ * That is why the changelog above runs v1…v6, reads `v1` again for
+ * 2026-08-24, and then `v2` for 2026-09-13: the numbered entries up to v6 are
+ * the pre-collapse ladder, kept as the publication history of the TEXT, and
+ * the live label was `v1` from 2026-08-20 until the 2026-09-13 bump. A dated
+ * entry with no new number is the collapse working, not a missing bump.
  *
  * ## What the .txt is FOR, since it is not for reading
  *
@@ -517,14 +556,14 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '0fba3a5fbc9305bf7501b0c1774c743588acb08c363f80509480bd824f38b795',
-    bytes: 39042,
+      '7257cce3324dc001b361532ebb922b665c374d8e40926087c83289eed0e27d9f',
+    bytes: 39062,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '42ea82d50df140c03eafeeacce65376b8dd5b5cb3f230aedb13b2e344f216cba',
-    bytes: 15286,
+      '6cb2c8bbafade158292c77dcb58606d241c02b2c75892968125f0fe601c4ff90',
+    bytes: 15426,
   },
 ]

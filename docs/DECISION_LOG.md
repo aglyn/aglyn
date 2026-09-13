@@ -92,6 +92,21 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-13 — `LEGAL_DOCUMENT_VERSION` moves to `v2`, reusing the pre-collapse label
+
+- **Decided by:** the account owner. On 2026-09-11: Privacy Policy §3 names video hosting (Wistia, on the platform's own marketing site), and that change costs the clickwrap a version instead of folding into `v1`. On 2026-09-13: the Terms §4.1 plan-list correction rides the same version, so people re-accept once, and the label is `v2` rather than `v7`, chosen with the consequence below in view. Supersedes the 2026-08-24 entry below (`v1` until launch) now that acceptances are on record.
+- **Scope:** legal
+- **Evidence:** `LEGAL_DOCUMENT_VERSION` and `LEGAL_DOCUMENTS` in `apps/console/constants/legal-documents.ts`, with the 2026-09-13 entry in its docblock; `compareLegalDocumentVersions` and `evaluateLegalAcceptance` in `libs/tenant/data/admin/src/lib/server/legal-acceptance.ts`; `npm run check:legal-snapshots` against Drive `Acceptance-Snapshots/v2`; AGL-2844, AGL-2832.
+
+Every account whose latest acceptance is `v1` sees the re-acceptance banner. The label `v2` was
+used once before, by the pre-collapse ladder on 2026-08-13, and version order is numeric, so two
+kinds of record are not asked again: an acceptance stored as `v2` before the collapse, which pins
+the 2026-08-13 text but matches the current `v2` by id, and an acceptance stored as `v3`–`v6`,
+which outranks `v2`. `v7` would have reached both; a later bump reaches them only at `v7` or
+above. The hashes on those records still say which text was agreed to.
+
+---
+
 ## 2026-09-11 — The CRM is paid-only: every section locks on Free, and the whole CRM opens from Starter
 
 - **Decided by:** the account owner, 2026-09-11 — the CRM is for paying subscribers and no part of it is on Free, one gate in place of a view-only Leads mode; beta.118 held until it ships. Supersedes the 2026-09-10 entry below (Free opens on Leads, view-only), which never shipped, and the 2026-09-05 line that Free keeps the contacts list.
