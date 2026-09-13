@@ -108,6 +108,46 @@ export interface BesignerServerDraft {
 }
 
 /**
+ * A draft as the store hands it back: what was written, plus WHEN.
+ *
+ * The time is the server's stamp, not the reader's clock. It is what the
+ * editor tells an author about the draft's age, and a draft saved yesterday
+ * that is described as "less than a minute ago" reads as work somebody is
+ * doing right now — the one thing a stranded draft is not (AGL-2868).
+ */
+export interface StoredServerDraft extends BesignerServerDraft {
+  /** Epoch milliseconds of the last write, or null when the document carries no stamp. */
+  updatedAt: number | null
+}
+
+/**
+ * Epoch milliseconds from a stored stamp — a Firestore `Timestamp`, or its
+ * `{ seconds, nanoseconds }` shape once it has crossed a serialization — or
+ * null for anything else. Null is an honest "not known", which the banner
+ * renders by not naming an age at all.
+ */
+function stampMillis(value: unknown): number | null {
+  if (!value || typeof value !== 'object') return null
+  const stamp = value as {
+    toMillis?: () => number
+    seconds?: number
+    nanoseconds?: number
+  }
+  if (typeof stamp.toMillis === 'function') {
+    try {
+      const millis = stamp.toMillis()
+      return Number.isFinite(millis) ? millis : null
+    } catch {
+      return null
+    }
+  }
+  if (typeof stamp.seconds === 'number' && Number.isFinite(stamp.seconds)) {
+    return stamp.seconds * 1000 + Math.floor((stamp.nanoseconds ?? 0) / 1e6)
+  }
+  return null
+}
+
+/**
  * `screen` → `screens`. The kinds that have no versioned subcollection get no
  * draft: a template IS its document, so there is nothing for a draft to sit
  * beside, and returning null here is what keeps callers from inventing a path.
@@ -209,12 +249,17 @@ export async function writeServerDraft(
 export async function readServerDraft(
   firestore: Firestore,
   ids: BesignerDraftIds,
-): Promise<BesignerServerDraft | null> {
+): Promise<StoredServerDraft | null> {
   const ref = serverDraftRef(firestore, ids)
   if (!ref) return null
   const snapshot = await getDoc(ref)
   if (!snapshot.exists()) return null
-  const data = snapshot.data() as Partial<BesignerServerDraft>
+  // `estimate`: a draft this browser wrote a moment ago can still have its
+  // `serverTimestamp` pending, and the local estimate of it is a truer age
+  // than none.
+  const data = snapshot.data({ serverTimestamps: 'estimate' }) as Partial<
+    BesignerServerDraft & { updatedAt: unknown }
+  >
   // BOTH stored forms, permanently. Drafts written before compression are
   // plain maps and nothing migrates them, so a reader that understood only
   // bytes would find no tree and report the draft absent — offering an author
@@ -230,6 +275,7 @@ export async function readServerDraft(
     baseStamp: data.baseStamp ?? null,
     updatedByUid: data.updatedByUid ?? null,
     updatedByEmail: data.updatedByEmail ?? null,
+    updatedAt: stampMillis(data.updatedAt),
   }
 }
 

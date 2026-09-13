@@ -381,6 +381,81 @@ describe('recoverableRoomSessions (AGL-2486)', () => {
 })
 
 /**
+ * HOW OLD a saved draft is (AGL-2868).
+ *
+ * Measured in production: a component's saved draft, written at 00:13 UTC,
+ * was offered seventeen hours later as "a saved draft from less than a minute
+ * ago". The offer was stamped with the reader's clock instead of the draft's.
+ */
+describe('useBesignerDraft saved-draft age (AGL-2868)', () => {
+  const IDS: BesignerDraftIds = {
+    scope: 'host-1',
+    kind: 'component',
+    docId: 'component-1',
+    versionId: 'v1',
+  }
+  const DRAFT_NODES = { root: { $id: 'root', componentId: 'div' } } as never
+  const HOUR = 60 * 60 * 1000
+
+  function setup(updatedAt: number | null) {
+    mockReadServerDraft.mockResolvedValueOnce({
+      nodes: DRAFT_NODES,
+      baseStamp: 'ms:100',
+      updatedByUid: null,
+      updatedByEmail: null,
+      updatedAt,
+    })
+    const seen: BesignerDraftState[] = []
+    function Harness() {
+      const draft = useBesignerDraft({
+        ids: IDS,
+        firestore: {} as never,
+        loaded: true,
+        dirty: true,
+        storedStamp: 'ms:100',
+      })
+      seen.push(draft)
+      return <BesignerDraftAlertComponent draft={draft} noun="component" />
+    }
+    render(<Harness />)
+    return { state: () => seen[seen.length - 1] }
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    mockCanvas.hasRemoteEdits = false
+    mockReadServerDraft.mockReset()
+    mockReadServerDraft.mockResolvedValue(null)
+  })
+
+  it('offers a saved draft with the time it was saved', async () => {
+    const savedAt = Date.now() - 17 * HOUR
+    const { state } = setup(savedAt)
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(state().origin).toBe('shared')
+    expect(state().takenAt).toBe(savedAt)
+    const copy = screen.getByRole('alert').textContent
+    expect(copy).toContain('a saved draft from about 17 hours ago')
+    expect(copy).not.toContain('less than a minute ago')
+  })
+
+  it('names no age at all when the store recorded no time', async () => {
+    const { state } = setup(null)
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(state().takenAt).toBeNull()
+    const copy = screen.getByRole('alert').textContent
+    expect(copy).toContain('This component has a saved draft that has not been published')
+    expect(copy).not.toMatch(/ago/)
+  })
+})
+
+/**
  * WHICH unsaved state the author is looking at (AGL-2508).
  *
  * The banner served one sentence for two different documents. Pressing

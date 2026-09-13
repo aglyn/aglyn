@@ -21,7 +21,6 @@ import type { Firestore } from 'firebase/firestore'
 import { autorun } from 'mobx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  type BesignerDraft,
   type BesignerDraftIds,
   besignerDraftKey,
   clearBesignerDraft,
@@ -70,6 +69,20 @@ export type BesignerDraftRestoreBlock =
 /** Which store an offered draft came from. See `BesignerDraftState.origin`. */
 export type BesignerDraftOrigin = 'browser' | 'shared'
 
+/**
+ * A draft on offer, from either store.
+ *
+ * `takenAt` is when the draft was WRITTEN, as its own store recorded it: the
+ * crash net's `updatedAt`, or the shared draft's server stamp. Null when the
+ * store did not say, and the banner then names no age rather than inventing
+ * one (AGL-2868).
+ */
+interface DraftOffer {
+  nodes: Aglyn.ProcessableNodes
+  baseStamp: string | null
+  takenAt: number | null
+}
+
 export interface BesignerDraftState {
   /**
    * Unsaved work from a previous session is on hand and the author has not
@@ -77,7 +90,10 @@ export interface BesignerDraftState {
    * both read as false.
    */
   available: boolean
-  /** When the offered draft was taken; null when there is none. */
+  /**
+   * When the offered draft was written, per its own store; null when there is
+   * no offer, or when the store recorded no time.
+   */
   takenAt: number | null
   /**
    * The stored document has moved on since the draft was taken — someone
@@ -238,7 +254,7 @@ export function useBesignerDraft(
   const key = ids ? besignerDraftKey(ids) : null
 
   /** The draft being offered, held in memory for the life of the offer. */
-  const [offer, setOffer] = useState<BesignerDraft | null>(null)
+  const [offer, setOffer] = useState<DraftOffer | null>(null)
   /**
    * Which store {@link offer} came from (AGL-2508). Tracked beside the offer
    * rather than folded into `BesignerDraft`, because the stored shape is what
@@ -290,7 +306,16 @@ export function useBesignerDraft(
     if (readKeyRef.current === key) return
     readKeyRef.current = key
     pruneBesignerDrafts()
-    setOffer(readBesignerDraft(currentIds))
+    const local = readBesignerDraft(currentIds)
+    setOffer(
+      local
+        ? {
+            nodes: local.nodes,
+            baseStamp: local.baseStamp,
+            takenAt: local.updatedAt ?? null,
+          }
+        : null,
+    )
     setOfferOrigin('browser')
     // The shared draft answers late, and wins when it answers. `readKeyRef`
     // has already latched, so a slow reply cannot re-offer a draft the author
@@ -304,10 +329,10 @@ export function useBesignerDraft(
         setOffer({
           nodes: server.nodes,
           baseStamp: server.baseStamp,
-          // The shared draft stamps with `serverTimestamp`; the offer only
-          // needs an age for the local store's expiry rules, which do not
-          // apply to it. "Now" keeps it out of the aged-out branch.
-          updatedAt: Date.now(),
+          // The server's stamp, so the banner tells the draft's real age.
+          // Expiry never reads it: `DRAFT_MAX_AGE_MS` belongs to the crash
+          // net, and a saved draft lives until it is published or discarded.
+          takenAt: server.updatedAt,
         })
       })
       .catch(() => undefined)
@@ -470,7 +495,7 @@ export function useBesignerDraft(
     if (roomIsShared) return EMPTY_STATE
     return {
       available: true,
-      takenAt: offer.updatedAt ?? null,
+      takenAt: offer.takenAt,
       staleAgainstDocument,
       origin: offerOrigin,
       restoreBlockedBy,
