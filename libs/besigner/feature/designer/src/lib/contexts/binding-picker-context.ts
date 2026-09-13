@@ -65,6 +65,12 @@ export interface BindingPickerContextValue {
    * definition it belongs to.
    */
   componentProps?: import('@aglyn/aglyn').ReusableComponentProp[]
+  /**
+   * The site being edited, for `{{host.*}}` tokens (AGL-2881): the canvas
+   * fills them in from it through the resolver the published page composes
+   * with. Optional — without it the tokens draw as written.
+   */
+  host?: import('@aglyn/aglyn').HostTokenSource | null
 }
 
 export const BindingPickerContext = createContext<BindingPickerContextValue>(

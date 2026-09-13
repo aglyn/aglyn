@@ -187,7 +187,9 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
       if (definition.deletedAt || !definition.name) continue
       functions[definition.$id] = definition
     }
-    return { options, variables, functions, componentProps }
+    // The same document the Site options above preview, so the canvas fills
+    // `{{host.*}}` in with exactly the values the picker promised (AGL-2881).
+    return { options, variables, functions, componentProps, host: hostDoc }
   }, [variableDocs, functionDocs, hostDoc, componentProps])
 
   return (
