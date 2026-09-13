@@ -212,6 +212,62 @@ describe('interactions across the merge (AGL-2521)', () => {
   })
 })
 
+/**
+ * The hierarchy eye across the merge (AGL-2873).
+ *
+ * The eye stores `hidden: true` on the node an author clicked, and `Leaf`
+ * renders a hidden node as `display: none`. On a placement that node is the
+ * instance, and the instance is gone from the composed map once the root takes
+ * its place, so the flag has to move onto the root or the published page shows
+ * what the canvas hides.
+ */
+describe('the hierarchy eye across the merge (AGL-2873)', () => {
+  const definition = (root: Record<string, unknown> = {}) =>
+    ({
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'section', nodes: ['label'], ...root },
+        label: { $id: 'label', componentId: 'muiTypography', parentId: 'root' },
+      },
+    }) as any
+
+  const compose = (
+    placement: Record<string, unknown>,
+    root?: Record<string, unknown>,
+  ) =>
+    composeReusableComponentNodes(
+      {
+        _root_: { $id: '_root_', componentId: 'div', nodes: ['a'] },
+        a: { ...instance('a', 'card'), ...placement },
+      } as any,
+      { card: definition(root) },
+    )
+
+  it('hides the element a hidden placement became', () => {
+    const composed = compose({ hidden: true })
+    expect(composed['a']).toMatchObject({ componentId: 'section', hidden: true })
+    // The children stay as authored: hiding the element takes them with it,
+    // and flagging each one would be a second copy of the same decision.
+    expect((composed['cmp__a__label'] as any).hidden).toBeUndefined()
+  })
+
+  it('keeps a root the component hid hidden under a placement that never touched its eye', () => {
+    expect((compose({}, { hidden: true })['a'] as any).hidden).toBe(true)
+  })
+
+  it('does not let a stored `false` on the placement show a root the component hid', () => {
+    // `false` and absent mean the same thing on a node, so only a hiding flag
+    // crosses the merge.
+    expect((compose({ hidden: false }, { hidden: true })['a'] as any).hidden).toBe(
+      true,
+    )
+  })
+
+  it('materializes no flag when neither side hid anything', () => {
+    expect('hidden' in (compose({})['a'] as any)).toBe(false)
+  })
+})
+
 describe('replaceSubtreeWithInstance', () => {
   /** `App Bar` → brand + a link, sitting in a layout beside a footer. */
   const layout = () =>

@@ -1086,6 +1086,21 @@ export function composeReusableComponentNodes<
           ...(mergedInteractions.length
             ? { interactions: mergedInteractions }
             : {}),
+          /*
+           * The eye on the placement's hierarchy row hides the element the
+           * placement became.
+           *
+           * Either author may hide it: the component, on its own root, which
+           * arrives with the spread above, or the page, on the placement. Only
+           * a hiding flag is carried, never a showing one: `false` and absent
+           * mean the same thing on a node, so a placement whose eye was never
+           * touched cannot bring back a root the component hid. Read off the
+           * node for the reason `interactions` is: `hidden` is declared on
+           * `NodeSchema`, above the type this function is generic over.
+           */
+          ...((instanceNode as { hidden?: unknown }).hidden
+            ? { hidden: true }
+            : {}),
         } as N
         for (const childId of Array.isArray(merged.nodes)
           ? (merged.nodes as NodeId[])
