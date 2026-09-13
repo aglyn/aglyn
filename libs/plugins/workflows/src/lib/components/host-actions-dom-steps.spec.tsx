@@ -163,6 +163,27 @@ describe('HostActionsCard in-page steps', () => {
     })
   })
 
+  it('builds "Scroll to element" with how and where it stops (AGL-2867)', async () => {
+    startAction()
+    pick('Do', 'Scroll to element')
+    type('CSS selector', TARGET)
+    pick('Scroll', 'Instantly')
+    type('Offset (px)', '80')
+    expect(await savedStep()).toEqual({
+      type: 'scrollTo',
+      selector: TARGET,
+      behavior: 'instant',
+      offsetPx: 80,
+    })
+  })
+
+  it('builds "Play a video" (AGL-2867)', async () => {
+    startAction()
+    pick('Do', 'Play a video')
+    type('CSS selector', TARGET)
+    expect(await savedStep()).toEqual({ type: 'playVideo', selector: TARGET })
+  })
+
   it('says so while the attribute is one the page will not apply', () => {
     startAction()
     pick('Do', 'Set an ARIA or data attribute')

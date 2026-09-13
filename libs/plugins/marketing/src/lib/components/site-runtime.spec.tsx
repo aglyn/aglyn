@@ -426,6 +426,143 @@ describe('automations engine — nav interactions (AGL-562)', () => {
 })
 
 /**
+ * Scroll to element and Play a video (AGL-2867), driven through the engine a
+ * published page mounts: a click on the trigger, the step, and what the
+ * visitor's document does. jsdom lays nothing out, so each target is given
+ * the box a browser would give it.
+ */
+describe('automations engine — scroll to element and play a video (AGL-2867)', () => {
+  let scrollTo: jest.SpyInstance
+
+  const onThePage = (element: Element | null, top = 0) => {
+    Object.defineProperty(element, 'getClientRects', {
+      configurable: true,
+      value: () => [{ top }],
+    })
+    Object.defineProperty(element, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ top, left: 0, right: 0, bottom: top, width: 0, height: 0 }),
+    })
+    return element as HTMLElement
+  }
+
+  beforeEach(() => {
+    document.body.innerHTML =
+      '<button id="cta" data-aglyn="leaf:cta">Watch the demo</button>' +
+      '<section id="film" data-aglyn="leaf:layout__film">The film</section>' +
+      '<nav id="links" data-aglyn="leaf:links-1">Links</nav>'
+    scrollTo = jest.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    scrollTo.mockRestore()
+    for (const unmount of unmounts) unmount()
+    unmounts = []
+  })
+
+  const clickCta = () =>
+    fireEvent.click(document.getElementById('cta') as HTMLElement)
+
+  it('scrolls to a layout-composed target from the raw id the builder stored, and focuses it', () => {
+    const film = onThePage(document.getElementById('film'), 420)
+    runEngine([
+      {
+        event: 'elementClick',
+        selector: '[data-aglyn="leaf:cta"]',
+        everyTime: true,
+        steps: [
+          {
+            type: 'scrollTo',
+            selector: '[data-aglyn="leaf:film"]',
+            offsetPx: 64,
+          },
+        ],
+      },
+    ])
+    clickCta()
+    expect(scrollTo).toHaveBeenCalledWith({ top: 356, behavior: 'smooth' })
+    expect(document.activeElement).toBe(film)
+  })
+
+  it('presses the Video the step names', () => {
+    const film = onThePage(document.getElementById('film'))
+    const heard: Aglyn.VideoCommandDetail[] = []
+    const unsubscribe = Aglyn.subscribeVideoCommands(film, (detail) =>
+      heard.push(detail),
+    )
+    runEngine([
+      {
+        event: 'elementClick',
+        selector: '[data-aglyn="leaf:cta"]',
+        everyTime: true,
+        steps: [{ type: 'playVideo', selector: '[data-aglyn="leaf:film"]' }],
+      },
+    ])
+    clickCta()
+    clickCta()
+    unsubscribe()
+    expect(heard).toEqual([{ command: 'play' }, { command: 'play' }])
+  })
+
+  it('a deleted target does nothing, throws nothing, and costs the later steps nothing', () => {
+    // The film was on the page when the interaction was authored and has been
+    // deleted since. The engine wraps every step in a try/catch, so a throw
+    // here would not surface — it would silently drop the attribute step.
+    document.getElementById('film')?.remove()
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    runEngine([
+      {
+        event: 'elementClick',
+        selector: '[data-aglyn="leaf:cta"]',
+        everyTime: true,
+        steps: [
+          { type: 'scrollTo', selector: '[data-aglyn="leaf:film"]' },
+          { type: 'playVideo', selector: '[data-aglyn="leaf:film"]' },
+          {
+            type: 'setAttribute',
+            selector: '[data-aglyn="leaf:links-1"]',
+            name: 'data-watched',
+            value: 'yes',
+          },
+        ],
+      },
+    ])
+    clickCta()
+    const failures = errors.mock.calls.filter(
+      ([message]) => message === 'automation step failed',
+    )
+    errors.mockRestore()
+    expect(failures).toEqual([])
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(
+      document.getElementById('links')?.getAttribute('data-watched'),
+    ).toBe('yes')
+  })
+
+  it('a step stored without any target is a no-op too', () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    runEngine([
+      {
+        event: 'elementClick',
+        selector: '[data-aglyn="leaf:cta"]',
+        everyTime: true,
+        steps: [
+          { type: 'scrollTo' } as never,
+          { type: 'playVideo' } as never,
+        ],
+      },
+    ])
+    clickCta()
+    const failures = errors.mock.calls.filter(
+      ([message]) => message === 'automation step failed',
+    )
+    errors.mockRestore()
+    expect(failures).toEqual([])
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+})
+
+/**
  * The popup image is a free-text console field rendered verbatim — one of
  * AGL-1725's raw author `<img>` sinks, and (with the events cover) one of
  * the two `http:`-accepting egresses left after AGL-1713 and the collection

@@ -231,6 +231,10 @@ function defaultStep(type: HostActionStepType): HostActionStep {
       return { type, selector: '', name: '', value: '' }
     case 'removeAttribute':
       return { type, selector: '', name: '' }
+    // One-target steps (AGL-2867); absent options are the defaults.
+    case 'scrollTo':
+    case 'playVideo':
+      return { type, selector: '' }
     case 'openDrawer':
     case 'closeDrawer':
     case 'toggleDrawer':
@@ -1781,10 +1785,12 @@ export function HostActionsCard(props: {
                   </>
                 ) : step.type === 'showElement' ||
                   step.type === 'hideElement' ||
-                  step.type === 'toggleElement' ? (
-                  // Element choreography (AGL-562). The besigner's builder
-                  // offers an element picker; here the CSS selector is the
-                  // escape hatch (node targets use [data-aglyn="leaf:…"]).
+                  step.type === 'toggleElement' ||
+                  step.type === 'playVideo' ? (
+                  // Element choreography (AGL-562) and Play a video
+                  // (AGL-2867). The besigner's builder offers an element
+                  // picker; here the CSS selector is the escape hatch (node
+                  // targets use [data-aglyn="leaf:…"]).
                   <TextField
                     label="CSS selector"
                     placeholder='[data-aglyn="leaf:…"] or .my-class'
@@ -1802,6 +1808,77 @@ export function HostActionsCard(props: {
                     size="small"
                     sx={{ flex: 1 }}
                   />
+                ) : step.type === 'scrollTo' ? (
+                  // Scroll to element (AGL-2867): the target, how the page
+                  // moves, and the room left above it for a sticky header.
+                  <>
+                    <TextField
+                      label="CSS selector"
+                      placeholder='[data-aglyn="leaf:…"] or .my-class'
+                      value={step.selector ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? { ...s, selector: event.target.value }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                    />
+                    <TextField
+                      select
+                      label="Scroll"
+                      value={step.behavior === 'instant' ? 'instant' : 'smooth'}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? {
+                                  ...s,
+                                  behavior:
+                                    event.target.value === 'instant'
+                                      ? 'instant'
+                                      : undefined,
+                                }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 130 }}
+                    >
+                      <MenuItem value="smooth">{'Smoothly'}</MenuItem>
+                      <MenuItem value="instant">{'Instantly'}</MenuItem>
+                    </TextField>
+                    <TextField
+                      label="Offset (px)"
+                      type="number"
+                      value={step.offsetPx ?? ''}
+                      onChange={(event) =>
+                        patch((previous) => ({
+                          ...previous,
+                          steps: previous.steps.map((s, index2) =>
+                            index2 === index
+                              ? {
+                                  ...s,
+                                  offsetPx:
+                                    event.target.value === ''
+                                      ? undefined
+                                      : Number(event.target.value),
+                                }
+                              : s,
+                          ),
+                        }))
+                      }
+                      size="small"
+                      sx={{ width: 110 }}
+                    />
+                  </>
                 ) : step.type === 'setAttribute' ||
                   step.type === 'removeAttribute' ? (
                   // The attribute steps (AGL-2546). The page applies only

@@ -24,6 +24,7 @@
  * that touches `window`/`document` is only ever called client-side.
  */
 
+import { SCROLL_TO_MAX_OFFSET_PX, type ScrollToBehavior } from './actions'
 import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
 import { ELEMENT_HIDDEN_CLASS } from './element-hidden-style'
 import { COMPONENT_NODE_ID_PREFIX } from './reusable-component-keys'
@@ -421,6 +422,182 @@ export function subscribeMenuCommands(
   handler: (detail: MenuCommandDetail) => void,
 ): () => void {
   return subscribeUiCommands(MENU_COMMAND_EVENT, handler)
+}
+
+/* ── One-target steps: scroll to an element, play a video (AGL-2867) ── */
+
+/**
+ * The element a one-target step acts on: the first match that has a layout
+ * box, or null.
+ *
+ * Every match is read rather than only the first, because one element can
+ * legitimately appear twice — an expanded leaf selector reaches each
+ * composition of an id, and a page may carry a desktop and a mobile copy with
+ * one hidden at each breakpoint. The copy the visitor can see is the one they
+ * meant.
+ *
+ * A match with no box is never acted on. Scrolling to a `display: none`
+ * element lands at the top of the page, and pressing a hidden player starts a
+ * film nobody can see, so a target that is not on the page in the layout
+ * sense makes the step a no-op, as a missing or deleted one does.
+ */
+export function resolveStepTarget(
+  selector: string,
+  root: ParentNode = document,
+): HTMLElement | SVGElement | null {
+  let matches: Element[]
+  try {
+    matches = Array.from(root.querySelectorAll(selector))
+  } catch {
+    return null // Invalid stored selector — never break the page.
+  }
+  const shown = matches.find((element) => element.getClientRects().length > 0)
+  return (shown as HTMLElement | SVGElement | undefined) ?? null
+}
+
+export interface ScrollToStepOptions {
+  /** Absent means `smooth`; reduced motion overrides either to `instant`. */
+  behavior?: ScrollToBehavior
+  /** Pixels left above the target; clamped to 0–{@link SCROLL_TO_MAX_OFFSET_PX}. */
+  offsetPx?: number
+}
+
+/** The nearest ancestor that scrolls its own content, below the document. */
+function scrollContainerOf(element: Element, view: Window): Element | null {
+  const doc = element.ownerDocument
+  for (
+    let node = element.parentElement;
+    node && node !== doc.body && node !== doc.documentElement;
+    node = node.parentElement
+  ) {
+    const { overflowY } = view.getComputedStyle(node)
+    if (
+      (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node
+    }
+  }
+  return null
+}
+
+/**
+ * Focus for a keyboard visitor, without the second scroll `focus()` would
+ * start on its own.
+ *
+ * An element that cannot take focus is given `tabindex="-1"` for the length
+ * of the visit to it — focusable by script, never added to the Tab order —
+ * and loses it again on blur, so the author's markup is left as it was.
+ */
+function focusWithoutScrolling(element: HTMLElement | SVGElement): void {
+  if (element.tabIndex < 0 && !element.hasAttribute('tabindex')) {
+    element.setAttribute('tabindex', '-1')
+    element.addEventListener('blur', () => element.removeAttribute('tabindex'), {
+      once: true,
+    })
+  }
+  element.focus({ preventScroll: true })
+}
+
+/**
+ * Runs a `scrollTo` step: brings the target to the top of the window, less
+ * the offset, and moves focus to it. Returns whether there was a target.
+ *
+ * The position is computed and handed to the window rather than asked of
+ * `scrollIntoView`, because the offset has nowhere to go in that call except
+ * a `scroll-margin` written onto the author's element. A target inside a box
+ * that scrolls its own content is the exception, and there the box has to be
+ * scrolled too, which `scrollIntoView` does for every such ancestor at once;
+ * the offset is for a header over the page, not for a panel's own edge.
+ *
+ * Reduced motion is read at the moment of the press, so a visitor who changes
+ * the setting mid-visit gets what they asked for on the next one.
+ */
+export function runScrollToStep(
+  selector: string,
+  options: ScrollToStepOptions = {},
+  doc: Document = document,
+): boolean {
+  const view = doc.defaultView
+  const target = resolveStepTarget(selector, doc)
+  if (!view || !target) return false
+  const reduceMotion =
+    view.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
+  const behavior: ScrollBehavior =
+    reduceMotion || options.behavior === 'instant' ? 'instant' : 'smooth'
+  if (scrollContainerOf(target, view)) {
+    target.scrollIntoView({ behavior, block: 'start' })
+  } else {
+    const requested = Number(options.offsetPx)
+    const offset = Number.isFinite(requested)
+      ? Math.min(Math.max(requested, 0), SCROLL_TO_MAX_OFFSET_PX)
+      : 0
+    const top = view.scrollY + target.getBoundingClientRect().top - offset
+    view.scrollTo({ top: Math.max(0, top), behavior })
+  }
+  focusWithoutScrolling(target)
+  return true
+}
+
+/**
+ * The event a Video element answers with its own poster press.
+ *
+ * Dispatched ON the element, where the drawer and menu commands go to
+ * `window`. Those buses need an address because a command with none means
+ * "the page's first drawer"; a `playVideo` step has already found its element
+ * through its selector, so the element that receives the event is the one that
+ * should answer, with no id to parse or compare.
+ */
+export const VIDEO_COMMAND_EVENT = 'aglyn:video-command'
+
+export type VideoCommand = 'play'
+
+export interface VideoCommandDetail {
+  command: VideoCommand
+}
+
+/**
+ * Sends a command to an element. Returns whether a Video element answered —
+ * a listener registered through {@link subscribeVideoCommands} cancels the
+ * event to say so — which is false for an element that is not a Video.
+ */
+export function dispatchVideoCommand(
+  element: EventTarget,
+  command: VideoCommand,
+): boolean {
+  return !element.dispatchEvent(
+    new CustomEvent<VideoCommandDetail>(VIDEO_COMMAND_EVENT, {
+      detail: { command },
+      cancelable: true,
+    }),
+  )
+}
+
+/** Answers video commands sent to `element`; returns the unsubscriber. */
+export function subscribeVideoCommands(
+  element: EventTarget,
+  handler: (detail: VideoCommandDetail) => void,
+): () => void {
+  const listener = (event: Event) => {
+    const detail = (event as CustomEvent<VideoCommandDetail>).detail
+    if (!detail?.command) return
+    event.preventDefault()
+    handler(detail)
+  }
+  element.addEventListener(VIDEO_COMMAND_EVENT, listener)
+  return () => element.removeEventListener(VIDEO_COMMAND_EVENT, listener)
+}
+
+/**
+ * Runs a `playVideo` step: presses the poster of the Video element the
+ * selector names. Returns whether a Video answered.
+ */
+export function runPlayVideoStep(
+  selector: string,
+  doc: Document = document,
+): boolean {
+  const target = resolveStepTarget(selector, doc)
+  return target ? dispatchVideoCommand(target, 'play') : false
 }
 
 /* ── Responsive visibility bands (AGL-562) ──────────────────────────── */

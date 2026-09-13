@@ -59,6 +59,29 @@ describe('compileClientAutomations (AGL-830)', () => {
     expect(result).toHaveLength(1)
   })
 
+  it('ships scroll-to and play-video steps, options intact, to a Free page (AGL-2867)', () => {
+    const steps = [
+      {
+        type: 'scrollTo',
+        selector: '[data-aglyn="leaf:film"]',
+        behavior: 'instant',
+        offsetPx: 72,
+      },
+      { type: 'playVideo', selector: '[data-aglyn="leaf:film"]' },
+    ]
+    const [automation] = compileClientAutomations(
+      [
+        raw('watch', {
+          trigger: { event: 'elementClick', selector: '[data-aglyn="leaf:cta"]' },
+          steps: steps as never,
+        }),
+      ],
+      opts,
+    )
+    expect(automation.steps).toEqual(steps)
+    expect(automation.hasServerSteps).toBe(false)
+  })
+
   it('drops disabled and soft-deleted actions', () => {
     const result = compileClientAutomations(
       [

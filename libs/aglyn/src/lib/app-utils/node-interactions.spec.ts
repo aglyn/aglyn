@@ -344,6 +344,43 @@ describe('a composed page keeps the interactions authored on it', () => {
     })
   })
 
+  it('re-points scroll-to and play-video targets, which use `selector` for the same reason (AGL-2867)', () => {
+    // A "Watch the demo" button inside a hero component, pointing at the
+    // component's own film: grafted, both steps have to reach the instance's
+    // film and not the definition id no page ever renders.
+    const collected = collectNodeInteractions([
+      {
+        $id: 'cmp__hero__cta',
+        interactions: [
+          {
+            id: 'watch',
+            enabled: true,
+            trigger: { event: 'elementClick', everyTime: true },
+            steps: [
+              {
+                type: 'scrollTo',
+                selector: '[data-aglyn="leaf:film"]',
+                behavior: 'instant',
+                offsetPx: 72,
+              },
+              { type: 'playVideo', selector: '[data-aglyn="leaf:film"]' },
+            ],
+          },
+        ],
+      },
+      { $id: 'cmp__hero__film' },
+    ] as never)
+    expect(collected[0].action.steps).toEqual([
+      {
+        type: 'scrollTo',
+        selector: '[data-aglyn="leaf:cmp__hero__film"]',
+        behavior: 'instant',
+        offsetPx: 72,
+      },
+      { type: 'playVideo', selector: '[data-aglyn="leaf:cmp__hero__film"]' },
+    ])
+  })
+
   it('leaves a page-level target alone, and an unresolvable one untouched', () => {
     // A component may legitimately drive an element outside itself, and a
     // selector that resolves nowhere must not be pointed somewhere plausible.

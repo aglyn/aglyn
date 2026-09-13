@@ -22,6 +22,7 @@ import {
   applyElementVisibility,
   dispatchDrawerCommand,
   dispatchMenuCommand,
+  dispatchVideoCommand,
   DRAWER_COMMAND_EVENT,
   ELEMENT_HIDDEN_CLASS,
   ELEMENT_HIDDEN_STYLE_ID,
@@ -31,11 +32,17 @@ import {
   leafIdsMatch,
   MENU_COMMAND_EVENT,
   normalizeLeafId,
+  resolveStepTarget,
+  runPlayVideoStep,
+  runScrollToStep,
   subscribeDrawerCommands,
   subscribeMenuCommands,
+  subscribeVideoCommands,
+  VIDEO_COMMAND_EVENT,
   VISIBILITY_BAND_MEDIA,
   VISIBILITY_BANDS,
 } from './element-ui'
+import { SCROLL_TO_MAX_OFFSET_PX } from './actions'
 import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
 
 describe('applyElementVisibility (AGL-562)', () => {
@@ -466,5 +473,221 @@ describe('runElementVisibilityStep (AGL-589)', () => {
     runElementVisibilityStep('show', '#panel')
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(hidden(panel)).toBe(false)
+  })
+})
+
+/**
+ * jsdom lays nothing out: every element reports no client rects and a zero
+ * bounding box. These give an element the box a browser would, so the "is it
+ * on the page" rule and the position arithmetic both have something to read.
+ */
+const layOut = (element: Element, top = 0) => {
+  Object.defineProperty(element, 'getClientRects', {
+    configurable: true,
+    value: () => [{ top }],
+  })
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({ top, left: 0, right: 0, bottom: top, width: 0, height: 0 }),
+  })
+  return element as HTMLElement
+}
+
+describe('resolveStepTarget (AGL-2867)', () => {
+  it('takes the first match that is on the page, skipping hidden copies', () => {
+    document.body.innerHTML =
+      '<div id="desktop" data-aglyn="leaf:cta"></div>' +
+      '<div id="mobile" data-aglyn="leaf:cta"></div>'
+    const mobile = layOut(document.getElementById('mobile') as Element)
+    expect(resolveStepTarget('[data-aglyn="leaf:cta"]')).toBe(mobile)
+  })
+
+  it('answers null for no match, no box, or a selector that does not parse', () => {
+    document.body.innerHTML = '<div id="hidden" data-aglyn="leaf:cta"></div>'
+    expect(resolveStepTarget('[data-aglyn="leaf:gone"]')).toBeNull()
+    // A `display: none` element is in the document but not on the page.
+    expect(resolveStepTarget('[data-aglyn="leaf:cta"]')).toBeNull()
+    expect(() => resolveStepTarget('[data-aglyn="leaf:')).not.toThrow()
+    expect(resolveStepTarget('[data-aglyn="leaf:')).toBeNull()
+  })
+})
+
+describe('runScrollToStep (AGL-2867)', () => {
+  let scrollTo: jest.SpyInstance
+  let target: HTMLElement
+
+  beforeEach(() => {
+    document.body.innerHTML =
+      '<header>Site nav</header>' +
+      '<section id="film" data-aglyn="leaf:film">The film</section>' +
+      '<button id="cta">Watch the demo</button>'
+    target = layOut(document.getElementById('film') as Element, 300)
+    scrollTo = jest.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 500 })
+  })
+
+  afterEach(() => {
+    scrollTo.mockRestore()
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 })
+    delete (window as { matchMedia?: unknown }).matchMedia
+  })
+
+  const reduceMotion = (matches: boolean) => {
+    ;(window as { matchMedia?: unknown }).matchMedia = (query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)' && matches,
+    })
+  }
+
+  it('brings the target to the top of the window, smoothly, less the offset', () => {
+    expect(runScrollToStep('[data-aglyn="leaf:film"]', { offsetPx: 64 })).toBe(true)
+    // 500 already scrolled + 300 from the top of the window − a 64px header.
+    expect(scrollTo).toHaveBeenCalledWith({ top: 736, behavior: 'smooth' })
+  })
+
+  it('jumps when the author asked for an instant scroll', () => {
+    runScrollToStep('[data-aglyn="leaf:film"]', { behavior: 'instant' })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 800, behavior: 'instant' })
+  })
+
+  it('jumps for a visitor who asks for reduced motion, whatever was authored', () => {
+    reduceMotion(true)
+    runScrollToStep('[data-aglyn="leaf:film"]', { behavior: 'smooth' })
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 800, behavior: 'instant' })
+    // The control: the same query answering no leaves the animation alone,
+    // so the case above is about the preference and not about `matchMedia`
+    // merely existing.
+    reduceMotion(false)
+    runScrollToStep('[data-aglyn="leaf:film"]', { behavior: 'smooth' })
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 800, behavior: 'smooth' })
+  })
+
+  it('holds a stored offset to the band the editor enforces', () => {
+    // A stored document need not have passed through the editor, so the
+    // runtime clamps rather than trusting the number it is handed.
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 5000 })
+    runScrollToStep('[data-aglyn="leaf:film"]', { offsetPx: -80 })
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 5300, behavior: 'smooth' })
+    runScrollToStep('[data-aglyn="leaf:film"]', { offsetPx: 99_999 })
+    expect(scrollTo).toHaveBeenLastCalledWith({
+      top: 5300 - SCROLL_TO_MAX_OFFSET_PX,
+      behavior: 'smooth',
+    })
+    runScrollToStep('[data-aglyn="leaf:film"]', { offsetPx: Number.NaN })
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 5300, behavior: 'smooth' })
+  })
+
+  it('never asks for a position above the top of the page', () => {
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 })
+    layOut(target, 10)
+    runScrollToStep('[data-aglyn="leaf:film"]', { offsetPx: 64 })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+  })
+
+  it('moves focus to the target without a second scroll, and tidies up after', () => {
+    const focus = jest.spyOn(target, 'focus')
+    runScrollToStep('[data-aglyn="leaf:film"]')
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    expect(document.activeElement).toBe(target)
+    // Focusable by script for the visit, never added to the Tab order…
+    expect(target.getAttribute('tabindex')).toBe('-1')
+    // …and the author's markup is as it was once focus moves on.
+    target.blur()
+    expect(target.hasAttribute('tabindex')).toBe(false)
+  })
+
+  it('leaves an element that already takes focus exactly as authored', () => {
+    const button = layOut(document.getElementById('cta') as Element, 40)
+    runScrollToStep('#cta')
+    expect(document.activeElement).toBe(button)
+    expect(button.hasAttribute('tabindex')).toBe(false)
+  })
+
+  it('does nothing, and throws nothing, for a target that is missing, deleted or hidden', () => {
+    const active = document.activeElement
+    expect(runScrollToStep('[data-aglyn="leaf:never-existed"]')).toBe(false)
+    target.remove()
+    expect(runScrollToStep('[data-aglyn="leaf:film"]')).toBe(false)
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<section data-aglyn="leaf:hidden"></section>',
+    )
+    expect(runScrollToStep('[data-aglyn="leaf:hidden"]')).toBe(false)
+    expect(() => runScrollToStep('[data-aglyn="leaf:')).not.toThrow()
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(active)
+  })
+
+  it('scrolls a box that scrolls its own content, rather than only the window', () => {
+    document.body.innerHTML =
+      '<div id="panel" style="overflow-y: auto; height: 200px">' +
+      '<p id="deep" data-aglyn="leaf:deep">Deep in the panel</p></div>'
+    const panel = document.getElementById('panel') as HTMLElement
+    Object.defineProperty(panel, 'scrollHeight', { configurable: true, value: 900 })
+    Object.defineProperty(panel, 'clientHeight', { configurable: true, value: 200 })
+    const deep = layOut(document.getElementById('deep') as Element, 600)
+    const scrollIntoView = jest.fn()
+    deep.scrollIntoView = scrollIntoView
+
+    runScrollToStep('[data-aglyn="leaf:deep"]', { behavior: 'instant' })
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', block: 'start' })
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+})
+
+describe('video commands (AGL-2867)', () => {
+  beforeEach(() => {
+    document.body.innerHTML =
+      '<div id="film" data-aglyn="leaf:film"></div>' +
+      '<div id="heading" data-aglyn="leaf:heading"></div>'
+    layOut(document.getElementById('film') as Element)
+    layOut(document.getElementById('heading') as Element)
+  })
+
+  it('delivers a play to the element the step names, which says it answered', () => {
+    const film = document.getElementById('film') as HTMLElement
+    const heard: unknown[] = []
+    const unsubscribe = subscribeVideoCommands(film, (detail) => heard.push(detail))
+
+    expect(runPlayVideoStep('[data-aglyn="leaf:film"]')).toBe(true)
+    expect(heard).toEqual([{ command: 'play' }])
+
+    unsubscribe()
+    expect(runPlayVideoStep('[data-aglyn="leaf:film"]')).toBe(false)
+    expect(heard).toHaveLength(1)
+  })
+
+  it('goes to that element only — never to another video, never to the window', () => {
+    const film = document.getElementById('film') as HTMLElement
+    const heading = document.getElementById('heading') as HTMLElement
+    const filmHeard: unknown[] = []
+    const onWindow = jest.fn()
+    const unsubscribe = subscribeVideoCommands(film, (d) => filmHeard.push(d))
+    window.addEventListener(VIDEO_COMMAND_EVENT, onWindow)
+
+    // Not a Video: nobody answers, and a different element's listener is
+    // not reached by an event sent to this one.
+    expect(dispatchVideoCommand(heading, 'play')).toBe(false)
+    expect(filmHeard).toHaveLength(0)
+    expect(onWindow).not.toHaveBeenCalled()
+
+    unsubscribe()
+    window.removeEventListener(VIDEO_COMMAND_EVENT, onWindow)
+  })
+
+  it('does nothing, and throws nothing, for a target that is missing or deleted', () => {
+    expect(runPlayVideoStep('[data-aglyn="leaf:never-existed"]')).toBe(false)
+    document.getElementById('film')?.remove()
+    expect(runPlayVideoStep('[data-aglyn="leaf:film"]')).toBe(false)
+    expect(() => runPlayVideoStep('[data-aglyn="leaf:')).not.toThrow()
+  })
+
+  it('ignores a malformed event', () => {
+    const film = document.getElementById('film') as HTMLElement
+    const heard: unknown[] = []
+    const unsubscribe = subscribeVideoCommands(film, (d) => heard.push(d))
+    film.dispatchEvent(new CustomEvent(VIDEO_COMMAND_EVENT, {}))
+    unsubscribe()
+    expect(heard).toHaveLength(0)
   })
 })

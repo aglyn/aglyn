@@ -334,6 +334,23 @@ export type HostActionStep = (
   // attribute the author picked.
   | { type: 'setAttribute'; selector: string; name: string; value: string }
   | { type: 'removeAttribute'; selector: string; name: string }
+  // Steps that act on ONE element (AGL-2867): the first rendered match of
+  // `selector`, which is spelled `selector` for the reason the attribute
+  // steps give above. `scrollTo` rather than `scrollToElement`, because that
+  // name is already a TRIGGER — "the visitor scrolled to the element" — and
+  // one word meaning both directions would be read wrong by every reader of a
+  // stored document.
+  | {
+      type: 'scrollTo'
+      selector: string
+      /** Absent means `smooth`. A visitor who asks for reduced motion is always scrolled instantly. */
+      behavior?: ScrollToBehavior
+      /** Pixels left above the target, so a sticky header does not cover it. Absent means 0. */
+      offsetPx?: number
+    }
+  // Presses a Video element's poster from outside it: the same press, so
+  // the lightbox opens and plays, or the film plays in place of the poster.
+  | { type: 'playVideo'; selector: string }
   | { type: 'openDrawer'; drawerNodeId?: string }
   | { type: 'closeDrawer'; drawerNodeId?: string }
   | { type: 'toggleDrawer'; drawerNodeId?: string }
@@ -478,6 +495,8 @@ export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'toggleMenu',
     'setAttribute',
     'removeAttribute',
+    'scrollTo',
+    'playVideo',
     'showHtml',
     'runJs',
     'redirect',
@@ -882,6 +901,11 @@ export const BASIC_CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'toggleMenu',
     'setAttribute',
     'removeAttribute',
+    // Moving the page and pressing a player the author placed: no data, no
+    // server, and nothing a Video element's own poster does not already do
+    // on every plan.
+    'scrollTo',
+    'playVideo',
     'redirect',
     'siteAlert',
   ] as const)
@@ -963,6 +987,26 @@ export const ELEMENT_DISMISS_OPTIONS = ['escape', 'outsideClick'] as const
 export type ElementDismissOption = (typeof ELEMENT_DISMISS_OPTIONS)[number]
 /** Visibility grace-delay ceiling — enough for hover travel, no dead UIs. */
 export const ELEMENT_VISIBILITY_MAX_DELAY_MS = 5000
+
+/**
+ * How a `scrollTo` step moves the page. Stored in documents; never rename a
+ * value. `instant` rather than the DOM's `auto`, because `auto` defers to the
+ * site's CSS `scroll-behavior` — a site that sets `smooth` there would animate
+ * a scroll the author asked to be instant.
+ */
+export const SCROLL_TO_BEHAVIORS = ['smooth', 'instant'] as const
+export type ScrollToBehavior = (typeof SCROLL_TO_BEHAVIORS)[number]
+
+/**
+ * The largest offset a `scrollTo` step may leave above its target.
+ *
+ * The offset exists to clear a sticky header, which is tens of pixels and
+ * rarely more than a few hundred with an announcement bar stacked on it. A
+ * thousand leaves room for any header while still refusing the extra digit
+ * that would park the target off the bottom of the screen.
+ */
+export const SCROLL_TO_MAX_OFFSET_PX = 1000
+
 /** Custom event names: short, no collision with built-ins. */
 export const CUSTOM_EVENT_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]{1,39}$/
 
@@ -1031,6 +1075,8 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   toggleMenu: 'Open/close a menu',
   setAttribute: 'Set an ARIA or data attribute',
   removeAttribute: 'Remove an ARIA or data attribute',
+  scrollTo: 'Scroll to element',
+  playVideo: 'Play a video',
   showHtml: 'Show custom HTML',
   runJs: 'Run custom JS (Business)',
   redirect: 'Redirect the visitor',
@@ -1318,6 +1364,34 @@ export function validateHostAction(action: HostAction): string | null {
       ) {
         return `${label}: dismiss options are escape and outsideClick`
       }
+    }
+    // One-target steps (AGL-2867). The runtime does nothing for a target it
+    // cannot find, so a missing one is refused here, where it can be fixed.
+    if (step.type === 'scrollTo') {
+      if (!step.selector?.trim()) {
+        return `${label}: pick the element to scroll to`
+      }
+      const behavior = (step as { behavior?: unknown }).behavior
+      if (
+        behavior != null &&
+        !(SCROLL_TO_BEHAVIORS as readonly unknown[]).includes(behavior)
+      ) {
+        return `${label}: scroll smoothly or instantly`
+      }
+      const offset = (step as { offsetPx?: unknown }).offsetPx
+      if (
+        offset != null &&
+        !(
+          Number.isInteger(offset) &&
+          (offset as number) >= 0 &&
+          (offset as number) <= SCROLL_TO_MAX_OFFSET_PX
+        )
+      ) {
+        return `${label}: the offset must be 0–${SCROLL_TO_MAX_OFFSET_PX}px`
+      }
+    }
+    if (step.type === 'playVideo' && !step.selector?.trim()) {
+      return `${label}: pick the video to play`
     }
     if (step.type === 'showHtml') {
       if (!step.html?.trim()) return `${label}: enter the HTML`

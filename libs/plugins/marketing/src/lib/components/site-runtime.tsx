@@ -324,6 +324,19 @@ function AutomationsEngine(props: {
                 }
               })
             }
+          } else if (step.type === 'scrollTo') {
+            // One target, the first one on screen (AGL-2867). A target that
+            // is missing, deleted or hidden makes the step a no-op, and the
+            // steps after it in this automation still run.
+            Aglyn.runScrollToStep(Aglyn.expandLeafSelector(step.selector), {
+              behavior: step.behavior,
+              offsetPx: step.offsetPx,
+            })
+          } else if (step.type === 'playVideo') {
+            // The Video element's own poster press, sent to the element: the
+            // player loads only now, exactly as it would for a click on the
+            // poster, and under the same consent rules.
+            Aglyn.runPlayVideoStep(Aglyn.expandLeafSelector(step.selector))
           } else if (step.type === 'stickyNav') {
             const target = document.querySelector(
               Aglyn.expandLeafSelector(step.selector?.trim() || 'header, nav'),
