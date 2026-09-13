@@ -21,6 +21,7 @@ import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import {
   consumeRateLimit,
+  getHostDocAdmin,
   visitorContentRefusal,
 } from '@aglyn/tenant-data-admin'
 import { createHash, timingSafeEqual } from 'crypto'
@@ -115,10 +116,19 @@ export async function POST(request: Request): Promise<Response> {
     if (!match) {
       return json({ error: 'Wrong password' }, 401)
     }
+    // The site document (AGL-2883): the tree's host variables fill in from
+    // it, and the enricher slice below reads the same copy. A failed read
+    // composes with no site, which renders those variables as nothing — the
+    // unlocked page without its business name still beats no page.
+    const host = await getHostDocAdmin(hostId).catch((error) => {
+      console.error(error)
+      return null
+    })
     const nodes = await composeScreenNodes({
       hostId,
       screenId,
       screen: screenRes.screen,
+      host,
     })
     if (!nodes) return json({ error: 'Compose failed' }, 500)
     // The page's behavior travels with its nodes (AGL-2510). The loader ships
@@ -138,6 +148,7 @@ export async function POST(request: Request): Promise<Response> {
       screenId,
       screen: screenRes.screen,
       nodes,
+      ...(host ? { host } : {}),
     })
     return json({ nodes, ...enriched })
   } catch (error) {

@@ -40,6 +40,9 @@ const mockDocsByCollection: Record<
   Array<{ id: string; fields: Record<string, unknown> }>
 > = {}
 const mockMemberSetCalls: Array<Record<string, unknown>> = []
+const mockHostDoc = { $id: 'host-1', displayName: 'Northwind Coffee' }
+/** What each members-only composition was asked to compose with. */
+const mockComposeCalls: Array<Record<string, unknown>> = []
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const makeSnapshot = (doc: {
@@ -97,6 +100,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     getOrgForHost: async () => ({
       org: { entitlements: { features: { contentGating: true } } },
     }),
+    // The site a members-only tree composes against (AGL-2883).
+    getHostDocAdmin: async () => mockHostDoc,
   }
 })
 // Members-only content resolves through tenant-runtime; the suspension
@@ -108,7 +113,10 @@ jest.mock('@aglyn/tenant-runtime/get-screen', () => ({
 }))
 jest.mock('@aglyn/tenant-runtime/compose-screen-nodes', () => ({
   __esModule: true,
-  default: async () => [{ id: 'node-1' }],
+  default: async (options: Record<string, unknown>) => {
+    mockComposeCalls.push(options)
+    return [{ id: 'node-1' }]
+  },
 }))
 
 const HOST_ID = 'host-1'
@@ -361,5 +369,23 @@ describe('member suspension enforcement (AGL-550)', () => {
     )
     expect(result.status).toBe(401)
     expect(result.body).toEqual({ error: 'Not signed in' })
+  })
+})
+
+describe('members-only content names its site (AGL-2883)', () => {
+  it('composes the tree against the site document, so its host variables fill in', async () => {
+    mockComposeCalls.length = 0
+    const { res, result } = makeResponse()
+    await membershipContentHandler(
+      makeRequest({
+        method: 'POST',
+        body: { hostId: HOST_ID, screenId: 'screen-1' },
+      }),
+      res,
+    )
+    expect(result.status).toBe(200)
+    expect(mockComposeCalls).toHaveLength(1)
+    // The layout's `{{host.businessName}}` renders as nothing without it.
+    expect(mockComposeCalls[0]?.['host']).toBe(mockHostDoc)
   })
 })

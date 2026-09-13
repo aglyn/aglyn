@@ -175,7 +175,12 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
     Aglyn.resolveOrgEntitlements(org).features.abTesting &&
     screenId &&
     screen
-      ? await getScreenExperiments({ hostId, screenId, screen })
+      ? await getScreenExperiments({
+          hostId,
+          screenId,
+          screen,
+          host: host as Aglyn.HostTokenSource,
+        })
       : []
 
   // Overlay payloads showOverlay steps reference (AGL-257).

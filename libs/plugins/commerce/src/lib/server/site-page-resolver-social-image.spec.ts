@@ -168,6 +168,26 @@ describe('a product page (AGL-2850)', () => {
   })
 })
 
+/**
+ * The site the store renders for reaches the template's composition too
+ * (AGL-2883): the composition fills host variables in from it, and renders
+ * each as nothing without it — the store layout's footer included.
+ */
+describe('a store template names its site (AGL-2883)', () => {
+  const hostHanded = () =>
+    (mockCompose.mock.calls[0]?.[0] as { host?: unknown } | undefined)?.host
+
+  it('on a product page', async () => {
+    await resolve('/products/blue-widget')
+    expect(hostHanded()).toBe(HOST)
+  })
+
+  it('on a catalog collection page', async () => {
+    await resolve('/collections/summer')
+    expect(hostHanded()).toBe(HOST)
+  })
+})
+
 describe('a catalog collection page (AGL-2850)', () => {
   it("hands the template's image and the site default to the composition, and returns what it read", async () => {
     const answer = await resolve('/collections/summer')
