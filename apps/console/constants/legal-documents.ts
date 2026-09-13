@@ -62,8 +62,8 @@
  * no banner. Records written before the 2026-08-20 collapse (below) carry
  * labels up to `v6`; the 2026-09-13 entry says what that means for `v2`.
  *
- * ⚠️ Neither path adds `constants/legal/v2/`. The snapshot TEXT left this repo
- * on 2026-08-20 and lives in the shared drive at
+ * ⚠️ A bump adds no `constants/legal/<version>/`. The snapshot TEXT left
+ * this repo on 2026-08-20 and lives in the shared drive at
  * `Platform Docs/Legal/Acceptance-Snapshots/<version>/`; only the hash stays
  * here. And `specs/legal-document-version.spec.ts` no longer re-hashes
  * anything — it asserts the manifest's SHAPE, offline. The content check is
