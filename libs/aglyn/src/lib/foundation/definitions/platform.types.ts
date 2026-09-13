@@ -1056,8 +1056,9 @@ export type ComponentDefUid = string
  * to it. Every kind substitutes as text, so the graft stays a string
  * replacement over the definition's props — except that a field bound to
  * nothing but a `boolean` prop receives a real `true` or `false`, one bound to
- * a `choice` nobody made is left to the element's own default, and one bound to
- * an `icon` brings the icon's path with its id (`resolveComponentPropTokens`).
+ * a `number` a real number, one bound to a `choice` nobody made is left to the
+ * element's own default, and one bound to an `icon` brings the icon's path with
+ * its id (`resolveComponentPropTokens`).
  */
 export type ReusableComponentPropType =
   | 'text'

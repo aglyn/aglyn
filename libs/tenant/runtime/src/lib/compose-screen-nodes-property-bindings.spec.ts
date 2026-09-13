@@ -317,5 +317,37 @@ describe('component properties driving non-text fields on the published page', (
       const shipped = chip(await compose(pagePlacingChip()))
       expect(shipped.props).toMatchObject(DATASETS_ICON)
     })
+
+    /**
+     * A Number property bound into the icon's size (AGL-2880). As the text
+     * `'40'` MUI would compile `font-size: 40`, which no browser applies.
+     */
+    it('ships a size bound to a Number property as a number', async () => {
+      mockGetComponents.mockResolvedValue({
+        definitions: {
+          chipCard: {
+            ...CHIP_CARD,
+            nodes: {
+              ...CHIP_CARD.nodes,
+              'i-chip': {
+                ...CHIP_CARD.nodes['i-chip'],
+                props: {
+                  iconId: '{{prop.productIcon}}',
+                  size: '{{prop.chipSize}}',
+                },
+              },
+            },
+            props: [
+              ...CHIP_CARD.props,
+              { name: 'chipSize', type: 'number', defaultValue: '28' },
+            ],
+          },
+        },
+      })
+      expect(chip(await compose(pagePlacingChip())).props.size).toBe(28)
+      expect(
+        chip(await compose(pagePlacingChip({ chipSize: 40 }))).props.size,
+      ).toBe(40)
+    })
   })
 })

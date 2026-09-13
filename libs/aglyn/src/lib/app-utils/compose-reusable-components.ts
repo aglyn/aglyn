@@ -572,6 +572,14 @@ export function readYesNoValue(value: unknown): boolean | undefined {
   return directiveTruth(value)
 }
 
+/** The property kinds {@link resolveComponentPropTokens} finishes by type. */
+const TYPED_BINDING_KINDS: ReadonlySet<ReusableComponentPropType> = new Set([
+  'boolean',
+  'choice',
+  'icon',
+  'number',
+])
+
 /**
  * The declared-prop substitution for a set of nodes, with each binding handed
  * to the element as the type its property declares.
@@ -597,6 +605,10 @@ export function readYesNoValue(value: unknown): boolean | undefined {
  *   pass, because a path left over from the component's own icon would be
  *   drawn in place of the page's. Nothing picked removes both, and the element
  *   draws its empty placeholder.
+ * - `number` — handed on as a real number when the text is one, because an
+ *   element passing `size` to MUI turns `'32'` into `font-size: 32`, which no
+ *   browser applies. Nothing set is removed, as for a choice; text that is not
+ *   a number is left as it was authored.
  *
  * "Nothing chosen" includes a binding still holding its token after
  * substitution — a component editor drawing a prop that has no default —
@@ -607,9 +619,10 @@ export function readYesNoValue(value: unknown): boolean | undefined {
  * stays text. An undeclared name is never typed either — it never substitutes,
  * so there is no value to read.
  *
- * Top-level props only. The binding a panel field offers writes that field's
- * own prop; a token nested in an item list is content the component spelled
- * out, and it keeps the textual treatment every nested value gets.
+ * Top-level props only, and never an element's text content (`children`). The
+ * binding a panel field offers writes that field's own prop; a token nested in
+ * an item list is content the component spelled out, and text is text
+ * whatever kind of property fills it — so both keep the textual treatment.
  *
  * Inputs are never mutated, and a map with no typed binding comes back exactly
  * as the substitution left it.
@@ -625,10 +638,7 @@ export function resolveComponentPropTokens<
   const substituted = resolveNamedTokens(nodes, tokens)
   const typedProps = new Map<string, ReusableComponentPropType>()
   for (const prop of declared ?? []) {
-    if (
-      prop?.name &&
-      (prop.type === 'boolean' || prop.type === 'choice' || prop.type === 'icon')
-    ) {
+    if (prop?.name && prop.type && TYPED_BINDING_KINDS.has(prop.type)) {
       typedProps.set(prop.name, prop.type)
     }
   }
@@ -639,6 +649,7 @@ export function resolveComponentPropTokens<
     if (!raw || typeof raw !== 'object') continue
     let props: Record<string, unknown> | undefined
     for (const [key, value] of Object.entries(raw)) {
+      if (key === 'children') continue
       const name = matchComponentPropToken(value)
       const type = name ? typedProps.get(name) : undefined
       if (!name || !type) continue
@@ -655,6 +666,11 @@ export function resolveComponentPropTokens<
         resolved.trim() !== '' &&
         matchComponentPropToken(resolved) == null
       if (!chosen) delete props[key]
+      if (type === 'number') {
+        const numeric = chosen ? Number(resolved) : Number.NaN
+        if (Number.isFinite(numeric)) props[key] = numeric
+        continue
+      }
       if (type !== 'icon') continue
       const pathKey = iconPathPropName(key)
       if (pathKey === key) continue

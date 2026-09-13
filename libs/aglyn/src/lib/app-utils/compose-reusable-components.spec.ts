@@ -3387,3 +3387,75 @@ describe('an icon picker bound to an Icon property (AGL-2871)', () => {
     ).toBe(ROCKET.iconId)
   })
 })
+
+/**
+ * A numeric attribute bound to a Number property (AGL-2880).
+ *
+ * The substitution is textual, and an element that hands `size` to MUI turns
+ * the text `'32'` into `font-size: 32` — no unit, so no browser applies it and
+ * the icon keeps its default size on every page that set one. A field bound
+ * to exactly one Number token receives a real number.
+ */
+describe('a numeric attribute bound to a Number property (AGL-2880)', () => {
+  const badge = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['icon', 'label'] },
+      icon: {
+        $id: 'icon',
+        componentId: 'icon',
+        parentId: 'root',
+        props: { iconPath: 'M0,0H1', size: '{{prop.iconSize}}' },
+      },
+      label: {
+        $id: 'label',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: '{{prop.count}}', 'aria-hidden': '{{prop.quiet}}' },
+      },
+    },
+    props: [
+      { name: 'iconSize', type: 'number' },
+      { name: 'count', type: 'number', defaultValue: '3' },
+      { name: 'quiet', type: 'boolean', defaultValue: 'true' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'badge', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  const composed = (propValues?: Record<string, unknown>) =>
+    composeReusableComponentNodes(page(propValues), { badge })
+
+  it('hands the element a real number', () => {
+    expect(composed({ iconSize: 32 })['cmp__a__icon'].props.size).toBe(32)
+    expect(composed({ iconSize: '48' })['cmp__a__icon'].props.size).toBe(48)
+  })
+
+  it('leaves the element its own default when nothing was set', () => {
+    expect('size' in composed()['cmp__a__icon'].props).toBe(false)
+    expect('size' in composed({ iconSize: '' })['cmp__a__icon'].props).toBe(
+      false,
+    )
+  })
+
+  it('keeps text that is not a number as it was authored', () => {
+    expect(composed({ iconSize: 'auto' })['cmp__a__icon'].props.size).toBe(
+      'auto',
+    )
+  })
+
+  it("leaves an element's text content as text, whatever kind of property fills it", () => {
+    const label = composed()['cmp__a__label'].props
+    expect(label.children).toBe('3')
+    // An attribute beside it is still finished by its property's type.
+    expect(label['aria-hidden']).toBe(true)
+  })
+})
