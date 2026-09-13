@@ -16,6 +16,7 @@
  */
 
 import {
+  buildComponentDefaultTokens,
   composeReusableComponentNodes,
   displayBindingTokens,
   FORM_COMPONENT_ID,
@@ -25,6 +26,7 @@ import {
   NODE_ROOT_ID,
   placedFormPlacement,
   resolveBindings,
+  resolveNamedTokens,
   REUSABLE_INSTANCE_COMPONENT_ID,
 } from '@aglyn/aglyn'
 import {
@@ -252,7 +254,9 @@ export const NodeLeaf = observer(
     // live on the rendered copy (selection/dnd keep the original node).
     // Bound nodes are flagged either way so editors can spot them.
     const [resolveFlag] = useAglynBesignerFlag('resolveBindings')
-    const { variables, functions } = useContext(BindingPickerContext)
+    const { variables, functions, componentProps } = useContext(
+      BindingPickerContext,
+    )
     const boundProps = useMemo(
       () =>
         Object.entries(node?.props ?? {}).filter(
@@ -262,11 +266,31 @@ export const NodeLeaf = observer(
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [node, JSON.stringify(node?.props ?? {})],
     )
+    /**
+     * A component editor draws with the definition's OWN defaults
+     * (AGL-2870), so `{{prop.headline}}` shows the headline and a film with a
+     * default source actually plays.
+     *
+     * Only props that HAVE a default are substituted. One without stays a
+     * visible token, which is the signal an author needs: the slot is real
+     * and nothing fills it yet. Substituting `''` there would draw an empty
+     * component and hide the very thing they still have to decide.
+     *
+     * On a screen this path does nothing — the props belong to the component
+     * route, and an instance is composed through `composeReusableComponentNodes`
+     * below, which is the single substitution path a published page uses.
+     */
+    const defaultPropTokens = useMemo(
+      () => buildComponentDefaultTokens(componentProps),
+      [componentProps],
+    )
     const renderNode = useMemo(() => {
+      const hasDefaults = Object.keys(defaultPropTokens).length > 0
       if (
         !boundProps.length ||
         (!Object.keys(variables ?? {}).length &&
-          !Object.keys(functions ?? {}).length)
+          !Object.keys(functions ?? {}).length &&
+          !hasDefaults)
       ) {
         return node
       }
@@ -287,8 +311,20 @@ export const NodeLeaf = observer(
                 (functions ?? {}) as any,
               )
       }
-      return { ...node, props: resolved }
-    }, [node, boundProps, resolveFlag, variables, functions])
+      const next = { ...node, props: resolved }
+      // The raw-token view stays raw: an author who turned resolution OFF
+      // asked to see the tokens, and a default is a resolved value like any
+      // other.
+      if (resolveFlag === false || !hasDefaults) return next
+      // Through the same substitution a placed instance uses, keyed by this
+      // node alone — one code path deciding what a token becomes, never two
+      // that could disagree.
+      return (
+        resolveNamedTokens({ [String(node?.$id)]: next as any }, defaultPropTokens)[
+          String(node?.$id)
+        ] ?? next
+      )
+    }, [node, boundProps, resolveFlag, variables, functions, defaultPropTokens])
 
     // Classes switched off for comparison (AGL-2486). Composed onto the SAME
     // render copy the binding resolution builds, never onto the canvas node:

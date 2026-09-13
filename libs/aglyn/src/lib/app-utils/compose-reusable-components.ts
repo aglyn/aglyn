@@ -491,6 +491,33 @@ function buildPropTokens(
 }
 
 /**
+ * Token map of a definition's OWN defaults, with no instance in the picture.
+ *
+ * What the component editor draws with (AGL-2870). It is deliberately not
+ * {@link buildPropTokens} called with no overrides: that one stringifies a
+ * missing default to `''`, which is right for a page — an unset prop renders
+ * nothing — and wrong here, where a prop with no default has nothing to
+ * preview and should keep showing its raw token so the author can see at a
+ * glance which slots are still unfilled.
+ *
+ * `false` and `0` are real defaults and survive; only `null`, `undefined` and
+ * `''` are treated as "no default set".
+ */
+export function buildComponentDefaultTokens(
+  declared: ReusableComponentProp[] | undefined,
+): Record<string, string> {
+  const tokens: Record<string, string> = {}
+  for (const prop of declared ?? []) {
+    if (!prop?.name) continue
+    if (prop.defaultValue == null || prop.defaultValue === '') continue
+    tokens[`${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}`] = String(
+      prop.defaultValue,
+    )
+  }
+  return tokens
+}
+
+/**
  * Spellings of "no" a visibility directive accepts, beyond a real `false`.
  *
  * `'false'` and `'0'` are in here because the substitution these run

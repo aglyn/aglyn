@@ -16,6 +16,7 @@
  */
 
 import {
+  buildComponentDefaultTokens,
   collectReferencedComponentIds,
   composeReusableComponentNodes,
   detachInstanceSubtree,
@@ -2691,5 +2692,56 @@ describe('placed forms render their entity (docs/specs/reusable-forms.md)', () =
     expect(
       Object.keys(composed).filter((id) => id.startsWith('cmp__inline-')),
     ).toEqual([])
+  })
+})
+
+describe('buildComponentDefaultTokens', () => {
+  it('maps each declared default onto its prop token', () => {
+    expect(
+      buildComponentDefaultTokens([
+        { name: 'headline', defaultValue: 'A canvas for the entire web presence.' },
+        { name: 'eyebrow', defaultValue: 'THE VISUAL WEB PLATFORM' },
+      ] as never),
+    ).toEqual({
+      'prop.headline': 'A canvas for the entire web presence.',
+      'prop.eyebrow': 'THE VISUAL WEB PLATFORM',
+    })
+  })
+
+  it('withholds a prop that has no default, so its token stays visible', () => {
+    // The component editor draws with this map. A prop nobody has given a
+    // default is a slot still to be decided, and an empty string would paint
+    // the component as if it were finished.
+    expect(
+      buildComponentDefaultTokens([
+        { name: 'headline', defaultValue: 'Set' },
+        { name: 'unset' },
+        { name: 'nulled', defaultValue: null },
+        { name: 'blank', defaultValue: '' },
+      ] as never),
+    ).toEqual({ 'prop.headline': 'Set' })
+  })
+
+  it('keeps false and 0, which are real defaults rather than absent ones', () => {
+    expect(
+      buildComponentDefaultTokens([
+        { name: 'playInLightbox', defaultValue: false },
+        { name: 'duration', defaultValue: 0 },
+      ] as never),
+    ).toEqual({ 'prop.playInLightbox': 'false', 'prop.duration': '0' })
+  })
+
+  it('answers an empty map for a component that declares nothing', () => {
+    expect(buildComponentDefaultTokens(undefined)).toEqual({})
+    expect(buildComponentDefaultTokens([])).toEqual({})
+  })
+
+  it('skips an entry with no name rather than keying on undefined', () => {
+    expect(
+      buildComponentDefaultTokens([
+        { defaultValue: 'orphan' },
+        { name: 'kept', defaultValue: 'yes' },
+      ] as never),
+    ).toEqual({ 'prop.kept': 'yes' })
   })
 })
