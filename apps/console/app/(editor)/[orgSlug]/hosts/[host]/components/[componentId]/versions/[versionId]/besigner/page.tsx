@@ -21,7 +21,6 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
   CANVAS_ROOT_ELEMENT_ID,
-  canvasTreeToDefinition,
   definitionToCanvasTree,
   encodeStoredNodes,
   ScreenLinkContext,
@@ -69,6 +68,9 @@ import ComponentPropsDialog from '../../../../../../../../../../components/compo
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../../../../../../../../../utils/revalidate-live-pages'
+import resolveComponentDefinition, {
+  isComponentDefinitionRefusal,
+} from '../../../../../../../../../../utils/component-definition-write'
 import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
@@ -499,27 +501,24 @@ function ComponentBesignerPage(props) {
   const promoteToSites = useCallback(async () => {
     setPublishing(true)
     try {
-      // Unwrap the synthetic canvas root: the tenant runtime grafts from
-      // `rootId`, so publishing the wrapper would put an always-empty
-      // container inside every instance of this component (AGL-680).
-      const definition = canvasTreeToDefinition(
-        canvas.toJSON().nodes as Record<string, unknown>,
-      )
-      if (definition.ambiguousRoot) {
-        return enqueueSnackbar(
-          'A component needs a single top-level element. Wrap what you have ' +
-            'in one container, then publish.',
-          { variant: 'warning', allowDuplicate: true },
-        )
+      // The same resolution the Versions dialog's Publish runs (AGL-2878):
+      // the synthetic canvas root unwrapped, because the tenant grafts from
+      // `rootId` and a published wrapper would put an always-empty container
+      // inside every instance (AGL-680). Declared props publish with the tree
+      // (AGL-1247), for the same reason `rootId` does: the tenant reads the
+      // parent doc, so props left behind on the version would graft every
+      // `{{prop.*}}` token unresolved on the live site.
+      const definition = resolveComponentDefinition({
+        nodes: canvas.toJSON().nodes,
+        rootId: componentResult?.data?.rootId,
+        props: (data as { props?: Aglyn.ReusableComponentProp[] })?.props,
+      })
+      if (isComponentDefinitionRefusal(definition)) {
+        return enqueueSnackbar(definition.refusal, {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
       }
-      const publishedNodes = definition.nodes
-      const rootId = definition.rootId ?? componentResult?.data?.rootId
-      // Declared props publish with the tree (AGL-1247), for the same
-      // reason `rootId` does: the tenant reads the parent doc, so props
-      // left behind on the version would graft every `{{prop.*}}` token
-      // unresolved on the live site while the editor looked correct.
-      const declaredProps = (data as { props?: Aglyn.ReusableComponentProp[] })
-        ?.props
       await updateDoc(
         doc(firestore, 'hosts', hostId, 'components', componentId),
         {
@@ -528,9 +527,9 @@ function ComponentBesignerPage(props) {
           // it is copied far more often than it is written — and it was the
           // one document in the family still stored as a plain map, at about
           // 1.4x the bytes against the same 1 MiB ceiling.
-          nodes: Bytes.fromUint8Array(encodeStoredNodes(publishedNodes)!),
-          ...(rootId ? { rootId } : {}),
-          props: declaredProps ?? [],
+          nodes: Bytes.fromUint8Array(encodeStoredNodes(definition.nodes)!),
+          ...(definition.rootId ? { rootId: definition.rootId } : {}),
+          props: definition.props,
           versionId,
           updatedAt: Timestamp.now(),
         },
