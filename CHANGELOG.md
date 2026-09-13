@@ -9,6 +9,51 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.119 — 2026-09-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.118...v1.0.0-beta.119)
+
+### Added
+
+- **legal:** clickwrap v2 pins the September 13 Terms and Privacy Policy ([AGL-2844](https://linear.app/aglyn/issue/AGL-2844), [AGL-2832](https://linear.app/aglyn/issue/AGL-2832))
+- **legal:** declare Wistia a subprocessor for the platform's own films ([AGL-2844](https://linear.app/aglyn/issue/AGL-2844), [AGL-2826](https://linear.app/aglyn/issue/AGL-2826))
+- **besigner:** an icon picker binds to an Icon property that carries its path ([AGL-2871](https://linear.app/aglyn/issue/AGL-2871))
+- **besigner:** dropdowns and Screen pickers bind to Choice and Link properties ([AGL-2871](https://linear.app/aglyn/issue/AGL-2871))
+- **besigner:** an External URL that is only a #fragment says it goes nowhere ([AGL-2867](https://linear.app/aglyn/issue/AGL-2867))
+- **interactions:** a click can scroll to an element or play a video ([AGL-2867](https://linear.app/aglyn/issue/AGL-2867))
+- **besigner:** a switch or checkbox in a component binds to a Yes / no property ([AGL-2871](https://linear.app/aglyn/issue/AGL-2871))
+- **besigner:** a component editor draws with its own property defaults ([AGL-2870](https://linear.app/aglyn/issue/AGL-2870), [AGL-97](https://linear.app/aglyn/issue/AGL-97), [AGL-1335](https://linear.app/aglyn/issue/AGL-1335))
+
+### Fixed
+
+- **e2e:** seed the legal acceptance for the version the manifest names ([AGL-2844](https://linear.app/aglyn/issue/AGL-2844))
+- **legal:** date the Wistia row by its change-log entry ([AGL-2844](https://linear.app/aglyn/issue/AGL-2844))
+- **aglyn:** a field bound to a Number property receives a number, not its text ([AGL-2880](https://linear.app/aglyn/issue/AGL-2880))
+- **besigner:** an edit made before the icon catalog loads keeps the icon's stored path ([AGL-2879](https://linear.app/aglyn/issue/AGL-2879))
+- **console:** a component version row publishes its definition, not just a pointer ([AGL-2878](https://linear.app/aglyn/issue/AGL-2878))
+- **console:** every editor's Save & publish stops when its save was refused ([AGL-2877](https://linear.app/aglyn/issue/AGL-2877))
+- **workflows:** every step the Actions menu offers can be chosen and built ([AGL-2876](https://linear.app/aglyn/issue/AGL-2876))
+- **besigner:** a saved draft nobody has opened survives publish, save and undo ([AGL-2874](https://linear.app/aglyn/issue/AGL-2874))
+- **aglyn:** a placed component keeps its classes, and ⋮ Start hidden, when composed ([AGL-2875](https://linear.app/aglyn/issue/AGL-2875))
+- **aglyn:** a placed component hidden with the hierarchy eye stays hidden when composed ([AGL-2873](https://linear.app/aglyn/issue/AGL-2873), [AGL-2521](https://linear.app/aglyn/issue/AGL-2521))
+- **console:** the File menu's Save draft writes the same draft as the toolbar ([AGL-2868](https://linear.app/aglyn/issue/AGL-2868))
+- **besigner:** a saved draft is offered with the age it was saved at ([AGL-2868](https://linear.app/aglyn/issue/AGL-2868))
+- **mui:** the video play button reads the site's accent on a white disc ([AGL-2869](https://linear.app/aglyn/issue/AGL-2869))
+
+### Documentation
+
+- **legal:** the manifest's archive note speaks of a bump, not two paths ([AGL-2844](https://linear.app/aglyn/issue/AGL-2844))
+- **versions:** a component version reaches every page, and cannot be scheduled ([AGL-2878](https://linear.app/aglyn/issue/AGL-2878))
+- **interactions:** how to scroll to an element or play a video, and why a #link does not ([AGL-2867](https://linear.app/aglyn/issue/AGL-2867))
+- **components:** the save steps name Save draft and Save & publish ([AGL-2868](https://linear.app/aglyn/issue/AGL-2868))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **console:** pin the clock under the durable rate-limit spec ([AGL-2872](https://linear.app/aglyn/issue/AGL-2872))
+
+</details>
+
 ## v1.0.0-beta.118 — 2026-09-12
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.117...v1.0.0-beta.118)
