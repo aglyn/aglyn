@@ -34,7 +34,8 @@ Bindings appear inside text props as tokens:
 | Dataset field bindings | A value from a [dataset](../../content-and-data/datasets/overview.md) record. |
 
 The Besigner resolves bindings **WYSIWYG** on the canvas and marks bound content so you can
-see what's dynamic.
+see what's dynamic. The **`{ }`** button in the canvas toolbar switches to the raw tokens
+and back.
 
 ## Rename-safe id tokens
 
@@ -53,6 +54,7 @@ Click it to open the **data picker** — a searchable menu grouped by source:
 | --- | --- | --- |
 | **Variables** | Your site variables (inserted as rename-safe id tokens) | When the site has variables |
 | **Functions** | Your functions, with parameter placeholders | When the site has functions |
+| **Site** | The site's own details — see [Site details](#site-details) | Always |
 | **Entry** | Collection-entry fields — Title, Excerpt, Link URL, Published date, … | Always (hint shows where they resolve) |
 | **Collection** | Collection name and slug | Always (resolves on collection pages) |
 | **Dataset item** | The fields of the repeated dataset, by display name | Only inside a repeating container |
@@ -105,6 +107,25 @@ Everywhere else the console references logic by entity, it uses **pickers that s
 ids**, never typed names: workflow steps pick their function, automations pick their
 workflow/dataset/webhook, and computed variables pick their workflow. Renaming an
 entity never breaks anything that references it — the display name is just a label.
+
+## Site details
+
+`{{host.*}}` tokens name the site itself instead of hard-coding it, so copy stays right
+when the site is renamed, and a template installed on another site fills in that site's
+details.
+
+| Token | Fills in |
+| --- | --- |
+| `{{host.businessName}}` | **Setup → SEO → Entity → Name**, or the site name when that is empty |
+| `{{host.url}}` | The site's address — its custom domain when one is connected |
+| `{{host.supportEmail}}` | **Support email**, from **Setup → Details → Business details** |
+| `{{host.address}}` | **Postal address**, from the same card |
+| `{{host.socialLinks}}` | The labels of the card's **Social links** |
+
+A detail the site hasn't set renders as nothing, never as the token. The canvas and
+**Preview** fill these in from the site you are editing, exactly as the published page
+does. In a field, the token shows as a pill named after the detail, such as
+**Business name**.
 
 ## Typed variables
 
