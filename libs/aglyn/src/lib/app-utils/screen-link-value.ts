@@ -163,6 +163,58 @@ export const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:|\/|#)/i
 export const EXTERNAL_HREF_PATTERN = /^(https?:\/\/|mailto:|tel:)/i
 
 /**
+ * The id a link value jumps to when a fragment is ALL it holds — `#watch`
+ * gives `watch` — or `undefined` for any other value (AGL-2867).
+ *
+ * A link field takes paths, so it takes `#watch` too, and on the canvas the
+ * element looks linked. On the published page the browser looks for an
+ * element with that id, and the elements an author places carry no id they
+ * can set, so the press goes nowhere. Two fragments are not that trap and are
+ * left out: `#top` (any case), which a browser scrolls to the top of the page
+ * with no element needed, and a value holding a `{{…}}` binding, whose text is
+ * not known until the page renders. A lone `#` names no element either, and
+ * means the top of the page.
+ */
+export function bareFragmentOfLinkValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('#') || trimmed.includes('{{')) return undefined
+  const fragment = trimmed.slice(1)
+  if (!fragment || fragment.toLowerCase() === 'top') return undefined
+  return fragment
+}
+
+/**
+ * What a link field says while its value is a bare fragment, or `undefined`
+ * (AGL-2867). It names the interaction that does what the fragment was
+ * reaching for, because the author is looking at the field, not at the docs.
+ */
+export function bareFragmentLinkWarning(value: unknown): string | undefined {
+  const fragment = bareFragmentOfLinkValue(value)
+  if (fragment === undefined) return undefined
+  return (
+    `Elements you place carry no id, so #${fragment} goes nowhere on the ` +
+    'published page. To take visitors to an element, clear this and add an ' +
+    'interaction: When clicked → Scroll to element.'
+  )
+}
+
+/**
+ * {@link bareFragmentLinkWarning} as a form field's `resolveProps`, for a link
+ * attribute in a component schema: the field's helper text carries the warning
+ * while the value is a bare fragment, and the field's own description
+ * otherwise. Computed from the live value, so it appears as the fragment is
+ * typed and clears as it is removed.
+ */
+export function bareFragmentLinkFieldProps(
+  _props: unknown,
+  field: { input?: { value?: unknown } },
+): { helperText?: string } {
+  const warning = bareFragmentLinkWarning(field?.input?.value)
+  return warning ? { helperText: warning } : {}
+}
+
+/**
  * Turns a screen id into its current href against a routing map, or
  * `undefined` when there is no id or the id has no entry (unpublished or
  * deleted). Pure and hook-free on purpose: an element that resolves ONE

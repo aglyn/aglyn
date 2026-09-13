@@ -278,6 +278,8 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
         'Screen names one — that field wins, so clear it to use a URL.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
+      // A bare `#fragment` saves and goes nowhere (AGL-2867).
+      resolveProps: Aglyn.bareFragmentLinkFieldProps,
     },
     FIELD_LINK_TARGET,
     FIELD_LINK_TARGET_NAME,

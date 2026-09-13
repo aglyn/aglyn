@@ -586,6 +586,8 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
         'clickable at all.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
+      // A bare `#fragment` saves and goes nowhere (AGL-2867).
+      resolveProps: Aglyn.bareFragmentLinkFieldProps,
     },
   ],
 }

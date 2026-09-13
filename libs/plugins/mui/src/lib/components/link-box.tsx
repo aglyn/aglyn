@@ -152,6 +152,8 @@ export const schema: Aglyn.ComponentSchema<LinkBoxProps> = {
         'part of this one link, so it should hold no other link.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'External URL',
+      // A bare `#fragment` saves and goes nowhere (AGL-2867).
+      resolveProps: Aglyn.bareFragmentLinkFieldProps,
     },
     {
       name: 'newTab',
