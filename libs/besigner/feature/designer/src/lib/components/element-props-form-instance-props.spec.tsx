@@ -15,7 +15,24 @@
  * limitations under the License.
  */
 
+// A stand-in icon catalog, mocked at the subpath the picker imports: the real
+// one loads ~6,600 icons asynchronously, and nothing here is about it.
+jest.mock('@aglyn/shared-ui-jsx/hooks/mdi-icon/use-mdi-icons-fuzzy', () => {
+  const catalog = [
+    { id: 'mdiRocket', name: 'Rocket', path: 'M13,22L11,18', tags: [] },
+  ]
+  return { useMdiIconsFuzzy: () => [catalog, catalog, jest.fn(), jest.fn()] }
+})
+// The grid is virtualized, which renders nothing in a zero-height jsdom box.
+// Only the windowing is replaced; the cards it is handed are the real ones.
+jest.mock('@aglyn/shared-ui-jsx/components/grid-list', () => ({
+  GridList: ({ items, renderItemContent }: any) => (
+    <div>{items.map((item: any, i: number) => renderItemContent(item, i))}</div>
+  ),
+}))
+
 import * as Aglyn from '@aglyn/aglyn'
+import { MdiIcons } from '@aglyn/shared-data-mdi'
 import {
   fireEvent,
   render,
@@ -205,6 +222,61 @@ describe("an instance's property fields (AGL-2871)", () => {
       unmount()
       expect(updateNodeProps).toHaveBeenCalled()
       expect(committedValues()).not.toHaveProperty('tint')
+    })
+  })
+
+  describe('an Icon property', () => {
+    const ROCKET = { iconId: 'mdiRocket', iconPath: 'M13,22L11,18' }
+    const PROPS: Aglyn.ReusableComponentProp[] = [
+      {
+        name: 'productIcon',
+        type: 'icon',
+        label: 'Product icon',
+        defaultValue: 'mdiDatabase',
+        defaultIconPath: 'M12,3C7.58,3',
+      },
+    ]
+
+    beforeAll(() => {
+      // What the picker loads before it can offer an icon at all.
+      MdiIcons.set('mdiRocket' as never, { id: 'mdiRocket', path: ROCKET.iconPath } as never)
+    })
+    afterAll(() => {
+      MdiIcons.delete('mdiRocket' as never)
+    })
+
+    it('stores the pick with its path, which is what a published page draws', async () => {
+      const { unmount } = mount(PROPS)
+      const caption = await screen.findByText('Product icon', undefined, {
+        timeout: 10000,
+      })
+      const picker = caption.closest('.MuiGrid-container')
+        ?.parentElement as HTMLElement
+      // The current-icon link opens the grid; picking is two steps.
+      fireEvent.click(picker.querySelector('.MuiLink-root') as HTMLElement)
+      fireEvent.click(
+        within(picker).getByRole('button', { pressed: false, name: /Rocket/ }),
+      )
+      fireEvent.click(within(picker).getByRole('button', { name: 'Choose' }))
+      unmount()
+      expect(committedValues()['productIcon']).toEqual(ROCKET)
+    })
+
+    it("says what an unset icon shows, and clears back to it", async () => {
+      const { unmount } = mount(PROPS, { productIcon: ROCKET })
+      expect(
+        await screen.findByRole(
+          'button',
+          { name: 'Help: Product icon' },
+          { timeout: 10000 },
+        ),
+      ).toBeTruthy()
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Clear Product icon' }),
+      )
+      unmount()
+      expect(updateNodeProps).toHaveBeenCalled()
+      expect(committedValues()).not.toHaveProperty('productIcon')
     })
   })
 })

@@ -47,6 +47,7 @@ import {
   useMemo,
   useState,
 } from 'react'
+import FormFieldGrid, { buildFieldClear } from '../mapper/form-field-grid'
 import { validationMessage } from '../utils/validation-message'
 
 import {
@@ -391,6 +392,10 @@ IconSelectControl.displayName = 'IconSelectControl'
  * The data-driven-forms field: everything form-shaped (validation message,
  * helper/description precedence, the final-form input) resolved here, and
  * the picking itself delegated to {@link IconSelectControl}.
+ *
+ * Sits in the same {@link FormFieldGrid} every other field does, so the corner
+ * controls a schema asks for — the help tip, the opt-in clear, a caller's own
+ * — are where they are on every other field rather than silently dropped.
  */
 const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
   const {
@@ -406,6 +411,9 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
     meta,
     inputProps,
     GridListProps,
+    help,
+    clearable,
+    FormFieldGridProps = {},
     ...rest
   } = useFieldApi(props as UseFieldApiConfig)
 
@@ -417,15 +425,27 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
     description,
   ].find((i) => Boolean(i))
 
+  // The picker can only ever choose an icon, so without this nothing takes
+  // one back off again.
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue: Boolean(input.value),
+    locked: Boolean(isDisabled || isReadOnly),
+    onClear: () => input.onChange(''),
+  })
+
   return (
-    <IconSelectControl
-      ref={ref}
-      value={input.value}
-      onChange={input.onChange}
-      label={label}
-      helperText={helperContent}
-      GridListProps={GridListProps}
-    />
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
+      <IconSelectControl
+        ref={ref}
+        value={input.value}
+        onChange={input.onChange}
+        label={label}
+        helperText={helperContent}
+        GridListProps={GridListProps}
+      />
+    </FormFieldGrid>
   )
 })
 

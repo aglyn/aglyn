@@ -25,6 +25,8 @@ export interface ComponentIconFieldProps {
   value?: Aglyn.ReusableComponentIcon
   onChange: (icon: Aglyn.ReusableComponentIcon) => void
   helperText?: string
+  /** Defaults to `Icon`. */
+  label?: string
 }
 
 /**
@@ -39,7 +41,7 @@ export interface ComponentIconFieldProps {
  * — this component is what loaded it.
  */
 export function ComponentIconField(props: ComponentIconFieldProps) {
-  const { value, onChange, helperText } = props
+  const { value, onChange, helperText, label = 'Icon' } = props
 
   const handleChange = useCallback(
     (iconId: string) => {
@@ -52,7 +54,7 @@ export function ComponentIconField(props: ComponentIconFieldProps) {
     <IconSelectControl
       value={value?.iconId ?? ''}
       onChange={handleChange}
-      label="Icon"
+      label={label}
       helperText={helperText}
     />
   )

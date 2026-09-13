@@ -97,6 +97,12 @@ function componentPropDefaultPreview(
       ? `Defaults to ${choice.label || choice.value}`
       : 'No default — the field keeps its own until a page chooses'
   }
+  if (prop.type === 'icon') {
+    // An icon id is not something to read out; the picker shows the icon.
+    return prop.defaultValue
+      ? 'Defaults to the icon picked in Properties'
+      : 'No default — shows no icon until a page picks one'
+  }
   return prop.defaultValue
     ? `Defaults to "${prop.defaultValue}"`
     : 'No default — renders as nothing until a page sets it'

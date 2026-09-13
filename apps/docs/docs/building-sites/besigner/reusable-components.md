@@ -86,6 +86,7 @@ This is what stops a hero from being rebuilt on every page. Only the words diffe
 | Number | Number |
 | Yes / no | **Yes** or **No**, or left to the component's default |
 | Choice | A dropdown of the answers you give the property |
+| Icon | Icon picker |
 
 A **Link** property is a screen picker at both ends — in the dialog's **Default** column and
 in each instance's Attributes panel — exactly like a Button's own **Link to screen** field.
@@ -103,6 +104,8 @@ A **Choice** property lists its answers under its row: **Add choice**, then give
 **Label**, which is what a page picks, and a **Value**, which is what the field bound to the
 property receives. Bound to a dropdown, the values must be ones that dropdown offers; the
 Attributes panel lists them if one is missing. Pick the **Default** from the answers.
+
+An **Icon** property's default is picked with the icon picker under its row.
 
 Property names must start with a letter or underscore and contain only letters, numbers and
 underscores. A dot is rejected: the Attributes panel names its field for the storage path
@@ -133,6 +136,7 @@ properties that can drive that field:
 | Switch or checkbox | Yes / no |
 | Dropdown | Choice |
 | Screen picker | Link |
+| Icon picker | Icon |
 
 Bind a Video's **Open in a lightbox** to a Yes / no property, and each page decides whether
 its film opens in a lightbox or plays in place; bind a Screen Link's **Screen** to a Link
@@ -165,8 +169,8 @@ spelled out underneath. Leave a field empty and that default is what renders —
 a field restores the component's own copy rather than collapsing the section to nothing.
 
 An empty field counts as unset. `0` and **no** are real values and survive. A Yes / no field
-offers **Yes** and **No** and a Choice field offers the property's answers; the ✕ on either
-hands the decision back to the component's default.
+offers **Yes** and **No**, a Choice field offers the property's answers, and an Icon field
+is the icon picker; the ✕ on any of them hands the decision back to the component's default.
 
 ### Restyle one instance
 

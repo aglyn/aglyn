@@ -22,6 +22,7 @@ import { COMPONENT_PROP_NAME_PATTERN, readYesNoValue } from '@aglyn/aglyn'
 import { mdiDelete, mdiPlus } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ScreenLinkValuePicker } from '@aglyn/besigner-ui'
+import ComponentIconField from './component-icon-field.component'
 import {
   Alert,
   Box,
@@ -50,6 +51,7 @@ const TYPE_OPTIONS: Array<{
   { value: 'number', label: 'Number' },
   { value: 'boolean', label: 'Yes / no' },
   { value: 'choice', label: 'Choice' },
+  { value: 'icon', label: 'Icon' },
 ]
 
 /**
@@ -69,7 +71,8 @@ const TEXT_SHAPED_TYPES: ReadonlySet<Aglyn.ReusableComponentPropType> = new Set(
  * carried into a Yes / no property it would read as Yes, which nobody chose.
  * So a default survives a change between text-shaped kinds and is dropped on
  * any change into or out of the others, leaving that kind's own "not set".
- * A Choice's list of answers belongs to the Choice, and goes with it.
+ * A Choice's list of answers belongs to the Choice, and an Icon's path to the
+ * Icon, and each goes with it.
  */
 export function retypeComponentProp(
   prop: Aglyn.ReusableComponentProp,
@@ -82,6 +85,7 @@ export function retypeComponentProp(
     type,
     ...(keepsDefault ? {} : { defaultValue: undefined }),
     options: type === 'choice' ? (prop.options ?? []) : undefined,
+    defaultIconPath: undefined,
   }
 }
 
@@ -157,12 +161,17 @@ export function cleanComponentProps(
       !options?.some((option) => option.value === prop.defaultValue)
         ? undefined
         : prop.defaultValue
+    // An Icon's default travels with its path, and only with it: the path is
+    // what a published page draws.
+    const defaultIconPath =
+      type === 'icon' && defaultValue ? prop.defaultIconPath : undefined
     return {
       name: prop.name.trim(),
       type,
       ...(prop.label?.trim() && { label: prop.label.trim() }),
       ...(defaultValue && { defaultValue }),
       ...(options && { options }),
+      ...(defaultIconPath && { defaultIconPath }),
     }
   })
 }
@@ -435,6 +444,10 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
                         </MenuItem>
                       ))}
                   </TextField>
+                ) : prop.type === 'icon' ? (
+                  // The picker needs the width of the dialog, so it opens on
+                  // its own row below; this cell only keeps the columns even.
+                  <Box sx={{ flex: 1 }} />
                 ) : (
                   <TextField
                     label="Default"
@@ -462,6 +475,51 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
                   error={errors[index]?.choices ?? ''}
                   onChange={(options) => update(index, { options })}
                 />
+              ) : null}
+              {prop.type === 'icon' ? (
+                // The same picker the component's own icon uses, which emits
+                // the path beside the id — the half a published page draws.
+                <Stack
+                  spacing={0.5}
+                  sx={{
+                    pl: { sm: 2 },
+                    borderLeft: { sm: 2 },
+                    borderColor: { sm: 'divider' },
+                  }}
+                >
+                  <ComponentIconField
+                    label="Default icon"
+                    value={{
+                      iconId: prop.defaultValue,
+                      iconPath: prop.defaultIconPath,
+                    }}
+                    onChange={(icon) =>
+                      update(index, {
+                        defaultValue: icon.iconId || undefined,
+                        defaultIconPath: icon.iconPath || undefined,
+                      })
+                    }
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {'Used where a page sets nothing.'}
+                  </Typography>
+                  {prop.defaultValue ? (
+                    <Box>
+                      <Button
+                        size="small"
+                        color="inherit"
+                        onClick={() =>
+                          update(index, {
+                            defaultValue: undefined,
+                            defaultIconPath: undefined,
+                          })
+                        }
+                      >
+                        {'No default icon'}
+                      </Button>
+                    </Box>
+                  ) : null}
+                </Stack>
               ) : null}
             </Stack>
           ))}

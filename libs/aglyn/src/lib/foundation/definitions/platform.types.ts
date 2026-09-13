@@ -1055,9 +1055,9 @@ export type ComponentDefUid = string
  * Attributes panel edits it and which fields inside the component can be bound
  * to it. Every kind substitutes as text, so the graft stays a string
  * replacement over the definition's props — except that a field bound to
- * nothing but a `boolean` prop receives a real `true` or `false`, and one bound
- * to a `choice` nobody made is left to the element's own default
- * (`resolveComponentPropTokens`).
+ * nothing but a `boolean` prop receives a real `true` or `false`, one bound to
+ * a `choice` nobody made is left to the element's own default, and one bound to
+ * an `icon` brings the icon's path with its id (`resolveComponentPropTokens`).
  */
 export type ReusableComponentPropType =
   | 'text'
@@ -1067,6 +1067,7 @@ export type ReusableComponentPropType =
   | 'number'
   | 'boolean'
   | 'choice'
+  | 'icon'
 
 /**
  * One answer a `choice` prop offers (AGL-2871).
@@ -1114,6 +1115,15 @@ export interface ReusableComponentProp {
    * `defaultValue` names one of their values.
    */
   options?: ReusableComponentPropOption[]
+  /**
+   * `icon` only: the SVG path of the icon `defaultValue` names, stored beside
+   * the id when the default is picked, for the reason
+   * {@link ReusableComponentIcon} stores both — a published page never loads
+   * the icon catalog, so an id alone draws the empty Icon placeholder. An
+   * instance's own pick travels the same way, as a whole
+   * {@link ReusableComponentIcon} in its prop values.
+   */
+  defaultIconPath?: string
 }
 
 /**

@@ -262,6 +262,40 @@ describe('buildInstancePropFields (AGL-1247)', () => {
     })
   })
 
+  /**
+   * An Icon property stores a pick as the id AND its path (AGL-2871), because
+   * a published page never loads the catalog an id would be looked up in.
+   */
+  describe('an Icon property', () => {
+    const [icon] = buildInstancePropFields([
+      { name: 'productIcon', type: 'icon', defaultValue: 'mdiDatabase' },
+    ]) as Array<Record<string, any>>
+
+    it('edits with the icon picker, clears, and says what unset shows', () => {
+      expect(icon['component']).toBe(Aglyn.FieldComponentType.ICON_PICKER)
+      expect(icon['clearable']).toBe(true)
+      expect(icon['help']).toMatchObject({
+        excerpt: "Leave it unset to show the component's default icon.",
+      })
+      // An icon id is not a placeholder anyone can read.
+      expect(icon['placeholder']).toBeUndefined()
+      expect(icon['description']).toBeUndefined()
+    })
+
+    it('shows the id of whatever pick is stored', () => {
+      const { format } = icon['FieldProps']
+      expect(format({ iconId: 'mdiRocket', iconPath: 'M1' })).toBe('mdiRocket')
+      expect(format(undefined)).toBe('')
+    })
+
+    it('stores no path it could not look up, and nothing for no pick', () => {
+      const { parse } = icon['FieldProps']
+      // Not in the loaded catalog: the id alone, never a guessed path.
+      expect(parse('mdiNotAnIcon')).toEqual({ iconId: 'mdiNotAnIcon' })
+      expect(parse('')).toBeUndefined()
+    })
+  })
+
   it('shows the definition default as the placeholder, and labels', () => {
     const fields = buildInstancePropFields(declared)
     // Literally true: leave it empty and the default is what renders.

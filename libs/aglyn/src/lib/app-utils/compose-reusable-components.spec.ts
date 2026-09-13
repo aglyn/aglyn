@@ -16,6 +16,7 @@
  */
 
 import {
+  buildComponentDefaultIconPaths,
   buildComponentDefaultTokens,
   collectReferencedComponentIds,
   composeReusableComponentNodes,
@@ -30,6 +31,7 @@ import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
   nodesReferenceComponent,
+  readInstanceIconValue,
   readYesNoValue,
   replaceSubtreeWithInstance,
   resolveComponentPropTokens,
@@ -3202,7 +3204,7 @@ describe('a dropdown or Screen picker bound to a property (AGL-2871)', () => {
     expect('variant' in more.props).toBe(false)
   })
 
-  it('negative control: a choice written into text stays text', () => {
+  it('negative control: a choice written into text is substituted as text', () => {
     const labelled = {
       ...card,
       nodes: {
@@ -3217,5 +3219,171 @@ describe('a dropdown or Screen picker bound to a property (AGL-2871)', () => {
       'cmp__a__chip'
     ]
     expect(chip.props.label).toBe('Tint: ')
+  })
+})
+
+/**
+ * An icon picker bound to an Icon property (AGL-2871).
+ *
+ * A published page never loads the icon catalog, and the Icon element draws
+ * `iconPath || getMdiIconPath(iconId)` — so an id with no path is the empty
+ * placeholder on a live site. The contract pinned here is that a bound picker
+ * reaches the element with BOTH halves: the id in the field, and the path in
+ * its companion, from the page's own pick or from the property's default.
+ */
+describe('an icon picker bound to an Icon property (AGL-2871)', () => {
+  const HOME = { iconId: 'mdiHome', iconPath: 'M10,20V14H14V20' }
+  const ROCKET = { iconId: 'mdiRocket', iconPath: 'M13.13,22.19L11.5,18.36' }
+
+  const card = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['chip', 'cta'] },
+      chip: {
+        $id: 'chip',
+        componentId: 'icon',
+        parentId: 'root',
+        // A path left from the icon the component was drawn with before the
+        // picker was bound, which must never outlive the binding.
+        props: { iconId: '{{prop.icon}}', iconPath: 'M0,0H1', size: 32 },
+      },
+      cta: {
+        $id: 'cta',
+        componentId: 'muiButton',
+        parentId: 'root',
+        props: { children: 'Go', startIconId: '{{prop.ctaIcon}}' },
+      },
+    },
+    props: [
+      {
+        name: 'icon',
+        type: 'icon',
+        defaultValue: HOME.iconId,
+        defaultIconPath: HOME.iconPath,
+      },
+      { name: 'ctaIcon', type: 'icon' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'card', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  const composed = (propValues?: Record<string, unknown>) =>
+    composeReusableComponentNodes(page(propValues), { card })
+
+  it("draws the page's pick with the path it was picked with", () => {
+    const chip = composed({ icon: ROCKET })['cmp__a__chip'].props
+    expect(chip).toMatchObject({
+      iconId: ROCKET.iconId,
+      iconPath: ROCKET.iconPath,
+      size: 32,
+    })
+  })
+
+  it("draws the property's default, path and all, where the page picked nothing", () => {
+    expect(composed()['cmp__a__chip'].props).toMatchObject({
+      iconId: HOME.iconId,
+      iconPath: HOME.iconPath,
+    })
+    // A cleared pick is no pick.
+    expect(composed({ icon: {} })['cmp__a__chip'].props.iconPath).toBe(
+      HOME.iconPath,
+    )
+  })
+
+  it('fills the companion of whichever picker is bound (startIconId → startIconPath)', () => {
+    const cta = composed({ ctaIcon: ROCKET })['cmp__a__cta'].props
+    expect(cta).toMatchObject({
+      startIconId: ROCKET.iconId,
+      startIconPath: ROCKET.iconPath,
+    })
+  })
+
+  it('leaves the element its placeholder when there is no pick and no default', () => {
+    const cta = composed()['cmp__a__cta'].props
+    expect('startIconId' in cta).toBe(false)
+    expect('startIconPath' in cta).toBe(false)
+    expect(cta.children).toBe('Go')
+  })
+
+  it('never draws a path the page did not pick', () => {
+    // An id stored with no path — written by anything but the panel — has no
+    // path to draw, and the one the component was drawn with is not it.
+    const chip = composed({ icon: 'mdiRocket' })['cmp__a__chip'].props
+    expect(chip.iconId).toBe('mdiRocket')
+    expect('iconPath' in chip).toBe(false)
+  })
+
+  it('detaches into the icon the instance was rendering', () => {
+    let counter = 0
+    const detached = detachInstanceSubtree(
+      page({ icon: ROCKET }),
+      'a',
+      card,
+      () => `n${++counter}`,
+    )
+    const chip = (Object.values(detached) as any[]).find(
+      (node) => node?.componentId === 'icon',
+    )
+    expect(chip.props).toMatchObject(ROCKET)
+  })
+
+  it('draws a component editor with the default icon paths', () => {
+    const drawn = resolveComponentPropTokens(
+      card.nodes,
+      card.props,
+      buildComponentDefaultTokens(card.props),
+      buildComponentDefaultIconPaths(card.props),
+    )
+    expect(drawn['chip'].props).toMatchObject(HOME)
+    expect('startIconId' in drawn['cta'].props).toBe(false)
+  })
+
+  describe('readInstanceIconValue', () => {
+    it('reads a pick, with or without its path', () => {
+      expect(readInstanceIconValue(ROCKET)).toEqual(ROCKET)
+      expect(readInstanceIconValue({ iconId: 'mdiRocket', iconPath: '' })).toEqual(
+        { iconId: 'mdiRocket' },
+      )
+      expect(readInstanceIconValue(' mdiRocket ')).toEqual({ iconId: 'mdiRocket' })
+    })
+
+    it('reads no pick from nothing', () => {
+      for (const value of [undefined, null, '', {}, { iconPath: 'M0' }, []]) {
+        expect(readInstanceIconValue(value)).toBeUndefined()
+      }
+    })
+  })
+
+  it("never puts an icon pick left under a retyped property on the page", () => {
+    const retyped = {
+      ...card,
+      nodes: {
+        ...card.nodes,
+        cta: { ...card.nodes.cta, props: { children: '{{prop.ctaIcon}}' } },
+      },
+      props: [{ name: 'ctaIcon', type: 'text', defaultValue: 'Go' }],
+    }
+    const cta = composeReusableComponentNodes(page({ ctaIcon: ROCKET }), {
+      card: retyped,
+    })['cmp__a__cta'].props
+    expect(cta.children).toBe('Go')
+  })
+
+  it("reads an icon pick's id as the text an inline editor starts from", () => {
+    expect(
+      getInstanceEffectivePropText(
+        { propValues: { icon: ROCKET } },
+        card.props,
+        'icon',
+      ),
+    ).toBe(ROCKET.iconId)
   })
 })

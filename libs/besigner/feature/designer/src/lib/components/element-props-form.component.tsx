@@ -57,6 +57,7 @@ import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
   normalizeBindingTokens,
+  readInstanceIconValue,
   readYesNoValue,
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
@@ -396,6 +397,34 @@ export function parseYesNoPropValue(value: unknown): boolean | undefined {
 }
 
 /**
+ * An icon property's stored pick as the icon picker shows it: the icon's id,
+ * or `''` for nothing picked.
+ */
+export function formatIconPropValue(value: unknown): string {
+  return readInstanceIconValue(value)?.iconId ?? ''
+}
+
+/**
+ * The icon picker's choice as the instance stores it: the id AND its SVG path,
+ * or unset.
+ *
+ * The path is looked up here, at the moment of the pick, for the reason
+ * `handleElementSave` stores `iconPath` beside an Icon element's `iconId`
+ * (AGL-1212): a published page never loads the icon catalog, so an id alone
+ * draws the empty Icon placeholder. This is the one moment the catalog is
+ * certainly loaded — the picker needed it to offer the icon — and an
+ * untouched field is never parsed again, so no later edit can look the id up
+ * against a catalog that has not arrived.
+ */
+export function parseIconPropValue(
+  value: unknown,
+): Aglyn.ReusableComponentIcon | undefined {
+  if (typeof value !== 'string' || !value) return undefined
+  const iconPath = getMdiIconPath(value)
+  return iconPath ? { iconId: value, iconPath } : { iconId: value }
+}
+
+/**
  * One Attributes field per prop a reusable component declares (AGL-1247),
  * so the same hero can carry different copy on eleven pages instead of
  * being copied onto each.
@@ -472,6 +501,28 @@ export function buildInstancePropFields(
             clearable: true,
           }
         }
+        case 'icon':
+          // The picker the Icon element uses, storing the pick with its path
+          // (see `parseIconPropValue`). An icon has no placeholder to show,
+          // so what unset means is said in the help tip, and the corner ✕
+          // is the way back to it.
+          return {
+            ...base,
+            component: FieldComponentType.ICON_PICKER,
+            placeholder: undefined,
+            description: undefined,
+            help: {
+              title: base.label,
+              excerpt: prop.defaultValue
+                ? "Leave it unset to show the component's default icon."
+                : 'Leave it unset to show no icon.',
+            },
+            clearable: true,
+            FieldProps: {
+              format: formatIconPropValue,
+              parse: parseIconPropValue,
+            },
+          }
         case 'number':
           return {
             ...base,

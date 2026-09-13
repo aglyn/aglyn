@@ -15,6 +15,15 @@
  * limitations under the License.
  */
 
+// A stand-in icon catalog: the real one loads ~6,600 icons asynchronously, and
+// nothing here is about the catalog. Mocked at the subpath the picker imports.
+jest.mock('@aglyn/shared-ui-jsx/hooks/mdi-icon/use-mdi-icons-fuzzy', () => {
+  const catalog = [
+    { id: 'mdiRocket', name: 'Rocket', path: 'M13,22L11,18', tags: [] },
+  ]
+  return { useMdiIconsFuzzy: () => [catalog, catalog, jest.fn(), jest.fn()] }
+})
+
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 
@@ -348,6 +357,91 @@ describe('binding a dropdown or a Screen picker to a property (AGL-2871)', () =>
     expect(
       screen.queryByRole('button', { name: 'Bind Tags to a property' }),
     ).toBeNull()
+  })
+})
+
+describe('binding an icon picker to an Icon property (AGL-2871)', () => {
+  let updateNodeProps: jest.SpyInstance
+
+  beforeEach(() => {
+    updateNodeProps = jest
+      .spyOn(Aglyn.canvas, 'updateNodeProps')
+      .mockImplementation((() => undefined) as never)
+  })
+  afterEach(() => {
+    updateNodeProps.mockRestore()
+  })
+
+  /** The Icon element's own picker, as its schema declares it. */
+  const ICON_ATTRIBUTES = [
+    {
+      name: 'iconId',
+      label: 'Icon',
+      description: 'Pick any icon from the library.',
+      component: Aglyn.FieldComponentType.ICON_PICKER,
+    },
+  ]
+
+  const mount = (props: Record<string, unknown>) =>
+    render(
+      <BindingPickerContext.Provider
+        value={{
+          componentProps: [
+            { name: 'productIcon', type: 'icon', label: 'Product icon' },
+            { name: 'featured', type: 'boolean', label: 'Featured' },
+          ],
+        }}
+      >
+        <ElementPropsForm
+          node={
+            {
+              $id: 'agl2871-icon',
+              type: 'node',
+              componentId: 'icon',
+              props,
+              componentSchema: { attributes: ICON_ATTRIBUTES },
+              nodes: [],
+            } as never
+          }
+        />
+      </BindingPickerContext.Provider>,
+    )
+
+  it('offers only the Icon properties, and the bound element keeps no stale path', async () => {
+    // The icon the element was drawn with before it was bound.
+    const { unmount } = mount({ iconId: 'mdiRocket', iconPath: 'M13,22L11,18' })
+    fireEvent.click(
+      await screen.findByRole(
+        'button',
+        { name: 'Bind Icon to a property' },
+        { timeout: 10000 },
+      ),
+    )
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).queryByText('Featured')).toBeNull()
+    fireEvent.click(within(menu).getByText('Product icon'))
+
+    expect(
+      await screen.findByText('Each page sets this with the Product icon property.'),
+    ).toBeTruthy()
+    unmount()
+    const calls = updateNodeProps.mock.calls
+    const committed = calls[calls.length - 1]?.[1] as Record<string, unknown>
+    expect(committed['iconId']).toBe('{{prop.productIcon}}')
+    // The page's pick brings its own path at render; this one would outlive
+    // the binding otherwise.
+    expect(committed['iconPath']).toBeUndefined()
+  })
+
+  it('keeps the help tip the schema gives the picker', async () => {
+    mount({})
+    expect(
+      await screen.findByRole(
+        'button',
+        { name: 'Help: Icon' },
+        { timeout: 10000 },
+      ),
+    ).toBeTruthy()
   })
 })
 

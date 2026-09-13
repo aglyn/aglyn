@@ -16,6 +16,7 @@
  */
 
 import {
+  buildComponentDefaultIconPaths,
   buildComponentDefaultTokens,
   composeReusableComponentNodes,
   displayBindingTokens,
@@ -284,6 +285,12 @@ export const NodeLeaf = observer(
       () => buildComponentDefaultTokens(componentProps),
       [componentProps],
     )
+    // The paths of the default icons, which a field bound to an icon property
+    // draws with — the editor has no reason to have loaded the icon catalog.
+    const defaultIconPaths = useMemo(
+      () => buildComponentDefaultIconPaths(componentProps),
+      [componentProps],
+    )
     const renderNode = useMemo(() => {
       const hasDeclaredProps = Boolean(componentProps?.length)
       if (
@@ -327,6 +334,7 @@ export const NodeLeaf = observer(
           { [String(node?.$id)]: next as any },
           componentProps,
           resolveFlag === false ? undefined : defaultPropTokens,
+          resolveFlag === false ? undefined : defaultIconPaths,
         )[String(node?.$id)] ?? next
       )
     }, [
@@ -337,6 +345,7 @@ export const NodeLeaf = observer(
       functions,
       componentProps,
       defaultPropTokens,
+      defaultIconPaths,
     ])
 
     // Classes switched off for comparison (AGL-2486). Composed onto the SAME

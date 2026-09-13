@@ -53,9 +53,9 @@ import { TokenPillPopover, tokenPillContainerSx } from './token-pill.component'
  *
  * A free-text attribute has always taken `{{prop.headline}}`: the token is
  * typed, or picked with the `{}` in the box, and substitution does the rest.
- * A switch, a checkbox or a dropdown has no text to type into, so inside a
- * reusable component it could only ever hold the component's own value — and
- * a property of the matching kind had nothing to drive.
+ * A switch, a checkbox, a dropdown or an icon picker has no text to type into,
+ * so inside a reusable component it could only ever hold the component's own
+ * value — and a property of the matching kind had nothing to drive.
  *
  * This wraps such a field, inside a component editor only. Unbound, it is the
  * field exactly as before, with a `{}` among its corner controls. Bound, the
@@ -85,6 +85,7 @@ export const PROPERTY_BINDING_TYPES: Readonly<
   [FieldComponentType.CHECKBOX]: ['boolean'],
   [FieldComponentType.SELECT]: ['choice'],
   [FieldComponentType.SCREEN_SELECT]: ['href'],
+  [FieldComponentType.ICON_PICKER]: ['icon'],
 }
 
 /** What each kind of property is called in the panel's own words. */
@@ -94,6 +95,7 @@ const PROPERTY_KIND_LABEL: Readonly<
   boolean: 'Yes / no',
   choice: 'Choice',
   href: 'Link',
+  icon: 'Icon',
 }
 
 /**

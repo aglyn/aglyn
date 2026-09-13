@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+// By path: the naming rule alone, without the icon catalog's loader beside it.
+import { iconPathPropName } from '@aglyn/shared-data-mdi/utils/icon-path-prop-name'
 import type {
   AglynNodeSchema,
   NodeId,
@@ -468,10 +470,94 @@ export function getInstanceEffectivePropText(
   const values = (instanceProps as Record<string, unknown> | undefined)?.[
     REUSABLE_INSTANCE_PROP_VALUES_KEY
   ] as Record<string, unknown> | undefined
-  const override = values?.[propName]
-  if (override != null && override !== '') return String(override)
   const prop = (declared ?? []).find((entry) => entry?.name === propName)
+  const override = propValueOverride(values?.[propName], prop)
+  if (override !== undefined) return String(override)
   return prop?.defaultValue == null ? '' : String(prop.defaultValue)
+}
+
+/**
+ * The icon an instance picked for an `icon` prop, or `undefined` when it
+ * picked none.
+ *
+ * Stored as a whole {@link ReusableComponentIcon} so the path travels with the
+ * id. A bare id — written by anything other than the Attributes panel — still
+ * counts as a pick; it simply arrives with no path to draw on a published
+ * page.
+ */
+export function readInstanceIconValue(
+  value: unknown,
+): ReusableComponentIcon | undefined {
+  if (typeof value === 'string') {
+    return value.trim() ? { iconId: value.trim() } : undefined
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const { iconId, iconPath } = value as ReusableComponentIcon
+  if (typeof iconId !== 'string' || !iconId) return undefined
+  return typeof iconPath === 'string' && iconPath
+    ? { iconId, iconPath }
+    : { iconId }
+}
+
+/**
+ * What an instance's stored value for a prop substitutes as, or `undefined`
+ * where it set nothing and the default applies.
+ *
+ * `''` is unset, for the reason {@link buildPropTokens} gives. An icon pick
+ * substitutes its id. Any other object is unset too: the only object a prop
+ * value is ever written as is an icon, so one under any other prop is a pick
+ * left behind when the prop's type changed, and stringifying it would put
+ * `[object Object]` on the page.
+ */
+function propValueOverride(
+  value: unknown,
+  prop: Pick<ReusableComponentProp, 'type'> | undefined,
+): string | number | boolean | undefined {
+  if (value == null || value === '') return undefined
+  if (prop?.type === 'icon') return readInstanceIconValue(value)?.iconId
+  if (typeof value === 'object') return undefined
+  return value as string | number | boolean
+}
+
+/**
+ * The SVG path each `icon` prop draws with for one instance: its own pick's
+ * path, else the definition's default path, keyed by prop name.
+ *
+ * Beside {@link buildPropTokens} rather than inside it, because a path is not
+ * a token: it is never typed into a field, and it only ever lands in the
+ * companion of a field bound to the prop (`iconId` → `iconPath`).
+ */
+function buildPropIconPaths(
+  declared: ReusableComponentProp[] | undefined,
+  instanceProps: unknown,
+): Record<string, string> {
+  const values = (instanceProps as Record<string, unknown> | undefined)?.[
+    REUSABLE_INSTANCE_PROP_VALUES_KEY
+  ] as Record<string, unknown> | undefined
+  const paths: Record<string, string> = {}
+  for (const prop of declared ?? []) {
+    if (!prop?.name || prop.type !== 'icon') continue
+    const picked = readInstanceIconValue(values?.[prop.name])
+    const path = picked
+      ? picked.iconPath
+      : prop.defaultValue
+        ? prop.defaultIconPath
+        : undefined
+    if (path) paths[prop.name] = path
+  }
+  return paths
+}
+
+/**
+ * The icon paths a definition's OWN defaults draw with — what the component
+ * editor shows beside {@link buildComponentDefaultTokens}.
+ */
+export function buildComponentDefaultIconPaths(
+  declared: ReusableComponentProp[] | undefined,
+): Record<string, string> {
+  return buildPropIconPaths(declared, undefined)
 }
 
 /**
@@ -504,6 +590,13 @@ export function readYesNoValue(value: unknown): boolean | undefined {
  *   so the element falls back to its own default. A dropdown's empty value is
  *   not one of its options, and an element handed `variant: ''` draws neither
  *   the component's variant nor its own.
+ * - `icon` — handed on as the picked icon's id, with its path written into
+ *   the field's companion (`iconId` → `iconPath`, the rule `iconPathPropName`
+ *   states) from `iconPaths`. The path is what a published page draws, since
+ *   it never loads the icon catalog; and it is written or removed on every
+ *   pass, because a path left over from the component's own icon would be
+ *   drawn in place of the page's. Nothing picked removes both, and the element
+ *   draws its empty placeholder.
  *
  * "Nothing chosen" includes a binding still holding its token after
  * substitution — a component editor drawing a prop that has no default —
@@ -527,11 +620,15 @@ export function resolveComponentPropTokens<
   nodes: NormalizedNodes<N>,
   declared: ReusableComponentProp[] | undefined | null,
   tokens: Record<string, string> | null | undefined,
+  iconPaths?: Record<string, string> | null,
 ): NormalizedNodes<N> {
   const substituted = resolveNamedTokens(nodes, tokens)
   const typedProps = new Map<string, ReusableComponentPropType>()
   for (const prop of declared ?? []) {
-    if (prop?.name && (prop.type === 'boolean' || prop.type === 'choice')) {
+    if (
+      prop?.name &&
+      (prop.type === 'boolean' || prop.type === 'choice' || prop.type === 'icon')
+    ) {
       typedProps.set(prop.name, prop.type)
     }
   }
@@ -544,20 +641,26 @@ export function resolveComponentPropTokens<
     for (const [key, value] of Object.entries(raw)) {
       const name = matchComponentPropToken(value)
       const type = name ? typedProps.get(name) : undefined
-      if (!type) continue
+      if (!name || !type) continue
       props = props ?? {
         ...(substituted[id]?.props as Record<string, unknown> | undefined),
       }
       const resolved = props[key]
       if (type === 'boolean') {
         props[key] = readYesNoValue(resolved) === true
-      } else if (
-        typeof resolved !== 'string' ||
-        !resolved.trim() ||
-        matchComponentPropToken(resolved) != null
-      ) {
-        delete props[key]
+        continue
       }
+      const chosen =
+        typeof resolved === 'string' &&
+        resolved.trim() !== '' &&
+        matchComponentPropToken(resolved) == null
+      if (!chosen) delete props[key]
+      if (type !== 'icon') continue
+      const pathKey = iconPathPropName(key)
+      if (pathKey === key) continue
+      const path = chosen ? iconPaths?.[name] : undefined
+      if (path) props[pathKey] = path
+      else delete props[pathKey]
     }
     if (!props) continue
     typed = typed ?? { ...substituted }
@@ -586,9 +689,8 @@ function buildPropTokens(
   const tokens: Record<string, string> = {}
   for (const prop of declared) {
     if (!prop?.name) continue
-    const override = values?.[prop.name]
-    const value =
-      override == null || override === '' ? prop.defaultValue : override
+    const override = propValueOverride(values?.[prop.name], prop)
+    const value = override === undefined ? prop.defaultValue : override
     tokens[`${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}`] =
       value == null ? '' : String(value)
   }
@@ -1060,6 +1162,7 @@ export function composeReusableComponentNodes<
             grafted,
             definition.props,
             buildPropTokens(definition.props, instanceNode.props),
+            buildPropIconPaths(definition.props, instanceNode.props),
           ),
           prefixId(definition.rootId),
         ),
@@ -1415,6 +1518,7 @@ export function detachInstanceSubtree<
         copied,
         definition.props,
         buildPropTokens(definition.props, instanceNode.props),
+        buildPropIconPaths(definition.props, instanceNode.props),
       ),
       instanceId,
     ),

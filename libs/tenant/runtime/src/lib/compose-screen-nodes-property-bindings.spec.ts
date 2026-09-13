@@ -252,4 +252,70 @@ describe('component properties driving non-text fields on the published page', (
       expect(shipped.props.screenId).toBe('screen:products')
     })
   })
+
+  describe('an icon picker bound to an Icon property', () => {
+    const DATASETS_ICON = {
+      iconId: 'mdiDatabase',
+      iconPath: 'M12,3C7.58,3 4,4.79 4,7C4,9.21 7.58,11 12,11',
+    }
+    const CRM_ICON = {
+      iconId: 'mdiAccountGroup',
+      iconPath: 'M12,5.5A3.5,3.5 0 0,1 15.5,9',
+    }
+
+    /** The marketing card's icon chip. */
+    const CHIP_CARD = {
+      rootId: 'i-root',
+      nodes: {
+        'i-root': { $id: 'i-root', componentId: 'muiStack', nodes: ['i-chip'] },
+        'i-chip': {
+          $id: 'i-chip',
+          componentId: 'icon',
+          parentId: 'i-root',
+          props: { iconId: '{{prop.productIcon}}', size: 28 },
+        },
+      },
+      props: [
+        {
+          name: 'productIcon',
+          type: 'icon',
+          defaultValue: DATASETS_ICON.iconId,
+          defaultIconPath: DATASETS_ICON.iconPath,
+        },
+      ],
+    }
+
+    const pagePlacingChip = (propValues?: Record<string, unknown>) => ({
+      [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['chipCard'] },
+      chipCard: {
+        $id: 'chipCard',
+        componentId: 'reusableInstance',
+        parentId: ROOT,
+        props: { refId: 'chipCard', ...(propValues ? { propValues } : {}) },
+        nodes: [],
+      },
+    })
+
+    const chip = (nodes: Record<string, any>) => nodes['cmp__chipCard__i-chip']
+
+    beforeEach(() => {
+      mockGetComponents.mockResolvedValue({
+        definitions: { chipCard: CHIP_CARD },
+      })
+    })
+
+    it("ships the page's icon with the path the page picked it with", async () => {
+      // The path is the half a published page can draw: the catalog it would
+      // take to look the id up is never loaded here.
+      const shipped = chip(
+        await compose(pagePlacingChip({ productIcon: CRM_ICON })),
+      )
+      expect(shipped.props).toMatchObject({ ...CRM_ICON, size: 28 })
+    })
+
+    it("ships the property's default icon, path and all, where the page picked none", async () => {
+      const shipped = chip(await compose(pagePlacingChip()))
+      expect(shipped.props).toMatchObject(DATASETS_ICON)
+    })
+  })
 })

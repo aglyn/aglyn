@@ -161,6 +161,52 @@ describe('cleanComponentProps', () => {
       ]),
     ).toEqual([{ name: 'cta', type: 'text' }])
   })
+
+  it("saves an Icon's default with the path a published page draws, and only with it", () => {
+    expect(
+      cleanComponentProps([
+        {
+          name: 'productIcon',
+          type: 'icon',
+          defaultValue: 'mdiDatabase',
+          defaultIconPath: 'M12,3C7.58,3',
+        },
+        // A path with no icon to belong to is not saved.
+        { name: 'emptyIcon', type: 'icon', defaultIconPath: 'M0' },
+        // Nor one a property kept after it stopped being an Icon.
+        { name: 'cta', type: 'text', defaultValue: 'Go', defaultIconPath: 'M0' },
+      ]),
+    ).toEqual([
+      {
+        name: 'productIcon',
+        type: 'icon',
+        defaultValue: 'mdiDatabase',
+        defaultIconPath: 'M12,3C7.58,3',
+      },
+      { name: 'emptyIcon', type: 'icon' },
+      { name: 'cta', type: 'text', defaultValue: 'Go' },
+    ])
+  })
+})
+
+describe("an Icon property's type changes", () => {
+  it('drops the default icon and its path together', () => {
+    expect(
+      retypeComponentProp(
+        {
+          name: 'productIcon',
+          type: 'icon',
+          defaultValue: 'mdiDatabase',
+          defaultIconPath: 'M12,3C7.58,3',
+        },
+        'text',
+      ),
+    ).toMatchObject({
+      type: 'text',
+      defaultValue: undefined,
+      defaultIconPath: undefined,
+    })
+  })
 })
 
 describe('declaring a Choice in the dialog (AGL-2871)', () => {
