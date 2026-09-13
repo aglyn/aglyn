@@ -18,6 +18,7 @@
 import {
   HOST_TOKENS,
   describeHostTokens,
+  hostTokenDefinition,
   hostTokenMerge,
   hostTokensIn,
   resolveHostToken,
@@ -68,6 +69,67 @@ describe('the namespace is closed — no path syntax to abuse', () => {
     for (const definition of Object.values(HOST_TOKENS)) {
       expect(typeof definition.resolve).toBe('function')
       expect(definition.key).toMatch(/^[a-zA-Z][a-zA-Z0-9_]*$/)
+    }
+  })
+
+  /**
+   * Every name below matches the token pattern, and every one is a member the
+   * registry's object literal inherits. Read with a bare index, each answers a
+   * builtin where a definition belongs, and calling its `resolve` throws — in
+   * the middle of composing a published page, or of drawing the canvas.
+   */
+  const INHERITED = [
+    'constructor',
+    'toString',
+    'toLocaleString',
+    'valueOf',
+    'hasOwnProperty',
+    'isPrototypeOf',
+    'propertyIsEnumerable',
+  ]
+
+  it('CONTROL — each inherited name matches the token pattern', () => {
+    for (const key of INHERITED) {
+      expect(hostTokensIn(`{{host.${key}}}`)).toEqual([key])
+      expect(key in HOST_TOKENS).toBe(true)
+    }
+  })
+
+  it('resolves a name the registry only inherits to nothing, never to the builtin', () => {
+    for (const key of INHERITED) {
+      expect(hostTokenDefinition(key)).toBeUndefined()
+      expect(resolveHostToken(key, site())).toBeUndefined()
+      expect(resolveHostTokens(`What {{host.${key}}} is`, site())).toBe(
+        'What  is',
+      )
+      expect(shouldOmitBlock(`{{host.${key}}}`, site())).toBe(false)
+    }
+  })
+
+  it('composes a node map holding one without throwing', () => {
+    const nodes = {
+      t: {
+        props: {
+          children: 'Hi {{host.toString}}',
+          ariaLabel: '{{host.constructor}}',
+        },
+      },
+    }
+    const resolved = resolveNodesHostTokens(nodes, site()) as any
+    expect(resolved.t.props).toEqual({ children: 'Hi ', ariaLabel: '' })
+  })
+
+  it('reports one as an unknown token at authoring time', () => {
+    for (const key of INHERITED) {
+      expect(validateHostTokens(`{{host.${key}}}`)).toEqual([
+        expect.objectContaining({ key, kind: 'unknown' }),
+      ])
+    }
+  })
+
+  it('still finds every declared token', () => {
+    for (const key of Object.keys(HOST_TOKENS)) {
+      expect(hostTokenDefinition(key)).toBe(HOST_TOKENS[key])
     }
   })
 })

@@ -210,6 +210,24 @@ export const HOST_TOKENS: Record<string, HostTokenDefinition> = {
 }
 
 /**
+ * The registry's entry for `key`, or undefined when it declares none.
+ *
+ * An OWN entry only. `HOST_TOKENS` is an object literal, so a bare index also
+ * finds the `Object.prototype` members — `constructor`, `toString`, `valueOf` —
+ * and every one of those names matches {@link HOST_TOKEN_PATTERN}. Read that
+ * way, `{{host.constructor}}` answers the `Object` function where a definition
+ * belongs, and calling its `resolve` throws in the middle of a render. A name
+ * the registry does not declare resolves to nothing, whatever the name is.
+ */
+export function hostTokenDefinition(
+  key: string,
+): HostTokenDefinition | undefined {
+  return Object.prototype.hasOwnProperty.call(HOST_TOKENS, key)
+    ? HOST_TOKENS[key]
+    : undefined
+}
+
+/**
  * `{{host.key}}` — whitespace-tolerant, and deliberately NOT dotted beyond one
  * segment. `host.a.b` does not match, so there is no path syntax to abuse.
  */
@@ -228,7 +246,7 @@ export function resolveHostToken(
   key: string,
   host: HostTokenSource | null | undefined,
 ): string | undefined {
-  const definition = HOST_TOKENS[key]
+  const definition = hostTokenDefinition(key)
   if (!definition || !host) return undefined
   return definition.resolve(host) ?? definition.fallback?.(host)
 }
@@ -284,7 +302,7 @@ export function validateHostTokens(
   for (const key of hostTokensIn(text)) {
     if (seen.has(key)) continue
     seen.add(key)
-    const definition = HOST_TOKENS[key]
+    const definition = hostTokenDefinition(key)
     if (!definition) {
       issues.push({
         key,
@@ -326,7 +344,7 @@ export function shouldOmitBlock(
   host: HostTokenSource | null | undefined,
 ): boolean {
   for (const key of hostTokensIn(text)) {
-    const definition = HOST_TOKENS[key]
+    const definition = hostTokenDefinition(key)
     if (!definition || definition.whenEmpty !== 'omit-block') continue
     if (!resolveHostToken(key, host)) return true
   }
