@@ -536,6 +536,29 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       "Page views and conversion events from a visitor whose consent state permits advertising on a surface that asks about it, with the identifiers the tag sets. LinkedIn additionally sets cookies on its own domain, which a page on our origin cannot read or clear. On the console that visitor may be signed in, so the same caveat the Meta row carries applies here.",
   },
 
+  // MARK – Wistia
+  //
+  // One host, two relationships. On a customer site an author pastes their
+  // own Wistia link, which is that customer's choice of vendor, in the shape
+  // of the YouTube and Vimeo embeds below. The platform also plays its own
+  // films on its marketing site through the same element, and there the
+  // platform chose the vendor. A host carries one disposition, so it takes
+  // the stricter one: a published row, on the same footing as the analytics
+  // and advertising tags on the platform's own surfaces.
+
+  'fast.wistia.net': {
+    disposition: 'subprocessor',
+    entity: 'Wistia, Inc.',
+    region: 'United States',
+    purpose:
+      "Hosting and streaming the platform's own films on its marketing site, loaded only when a visitor presses play",
+    publishedOn: '2026-09-13',
+    reason:
+      "The Wistia player frame the Video element (`libs/plugins/mui/src/lib/components/video.tsx`) loads when a visitor presses play, at an address `libs/aglyn/src/lib/app-utils/wistia-embed.ts` rebuilds from the media id alone. Declared a subprocessor because the platform plays its own films on its marketing site through it. A Wistia link a customer's author pastes on their own site is still that customer's choice, as a YouTube or Vimeo link is, and gets no row of its own.",
+    dataReceived:
+      "From a visitor who presses play: the browser's requests for the player and the film, carrying the visitor's IP address and user-agent, and the viewing data Wistia's player reports. `video.tsx` adds Wistia's `doNotTrack` option unless the visitor's stored consent grants analytics, so a visitor still deciding, refused, opted out or sending GPC gets a player that does not record a viewing session; the player still keeps its own local storage inside its frame. A visitor who never presses play sends nothing.",
+  },
+
   // MARK – Requests that are made, and are still not Annex III rows
   //
   // Two admissible reasons only: nothing personal reaches the host, or the
@@ -554,13 +577,6 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'Customer-chosen destination, identical shape to the YouTube embed above.',
     dataReceived:
       "Whatever an embedded player receives from the visitor's browser, on a page the site author chose to put it on.",
-  },
-  'fast.wistia.net': {
-    disposition: 'not-a-subprocessor',
-    reason:
-      "Customer-chosen destination, the same shape as the YouTube and Vimeo embeds above. The Video element keeps only the media id from a Wistia link a site author pasted and rebuilds the player address on this host, and nothing loads until the visitor presses play. Serving first-party films on the marketing site through Wistia would make Wistia a vendor the platform chose, not one a customer chose, which needs a published /legal/subprocessors row first, as the advertising pixel on the marketing site has.",
-    dataReceived:
-      "Whatever an embedded player receives from the visitor's browser after they press play (IP and user-agent), on a page the site author chose to put it on, with Wistia's do-not-track flag set unless the visitor consented to analytics.",
   },
   'picsum.photos': {
     disposition: 'not-a-subprocessor',

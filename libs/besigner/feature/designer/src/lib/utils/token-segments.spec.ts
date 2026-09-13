@@ -303,4 +303,35 @@ describe('resolveTokenLabel (AGL-586)', () => {
       known: false,
     })
   })
+
+  /**
+   * A component's own property, named as the Attributes panel names it
+   * (AGL-2871). It resolves only where the picker offers it — inside the
+   * component that declares it — so the same token anywhere else, or naming
+   * a property since removed, is a binding that renders nothing.
+   */
+  it('names a declared property by its label, and flags one nobody declared', () => {
+    const inComponent: TokenLabelContext = {
+      options: [
+        {
+          group: 'Properties',
+          label: 'Play in a lightbox',
+          token: '{{prop.playInLightbox}}',
+        },
+      ],
+    }
+    expect(resolveTokenLabel('{{prop.playInLightbox}}', inComponent)).toEqual({
+      label: 'Play in a lightbox',
+      group: 'property',
+      known: true,
+    })
+    expect(resolveTokenLabel('{{ prop.playInLightbox }}', inComponent).known).toBe(
+      true,
+    )
+    expect(resolveTokenLabel('{{prop.removed}}', inComponent)).toEqual({
+      label: 'removed',
+      group: 'property',
+      known: false,
+    })
+  })
 })

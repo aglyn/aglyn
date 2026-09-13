@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { visitorConsentStorageKey } from '@aglyn/aglyn/app-utils/visitor-consent'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
 import Video, { resolveVideoPreload, schema } from './video'
 
@@ -458,6 +458,187 @@ describe('Video plays Wistia only after a press (AGL-2826)', () => {
   })
 })
 
+
+/**
+ * A press sent from outside the element (AGL-2867): a "Play a video"
+ * interaction on a button elsewhere on the page. The command is sent to the
+ * element's DOM root, the one a `playVideo` step's selector finds, and every
+ * case asserts what the element's OWN press would have done — including what
+ * it does not load before the command arrives.
+ */
+describe('Video answers a press sent from outside it (AGL-2867)', () => {
+  const LINK = 'https://aglyn.wistia.com/medias/e4a27b971d'
+  const PLAYER = 'https://fast.wistia.net/embed/iframe/e4a27b971d'
+
+  /** What a `playVideo` step does once its selector has found the element. */
+  const sendPlay = (container: HTMLElement) =>
+    act(() =>
+      Aglyn.dispatchVideoCommand(container.firstElementChild as Element, 'play'),
+    )
+  const onSite = (element: JSX.Element) => (
+    <Aglyn.SiteContext.Provider value={{ hostId: 'host1' }}>
+      {element}
+    </Aglyn.SiteContext.Provider>
+  )
+  const frameUrl = (root: ParentNode) =>
+    new URL((root.querySelector('iframe') as HTMLIFrameElement).src)
+
+  let play: jest.SpyInstance
+  beforeEach(() => {
+    play = jest
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockImplementation(() => Promise.resolve())
+  })
+  afterEach(() => {
+    play.mockRestore()
+    window.localStorage.clear()
+  })
+
+  it('opens the lightbox and plays, as a press on the poster does', async () => {
+    const { container, baseElement } = render(
+      <Video src="https://x/a.mp4" poster="media:h/p" lightbox title="Tour" />,
+    )
+    // Nothing is armed, and no dialog chunk is asked for, before the press.
+    expect(baseElement.querySelector('[role="dialog"]')).toBeNull()
+
+    let answered = false
+    await act(async () => {
+      answered = Aglyn.dispatchVideoCommand(
+        container.firstElementChild as Element,
+        'play',
+      )
+    })
+
+    expect(answered).toBe(true)
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe('Tour')
+    const film = dialog.querySelector('video') as HTMLVideoElement
+    expect(film.getAttribute('src')).toBe('https://x/a.mp4')
+    expect(film.autoplay).toBe(true)
+  })
+
+  it('plays a Wistia film in place of its poster, loading nothing from Wistia until then', () => {
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" title="Tour" />),
+    )
+    expect(container.querySelector('iframe')).toBeNull()
+    expect(container.innerHTML).not.toContain('wistia')
+
+    sendPlay(container)
+
+    expect(container.querySelector('button')).toBeNull()
+    const url = frameUrl(container)
+    expect(`${url.origin}${url.pathname}`).toBe(PLAYER)
+    expect(url.searchParams.get('autoPlay')).toBe('true')
+    // The same consent rule as a click: no analytics consent on record, so
+    // Wistia is told not to track.
+    expect(url.searchParams.get('doNotTrack')).toBe('true')
+  })
+
+  it('reads consent at the press, as the poster button does', () => {
+    window.localStorage.setItem(
+      visitorConsentStorageKey('host1'),
+      JSON.stringify({ v: 1, at: 1, status: 'implied' }),
+    )
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" title="Tour" />),
+    )
+    sendPlay(container)
+    expect(frameUrl(container).searchParams.has('doNotTrack')).toBe(false)
+  })
+
+  it('opens a Wistia film in the lightbox when the lightbox is on', async () => {
+    const { container } = render(
+      <Video src={LINK} poster="media:h/p" lightbox title="Tour" />,
+    )
+    await act(async () => {
+      Aglyn.dispatchVideoCommand(container.firstElementChild as Element, 'play')
+    })
+    const dialog = await screen.findByRole('dialog')
+    const url = frameUrl(dialog)
+    expect(`${url.origin}${url.pathname}`).toBe(PLAYER)
+  })
+
+  it('a second press on a film already playing in place changes nothing', () => {
+    const { container } = render(
+      <Video src={LINK} poster="media:h/p" title="Tour" />,
+    )
+    sendPlay(container)
+    const frame = container.querySelector('iframe')
+    sendPlay(container)
+    expect(container.querySelectorAll('iframe')).toHaveLength(1)
+    expect(container.querySelector('iframe')).toBe(frame)
+  })
+
+  it('plays the inline player, which is what a press on it does', () => {
+    const { container } = render(
+      <Video src="https://x/a.mp4" poster="https://x/a.png" />,
+    )
+    const film = container.querySelector('video') as HTMLVideoElement
+    expect(film.getAttribute('preload')).toBe('none')
+
+    let answered = false
+    act(() => {
+      answered = Aglyn.dispatchVideoCommand(film, 'play')
+    })
+
+    expect(answered).toBe(true)
+    expect(play).toHaveBeenCalledTimes(1)
+    expect(play.mock.instances[0]).toBe(film)
+  })
+
+  it('follows its root when an edit swaps the inline player for a poster', async () => {
+    const { container, rerender } = render(
+      <Video src="https://x/a.mp4" poster="media:h/p" />,
+    )
+    expect(container.querySelector('video')).toBeTruthy()
+    rerender(<Video src="https://x/a.mp4" poster="media:h/p" lightbox />)
+    expect(container.querySelector('video')).toBeNull()
+
+    await act(async () => {
+      Aglyn.dispatchVideoCommand(container.firstElementChild as Element, 'play')
+    })
+
+    expect(await screen.findByRole('dialog')).toBeTruthy()
+    expect(play).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when there is nothing it could play', () => {
+    const { container } = render(<Video src={LINK} title="Tour" />)
+    expect(() => sendPlay(container)).not.toThrow()
+    expect(container.querySelector('iframe')).toBeNull()
+
+    const empty = render(<Video />)
+    expect(() => sendPlay(empty.container)).not.toThrow()
+    expect(play).not.toHaveBeenCalled()
+  })
+
+  it('is inert on the besigner canvas, like the poster button', () => {
+    const inCanvas = (element: JSX.Element) => (
+      <Aglyn.ScreenLinkContext.Provider
+        value={{ suppressNavigation: true, editorInert: true }}
+      >
+        {element}
+      </Aglyn.ScreenLinkContext.Provider>
+    )
+    const wistia = render(inCanvas(<Video src={LINK} poster="media:h/p" lightbox />))
+    sendPlay(wistia.container)
+    const inline = render(inCanvas(<Video src="https://x/a.mp4" />))
+    sendPlay(inline.container)
+
+    expect(document.body.querySelector('iframe')).toBeNull()
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+    expect(play).not.toHaveBeenCalled()
+  })
+
+  it('stops listening once it leaves the page', () => {
+    const { container, unmount } = render(<Video src="https://x/a.mp4" />)
+    const film = container.querySelector('video') as HTMLVideoElement
+    unmount()
+    expect(Aglyn.dispatchVideoCommand(film, 'play')).toBe(false)
+    expect(play).not.toHaveBeenCalled()
+  })
+})
 
 /**
  * The element loads the delivery copy, not the master (AGL-2753).

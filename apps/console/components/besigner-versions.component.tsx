@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { canvas } from '@aglyn/aglyn'
+import { canvas, encodeStoredNodes } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_MENU_DOWN,
@@ -52,6 +52,7 @@ import {
   Typography,
 } from '@mui/material'
 import {
+  Bytes,
   collection,
   deleteDoc,
   deleteField,
@@ -77,6 +78,9 @@ import revalidateLivePages, {
 import rewriteStoredBindingTokens, {
   storedBindingTokenNeeds,
 } from '../utils/rewrite-stored-binding-tokens'
+import resolveComponentDefinition, {
+  isComponentDefinitionRefusal,
+} from '../utils/component-definition-write'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from '../components/host-id-provider'
@@ -109,6 +113,17 @@ interface VersionRouteArgs {
   host: string
   id: string
   versionId: string
+}
+
+interface ParentType {
+  collection: string
+  besignerUrl: (args: VersionRouteArgs) => string
+  /**
+   * Why a version of this kind cannot be scheduled, or undefined when it can
+   * (AGL-2878). Shown on the disabled Schedule button: a schedule nothing
+   * will ever apply is a control that is enabled and inert.
+   */
+  scheduleUnavailableReason?: string
 }
 
 const PARENT_TYPES = {
@@ -144,8 +159,15 @@ const PARENT_TYPES = {
         componentId: id,
         versionId,
       }),
+    // A component publish is a definition write onto the parent document, and
+    // neither schedule executor writes one: the beat job scans screens, and
+    // the lazy path runs where screens and layouts are read, never where
+    // components are.
+    scheduleUnavailableReason:
+      'A reusable component cannot be scheduled — publish the version when ' +
+      'it is ready',
   },
-} as const
+} as const satisfies Record<string, ParentType>
 
 export type BesignerVersionParentKind = keyof typeof PARENT_TYPES
 
@@ -208,7 +230,8 @@ export const BesignerVersionsComponent = observer(
     const [scheduleFor, setScheduleFor] = useState<string | null>(null)
     const [scheduleAt, setScheduleAt] = useState('')
 
-    const parentType = PARENT_TYPES[parent.kind]
+    const parentType: ParentType = PARENT_TYPES[parent.kind]
+    const scheduleUnavailableReason = parentType.scheduleUnavailableReason
     const parentCollection = parentType.collection
     const parentPath = ['hosts', hostId, parentCollection, parent.id] as const
     // No orderBy: Firestore drops docs missing the ordered field, and the
@@ -337,7 +360,49 @@ export const BesignerVersionsComponent = observer(
           } catch (error) {
             console.warn('Publish-time token normalization skipped', error)
           }
+          /*
+            A COMPONENT'S PUBLISH IS A DEFINITION WRITE (AGL-2878).
+
+            Screens and layouts are rendered through the pointer, so moving it
+            is the publish. A component is not: `getComponents` reads the
+            parent's own `nodes`, `rootId` and `props` and never opens a
+            version, so a pointer move alone changes the Published chip and
+            revalidates every dependent page onto exactly what it already
+            serves — a rollback through this row would change nothing a
+            visitor can see.
+
+            Read after the normalization above, which may have rewritten the
+            version's tokens, and resolved exactly as the besigner's Save &
+            publish resolves the canvas.
+          */
+          let definitionFields: Record<string, unknown> = {}
+          if (parent.kind === 'component') {
+            const version = await getDoc(
+              doc(firestore, ...parentPath, 'versions', targetVersionId),
+            )
+            const definition = resolveComponentDefinition({
+              nodes: version.get('nodes'),
+              rootId: version.get('rootId'),
+              props: version.get('props'),
+            })
+            if (isComponentDefinitionRefusal(definition)) {
+              enqueueSnackbar(definition.refusal, {
+                variant: 'warning',
+                allowDuplicate: true,
+              })
+              return
+            }
+            definitionFields = {
+              // Compressed at rest (AGL-1151), as the besigner writes it.
+              nodes: Bytes.fromUint8Array(
+                encodeStoredNodes(definition.nodes)!,
+              ),
+              ...(definition.rootId ? { rootId: definition.rootId } : {}),
+              props: definition.props,
+            }
+          }
           await updateDoc(doc(firestore, ...parentPath), {
+            ...definitionFields,
             versionId: targetVersionId,
             updatedAt: Timestamp.now(),
           })
@@ -561,6 +626,13 @@ export const BesignerVersionsComponent = observer(
 
     const handleScheduleOpen = useCallback(
       (targetId: string) => () => {
+        // The button is disabled with this reason; the handler agrees with it.
+        if (scheduleUnavailableReason) {
+          return void enqueueSnackbar(scheduleUnavailableReason, {
+            variant: 'info',
+            persist: false,
+          })
+        }
         // Same as `handleCreateVersion` above (AGL-1380).
         if (!orgReady) {
           return void enqueueSnackbar(
@@ -585,7 +657,7 @@ export const BesignerVersionsComponent = observer(
         )
         setScheduleFor(targetId)
       },
-      [org, orgReady, enqueueSnackbar],
+      [org, orgReady, enqueueSnackbar, scheduleUnavailableReason],
     )
 
     const handleScheduleConfirm = useCallback(async () => {
@@ -798,16 +870,19 @@ export const BesignerVersionsComponent = observer(
                         </Button>
                         <Tooltip
                           title={
-                            isPublished
+                            scheduleUnavailableReason ??
+                            (isPublished
                               ? 'This version is already live — create a new version to schedule it'
-                              : 'Publish this version automatically at a date/time'
+                              : 'Publish this version automatically at a date/time')
                           }
                         >
                           <span>
                             <Button
                               size="small"
                               color="primary"
-                              disabled={isPublished}
+                              disabled={
+                                isPublished || Boolean(scheduleUnavailableReason)
+                              }
                               onClick={handleScheduleOpen(version.$id)}
                               aria-label="schedule publish"
                               startIcon={

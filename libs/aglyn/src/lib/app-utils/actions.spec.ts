@@ -34,6 +34,7 @@ import {
   isInteractionAttributeAllowed,
   isSiteEventType,
   normalizeTriggerConditions,
+  SCROLL_TO_MAX_OFFSET_PX,
   validateHostAction,
   WEBHOOK_URL_PATTERN,
 } from './actions'
@@ -217,6 +218,73 @@ describe('nav-menu interactions surface (AGL-562)', () => {
       expect(CLIENT_ACTION_STEP_TYPES.has(type)).toBe(true)
       expect(HOST_ACTION_STEP_LABELS[type]).toBeTruthy()
     }
+  })
+
+  describe('scroll to element and play a video (AGL-2867)', () => {
+    const TARGET = '[data-aglyn="leaf:film"]'
+    const withStep = (step: Record<string, unknown>): HostAction => ({
+      ...base,
+      steps: [step as unknown as HostActionStep],
+    })
+
+    it('are client steps on every plan, with labels', () => {
+      for (const type of ['scrollTo', 'playVideo'] as const) {
+        expect(CLIENT_ACTION_STEP_TYPES.has(type)).toBe(true)
+        expect(BASIC_CLIENT_ACTION_STEP_TYPES.has(type)).toBe(true)
+        expect(
+          isClientStepEntitled({ type, selector: TARGET }, {
+            actionsEntitled: false,
+            allowJs: false,
+          }),
+        ).toBe(true)
+      }
+      expect(HOST_ACTION_STEP_LABELS.scrollTo).toBe('Scroll to element')
+      expect(HOST_ACTION_STEP_LABELS.playVideo).toBe('Play a video')
+    })
+
+    it('require a target', () => {
+      expect(validateHostAction(withStep({ type: 'scrollTo', selector: ' ' }))).toBe(
+        'Step 1: pick the element to scroll to',
+      )
+      expect(validateHostAction(withStep({ type: 'scrollTo' }))).toBe(
+        'Step 1: pick the element to scroll to',
+      )
+      expect(validateHostAction(withStep({ type: 'playVideo', selector: '' }))).toBe(
+        'Step 1: pick the video to play',
+      )
+      // The control: the same steps with a target pass, so the refusals
+      // above are about the target and nothing else.
+      expect(validateHostAction(withStep({ type: 'scrollTo', selector: TARGET }))).toBeNull()
+      expect(validateHostAction(withStep({ type: 'playVideo', selector: TARGET }))).toBeNull()
+    })
+
+    it('scroll smoothly or instantly, and nothing else', () => {
+      for (const behavior of ['smooth', 'instant']) {
+        expect(
+          validateHostAction(withStep({ type: 'scrollTo', selector: TARGET, behavior })),
+        ).toBeNull()
+      }
+      // `auto` is the DOM's word, and it defers to the site's CSS — which is
+      // how an instant scroll would come to animate.
+      for (const behavior of ['auto', 'fast', '']) {
+        expect(
+          validateHostAction(withStep({ type: 'scrollTo', selector: TARGET, behavior })),
+        ).toBe('Step 1: scroll smoothly or instantly')
+      }
+    })
+
+    it('leave a whole-pixel offset inside the band', () => {
+      for (const offsetPx of [0, 64, SCROLL_TO_MAX_OFFSET_PX]) {
+        expect(
+          validateHostAction(withStep({ type: 'scrollTo', selector: TARGET, offsetPx })),
+        ).toBeNull()
+      }
+      for (const offsetPx of [-1, SCROLL_TO_MAX_OFFSET_PX + 1, 12.5, '64', Number.NaN]) {
+        expect(
+          validateHostAction(withStep({ type: 'scrollTo', selector: TARGET, offsetPx })),
+        ).toBe(`Step 1: the offset must be 0–${SCROLL_TO_MAX_OFFSET_PX}px`)
+      }
+    })
   })
 
   it('accepts the every-time repeat flag on the trigger', () => {

@@ -107,6 +107,7 @@ export type {
   RedirectUid,
   ReusableComponentIcon,
   ReusableComponentProp,
+  ReusableComponentPropOption,
   ReusableComponentPropType,
   ScopeToken,
   ScreenSlug,

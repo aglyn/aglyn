@@ -1051,9 +1051,14 @@ export interface AglynScreenVersion<N = AglynNodeSchema>
 export type ComponentDefUid = string
 
 /**
- * Value kind of a declared component prop (AGL-1247), which decides only
- * how the Attributes panel edits it — every kind substitutes as text, so
- * the graft stays a string replacement over the definition's props.
+ * Value kind of a declared component prop (AGL-1247), which decides how the
+ * Attributes panel edits it and which fields inside the component can be bound
+ * to it. Every kind substitutes as text, so the graft stays a string
+ * replacement over the definition's props — except that a field bound to
+ * nothing but a `boolean` prop receives a real `true` or `false`, one bound to
+ * a `number` a real number, one bound to a `choice` nobody made is left to the
+ * element's own default, and one bound to an `icon` brings the icon's path with
+ * its id (`resolveComponentPropTokens`).
  */
 export type ReusableComponentPropType =
   | 'text'
@@ -1062,6 +1067,22 @@ export type ReusableComponentPropType =
   | 'href'
   | 'number'
   | 'boolean'
+  | 'choice'
+  | 'icon'
+
+/**
+ * One answer a `choice` prop offers (AGL-2871).
+ *
+ * Two halves because two people read it: the page author picks the `label`,
+ * and the field inside the component receives the `value` — which is why a
+ * dropdown bound to the prop needs values it offers itself.
+ */
+export interface ReusableComponentPropOption {
+  /** What a field bound to the prop receives. */
+  value: string
+  /** What the Attributes panel shows; falls back to `value`. */
+  label?: string
+}
 
 /**
  * A prop a reusable component declares (AGL-1247), so one definition can
@@ -1090,6 +1111,20 @@ export interface ReusableComponentProp {
    * unset prop can never collapse a section to empty on a live page.
    */
   defaultValue?: string
+  /**
+   * `choice` only: the answers a page picks from, in the order offered. A
+   * `defaultValue` names one of their values.
+   */
+  options?: ReusableComponentPropOption[]
+  /**
+   * `icon` only: the SVG path of the icon `defaultValue` names, stored beside
+   * the id when the default is picked, for the reason
+   * {@link ReusableComponentIcon} stores both — a published page never loads
+   * the icon catalog, so an id alone draws the empty Icon placeholder. An
+   * instance's own pick travels the same way, as a whole
+   * {@link ReusableComponentIcon} in its prop values.
+   */
+  defaultIconPath?: string
 }
 
 /**

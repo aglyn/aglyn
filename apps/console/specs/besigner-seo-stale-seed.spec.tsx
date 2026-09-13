@@ -235,8 +235,11 @@ jest.mock('@aglyn/besigner-ui', () => ({
   useBesignerDocument: () => ({
     saveAvailable: false,
     remoteChanged: false,
-    draft: null,
+    // The page's handlers read the draft state at render (AGL-2874), so it
+    // has to be the hook's shape rather than `null`.
+    draft: { available: false, sharedDraftUnopened: false },
     handleSave: () => undefined,
+    refuseOverUnopenedDraft: () => false,
     jsonOpen: false,
     openJsonEditor: () => undefined,
     closeJsonEditor: () => undefined,

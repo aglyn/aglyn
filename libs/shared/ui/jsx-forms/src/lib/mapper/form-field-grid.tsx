@@ -26,6 +26,7 @@ import {
   ICON_VARIANT_VISIBILITY_HIDDEN,
   ICON_VARIANT_VISIBILITY_SHOWN,
 } from '@aglyn/shared-data-enums'
+import { mdiCodeBraces } from '@aglyn/shared-data-mdi'
 import { HelpTip, type HelpTipContent, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   formControlClasses,
@@ -206,6 +207,24 @@ FieldMuteButton.displayName = 'AglynFieldMuteButton'
 /** Class marking a row whose declaration is switched off. */
 export const FIELD_MUTED_CLASS = classes.muted
 
+/**
+ * The "let something else supply this value" affordance — the `{}` a
+ * free-text field carries inside its box, for a field that has no box to
+ * carry it in.
+ *
+ * A switch or a checkbox has no box to put an end adornment in, so the button
+ * joins the corner controls instead, where it sits the same way on any field.
+ * What it opens is the caller's business: the field's name is all a wrapper
+ * knows, and which values may stand in for it is a question only the surface
+ * that rendered the field can answer.
+ */
+export interface FieldBindAction {
+  /** Accessible name, e.g. `Bind Autoplay to a property`. */
+  label: string
+  /** Opens the caller's picker, anchored on the button that was pressed. */
+  onOpen: (anchor: HTMLElement) => void
+}
+
 export interface FormFieldGridProps extends Omit<GridProps, 'size'> {
   children?: ReactNode
   className?: string
@@ -216,6 +235,8 @@ export interface FormFieldGridProps extends Omit<GridProps, 'size'> {
   clear?: FieldClearAction
   /** Switch this declaration off without losing it (AGL-2486). */
   mute?: FieldMuteAction
+  /** Supply this value from elsewhere, e.g. a component property. */
+  bind?: FieldBindAction
 }
 
 export const FormFieldGrid = ({
@@ -224,6 +245,7 @@ export const FormFieldGrid = ({
   help,
   clear,
   mute,
+  bind,
   size = { xs: 12 },
   ...props
 }: FormFieldGridProps) => (
@@ -233,6 +255,33 @@ export const FormFieldGrid = ({
     {...props}
   >
     {children}
+    {bind ? (
+      <Tooltip title={bind.label}>
+        <IconButton
+          size="small"
+          aria-label={bind.label}
+          onClick={(event) => bind.onOpen(event.currentTarget)}
+          sx={{
+            position: 'absolute',
+            top: -8,
+            // Outermost of all, for the reason the mute button below is
+            // outermost of the rest: every control an author has already
+            // learned the place of stays exactly where it was.
+            right:
+              (help ? 22 : 0) +
+              (clear && !clear.hidden ? 22 : 0) +
+              (mute ? 22 : 0),
+            zIndex: 1,
+            p: 0.25,
+            fontSize: '0.85rem',
+            lineHeight: 1,
+            color: 'text.secondary',
+          }}
+        >
+          <MdiIcon fontSize="inherit" path={mdiCodeBraces.path} />
+        </IconButton>
+      </Tooltip>
+    ) : null}
     <FieldMuteButton
       mute={mute}
       // Outermost of the corner controls, so adding it never moves the help

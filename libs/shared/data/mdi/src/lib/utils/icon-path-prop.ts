@@ -17,20 +17,7 @@
 
 import { MdiIcons } from '../constants/mdi-icons'
 
-/**
- * Companion prop that carries a picked icon's resolved SVG path (AGL-1212).
- *
- * `iconId` → `iconPath`, `startIconId` → `startIconPath`. Every icon
- * attribute in the catalog is an `ICON_PICKER` field whose name ends in
- * `Id`, so the editor can derive the companion name generically instead of
- * each component hard-coding a pair.
- *
- * The id stays the source of truth — the path is a denormalized copy so
- * render surfaces never have to load the ~2.9 MB icon catalog.
- */
-export function iconPathPropName(idPropName: string): string {
-  return idPropName.replace(/Id$/, 'Path')
-}
+export { iconPathPropName } from './icon-path-prop-name'
 
 /**
  * Looks up an icon's SVG path, or `undefined` when the catalog has no such

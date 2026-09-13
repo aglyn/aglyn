@@ -91,6 +91,26 @@ describe('ScreenLinkValuePicker (AGL-1335)', () => {
     )
   })
 
+  it('warns while the typed address is only a #fragment (AGL-2867)', () => {
+    render(<Harness />)
+    openSelect()
+    fireEvent.click(screen.getByRole('option', { name: /External URL/ }))
+    const box = screen.getByLabelText('External URL')
+    fireEvent.change(box, { target: { value: '#watch' } })
+    expect(stored()).toBe('#watch')
+    expect(
+      screen.getByText(/so #watch goes nowhere on the published page/),
+    ).toBeTruthy()
+    expect(screen.getByText(/Scroll to element/)).toBeTruthy()
+
+    // A real address clears it back to the general note.
+    fireEvent.change(box, { target: { value: '/pricing#faq' } })
+    expect(screen.queryByText(/goes nowhere/)).toBeNull()
+    expect(
+      screen.getByText('Typed addresses do not follow a screen rename.'),
+    ).toBeTruthy()
+  })
+
   it('opens a legacy raw-string value in URL mode, unchanged', () => {
     // The nine live `/product/*` CTAs. Opening the panel must not rewrite
     // them, and must not present them as "nothing chosen".

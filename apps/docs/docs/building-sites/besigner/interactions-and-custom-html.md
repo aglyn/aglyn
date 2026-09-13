@@ -44,6 +44,11 @@ configures in one dialog without leaving the besigner:
   - **Toggle / append / remove a class** — targets this element by
     default, or any CSS selector. Pair with your theme's utility classes
     for menus, reveals, and state changes.
+  - **Scroll to element** — moves the page to any element you pick, with
+    an offset for a sticky header. See
+    [Scroll to element](#scroll-to-element-step).
+  - **Play a video** — presses a Video element's poster from anywhere on
+    the page. See [Play a video](#play-video-step).
   - **Make the nav sticky**, **go to a URL / screen**, or **show a site
     alert** — navigation and lightweight feedback, no server involved.
 - The remaining actions are the **automations engine** (Pro+, metered —
@@ -94,8 +99,9 @@ Interactions come in two tiers, and the field editor labels the steps that
 need a higher plan:
 
 - **Basic interactions — every plan, including Free.** Opening and closing
-  menus and drawers, showing and hiding elements, toggling classes, sticky
-  nav, navigation, and site alerts are pure client-side DOM behavior with
+  menus and drawers, showing and hiding elements, toggling classes,
+  scrolling to an element, playing a video, sticky nav, navigation, and
+  site alerts are pure client-side DOM behavior with
   **no server cost**. They run everywhere and are **never metered** — a
   hover-to-open menu is not a paid feature.
 - **The automations engine — Pro+, metered.** Steps that reach the server
@@ -112,7 +118,8 @@ for the full step catalog and metering.
 ## Pick the target by clicking
 
 Any action that points at an element — *open a menu*, *show / hide*, *open
-a drawer* — lets you **choose the target visually**: click **Pick element**,
+a drawer*, *scroll to element*, *play a video* — lets you **choose the target
+visually**: click **Pick element**,
 click the element on the canvas, and confirm. No CSS selectors to write,
 and the picker resolves the stable `data-aglyn` id under the hood so the
 target survives edits. A **custom selector** field is there as a secondary
@@ -144,6 +151,46 @@ yourself).
   `visible`* with a CSS transition, frequency *once per visitor*.
 - **Announcement click-through**: *When clicked → Track analytics event*
   plus *Go to a URL*.
+- **"Watch the demo" button**: *When clicked → Scroll to element* and
+  *Play a video*, both picking the film.
+- **Section nav**: on each nav item, *When clicked → Scroll to element*
+  with the **Offset** set to your sticky header's height.
+
+## Scroll to element {#scroll-to-element-step}
+
+*When clicked → **Scroll to element*** brings the element you pick to the top
+of the window — no id to invent, and it keeps working when the page around it
+changes.
+
+| Option | What it does |
+| --- | --- |
+| **Scroll** | **Smoothly** (the default) or **Instantly**. A visitor whose device asks for reduced motion is always scrolled instantly. |
+| **Offset (px)** | Room left above the element, 0–1000, so a sticky header does not cover it. |
+
+Keyboard focus moves to the element too, so a keyboard or screen-reader visitor
+carries on from there. If the element is hidden or has been deleted, the step
+does nothing and the interaction's other actions still run.
+
+:::tip A #link is not a scroll
+A Button or Link whose **External URL** is only a fragment, such as `#watch`,
+goes nowhere on the published page, because the elements you place carry no id
+for it to find. The field warns while it holds one: clear it and use this
+action instead.
+:::
+
+## Play a video {#play-video-step}
+
+*When clicked → **Play a video*** does exactly what pressing a
+[Video element](video.md)'s poster does, from a button anywhere on the page.
+Pick the Video as the target.
+
+- With **Open in a lightbox** on, the lightbox opens and the film plays.
+- With it off, the film plays in place of the poster.
+
+Nothing is loaded from the video's host until the action runs, and a Wistia
+video follows the same consent rules as a press on its poster. To be sure the
+film is in view as it starts, put **Scroll to element**, picking the same
+Video, before it.
 
 ## Track an analytics event {#analytics-event-step}
 

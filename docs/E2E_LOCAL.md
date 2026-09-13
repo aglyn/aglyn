@@ -373,7 +373,8 @@ emulator-host env vars** so it can never touch production):
   forms — the wholesale inquiry that routes leads and the catering inquiry
   that could. Written with plain `set` rather than
   merge, because the CRM specs mutate these and re-seed them; the owner's
-  legal acceptance (`users/{uid}/legalAcceptances/v1`) is seeded beside them
+  legal acceptance (`users/{uid}/legalAcceptances/<version>`, the version
+  `LEGAL_DOCUMENT_VERSION` names) is seeded beside them
   so no page opens under the re-acceptance banner.
 - A workspace on Free (AGL-2809), from
   `tools/scripts/lib/crm-free-plan-fixtures.mjs`: auth user

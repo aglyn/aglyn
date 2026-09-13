@@ -25,11 +25,14 @@ import { mdiPlay, mdiVideo } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import type { SxProps } from '@mui/material/styles'
+import useEventCallback from '@mui/utils/useEventCallback'
+import useForkRef from '@mui/utils/useForkRef'
 import {
   Suspense,
   forwardRef,
   lazy,
   useCallback,
+  useEffect,
   useState,
   type ReactNode,
 } from 'react'
@@ -403,10 +406,63 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
       }),
     )
   }, [storedSrc, hostId, muted, loop])
+  /**
+   * What pressing the poster does. The poster's own button and a press sent
+   * from outside the element both call this one function, so the two cannot
+   * come to disagree about what a press is.
+   */
+  const press = () => {
+    if (wistiaId) playWistia()
+    if (lightbox) openLightbox()
+  }
+  /**
+   * A press sent from outside the element (AGL-2867) — a "Play a video"
+   * interaction on a button elsewhere on the page — answered as the markup
+   * rendered below would answer a press on it, branch for branch:
+   *
+   * - nothing that can play (no source, or a Wistia video with no poster):
+   *   nothing happens;
+   * - a Wistia player already in place of its poster: it is playing already;
+   * - a poster that is a button: that button's own press, which is the only
+   *   thing that ever loads a hosted player or the lightbox chunk, and which
+   *   reads consent at that moment;
+   * - the inline player: `play()`, which is what a press on it does.
+   *
+   * Inert on the besigner canvas, as the poster button is, for the same
+   * reason: nothing may load a player or open a dialog inside the editor.
+   *
+   * `useEventCallback`, not React's `useEffectEvent`: in the React this repo
+   * runs, an effect event declared in a `forwardRef` component is never
+   * handed the implementation from later renders, so a listener added once
+   * would go on answering with the props of the first one.
+   */
+  const answerVideoCommand = useEventCallback((element: HTMLElement) => {
+    if (editorInert || !src) return
+    if (wistiaId && !poster) return
+    if (wistiaId && !lightbox && playerSrc) return
+    if ((lightbox || wistiaId) && poster) return press()
+    if (element instanceof HTMLVideoElement) {
+      // A play the browser refuses (a trigger that was not a press, on an
+      // unmuted film) is the browser's decision to make, not an error.
+      void Promise.resolve(element.play()).catch(() => undefined)
+    }
+  })
+  /**
+   * The element's own DOM root, which receives the command. State rather than
+   * a ref object, because the root is a different element in different
+   * branches — the inline `<video>`, or the box around a poster — and the
+   * listener has to follow it.
+   */
+  const [root, setRoot] = useState<HTMLElement | null>(null)
+  const rootRef = useForkRef(ref, setRoot)
+  useEffect(() => {
+    if (!root) return undefined
+    return Aglyn.subscribeVideoCommands(root, () => answerVideoCommand(root))
+  }, [root, answerVideoCommand])
   /** The labeled box the element shows when it has nothing it can play. */
   const placeholder = (label: string) => (
     <Box
-      ref={ref}
+      ref={rootRef}
       {...rest}
       sx={[
         {
@@ -473,7 +529,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   if (wistiaId && !lightbox && playerSrc) {
     return (
       <Box
-        ref={ref}
+        ref={rootRef}
         {...rest}
         sx={[
           {
@@ -510,13 +566,9 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    */
   if ((lightbox || wistiaId) && poster) {
     const playsInPlace = Boolean(wistiaId) && !lightbox
-    const press = () => {
-      if (wistiaId) playWistia()
-      if (lightbox) openLightbox()
-    }
     return (
       <Box
-        ref={ref}
+        ref={rootRef}
         {...rest}
         sx={[
           {
@@ -624,26 +676,35 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 64,
-              height: 64,
+              // A poster is a frame of unknown brightness, and this control
+              // has to separate from all of them. A solid disc does; the
+              // translucent scrim it replaced sank into any dark frame.
+              width: { xs: 64, sm: 80, md: 96 },
+              height: { xs: 64, sm: 80, md: 96 },
               borderRadius: '50%',
-              color: 'common.white',
-              bgcolor: 'rgba(0, 0, 0, 0.55)',
+              // The site's accent, not a literal. A play control is the one
+              // mark on a poster that should read as the brand's, so it takes
+              // the theme's primary the way every other accented glyph does.
+              color: 'primary.main',
+              bgcolor: 'common.white',
               boxShadow: 6,
               // Gated in CSS rather than behind a JS branch, so toggling the
               // OS setting after load resolves in BOTH directions — the same
               // reason `element-animation-assets` puts every rule it has
               // inside this query.
               '@media (prefers-reduced-motion: no-preference)': {
-                transition: 'transform 150ms, background-color 150ms',
+                transition: 'transform 150ms, color 150ms',
                 'button:hover &, button:focus-visible &': {
                   transform: 'translate(-50%, -50%) scale(1.08)',
-                  bgcolor: 'rgba(0, 0, 0, 0.75)',
+                  color: 'primary.dark',
                 },
               },
             }}
           >
-            <MdiIcon path={mdiPlay.path} sx={{ fontSize: 36, ml: '4px' }} />
+            <MdiIcon
+              path={mdiPlay.path}
+              sx={{ fontSize: { xs: 32, sm: 40, md: 48 }, ml: '4px' }}
+            />
           </Box>
         </Box>
         {armed ? (
@@ -671,7 +732,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   }
   return (
     <Box
-      ref={ref}
+      ref={rootRef}
       component="video"
       src={src}
       poster={poster || undefined}

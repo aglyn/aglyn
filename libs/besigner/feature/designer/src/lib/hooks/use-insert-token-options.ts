@@ -27,6 +27,7 @@ import {
   EntityPickerContext,
   entityValueNeedsResolution,
   ENTRY_TOKEN_CATALOG,
+  readYesNoValue,
 } from '@aglyn/aglyn'
 import { useContext, useEffect, useMemo } from 'react'
 
@@ -46,6 +47,65 @@ export interface InsertTokenOptionsResult {
   options: BindingOption[]
   /** Display-name resolution inputs for pill rendering (AGL-586). */
   labelContext: TokenLabelContext
+}
+
+/**
+ * A component's own declared props as picker options (AGL-1335) — every one
+ * of them for a free-text field, or only those of the given types for a field
+ * that can hold nothing else (a switch takes a Yes / no property and no
+ * other).
+ *
+ * Names are filtered by the SAME pattern the graft requires, so a picker can
+ * never offer a token that would not substitute.
+ */
+export function componentPropBindingOptions(
+  componentProps: readonly Aglyn.ReusableComponentProp[] | undefined | null,
+  types?: readonly Aglyn.ReusableComponentPropType[],
+): BindingOption[] {
+  const options: BindingOption[] = []
+  for (const prop of componentProps ?? []) {
+    if (!COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? '')) continue
+    if (types && !types.includes(prop.type ?? 'text')) continue
+    options.push({
+      group: 'Properties',
+      groupHint: 'Set per page in the Attributes panel of each instance',
+      label: prop.label || prop.name,
+      token: `{{${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}}}`,
+      preview: componentPropDefaultPreview(prop),
+    })
+  }
+  return options
+}
+
+/** The picker's second line for a property: what a page that sets nothing gets. */
+function componentPropDefaultPreview(
+  prop: Aglyn.ReusableComponentProp,
+): string {
+  if (prop.type === 'boolean') {
+    // A yes/no has no "nothing": unset with no default substitutes `''`,
+    // which every Yes / no reader takes for a no.
+    return readYesNoValue(prop.defaultValue) === true
+      ? 'Defaults to Yes'
+      : 'Defaults to No'
+  }
+  if (prop.type === 'choice') {
+    // Named by the label a page author picks, not the value a field gets.
+    const choice = (prop.options ?? []).find(
+      (option) => option?.value && option.value === prop.defaultValue,
+    )
+    return choice
+      ? `Defaults to ${choice.label || choice.value}`
+      : 'No default — the field keeps its own until a page chooses'
+  }
+  if (prop.type === 'icon') {
+    // An icon id is not something to read out; the picker shows the icon.
+    return prop.defaultValue
+      ? 'Defaults to the icon picked in Properties'
+      : 'No default — shows no icon until a page picks one'
+  }
+  return prop.defaultValue
+    ? `Defaults to "${prop.defaultValue}"`
+    : 'No default — renders as nothing until a page sets it'
 }
 
 /**
@@ -159,22 +219,9 @@ export function useInsertTokenOptions(
      *
      * They were absent from this picker entirely, so binding one meant
      * typing `{{prop.name}}` by hand while a `{}` button sat next to the
-     * field implying otherwise. Names are filtered by the SAME pattern the
-     * graft requires, so the picker cannot offer a token that would never
-     * substitute.
+     * field implying otherwise.
      */
-    for (const prop of componentProps ?? []) {
-      if (!COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? '')) continue
-      assembled.push({
-        group: 'Properties',
-        groupHint: 'Set per page in the Attributes panel of each instance',
-        label: prop.label || prop.name,
-        token: `{{${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}}}`,
-        preview: prop.defaultValue
-          ? `Defaults to "${prop.defaultValue}"`
-          : 'No default — renders as nothing until a page sets it',
-      })
-    }
+    assembled.push(...componentPropBindingOptions(componentProps))
     const entryHint = insertContext.inCollectionEntries
       ? undefined
       : 'Resolves in Collection entries blocks and on entry pages'

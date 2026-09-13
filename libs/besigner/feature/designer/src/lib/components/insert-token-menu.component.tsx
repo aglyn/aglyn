@@ -145,6 +145,12 @@ export interface InsertTokenMenuProps {
   onClose: () => void
   options: BindingOption[]
   onInsert: (token: string) => void
+  /**
+   * What the menu says when there is nothing to offer at all, as opposed to
+   * nothing matching a search. A field that takes only one kind of value
+   * knows where more of that kind comes from, and should say so.
+   */
+  emptyText?: string
 }
 
 /**
@@ -155,7 +161,7 @@ export interface InsertTokenMenuProps {
  * their tokens resolve. Search filters across label, group, and preview.
  */
 export function InsertTokenMenu(props: InsertTokenMenuProps) {
-  const { anchorEl, open, onClose, options, onInsert } = props
+  const { anchorEl, open, onClose, options, onInsert, emptyText } = props
   // Hosts can have hundreds of variables (AGL-186) — filter as you type.
   const [search, setSearch] = useState('')
 
@@ -214,7 +220,9 @@ export function InsertTokenMenu(props: InsertTokenMenuProps) {
         />
       </Box>
       {visibleOptions.length === 0 ? (
-        <MenuItem disabled>{'No data matches'}</MenuItem>
+        <MenuItem disabled sx={{ whiteSpace: 'normal' }}>
+          {options.length === 0 && emptyText ? emptyText : 'No data matches'}
+        </MenuItem>
       ) : null}
       {visibleOptions.map((option, index) => {
         const previous = visibleOptions[index - 1]

@@ -15,11 +15,14 @@
  * limitations under the License.
  */
 
+// By path: the naming rule alone, without the icon catalog's loader beside it.
+import { iconPathPropName } from '@aglyn/shared-data-mdi/utils/icon-path-prop-name'
 import type {
   AglynNodeSchema,
   NodeId,
   ReusableComponentIcon,
   ReusableComponentProp,
+  ReusableComponentPropType,
 } from '../foundation'
 import {
   COMPONENT_NODE_ID_PREFIX,
@@ -42,6 +45,18 @@ const isStyleRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null &&
   !Array.isArray(value) &&
   Object.keys(value).length > 0
+
+/**
+ * Space-separated class lists joined in order, each name once, or `undefined`
+ * when no list holds a name. A value that is not a string contributes nothing.
+ */
+function joinClassNames(...lists: unknown[]): string | undefined {
+  const names = lists
+    .filter((list): list is string => typeof list === 'string')
+    .flatMap((list) => list.split(/\s+/))
+    .filter(Boolean)
+  return names.length ? [...new Set(names)].join(' ') : undefined
+}
 
 /**
  * Every per-instance style override an instance node carries, keyed the way
@@ -455,10 +470,219 @@ export function getInstanceEffectivePropText(
   const values = (instanceProps as Record<string, unknown> | undefined)?.[
     REUSABLE_INSTANCE_PROP_VALUES_KEY
   ] as Record<string, unknown> | undefined
-  const override = values?.[propName]
-  if (override != null && override !== '') return String(override)
   const prop = (declared ?? []).find((entry) => entry?.name === propName)
+  const override = propValueOverride(values?.[propName], prop)
+  if (override !== undefined) return String(override)
   return prop?.defaultValue == null ? '' : String(prop.defaultValue)
+}
+
+/**
+ * The icon an instance picked for an `icon` prop, or `undefined` when it
+ * picked none.
+ *
+ * Stored as a whole {@link ReusableComponentIcon} so the path travels with the
+ * id. A bare id — written by anything other than the Attributes panel — still
+ * counts as a pick; it simply arrives with no path to draw on a published
+ * page.
+ */
+export function readInstanceIconValue(
+  value: unknown,
+): ReusableComponentIcon | undefined {
+  if (typeof value === 'string') {
+    return value.trim() ? { iconId: value.trim() } : undefined
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const { iconId, iconPath } = value as ReusableComponentIcon
+  if (typeof iconId !== 'string' || !iconId) return undefined
+  return typeof iconPath === 'string' && iconPath
+    ? { iconId, iconPath }
+    : { iconId }
+}
+
+/**
+ * What an instance's stored value for a prop substitutes as, or `undefined`
+ * where it set nothing and the default applies.
+ *
+ * `''` is unset, for the reason {@link buildPropTokens} gives. An icon pick
+ * substitutes its id. Any other object is unset too: the only object a prop
+ * value is ever written as is an icon, so one under any other prop is a pick
+ * left behind when the prop's type changed, and stringifying it would put
+ * `[object Object]` on the page.
+ */
+function propValueOverride(
+  value: unknown,
+  prop: Pick<ReusableComponentProp, 'type'> | undefined,
+): string | number | boolean | undefined {
+  if (value == null || value === '') return undefined
+  if (prop?.type === 'icon') return readInstanceIconValue(value)?.iconId
+  if (typeof value === 'object') return undefined
+  return value as string | number | boolean
+}
+
+/**
+ * The SVG path each `icon` prop draws with for one instance: its own pick's
+ * path, else the definition's default path, keyed by prop name.
+ *
+ * Beside {@link buildPropTokens} rather than inside it, because a path is not
+ * a token: it is never typed into a field, and it only ever lands in the
+ * companion of a field bound to the prop (`iconId` → `iconPath`).
+ */
+function buildPropIconPaths(
+  declared: ReusableComponentProp[] | undefined,
+  instanceProps: unknown,
+): Record<string, string> {
+  const values = (instanceProps as Record<string, unknown> | undefined)?.[
+    REUSABLE_INSTANCE_PROP_VALUES_KEY
+  ] as Record<string, unknown> | undefined
+  const paths: Record<string, string> = {}
+  for (const prop of declared ?? []) {
+    if (!prop?.name || prop.type !== 'icon') continue
+    const picked = readInstanceIconValue(values?.[prop.name])
+    const path = picked
+      ? picked.iconPath
+      : prop.defaultValue
+        ? prop.defaultIconPath
+        : undefined
+    if (path) paths[prop.name] = path
+  }
+  return paths
+}
+
+/**
+ * The icon paths a definition's OWN defaults draw with — what the component
+ * editor shows beside {@link buildComponentDefaultTokens}.
+ */
+export function buildComponentDefaultIconPaths(
+  declared: ReusableComponentProp[] | undefined,
+): Record<string, string> {
+  return buildPropIconPaths(declared, undefined)
+}
+
+/**
+ * Whether a declared prop's value says yes, no, or nothing at all.
+ *
+ * The spellings a visibility directive accepts, because the value travels the
+ * same textual path to get here: `false`, `'false'`, `'0'`, `'off'`, `'no'` and
+ * `''` all read as no. `undefined` means there is nothing to read — the value
+ * is absent, or is still an unsubstituted token.
+ */
+export function readYesNoValue(value: unknown): boolean | undefined {
+  return directiveTruth(value)
+}
+
+/** The property kinds {@link resolveComponentPropTokens} finishes by type. */
+const TYPED_BINDING_KINDS: ReadonlySet<ReusableComponentPropType> = new Set([
+  'boolean',
+  'choice',
+  'icon',
+  'number',
+])
+
+/**
+ * The declared-prop substitution for a set of nodes, with each binding handed
+ * to the element as the type its property declares.
+ *
+ * The substitution itself is textual — {@link buildPropTokens} stringifies
+ * every value and `resolveNamedTokens` splices it into string props. That is
+ * right for copy and wrong for the fields that do not hold copy. So a prop
+ * whose stored value is EXACTLY one token naming a declared prop is finished
+ * by that prop's type:
+ *
+ * - `boolean` — read back through {@link readYesNoValue} and handed on as a
+ *   real `true` or `false`, because an element reading `lightbox` takes the
+ *   string `'false'` for a yes. Nothing to read is a no: an unset Yes / no
+ *   with no default substitutes `''`, and `''` is a no.
+ * - `choice` — handed on as the chosen value, or REMOVED when there is none,
+ *   so the element falls back to its own default. A dropdown's empty value is
+ *   not one of its options, and an element handed `variant: ''` draws neither
+ *   the component's variant nor its own.
+ * - `icon` — handed on as the picked icon's id, with its path written into
+ *   the field's companion (`iconId` → `iconPath`, the rule `iconPathPropName`
+ *   states) from `iconPaths`. The path is what a published page draws, since
+ *   it never loads the icon catalog; and it is written or removed on every
+ *   pass, because a path left over from the component's own icon would be
+ *   drawn in place of the page's. Nothing picked removes both, and the element
+ *   draws its empty placeholder.
+ * - `number` — handed on as a real number when the text is one, because an
+ *   element passing `size` to MUI turns `'32'` into `font-size: 32`, which no
+ *   browser applies. Nothing set is removed, as for a choice; text that is not
+ *   a number is left as it was authored.
+ *
+ * "Nothing chosen" includes a binding still holding its token after
+ * substitution — a component editor drawing a prop that has no default —
+ * which is then drawn exactly as a page that sets nothing renders it.
+ *
+ * Exact match only, for the reason {@link matchComponentPropToken} gives: a
+ * value that merely contains a token is text with a value inside it, and it
+ * stays text. An undeclared name is never typed either — it never substitutes,
+ * so there is no value to read.
+ *
+ * Top-level props only, and never an element's text content (`children`). The
+ * binding a panel field offers writes that field's own prop; a token nested in
+ * an item list is content the component spelled out, and text is text
+ * whatever kind of property fills it — so both keep the textual treatment.
+ *
+ * Inputs are never mutated, and a map with no typed binding comes back exactly
+ * as the substitution left it.
+ */
+export function resolveComponentPropTokens<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: NormalizedNodes<N>,
+  declared: ReusableComponentProp[] | undefined | null,
+  tokens: Record<string, string> | null | undefined,
+  iconPaths?: Record<string, string> | null,
+): NormalizedNodes<N> {
+  const substituted = resolveNamedTokens(nodes, tokens)
+  const typedProps = new Map<string, ReusableComponentPropType>()
+  for (const prop of declared ?? []) {
+    if (prop?.name && prop.type && TYPED_BINDING_KINDS.has(prop.type)) {
+      typedProps.set(prop.name, prop.type)
+    }
+  }
+  if (!typedProps.size) return substituted
+  let typed: NormalizedNodes<N> | undefined
+  for (const [id, node] of Object.entries(nodes ?? {})) {
+    const raw = node?.props as Record<string, unknown> | undefined
+    if (!raw || typeof raw !== 'object') continue
+    let props: Record<string, unknown> | undefined
+    for (const [key, value] of Object.entries(raw)) {
+      if (key === 'children') continue
+      const name = matchComponentPropToken(value)
+      const type = name ? typedProps.get(name) : undefined
+      if (!name || !type) continue
+      props = props ?? {
+        ...(substituted[id]?.props as Record<string, unknown> | undefined),
+      }
+      const resolved = props[key]
+      if (type === 'boolean') {
+        props[key] = readYesNoValue(resolved) === true
+        continue
+      }
+      const chosen =
+        typeof resolved === 'string' &&
+        resolved.trim() !== '' &&
+        matchComponentPropToken(resolved) == null
+      if (!chosen) delete props[key]
+      if (type === 'number') {
+        const numeric = chosen ? Number(resolved) : Number.NaN
+        if (Number.isFinite(numeric)) props[key] = numeric
+        continue
+      }
+      if (type !== 'icon') continue
+      const pathKey = iconPathPropName(key)
+      if (pathKey === key) continue
+      const path = chosen ? iconPaths?.[name] : undefined
+      if (path) props[pathKey] = path
+      else delete props[pathKey]
+    }
+    if (!props) continue
+    typed = typed ?? { ...substituted }
+    typed[id] = { ...substituted[id], props } as N
+  }
+  return typed ?? substituted
 }
 
 /**
@@ -481,11 +705,37 @@ function buildPropTokens(
   const tokens: Record<string, string> = {}
   for (const prop of declared) {
     if (!prop?.name) continue
-    const override = values?.[prop.name]
-    const value =
-      override == null || override === '' ? prop.defaultValue : override
+    const override = propValueOverride(values?.[prop.name], prop)
+    const value = override === undefined ? prop.defaultValue : override
     tokens[`${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}`] =
       value == null ? '' : String(value)
+  }
+  return tokens
+}
+
+/**
+ * Token map of a definition's OWN defaults, with no instance in the picture.
+ *
+ * What the component editor draws with (AGL-2870). It is deliberately not
+ * {@link buildPropTokens} called with no overrides: that one stringifies a
+ * missing default to `''`, which is right for a page — an unset prop renders
+ * nothing — and wrong here, where a prop with no default has nothing to
+ * preview and should keep showing its raw token so the author can see at a
+ * glance which slots are still unfilled.
+ *
+ * `false` and `0` are real defaults and survive; only `null`, `undefined` and
+ * `''` are treated as "no default set".
+ */
+export function buildComponentDefaultTokens(
+  declared: ReusableComponentProp[] | undefined,
+): Record<string, string> {
+  const tokens: Record<string, string> = {}
+  for (const prop of declared ?? []) {
+    if (!prop?.name) continue
+    if (prop.defaultValue == null || prop.defaultValue === '') continue
+    tokens[`${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}`] = String(
+      prop.defaultValue,
+    )
   }
   return tokens
 }
@@ -913,7 +1163,9 @@ export function composeReusableComponentNodes<
       //
       // The value lands in a real string prop and compose runs graft →
       // repeatables → `resolveNodesBindings`, so a `{{var:id}}` typed into
-      // an override still resolves downstream for free.
+      // an override still resolves downstream for free. A field bound to a
+      // prop that is not text is finished by that prop's type instead — see
+      // `resolveComponentPropTokens`.
       //
       // Visibility directives (AGL-1314) are evaluated on the result, never
       // before: they read `{{prop.*}}` like everything else, so pruning
@@ -922,9 +1174,11 @@ export function composeReusableComponentNodes<
       Object.assign(
         next,
         pruneHiddenNodes(
-          resolveNamedTokens(
+          resolveComponentPropTokens(
             grafted,
+            definition.props,
             buildPropTokens(definition.props, instanceNode.props),
+            buildPropIconPaths(definition.props, instanceNode.props),
           ),
           prefixId(definition.rootId),
         ),
@@ -1028,6 +1282,29 @@ export function composeReusableComponentNodes<
           const value = (instanceNode.props as Record<string, unknown>)?.[key]
           if (value !== undefined) carried[key] = value
         }
+        /*
+         * Classes from BOTH nodes, the component root's first.
+         *
+         * A class names the element for the site's stylesheet and for the
+         * runtime: ⋮ ▸ Start hidden writes `aglyn-hidden` into the placement's
+         * `props.className`, and the show/hide steps toggle that class on the
+         * element answering to the placement's id, which after the merge is
+         * this one. Keeping either list alone drops the other author's names,
+         * so the two are joined, each name once, in `props` and on the node.
+         */
+        const propsClassName = joinClassNames(
+          (graftedRoot.props as Record<string, unknown> | undefined)?.[
+            'className'
+          ],
+          (instanceNode.props as Record<string, unknown> | undefined)?.[
+            'className'
+          ],
+        )
+        if (propsClassName) carried['className'] = propsClassName
+        const nodeClassName = joinClassNames(
+          (graftedRoot as { className?: unknown }).className,
+          (instanceNode as { className?: unknown }).className,
+        )
         // The override slices and the reference are DOCUMENT state living on
         // the node beside `sx`, not props — the renderer never spreads them at
         // an element — so they ride along rather than being consumed and
@@ -1053,11 +1330,27 @@ export function composeReusableComponentNodes<
           ...(graftedRoot.props !== undefined || Object.keys(carried).length
             ? { props: { ...(graftedRoot.props as object), ...carried } }
             : {}),
+          ...(nodeClassName ? { className: nodeClassName } : {}),
           // Absent rather than empty, like `props` above: a node the author
           // gave no choreography is one that carries no such key anywhere
           // else in the pipeline.
           ...(mergedInteractions.length
             ? { interactions: mergedInteractions }
+            : {}),
+          /*
+           * The eye on the placement's hierarchy row hides the element the
+           * placement became.
+           *
+           * Either author may hide it: the component, on its own root, which
+           * arrives with the spread above, or the page, on the placement. Only
+           * a hiding flag is carried, never a showing one: `false` and absent
+           * mean the same thing on a node, so a placement whose eye was never
+           * touched cannot bring back a root the component hid. Read off the
+           * node for the reason `interactions` is: `hidden` is declared on
+           * `NodeSchema`, above the type this function is generic over.
+           */
+          ...((instanceNode as { hidden?: unknown }).hidden
+            ? { hidden: true }
             : {}),
         } as N
         for (const childId of Array.isArray(merged.nodes)
@@ -1237,9 +1530,11 @@ export function detachInstanceSubtree<
   return Object.assign(
     next,
     pruneHiddenNodes(
-      resolveNamedTokens(
+      resolveComponentPropTokens(
         copied,
+        definition.props,
         buildPropTokens(definition.props, instanceNode.props),
+        buildPropIconPaths(definition.props, instanceNode.props),
       ),
       instanceId,
     ),

@@ -17,6 +17,7 @@
 
 import type * as Aglyn from '@aglyn/aglyn'
 import {
+  bareFragmentLinkWarning,
   formatScreenLinkValue,
   parseScreenLinkValue,
   ScreenLinkContext,
@@ -229,7 +230,12 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
           disabled={disabled}
           placeholder={urlPlaceholder}
           helperText={
-            helperText ?? 'Typed addresses do not follow a screen rename.'
+            // A bare `#fragment` goes nowhere on the published page
+            // (AGL-2867); saying so outranks the general note, and only a
+            // validation error outranks it.
+            (error ? helperText : bareFragmentLinkWarning(literal)) ??
+            helperText ??
+            'Typed addresses do not follow a screen rename.'
           }
           onChange={(event) => onChange(event.target.value)}
           fullWidth

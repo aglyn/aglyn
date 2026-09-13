@@ -57,6 +57,8 @@ import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
   normalizeBindingTokens,
+  readInstanceIconValue,
+  readYesNoValue,
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   ScreenLinkContext,
@@ -121,6 +123,12 @@ import {
   ScreenLinkField,
   SCREEN_LINK_FIELD_COMPONENT,
 } from './screen-link-field.component'
+import {
+  PropertyBindingField,
+  type PropertyBindingControl,
+  PROPERTY_BINDING_FIELD_COMPONENT,
+  withPropertyBinding,
+} from './property-binding-field.component'
 import { besignerDocsUrl } from '../utils/docs-help'
 import { numericTextValue } from '../utils/numeric-text-value'
 import ElementInfoDetails from './element-info-details.component'
@@ -319,6 +327,10 @@ export const elementPropsComponentMapper = {
   // A placed plugin's declared settings as real fields (AGL-1049); the
   // attributes memo rewrites the plugin's JSON attribute to it.
   [PLUGIN_SETTINGS_FIELD_COMPONENT]: PluginSettingsField,
+  // A field with no text box inside a component editor, wrapped so it can be
+  // bound to one of the component's properties; the attributes memo wraps
+  // them (see `withPropertyBinding`).
+  [PROPERTY_BINDING_FIELD_COMPONENT]: PropertyBindingField,
 }
 
 /**
@@ -357,6 +369,102 @@ export function withNumericValueParse<T extends Record<string, unknown>>(
 }
 
 /**
+ * A Yes / no property's stored value as its dropdown shows it: `'true'`,
+ * `'false'`, or nothing chosen.
+ *
+ * Read with the spellings every Yes / no reader accepts, so an instance that
+ * stored the string `'false'` shows No rather than a blank dropdown. Unset is
+ * `undefined` rather than `''`: an empty string matches no option, and the
+ * dropdown would warn about a value it cannot show.
+ */
+export function formatYesNoPropValue(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined
+  const truth = readYesNoValue(value)
+  return truth === undefined ? undefined : truth ? 'true' : 'false'
+}
+
+/**
+ * The dropdown's choice as the instance stores it: a real boolean, or unset.
+ *
+ * Unset is the whole point of the field — it is how a page hands the choice
+ * back to the component's default — so everything that is not Yes or No,
+ * including the clear button's `null`, removes the value.
+ */
+export function parseYesNoPropValue(value: unknown): boolean | undefined {
+  if (value === 'true' || value === true) return true
+  if (value === 'false' || value === false) return false
+  return undefined
+}
+
+/**
+ * The path each icon picker's companion prop should hold once these values
+ * are saved: `iconId` → `iconPath`, `startIconId` → `startIconPath`
+ * (AGL-1212).
+ *
+ * The id stays the source of truth and the path travels with the document,
+ * because the catalog is ~2.9 MB, only picker surfaces load it, and a
+ * published page has to draw the icon without it.
+ *
+ * The lookup runs on every save of the panel, and the panel saves edits to
+ * every other attribute too — from the moment it opens, before the picker has
+ * finished loading the catalog (AGL-2879). So a miss is not evidence the icon
+ * has no path: for an id that did NOT change it keeps the path already
+ * stored. For a changed id the lookup decides, and a miss clears the path,
+ * because the old icon's path is never the new icon's.
+ */
+export function iconPathsForSave(
+  attributes: readonly Aglyn.AglynAttributeSchema[] | undefined | null,
+  values: Record<string, unknown>,
+  stored: Record<string, unknown> | undefined | null,
+): Record<string, string | undefined> {
+  const paths: Record<string, string | undefined> = {}
+  for (const attribute of attributes ?? []) {
+    if (attribute?.component !== FieldComponentType.ICON_PICKER) continue
+    const pathProp = iconPathPropName(attribute.name)
+    if (pathProp === attribute.name) continue
+    const pickedId = values[attribute.name]
+    if (typeof pickedId !== 'string' || !pickedId) {
+      paths[pathProp] = undefined
+      continue
+    }
+    const unchanged = pickedId === stored?.[attribute.name]
+    const storedPath = stored?.[pathProp]
+    paths[pathProp] =
+      getMdiIconPath(pickedId) ??
+      (unchanged && typeof storedPath === 'string' ? storedPath : undefined)
+  }
+  return paths
+}
+
+/**
+ * An icon property's stored pick as the icon picker shows it: the icon's id,
+ * or `''` for nothing picked.
+ */
+export function formatIconPropValue(value: unknown): string {
+  return readInstanceIconValue(value)?.iconId ?? ''
+}
+
+/**
+ * The icon picker's choice as the instance stores it: the id AND its SVG path,
+ * or unset.
+ *
+ * The path is looked up here, at the moment of the pick, for the reason
+ * `handleElementSave` stores `iconPath` beside an Icon element's `iconId`
+ * (AGL-1212): a published page never loads the icon catalog, so an id alone
+ * draws the empty Icon placeholder. This is the one moment the catalog is
+ * certainly loaded — the picker needed it to offer the icon — and an
+ * untouched field is never parsed again, so no later edit can look the id up
+ * against a catalog that has not arrived.
+ */
+export function parseIconPropValue(
+  value: unknown,
+): Aglyn.ReusableComponentIcon | undefined {
+  if (typeof value !== 'string' || !value) return undefined
+  const iconPath = getMdiIconPath(value)
+  return iconPath ? { iconId: value, iconPath } : { iconId: value }
+}
+
+/**
  * One Attributes field per prop a reusable component declares (AGL-1247),
  * so the same hero can carry different copy on eleven pages instead of
  * being copied onto each.
@@ -388,7 +496,73 @@ export function buildInstancePropFields(
       }
       switch (prop.type) {
         case 'boolean':
-          return { ...base, component: FieldComponentType.CHECKBOX }
+          // Yes, No, or the component's default — three answers, which a
+          // checkbox cannot give. Unticked read as No on a page rendering a
+          // default of Yes, and once ticked the field had no way back to
+          // the default at all. The corner ✕ is that way back here.
+          return {
+            ...base,
+            component: FieldComponentType.SELECT,
+            options: [
+              { value: 'true', label: 'Yes' },
+              { value: 'false', label: 'No' },
+            ],
+            placeholder: `Use the component default (${
+              readYesNoValue(prop.defaultValue) === true ? 'Yes' : 'No'
+            })`,
+            description: undefined,
+            clearable: true,
+            FieldProps: {
+              format: formatYesNoPropValue,
+              parse: parseYesNoPropValue,
+            },
+          }
+        case 'choice': {
+          // The component's own answers, by label. Unset is the default
+          // again, the way it is for a Yes / no: the placeholder names it and
+          // the corner ✕ returns to it.
+          const choices = (prop.options ?? [])
+            .filter((option) => option?.value)
+            .map((option) => ({
+              value: option.value,
+              label: option.label || option.value,
+            }))
+          const fallback = choices.find(
+            (option) => option.value === prop.defaultValue,
+          )
+          return {
+            ...base,
+            component: FieldComponentType.SELECT,
+            options: choices,
+            placeholder: fallback
+              ? `Use the component default (${fallback.label})`
+              : 'Not set',
+            description: undefined,
+            clearable: true,
+          }
+        }
+        case 'icon':
+          // The picker the Icon element uses, storing the pick with its path
+          // (see `parseIconPropValue`). An icon has no placeholder to show,
+          // so what unset means is said in the help tip, and the corner ✕
+          // is the way back to it.
+          return {
+            ...base,
+            component: FieldComponentType.ICON_PICKER,
+            placeholder: undefined,
+            description: undefined,
+            help: {
+              title: base.label,
+              excerpt: prop.defaultValue
+                ? "Leave it unset to show the component's default icon."
+                : 'Leave it unset to show no icon.',
+            },
+            clearable: true,
+            FieldProps: {
+              format: formatIconPropValue,
+              parse: parseIconPropValue,
+            },
+          }
         case 'number':
           return {
             ...base,
@@ -1167,6 +1341,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
      */
     const hasFormattedText = isFormattedText(node)
 
+    // The props of the component being edited, set ONLY inside a component
+    // editor — the same "am I editing a definition" signal the insert picker
+    // keys `{{prop.*}}` off. It decides whether a field with no text box can
+    // be bound to a property, and whether the visibility directives below
+    // are offered.
+    const { componentProps: editedComponentProps } =
+      useContext(BindingPickerContext)
+
     const attributes = useMemo(() => {
       // Every described attribute gets a help tooltip beside the field
       // (AGL-600) — the definition's own description, no docs link since
@@ -1334,21 +1516,40 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           }
         }
         return field
-      }).filter((field) => {
-        // Unknown editor types must degrade to a skipped attribute, never
-        // kill the whole form: the renderer throws on unregistered
-        // components, which blanked the email designer's attributes panel
-        // when COLOR_PICKER wasn't mapped (AGL-584).
-        const known = (field.component as string) in elementPropsComponentMapper
-        if (!known && process.env.NODE_ENV !== 'production') {
-          console.warn(
-            `[ElementPropsForm] attribute "${field.name}" uses unregistered ` +
-              `editor "${field.component}" — skipped; register it in ` +
-              'elementPropsComponentMapper.',
-          )
-        }
-        return known
       })
+        .map((field, index) =>
+          // One field in, one out, so `index` still names the attribute as
+          // the schema DECLARED it. The rewrites above change `component` —
+          // a Screen picker is a plain select by now — and what a field can
+          // be bound to follows what it holds, not how it is drawn.
+          withPropertyBinding(field, {
+            declaredComponent: rawAttributes?.[index]?.component,
+            componentProps: editedComponentProps,
+            control: (
+              elementPropsComponentMapper as Record<
+                string,
+                PropertyBindingControl
+              >
+            )[field.component as string],
+            tokenLabelContext,
+          }),
+        )
+        .filter((field) => {
+          // Unknown editor types must degrade to a skipped attribute, never
+          // kill the whole form: the renderer throws on unregistered
+          // components, which blanked the email designer's attributes panel
+          // when COLOR_PICKER wasn't mapped (AGL-584).
+          const known =
+            (field.component as string) in elementPropsComponentMapper
+          if (!known && process.env.NODE_ENV !== 'production') {
+            console.warn(
+              `[ElementPropsForm] attribute "${field.name}" uses unregistered ` +
+                `editor "${field.component}" — skipped; register it in ` +
+                'elementPropsComponentMapper.',
+            )
+          }
+          return known
+        })
     }, [
       hasFormattedText,
       rawAttributes,
@@ -1368,6 +1569,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       ancestorDatasetId,
       insertOptions,
       tokenLabelContext,
+      editedComponentProps,
     ])
 
     // Reusable-component flows (AGL-35): actions appear only when the host
@@ -1398,8 +1600,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // Visibility directives (AGL-1314), inside a component editor only —
     // `componentProps` is the same "am I editing a definition" signal the
     // insert picker keys `{{prop.*}}` off.
-    const { componentProps: editedComponentProps } =
-      useContext(BindingPickerContext)
     const visibilityFields = useMemo(
       () =>
         editedComponentProps
@@ -1760,23 +1960,16 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           }
           normalized[REUSABLE_INSTANCE_PROP_VALUES_KEY] = nextOverrides
         }
-        // Denormalize each picked icon's SVG path next to its id (AGL-1212).
-        // The catalog is ~2.9 MB and only picker surfaces load it, so a render
-        // surface that had to look the id up got `DEFAULT_ICON` — a real path,
-        // so every published icon painted a "help" glyph. Resolving here means
-        // the id stays the source of truth while the path travels with the
-        // document. This runs where the picker already loaded the catalog; a
-        // miss writes `undefined` and leaves the renderer's own fallback.
-        for (const attribute of node?.componentSchema?.attributes ?? []) {
-          if (attribute.component !== FieldComponentType.ICON_PICKER) {
-            continue
-          }
-          const pathProp = iconPathPropName(attribute.name)
-          if (pathProp === attribute.name) continue
-          const pickedId = normalized[attribute.name]
-          normalized[pathProp] =
-            typeof pickedId === 'string' ? getMdiIconPath(pickedId) : undefined
-        }
+        // Denormalize each picked icon's SVG path next to its id (AGL-1212) —
+        // see `iconPathsForSave` for why a miss does not always clear it.
+        Object.assign(
+          normalized,
+          iconPathsForSave(
+            node?.componentSchema?.attributes,
+            normalized,
+            node?.props as Record<string, unknown> | undefined,
+          ),
+        )
         canvas.updateNodeProps(node, normalized)
       },
       [node, bindingVariables, bindingFunctions, numericFieldNames],

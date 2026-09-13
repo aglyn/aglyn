@@ -31,6 +31,7 @@ import {
   isClientStepEntitled,
   isInteractionAttributeAllowed,
   planLabelGrantingFeature,
+  SCROLL_TO_MAX_OFFSET_PX,
   validateHostAction,
 } from '@aglyn/aglyn'
 // The analytics module is not on the `@aglyn/aglyn` barrel — it is imported by
@@ -130,6 +131,10 @@ const STEP_TYPES: Array<{ value: string; label: string }> = [
   // a show/hide step, these are what let a menu announce itself.
   { value: 'setAttribute', label: 'Set an ARIA or data attribute' },
   { value: 'removeAttribute', label: 'Remove an ARIA or data attribute' },
+  // One-target steps (AGL-2867), picked like every target above: the author
+  // clicks the element, and never invents an id to link to.
+  { value: 'scrollTo', label: 'Scroll to element' },
+  { value: 'playVideo', label: 'Play a video' },
   { value: 'siteAlert', label: 'Show a message' },
   { value: 'runWorkflow', label: 'Run a workflow' },
   { value: 'showOverlay', label: 'Open an overlay' },
@@ -570,6 +575,47 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
       ),
     [elementTargetOptions],
   )
+  // Video targets (AGL-2867): what a "Play a video" step can press.
+  const videoTargetOptions = useMemo(
+    () =>
+      elementTargetOptions.filter((option) => option.componentId === 'video'),
+    [elementTargetOptions],
+  )
+  /**
+   * Where a new "Play a video" step starts: the target it already has when
+   * that is a Video, the one Video on this canvas when there is exactly one,
+   * and otherwise the target as it was — with the notice below saying why it
+   * will not play. Guessing between two videos would be a pick the author did
+   * not make.
+   */
+  const startingVideoSelector = (current: string): string => {
+    const nodeId = LEAF_SELECTOR_RE.exec(current)?.[1]
+    if (nodeId && canvasNodes[nodeId]?.componentId === 'video') return current
+    return videoTargetOptions.length === 1
+      ? videoTargetOptions[0].value
+      : current
+  }
+  /**
+   * Why a "Play a video" step will do nothing, when this canvas can tell: its
+   * target is an element here that is not a Video. A custom selector, or an
+   * element this canvas does not hold, is not second-guessed.
+   */
+  const playVideoTargetNotice = (current: string): string | null => {
+    const nodeId = LEAF_SELECTOR_RE.exec(current)?.[1]
+    const node = nodeId ? canvasNodes[nodeId] : undefined
+    if (!node || node.componentId === 'video') return null
+    const name =
+      components.getSchema(node.componentId)?.displayName ??
+      node.componentId ??
+      'This element'
+    return (
+      `${name} is not a Video, so this step has nothing to play. Pick the ` +
+      'Video element it should play.' +
+      (videoTargetOptions.length
+        ? ''
+        : ' There is no Video on this screen yet — add one from the Media group.')
+    )
+  }
 
   const problem = validateHostAction(candidate as any)
 
@@ -872,6 +918,9 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     // them; carrying them onto another step type would ship
                     // a payload nothing reads.
                     params: undefined,
+                    // How a scroll moves belongs to the scroll step alone.
+                    behavior: undefined,
+                    offsetPx: undefined,
                     // Drawer commands (AGL-572) default to this element
                     // when it is itself a drawer, mirroring the menu
                     // default below; anything else broadcasts to the
@@ -898,7 +947,10 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                       )
                         ? state.nodeId
                         : undefined,
-                    selector: step.selector ?? selector,
+                    selector:
+                      nextType === 'playVideo'
+                        ? startingVideoSelector(String(step.selector ?? selector))
+                        : (step.selector ?? selector),
                   })
                 }}
                 size="small"
@@ -1256,6 +1308,8 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
               // layout. A bespoke targeting field would inherit neither.
               'setAttribute',
               'removeAttribute',
+              'scrollTo',
+              'playVideo',
             ].includes(step.type) ? (
               <TargetPicker
                 selector={String(step.selector ?? selector)}
@@ -1266,7 +1320,11 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                       updateStep(index, {
                         selector: nodeElementSelector(nodeId),
                       }),
-                    'Click an element on the canvas to target it',
+                    step.type === 'scrollTo'
+                      ? 'Click the element on the canvas to scroll to'
+                      : step.type === 'playVideo'
+                        ? 'Click the Video element on the canvas to play'
+                        : 'Click an element on the canvas to target it',
                   )
                 }
                 onSelectorChange={(value) =>
@@ -1274,6 +1332,63 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                 }
               />
             ) : null}
+            {step.type === 'scrollTo' ? (
+              // How the page moves (AGL-2867). A visitor who asks for reduced
+              // motion is scrolled instantly whatever is chosen here.
+              <Stack
+                direction="row"
+                spacing={2}
+                sx={{ alignItems: 'flex-start', flexWrap: 'wrap', pl: 0.5 }}
+              >
+                <TextField
+                  label="Scroll"
+                  select
+                  size="small"
+                  value={step.behavior === 'instant' ? 'instant' : 'smooth'}
+                  onChange={(inputEvent) =>
+                    updateStep(index, {
+                      behavior:
+                        inputEvent.target.value === 'instant'
+                          ? 'instant'
+                          : undefined,
+                    })
+                  }
+                  sx={{ width: 150 }}
+                  helperText="Always instant for visitors who ask for less motion"
+                >
+                  <MenuItem value="smooth">{'Smoothly'}</MenuItem>
+                  <MenuItem value="instant">{'Instantly'}</MenuItem>
+                </TextField>
+                <TextField
+                  label="Offset (px)"
+                  type="number"
+                  size="small"
+                  value={step.offsetPx ?? ''}
+                  onChange={(inputEvent) => {
+                    const raw = inputEvent.target.value
+                    updateStep(index, {
+                      offsetPx: raw === '' ? undefined : Number(raw),
+                    })
+                  }}
+                  slotProps={{
+                    htmlInput: { min: 0, max: SCROLL_TO_MAX_OFFSET_PX, step: 4 },
+                  }}
+                  sx={{ width: 150 }}
+                  placeholder="0"
+                  helperText="Room left above it for a sticky header"
+                />
+              </Stack>
+            ) : null}
+            {step.type === 'playVideo'
+              ? (() => {
+                  const notice = playVideoTargetNotice(
+                    String(step.selector ?? selector),
+                  )
+                  return notice ? (
+                    <Alert severity="warning">{notice}</Alert>
+                  ) : null
+                })()
+              : null}
             {['showElement', 'hideElement', 'toggleElement'].includes(
               step.type,
             ) ? (

@@ -84,7 +84,9 @@ This is what stops a hero from being rebuilt on every page. Only the words diffe
 | Image | Image picker |
 | Link | Screen picker (screens and collection listings), or an external URL |
 | Number | Number |
-| Yes / no | Toggle |
+| Yes / no | **Yes** or **No**, or left to the component's default |
+| Choice | A dropdown of the answers you give the property |
+| Icon | Icon picker |
 
 A **Link** property is a screen picker at both ends — in the dialog's **Default** column and
 in each instance's Attributes panel — exactly like a Button's own **Link to screen** field.
@@ -97,6 +99,13 @@ neither; a typed address is used verbatim and does not follow a rename.
 Link properties written before the picker existed hold a typed address. They keep working
 unchanged — but they are still typed addresses, so pick the screen again if you want them to
 survive a rename.
+
+A **Choice** property lists its answers under its row: **Add choice**, then give each one a
+**Label**, which is what a page picks, and a **Value**, which is what the field bound to the
+property receives. Bound to a dropdown, the values must be ones that dropdown offers; the
+Attributes panel lists them if one is missing. Pick the **Default** from the answers.
+
+An **Icon** property's default is picked with the icon picker under its row.
 
 Property names must start with a letter or underscore and contain only letters, numbers and
 underscores. A dot is rejected: the Attributes panel names its field for the storage path
@@ -119,16 +128,33 @@ typing the token.
 A Link property can be bound into either of a linking element's two fields — **Link to
 screen** or **External URL** — and resolves the same way in both.
 
+Fields you do not type into have a `{}` too, beside their help icon, and it lists only the
+properties that can drive that field:
+
+| Field | Properties offered |
+| -- | -- |
+| Switch or checkbox | Yes / no |
+| Dropdown | Choice |
+| Screen picker | Link |
+| Icon picker | Icon |
+
+Bind a Video's **Open in a lightbox** to a Yes / no property, and each page decides whether
+its film opens in a lightbox or plays in place; bind a Screen Link's **Screen** to a Link
+property, and each page picks where it goes. A bound field shows the property's name where
+the control was; click it to pick a different property or remove the binding.
+
 ### Save, then publish
 
-**Saving properties is not publishing them.** A save writes the working version; live pages
-read the published component.
+**Saving is not publishing.** Live pages read the published component.
 
 1. **Save properties** — the dialog confirms *"Properties saved. Publish to make them
    available on live pages."*
-2. **File ▸ Publish to sites** (labeled **Publish again** when the version you have open
-   is already the published one) — *"Published. Every screen using this component is
-   refreshing now — you do not need to republish them."*
+2. **Save draft**, in the toolbar or the File menu, keeps canvas work unpublished. On the
+   published version it is a draft stored with the site, offered to whoever opens the
+   component next with **Open draft** and **Discard**.
+3. **Save & publish**, in the toolbar's save menu or the File menu — *"Published. Every
+   screen using this component is refreshing now — you do not need to republish them."*
+   If a saved draft is on offer, open or discard it first.
 
 Publishing the component is enough. You do not republish the pages that use it.
 
@@ -142,7 +168,9 @@ The component's default shows as the field's **placeholder**, with the exact def
 spelled out underneath. Leave a field empty and that default is what renders — so clearing
 a field restores the component's own copy rather than collapsing the section to nothing.
 
-An empty field counts as unset. `0` and **no** are real values and survive.
+An empty field counts as unset. `0` and **no** are real values and survive. A Yes / no field
+offers **Yes** and **No**, a Choice field offers the property's answers, and an Icon field
+is the icon picker; the ✕ on any of them hands the decision back to the component's default.
 
 ### Restyle one instance
 

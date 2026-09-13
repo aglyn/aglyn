@@ -47,7 +47,6 @@ import {
 import {
   ICON_VARIANT_MODIFY_ADD,
   ICON_VARIANT_MODIFY_SAVE,
-  ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
@@ -209,6 +208,17 @@ function FormBesignerPage() {
    * before promoting.
    */
   const savedLandedRef = useRef(false)
+  /**
+   * Was the last save REFUSED, as opposed to having nothing to do? (AGL-2877)
+   *
+   * `savedLandedRef` staying false cannot tell the two apart, and they need
+   * opposite handling: nothing-to-save promotes, a refusal must not. Nor can
+   * `remoteChanged`, which is React state and still false in this tick for a
+   * conflict the save itself discovered — without this, a stale-baseline
+   * refusal is followed by writing this canvas onto the form every page that
+   * places it renders.
+   */
+  const saveRefusedRef = useRef(false)
 
   /**
    * Has this version been SAVED since it was last promoted? (AGL-1152)
@@ -323,6 +333,7 @@ function FormBesignerPage() {
     draft,
     handleSave,
     saveWorkingDraft,
+    refuseOverUnopenedDraft,
     hasError,
     notFound,
   } = useBesignerDocument({
@@ -361,6 +372,11 @@ function FormBesignerPage() {
         ? undefined
         : 'Form saved to this version. Publish it to update the live pages.',
     queueLoading,
+    // The refusal half of `onSaved`: together they let `handleSaveAndPublish`
+    // tell a document that needs no save from one that could not be saved.
+    onSaveRefused: () => {
+      saveRefusedRef.current = true
+    },
     // A definition's root is the promoted node, not the canvas root, so it
     // has to be wrapped or the canvas has no root and renders nothing
     // (AGL-680).
@@ -512,6 +528,8 @@ function FormBesignerPage() {
    * Saves the working draft rather than the form the sites are serving.
    */
   const handleSaveDraft = useCallback(async () => {
+    // A saved draft on offer is replaced by the next draft save (AGL-2874).
+    if (refuseOverUnopenedDraft('save')) return
     const wrote = await saveWorkingDraft({
       uid: user?.uid,
       email: user?.email,
@@ -528,7 +546,7 @@ function FormBesignerPage() {
     // the one time it matters (AGL-1262) — so the answer has to come from
     // the click.
     if (wrote === 'unchanged') {
-      enqueueSnackbar('Already saved — the draft is up to date.', {
+      enqueueSnackbar('Already saved — nothing new to save.', {
         variant: 'info',
         persist: false,
       })
@@ -539,7 +557,18 @@ function FormBesignerPage() {
       variant: 'success',
       persist: false,
     })
-  }, [saveWorkingDraft, user, enqueueSnackbar])
+  }, [refuseOverUnopenedDraft, saveWorkingDraft, user, enqueueSnackbar])
+
+  /**
+   * SAVE DRAFT — one action, wherever it is reached from (AGL-2868).
+   *
+   * The toolbar and File ▸ Save draft both call this: the shared working
+   * draft on the version the sites are serving, the version itself anywhere
+   * else. Two controls under one name must never write two different
+   * documents — whichever one an author checks afterwards has to be the one
+   * the other control wrote.
+   */
+  const saveDraft = editingLiveVersion ? handleSaveDraft : handleSave
 
   /**
    * Do the live sites already match this version?
@@ -557,8 +586,16 @@ function FormBesignerPage() {
 
   const handleSaveAndPublish = useCallback(async () => {
     if (publishing) return
+    // Publishing a canvas that never took in the saved draft on offer would
+    // push the stored design live and then clear the draft as published
+    // (AGL-2874).
+    if (refuseOverUnopenedDraft('publish')) return
     savedLandedRef.current = false
+    saveRefusedRef.current = false
     await handleSave()
+    // A REFUSED save stops here, before anything is promoted, revalidated or
+    // cleared (AGL-2877). The refusal has already said why.
+    if (saveRefusedRef.current) return
     /**
      * A save that did not write is not a reason to stop (AGL-1483).
      *
@@ -593,21 +630,28 @@ function FormBesignerPage() {
       if (remoteChanged) return
     }
     await promoteToSites()
-    void clearServerDraft(firestore, {
-      scope: hostId,
-      kind: 'form',
-      docId: formId,
-      versionId,
-    })
+    // Only a draft this canvas took in is published by this; one withheld
+    // from a shared room and never opened is still somebody's unpublished
+    // work (AGL-2874).
+    if (!draft.sharedDraftUnopened) {
+      void clearServerDraft(firestore, {
+        scope: hostId,
+        kind: 'form',
+        docId: formId,
+        versionId,
+      })
+    }
     setDraftPending(false)
   }, [
     publishing,
+    refuseOverUnopenedDraft,
     handleSave,
     promoteToSites,
     livePublished,
     remoteChanged,
     enqueueSnackbar,
     firestore,
+    draft.sharedDraftUnopened,
     user,
     hostId,
     formId,
@@ -705,14 +749,14 @@ function FormBesignerPage() {
                         children: 'File',
                         items: [
                           {
+                            // Named for the action, never for the canvas's
+                            // state: an entry reading "Up to Date" is not one
+                            // anybody recognizes as the way to save. A click
+                            // with nothing to store still answers.
                             id: 'center-nav-file-save',
-                            icon: saveAvailable
-                              ? { path: ICON_VARIANT_MODIFY_SAVE.path }
-                              : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
-                            children: saveAvailable
-                              ? 'Save draft'
-                              : 'Up to Date',
-                            onClick: handleSave,
+                            icon: { path: ICON_VARIANT_MODIFY_SAVE.path },
+                            children: 'Save draft',
+                            onClick: saveDraft,
                           },
                           {
                             id: 'center-nav-file-save-publish',
@@ -802,9 +846,7 @@ function FormBesignerPage() {
                           onPreview={handlePreview}
                           detailsUrl={detailsUrl}
                           presence={<PresenceAvatars presence={presence} />}
-                          onSave={
-                            editingLiveVersion ? handleSaveDraft : handleSave
-                          }
+                          onSave={saveDraft}
                           onSaveAndPublish={handleSaveAndPublish}
                           // A form is live only once its tree has been
                           // promoted onto the PARENT document — the pointer

@@ -1,0 +1,353 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * A COMPONENT PROPERTY DRIVES A NON-TEXT FIELD, ON THE PUBLISHED PAGE
+ * (AGL-2871).
+ *
+ * Inside a reusable component a field with no text box can be bound to one of
+ * the component's properties, and each page that places the component sets
+ * the value. The graft is unit-tested beside itself;
+ * what only this can see is the rest of the tenant pipeline running after it —
+ * repeatables, bindings, host tokens, denormalizing — any stage of which could
+ * turn a real `false` back into text or drop the value on the floor before the
+ * element reads it.
+ *
+ * So the fixtures run through `composeNodesWithChrome`, the function every
+ * published page is composed by, with only its reads stubbed.
+ */
+
+const mockGetPublishedLayoutVersion = jest.fn()
+const mockGetComponents = jest.fn()
+const mockGetVariables = jest.fn()
+const mockGetFunctions = jest.fn()
+const mockGetDatasets = jest.fn()
+const mockGetWorkflows = jest.fn()
+const mockGetPluginInstalls = jest.fn()
+const mockGetForms = jest.fn()
+
+jest.mock('./get-layout-version', () => ({
+  __esModule: true,
+  default: (...a: unknown[]) => mockGetPublishedLayoutVersion(...a),
+}))
+jest.mock('./get-components', () => ({
+  __esModule: true,
+  default: (...a: unknown[]) => mockGetComponents(...a),
+}))
+jest.mock('./get-forms', () => ({
+  __esModule: true,
+  default: (...a: unknown[]) => mockGetForms(...a),
+}))
+jest.mock('./get-datasets', () => ({
+  __esModule: true,
+  default: (...a: unknown[]) => mockGetDatasets(...a),
+}))
+jest.mock('./get-plugin-installs', () => ({
+  __esModule: true,
+  default: (...a: unknown[]) => mockGetPluginInstalls(...a),
+}))
+jest.mock('./get-variables', () => ({
+  __esModule: true,
+  default: (...a: unknown[]) => mockGetVariables(...a),
+  getFunctions: (...a: unknown[]) => mockGetFunctions(...a),
+  getWorkflows: (...a: unknown[]) => mockGetWorkflows(...a),
+}))
+jest.mock('./get-collection-content', () => ({
+  __esModule: true,
+  getPublishedCollectionSource: jest.fn(),
+}))
+jest.mock('./apply-publish-schedule', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}))
+jest.mock('./get-screen-version', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}))
+
+import { composeNodesWithChrome } from './compose-screen-nodes'
+
+const ROOT = '_@_'
+
+/**
+ * The marketing hero film: its player opens in a lightbox or plays in place,
+ * and shows or hides the browser controls, per placement.
+ */
+const HERO_FILM = {
+  rootId: 'f-root',
+  nodes: {
+    'f-root': { $id: 'f-root', componentId: 'muiStack', nodes: ['f-video'] },
+    'f-video': {
+      $id: 'f-video',
+      componentId: 'video',
+      parentId: 'f-root',
+      props: {
+        src: 'https://cdn.example.com/hero.mp4',
+        poster: 'https://cdn.example.com/hero.jpg',
+        lightbox: '{{prop.playInLightbox}}',
+        controls: '{{prop.showControls}}',
+      },
+    },
+  },
+  props: [
+    { name: 'playInLightbox', type: 'boolean', label: 'Play in a lightbox' },
+    { name: 'showControls', type: 'boolean', defaultValue: 'true' },
+  ],
+}
+
+/** A page placing the film once, with whatever this page chose. */
+const pagePlacingFilm = (propValues?: Record<string, unknown>) => ({
+  [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['hero'] },
+  hero: {
+    $id: 'hero',
+    componentId: 'reusableInstance',
+    parentId: ROOT,
+    props: { refId: 'heroFilm', ...(propValues ? { propValues } : {}) },
+    nodes: [],
+  },
+})
+
+const compose = (screenNodes: Record<string, unknown>) =>
+  composeNodesWithChrome({ hostId: 'h1', screenNodes: screenNodes as never })
+
+/** The film's player as the page ships it. */
+const video = (nodes: Record<string, any>) => nodes['cmp__hero__f-video']
+
+describe('component properties driving non-text fields on the published page', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetPublishedLayoutVersion.mockResolvedValue({
+      version: { nodes: {} },
+      layout: {},
+    })
+    mockGetComponents.mockResolvedValue({
+      definitions: { heroFilm: HERO_FILM },
+    })
+    mockGetVariables.mockResolvedValue([])
+    mockGetFunctions.mockResolvedValue([])
+    mockGetDatasets.mockResolvedValue([])
+    mockGetWorkflows.mockResolvedValue([])
+    mockGetPluginInstalls.mockResolvedValue([])
+    mockGetForms.mockResolvedValue({ forms: {} })
+  })
+
+  describe('a switch bound to a Yes / no property', () => {
+    it('reaches the element as a real boolean, whichever way the page set it', async () => {
+      const lightbox = video(await compose(pagePlacingFilm({ playInLightbox: true })))
+      expect(lightbox.props.lightbox).toBe(true)
+
+      // The string a checkbox round-tripped through text can arrive as. As a
+      // string it is non-empty, which the player would read as "open in a
+      // lightbox".
+      const inPlace = video(
+        await compose(pagePlacingFilm({ playInLightbox: 'false' })),
+      )
+      expect(inPlace.props.lightbox).toBe(false)
+    })
+
+    it("uses the property's default where the page chose nothing", async () => {
+      const unset = video(await compose(pagePlacingFilm()))
+      expect(unset.props.controls).toBe(true)
+      // No default declared: a Yes / no nobody set is a no.
+      expect(unset.props.lightbox).toBe(false)
+
+      const hidden = video(
+        await compose(pagePlacingFilm({ showControls: false })),
+      )
+      expect(hidden.props.controls).toBe(false)
+    })
+
+    it('keeps every value the component set for itself', async () => {
+      const shipped = video(await compose(pagePlacingFilm({ playInLightbox: true })))
+      expect(shipped.props).toMatchObject({
+        src: 'https://cdn.example.com/hero.mp4',
+        poster: 'https://cdn.example.com/hero.jpg',
+      })
+    })
+  })
+
+  describe('a dropdown bound to a Choice, and a Screen picker bound to a Link', () => {
+    /** The marketing card's "See …" link: its style and target per page. */
+    const CARD = {
+      rootId: 'c-root',
+      nodes: {
+        'c-root': { $id: 'c-root', componentId: 'muiStack', nodes: ['c-more'] },
+        'c-more': {
+          $id: 'c-more',
+          componentId: 'muiScreenLink',
+          parentId: 'c-root',
+          props: {
+            children: 'See {{prop.subject}}',
+            screenId: '{{prop.moreLink}}',
+            variant: '{{prop.linkStyle}}',
+          },
+        },
+      },
+      props: [
+        { name: 'subject', type: 'text', defaultValue: 'more' },
+        { name: 'moreLink', type: 'href', defaultValue: 'screen:products' },
+        {
+          name: 'linkStyle',
+          type: 'choice',
+          options: [
+            { value: 'text', label: 'Plain' },
+            { value: 'outlined', label: 'Outlined' },
+          ],
+        },
+      ],
+    }
+
+    const pagePlacingCard = (propValues?: Record<string, unknown>) => ({
+      [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['card'] },
+      card: {
+        $id: 'card',
+        componentId: 'reusableInstance',
+        parentId: ROOT,
+        props: { refId: 'card', ...(propValues ? { propValues } : {}) },
+        nodes: [],
+      },
+    })
+
+    const link = (nodes: Record<string, any>) => nodes['cmp__card__c-more']
+
+    beforeEach(() => {
+      mockGetComponents.mockResolvedValue({ definitions: { card: CARD } })
+    })
+
+    it('ships the style and the target the page chose', async () => {
+      const shipped = link(
+        await compose(
+          pagePlacingCard({
+            subject: 'pricing',
+            moreLink: 'screen:pricing',
+            linkStyle: 'outlined',
+          }),
+        ),
+      )
+      expect(shipped.props).toMatchObject({
+        children: 'See pricing',
+        screenId: 'screen:pricing',
+        variant: 'outlined',
+      })
+    })
+
+    it('ships the element its own style when no page and no default chose one', async () => {
+      const shipped = link(await compose(pagePlacingCard()))
+      // `variant: ''` would reach the button as no style at all.
+      expect('variant' in shipped.props).toBe(false)
+      expect(shipped.props.screenId).toBe('screen:products')
+    })
+  })
+
+  describe('an icon picker bound to an Icon property', () => {
+    const DATASETS_ICON = {
+      iconId: 'mdiDatabase',
+      iconPath: 'M12,3C7.58,3 4,4.79 4,7C4,9.21 7.58,11 12,11',
+    }
+    const CRM_ICON = {
+      iconId: 'mdiAccountGroup',
+      iconPath: 'M12,5.5A3.5,3.5 0 0,1 15.5,9',
+    }
+
+    /** The marketing card's icon chip. */
+    const CHIP_CARD = {
+      rootId: 'i-root',
+      nodes: {
+        'i-root': { $id: 'i-root', componentId: 'muiStack', nodes: ['i-chip'] },
+        'i-chip': {
+          $id: 'i-chip',
+          componentId: 'icon',
+          parentId: 'i-root',
+          props: { iconId: '{{prop.productIcon}}', size: 28 },
+        },
+      },
+      props: [
+        {
+          name: 'productIcon',
+          type: 'icon',
+          defaultValue: DATASETS_ICON.iconId,
+          defaultIconPath: DATASETS_ICON.iconPath,
+        },
+      ],
+    }
+
+    const pagePlacingChip = (propValues?: Record<string, unknown>) => ({
+      [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['chipCard'] },
+      chipCard: {
+        $id: 'chipCard',
+        componentId: 'reusableInstance',
+        parentId: ROOT,
+        props: { refId: 'chipCard', ...(propValues ? { propValues } : {}) },
+        nodes: [],
+      },
+    })
+
+    const chip = (nodes: Record<string, any>) => nodes['cmp__chipCard__i-chip']
+
+    beforeEach(() => {
+      mockGetComponents.mockResolvedValue({
+        definitions: { chipCard: CHIP_CARD },
+      })
+    })
+
+    it("ships the page's icon with the path the page picked it with", async () => {
+      // The path is the half a published page can draw: the catalog it would
+      // take to look the id up is never loaded here.
+      const shipped = chip(
+        await compose(pagePlacingChip({ productIcon: CRM_ICON })),
+      )
+      expect(shipped.props).toMatchObject({ ...CRM_ICON, size: 28 })
+    })
+
+    it("ships the property's default icon, path and all, where the page picked none", async () => {
+      const shipped = chip(await compose(pagePlacingChip()))
+      expect(shipped.props).toMatchObject(DATASETS_ICON)
+    })
+
+    /**
+     * A Number property bound into the icon's size (AGL-2880). As the text
+     * `'40'` MUI would compile `font-size: 40`, which no browser applies.
+     */
+    it('ships a size bound to a Number property as a number', async () => {
+      mockGetComponents.mockResolvedValue({
+        definitions: {
+          chipCard: {
+            ...CHIP_CARD,
+            nodes: {
+              ...CHIP_CARD.nodes,
+              'i-chip': {
+                ...CHIP_CARD.nodes['i-chip'],
+                props: {
+                  iconId: '{{prop.productIcon}}',
+                  size: '{{prop.chipSize}}',
+                },
+              },
+            },
+            props: [
+              ...CHIP_CARD.props,
+              { name: 'chipSize', type: 'number', defaultValue: '28' },
+            ],
+          },
+        },
+      })
+      expect(chip(await compose(pagePlacingChip())).props.size).toBe(28)
+      expect(
+        chip(await compose(pagePlacingChip({ chipSize: 40 }))).props.size,
+      ).toBe(40)
+    })
+  })
+})

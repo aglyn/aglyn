@@ -31,6 +31,12 @@ import {
   splitLinkValue,
   unresolvedScreenOption,
 } from './screen-link-context'
+import {
+  bareFragmentLinkFieldProps,
+  bareFragmentLinkWarning,
+  bareFragmentOfLinkValue,
+  SAFE_HREF_PATTERN,
+} from './screen-link-value'
 
 const SCREENS = {
   home: '/',
@@ -464,5 +470,57 @@ describe('a collection listing as a link target (AGL-2799)', () => {
     it('offers nothing before a map has arrived', () => {
       expect(screenLinkTargetOptions(undefined, LABELS)).toEqual([])
     })
+  })
+})
+
+/**
+ * A link field holding only `#fragment` (AGL-2867). The value is SAFE — it
+ * passes the href guard and renders an anchor — which is exactly why it saves
+ * without complaint and then goes nowhere on the published page.
+ */
+describe('a bare fragment in a link field (AGL-2867)', () => {
+  it('is a value the href guard lets through, so nothing else would say anything', () => {
+    expect(SAFE_HREF_PATTERN.test('#watch')).toBe(true)
+  })
+
+  it('names the id a bare fragment jumps to', () => {
+    expect(bareFragmentOfLinkValue('#watch')).toBe('watch')
+    expect(bareFragmentOfLinkValue('  #watch-the-demo ')).toBe('watch-the-demo')
+  })
+
+  it('leaves alone every value that is not that trap', () => {
+    for (const value of [
+      '',
+      '#',
+      // Scrolls to the top of the page with no element needed, in any case.
+      '#top',
+      '#TOP',
+      // Not known until the page renders.
+      '#{{prop.anchor}}',
+      '/pricing',
+      '/pricing#faq',
+      'https://example.com/#watch',
+      'screen:abc',
+      undefined,
+      42,
+    ]) {
+      expect(bareFragmentOfLinkValue(value)).toBeUndefined()
+      expect(bareFragmentLinkWarning(value)).toBeUndefined()
+    }
+  })
+
+  it('points the author at the interaction that does what the fragment was for', () => {
+    const warning = bareFragmentLinkWarning('#watch') as string
+    expect(warning).toContain('#watch')
+    expect(warning).toContain('Scroll to element')
+  })
+
+  it('reaches the field as its helper text, from the live value', () => {
+    expect(bareFragmentLinkFieldProps({}, { input: { value: '#watch' } })).toEqual({
+      helperText: bareFragmentLinkWarning('#watch'),
+    })
+    // Nothing is returned otherwise, so the field's own description stays.
+    expect(bareFragmentLinkFieldProps({}, { input: { value: '/pricing' } })).toEqual({})
+    expect(bareFragmentLinkFieldProps({}, {})).toEqual({})
   })
 })

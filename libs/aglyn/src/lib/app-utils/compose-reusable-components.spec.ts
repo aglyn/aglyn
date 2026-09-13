@@ -16,6 +16,8 @@
  */
 
 import {
+  buildComponentDefaultIconPaths,
+  buildComponentDefaultTokens,
   collectReferencedComponentIds,
   composeReusableComponentNodes,
   detachInstanceSubtree,
@@ -29,7 +31,10 @@ import {
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
   nodesReferenceComponent,
+  readInstanceIconValue,
+  readYesNoValue,
   replaceSubtreeWithInstance,
+  resolveComponentPropTokens,
   resolveInstanceIconPath,
   resolveInstanceLeafBinding,
   REUSABLE_INSTANCE_COMPONENT_ID,
@@ -208,6 +213,130 @@ describe('interactions across the merge (AGL-2521)', () => {
       { menu: bare },
     )
     expect('interactions' in (composed['a'] as any)).toBe(false)
+  })
+})
+
+/**
+ * The hierarchy eye across the merge (AGL-2873).
+ *
+ * The eye stores `hidden: true` on the node an author clicked, and `Leaf`
+ * renders a hidden node as `display: none`. On a placement that node is the
+ * instance, and the instance is gone from the composed map once the root takes
+ * its place, so the flag has to move onto the root or the published page shows
+ * what the canvas hides.
+ */
+describe('the hierarchy eye across the merge (AGL-2873)', () => {
+  const definition = (root: Record<string, unknown> = {}) =>
+    ({
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'section', nodes: ['label'], ...root },
+        label: { $id: 'label', componentId: 'muiTypography', parentId: 'root' },
+      },
+    }) as any
+
+  const compose = (
+    placement: Record<string, unknown>,
+    root?: Record<string, unknown>,
+  ) =>
+    composeReusableComponentNodes(
+      {
+        _root_: { $id: '_root_', componentId: 'div', nodes: ['a'] },
+        a: { ...instance('a', 'card'), ...placement },
+      } as any,
+      { card: definition(root) },
+    )
+
+  it('hides the element a hidden placement became', () => {
+    const composed = compose({ hidden: true })
+    expect(composed['a']).toMatchObject({ componentId: 'section', hidden: true })
+    // The children stay as authored: hiding the element takes them with it,
+    // and flagging each one would be a second copy of the same decision.
+    expect((composed['cmp__a__label'] as any).hidden).toBeUndefined()
+  })
+
+  it('keeps a root the component hid hidden under a placement that never touched its eye', () => {
+    expect((compose({}, { hidden: true })['a'] as any).hidden).toBe(true)
+  })
+
+  it('does not let a stored `false` on the placement show a root the component hid', () => {
+    // `false` and absent mean the same thing on a node, so only a hiding flag
+    // crosses the merge.
+    expect((compose({ hidden: false }, { hidden: true })['a'] as any).hidden).toBe(
+      true,
+    )
+  })
+
+  it('materializes no flag when neither side hid anything', () => {
+    expect('hidden' in (compose({})['a'] as any)).toBe(false)
+  })
+})
+
+/**
+ * Classes across the merge (AGL-2875).
+ *
+ * A class names the element for the site's stylesheet and for the runtime,
+ * and ⋮ ▸ Start hidden is one: it writes `aglyn-hidden` into the placement's
+ * `props.className`, which the published page hides from the first paint and
+ * the show/hide steps toggle. Both authors' names have to reach the element
+ * the placement became.
+ */
+describe('classes across the merge (AGL-2875)', () => {
+  const definition = (root: Record<string, unknown> = {}) =>
+    ({
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'section', nodes: [], ...root },
+      },
+    }) as any
+
+  const compose = (
+    placement: Record<string, unknown>,
+    root?: Record<string, unknown>,
+  ) =>
+    composeReusableComponentNodes(
+      {
+        a: {
+          ...instance('a', 'card'),
+          ...placement,
+          props: { refId: 'card', ...(placement['props'] as object) },
+        },
+      } as any,
+      { card: definition(root) },
+    )['a'] as any
+
+  it('carries Start hidden from the placement onto the element it became', () => {
+    expect(compose({ props: { className: 'aglyn-hidden' } }).props.className).toBe(
+      'aglyn-hidden',
+    )
+  })
+
+  it("joins the placement's classes after the component root's, each name once", () => {
+    const merged = compose(
+      { props: { className: 'promo-card  aglyn-hidden' } },
+      { props: { className: 'card promo-card' } },
+    )
+    expect(merged.props.className).toBe('card promo-card aglyn-hidden')
+  })
+
+  it('joins the node-level class list the same way', () => {
+    expect(
+      compose({ className: 'from-page' }, { className: 'from-component' })
+        .className,
+    ).toBe('from-component from-page')
+  })
+
+  it("keeps the component's own classes under a placement that set none", () => {
+    const merged = compose({}, { props: { className: 'card' }, className: 'x' })
+    expect(merged.props.className).toBe('card')
+    expect(merged.className).toBe('x')
+  })
+
+  it('materializes no class list when neither side has one', () => {
+    const merged = compose({})
+    expect('className' in merged).toBe(false)
+    // Nor a `props` bag to hold one: neither node had anything to put there.
+    expect(merged.props).toBeUndefined()
   })
 })
 
@@ -2691,5 +2820,642 @@ describe('placed forms render their entity (docs/specs/reusable-forms.md)', () =
     expect(
       Object.keys(composed).filter((id) => id.startsWith('cmp__inline-')),
     ).toEqual([])
+  })
+})
+
+describe('buildComponentDefaultTokens', () => {
+  it('maps each declared default onto its prop token', () => {
+    expect(
+      buildComponentDefaultTokens([
+        { name: 'headline', defaultValue: 'A canvas for the entire web presence.' },
+        { name: 'eyebrow', defaultValue: 'THE VISUAL WEB PLATFORM' },
+      ] as never),
+    ).toEqual({
+      'prop.headline': 'A canvas for the entire web presence.',
+      'prop.eyebrow': 'THE VISUAL WEB PLATFORM',
+    })
+  })
+
+  it('withholds a prop that has no default, so its token stays visible', () => {
+    // The component editor draws with this map. A prop nobody has given a
+    // default is a slot still to be decided, and an empty string would paint
+    // the component as if it were finished.
+    expect(
+      buildComponentDefaultTokens([
+        { name: 'headline', defaultValue: 'Set' },
+        { name: 'unset' },
+        { name: 'nulled', defaultValue: null },
+        { name: 'blank', defaultValue: '' },
+      ] as never),
+    ).toEqual({ 'prop.headline': 'Set' })
+  })
+
+  it('keeps false and 0, which are real defaults rather than absent ones', () => {
+    expect(
+      buildComponentDefaultTokens([
+        { name: 'playInLightbox', defaultValue: false },
+        { name: 'duration', defaultValue: 0 },
+      ] as never),
+    ).toEqual({ 'prop.playInLightbox': 'false', 'prop.duration': '0' })
+  })
+
+  it('answers an empty map for a component that declares nothing', () => {
+    expect(buildComponentDefaultTokens(undefined)).toEqual({})
+    expect(buildComponentDefaultTokens([])).toEqual({})
+  })
+
+  it('skips an entry with no name rather than keying on undefined', () => {
+    expect(
+      buildComponentDefaultTokens([
+        { defaultValue: 'orphan' },
+        { name: 'kept', defaultValue: 'yes' },
+      ] as never),
+    ).toEqual({ 'prop.kept': 'yes' })
+  })
+})
+
+/**
+ * A switch or checkbox bound to a Yes / no property (AGL-2871).
+ *
+ * Substitution is textual, so the value reaches the graft as `'true'` or
+ * `'false'` — and an element reading `lightbox` takes any non-empty string for
+ * a yes. The contract pinned here is that a field holding EXACTLY one token for
+ * a declared Yes / no property receives a real boolean, read with the same
+ * spellings the visibility directives accept, while everything that is text
+ * stays text.
+ */
+describe('a field bound to a Yes / no property (AGL-2871)', () => {
+  /** A film whose lightbox, controls and autoplay each page decides. */
+  const film = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['video', 'note'] },
+      video: {
+        $id: 'video',
+        componentId: 'video',
+        parentId: 'root',
+        props: {
+          src: '{{prop.source}}',
+          lightbox: '{{prop.playInLightbox}}',
+          controls: '{{prop.showControls}}',
+          // Whitespace inside the braces is the same binding.
+          autoPlay: '{{ prop.autoplay }}',
+          muted: true,
+        },
+      },
+      note: {
+        $id: 'note',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: 'Opens in a lightbox: {{prop.playInLightbox}}' },
+      },
+    },
+    props: [
+      {
+        name: 'source',
+        type: 'text',
+        defaultValue: 'https://cdn.example.com/a.mp4',
+      },
+      { name: 'playInLightbox', type: 'boolean' },
+      { name: 'showControls', type: 'boolean', defaultValue: 'true' },
+      { name: 'autoplay', type: 'boolean', defaultValue: 'false' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'film', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  const videoProps = (propValues?: Record<string, unknown>) =>
+    composeReusableComponentNodes(page(propValues), { film })['cmp__a__video']
+      .props
+
+  it('hands the element a real boolean, not the string a switch reads as yes', () => {
+    expect(videoProps({ playInLightbox: false }).lightbox).toBe(false)
+    expect(videoProps({ playInLightbox: true }).lightbox).toBe(true)
+  })
+
+  it('reads every spelling of no a stored value can arrive in', () => {
+    for (const no of [false, 'false', 'FALSE', '0', 'off', 'no']) {
+      expect(videoProps({ playInLightbox: no }).lightbox).toBe(false)
+    }
+    for (const yes of [true, 'true', 'yes', 'on', '1']) {
+      expect(videoProps({ playInLightbox: yes }).lightbox).toBe(true)
+    }
+  })
+
+  it("applies the property's default where the page sets nothing", () => {
+    const props = videoProps()
+    expect(props.controls).toBe(true)
+    expect(props.autoPlay).toBe(false)
+    // No default: an unset Yes / no substitutes `''`, which is a no.
+    expect(props.lightbox).toBe(false)
+  })
+
+  it('treats a cleared value as unset, so the default comes back', () => {
+    expect(videoProps({ showControls: '' }).controls).toBe(true)
+    // ...while a real no on the page beats a default of yes.
+    expect(videoProps({ showControls: false }).controls).toBe(false)
+  })
+
+  it('leaves text that mentions the property as text', () => {
+    const composed = composeReusableComponentNodes(
+      page({ playInLightbox: true }),
+      { film },
+    )
+    expect(composed['cmp__a__note'].props.children).toBe(
+      'Opens in a lightbox: true',
+    )
+    expect(composed['cmp__a__video'].props.src).toBe(
+      'https://cdn.example.com/a.mp4',
+    )
+  })
+
+  it('keeps a value the component set itself', () => {
+    expect(videoProps({ playInLightbox: true }).muted).toBe(true)
+  })
+
+  it('never mutates the definition it read the bindings from', () => {
+    videoProps({ playInLightbox: true })
+    expect(film.nodes.video.props.lightbox).toBe('{{prop.playInLightbox}}')
+  })
+
+  it('negative control: a property that is not Yes / no substitutes as text', () => {
+    const textual = {
+      ...film,
+      props: film.props.map((prop: any) =>
+        prop.name === 'playInLightbox' ? { ...prop, type: 'text' } : prop,
+      ),
+    }
+    const composed = composeReusableComponentNodes(
+      page({ playInLightbox: 'false' }),
+      { film: textual },
+    )
+    expect(composed['cmp__a__video'].props.lightbox).toBe('false')
+  })
+
+  it('negative control: a token nobody declared is left verbatim', () => {
+    const undeclared = {
+      ...film,
+      props: film.props.filter((prop: any) => prop.name !== 'playInLightbox'),
+    }
+    const composed = composeReusableComponentNodes(
+      page({ playInLightbox: true }),
+      { film: undeclared },
+    )
+    expect(composed['cmp__a__video'].props.lightbox).toBe(
+      '{{prop.playInLightbox}}',
+    )
+  })
+
+  it('detaches into the booleans the instance was rendering', () => {
+    let counter = 0
+    const detached = detachInstanceSubtree(
+      page({ playInLightbox: 'true' }),
+      'a',
+      film,
+      () => `n${++counter}`,
+    )
+    const video = (Object.values(detached) as any[]).find(
+      (node) => node?.componentId === 'video',
+    )
+    expect(video.props).toMatchObject({
+      lightbox: true,
+      controls: true,
+      autoPlay: false,
+    })
+  })
+
+  describe('resolveComponentPropTokens', () => {
+    const nodes = {
+      v: {
+        $id: 'v',
+        componentId: 'video',
+        props: {
+          lightbox: '{{prop.playInLightbox}}',
+          title: '{{prop.title}}',
+        },
+      },
+    } as any
+    const declared = [
+      { name: 'playInLightbox', type: 'boolean' },
+      { name: 'title', type: 'text' },
+    ] as any
+
+    it('reads a binding still holding its token as a no, as a page that sets nothing would', () => {
+      // A component editor drawing a property with no default substitutes
+      // nothing, so the token is still there when the type is read.
+      const resolved = resolveComponentPropTokens(nodes, declared, undefined)
+      expect(resolved['v'].props.lightbox).toBe(false)
+      // Text keeps its token, which is how an unfilled slot stays visible.
+      expect(resolved['v'].props.title).toBe('{{prop.title}}')
+    })
+
+    it('returns the substitution untouched when nothing is bound to a Yes / no', () => {
+      const plain = { t: { $id: 't', props: { children: 'Hi' } } } as any
+      expect(resolveComponentPropTokens(plain, declared, {})).toBe(plain)
+    })
+  })
+
+  describe('readYesNoValue', () => {
+    it('shares the spellings the visibility directives accept', () => {
+      expect(readYesNoValue('off')).toBe(false)
+      expect(readYesNoValue('')).toBe(false)
+      expect(readYesNoValue('Yes')).toBe(true)
+      expect(readYesNoValue(0)).toBe(false)
+    })
+
+    it('has no answer for an absent value or an unsubstituted token', () => {
+      expect(readYesNoValue(undefined)).toBeUndefined()
+      expect(readYesNoValue(null)).toBeUndefined()
+      expect(readYesNoValue('{{prop.flag}}')).toBeUndefined()
+    })
+  })
+})
+
+/**
+ * A dropdown bound to a Choice property, and a Screen picker bound to a Link
+ * property (AGL-2871).
+ *
+ * A choice arrives as the value the page picked, which the element reads like
+ * any value its own dropdown stored. What is pinned is the case with nothing
+ * picked: a dropdown's empty value is none of its options, so the prop is
+ * removed and the element keeps its own default rather than drawing `''`.
+ */
+describe('a dropdown or Screen picker bound to a property (AGL-2871)', () => {
+  const card = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['chip', 'more'] },
+      chip: {
+        $id: 'chip',
+        componentId: 'muiChip',
+        parentId: 'root',
+        props: { label: 'New', color: '{{prop.tint}}' },
+      },
+      more: {
+        $id: 'more',
+        componentId: 'muiScreenLink',
+        parentId: 'root',
+        props: {
+          children: 'See more',
+          screenId: '{{prop.moreLink}}',
+          variant: '{{prop.linkStyle}}',
+        },
+      },
+    },
+    props: [
+      {
+        name: 'tint',
+        type: 'choice',
+        options: [
+          { value: 'primary', label: 'Blue' },
+          { value: 'secondary', label: 'Magenta' },
+          { value: 'default', label: 'Neutral' },
+        ],
+        defaultValue: 'default',
+      },
+      {
+        name: 'linkStyle',
+        type: 'choice',
+        options: [
+          { value: 'text', label: 'Plain' },
+          { value: 'outlined', label: 'Outlined' },
+        ],
+      },
+      { name: 'moreLink', type: 'href', defaultValue: 'screen:products' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'card', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  const composed = (propValues?: Record<string, unknown>) =>
+    composeReusableComponentNodes(page(propValues), { card })
+
+  it('hands the dropdown the value the page chose', () => {
+    expect(composed({ tint: 'secondary' })['cmp__a__chip'].props.color).toBe(
+      'secondary',
+    )
+    expect(
+      composed({ linkStyle: 'outlined' })['cmp__a__more'].props.variant,
+    ).toBe('outlined')
+  })
+
+  it("falls back to the property's default where the page chose nothing", () => {
+    expect(composed()['cmp__a__chip'].props.color).toBe('default')
+    expect(composed({ tint: '' })['cmp__a__chip'].props.color).toBe('default')
+  })
+
+  it("leaves the element its own default when there is no choice and no default", () => {
+    const more = composed()['cmp__a__more'].props
+    expect('variant' in more).toBe(false)
+    // Everything else on the element is untouched.
+    expect(more.children).toBe('See more')
+  })
+
+  it('carries a Link property into a Screen picker as the reference it holds', () => {
+    expect(composed()['cmp__a__more'].props.screenId).toBe('screen:products')
+    expect(
+      composed({ moreLink: 'screen:pricing' })['cmp__a__more'].props.screenId,
+    ).toBe('screen:pricing')
+    // A typed address arrives verbatim; the linking element sorts the two.
+    expect(
+      composed({ moreLink: 'https://example.com/tour' })['cmp__a__more'].props
+        .screenId,
+    ).toBe('https://example.com/tour')
+  })
+
+  it('draws a component editor with no choice as a page that chose nothing', () => {
+    // No tokens: a property with no default has nothing to substitute.
+    const drawn = resolveComponentPropTokens(card.nodes, card.props, {})
+    expect('variant' in drawn['more'].props).toBe(false)
+    expect('color' in drawn['chip'].props).toBe(false)
+  })
+
+  it('detaches into the choices the instance was rendering', () => {
+    let counter = 0
+    const detached = detachInstanceSubtree(
+      page({ tint: 'primary' }),
+      'a',
+      card,
+      () => `n${++counter}`,
+    )
+    const chip = (Object.values(detached) as any[]).find(
+      (node) => node?.componentId === 'muiChip',
+    )
+    const more = (Object.values(detached) as any[]).find(
+      (node) => node?.componentId === 'muiScreenLink',
+    )
+    expect(chip.props.color).toBe('primary')
+    expect('variant' in more.props).toBe(false)
+  })
+
+  it('negative control: a choice written into text is substituted as text', () => {
+    const labelled = {
+      ...card,
+      nodes: {
+        ...card.nodes,
+        chip: {
+          ...card.nodes.chip,
+          props: { label: 'Tint: {{prop.linkStyle}}' },
+        },
+      },
+    }
+    const chip = composeReusableComponentNodes(page(), { card: labelled })[
+      'cmp__a__chip'
+    ]
+    expect(chip.props.label).toBe('Tint: ')
+  })
+})
+
+/**
+ * An icon picker bound to an Icon property (AGL-2871).
+ *
+ * A published page never loads the icon catalog, and the Icon element draws
+ * `iconPath || getMdiIconPath(iconId)` — so an id with no path is the empty
+ * placeholder on a live site. The contract pinned here is that a bound picker
+ * reaches the element with BOTH halves: the id in the field, and the path in
+ * its companion, from the page's own pick or from the property's default.
+ */
+describe('an icon picker bound to an Icon property (AGL-2871)', () => {
+  const HOME = { iconId: 'mdiHome', iconPath: 'M10,20V14H14V20' }
+  const ROCKET = { iconId: 'mdiRocket', iconPath: 'M13.13,22.19L11.5,18.36' }
+
+  const card = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['chip', 'cta'] },
+      chip: {
+        $id: 'chip',
+        componentId: 'icon',
+        parentId: 'root',
+        // A path left from the icon the component was drawn with before the
+        // picker was bound, which must never outlive the binding.
+        props: { iconId: '{{prop.icon}}', iconPath: 'M0,0H1', size: 32 },
+      },
+      cta: {
+        $id: 'cta',
+        componentId: 'muiButton',
+        parentId: 'root',
+        props: { children: 'Go', startIconId: '{{prop.ctaIcon}}' },
+      },
+    },
+    props: [
+      {
+        name: 'icon',
+        type: 'icon',
+        defaultValue: HOME.iconId,
+        defaultIconPath: HOME.iconPath,
+      },
+      { name: 'ctaIcon', type: 'icon' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'card', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  const composed = (propValues?: Record<string, unknown>) =>
+    composeReusableComponentNodes(page(propValues), { card })
+
+  it("draws the page's pick with the path it was picked with", () => {
+    const chip = composed({ icon: ROCKET })['cmp__a__chip'].props
+    expect(chip).toMatchObject({
+      iconId: ROCKET.iconId,
+      iconPath: ROCKET.iconPath,
+      size: 32,
+    })
+  })
+
+  it("draws the property's default, path and all, where the page picked nothing", () => {
+    expect(composed()['cmp__a__chip'].props).toMatchObject({
+      iconId: HOME.iconId,
+      iconPath: HOME.iconPath,
+    })
+    // A cleared pick is no pick.
+    expect(composed({ icon: {} })['cmp__a__chip'].props.iconPath).toBe(
+      HOME.iconPath,
+    )
+  })
+
+  it('fills the companion of whichever picker is bound (startIconId → startIconPath)', () => {
+    const cta = composed({ ctaIcon: ROCKET })['cmp__a__cta'].props
+    expect(cta).toMatchObject({
+      startIconId: ROCKET.iconId,
+      startIconPath: ROCKET.iconPath,
+    })
+  })
+
+  it('leaves the element its placeholder when there is no pick and no default', () => {
+    const cta = composed()['cmp__a__cta'].props
+    expect('startIconId' in cta).toBe(false)
+    expect('startIconPath' in cta).toBe(false)
+    expect(cta.children).toBe('Go')
+  })
+
+  it('never draws a path the page did not pick', () => {
+    // An id stored with no path — written by anything but the panel — has no
+    // path to draw, and the one the component was drawn with is not it.
+    const chip = composed({ icon: 'mdiRocket' })['cmp__a__chip'].props
+    expect(chip.iconId).toBe('mdiRocket')
+    expect('iconPath' in chip).toBe(false)
+  })
+
+  it('detaches into the icon the instance was rendering', () => {
+    let counter = 0
+    const detached = detachInstanceSubtree(
+      page({ icon: ROCKET }),
+      'a',
+      card,
+      () => `n${++counter}`,
+    )
+    const chip = (Object.values(detached) as any[]).find(
+      (node) => node?.componentId === 'icon',
+    )
+    expect(chip.props).toMatchObject(ROCKET)
+  })
+
+  it('draws a component editor with the default icon paths', () => {
+    const drawn = resolveComponentPropTokens(
+      card.nodes,
+      card.props,
+      buildComponentDefaultTokens(card.props),
+      buildComponentDefaultIconPaths(card.props),
+    )
+    expect(drawn['chip'].props).toMatchObject(HOME)
+    expect('startIconId' in drawn['cta'].props).toBe(false)
+  })
+
+  describe('readInstanceIconValue', () => {
+    it('reads a pick, with or without its path', () => {
+      expect(readInstanceIconValue(ROCKET)).toEqual(ROCKET)
+      expect(readInstanceIconValue({ iconId: 'mdiRocket', iconPath: '' })).toEqual(
+        { iconId: 'mdiRocket' },
+      )
+      expect(readInstanceIconValue(' mdiRocket ')).toEqual({ iconId: 'mdiRocket' })
+    })
+
+    it('reads no pick from nothing', () => {
+      for (const value of [undefined, null, '', {}, { iconPath: 'M0' }, []]) {
+        expect(readInstanceIconValue(value)).toBeUndefined()
+      }
+    })
+  })
+
+  it("never puts an icon pick left under a retyped property on the page", () => {
+    const retyped = {
+      ...card,
+      nodes: {
+        ...card.nodes,
+        cta: { ...card.nodes.cta, props: { children: '{{prop.ctaIcon}}' } },
+      },
+      props: [{ name: 'ctaIcon', type: 'text', defaultValue: 'Go' }],
+    }
+    const cta = composeReusableComponentNodes(page({ ctaIcon: ROCKET }), {
+      card: retyped,
+    })['cmp__a__cta'].props
+    expect(cta.children).toBe('Go')
+  })
+
+  it("reads an icon pick's id as the text an inline editor starts from", () => {
+    expect(
+      getInstanceEffectivePropText(
+        { propValues: { icon: ROCKET } },
+        card.props,
+        'icon',
+      ),
+    ).toBe(ROCKET.iconId)
+  })
+})
+
+/**
+ * A numeric attribute bound to a Number property (AGL-2880).
+ *
+ * The substitution is textual, and an element that hands `size` to MUI turns
+ * the text `'32'` into `font-size: 32` — no unit, so no browser applies it and
+ * the icon keeps its default size on every page that set one. A field bound
+ * to exactly one Number token receives a real number.
+ */
+describe('a numeric attribute bound to a Number property (AGL-2880)', () => {
+  const badge = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'muiStack', nodes: ['icon', 'label'] },
+      icon: {
+        $id: 'icon',
+        componentId: 'icon',
+        parentId: 'root',
+        props: { iconPath: 'M0,0H1', size: '{{prop.iconSize}}' },
+      },
+      label: {
+        $id: 'label',
+        componentId: 'muiTypography',
+        parentId: 'root',
+        props: { children: '{{prop.count}}', 'aria-hidden': '{{prop.quiet}}' },
+      },
+    },
+    props: [
+      { name: 'iconSize', type: 'number' },
+      { name: 'count', type: 'number', defaultValue: '3' },
+      { name: 'quiet', type: 'boolean', defaultValue: 'true' },
+    ],
+  } as any
+
+  const page = (propValues?: Record<string, unknown>) =>
+    ({
+      a: {
+        $id: 'a',
+        componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'badge', ...(propValues && { propValues }) },
+        nodes: [] as string[],
+      },
+    }) as any
+
+  const composed = (propValues?: Record<string, unknown>) =>
+    composeReusableComponentNodes(page(propValues), { badge })
+
+  it('hands the element a real number', () => {
+    expect(composed({ iconSize: 32 })['cmp__a__icon'].props.size).toBe(32)
+    expect(composed({ iconSize: '48' })['cmp__a__icon'].props.size).toBe(48)
+  })
+
+  it('leaves the element its own default when nothing was set', () => {
+    expect('size' in composed()['cmp__a__icon'].props).toBe(false)
+    expect('size' in composed({ iconSize: '' })['cmp__a__icon'].props).toBe(
+      false,
+    )
+  })
+
+  it('keeps text that is not a number as it was authored', () => {
+    expect(composed({ iconSize: 'auto' })['cmp__a__icon'].props.size).toBe(
+      'auto',
+    )
+  })
+
+  it("leaves an element's text content as text, whatever kind of property fills it", () => {
+    const label = composed()['cmp__a__label'].props
+    expect(label.children).toBe('3')
+    // An attribute beside it is still finished by its property's type.
+    expect(label['aria-hidden']).toBe(true)
   })
 })

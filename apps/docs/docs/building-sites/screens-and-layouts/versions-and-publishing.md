@@ -32,12 +32,15 @@ is symmetrical, so rolling forward again is the same click.
 
 A **save is not a publish.** Saving updates the version you have open; publishing is what
 changes the live site. Publishing a *layout* version reaches every screen bound to that
-layout, so check its **Used by** card first — see [Layouts](layouts.md#used-by).
+layout, so check its **Used by** card first — see [Layouts](layouts.md#used-by). A
+*reusable component* version reaches every page that places it the same way.
 
 ## Scheduled publishing
 
 **Schedule** publishes a version automatically at a chosen future time; the row then
-shows a *"Publishes …"* chip you can clear to cancel.
+shows a *"Publishes …"* chip you can clear to cancel. Screens and layouts can be
+scheduled; a reusable component cannot, so its **Schedule** is disabled — publish that
+version when it is ready.
 
 If a scheduled publish comes due on a plan that no longer includes scheduling — after a
 downgrade, say — it is **skipped and shown as skipped** on the screen's page, never

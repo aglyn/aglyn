@@ -64,6 +64,12 @@ export function describeDraftOffer(
 ): string {
   const age = describeDraftAge(draft.takenAt, now)
   /**
+   * A saved draft whose store recorded no time names no age: "a moment ago"
+   * would claim a recency nobody measured, and a stranded draft described as
+   * brand new reads as somebody's work in progress (AGL-2868).
+   */
+  const savedFrom = draft.takenAt ? ` from ${age}` : ''
+  /**
    * The SHARED working draft is a different sentence from the crash net, and
    * saying the crash net's one over it is the AGL-2508 defect: an author who
    * pressed Save draft, was told "Draft saved", and came back to
@@ -78,13 +84,30 @@ export function describeDraftOffer(
    */
   const found =
     draft.origin === 'shared'
-      ? `This ${noun} has a saved draft from ${age} that has not been ` +
+      ? `This ${noun} has a saved draft${savedFrom} that has not been ` +
         'published. It is stored with the site, so anyone who opens this ' +
         `${noun} sees it offered. `
       : `Unsaved changes to this ${noun} from ${age} were recovered from ` +
         'this browser. '
   switch (draft.restoreBlockedBy) {
     case 'saved-since':
+      /*
+       * A SAVED draft the document has moved past (AGL-2874). The crash-net
+       * sentences below speak of unsaved changes in this browser, and a saved
+       * draft is neither (AGL-2508). What the author needs instead is that it
+       * cannot be opened and that Discard is what stops it being offered.
+       */
+      if (draft.origin === 'shared') {
+        return (
+          `This ${noun} has a saved draft${savedFrom}, but the ${noun} has ` +
+          'been saved since it was taken, so opening it would undo that save ' +
+          '— it can no longer be opened. ' +
+          (remoteChanged
+            ? `Someone else has also saved this ${noun} since it loaded, so ` +
+              'saving is paused until you reload.'
+            : 'Discard it once nobody needs it; nothing else is affected.')
+        )
+      }
       // Whether saving is PAUSED is a different fact from whether the draft
       // may be put back, and only `remoteChanged` can answer it. A draft
       // stranded by a save that landed before this editor even opened blocks

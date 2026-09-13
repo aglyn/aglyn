@@ -28,6 +28,7 @@ import {
   createDevicePinnedTheme,
   resolveSxForDeviceWidth,
 } from '../utils/device-preview-styles'
+import BindingPickerContext from '../contexts/binding-picker-context'
 import CanvasRevealContext from '../contexts/canvas-reveal-context'
 import ElementLeafComponent, { denormalizeTree } from './node-leaf'
 import * as Aglyn from '@aglyn/aglyn'
@@ -550,6 +551,48 @@ describe('component instance preview (AGL-1251)', () => {
     expect(leafText(baseElement)).not.toContain('Component copy')
   })
 
+  it("keeps the placement's classes on the placement, not a second copy on the preview", () => {
+    // The published page joins a placement's classes onto the root it
+    // becomes. On the canvas the placement is still its own element around
+    // the preview, so the classes belong there once: a copy on the preview's
+    // root would apply every class twice, and hold `aglyn-hidden` collapsed
+    // inside a placement the canvas reveals while it is selected.
+    const definition = {
+      rootId: 'root',
+      nodes: {
+        root: {
+          $id: 'root',
+          componentId: 'div',
+          props: { className: 'from-component' },
+          nodes: [],
+        },
+      },
+    } as any
+    const node = {
+      $id: 'inst1',
+      type: 'node',
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      props: { refId: 'hero', className: 'promo-card aglyn-hidden' },
+      sx: {},
+      nodes: [],
+    } as any
+    const { baseElement } = renderInstance(node, { hero: definition })
+    const previewRoot = baseElement.querySelector(
+      '[data-aglyn-component-preview] [data-aglyn="leaf:inst1"]',
+    ) as HTMLElement
+    const placement = [
+      ...baseElement.querySelectorAll('[data-aglyn="leaf:inst1"]'),
+    ].find((element) => element !== previewRoot) as HTMLElement
+    expect(previewRoot).toBeTruthy()
+    expect(placement).toBeTruthy()
+    expect(placement.classList.contains('promo-card')).toBe(true)
+    expect(placement.classList.contains('aglyn-hidden')).toBe(true)
+    // The component's own class still reaches the root it styles.
+    expect(previewRoot.classList.contains('from-component')).toBe(true)
+    expect(previewRoot.classList.contains('promo-card')).toBe(false)
+    expect(previewRoot.classList.contains('aglyn-hidden')).toBe(false)
+  })
+
   /**
    * Live propagation into an already-open canvas (AGL-1898 phase 2).
    *
@@ -1011,5 +1054,60 @@ describe('placed form preview', () => {
 
     const canvasIds = Object.keys(Aglyn.canvas.toJSON()?.nodes ?? {})
     expect(canvasIds.some((id) => id.startsWith('cmp__form1__'))).toBe(false)
+  })
+})
+
+/**
+ * The component editor draws a field bound to a Yes / no property with a
+ * real yes or no (AGL-2871).
+ *
+ * `hidden` stands in for any boolean attribute: React omits it for `false`
+ * and writes it for any non-empty string — which is exactly how a bound
+ * switch reading its token's text would behave, and why the text alone could
+ * never draw a "no".
+ */
+describe('a Yes / no binding in the component editor (AGL-2871)', () => {
+  const boundNode = {
+    $id: 'bound-leaf',
+    type: 'node',
+    componentId: 'div',
+    props: { hidden: '{{prop.hideIt}}' },
+    sx: {},
+    nodes: [],
+  } as any
+
+  const drawn = (componentProps: Aglyn.ReusableComponentProp[]) => {
+    // The render's own container, not the document: one test draws twice.
+    const { container } = render(
+      <BindingPickerContext.Provider value={{ componentProps }}>
+        <ElementLeafComponent node={boundNode} />
+      </BindingPickerContext.Provider>,
+    )
+    return container.querySelector(
+      '[data-aglyn="leaf:bound-leaf"]',
+    ) as HTMLElement
+  }
+
+  it("draws the property's default, a no as a no", () => {
+    expect(
+      drawn([{ name: 'hideIt', type: 'boolean', defaultValue: 'false' }])
+        .hasAttribute('hidden'),
+    ).toBe(false)
+    expect(
+      drawn([{ name: 'hideIt', type: 'boolean', defaultValue: 'true' }])
+        .hasAttribute('hidden'),
+    ).toBe(true)
+  })
+
+  it('draws a property with no default as the no a page that sets nothing renders', () => {
+    expect(
+      drawn([{ name: 'hideIt', type: 'boolean' }]).hasAttribute('hidden'),
+    ).toBe(false)
+  })
+
+  it('negative control: a text property keeps its token, which reads as a yes', () => {
+    expect(
+      drawn([{ name: 'hideIt', type: 'text' }]).hasAttribute('hidden'),
+    ).toBe(true)
   })
 })

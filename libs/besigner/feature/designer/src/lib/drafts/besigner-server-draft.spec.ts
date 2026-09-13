@@ -20,6 +20,8 @@ import type { BesignerDraftIds } from './besigner-draft-store'
 
 /** Documents by path, holding exactly what the code under test wrote. */
 const mockStore = new Map<string, Record<string, unknown>>()
+/** The `SnapshotOptions` each read asked `data()` for, in order. */
+const mockDataOptions: unknown[] = []
 
 /**
  * The double is built INSIDE the factory and read back below, because
@@ -55,7 +57,10 @@ jest.mock('firebase/firestore', () => ({
   }),
   getDoc: jest.fn(async (ref: { path: string }) => ({
     exists: () => mockStore.has(ref.path),
-    data: () => mockStore.get(ref.path),
+    data: (options?: unknown) => {
+      mockDataOptions.push(options)
+      return mockStore.get(ref.path)
+    },
   })),
   deleteDoc: jest.fn(async (ref: { path: string }) => {
     mockStore.delete(ref.path)
@@ -115,8 +120,17 @@ beforeEach(async () => {
   // stores nothing, and every assertion after it reads an empty document.
   await clearServerDraft(firestore, IDS)
   mockStore.clear()
+  mockDataOptions.length = 0
   jest.clearAllMocks()
 })
+
+/**
+ * What a read hands back beyond what was written: the stamp. The double's
+ * `serverTimestamp()` is a sentinel rather than a time, which is exactly what
+ * a draft with no usable stamp looks like — so every round trip below expects
+ * `updatedAt: null`.
+ */
+const READ_BACK = { ...DRAFT, updatedAt: null }
 
 describe('the working draft is compressed at rest', () => {
   /**
@@ -159,7 +173,56 @@ describe('the working draft is compressed at rest', () => {
   it('round-trips the tree it just wrote', async () => {
     await writeServerDraft(firestore, IDS, DRAFT)
 
-    await expect(readServerDraft(firestore, IDS)).resolves.toEqual(DRAFT)
+    await expect(readServerDraft(firestore, IDS)).resolves.toEqual(READ_BACK)
+  })
+})
+
+/**
+ * WHEN a draft was saved (AGL-2868).
+ *
+ * The banner's "saved draft from …" is computed from this. Without it every
+ * saved draft was described as taken "less than a minute ago" — measured on a
+ * component whose draft had been saved seventeen hours earlier.
+ */
+describe('a draft says when it was saved', () => {
+  const SAVED_AT = Date.UTC(2026, 8, 13, 0, 13, 42)
+
+  it('reads the server stamp as epoch milliseconds', async () => {
+    mockStore.set(PATH, { ...DRAFT, updatedAt: { toMillis: () => SAVED_AT } })
+
+    await expect(readServerDraft(firestore, IDS)).resolves.toEqual({
+      ...DRAFT,
+      updatedAt: SAVED_AT,
+    })
+  })
+
+  it('reads a stamp that crossed a serialization as seconds and nanoseconds', async () => {
+    mockStore.set(PATH, {
+      ...DRAFT,
+      updatedAt: { seconds: SAVED_AT / 1000, nanoseconds: 250_000_000 },
+    })
+
+    const read = await readServerDraft(firestore, IDS)
+
+    expect(read?.updatedAt).toBe(SAVED_AT + 250)
+  })
+
+  it('reports no time, rather than inventing one, for a draft with no stamp', async () => {
+    mockStore.set(PATH, { ...DRAFT })
+
+    const read = await readServerDraft(firestore, IDS)
+
+    expect(read?.updatedAt).toBeNull()
+  })
+
+  it('takes the local estimate of a stamp the server has not confirmed yet', async () => {
+    // The draft this browser has just saved: `serverTimestamp()` is still
+    // pending, and the SDK's default read of a pending stamp is null.
+    mockStore.set(PATH, { ...DRAFT, updatedAt: { toMillis: () => SAVED_AT } })
+
+    await readServerDraft(firestore, IDS)
+
+    expect(mockDataOptions).toEqual([{ serverTimestamps: 'estimate' }])
   })
 })
 
@@ -175,7 +238,7 @@ describe('reading a draft stored the other way', () => {
   it('reads a plain-map draft written before compression', async () => {
     mockStore.set(PATH, { ...DRAFT, updatedAt: { __serverTimestamp: true } })
 
-    await expect(readServerDraft(firestore, IDS)).resolves.toEqual(DRAFT)
+    await expect(readServerDraft(firestore, IDS)).resolves.toEqual(READ_BACK)
   })
 
   it('reads a bytes draft', async () => {
@@ -184,7 +247,7 @@ describe('reading a draft stored the other way', () => {
       nodes: mockBytes.fromUint8Array(compress(NODES)),
     })
 
-    await expect(readServerDraft(firestore, IDS)).resolves.toEqual(DRAFT)
+    await expect(readServerDraft(firestore, IDS)).resolves.toEqual(READ_BACK)
   })
 
   it('gives both stored forms the same answer', async () => {

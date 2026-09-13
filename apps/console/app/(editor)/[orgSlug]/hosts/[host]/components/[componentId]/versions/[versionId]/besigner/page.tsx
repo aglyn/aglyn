@@ -21,7 +21,6 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
   CANVAS_ROOT_ELEMENT_ID,
-  canvasTreeToDefinition,
   definitionToCanvasTree,
   encodeStoredNodes,
   ScreenLinkContext,
@@ -46,7 +45,6 @@ import {
 import {
   ICON_VARIANT_MODIFY_ADD,
   ICON_VARIANT_MODIFY_SAVE,
-  ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
@@ -70,6 +68,9 @@ import ComponentPropsDialog from '../../../../../../../../../../components/compo
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../../../../../../../../../utils/revalidate-live-pages'
+import resolveComponentDefinition, {
+  isComponentDefinitionRefusal,
+} from '../../../../../../../../../../utils/component-definition-write'
 import { Bytes, collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
@@ -179,6 +180,17 @@ function ComponentBesignerPage(props) {
    * live without it having been stored.
    */
   const savedLandedRef = useRef(false)
+  /**
+   * Was the last save REFUSED, as opposed to having nothing to do? (AGL-2877)
+   *
+   * `savedLandedRef` staying false cannot tell the two apart, and they need
+   * opposite handling: nothing-to-save promotes, a refusal must not. Nor can
+   * `remoteChanged`, which is React state and still false in this tick for a
+   * conflict the save itself discovered — without this, a stale-baseline
+   * refusal is followed by writing this canvas onto the definition every page
+   * renders.
+   */
+  const saveRefusedRef = useRef(false)
 
   /**
    * Has this version been SAVED since it was last promoted? (AGL-1152)
@@ -323,6 +335,7 @@ function ComponentBesignerPage(props) {
     draft,
     handleSave,
     saveWorkingDraft,
+    refuseOverUnopenedDraft,
     markOwnWrite,
     jsonOpen,
     openJsonEditor,
@@ -374,6 +387,11 @@ function ComponentBesignerPage(props) {
         ? undefined
         : 'Component saved to this version. Publish it to update the live pages.',
     queueLoading,
+    // The refusal half of `onSaved`: together they let `handleSaveAndPublish`
+    // tell a document that needs no save from one that could not be saved.
+    onSaveRefused: () => {
+      saveRefusedRef.current = true
+    },
     // A definition's root is the promoted node, not the canvas root, so it
     // has to be wrapped or the canvas has no root and renders nothing
     // (AGL-680).
@@ -483,27 +501,24 @@ function ComponentBesignerPage(props) {
   const promoteToSites = useCallback(async () => {
     setPublishing(true)
     try {
-      // Unwrap the synthetic canvas root: the tenant runtime grafts from
-      // `rootId`, so publishing the wrapper would put an always-empty
-      // container inside every instance of this component (AGL-680).
-      const definition = canvasTreeToDefinition(
-        canvas.toJSON().nodes as Record<string, unknown>,
-      )
-      if (definition.ambiguousRoot) {
-        return enqueueSnackbar(
-          'A component needs a single top-level element. Wrap what you have ' +
-            'in one container, then publish.',
-          { variant: 'warning', allowDuplicate: true },
-        )
+      // The same resolution the Versions dialog's Publish runs (AGL-2878):
+      // the synthetic canvas root unwrapped, because the tenant grafts from
+      // `rootId` and a published wrapper would put an always-empty container
+      // inside every instance (AGL-680). Declared props publish with the tree
+      // (AGL-1247), for the same reason `rootId` does: the tenant reads the
+      // parent doc, so props left behind on the version would graft every
+      // `{{prop.*}}` token unresolved on the live site.
+      const definition = resolveComponentDefinition({
+        nodes: canvas.toJSON().nodes,
+        rootId: componentResult?.data?.rootId,
+        props: (data as { props?: Aglyn.ReusableComponentProp[] })?.props,
+      })
+      if (isComponentDefinitionRefusal(definition)) {
+        return enqueueSnackbar(definition.refusal, {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
       }
-      const publishedNodes = definition.nodes
-      const rootId = definition.rootId ?? componentResult?.data?.rootId
-      // Declared props publish with the tree (AGL-1247), for the same
-      // reason `rootId` does: the tenant reads the parent doc, so props
-      // left behind on the version would graft every `{{prop.*}}` token
-      // unresolved on the live site while the editor looked correct.
-      const declaredProps = (data as { props?: Aglyn.ReusableComponentProp[] })
-        ?.props
       await updateDoc(
         doc(firestore, 'hosts', hostId, 'components', componentId),
         {
@@ -512,9 +527,9 @@ function ComponentBesignerPage(props) {
           // it is copied far more often than it is written — and it was the
           // one document in the family still stored as a plain map, at about
           // 1.4x the bytes against the same 1 MiB ceiling.
-          nodes: Bytes.fromUint8Array(encodeStoredNodes(publishedNodes)!),
-          ...(rootId ? { rootId } : {}),
-          props: declaredProps ?? [],
+          nodes: Bytes.fromUint8Array(encodeStoredNodes(definition.nodes)!),
+          ...(definition.rootId ? { rootId: definition.rootId } : {}),
+          props: definition.props,
           versionId,
           updatedAt: Timestamp.now(),
         },
@@ -598,6 +613,8 @@ function ComponentBesignerPage(props) {
    * a draft is for.
    */
   const handleSaveDraft = useCallback(async () => {
+    // A saved draft on offer is replaced by the next draft save (AGL-2874).
+    if (refuseOverUnopenedDraft('save')) return
     const wrote = await saveWorkingDraft({
       uid: user?.uid,
       email: user?.email,
@@ -615,7 +632,7 @@ function ComponentBesignerPage(props) {
     // the click, and "Draft saved" four times over an untouched document is
     // how a reader stops believing the message.
     if (wrote === 'unchanged') {
-      enqueueSnackbar('Already saved — the draft is up to date.', {
+      enqueueSnackbar('Already saved — nothing new to save.', {
         variant: 'info',
         persist: false,
       })
@@ -627,7 +644,19 @@ function ComponentBesignerPage(props) {
       variant: 'success',
       persist: false,
     })
-  }, [saveWorkingDraft, user, enqueueSnackbar])
+  }, [refuseOverUnopenedDraft, saveWorkingDraft, user, enqueueSnackbar])
+
+  /**
+   * SAVE DRAFT — one action, wherever it is reached from (AGL-2868).
+   *
+   * The toolbar and File ▸ Save draft both call this. On the version the
+   * sites are serving it writes the shared working draft; on any other
+   * version it writes that version, which is already somewhere to work
+   * without touching the live sites. Two controls under one name must never
+   * write two different documents — whichever one an author checks afterwards
+   * has to be the one the other control wrote.
+   */
+  const saveDraft = editingLiveVersion ? handleSaveDraft : handleSave
 
   /**
    * Do the live sites already match this version?
@@ -649,8 +678,16 @@ function ComponentBesignerPage(props) {
 
   const handleSaveAndPublish = useCallback(async () => {
     if (publishing) return
+    // Publishing a canvas that never took in the saved draft on offer would
+    // push the stored tree live and then clear the draft as published
+    // (AGL-2874).
+    if (refuseOverUnopenedDraft('publish')) return
     savedLandedRef.current = false
+    saveRefusedRef.current = false
     await handleSave()
+    // A REFUSED save stops here, before anything is promoted, revalidated or
+    // cleared (AGL-2877). The refusal has already said why.
+    if (saveRefusedRef.current) return
     /**
      * A save that did not write is not a reason to stop (AGL-1483).
      *
@@ -699,21 +736,28 @@ function ComponentBesignerPage(props) {
       if (remoteChanged) return
     }
     await promoteToSites()
-    void clearServerDraft(firestore, {
-      scope: hostId,
-      kind: 'component',
-      docId: componentId,
-      versionId,
-    })
+    // Only a draft this canvas took in is published by this; one withheld
+    // from a shared room and never opened is still somebody's unpublished
+    // work (AGL-2874).
+    if (!draft.sharedDraftUnopened) {
+      void clearServerDraft(firestore, {
+        scope: hostId,
+        kind: 'component',
+        docId: componentId,
+        versionId,
+      })
+    }
     setDraftPending(false)
   }, [
     publishing,
+    refuseOverUnopenedDraft,
     handleSave,
     promoteToSites,
     livePublished,
     remoteChanged,
     enqueueSnackbar,
     firestore,
+    draft.sharedDraftUnopened,
     user,
     hostId,
     componentId,
@@ -822,14 +866,14 @@ function ComponentBesignerPage(props) {
                         children: 'File',
                         items: [
                           {
+                            // Named for the action, never for the canvas's
+                            // state: an entry reading "Up to Date" is not one
+                            // anybody recognizes as the way to save. A click
+                            // with nothing to store still answers.
                             id: 'center-nav-file-save',
-                            icon: saveAvailable
-                              ? { path: ICON_VARIANT_MODIFY_SAVE.path }
-                              : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
-                            children: saveAvailable
-                              ? 'Save draft'
-                              : 'Up to Date',
-                            onClick: handleSave,
+                            icon: { path: ICON_VARIANT_MODIFY_SAVE.path },
+                            children: 'Save draft',
+                            onClick: saveDraft,
                           },
                           {
                             /*
@@ -962,9 +1006,7 @@ function ComponentBesignerPage(props) {
                           onPreview={handlePreview}
                           detailsUrl={listUrl}
                           presence={<PresenceAvatars presence={presence} />}
-                          onSave={
-                            editingLiveVersion ? handleSaveDraft : handleSave
-                          }
+                          onSave={saveDraft}
                           onSaveAndPublish={handleSaveAndPublish}
                           // A component is live only once its tree has been promoted onto
                           // the PARENT document — the pointer alone is not enough, which

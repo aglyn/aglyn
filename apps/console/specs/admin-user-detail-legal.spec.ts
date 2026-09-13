@@ -200,9 +200,9 @@ describe('AGL-2316 · the accepted version and timestamp reach the staff view', 
     )
     expect(payload.legal.arbitration.deadline).toBe('2026-08-31T00:00:00.000Z')
     // Still additive: the older version is evidence of what was agreed then.
-    // `v0` rather than `v1`: the snapshot set was collapsed back to v1 on
-    // 2026-08-20, so `v1` IS the current version and a fixture using it no
-    // longer models a SUPERSEDED acceptance — which is the whole case.
+    // `v0` rather than a real earlier label: `v0` ranks below every `v<N>`
+    // the constant can name, so the fixture stays a SUPERSEDED acceptance
+    // whatever the current version is — which is the whole case.
     expect(payload.legal.acceptedVersions).toEqual(['v0', LEGAL_DOCUMENT_VERSION])
   })
 
