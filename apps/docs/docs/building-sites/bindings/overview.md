@@ -40,9 +40,10 @@ and back.
 ## Rename-safe id tokens
 
 Bindings reference variables and functions **by id**, not by name. That means renaming a
-variable doesn't break anything that uses it. Legacy name-based tokens still resolve via a
-fallback, and imports are normalized to id form automatically. When you publish, older
-documents are migrated to id tokens.
+variable doesn't break anything that uses it. A typed `{{name}}` is converted to its id
+form when you save or publish, and imports are converted automatically. A published page
+resolves only the id form, so a name token that was never converted — because no variable
+had that name — shows exactly as typed.
 
 ## Insert a variable
 

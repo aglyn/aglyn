@@ -31,7 +31,7 @@ flowchart LR
 
 A **site-wide announcement bar** shows a message across every page — ideal for sales,
 notices, or launches. It's controlled centrally and gated by the marketing-overlays
-entitlement.
+entitlement. Its text can show [variables and site details](#variables-in-copy).
 
 ## Promotional popups
 
@@ -96,6 +96,21 @@ The **Marketing** page manages any number of bars and popups, each with:
 When several overlays match a page, the first bar and the first popup (by order) show.
 The single announcement bar and popup on the same page remain as your always-on default
 surfaces; configured overlays take priority over them.
+
+## Variables and site details in copy {#variables-in-copy}
+
+A bar's text and a popup's headline and body are filled in when the page renders:
+
+- **A variable** — type its name in double braces, such as `{{saleEndsAt}}` for a variable
+  named `saleEndsAt` on the **Logic** page. Saving stores the variable's id, so renaming
+  the variable later does not break the copy.
+- **A site detail** — `{{host.businessName}}` and the other
+  [site details](../../building-sites/bindings/overview.md#site-details). A detail the
+  site hasn't set renders as nothing.
+
+A token nothing fills in, such as a name no variable carries or a function call, would
+reach visitors exactly as typed, so the field turns red and names it. A date variable
+shows as a date, not as a live countdown.
 
 ## Engagement stats
 
