@@ -42,6 +42,11 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import OverlayStatsRow from './overlay-stats-row.component'
+import {
+  OVERLAY_COPY_HELPER_TEXT,
+  shownAsTypedHelperText,
+  useOverlayCopyEditor,
+} from './use-overlay-copy-editor'
 
 export interface AnnouncementBarCardProps {
   hostId: string
@@ -52,9 +57,11 @@ export interface AnnouncementBarCardProps {
 /**
  * Announcement bar editor (AGL-195): site-wide banner config persisted on
  * the host doc; the tenant render gates on the marketingOverlays
- * entitlement and resolves binding tokens in the text server-side.
- * Starter+ (locked-state upsell below), dark-launched for plan-less
- * workspaces like the other AGL-99 gates.
+ * entitlement and resolves the text through `resolveOverlayCopy`. A typed
+ * `{{name}}` is stored as its variable's id token, the only variable form
+ * that resolves, and a token that would still show as typed is flagged
+ * under the field (AGL-2885). Starter+ (locked-state upsell below),
+ * dark-launched for plan-less workspaces like the other AGL-99 gates.
  */
 export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
   const { hostId } = props
@@ -92,9 +99,21 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedKey])
 
-  const dirty = JSON.stringify(draft) !== savedKey
+  // `draft.text` is held in its stored form; the field shows it as typed.
+  const copy = useOverlayCopyEditor({
+    hostId,
+    host,
+    usesTokens:
+      entitled &&
+      [saved.text, draft.text].some((text) => text?.includes('{{')),
+  })
+  // Compared as it would be stored, so a name typed before the variables
+  // arrived still counts as the change it becomes on save.
+  const dirty =
+    JSON.stringify({ ...draft, text: copy.stored(draft.text) }) !== savedKey
   const patch = (partial: Partial<HostAnnouncementBar>) =>
     setDraft((previous) => ({ ...previous, ...partial }))
+  const textShownAsTyped = copy.shownAsTyped(draft.text)
 
   const handleSave = async () => {
     const dequeue = queueLoading()
@@ -125,7 +144,7 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
           await updateDoc(doc(firestore, 'hosts', hostId), {
             announcementBar: {
               enabled: Boolean(draft.enabled),
-              text: (draft.text ?? '').slice(0, 300),
+              text: copy.storedWithin(draft.text, 300),
               href: (draft.href ?? '').trim(),
               backgroundColor: (draft.backgroundColor ?? '').trim(),
               textColor: (draft.textColor ?? '').trim(),
@@ -189,9 +208,14 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
           <TextField
             label="Text"
             size="small"
-            value={draft.text ?? ''}
-            onChange={(event) => patch({ text: event.target.value })}
-            helperText="Supports variable bindings, e.g. {{saleEndsAt}}"
+            value={copy.editable(draft.text)}
+            onChange={(event) =>
+              patch({ text: copy.stored(event.target.value) })
+            }
+            error={textShownAsTyped.length > 0}
+            helperText={
+              shownAsTypedHelperText(textShownAsTyped) ?? OVERLAY_COPY_HELPER_TEXT
+            }
             multiline
             fullWidth
           />
@@ -246,13 +270,17 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
                 backgroundColor: draft.backgroundColor || '#111827',
               }}
             >
-              {draft.text}
+              {copy.preview(draft.text)}
             </Box>
           ) : null}
           <Button
             variant="contained"
             color="primary"
-            disabled={!dirty || (Boolean(draft.enabled) && !draft.text?.trim())}
+            disabled={
+              !dirty ||
+              (Boolean(draft.enabled) && !draft.text?.trim()) ||
+              copy.pending(draft.text)
+            }
             onClick={handleSave}
             sx={{ alignSelf: 'flex-start' }}
           >

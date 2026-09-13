@@ -24,7 +24,10 @@
  */
 
 import type { HostVariable } from '@aglyn/aglyn/app-utils/variables'
-import { resolveOverlayCopy } from './overlay-copy'
+import {
+  overlayCopyTokensShownAsTyped,
+  resolveOverlayCopy,
+} from './overlay-copy'
 
 const VARIABLES: Record<string, HostVariable> = {
   'var-sale': { name: 'saleEndsAt', type: 'text', value: 'Sunday at midnight' },
@@ -83,5 +86,46 @@ describe('resolveOverlayCopy (AGL-2887)', () => {
     expect(resolveOverlayCopy('Free shipping this week', {}, SITE)).toBe(
       'Free shipping this week',
     )
+  })
+})
+
+describe('overlayCopyTokensShownAsTyped (AGL-2885)', () => {
+  it('lists a bare {{name}}, which no published page resolves', () => {
+    expect(
+      overlayCopyTokensShownAsTyped('Sale ends {{saleEndsAt}}', VARIABLES, SITE),
+    ).toEqual(['{{saleEndsAt}}'])
+  })
+
+  it('lists tokens overlay copy has no source for', () => {
+    expect(
+      overlayCopyTokensShownAsTyped(
+        '{{fn:countdown(3)}} left on {{entry.title}}',
+        VARIABLES,
+        SITE,
+      ),
+    ).toEqual(['{{fn:countdown(3)}}', '{{entry.title}}'])
+  })
+
+  it('does not list a token the page fills in, even with nothing', () => {
+    expect(
+      overlayCopyTokensShownAsTyped(
+        '{{var:var-sale}} {{var:deleted}} {{host.businessName}} {{host.supportEmail}}',
+        VARIABLES,
+        SITE,
+      ),
+    ).toEqual([])
+  })
+
+  it('names each token once', () => {
+    expect(
+      overlayCopyTokensShownAsTyped('{{later}} and {{later}}', VARIABLES, SITE),
+    ).toEqual(['{{later}}'])
+  })
+
+  it('lists nothing for copy without tokens, or no copy', () => {
+    expect(overlayCopyTokensShownAsTyped('Free shipping', VARIABLES, SITE)).toEqual(
+      [],
+    )
+    expect(overlayCopyTokensShownAsTyped(undefined, VARIABLES, SITE)).toEqual([])
   })
 })

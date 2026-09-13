@@ -121,6 +121,41 @@ export function normalizeBindingTokens(
   })
 }
 
+/** A whole `{{name}}` token, for asking whether a name can be typed as one. */
+const TYPED_NAME_TOKEN = new RegExp(`^${NAME_TOKEN_PATTERN.source}$`)
+
+/**
+ * Rewrites id-form variable tokens to the `{{name}}` an author types — the
+ * inverse of {@link normalizeBindingTokens}, for an editor that shows stored
+ * copy in a plain text field and normalizes it again when it saves.
+ *
+ * Unlike {@link displayBindingTokens}, whose result must never be persisted,
+ * this one survives the round trip: normalizing its output restores the
+ * input. So a token is rewritten only when that holds — its variable exists,
+ * its name is one a typed token can carry, and looking that name up leads back
+ * to this id and no other. Every other token keeps its id form. That includes
+ * a deleted variable's token, which renders as nothing on a published page,
+ * where `{{missing binding}}` would render as typed.
+ *
+ * @param variables - the lookup `normalizeBindingTokens` takes: the site's
+ *   variables keyed by name, each carrying its document id as `$id`.
+ */
+export function editableBindingTokens(
+  text: string,
+  variables: Record<string, BindingDocRef> = {},
+): string {
+  if (!text.includes('{{')) return text
+  return text.replace(VARIABLE_ID_TOKEN_PATTERN, (token, rawId) => {
+    const id = String(rawId)
+    const name = Object.values(variables).find(
+      (variable) => variable?.$id === id,
+    )?.name
+    if (!name || variables[name]?.$id !== id) return token
+    const typed = `{{${name}}}`
+    return TYPED_NAME_TOKEN.test(typed) ? typed : token
+  })
+}
+
 /** A variable/function referent to search for in stored content. */
 export interface BindingRef {
   kind: 'variable' | 'function'

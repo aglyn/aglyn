@@ -67,6 +67,11 @@ import {
   useHostActivityLogger,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  OVERLAY_COPY_HELPER_TEXT,
+  shownAsTypedHelperText,
+  useOverlayCopyEditor,
+} from './use-overlay-copy-editor'
 
 export interface HostOverlaysCardProps {
   hostId: string
@@ -124,7 +129,9 @@ function parsePatterns(value: string): string[] {
  * Marketing hub overlays manager (AGL-251): multiple announcement bars
  * and popups at `hosts/{hostId}/overlays`, each with a schedule window
  * and page targeting; the tenant render shows the first active match per
- * kind (overlay docs win over the legacy single bar/popup fields).
+ * kind (overlay docs win over the legacy single bar/popup fields). A bar's
+ * text and a popup's headline and body are edited through
+ * `useOverlayCopyEditor`, like the single bar and popup cards (AGL-2885).
  */
 export function HostOverlaysCard(props: HostOverlaysCardProps) {
   const { hostId } = props
@@ -201,6 +208,18 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
     )
 
   const [editor, setEditor] = useState<OverlayDraft | null>(null)
+  // The editor's copy is held in its stored form; the fields show it as typed.
+  const copy = useOverlayCopyEditor({
+    hostId,
+    usesTokens:
+      entitled &&
+      [editor?.bar?.text, editor?.popup?.headline, editor?.popup?.body].some(
+        (text) => text?.includes('{{'),
+      ),
+  })
+  const barTextShownAsTyped = copy.shownAsTyped(editor?.bar?.text)
+  const headlineShownAsTyped = copy.shownAsTyped(editor?.popup?.headline)
+  const bodyShownAsTyped = copy.shownAsTyped(editor?.popup?.body)
   const patch = (partial: Partial<OverlayDraft>) =>
     setEditor((previous) => (previous ? { ...previous, ...partial } : previous))
   const patchBar = (partial: Partial<NonNullable<OverlayDraft['bar']>>) =>
@@ -238,10 +257,23 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
       ...payload
     } = editor as OverlayDraft & { createdAt?: unknown; updatedAt?: unknown }
     try {
-      // JSON round-trip strips undefined values Firestore rejects.
+      // JSON round-trip strips undefined values Firestore rejects. The copy
+      // is stored again here, for a name typed before the variables arrived.
       const cleaned = JSON.parse(
         JSON.stringify({
           ...payload,
+          ...(payload.bar
+            ? { bar: { ...payload.bar, text: copy.stored(payload.bar.text) } }
+            : {}),
+          ...(payload.popup
+            ? {
+                popup: {
+                  ...payload.popup,
+                  headline: copy.stored(payload.popup.headline),
+                  body: copy.stored(payload.popup.body),
+                },
+              }
+            : {}),
           name: (editor.name ?? '').trim() || null,
         }),
       )
@@ -562,8 +594,15 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
                     size="small"
                     label="Text"
                     required
-                    value={editor.bar?.text ?? ''}
-                    onChange={(event) => patchBar({ text: event.target.value })}
+                    value={copy.editable(editor.bar?.text)}
+                    onChange={(event) =>
+                      patchBar({ text: copy.stored(event.target.value) })
+                    }
+                    error={barTextShownAsTyped.length > 0}
+                    helperText={
+                      shownAsTypedHelperText(barTextShownAsTyped) ??
+                      OVERLAY_COPY_HELPER_TEXT
+                    }
                   />
                   <TextField
                     size="small"
@@ -595,10 +634,12 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
                   <TextField
                     size="small"
                     label="Headline"
-                    value={editor.popup?.headline ?? ''}
+                    value={copy.editable(editor.popup?.headline)}
                     onChange={(event) =>
-                      patchPopup({ headline: event.target.value })
+                      patchPopup({ headline: copy.stored(event.target.value) })
                     }
+                    error={headlineShownAsTyped.length > 0}
+                    helperText={shownAsTypedHelperText(headlineShownAsTyped)}
                   />
                   <TextField
                     size="small"
@@ -606,9 +647,14 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
                     required
                     multiline
                     minRows={2}
-                    value={editor.popup?.body ?? ''}
+                    value={copy.editable(editor.popup?.body)}
                     onChange={(event) =>
-                      patchPopup({ body: event.target.value })
+                      patchPopup({ body: copy.stored(event.target.value) })
+                    }
+                    error={bodyShownAsTyped.length > 0}
+                    helperText={
+                      shownAsTypedHelperText(bodyShownAsTyped) ??
+                      OVERLAY_COPY_HELPER_TEXT
                     }
                   />
                   <Stack direction="row" spacing={1}>
@@ -757,7 +803,16 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
           <Button color="inherit" onClick={() => setEditor(null)}>
             {'Cancel'}
           </Button>
-          <Button variant="contained" color="primary" onClick={handleSave}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleSave}
+            disabled={copy.pending(
+              editor?.bar?.text,
+              editor?.popup?.headline,
+              editor?.popup?.body,
+            )}
+          >
             {'Save'}
           </Button>
         </DialogActions>

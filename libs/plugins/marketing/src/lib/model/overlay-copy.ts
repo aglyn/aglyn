@@ -61,3 +61,33 @@ export function resolveOverlayCopy(
   if (typeof text !== 'string' || !text.includes('{{')) return text
   return resolveHostTokens(resolveBindings(text, variables), host)
 }
+
+/** Any `{{…}}` token, whatever it names. */
+const ANY_TOKEN_PATTERN = /\{\{[^{}]*\}\}/g
+
+/**
+ * The tokens in stored overlay copy that a visitor would read exactly as
+ * typed: every token {@link resolveOverlayCopy} leaves in place.
+ *
+ * A bare `{{name}}` is one — nothing on a published page resolves that form,
+ * which is why an editor rewrites a name it recognizes to `{{var:id}}` before
+ * saving — and so is any token overlay copy has no source for, such as a
+ * function call or an entry field.
+ *
+ * Each token is put through the published page's own resolution rather than
+ * matched against a list of forms, so what an editor warns about cannot drift
+ * from what the page does. A variable whose document is gone and a detail the
+ * site has not set both render as nothing, and neither is listed.
+ */
+export function overlayCopyTokensShownAsTyped(
+  text: string | undefined,
+  variables: Record<string, HostVariable>,
+  host: HostTokenSource | null | undefined,
+): string[] {
+  if (typeof text !== 'string' || !text.includes('{{')) return []
+  const shown = new Set<string>()
+  for (const token of text.match(ANY_TOKEN_PATTERN) ?? []) {
+    if (resolveOverlayCopy(token, variables, host) === token) shown.add(token)
+  }
+  return [...shown]
+}
