@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import type { SitePageEnricher } from '@aglyn/aglyn/server'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
 import * as MarketingModel from '../model'
+import { OVERLAY_COPY_FIELDS, resolveOverlayCopy } from '../model/overlay-copy'
 import { getClientAutomations, type ClientAutomation } from './get-client-automations'
 import { getScreenExperiments, type ScreenExperiment } from './get-screen-experiments'
 import getOverlays from './get-overlays'
@@ -94,15 +95,24 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
           : {}),
       }
     : ((host as any)?.popup as Aglyn.HostPopup | undefined)
-  const overlayVariables =
-    overlaysEntitled &&
-    ((barConfig?.enabled && barConfig.text) ||
-      (popupConfig?.enabled && popupConfig.body))
-      ? await getVariables({ hostId })
-      : {}
+  /**
+   * Overlay copy as the visitor reads it, through the one resolution every
+   * overlay path shares.
+   *
+   * The site's variables are read at most once per page, and only for copy
+   * that holds a token: most bars and popups are plain text and cost no read.
+   */
+  let overlayVariables:
+    | Promise<Record<string, Aglyn.HostVariable>>
+    | undefined
+  const overlayCopy = async (text: string): Promise<string> => {
+    if (!text.includes('{{')) return text
+    overlayVariables ??= getVariables({ hostId })
+    return resolveOverlayCopy(text, await overlayVariables, host)
+  }
   let announcementBar: Record<string, unknown> | null = null
   if (overlaysEntitled && barConfig?.enabled && barConfig.text) {
-    const text = Aglyn.resolveBindings(barConfig.text, overlayVariables)
+    const text = await overlayCopy(barConfig.text)
     announcementBar = {
       text,
       ...(barConfig.href ? { href: barConfig.href } : {}),
@@ -119,9 +129,9 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
   }
   let popup: Record<string, unknown> | null = null
   if (overlaysEntitled && popupConfig?.enabled && popupConfig.body) {
-    const body = Aglyn.resolveBindings(popupConfig.body, overlayVariables)
+    const body = await overlayCopy(popupConfig.body)
     const headline = popupConfig.headline
-      ? Aglyn.resolveBindings(popupConfig.headline, overlayVariables)
+      ? await overlayCopy(popupConfig.headline)
       : undefined
     popup = {
       ...(headline ? { headline } : {}),
@@ -183,19 +193,39 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
         })
       : []
 
+  /**
+   * A stored bar or popup with its copy resolved and every other field as
+   * stored. The site runtime renders these payloads as they arrive, so copy
+   * left unresolved here reaches the visitor as the raw token.
+   */
+  const withOverlayCopy = async <T extends object>(payload: T): Promise<T> => {
+    const resolved = { ...payload } as Record<string, unknown>
+    for (const field of OVERLAY_COPY_FIELDS) {
+      const value = resolved[field]
+      if (typeof value === 'string') resolved[field] = await overlayCopy(value)
+    }
+    return resolved as T
+  }
+
   // Overlay payloads showOverlay steps reference (AGL-257).
   const automationOverlays: Record<string, any> = {}
   for (const automation of clientAutomations) {
     for (const step of automation.steps) {
-      if (step.type === 'showOverlay' && step.overlayId) {
+      if (
+        step.type === 'showOverlay' &&
+        step.overlayId &&
+        !automationOverlays[step.overlayId]
+      ) {
         const overlay = allOverlayDocs.find(
           (candidate) => candidate.$id === step.overlayId,
         )
         if (overlay) {
           automationOverlays[step.overlayId] = {
             kind: overlay.kind,
-            ...(overlay.bar ? { bar: overlay.bar } : {}),
-            ...(overlay.popup ? { popup: overlay.popup } : {}),
+            ...(overlay.bar ? { bar: await withOverlayCopy(overlay.bar) } : {}),
+            ...(overlay.popup
+              ? { popup: await withOverlayCopy(overlay.popup) }
+              : {}),
           }
         }
       }
