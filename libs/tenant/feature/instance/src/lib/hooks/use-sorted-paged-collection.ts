@@ -105,10 +105,12 @@ function useCurrentRows(rows: unknown, request: DependencyList): boolean {
  *
  * ```ts
  * useSortedPagedCollection<Entry>(
- *   () => query(collection(firestore, 'hosts', hostId, 'entries'),
- *               where('status', '==', status)),
+ *   () => query(
+ *     collection(firestore, 'hosts', hostId, 'collections', collectionId, 'entries'),
+ *     where('status', '==', status),
+ *   ),
  *   { field: 'publishedAt', direction: 'desc' },
- *   [firestore, hostId, status],
+ *   [firestore, hostId, collectionId, status],
  *   { idField: '$id', equalityFields: ['status'] },
  * )
  * ```
