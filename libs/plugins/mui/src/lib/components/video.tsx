@@ -624,26 +624,35 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 64,
-              height: 64,
+              // A poster is a frame of unknown brightness, and this control
+              // has to separate from all of them. A solid disc does; the
+              // translucent scrim it replaced sank into any dark frame.
+              width: { xs: 64, sm: 80, md: 96 },
+              height: { xs: 64, sm: 80, md: 96 },
               borderRadius: '50%',
-              color: 'common.white',
-              bgcolor: 'rgba(0, 0, 0, 0.55)',
+              // The site's accent, not a literal. A play control is the one
+              // mark on a poster that should read as the brand's, so it takes
+              // the theme's primary the way every other accented glyph does.
+              color: 'primary.main',
+              bgcolor: 'common.white',
               boxShadow: 6,
               // Gated in CSS rather than behind a JS branch, so toggling the
               // OS setting after load resolves in BOTH directions — the same
               // reason `element-animation-assets` puts every rule it has
               // inside this query.
               '@media (prefers-reduced-motion: no-preference)': {
-                transition: 'transform 150ms, background-color 150ms',
+                transition: 'transform 150ms, color 150ms',
                 'button:hover &, button:focus-visible &': {
                   transform: 'translate(-50%, -50%) scale(1.08)',
-                  bgcolor: 'rgba(0, 0, 0, 0.75)',
+                  color: 'primary.dark',
                 },
               },
             }}
           >
-            <MdiIcon path={mdiPlay.path} sx={{ fontSize: 36, ml: '4px' }} />
+            <MdiIcon
+              path={mdiPlay.path}
+              sx={{ fontSize: { xs: 32, sm: 40, md: 48 }, ml: '4px' }}
+            />
           </Box>
         </Box>
         {armed ? (
