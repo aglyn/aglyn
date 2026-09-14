@@ -18,6 +18,7 @@
 import {
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
+  isLiveSubscriptionStatus,
   orgCogsInputFrom,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
@@ -159,8 +160,8 @@ async function readAddonSince(orgId: string): Promise<AddonSince> {
     // The LIVE subscription's item, when one exists: an add-on on a canceled
     // subscription is not an add-on the org has, and `hasAiAddon` already
     // says so — the date beside "off" would only confuse.
-    const live = subscriptions.filter(
-      (subscription) => subscription.status === 'active' || subscription.status === 'trialing' || subscription.status === 'past_due',
+    const live = subscriptions.filter((subscription) =>
+      isLiveSubscriptionStatus(subscription.status),
     )
     for (const subscription of live.length ? live : subscriptions) {
       for (const item of subscription.items?.data ?? []) {
