@@ -217,6 +217,25 @@ export function rankAssistSpend(
   return { rows: sorted.slice(0, cap), ranked: sorted.length }
 }
 
+/**
+ * Today's platform-wide free-tier AI spend against its daily ceiling
+ * (AGL-2925), as the route reads it beside the mined signals. Declared here,
+ * where the page's report type lives, so the client page needs no import
+ * from the admin library to name it.
+ */
+export interface AssistFreeSpendReadout {
+  /** The UTC day the figures describe. */
+  day: string
+  estCostUsd: number
+  requests: number
+  refusals: number
+  ceilingUsd: number
+  /** True once staff were mailed at 80% today. */
+  alerted: boolean
+  /** True while every Free workspace is refused generation for the day. */
+  paused: boolean
+}
+
 export interface AssistMiningReport {
   scanned: number
   /** True when the read hit its ceiling — see `mineAssistSignals`. */
@@ -283,6 +302,12 @@ export interface AssistMiningReport {
     ungroundedRoutes: number
     orgs: number
   }
+  /**
+   * Today's free-tier spend against the platform ceiling (AGL-2925).
+   * Optional because the miner is pure and does not produce it — the route
+   * reads it from Firestore and attaches it beside the mined report.
+   */
+  freeSpend?: AssistFreeSpendReadout
   /** Turns whose words are worth reading — see {@link ProseCandidate}. */
   proseCandidates: ProseCandidate[]
   ungrounded: {

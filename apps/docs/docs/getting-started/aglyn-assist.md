@@ -101,7 +101,12 @@ If a quoted page did not cover what you meant, just ask again with more detail
 ## Message limits
 
 - **Free workspaces** get a limited number of assistant messages each day,
-  with answers and docs links.
+  with answers and docs links, and **300 AI credits a month** for the
+  assistant and AI generation together. The credits belong to the person who
+  owns the workspace, so several Free workspaces owned by one account share
+  them; when they are used, AI pauses until next month or an upgrade, and
+  nothing is ever billed. A new account waits a short while after signing up
+  before it can generate, and free requests are capped per day.
 - **Pro and higher plans** get generous limits, page-aware guidance, and the
   offers to open a page described above.
 

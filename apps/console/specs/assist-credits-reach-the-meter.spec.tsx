@@ -71,8 +71,8 @@ import BillingUsageComponent from '../components/billing/billing-usage.component
 
 /** Business: 7,500 credits included. */
 const BUSINESS = { $id: 'org-1', plan: 'business' } as any
-/** Free: `assistCreditsPerMonth: 0` — the plan sells no band. */
-const FREE = { $id: 'org-1', plan: 'free' } as any
+/** Starter: `assistCreditsPerMonth: 0` — the plan sells no band. */
+const STARTER = { $id: 'org-1', plan: 'starter' } as any
 const HOSTS = [{ $id: 'host-a', displayName: 'Site A' }]
 
 /** Named for the ONE pool (AGL-2899): the add-on widens it, never a second meter. */
@@ -110,9 +110,11 @@ beforeEach(() => {
 })
 
 describe('the fixture is a plan that really sells a band', () => {
-  it('Business includes 7,500 credits and Free includes none', () => {
+  it('Business includes 7,500 credits, Starter includes none, and Free carries the taste', () => {
     expect(PLAN_ENTITLEMENTS.business.assistCreditsPerMonth).toBe(7_500)
-    expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(0)
+    expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(0)
+    // The Free taste (AGL-2925): a real band, so the meter renders for it.
+    expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(300)
   })
 })
 
@@ -166,10 +168,10 @@ describe('a workspace with a band can see how much of it is left', () => {
   })
 
   it('renders NO meter for a plan that sells no band', async () => {
-    // "0 of 0" is not a readout of anything, and Free's assistant is bounded
-    // by a message cap the panel already states.
+    // "0 of 0" is not a readout of anything, and Starter's assistant is
+    // bounded by a message cap the panel already states.
     mockCredits = null
-    render(<BillingUsageComponent org={FREE} hosts={HOSTS} />)
+    render(<BillingUsageComponent org={STARTER} hosts={HOSTS} />)
     await waitFor(() => expect(screen.queryAllByText(METER)).toHaveLength(0))
   })
 })

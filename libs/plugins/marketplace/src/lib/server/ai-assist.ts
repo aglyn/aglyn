@@ -20,7 +20,10 @@ import {
   type PluginApiHandler,
   type PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import { assistOwnControlRefusalText } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  assistFreeTasteRefusalText,
+  assistOwnControlRefusalText,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   aiPermissionRefusal,
   checkRateLimit,
@@ -42,10 +45,14 @@ import {
 // the entry point, so the spec exercises the real request shape and the real
 // error boundary rather than a stub that agrees with the handler.
 import {
+  AI_ACCEPTABLE_USE_BLOCK,
   AiUpstreamError,
   runAiRequest,
   type AiResult,
 } from '@aglyn/tenant-data-admin/server/ai-runtime'
+// By its own entry point for the same reason (AGL-2925): the per-address
+// rung is real in the spec, keyed on whatever address the harness sends.
+import { checkAiClientIpRateLimit } from '@aglyn/tenant-data-admin/server/ai-abuse-guards'
 import {
   MARKETPLACE_COMPONENT_ID_ALLOWLIST,
   sanitizeMarketplaceDefinition,
@@ -287,6 +294,17 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         .status(429)
         .json({ error: 'Too many AI requests — slow down a moment' })
     }
+    // The same window keyed on the trusted-hop client address (AGL-2925):
+    // accounts rotated behind one address share one budget.
+    const ipRate = checkAiClientIpRateLimit(headers)
+    if (ipRate && !ipRate.allowed) {
+      for (const [name, value] of Object.entries(rateLimitHeaders(ipRate))) {
+        res.setHeader(name, value)
+      }
+      return res
+        .status(429)
+        .json({ error: 'Too many AI requests — slow down a moment' })
+    }
 
     // RESERVED, not merely checked (AGL-2057/2073). Read-and-increment in one
     // transaction, BEFORE a single token is spent, so N concurrent requests
@@ -324,6 +342,9 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
       return res.status(ownControl ? 402 : 429).json({
         error:
           ownControl ??
+          // The Free taste's own precautions (AGL-2925), in the sentences
+          // the console assistant uses.
+          assistFreeTasteRefusalText(reservation.refusedBy) ??
           'This workspace reached its AI assist limit for the month — contact support if you need a higher cap',
         // CREDITS, never the reservation itself — see `publicAssistQuota`.
         quota: publicAssistQuota(reservation),
@@ -335,6 +356,10 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     // `assistModelForMode`. Two call sites would let them drift.
     const model = assistModelForMode(mode)
     /** Meter what the provider actually charged us for, per org. */
+    // The account the reservation drew on (AGL-2925), read once here: the
+    // closure below runs after `reservation` may have been cleared by a
+    // refund, and a refund never reaches the meter.
+    const free = reservation?.free ?? null
     const meter = (result: AiResult): Promise<unknown> =>
       recordAssistCost(firestore, orgId, {
         route: `/api/ai/assist/${mode}`,
@@ -344,6 +369,7 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         usage: result.usage,
         docsPaths: [],
         stopReason: result.stopReason,
+        free,
       }).catch((error) => console.error('assist cost metering failed', error))
 
     /**
@@ -365,7 +391,10 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
           model,
           maxTokens,
           stream: false,
-          system: [{ text: system }],
+          // The acceptable-use rules ahead of every mode's own prompt
+          // (AGL-2925): one block, shared with the console assistant, and
+          // no per-org byte in it.
+          system: [{ text: `${AI_ACCEPTABLE_USE_BLOCK}\n\n${system}` }],
           messages: [{ role: 'user', content }],
         })
         providerAnswered = true

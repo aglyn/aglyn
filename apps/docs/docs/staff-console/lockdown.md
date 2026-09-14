@@ -373,7 +373,18 @@ page.
 | `checkout` | **New** Stripe checkout sessions only — console plan upgrades and marketplace purchases. Existing subscriptions, invoices, and the pay-your-way-out path for billing-locked orgs are untouched, and the notice says explicitly that it is *not* a payment failure. | Stripe integration bug mid-charge |
 | `marketplace-installs` | Installing anything from the marketplace (all artifact kinds, including re-copying an updated artifact). Everything already installed keeps working; publishing, reviews, and abuse reports stay open. | A malicious listing slips review (the per-plugin kill switch takes out one listing; this is the wider valve) |
 | `ai-assist` | The AI assist endpoint. The switch works even while the feature is unconfigured — it predates the API key on purpose. | Provider incident, cost runaway |
-| `ai-generate` | The generative doors (sections, pages and automations written by a model), behind the `release_ai_generative` flag. Separate from `ai-assist` because generation spends at a different rate and an incident on one need not stop the other. | Provider incident, cost runaway on generation |
+| `ai-generate` | The generative doors (sections, pages and automations written by a model), behind the `release_ai_generative` flag. Separate from `ai-assist` because generation spends at a different rate and an incident on one need not stop the other. | Provider incident, cost runaway on generation, **an abuse wave on the Free AI taste** — this is the first response, ahead of any per-account measure |
+
+**The Free taste and this key.** Free workspaces carry 300 AI credits a month
+with no invoice behind them, and a platform-wide daily ceiling on free-tier
+spend pauses free generation on its own when the sum of a day's free spend
+reaches `AI_FREE_DAILY_PLATFORM_CEILING_USD` (staff are mailed at 80%, the
+assist signals page shows the day so far). That pause is automatic and
+Free-only. `ai-generate` is the manual lever for anything the ceiling has not
+caught yet — a wave that is spending fast but is still under the day's ceiling,
+or generated content that is abusive rather than expensive — and it stops
+generation for every plan, paid included, so it is the wider valve: pull it
+first, then read the signals page to see which workspaces drove the spend.
 
 **Composition, not ranking:** a platform lock implies every feature; a feature
 lock implies nothing about the platform, workspace, site, or account scopes.

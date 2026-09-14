@@ -80,6 +80,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       { error: 'Verify your email to continue', reason: 'email-unverified' },
       { status: 403 },
     ),
+  // The Free taste's day (AGL-2925): read beside the mined report and
+  // attached to it, so the staff page can render the ceiling chip.
+  assistUsageDay: () => '2026-09-14',
+  readPlatformFreeSpend: async (_firestore: unknown, day: string) => ({
+    day,
+    estCostUsd: 21.5,
+    requests: 88,
+    refusals: 3,
+    ceilingUsd: 25,
+    alerted: true,
+    paused: false,
+  }),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -529,6 +541,17 @@ describe('/api/admin/assist-signals authorization (AGL-2252)', () => {
     expect(response.status).toBe(200)
     const payload = await response.json()
     expect(mockCollectionGroup).toHaveBeenCalledWith('assistSignals')
+    // Today's free-tier spend rides beside the report (AGL-2925), read for
+    // the current UTC day and handed through untouched.
+    expect(payload.freeSpend).toEqual({
+      day: '2026-09-14',
+      estCostUsd: 21.5,
+      requests: 88,
+      refusals: 3,
+      ceilingUsd: 25,
+      alerted: true,
+      paused: false,
+    })
     // The org is the PARENT of the parent — the signal document carries no
     // identifier of its own (AGL-1972), so a projection that looked for an
     // `orgId` field would attribute every row on the platform to nobody.

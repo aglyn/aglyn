@@ -1839,6 +1839,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // One document per UTC day of FREE-TIER AI provider spend (AGL-2925):
+    // `{ day, estCostUsd, requests, refusals, alertedAt?, pausedAt? }`,
+    // incremented by the assist meter and read inside every Free
+    // workspace's reservation to refuse generation once the day's sum meets
+    // `AI_FREE_DAILY_PLATFORM_CEILING_USD`. Deny ALL client access, staff
+    // included: a client that could write it could un-pause the day or
+    // pause it for everyone, and the figure is our provider bill. The staff
+    // readout goes through `/api/admin/assist-signals` on the Admin SDK.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record.
+    match /platformAiFreeSpend/{day} {
+      allow read, write: if false;
+    }
+
     // Stripe customer -> org reverse index (AGL-1028), written by the webhook
     // beside `orgs/{orgId}/billing/stripe`. It exists because moving
     // `stripeCustomerId` into a subcollection broke the webhook's
@@ -3701,6 +3715,19 @@ service cloud.firestore {
         allow read: if isStaff() ||
           (isSignedIn() && request.auth.uid == userId);
         allow write: if false;
+      }
+
+      // The account's month of FREE AI spend (AGL-2925): `{ month,
+      // estCostUsd, requests, days: { [day]: { requests, refusals } } }`,
+      // the allowance one person shares across every free workspace they
+      // own. Closed to its OWNER as well as to everyone else, and the owner
+      // is the point: `users/{userId}` itself is owner-writable with no
+      // field validation, so anything the meter kept on that document could
+      // be reset by the person it meters. Here it is the meter's alone —
+      // written and read inside `reserveAssistMessage`'s transaction on the
+      // Admin SDK, and shown to the owner only through the billing routes.
+      match /aiUsage/{month} {
+        allow read, write: if false;
       }
     }
 

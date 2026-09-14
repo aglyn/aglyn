@@ -22,11 +22,16 @@ import {
   type ReleaseFlagKey,
 } from '@aglyn/aglyn/server'
 import {
+  assistFreeTasteRefusalText,
   assistHardCapRefusalText,
   assistRefusedByHardCap,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import type { AglynOrganization } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import type { OrgFeatureFlags } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import {
+  checkAiClientIpRateLimit,
+  freeAccountAgeRefusal,
+} from './ai-abuse-guards'
 import {
   checkRateLimit,
   rateLimitHeaders,
@@ -74,9 +79,21 @@ import { isServerReleaseFlagOnForOrg } from './release-flags'
  *        feature kill switch, with its per-feature staff bypass
  *   429  the per-uid rate limit, which fails SOFT: it is a per-instance
  *        window that smooths bursts and is not the spend bound
+ *   429  the per-address rate limit (AGL-2925), the same window keyed on
+ *        the trusted-hop client address, so a farm rotating accounts
+ *        behind one address meets one budget; skipped when no address is
+ *        readable
+ *   403  account age (AGL-2925): a Free workspace's caller must hold an
+ *        account older than `AI_FREE_MIN_ACCOUNT_AGE_HOURS`; paid
+ *        workspaces and staff never consult it, and a record that cannot
+ *        be read is a 503 rather than an admission
  *   ---  the reservation, which fails CLOSED: it is the only global, atomic
  *        bound on provider spend, so a reservation that cannot be taken
- *        refuses with 503 rather than calling the provider uncapped
+ *        refuses with 503 rather than calling the provider uncapped. On a
+ *        Free workspace it also decides the taste's own rungs — the
+ *        account's daily requests, its refusal pause, its monthly
+ *        allowance across every workspace it owns, and the platform-wide
+ *        daily ceiling — inside the same transaction
  *
  * A door that gets a context back has a reservation in hand and owes the
  * meter a record — or `releaseAssistMessage` if the provider was never
@@ -264,6 +281,34 @@ export async function aiGateLadder(
       { status: 429, headers: rateLimitHeaders(rate) },
     )
   }
+  // The same window keyed on the address (AGL-2925): a farm rotating
+  // fresh accounts behind one NAT meets one budget rather than one per
+  // account. Answered with the same status and reason so the panel's
+  // handling is unchanged.
+  const ipRate = checkAiClientIpRateLimit(request.headers)
+  if (ipRate && !ipRate.allowed) {
+    return Response.json(
+      { error: 'Too many requests — slow down a moment', reason: 'rate' },
+      { status: 429, headers: rateLimitHeaders(ipRate) },
+    )
+  }
+
+  // A Free workspace's caller must have held an account for a day
+  // (AGL-2925). Read from the pool the token was minted in — a tenant
+  // user's record is not in the project pool — and after the rate limits,
+  // so a burst cannot turn one cached read into many.
+  const tooYoung = await freeAccountAgeRefusal({
+    uid: decoded.uid,
+    org,
+    staff,
+    getUser: (uid) =>
+      (decoded.firebase?.tenant
+        ? app.auth().tenantManager().authForTenant(decoded.firebase.tenant)
+        : app.auth()
+      ).getUser(uid),
+    now: input.now,
+  })
+  if (tooYoung) return tooYoung
 
   // RESERVED, not merely checked (AGL-2057/2073): read-and-increment in one
   // transaction BEFORE a token is spent, so N concurrent requests cannot all
@@ -297,11 +342,14 @@ export async function aiGateLadder(
       {
         error: hardCapped
           ? assistHardCapRefusalText(org)
-          : reservation.refusedBy === 'budget' || reservation.refusedBy === 'band'
-            ? reservation.budgetUsd === null
-              ? 'This workspace reached its AI spending limit for the month'
-              : 'This workspace used its AI credits for the month'
-            : 'This workspace reached its AI limit for the month',
+          : // The Free taste's own precautions (AGL-2925) have their own
+            // sentences: each names a clock or an upgrade, never a figure.
+            (assistFreeTasteRefusalText(reservation.refusedBy) ??
+            (reservation.refusedBy === 'budget' || reservation.refusedBy === 'band'
+              ? reservation.budgetUsd === null
+                ? 'This workspace reached its AI spending limit for the month'
+                : 'This workspace used its AI credits for the month'
+              : 'This workspace reached its AI limit for the month')),
         reason: 'quota',
         // CREDITS, never the reservation itself — its figures are our
         // provider bill and do not leave the server.

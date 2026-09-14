@@ -92,6 +92,47 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-14 — The Free AI taste: 300 credits a month behind a hard wall, per account, shipped with its abuse precautions
+
+- **Decided by:** the account owner on 2026-09-14 (AGL-2895), as the one addition to the add-on decision below: Free gets a taste of AI generation only together with the precautions that stop it multiplying, which is AGL-2925.
+- **Scope:** packaging
+- **Evidence:** `FREE_AI_TASTE_CREDITS_PER_MONTH`, `PLAN_ENTITLEMENTS.free.assistCreditsPerMonth` and `PLAN_ENTITLEMENTS.free.features.aiGenerative` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `PLAN_PRICING.free.extraAssistCreditsUsdPer1k` unchanged at `null`, so `assistBandRefuses` makes the band a wall; the account, daily-request, refusal and platform rungs in `libs/tenant/data/admin/src/lib/server/assist-free-taste.ts`, decided inside `reserveAssistMessage`'s transaction; the per-address window and the account-age rung in `ai-abuse-guards.ts`; `apps/console/specs/tier-margin-floor.spec.ts` (the taste costs ≤ $0.30 a month per Free workspace), `plan-entitlements.spec.ts`, `assist-credits.spec.ts`, `assist-usage.spec.ts`, `ai-gate.spec.ts`; the chain in `docs/RATE_LIMITING.md`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2925, AGL-2895, AGL-2265.
+
+**No locked price moves.** Free's `assistCreditsPerMonth` goes from 0 to 300
+and `features.aiGenerative` from off to on; nothing else on the Free row and
+nothing on any paid row changes. The band is a WALL: no rate, no overage, no
+switch, no invoice, ever.
+
+**Why 300, and why per account.** The taste exists so the AI landing pages can
+say "generate your first page free". Three hundred credits is one or two
+generated sections, and costs at most $0.30 of provider spend a month per Free
+workspace. It is the one AI band with no invoice behind it, so it is metered a
+second time, per **account** — the workspace owner's, read off `ownerUid` ∪
+`createdByUid` exactly as the free-workspace ceiling (AGL-2265) counts — so the
+three free workspaces one person may hold share one allowance rather than
+tripling it. A member invited to someone else's free workspace draws on that
+workspace's band and its owner's allowance, never their own account.
+
+**The precautions that ship with it**, each one a rung that can go red on its
+own: a verified email and a minimum account age (`AI_FREE_MIN_ACCOUNT_AGE_HOURS`,
+default 24, read off the Auth record's creation time and never the token); a
+per-address window of 60 / min on every AI door beside the per-uid 20 / min; a
+per-account daily cap of `AI_FREE_DAILY_REQUESTS` (default 30); a pause for the
+day after three `refusal` stops, with a refusal drawing no credits; a
+platform-wide ceiling on one UTC day of free-tier spend
+(`AI_FREE_DAILY_PLATFORM_CEILING_USD`, default $25 — staff mailed at 80%, free
+generation refused at 100%, paid workspaces untouched); an acceptable-use block
+in every generation prompt; and the `ai-generate` lockdown key as the manual
+stop. The chain in front of all of it — edge challenge, signups lock, workspace
+creation limits — is written down in `docs/RATE_LIMITING.md`.
+
+**What does not move.** `aiAssist` stays off on Free: the guided rung of the
+console assistant stays Pro and up, and Free keeps the docs-grounded chat it
+had. The `/pricing` compare grid does not carry the credits row yet; the tables
+generator emits it and declares it expected-absent until AGL-2900 publishes it.
+
+---
+
 ## 2026-09-14 — The Aglyn AI add-on: a flat per-workspace line that unlocks generative building and widens the assist band
 
 - **Decided by:** the account owner on 2026-09-14 (AGL-2895), confirming the recommendation the engineering session recorded the same day — one paid add-on, flat per workspace, one credit pool, the figures below — with one addition: the Free taste ships only together with abuse precautions (AGL-2925). The twelve live Stripe prices were minted on 2026-09-14 (AGL-2897); the pricing page card follows under AGL-2900.

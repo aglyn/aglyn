@@ -385,6 +385,31 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                       label={`${reason}: ${count}`}
                     />
                   ))}
+                  {/*
+                   * Today's FREE-TIER spend against the platform ceiling
+                   * (AGL-2925). The one AI band with no invoice behind it,
+                   * and the one figure that can switch every Free
+                   * workspace's generation off at once — so it sits with
+                   * the fleet money rather than on a page of its own. Red
+                   * once paused, amber once staff were mailed at 80%.
+                   */}
+                  {report.freeSpend ? (
+                    <Chip
+                      color={
+                        report.freeSpend.paused
+                          ? 'error'
+                          : report.freeSpend.alerted
+                            ? 'warning'
+                            : 'default'
+                      }
+                      label={
+                        `free tier today ${money(report.freeSpend.estCostUsd)} of ` +
+                        `${money(report.freeSpend.ceilingUsd)} ceiling · ` +
+                        `${report.freeSpend.requests.toLocaleString()} requests` +
+                        (report.freeSpend.paused ? ' · PAUSED until tomorrow' : '')
+                      }
+                    />
+                  ) : null}
                 </Stack>
               )}
             </CardDisplay>

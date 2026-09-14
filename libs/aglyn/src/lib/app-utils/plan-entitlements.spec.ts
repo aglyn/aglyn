@@ -86,7 +86,7 @@ import {
   aiAddonUnits,
   hasAiAddon,
 } from './plan-entitlements'
-import { ASSIST_CREDIT_COST_USD } from './assist-credits'
+import { ASSIST_CREDIT_COST_USD, assistBandRefuses } from './assist-credits'
 import type { OrgPlan } from '../foundation'
 
 describe('plan entitlements', () => {
@@ -2659,6 +2659,17 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
           expect(`${plan}: ${price}`).toBe(`${plan}: null`)
           continue
         }
+        if (plan === 'free' && band === 'assistCreditsPerMonth') {
+          // The Free AI taste (AGL-2925): a positive band with NO rate, by
+          // decision, and NOT the silent free overage this rule forbids —
+          // because the band is a WALL. `assistBandRefuses` is the gate's
+          // own predicate, so a Free workspace is refused at 300 rather
+          // than handed credits past a bound that bills nothing.
+          expect(limit).toBeGreaterThan(0)
+          expect(`${plan}: ${price}`).toBe(`${plan}: null`)
+          expect(assistBandRefuses({ plan })).toBe(true)
+          continue
+        }
         if (Number.isFinite(limit) && limit > 0) {
           sold.push(plan)
           expect(`${plan}: ${price}`).not.toBe(`${plan}: null`)
@@ -2977,16 +2988,22 @@ describe('the Aglyn AI add-on (AGL-2896)', () => {
   const PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
   const SOLD = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency'] as const
 
-  it('no self-serve tier includes generative building; Enterprise carries it in the agreement', () => {
+  it('no PAID self-serve tier includes generative building; Enterprise carries it in the agreement, Free carries the taste', () => {
+    // Free's `true` is the AI taste (AGL-2925): 300 credits a month behind
+    // a wall, so "generate your first page free" is a thing the product
+    // does. Every paid self-serve tier buys the rung through the add-on.
     for (const plan of PLANS) {
       expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].features.aiGenerative}`).toBe(
-        `${plan}: ${plan === 'enterprise'}`,
+        `${plan}: ${plan === 'enterprise' || plan === 'free'}`,
       )
     }
-    // The flag is distinct from `aiAssist`, which Pro and up already carry.
+    // The flag is distinct from `aiAssist`, which Pro and up already carry
+    // and Free does not: the taste opens generation, not guided assist.
     expect(PLAN_ENTITLEMENTS.pro.features.aiAssist).toBe(true)
     expect(PLAN_ENTITLEMENTS.pro.features.aiGenerative).toBe(false)
+    expect(PLAN_ENTITLEMENTS.free.features.aiAssist).toBe(false)
     expect(checkEntitlement({ plan: 'agency' } as any, 'aiGenerative')).toBe(false)
+    expect(checkEntitlement({ plan: 'free' } as any, 'aiGenerative')).toBe(true)
   })
 
   it('expands the assist pool and flips BOTH features when purchased', () => {
@@ -3053,18 +3070,25 @@ describe('the Aglyn AI add-on (AGL-2896)', () => {
       seatAddons: { aiAddon: 1 },
     } as any
     expect(hasAiAddon(dead)).toBe(false)
-    expect(resolveOrgEntitlements(dead).assistCreditsPerMonth).toBe(0)
-    expect(resolveOrgEntitlements(dead).features.aiGenerative).toBe(false)
+    // Dead resolves to Free, and Free carries the taste (AGL-2925): the
+    // add-on's nine thousand and Pro's own band are gone, three hundred
+    // remain as a wall, and the generative door is the taste's rather than
+    // the add-on's. Guided assist goes with the plan.
+    expect(resolveOrgEntitlements(dead).assistCreditsPerMonth).toBe(
+      PLAN_ENTITLEMENTS.free.assistCreditsPerMonth,
+    )
+    expect(resolveOrgEntitlements(dead).assistCreditsPerMonth).toBe(300)
+    expect(resolveOrgEntitlements(dead).features.aiGenerative).toBe(true)
     expect(resolveOrgEntitlements(dead).features.aiAssist).toBe(false)
     // Dunning grace keeps it, as it keeps every other add-on.
     const pastDue = { ...dead, subscription: { status: 'past_due' } }
     expect(hasAiAddon(pastDue)).toBe(true)
     expect(resolveOrgEntitlements(pastDue).assistCreditsPerMonth).toBe(2_750 + 9_000)
-    // Free never sells it: a quantity on a Free org adds nothing.
+    // Free never sells it: a quantity on a Free org adds nothing to the taste.
     expect(
       resolveOrgEntitlements({ plan: 'free', seatAddons: { aiAddon: 1 } } as any)
         .assistCreditsPerMonth,
-    ).toBe(0)
+    ).toBe(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth)
   })
 
   it('reaches the revenue figure: the add-on bills once, monthly, on either interval', () => {

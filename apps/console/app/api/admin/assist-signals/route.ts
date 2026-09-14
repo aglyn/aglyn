@@ -21,9 +21,11 @@ import {
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import {
+  assistUsageDay,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  readPlatformFreeSpend,
 } from '@aglyn/tenant-data-admin'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
@@ -358,9 +360,22 @@ async function handler(request: Request): Promise<Response> {
     const orgLabel = (orgId: string): string =>
       orgLabelById.get(orgId) ?? orgId
 
+    // Today's free-tier spend against the platform ceiling (AGL-2925): one
+    // document read, and the only place staff can see the taste switching
+    // itself off before the email arrives. Best-effort — a readout that
+    // cannot be read must not take the rest of the board down with it.
+    const freeSpend = await readPlatformFreeSpend(
+      firestore,
+      assistUsageDay(),
+    ).catch((error) => {
+      console.error('[admin/assist-signals] free spend readout failed', error)
+      return undefined
+    })
+
     return Response.json(
       {
         ...report,
+        freeSpend,
         orgs: report.orgs.map((row) => ({
           ...row,
           orgLabel: orgLabel(row.orgId),

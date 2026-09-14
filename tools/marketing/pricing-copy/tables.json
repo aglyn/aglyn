@@ -751,6 +751,20 @@
             }
           },
           {
+            "label": "AI credits / mo",
+            "duplicateOf": null,
+            "values": {
+              "free": "300 / mo",
+              "starter": "—",
+              "pro": "2.75k / mo",
+              "business": "7.5k / mo",
+              "scale": "10k / mo",
+              "advanced": "13k / mo",
+              "agency": "58k / mo",
+              "enterprise": "Talk to us"
+            }
+          },
+          {
             "label": "Per-screen analytics",
             "duplicateOf": null,
             "values": {

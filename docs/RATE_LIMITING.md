@@ -165,10 +165,61 @@ we publish?** If it is, per-instance enforcement means the published number is
 not the enforced one, and that is a defect regardless of how cheap the endpoint
 is.
 
+## The AI doors, and the chain in front of the Free taste (AGL-2925)
+
+Every AI door — `POST /api/assist/chat`, `POST /api/ai/assist` and every door
+built on `aiGateLadder` — carries the same two in-memory windows: **20 / min
+per uid** at the door's own key, then **60 / min per client address** at
+`ai-ip:{ip}`, keyed on the trusted-hop address `readClientIp` returns and
+skipped when no address is readable (one bucket for every anonymous caller
+would be an outage the limiter inflicts on itself). Neither is the spend
+bound. The bound is the reservation `reserveAssistMessage` takes in a
+Firestore transaction before a token is spent, and on a Free workspace that
+transaction also decides the taste's own rungs.
+
+The Free taste is 300 AI credits a month with no invoice behind it, so this is
+the whole chain a request has to pass before it can spend one of them. Each
+link is enforced by code that ships, except where noted:
+
+1. **The edge.** The Vercel firewall's bot challenge sits in front of the
+   console origin, so an automated client is challenged before any of these
+   routes runs. `cloud/functions/src/edge-challenge.ts` is the cron caller's
+   detector for that page — evidence the challenge is armed — not a control
+   of its own.
+2. **Account creation.** `beforeUserCreated` in `cloud/functions/src/index.ts`
+   (`signups-lock.ts`) is the one chokepoint for every way an account can be
+   born, and the `signups` feature lock closes it. ⚠️ Enforced only once the
+   blocking function is deployed and registered — the lockdown page reports
+   whether it is.
+3. **A verified address.** Every AI door refuses an unverified email
+   (`emailUnverifiedResponse`), so each account costs a working inbox.
+4. **Workspace creation.** `POST /api/orgs/create` is limited per uid and per
+   address (the row above), and the free-workspace ceiling (AGL-2265) bounds
+   the count at three per account, counted by `ownerUid` ∪ `createdByUid`.
+5. **The door.** The two windows above, then — on a Free workspace only —
+   `AI_FREE_MIN_ACCOUNT_AGE_HOURS` (default 24) read off the Auth record's
+   creation time, never the token.
+6. **The reservation.** The workspace's daily message cap and its 300-credit
+   band, then the OWNER's account: `AI_FREE_DAILY_REQUESTS` (default 30) a
+   day across every free workspace they own, a pause for the day after three
+   `refusal` stops, and the same 300 credits shared across those workspaces
+   (`users/{uid}/aiUsage/{month}`). Then the platform: one day's free-tier
+   spend against `AI_FREE_DAILY_PLATFORM_CEILING_USD` (default $25) —
+   staff mailed at 80%, every Free workspace refused at 100% until the UTC
+   day rolls, paid workspaces untouched (`platformAiFreeSpend/{day}`).
+7. **The kill switch.** The `ai-generate` feature lock on Staff → Lockdown is
+   the manual stop for anything the ceiling has not caught, and it stops
+   generation for every plan.
+
+A refusal from the model draws no credits — it counts against the account's
+day, which is what the pause reads — so a run of declined briefs cannot empty
+a band, and cannot be free either.
+
 ## What is deliberately NOT durable
 
 `POST /api/analytics/collect` and the two `POST /api/errors` client error-report
-endpoints still use in-memory limiters.
+endpoints still use in-memory limiters, and so do the AI doors' two windows
+above — the spend bound behind them is the transaction, not the window.
 
 Each durable call costs one document write plus one document read. That
 is the right price for a password attempt and the wrong price for a beacon

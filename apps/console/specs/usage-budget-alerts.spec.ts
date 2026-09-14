@@ -1174,9 +1174,11 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
   })
 
   it('has NO band to alert on for a plan that sells none', async () => {
-    // Free with no override: `resolveAssistCreditBudget` is null, the limit
-    // is 0 and the check is skipped like every other zero-quota dimension.
-    mockOrgs = [seededOrg({ plan: 'free', rollup: null, assistEstCostUsd: credits(900) })]
+    // Starter with no override: `resolveAssistCreditBudget` is null, the
+    // limit is 0 and the check is skipped like every other zero-quota
+    // dimension. (Free carries the taste since AGL-2925 and alerts on it,
+    // with the wall copy the Free-band case above exercises.)
+    mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: credits(900) })]
     await run()
     expect(assistAlerts()).toHaveLength(0)
     expect(assistGuard()).toBeUndefined()

@@ -37,7 +37,26 @@ import {
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 
-/** Faithful `increment` + merge semantics (the AGL test-double lesson). */
+/** A map value, as opposed to a sentinel, an array or a scalar. */
+function isPlainMap(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype &&
+    !('__inc' in (value as object))
+  )
+}
+
+/**
+ * Faithful `increment` + merge semantics (the AGL test-double lesson).
+ *
+ * Maps merge DEEPLY under `{ merge: true }`, with increments applied at
+ * their nested path — which is what Firestore does, and what the Free
+ * taste's account document (`days.{day}.requests`, AGL-2925) depends on. A
+ * fake that replaced the whole `days` map on every write would zero every
+ * other day's counters and fabricate a green daily cap.
+ */
 function applyData(
   existing: Record<string, unknown> | undefined,
   data: Record<string, unknown>,
@@ -49,6 +68,9 @@ function applyData(
     if (typeof inc === 'number') {
       const current = Number(base[key] ?? 0)
       base[key] = current + inc
+    } else if (isPlainMap(value)) {
+      const current = merge && isPlainMap(base[key]) ? base[key] : undefined
+      base[key] = applyData(current, value, true)
     } else {
       base[key] = value
     }
@@ -90,6 +112,11 @@ function mockMakeFirestore() {
   })
   const makeCollection = (prefix: string) => ({
     doc: (id?: string) => makeDoc(`${prefix}/${id ?? `auto-${++mockAutoId}`}`),
+    add: async (data: Record<string, unknown>) => {
+      const ref = makeDoc(`${prefix}/auto-${++mockAutoId}`)
+      mockDocs.set(ref.path, applyData(undefined, data, false))
+      return ref
+    },
   })
   return {
     collection: (name: string) => makeCollection(name),
@@ -178,6 +205,16 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
+/** The staff mail the platform ceiling sends (AGL-2925), captured. */
+const mockStaffAlerts: Array<{ subject: string; text: string; context: string }> = []
+jest.mock('./staff-alert-email', () => ({
+  __esModule: true,
+  sendStaffAlertEmail: async (input: { subject: string; text: string; context: string }) => {
+    mockStaffAlerts.push(input)
+    return { sent: true }
+  },
+}))
+
 const {
   ASSIST_EXCHANGE_RETENTION_DAYS,
   assistEntitledMonthlyLimit,
@@ -198,9 +235,29 @@ const {
   releaseAssistMessage,
   reserveAssistMessage,
 } = require('./assist-usage') as typeof import('./assist-usage')
+const {
+  aiFreeDailyPlatformCeilingUsd,
+  aiFreeDailyRequests,
+  freeAssistAccount,
+  readPlatformFreeSpend,
+} = require('./assist-free-taste') as typeof import('./assist-free-taste')
+const {
+  FREE_AI_TASTE_CREDITS_PER_MONTH,
+  PLAN_ENTITLEMENTS,
+} = require('@aglyn/aglyn/app-utils/plan-entitlements') as typeof import('@aglyn/aglyn/app-utils/plan-entitlements')
 
 const NOW = new Date('2026-08-17T12:00:00Z')
 const ORG = 'org-assist'
+
+/**
+ * An org that sells NO assist band (AGL-2925). Every case below about the
+ * operator backstop used to pass no org at all, and a plan-less org
+ * resolves as Free — which since the Free taste carries a band of its own,
+ * a small one that binds long before the $40 default. Starter is the one
+ * plan left whose band is genuinely none; `entitled` is a separate
+ * argument here, so the same fixture serves the monthly-gated cases too.
+ */
+const NO_BAND = { plan: 'starter' as const }
 
 const firestore = () =>
   mockMakeFirestore() as unknown as FirebaseFirestore.Firestore
@@ -208,9 +265,12 @@ const firestore = () =>
 beforeEach(() => {
   mockDocs = new Map()
   mockAutoId = 0
+  mockStaffAlerts.length = 0
   delete process.env.ASSIST_FREE_DAILY_LIMIT
   delete process.env.ASSIST_ENTITLED_MONTHLY_LIMIT
   delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
+  delete process.env.AI_FREE_DAILY_REQUESTS
+  delete process.env.AI_FREE_DAILY_PLATFORM_CEILING_USD
 })
 
 describe('period keys and limits', () => {
@@ -531,7 +591,7 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     // guard. The org has 988 messages in hand and is refused anyway, which
     // is the entire point — the messages were dear, not many.
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 41.5 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, NO_BAND)
     expect(reservation).toMatchObject({
       allowed: false,
       refusedBy: 'budget',
@@ -551,7 +611,7 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     // The only difference between the two fixtures is the env var.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 41.5 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, NO_BAND)
     expect(reservation).toMatchObject({
       allowed: true,
       refusedBy: null,
@@ -575,12 +635,12 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
     mockDocs.set(dailyPath, { '2026-08-17': 1 })
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 41.5 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, NO_BAND)
     expect(reservation).toMatchObject({ allowed: true, costUsd: null })
     // And with a ceiling configured the same call DOES look, so the null
     // above means "not consulted" rather than "never reads this field".
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '999'
-    const looked = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    const looked = await reserveAssistMessage(firestore(), ORG, false, NOW, NO_BAND)
     expect(looked).toMatchObject({ allowed: true, costUsd: 41.5 })
   })
 
@@ -589,20 +649,22 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     // configured, which would pass both tests above.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 39 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, NO_BAND)
     expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
   })
 
-  it('binds the FREE tier too, whose gate is a different document', async () => {
-    // The free tier gates on `counters/assistMessagesDaily`, so the spend
-    // figure is in a document the reservation would otherwise never open.
-    // A build that reads the ceiling off the gate document passes every
-    // entitled test above and leaves the free tier unbounded.
+  it('binds the DAILY-GATED tier too, whose gate is a different document', async () => {
+    // An unentitled workspace gates on `counters/assistMessagesDaily`, so the
+    // spend figure is in a document the reservation would otherwise never
+    // open. A build that reads the ceiling off the gate document passes
+    // every entitled test above and leaves that tier unbounded. Starter,
+    // because Free now carries a band of its own that binds first — see the
+    // Free taste block below.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
     mockDocs.set(dailyPath, { '2026-08-17': 0 })
     mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, NO_BAND)
     expect(reservation).toMatchObject({
       allowed: false,
       refusedBy: 'budget',
@@ -619,7 +681,7 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
     mockDocs.set(dailyPath, { '2026-08-17': 10 })
     mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, NO_BAND)
     expect(reservation).toMatchObject({ allowed: false, refusedBy: 'messages' })
   })
 
@@ -631,7 +693,7 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     // subscription that did not move.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     mockDocs.set(monthPath, { messages: 3, estCostUsd: 100_000 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, NO_BAND)
     expect(reservation).toMatchObject({
       allowed: false,
       refusedBy: 'budget',
@@ -649,19 +711,19 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     // satisfied by a build that refuses every entitled org.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     mockDocs.set(monthPath, { messages: 950, estCostUsd: 28 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, NO_BAND)
     expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 951 })
   })
 
-  it('and the DEFAULT binds the free tier too, without a separate figure', async () => {
-    // The free tier needs no ceiling of its own — 10 messages a UTC day
+  it('and the DEFAULT binds the daily-gated tier too, without a separate figure', async () => {
+    // A bandless tier needs no ceiling of its own — 10 messages a UTC day
     // bounds it at roughly $0.28/day — but it must not be EXEMPT from this
     // one, or a tier-scoped read would leave the unpriced surface unbounded.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     mockDocs.set(dailyPath, { '2026-08-17': 0 })
     mockDocs.set(monthPath, { messages: 400, estCostUsd: 4_000 })
-    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, NO_BAND)
     expect(reservation).toMatchObject({ allowed: false, refusedBy: 'budget' })
     expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 0 })
   })
@@ -1206,14 +1268,15 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
   })
 
   it('an org with NO band is unchanged — the default still binds it', async () => {
-    // Free and Starter sell no assist band. Their assistant is bounded by the
-    // daily message cap and by the operator backstop, exactly as before.
+    // Starter sells no assist band. Its assistant is bounded by the daily
+    // message cap and by the operator backstop, exactly as before. (Free
+    // did too, until the taste gave it a band — AGL-2925.)
     expect(assistMonthlyCeilingUsd(null)).toBe(
       ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
     )
     mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
     const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, {
-      plan: 'free',
+      plan: 'starter',
     })
     expect(reservation).toMatchObject({
       allowed: false,
@@ -1477,14 +1540,30 @@ describe('what leaves the server is credits, never our provider bill', () => {
   })
 
   it('reports NO credit standing for an org with no band', async () => {
-    // A Free workspace refused at the operator backstop has no credit balance.
-    // Converting $40 into "40,000 credits" would name a band it never bought.
+    // A Starter workspace refused at the operator backstop has no credit
+    // balance. Converting $40 into "40,000 credits" would name a band it
+    // never bought.
     mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
     const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, {
-      plan: 'free',
+      plan: 'starter',
     })
     expect(reservation.allowed).toBe(false)
     expect(publicAssistQuota(reservation).credits).toBeNull()
+  })
+
+  it('reports the TASTE as a credit standing on a Free workspace (AGL-2925)', async () => {
+    // Free carries a real band now, so a Free workspace refused at it is
+    // told "300 of 300" — a band it was given, in the unit it was given in.
+    mockDocs.set(monthPath, { messages: 4, estCostUsd: 0.3 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, {
+      plan: 'free',
+    })
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
+    expect(publicAssistQuota(reservation).credits).toEqual({
+      used: 300,
+      limit: 300,
+      remaining: 0,
+    })
   })
 })
 
@@ -1583,14 +1662,19 @@ describe('Free is a WALL, even when given a band (AGL-2898)', () => {
   const dailyPath = `orgs/${ORG}/counters/assistMessagesDaily`
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
   /**
-   * A Free org handed 300 credits through the entitlements override. Its
-   * plan sells no credits past the band, so the band is a wall — and it is
-   * refused there in the plan's name, not by any control the org could set.
+   * A Free org on the REAL plan row (AGL-2925): 300 credits, the taste, and
+   * no rate to sell past it at, so the band is a wall — refused there in the
+   * plan's name, not by any control the org could set. This block was
+   * written against an entitlements override of 300 before the constant
+   * existed; it now reads the constant, and the override case below shows
+   * a widened band is a wall all the same.
    */
-  const freeWithBand = {
-    plan: 'free' as const,
-    entitlements: { assistCreditsPerMonth: 300 },
-  }
+  const freeWithBand = { plan: 'free' as const }
+
+  it('the real row IS the band this block measures', () => {
+    expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(300)
+    expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
+  })
 
   it('is refused AT the band as `band`, on its own daily rung, with nothing billed', async () => {
     // FORCED RED by making `assistBandRefuses` answer false for a null
@@ -1632,5 +1716,381 @@ describe('Free is a WALL, even when given a band (AGL-2898)', () => {
     mockDocs.set(monthPath, { messages: 40, estCostUsd: assistUsdFromCredits(200) })
     const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, freeWithBand)
     expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
+  })
+
+  it('a band WIDENED by staff is still a wall, and still the org’s own', async () => {
+    mockDocs.set(monthPath, { messages: 40, estCostUsd: assistUsdFromCredits(900) })
+    const widened = { plan: 'free' as const, entitlements: { assistCreditsPerMonth: 900 } }
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, widened)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band', budgetUsd: 0.9 })
+    expect(assistOwnControlRefusalText(widened, reservation.refusedBy)).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The Free taste (AGL-2925): 300 credits behind a wall, metered per ACCOUNT
+// as well as per workspace, with a daily request cap, a refusal pause and a
+// platform-wide ceiling — every one of them forced red, and each with the
+// negative control that proves the refusal was that rung and not a blanket.
+// ---------------------------------------------------------------------------
+describe('the Free taste is metered per ACCOUNT, across every workspace one person owns (AGL-2925)', () => {
+  const day = '2026-08-17'
+  const orgMonthPath = `orgs/${ORG}/assistUsage/2026-08`
+  const accountPath = 'users/owner-1/aiUsage/2026-08'
+  const platformPath = 'platformAiFreeSpend/2026-08-17'
+  const FREE = { plan: 'free' as const, ownerUid: 'owner-1' }
+
+  it('attributes a Free reservation to the OWNER, and counts the request there', async () => {
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, FREE)
+    expect(reservation).toMatchObject({ allowed: true, free: { accountUid: 'owner-1' } })
+    expect(mockDocs.get(accountPath)).toMatchObject({
+      month: '2026-08',
+      requests: 1,
+      days: { [day]: { requests: 1 } },
+    })
+    // A second workspace of the SAME owner lands on the same document.
+    await reserveAssistMessage(firestore(), 'org-two', false, NOW, FREE)
+    expect(mockDocs.get(accountPath)).toMatchObject({
+      requests: 2,
+      days: { [day]: { requests: 2 } },
+    })
+  })
+
+  it('a member of someone else’s free workspace draws on the OWNER’s allowance, never their own', async () => {
+    // The reservation takes no requester uid at all — the attribution is a
+    // fact about the workspace, read off `ownerUid`, so there is no path by
+    // which an invited member's account could be charged or could be the
+    // one that runs out.
+    await reserveAssistMessage(firestore(), ORG, false, NOW, FREE)
+    expect([...mockDocs.keys()].filter((path) => path.startsWith('users/'))).toEqual([accountPath])
+  })
+
+  it('falls back to the CREATOR for an org that names no owner, and skips the account rungs for one that names neither', async () => {
+    const created = await reserveAssistMessage(firestore(), ORG, false, NOW, {
+      plan: 'free',
+      createdByUid: 'creator-1',
+    })
+    expect(created.free).toEqual({ accountUid: 'creator-1' })
+    expect(mockDocs.get('users/creator-1/aiUsage/2026-08')).toMatchObject({ requests: 1 })
+    const orphan = await reserveAssistMessage(firestore(), 'org-orphan', false, NOW, {
+      plan: 'free',
+    })
+    expect(orphan).toMatchObject({ allowed: true, free: { accountUid: null } })
+  })
+
+  it('a PAID workspace is attributed to nobody and touches no account document', async () => {
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'pro',
+      ownerUid: 'owner-1',
+    })
+    expect(reservation).toMatchObject({ allowed: true, free: null })
+    expect(mockDocs.get(accountPath)).toBeUndefined()
+  })
+
+  it('REFUSES as `account` once the owner’s 300 credits are spent across workspaces', async () => {
+    // FORCED RED by dropping the account read from the transaction: this
+    // workspace's own band is untouched, so it reserved.
+    mockDocs.set(accountPath, { estCostUsd: 0.3 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, FREE)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'account' })
+    // Nothing moved — not the org's counters, not the account's request.
+    expect(mockDocs.get(orgMonthPath)).toBeUndefined()
+    expect(mockDocs.get(accountPath)).toEqual({ estCostUsd: 0.3 })
+  })
+
+  it('THE NEGATIVE CONTROL: another owner’s workspace, same spend on the first, reserves', async () => {
+    mockDocs.set(accountPath, { estCostUsd: 0.3 })
+    const reservation = await reserveAssistMessage(firestore(), 'org-other', false, NOW, {
+      plan: 'free',
+      ownerUid: 'owner-2',
+    })
+    expect(reservation).toMatchObject({ allowed: true, free: { accountUid: 'owner-2' } })
+  })
+
+  it('the WORKSPACE band wins over the account band when both apply, so the words stay true', async () => {
+    // "This workspace used its credits" is checkable on the workspace's own
+    // meter; "your other workspaces used them" is not, so the nearer
+    // explanation is given when both are true.
+    mockDocs.set(orgMonthPath, { messages: 4, estCostUsd: 0.3 })
+    mockDocs.set(accountPath, { estCostUsd: 0.3 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, FREE)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
+  })
+
+  it('REFUSES as `requests` at the account’s daily cap, and honours the env override', async () => {
+    mockDocs.set(accountPath, { requests: 30, days: { [day]: { requests: 30 } } })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: false, refusedBy: 'requests' })
+    // One under: reserves, and the count moves to exactly the cap.
+    mockDocs.set(accountPath, { requests: 29, days: { [day]: { requests: 29 } } })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: true })
+    expect(mockDocs.get(accountPath)).toMatchObject({ days: { [day]: { requests: 30 } } })
+    // Yesterday's requests never count against today.
+    mockDocs.set(accountPath, { requests: 30, days: { '2026-08-16': { requests: 30 } } })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: true })
+    // Tightened without a deploy.
+    process.env.AI_FREE_DAILY_REQUESTS = '2'
+    mockDocs.set(accountPath, { requests: 2, days: { [day]: { requests: 2 } } })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: false, refusedBy: 'requests' })
+  })
+
+  it('REFUSES as `refusals` after three declined briefs in a day — two is not a pause', async () => {
+    mockDocs.set(accountPath, { days: { [day]: { refusals: 3 } } })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: false, refusedBy: 'refusals' })
+    mockDocs.set(accountPath, { days: { [day]: { refusals: 2 } } })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: true })
+  })
+
+  it('REFUSES as `platform` at the day’s ceiling, and a PAID workspace is untouched by it', async () => {
+    mockDocs.set(platformPath, { estCostUsd: 25 })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: false, refusedBy: 'platform' })
+    // The recorded pause refuses even when the running figure is under —
+    // an operator raising the ceiling mid-day does not un-pause the day.
+    mockDocs.set(platformPath, { estCostUsd: 1, pausedAt: '__now__' })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: false, refusedBy: 'platform' })
+    // Paid: the same day document, and the reservation never reads it.
+    expect(
+      await reserveAssistMessage(firestore(), ORG, true, NOW, { plan: 'pro' }),
+    ).toMatchObject({ allowed: true, refusedBy: null })
+    // Under the ceiling: reserves. Env-tunable.
+    mockDocs.set(platformPath, { estCostUsd: 24.99 })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: true })
+    process.env.AI_FREE_DAILY_PLATFORM_CEILING_USD = '10'
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: false, refusedBy: 'platform' })
+  })
+
+  it('the MESSAGE cap still wins over every taste rung, so the checkable refusal is given', async () => {
+    mockDocs.set(`orgs/${ORG}/counters/assistMessagesDaily`, { [day]: 10 })
+    mockDocs.set(platformPath, { estCostUsd: 25 })
+    mockDocs.set(accountPath, { estCostUsd: 0.3, days: { [day]: { requests: 30 } } })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, FREE),
+    ).toMatchObject({ allowed: false, refusedBy: 'messages' })
+  })
+
+  it('THE FAIL-OPEN, on the account: concurrent requests cannot all pass the daily cap', async () => {
+    process.env.AI_FREE_DAILY_REQUESTS = '2'
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, i) =>
+        reserveAssistMessage(firestore(), `org-${i}`, false, NOW, FREE),
+      ),
+    )
+    expect(results.filter((r) => r.allowed)).toHaveLength(2)
+    expect(results.filter((r) => r.refusedBy === 'requests')).toHaveLength(4)
+    expect(mockDocs.get(accountPath)).toMatchObject({ days: { [day]: { requests: 2 } } })
+  })
+
+  it('releasing a Free reservation hands the account’s request back, and never below zero', async () => {
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, FREE)
+    expect(mockDocs.get(accountPath)).toMatchObject({ requests: 1, days: { [day]: { requests: 1 } } })
+    await releaseAssistMessage(firestore(), ORG, reservation)
+    expect(mockDocs.get(accountPath)).toMatchObject({ requests: 0, days: { [day]: { requests: 0 } } })
+    await releaseAssistMessage(firestore(), ORG, reservation)
+    expect(mockDocs.get(accountPath)).toMatchObject({ requests: 0, days: { [day]: { requests: 0 } } })
+    // A caller that carries no attribution — the older reservation shape —
+    // still releases the org's counters and touches no account.
+    const paid = await reserveAssistMessage(firestore(), ORG, true, NOW, { plan: 'pro' })
+    await releaseAssistMessage(firestore(), ORG, {
+      allowed: paid.allowed,
+      dayKey: paid.dayKey,
+      monthKey: paid.monthKey,
+    })
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ messages: 0 })
+  })
+})
+
+describe('a Free turn is metered on the account and the platform; a refusal draws no credits (AGL-2925)', () => {
+  const day = '2026-08-17'
+  const orgMonthPath = `orgs/${ORG}/assistUsage/2026-08`
+  const accountPath = 'users/owner-1/aiUsage/2026-08'
+  const platformPath = 'platformAiFreeSpend/2026-08-17'
+  const usage = { inputTokens: 1_000, outputTokens: 500, cacheReadTokens: 0, cacheWriteTokens: 0 }
+  const cost = estimateAssistCostUsd(usage, 'claude-sonnet-5')
+  const record = (stopReason: string | null, free: { accountUid: string | null } | null) => ({
+    route: '/api/ai/assist/section',
+    hostId: null,
+    model: 'claude-sonnet-5',
+    tier: 'free' as const,
+    usage,
+    docsPaths: [],
+    stopReason,
+    free,
+  })
+
+  it('an answered Free turn lands on the org, the account AND the platform day', async () => {
+    await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: 'owner-1' }), NOW)
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: cost, refusals: 0, refusedCostUsd: 0 })
+    expect(mockDocs.get(accountPath)).toMatchObject({ month: '2026-08', estCostUsd: cost })
+    expect(mockDocs.get(platformPath)).toMatchObject({ day, estCostUsd: cost, requests: 1, refusals: 0 })
+    // Accumulates, on all three, through the other writer too.
+    await recordAssistExchange(
+      firestore(),
+      ORG,
+      { ...record('end_turn', { accountUid: 'owner-1' }), uid: 'member-9', question: 'q', answer: 'a' },
+      NOW,
+    )
+    expect(mockDocs.get(accountPath)).toMatchObject({ estCostUsd: cost * 2 })
+    expect(mockDocs.get(platformPath)).toMatchObject({ estCostUsd: cost * 2, requests: 2 })
+  })
+
+  it('a REFUSED Free turn costs the platform, counts on the account’s day, and draws NO credits', async () => {
+    // FORCED RED by metering a refusal like any other turn: the org's
+    // `estCostUsd` moved and the account's did too.
+    await recordAssistCost(firestore(), ORG, record('refusal', { accountUid: 'owner-1' }), NOW)
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: 0, refusals: 1, refusedCostUsd: cost })
+    expect(mockDocs.get(accountPath)).toMatchObject({ days: { [day]: { refusals: 1 } } })
+    expect(mockDocs.get(accountPath)?.estCostUsd).toBeUndefined()
+    expect(mockDocs.get(platformPath)).toMatchObject({ estCostUsd: cost, requests: 1, refusals: 1 })
+    // The signal keeps the true cost: the staff board reads our money there.
+    const signal = [...mockDocs.entries()].find(([path]) => path.includes('/assistSignals/'))?.[1]
+    expect(signal).toMatchObject({ stopReason: 'refusal', estCostUsd: cost })
+  })
+
+  it('a PAID turn — no attribution — is metered exactly as before, refusal or not', async () => {
+    await recordAssistCost(firestore(), ORG, { ...record('refusal', null), tier: 'entitled' }, NOW)
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: cost, refusals: 0, refusedCostUsd: 0 })
+    expect(mockDocs.get(platformPath)).toBeUndefined()
+    expect([...mockDocs.keys()].some((path) => path.startsWith('users/'))).toBe(false)
+  })
+
+  it('a Free workspace with NO owner meters the platform day and nothing else', async () => {
+    await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: null }), NOW)
+    expect(mockDocs.get(platformPath)).toMatchObject({ estCostUsd: cost, requests: 1 })
+    expect([...mockDocs.keys()].some((path) => path.startsWith('users/'))).toBe(false)
+  })
+
+  it('tells staff ONCE at 80% of the day’s ceiling, and records the pause ONCE at 100%', async () => {
+    process.env.AI_FREE_DAILY_PLATFORM_CEILING_USD = '1'
+    // Under 80%: silence.
+    mockDocs.set(platformPath, { estCostUsd: 0.5 })
+    await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: 'owner-1' }), NOW)
+    expect(mockStaffAlerts).toHaveLength(0)
+    // Cross 80%: one mail, `alertedAt` stamped.
+    mockDocs.set(platformPath, { estCostUsd: 0.8 })
+    await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: 'owner-1' }), NOW)
+    expect(mockStaffAlerts).toHaveLength(1)
+    expect(mockStaffAlerts[0].subject).toContain('80%')
+    expect(mockDocs.get(platformPath)).toMatchObject({ alertedAt: '__now__' })
+    // Another turn in the eighties: still one mail.
+    await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: 'owner-1' }), NOW)
+    expect(mockStaffAlerts).toHaveLength(1)
+    // Cross 100%: the pause is stamped, one audit row, one more mail.
+    mockDocs.set(platformPath, { ...mockDocs.get(platformPath), estCostUsd: 1 })
+    await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: 'owner-1' }), NOW)
+    expect(mockStaffAlerts).toHaveLength(2)
+    expect(mockStaffAlerts[1].subject).toContain('paused')
+    expect(mockDocs.get(platformPath)).toMatchObject({ pausedAt: '__now__' })
+    const audits = [...mockDocs.entries()].filter(([path]) => path.startsWith('adminAudit/'))
+    expect(audits).toHaveLength(1)
+    expect(audits[0][1]).toMatchObject({
+      action: 'platform.aiFreeSpend.paused',
+      target: 'platformAiFreeSpend/2026-08-17',
+      actorUid: 'system:ai-free-spend',
+    })
+    // And it stays paused for every Free reservation until the day rolls.
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, NOW, { plan: 'free', ownerUid: 'owner-1' }),
+    ).toMatchObject({ allowed: false, refusedBy: 'platform' })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, false, new Date('2026-08-18T00:00:01Z'), {
+        plan: 'free',
+        ownerUid: 'owner-1',
+      }),
+    ).toMatchObject({ allowed: true })
+    // A further turn past the ceiling announces nothing again.
+    await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: 'owner-1' }), NOW)
+    expect(mockStaffAlerts).toHaveLength(2)
+    expect([...mockDocs.keys()].filter((path) => path.startsWith('adminAudit/'))).toHaveLength(1)
+  })
+
+  it('the staff mail names the day, the figure and the manual stop, and never a customer', async () => {
+    process.env.AI_FREE_DAILY_PLATFORM_CEILING_USD = '1'
+    mockDocs.set(platformPath, { estCostUsd: 1 })
+    await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: 'owner-1' }), NOW)
+    const mail = mockStaffAlerts[0]
+    expect(mail.context).toBe('ai-free-spend')
+    expect(mail.text).toContain('2026-08-17')
+    expect(mail.text).toContain('ai-generate')
+    expect(mail.text).not.toContain('owner-1')
+    expect(mail.text).not.toContain(ORG)
+  })
+})
+
+describe('the Free taste readout and knobs (AGL-2925)', () => {
+  const platformPath = 'platformAiFreeSpend/2026-08-17'
+
+  it('reads the day against the ceiling, and reports a pause from the stamp OR the figure', async () => {
+    expect(await readPlatformFreeSpend(firestore(), '2026-08-17')).toEqual({
+      day: '2026-08-17',
+      estCostUsd: 0,
+      requests: 0,
+      refusals: 0,
+      ceilingUsd: 25,
+      alerted: false,
+      paused: false,
+    })
+    mockDocs.set(platformPath, { estCostUsd: 26, requests: 40, refusals: 2 })
+    expect(await readPlatformFreeSpend(firestore(), '2026-08-17')).toMatchObject({
+      estCostUsd: 26,
+      requests: 40,
+      refusals: 2,
+      paused: true,
+      alerted: false,
+    })
+    mockDocs.set(platformPath, { estCostUsd: 3, alertedAt: '__now__', pausedAt: '__now__' })
+    expect(await readPlatformFreeSpend(firestore(), '2026-08-17')).toMatchObject({
+      paused: true,
+      alerted: true,
+    })
+  })
+
+  it('attributes by plan, not by field: a dead subscription is Free again', () => {
+    expect(freeAssistAccount({ plan: 'pro', ownerUid: 'o' })).toBeNull()
+    expect(freeAssistAccount({ plan: 'free', ownerUid: 'o', createdByUid: 'c' })).toEqual({ accountUid: 'o' })
+    expect(freeAssistAccount({ plan: 'free', createdByUid: 'c' })).toEqual({ accountUid: 'c' })
+    expect(freeAssistAccount({ plan: 'free' })).toEqual({ accountUid: null })
+    expect(freeAssistAccount(null)).toEqual({ accountUid: null })
+    expect(
+      freeAssistAccount({ plan: 'agency', ownerUid: 'o', subscription: { status: 'canceled' } } as never),
+    ).toEqual({ accountUid: 'o' })
+  })
+
+  it('the knobs default, honour a number, and never fail open', () => {
+    expect(aiFreeDailyRequests()).toBe(30)
+    expect(aiFreeDailyPlatformCeilingUsd()).toBe(25)
+    process.env.AI_FREE_DAILY_REQUESTS = '5'
+    process.env.AI_FREE_DAILY_PLATFORM_CEILING_USD = '2.5'
+    expect(aiFreeDailyRequests()).toBe(5)
+    expect(aiFreeDailyPlatformCeilingUsd()).toBe(2.5)
+    // Zero requests is a decision; a zero ceiling is not a number to honour.
+    process.env.AI_FREE_DAILY_REQUESTS = '0'
+    process.env.AI_FREE_DAILY_PLATFORM_CEILING_USD = '0'
+    expect(aiFreeDailyRequests()).toBe(0)
+    expect(aiFreeDailyPlatformCeilingUsd()).toBe(25)
+    for (const junk of ['lots', '', '-3', 'off']) {
+      process.env.AI_FREE_DAILY_REQUESTS = junk
+      process.env.AI_FREE_DAILY_PLATFORM_CEILING_USD = junk
+      expect(aiFreeDailyRequests()).toBe(30)
+      expect(aiFreeDailyPlatformCeilingUsd()).toBe(25)
+    }
   })
 })

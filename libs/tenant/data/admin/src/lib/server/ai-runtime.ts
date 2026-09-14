@@ -84,6 +84,31 @@ export const AI_MAX_CACHE_BREAKPOINTS = 4
 export const AI_UPSTREAM_FAILURE_COPY = 'The AI request failed — try again.'
 
 /**
+ * The acceptable-use rules every generation prompt carries (AGL-2925).
+ *
+ * ONE constant, appended to each door's STATIC system text — inside the
+ * cached prefix on the console chat, ahead of the mode prompt on the copy
+ * assistant — so the rules the model is held to are the same at every
+ * door and carry no per-org byte. The Free taste is what makes them worth
+ * stating: a generated page that nobody paid for is the cheapest phishing
+ * kit there is, and the model declining it is the first line, ahead of the
+ * abuse-report route and the lockdown key.
+ *
+ * The categories are the platform's own Acceptable Use Policy, restated in
+ * the second person for the model. A decline from the model's safety layer
+ * arrives as a `refusal` stop, which the meter counts against the account's
+ * daily pause and never against its credits.
+ */
+export const AI_ACCEPTABLE_USE_BLOCK = `Acceptable use — decline these rather than write them, and say briefly why:
+- Pages, emails or copy that harvest credentials, payment details or personal data by deception (phishing, fake sign-in or checkout pages, fake "verify your account" notices).
+- Impersonating a real business, brand, public body or person you were not told the user represents — their name, logo, sign-in page or voice — or copy that claims an endorsement, certification or partnership that was not given to you as a fact.
+- Content that promotes or sells prohibited goods and services: weapons, illegal drugs, counterfeit goods, malware or deceptive downloads, unlicensed gambling, or adult content involving minors.
+- Scams and fraud: fake investment or crypto schemes, advance-fee offers, tech-support scams, fake charities, deceptive "you have won" pages, or copy built to defraud.
+- Harassment, threats, or hateful content targeting a person or a group.
+- Spam farms: bulk near-duplicate pages or copy whose only purpose is to game search engines or send unsolicited mail.
+When a brief is ordinary business content, write it well and do not lecture.`
+
+/**
  * One system block. `cacheBreakpoint` marks the end of a cacheable prefix;
  * `volatile` declares that the text carries a per-request or per-org byte
  * and therefore may never sit inside one.

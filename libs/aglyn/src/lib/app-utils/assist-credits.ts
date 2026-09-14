@@ -113,12 +113,18 @@ export function assistCreditsFromUsd(usd: number): number {
  *
  * ## `null` is not zero, and the difference is the whole safety property
  *
- * Free and Starter carry `assistCreditsPerMonth: 0` because neither carries
- * `aiAssist` and neither is sold generative building. They still reach the
+ * Starter carries `assistCreditsPerMonth: 0` because it carries no
+ * `aiAssist` and is not sold generative building. It still reaches the
  * console assistant's docs-grounded rung, which is bounded by the free daily
- * message cap and by the operator's spend backstop. Resolving their band as a
+ * message cap and by the operator's spend backstop. Resolving its band as a
  * budget of `$0` would refuse that rung outright — a tier's whole assistant
  * turned off by a pricing field that was never about it.
+ *
+ * Free is different since AGL-2925: it carries a REAL band of
+ * `FREE_AI_TASTE_CREDITS_PER_MONTH` credits with no rate beside it, so it
+ * resolves to a budget here and `assistBandRefuses` makes that budget a
+ * wall. Its docs-grounded chat draws on the same band, which is fine — the
+ * band is sized so that a month of it costs under a third of a dollar.
  *
  * Starter WITH the Aglyn AI add-on (AGL-2896) is a different org: the
  * resolver has added `AI_ADDON_CREDITS_PER_MONTH.starter` to its band, so it
@@ -191,8 +197,9 @@ export function assistCreditOverage(
  * does not carry without the add-on. The add-on is read through
  * `hasAiAddon`, so a dead subscription takes the rate away with the band.
  *
- * Free and Enterprise stay null with or without the add-on: Free sells
- * neither the add-on nor a band, and Enterprise's usage is in the contract.
+ * Free and Enterprise stay null with or without the add-on: Free sells no
+ * add-on and its taste band is a wall by decision (AGL-2925), and
+ * Enterprise's usage is in the contract.
  */
 export function resolveAssistOverageRateUsdPer1k(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -366,10 +373,71 @@ export function assistBandRefuses(
  *               no rate to sell past it at.
  * - `cap`:      the org's own dollar ceiling on overage (AGL-2898).
  *
+ * The four that exist only on the Free taste (AGL-2925), each a precaution
+ * against the one band that has no invoice behind it:
+ *
+ * - `account`:  the ACCOUNT's 300 credits are spent across every free
+ *               workspace it owns — the org band alone would multiply by
+ *               the workspaces one person may hold.
+ * - `requests`: the account's daily free request cap.
+ * - `refusals`: the account's free generation is paused for the day after
+ *               too many `refusal` stops — a brief the model declined is a
+ *               brief that should not be retried thirty times.
+ * - `platform`: the platform-wide daily ceiling on free spend; nobody's
+ *               fault, and "try again tomorrow" is the whole answer.
+ *
  * Declared here, beside the helpers that read it, so the reservation, its
  * public projection and both doors name one union.
  */
-export type AssistRefusedBy = 'messages' | 'budget' | 'band' | 'cap' | null
+export type AssistRefusedBy =
+  | 'messages'
+  | 'budget'
+  | 'band'
+  | 'cap'
+  | 'account'
+  | 'requests'
+  | 'refusals'
+  | 'platform'
+  | null
+
+/**
+ * The sentence a Free workspace is told when one of the taste's own
+ * precautions refused it, or `null` when the refusal was something else.
+ *
+ * One string per rung, for both doors and the gate ladder, so a customer
+ * reading the console panel and one reading the besigner get the same
+ * words. Every sentence is customer-safe: it names what to do (upgrade,
+ * wait) and never a figure from our cost model, a counter document, or
+ * another workspace.
+ */
+export function assistFreeTasteRefusalText(
+  refusedBy: AssistRefusedBy,
+): string | null {
+  switch (refusedBy) {
+    case 'account':
+      return (
+        'Your free AI credits for this month are used across your ' +
+        'workspaces — upgrade any workspace to keep going.'
+      )
+    case 'requests':
+      return (
+        'Free workspaces get a limited number of AI requests a day — ' +
+        'try again tomorrow, or upgrade to keep going.'
+      )
+    case 'refusals':
+      return (
+        'The AI declined several requests today, so free AI generation is ' +
+        'paused until tomorrow. Try a different kind of brief then.'
+      )
+    case 'platform':
+      return (
+        'Free AI generation is paused for the rest of today — try again ' +
+        'tomorrow. Paid workspaces are not affected.'
+      )
+    default:
+      return null
+  }
+}
 
 /**
  * Whether a refusal at the band was the org's OWN doing — the switch is on

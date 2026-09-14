@@ -59,6 +59,16 @@ a prompt problem and a rising `max_tokens` rate is a ceiling problem, and they n
 different fixes. And the **unrated** count is usually the largest of the three thumbs
 figures; that is normal, not a broken control. Ratings are volunteered.
 
+**Free tier today** is the one chip about money that is not a sample: it is today's
+(UTC) free-tier provider spend against the platform's daily ceiling, with the number of
+free requests behind it. Free workspaces carry AI credits with no invoice behind them,
+so this is the figure that can switch every Free workspace's generation off at once —
+amber once staff have been mailed at 80% of the ceiling, red and marked **paused** once
+the ceiling is reached, at which point every Free workspace is refused generation until
+the day rolls and paid workspaces carry on. If the chip is red on an ordinary day, the
+per-workspace cost table below says who spent it; if it is red because of a wave, the
+`ai-generate` lock on **Staff → Lockdown** is the manual stop.
+
 ### The cache-read rate, and what a bad number looks like
 
 The **cache-read rate** is the share of billable prompt tokens served from the prompt

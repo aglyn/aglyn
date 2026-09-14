@@ -259,6 +259,44 @@ export type ResolvedOrgEntitlements = Required<
  */
 export const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = 116_000
 
+/**
+ * The Free AI taste (AGL-2925): the assist credits a Free workspace draws
+ * on each month, behind a hard wall.
+ *
+ * ## Why it exists
+ *
+ * So the AI landing pages can say "generate your first page free" and mean
+ * it. Three hundred credits is one or two generated sections or a handful
+ * of copy rewrites — enough to see what the assistant does, not enough to
+ * build a site on. The band is a WALL: `PLAN_PRICING.free
+ * .extraAssistCreditsUsdPer1k` stays `null`, so `assistBandRefuses` answers
+ * true and the reservation refuses at 100% with no overage, no switch and no
+ * invoice. Nothing about a Free workspace can produce a charge.
+ *
+ * ## What it costs, and why that is the number
+ *
+ * A credit is `ASSIST_CREDIT_COST_USD` of provider spend, so the band costs
+ * at most **$0.30 per Free workspace per month** — asserted by
+ * `apps/console/specs/tier-margin-floor.spec.ts`. It is the one AI band with
+ * no invoice behind it, which is why the same issue closes every multiplier
+ * a script could use before the flag flips:
+ *
+ *  - it is metered per ACCOUNT as well as per workspace, so the three free
+ *    workspaces an account may hold (AGL-2265) share one 300-credit
+ *    allowance rather than tripling it (`reserveAssistMessage`);
+ *  - a fresh account waits `AI_FREE_MIN_ACCOUNT_AGE_HOURS` before it can
+ *    spend, and every free request is bounded per IP, per uid and per
+ *    account per day;
+ *  - a platform-wide daily ceiling on free spend pauses the taste for
+ *    everyone until the UTC day rolls, paid workspaces untouched.
+ *
+ * The account allowance reads THIS constant rather than the workspace's
+ * resolved band, because a staff override that widens one workspace's band
+ * is a decision about that workspace, not about how much one person may
+ * draw across all of theirs.
+ */
+export const FREE_AI_TASTE_CREDITS_PER_MONTH = 300
+
 export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   free: {
     hostLimit: 1,
@@ -300,7 +338,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     crmEmailsPerDay: 0,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
-    assistCreditsPerMonth: 0,
+    // The Free AI taste (AGL-2925): a real band, and a wall. See the
+    // constant for what it buys, what it costs and the precautions that
+    // keep one person from drawing it three times over.
+    assistCreditsPerMonth: FREE_AI_TASTE_CREDITS_PER_MONTH,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 0,
     maxDatasetsPerOrg: 0,
@@ -334,8 +375,16 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: false,
       scheduledPublishing: false,
       marketplaceSelling: false,
+      // The two AI flags point opposite ways on Free, on purpose (AGL-2925).
+      // `aiAssist` is the guided rung of the console assistant — page-aware
+      // level-2 answers and the copy assistant — and stays Pro and up; Free
+      // keeps the docs-grounded level-1 chat it always had. `aiGenerative`
+      // is the generative door the taste is FOR: a Free workspace may
+      // generate against its 300-credit band, behind the wall and every
+      // precaution the constant lists, so the landing page's "generate your
+      // first page free" is a thing the product does.
       aiAssist: false,
-      aiGenerative: false,
+      aiGenerative: true,
       workflows: false,
       dataStore: false,
       videoMedia: false,
@@ -1340,10 +1389,13 @@ export interface PlanPricing {
    *
    * ## Where it is null, and why that is not "free overage"
    *
-   * Null on Free and Starter because neither carries `aiAssist` and both
-   * band at 0 credits: there is no generative building to overspend, so
-   * there is no overage to price. Null on Enterprise, where every rate is
-   * the "not for sale" sentinel and the terms are contractual.
+   * Null on Starter because it carries no `aiAssist` and bands at 0
+   * credits: there is no generative building to overspend, so there is no
+   * overage to price. Null on Free because its band is a WALL by decision
+   * (AGL-2925): the 300-credit taste refuses at 100% with nothing sold past
+   * it, and a rate here would be a charge on a plan that must never produce
+   * one. Null on Enterprise, where every rate is the "not for sale"
+   * sentinel and the terms are contractual.
    *
    * Starter with the Aglyn AI add-on is the exception, and it is NOT written
    * here: that org has a band, so it sells past it at

@@ -189,13 +189,29 @@ removing the ceiling needs the **Manage billing** permission, and a ceiling is n
 applied unless you set one.
 
 :::info Plans that sell no overage
-Free and Starter include no AI assist credits by default, so there is nothing to stop at.
-A workspace on a plan that sells no credits past its band — Enterprise, whose credits are
-set by agreement, or a Free workspace that has been given a band — stops at the band on
-its own: the assistant refuses there until next month or an upgrade, and **nothing is
-ever billed** for AI assist. Neither the switch nor the ceiling is offered, because
-neither would change anything.
+Starter includes no AI assist credits by default, so there is nothing to stop at. A
+workspace on a plan that sells no credits past its band — Enterprise, whose credits are
+set by agreement, or a Free workspace — stops at the band on its own: the assistant
+refuses there until next month or an upgrade, and **nothing is ever billed** for AI
+assist. Neither the switch nor the ceiling is offered, because neither would change
+anything.
 :::
+
+### Free workspaces {#free-ai-credits}
+
+Every Free workspace includes **300 AI credits a month** — enough to generate a first
+page or a few sections and see what the assistant does. The band is a hard stop: when it
+is used, AI generation pauses until next month or an upgrade, and **nothing is ever
+billed**. There is no overage on Free, so there is no switch or ceiling to set.
+
+The 300 credits are yours as a person, not per workspace: if you own more than one Free
+workspace, they share the allowance, and the meter on each workspace's billing page shows
+that workspace's share of it. Members you invite to a Free workspace draw on that
+workspace's credits, not on their own account. A few other limits apply only to Free
+workspaces and only to AI generation — a short wait after an account is created before it
+can generate, a daily cap on free requests, and a platform-wide daily limit on free
+generation that, when reached, pauses it for every Free workspace until the next day (UTC).
+Each one tells you what to do when it applies; none of them can produce a charge.
 
 ### Alerts on the way there {#ai-credit-alerts}
 

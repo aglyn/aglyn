@@ -334,6 +334,18 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       },
       { label: 'CDN & responsive images', value: (p) => bool(F(p).mediaCdn) },
       { label: 'AI assist', value: (p) => bool(F(p).aiAssist) },
+      /*
+       * The included AI credits band, per plan (AGL-2925). Free's cell is
+       * the taste — 300 a month behind a hard wall — and it is the reason
+       * the row exists: "AI assist ✓" above says nothing about a plan whose
+       * `aiAssist` is off but which still generates against a band. Starter
+       * prints the dash `perMonth` gives a band of zero; Enterprise talks.
+       * The page does not carry this row yet — see `EXPECTED_MISSING`.
+       */
+      {
+        label: 'AI credits / mo',
+        value: talk((p) => perMonth(E(p).assistCreditsPerMonth)),
+      },
       { label: 'Per-screen analytics', value: (p) => bool(F(p).screenAnalytics) },
       { label: 'Sell on the marketplace', value: (p) => bool(F(p).marketplaceSelling) },
     ],
@@ -1060,7 +1072,10 @@ if (!frameTable) {
  * stale" has to be an argument someone made once, not a shrug the reconciler
  * repeats forever. An entry here that stops diverging fails too.
  */
-const EXPECTED_MISSING: Record<string, string> = {}
+const EXPECTED_MISSING: Record<string, string> = {
+  'AI credits / mo':
+    'the compare grid carries "AI assist ✓" and no credits row, while `PLAN_ENTITLEMENTS[*].assistCreditsPerMonth` is a band every plan is metered against — including the Free AI taste of 300 a month (AGL-2925). Resolves when AGL-2900 publishes the AI rows on `/pricing`',
+}
 
 for (const [label, [why]] of injected('--declare-missing-row', 2)) {
   EXPECTED_MISSING[label] = why

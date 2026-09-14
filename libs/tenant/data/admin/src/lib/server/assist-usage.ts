@@ -36,6 +36,18 @@ import {
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { recordAssistRefusal } from './assist-refusals'
+import {
+  announcePlatformFreeSpend,
+  freeAccountReservationWrite,
+  freeAccountUsageRef,
+  freeAssistAccount,
+  freeTasteMeterWrites,
+  freeTasteReadsFrom,
+  freeTasteRefusal,
+  platformFreeSpendRef,
+  type AssistMeteredOrg,
+  type FreeAssistAccount,
+} from './assist-free-taste'
 
 /**
  * Aglyn Assist metering + the data loop (AGL-1860, phase 1).
@@ -56,6 +68,10 @@ import { recordAssistRefusal } from './assist-refusals'
  *     { route, hostId, model, tier, inputTokens, outputTokens,
  *       cacheReadTokens, cacheWriteTokens, estCostUsd, docsPaths,
  *       stopReason, feedback: 'up'|'down'|null, createdAt }
+ *
+ * The Free taste (AGL-2925) adds two more, one under the workspace OWNER's
+ * user document and one platform-wide, both documented and both closed to
+ * clients in `assist-free-taste.ts`.
  *
  * Costs are OUR cost estimates at list rates (pricing-tunable telemetry),
  * mirrored after ORG_COGS_UNIT_RATES_USD's posture: cost visibility per org
@@ -437,12 +453,25 @@ export interface AssistReservation extends AssistQuotaVerdict {
    * operator's lower figure refuses as `'budget'` even on a plan with one.
    * `'cap'` (AGL-2898) is the org's own dollar ceiling on the overage it
    * buys past the band — reachable only on a plan that sells past it.
+   * `'requests'`, `'refusals'`, `'account'` and `'platform'` (AGL-2925) are
+   * the Free taste's own precautions, and only a Free workspace can hear
+   * them.
    *
    * Only on the reservation, not on `AssistQuotaVerdict` — `checkAssistQuota`
    * is a reporting read that never consults the spend ceiling, and widening
    * the shared type would let a caller believe it had.
    */
   refusedBy: AssistRefusedBy
+  /**
+   * The account the workspace's FREE spend is attributed to, or `null` for
+   * a workspace that is not on the Free plan (AGL-2925).
+   *
+   * Carried on the reservation so the door that meters the turn can hand
+   * the same attribution to `recordAssistCost` without resolving it twice:
+   * the reservation decided which account's allowance this request drew
+   * on, and the record must charge that account and no other.
+   */
+  free: FreeAssistAccount | null
   /**
    * Measured provider spend for `monthKey` in USD as read inside the
    * transaction, or `null` when the transaction did not consult it.
@@ -544,13 +573,24 @@ export interface AssistReservation extends AssistQuotaVerdict {
  * place that rule lives. The ceiling below is composed from that answer, and
  * `refusedBy: 'band'` is how a refusal the switch caused is told apart from
  * one the operator's figure caused.
+ *
+ * ## The Free taste is metered twice (AGL-2925)
+ *
+ * A Free workspace's band is a wall, and a wall per workspace is not a
+ * bound per person. So when `org` resolves to the Free plan the SAME
+ * transaction also reads the workspace owner's account document and the
+ * platform's day of free spend, and refuses on the account's daily request
+ * cap, its refusal pause, its monthly allowance and the platform ceiling —
+ * see `assist-free-taste.ts` for each. An admitted free reservation counts
+ * the request on the account beside the org's own counters, so the release
+ * path hands both back together.
  */
 export async function reserveAssistMessage(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
   entitled: boolean,
   now = new Date(),
-  org: Partial<AglynOrgBilling> | null = null,
+  org: AssistMeteredOrg | null = null,
 ): Promise<AssistReservation> {
   const increment = FieldValue.increment
   const serverTimestamp = FieldValue.serverTimestamp
@@ -563,6 +603,12 @@ export async function reserveAssistMessage(
   const period: 'day' | 'month' = entitled ? 'month' : 'day'
   const gateRef = entitled ? monthlyRef : dailyRef
   const gateField = entitled ? 'messages' : day
+  // The Free taste's attribution, resolved once and carried on every
+  // answer below: `null` for any paid plan, and for the paths that never
+  // consult it.
+  const free = freeAssistAccount(org)
+  const accountRef =
+    free?.accountUid ? freeAccountUsageRef(firestore, free.accountUid, month) : null
 
   // The plan's band first, then whether it refuses at all, then whatever the
   // operator did about it. Resolved OUTSIDE the transaction: it is pure
@@ -595,6 +641,14 @@ export async function reserveAssistMessage(
       : costLimitUsd === null
         ? null
         : await tx.get(monthlyRef)
+    // The taste's two extra reads, only for a Free workspace: the owner's
+    // account month (when the org names an owner) and the platform's day.
+    // Inside the transaction with everything else, so the rungs they feed
+    // are decided against the same snapshot the counters move under.
+    const accountSnapshot = accountRef ? await tx.get(accountRef) : null
+    const platformSnapshot = free
+      ? await tx.get(platformFreeSpendRef(firestore, day))
+      : null
     const used = Number(snapshot.get(gateField) ?? 0)
     const costUsd = monthlySnapshot
       ? Number(monthlySnapshot.get('estCostUsd') ?? 0)
@@ -613,6 +667,7 @@ export async function reserveAssistMessage(
         costUsd,
         costLimitUsd,
         budgetUsd,
+        free,
       }
     }
     // The dollar ceiling, checked AFTER the message cap so the cheaper and
@@ -633,6 +688,7 @@ export async function reserveAssistMessage(
         costUsd,
         costLimitUsd,
         budgetUsd,
+        free,
       }
     }
     // The org's ceiling on its OVERAGE (AGL-2898), checked after the band
@@ -661,6 +717,29 @@ export async function reserveAssistMessage(
         costUsd,
         costLimitUsd,
         budgetUsd,
+        free,
+      }
+    }
+    // The Free taste's own rungs (AGL-2925), AFTER the workspace's, so a
+    // workspace at its own band is told about its own band. Same shape:
+    // decided inside the transaction, against what it read, moving nothing.
+    const tasteRefusal = free
+      ? freeTasteRefusal(freeTasteReadsFrom(accountSnapshot, platformSnapshot, day))
+      : null
+    if (tasteRefusal) {
+      return {
+        allowed: false,
+        refusedBy: tasteRefusal,
+        period,
+        dayKey: day,
+        monthKey: month,
+        used,
+        limit,
+        remaining: Math.max(0, limit - used),
+        costUsd,
+        costLimitUsd,
+        budgetUsd,
+        free,
       }
     }
     // `set(…, { merge: true })` and never `update()`: the counter document
@@ -672,6 +751,12 @@ export async function reserveAssistMessage(
       { month, messages: increment(1), updatedAt: serverTimestamp() },
       { merge: true },
     )
+    // The account's request, counted in the same commit as the org's
+    // message — one atomic step, or the daily request cap has the same
+    // read-then-write hole the message cap was moved here to close.
+    if (accountRef) {
+      tx.set(accountRef, freeAccountReservationWrite(month, day), { merge: true })
+    }
     return {
       allowed: true,
       refusedBy: null,
@@ -684,6 +769,7 @@ export async function reserveAssistMessage(
       costUsd,
       costLimitUsd,
       budgetUsd,
+      free,
     }
   })
 }
@@ -765,21 +851,48 @@ export function publicAssistQuota(
 export async function releaseAssistMessage(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
-  reservation: Pick<AssistReservation, 'allowed' | 'dayKey' | 'monthKey'>,
+  reservation: Pick<AssistReservation, 'allowed' | 'dayKey' | 'monthKey'> &
+    Partial<Pick<AssistReservation, 'free'>>,
 ): Promise<void> {
   if (!reservation.allowed) return
   const increment = FieldValue.increment
   const orgRef = firestore.collection('orgs').doc(orgId)
   const dailyRef = orgRef.collection('counters').doc('assistMessagesDaily')
   const monthlyRef = orgRef.collection('assistUsage').doc(reservation.monthKey)
+  // The account's request goes back with the org's message (AGL-2925) —
+  // against the same keys, read first for the same reason.
+  const accountRef = reservation.free?.accountUid
+    ? freeAccountUsageRef(firestore, reservation.free.accountUid, reservation.monthKey)
+    : null
   await firestore.runTransaction(async (tx) => {
     const dailySnapshot = await tx.get(dailyRef)
     const monthlySnapshot = await tx.get(monthlyRef)
+    const accountSnapshot = accountRef ? await tx.get(accountRef) : null
     if (Number(dailySnapshot.get(reservation.dayKey) ?? 0) > 0) {
       tx.set(dailyRef, { [reservation.dayKey]: increment(-1) }, { merge: true })
     }
     if (Number(monthlySnapshot.get('messages') ?? 0) > 0) {
       tx.set(monthlyRef, { messages: increment(-1) }, { merge: true })
+    }
+    if (accountRef && accountSnapshot) {
+      const days = (accountSnapshot.get('days') ?? {}) as Record<
+        string,
+        { requests?: unknown } | undefined
+      >
+      const today = Number(days[reservation.dayKey]?.requests ?? 0)
+      const month = Number(accountSnapshot.get('requests') ?? 0)
+      if (today > 0 || month > 0) {
+        tx.set(
+          accountRef,
+          {
+            ...(month > 0 ? { requests: increment(-1) } : {}),
+            ...(today > 0
+              ? { days: { [reservation.dayKey]: { requests: increment(-1) } } }
+              : {}),
+          },
+          { merge: true },
+        )
+      }
     }
   })
 }
@@ -878,6 +991,14 @@ export interface AssistSignalRecord {
    * free.
    */
   deflected?: boolean
+  /**
+   * The Free taste's attribution (AGL-2925), copied from the reservation
+   * that admitted this turn: `null` or absent for a paid workspace, and for
+   * a turn that took no reservation. Present, the turn's cost also lands on
+   * the platform's day of free spend and — unless the model refused — on
+   * the owner's account allowance.
+   */
+  free?: FreeAssistAccount | null
 }
 
 /** A signal PLUS the verbatim half — the question, the answer, the asker. */
@@ -895,6 +1016,7 @@ export interface AssistExchangeRecord extends AssistSignalRecord {
  * money for the same tokens.
  */
 function writeSignalAndRollup(
+  firestore: FirebaseFirestore.Firestore,
   batch: FirebaseFirestore.WriteBatch,
   orgRef: FirebaseFirestore.DocumentReference,
   signalRef: FirebaseFirestore.DocumentReference,
@@ -905,6 +1027,12 @@ function writeSignalAndRollup(
   const serverTimestamp = FieldValue.serverTimestamp
   const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
   const deflected = record.deflected === true
+  const free = record.free ?? null
+  // On the Free taste a `refusal` stop draws no credits (AGL-2925): the
+  // org's band and the account's allowance stay where they were, and the
+  // cost goes to the platform's day instead, where it is still our money.
+  // Everywhere else the tokens are metered as they always were.
+  const refusedFree = free !== null && record.stopReason === 'refusal'
   // The analytic half. No prose and NO uid — deliberately, because a signal
   // row that names the asker is just the exchange with the words removed,
   // and would re-create as an access-request obligation exactly what the
@@ -949,10 +1077,46 @@ function writeSignalAndRollup(
       outputTokens: increment(record.usage.outputTokens),
       cacheReadTokens: increment(record.usage.cacheReadTokens),
       cacheWriteTokens: increment(record.usage.cacheWriteTokens),
-      estCostUsd: increment(estCostUsd),
+      estCostUsd: increment(refusedFree ? 0 : estCostUsd),
+      // The refused half of a Free month, kept beside the credited half so
+      // the rollup still says what the month cost us in total.
+      refusals: increment(refusedFree ? 1 : 0),
+      refusedCostUsd: increment(refusedFree ? estCostUsd : 0),
       updatedAt: serverTimestamp(),
     },
     { merge: true },
+  )
+  if (free) {
+    const day = assistUsageDay(now)
+    const writes = freeTasteMeterWrites({
+      estCostUsd,
+      refused: refusedFree,
+      day,
+      month: assistUsageMonth(now),
+    })
+    batch.set(platformFreeSpendRef(firestore, day), writes.platform, { merge: true })
+    if (free.accountUid) {
+      batch.set(
+        freeAccountUsageRef(firestore, free.accountUid, assistUsageMonth(now)),
+        writes.account,
+        { merge: true },
+      )
+    }
+  }
+}
+
+/**
+ * After a Free turn's batch commits: the ceiling's announcements, which
+ * need the figure the batch just moved and must never fail the turn.
+ */
+async function announceFreeTurn(
+  firestore: FirebaseFirestore.Firestore,
+  record: AssistSignalRecord,
+  now: Date,
+): Promise<void> {
+  if (!record.free) return
+  await announcePlatformFreeSpend(firestore, assistUsageDay(now)).catch((error) =>
+    console.error('[ai-free-spend] announcement failed', error),
   )
 }
 
@@ -979,8 +1143,9 @@ export async function recordAssistCost(
   const orgRef = firestore.collection('orgs').doc(orgId)
   const signalRef = orgRef.collection('assistSignals').doc()
   const batch = firestore.batch()
-  writeSignalAndRollup(batch, orgRef, signalRef, record, now)
+  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now)
   await batch.commit()
+  await announceFreeTurn(firestore, record, now)
   return signalRef.id
 }
 
@@ -1022,8 +1187,9 @@ export async function recordAssistExchange(
   // The analytic half plus the meters — the same writer `recordAssistCost`
   // uses, so the two assist entrypoints can never report different money for
   // the same tokens.
-  writeSignalAndRollup(batch, orgRef, signalRef, record, now)
+  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now)
   await batch.commit()
+  await announceFreeTurn(firestore, record, now)
   return exchangeRef.id
 }
 

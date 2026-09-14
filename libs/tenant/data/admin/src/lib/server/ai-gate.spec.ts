@@ -33,13 +33,17 @@ const mockFeatureLockdownRefusal = jest.fn()
 const mockCheckRateLimit = jest.fn()
 const mockReserve = jest.fn()
 const mockCheckEntitlement = jest.fn()
+const mockGetUser = jest.fn()
 const mockFirestore = { kind: 'firestore' }
 
 jest.mock('./firebase-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
-      auth: () => ({ verifyIdToken: (token: string) => mockVerifyIdToken(token) }),
+      auth: () => ({
+        verifyIdToken: (token: string) => mockVerifyIdToken(token),
+        getUser: (uid: string) => mockGetUser(uid),
+      }),
       firestore: () => mockFirestore,
     }),
   },
@@ -100,9 +104,14 @@ jest.mock('@aglyn/aglyn/app-utils/assist-credits', () => ({
     refusedBy: string | null,
   ) => refusedBy === 'band' && org.assistOverage === 'off',
   assistHardCapRefusalText: () => 'Overage is switched off for this workspace',
+  assistFreeTasteRefusalText: (refusedBy: string | null) =>
+    refusedBy === 'account' || refusedBy === 'platform'
+      ? `the taste's ${refusedBy} sentence`
+      : null,
 }))
 
 import { aiGateLadder, type AiGateConfig } from './ai-gate'
+import { resetAccountAgeCache } from './ai-abuse-guards'
 
 const CONFIG: AiGateConfig = {
   feature: 'aiAssist',
@@ -114,20 +123,37 @@ const CONFIG: AiGateConfig = {
 const ORG = { plan: 'pro', name: 'Pros' }
 
 function request(
-  init: { method?: string; token?: string | null } = {},
+  init: { method?: string; token?: string | null; ip?: string } = {},
 ): Request {
   const token = init.token === undefined ? 'user-token' : init.token
   return new Request('https://app.aglyn.com/api/ai/generate', {
     method: init.method ?? 'POST',
-    headers: token ? { authorization: `Bearer ${token}` } : {},
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      // No platform edge is detected in a unit test, so the trusted hop is
+      // the rightmost one — which is the only one there is.
+      ...(init.ip ? { 'x-forwarded-for': init.ip } : {}),
+    },
   })
 }
+
+/** An Auth record created `hoursAgo` hours before `NOW`. */
+const NOW = new Date('2026-09-14T12:00:00Z')
+const createdHoursAgo = (hoursAgo: number) => ({
+  metadata: {
+    creationTime: new Date(NOW.getTime() - hoursAgo * 60 * 60 * 1000).toUTCString(),
+  },
+})
 
 async function climb(
   overrides: { request?: Request; orgId?: string } = {},
 ): Promise<Response | Record<string, unknown>> {
   return aiGateLadder(
-    { request: overrides.request ?? request(), orgId: overrides.orgId ?? 'org-1' },
+    {
+      request: overrides.request ?? request(),
+      orgId: overrides.orgId ?? 'org-1',
+      now: NOW,
+    },
     CONFIG,
   ) as Promise<Response | Record<string, unknown>>
 }
@@ -158,6 +184,9 @@ beforeEach(() => {
   mockFeatureLockdownRefusal.mockResolvedValue(null)
   mockCheckRateLimit.mockReturnValue(ALLOWED_RATE)
   mockReserve.mockResolvedValue(RESERVED)
+  mockGetUser.mockResolvedValue(createdHoursAgo(24 * 30))
+  resetAccountAgeCache()
+  delete process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
 
@@ -353,6 +382,110 @@ describe('the ladder, one rung red at a time', () => {
       windowMs: 60_000,
     })
     expectNothingBelowRan('rate')
+  })
+
+  it('429 from the per-ADDRESS window after the per-uid one, keyed on the trusted hop, and NO reservation taken (AGL-2925)', async () => {
+    // The uid window admits; the address window refuses. Both are the same
+    // limiter under different keys, so the second call is what proves the
+    // address rung exists at all.
+    mockCheckRateLimit
+      .mockReturnValueOnce(ALLOWED_RATE)
+      .mockReturnValueOnce({ ...ALLOWED_RATE, allowed: false, remaining: 0 })
+    const response = (await climb({ request: request({ ip: '203.0.113.9' }) })) as Response
+    expect(response.status).toBe(429)
+    await expect(response.json()).resolves.toMatchObject({ reason: 'rate' })
+    expect(mockCheckRateLimit).toHaveBeenNthCalledWith(2, 'ai-ip:203.0.113.9', {
+      limit: 60,
+      windowMs: 60_000,
+    })
+    expect(mockReserve).not.toHaveBeenCalled()
+    expect(mockGetUser).not.toHaveBeenCalled()
+  })
+
+  it('consults NO address window when no address is readable — one bucket for everyone is a self-inflicted outage', async () => {
+    expect((await climb()) as Response).not.toBeInstanceOf(Response)
+    expect(mockCheckRateLimit).toHaveBeenCalledTimes(1)
+    expect(mockCheckRateLimit).toHaveBeenCalledWith('ai-generate:user-1', expect.anything())
+  })
+
+  it('403 account-age for a FREE workspace whose caller is younger than a day; a day passes; paid and staff never read the record (AGL-2925)', async () => {
+    const free = { orgId: 'org-1', org: { plan: 'free', ownerUid: 'user-1' }, member: {} }
+    mockGetOrgForUser.mockResolvedValue(free)
+    mockGetUser.mockResolvedValue(createdHoursAgo(3))
+    const response = (await climb()) as Response
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      reason: 'account-age',
+      error: expect.stringMatching(/24 hours/),
+    })
+    expect(mockGetUser).toHaveBeenCalledWith('user-1')
+    // Refused BEFORE the reservation, so no counter moved for a day-zero
+    // account — and after the rate limits, so a burst is bounded first.
+    expect(mockReserve).not.toHaveBeenCalled()
+    expect(mockCheckRateLimit).toHaveBeenCalled()
+
+    // At the minimum, exactly: admitted.
+    resetAccountAgeCache()
+    mockGetUser.mockResolvedValue(createdHoursAgo(24))
+    expect((await climb()) as Response).not.toBeInstanceOf(Response)
+
+    // The knob: tightened to two days, the same day-old account is refused;
+    // zero switches the rung off for an invite-only deployment.
+    resetAccountAgeCache()
+    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '48'
+    expect(((await climb()) as Response).status).toBe(403)
+    resetAccountAgeCache()
+    process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS = '0'
+    mockGetUser.mockClear()
+    expect((await climb()) as Response).not.toBeInstanceOf(Response)
+    expect(mockGetUser).not.toHaveBeenCalled()
+    delete process.env.AI_FREE_MIN_ACCOUNT_AGE_HOURS
+
+    // A PAID workspace: the record is never read, however young the account.
+    resetAccountAgeCache()
+    mockGetUser.mockClear()
+    mockGetUser.mockResolvedValue(createdHoursAgo(0))
+    mockGetOrgForUser.mockResolvedValue({ orgId: 'org-1', org: ORG, member: {} })
+    expect((await climb()) as Response).not.toBeInstanceOf(Response)
+    expect(mockGetUser).not.toHaveBeenCalled()
+
+    // Staff on a Free workspace: exempt — they verify the fix mid-incident.
+    mockGetOrgForUser.mockResolvedValue(free)
+    mockVerifyIdToken.mockResolvedValueOnce({ uid: 'user-1', email_verified: true, staff: true })
+    expect((await climb()) as Response).not.toBeInstanceOf(Response)
+    expect(mockGetUser).not.toHaveBeenCalled()
+  })
+
+  it('the account-age read is cached per instance, and a read that fails refuses CLOSED with 503', async () => {
+    const free = { orgId: 'org-1', org: { plan: 'free', ownerUid: 'user-1' }, member: {} }
+    mockGetOrgForUser.mockResolvedValue(free)
+    mockGetUser.mockResolvedValue(createdHoursAgo(48))
+    await climb()
+    await climb()
+    expect(mockGetUser).toHaveBeenCalledTimes(1)
+
+    resetAccountAgeCache()
+    mockReserve.mockClear()
+    mockGetUser.mockRejectedValueOnce(new Error('auth unreachable'))
+    const response = (await climb()) as Response
+    expect(response.status).toBe(503)
+    expect(mockReserve).not.toHaveBeenCalled()
+  })
+
+  it('the taste’s own refusals keep the 429 and get their own sentence (AGL-2925)', async () => {
+    mockReserve.mockResolvedValueOnce({ ...RESERVED, allowed: false, refusedBy: 'account' })
+    let response = (await climb()) as Response
+    expect(response.status).toBe(429)
+    await expect(response.json()).resolves.toMatchObject({
+      reason: 'quota',
+      error: "the taste's account sentence",
+    })
+    mockReserve.mockResolvedValueOnce({ ...RESERVED, allowed: false, refusedBy: 'platform' })
+    response = (await climb()) as Response
+    expect(response.status).toBe(429)
+    await expect(response.json()).resolves.toMatchObject({
+      error: "the taste's platform sentence",
+    })
   })
 
   it('503 when the reservation cannot be taken — FAIL CLOSED', async () => {

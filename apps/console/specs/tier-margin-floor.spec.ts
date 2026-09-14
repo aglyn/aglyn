@@ -121,6 +121,7 @@ import {
 } from '../utils/usage-metering'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
+  FREE_AI_TASTE_CREDITS_PER_MONTH,
   BANDWIDTH_ABUSE_CEILING_FLOOR,
   BANDWIDTH_ABUSE_CEILING_MULTIPLE,
   ESTIMATED_PAGE_TRANSFER_BYTES,
@@ -1667,6 +1668,29 @@ describe("Free's bandwidth band, and everything derived from it", () => {
     expect(PLAN_ENTITLEMENTS.free.emailSendsPerMonth).toBe(0)
     expect(PLAN_ENTITLEMENTS.free.features.aiAssist).toBe(false)
     expect(PLAN_PRICING.free.basePriceMonthlyUsd).toBe(0)
+  })
+
+  /**
+   * THE AI TASTE (AGL-2925) — the one Free band with no bandwidth wall
+   * behind it, and the one give that is priced in provider dollars rather
+   * than in gigabytes. Its cost exposure is the number the decision was
+   * made on, so it is pinned here beside the bandwidth give: at most thirty
+   * cents a month per Free workspace, and a WALL — no rate, so nothing past
+   * the band can ever produce a charge in either direction.
+   */
+  it('the AI taste costs at most $0.30 a month per Free workspace, and is a wall', () => {
+    expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(300)
+    expect(PLAN_ENTITLEMENTS.free.features.aiGenerative).toBe(true)
+    const monthlyCostUsd = assistUsdFromCredits(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth)
+    expect(monthlyCostUsd).toBeLessThanOrEqual(0.3)
+    expect(monthlyCostUsd).toBeGreaterThan(0)
+    // …and it is metered on the SAME rate the paid bands are, so a cheaper
+    // credit could not silently make the taste larger than it was decided.
+    expect(monthlyCostUsd).toBe(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth * ASSIST_CREDIT_COST_USD)
+    expect(PLAN_PRICING.free.extraAssistCreditsUsdPer1k).toBeNull()
+    // Three workspaces per account (AGL-2265) do NOT triple it: the account
+    // allowance is the same constant, read by the meter for the owner.
+    expect(FREE_AI_TASTE_CREDITS_PER_MONTH).toBe(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth)
   })
 
   it('costs what the give is worth, at the platform\'s own rate', () => {

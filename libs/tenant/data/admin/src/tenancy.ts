@@ -20,6 +20,10 @@ export * from './lib/server/api-http'
 export * from './lib/server/api-keys'
 export * from './lib/server/assist-answer-cache'
 export * from './lib/server/assist-usage'
+// The Free taste's precautions (AGL-2925): the account and platform half
+// of the meter, and the request-level rungs every AI door climbs.
+export * from './lib/server/assist-free-taste'
+export * from './lib/server/ai-abuse-guards'
 // The one Anthropic runtime and the gate ladder every AI door composes
 // (AGL-2903). Beside the meters they price with.
 export * from './lib/server/ai-runtime'
