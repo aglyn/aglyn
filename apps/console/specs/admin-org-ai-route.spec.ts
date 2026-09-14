@@ -254,7 +254,17 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
     expect(body.overage.capReached).toBe(false)
 
     // Refusals: zero-filled from the sparse map on the month document.
-    expect(body.refusals).toEqual({ band: 1, cap: 2, messages: 0, budget: 0, total: 3 })
+    expect(body.refusals).toEqual({
+      band: 1,
+      cap: 2,
+      messages: 0,
+      budget: 0,
+      account: 0,
+      requests: 0,
+      refusals: 0,
+      platform: 0,
+      total: 3,
+    })
 
     // Jobs: counted by status, listed newest-first with the assumed fields.
     expect(body.jobs.counts).toEqual({

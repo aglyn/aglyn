@@ -107,7 +107,17 @@ function body(overrides: Partial<StaffOrgAiResponse> = {}): StaffOrgAiResponse {
       capReached: false,
       bandRefuses: false,
     },
-    refusals: { band: 0, cap: 12, messages: 0, budget: 0, total: 12 },
+    refusals: {
+      band: 0,
+      cap: 12,
+      messages: 0,
+      budget: 0,
+      account: 0,
+      requests: 0,
+      refusals: 0,
+      platform: 0,
+      total: 12,
+    },
     jobs: {
       counts: { queued: 1, running: 0, needs_input: 0, done: 3, failed: 0, canceled: 0 },
       recent: [

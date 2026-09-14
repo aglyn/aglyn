@@ -53,12 +53,20 @@ import type { AssistRefusedBy } from '@aglyn/aglyn/app-utils/assist-credits'
 /** A reason that actually refused — the `null` (admitted) case has no count. */
 export type AssistRefusalReason = NonNullable<AssistRefusedBy>
 
-/** Every reason, in the order the card and the leaderboard list them. */
+/**
+ * Every reason, in the order the card and the leaderboard list them: the
+ * workspace's own four first, then the Free taste's (AGL-2925), which only a
+ * Free workspace can be refused by.
+ */
 export const ASSIST_REFUSAL_REASONS: readonly AssistRefusalReason[] = [
   'band',
   'cap',
   'messages',
   'budget',
+  'account',
+  'requests',
+  'refusals',
+  'platform',
 ]
 
 export function recordAssistRefusal(
@@ -88,7 +96,7 @@ export function recordAssistRefusal(
   }
 }
 
-/** The four counts, zero-filled, as the card and the leaderboard read them. */
+/** Every reason's count, zero-filled, as the card and the leaderboard read them. */
 export type AssistRefusalCounts = Record<AssistRefusalReason, number> & {
   total: number
 }

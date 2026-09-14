@@ -125,6 +125,11 @@ function RefusalsRow({ refusals }: { refusals: StaffOrgAiRefusals }) {
     cap: 'ceiling',
     messages: 'messages',
     budget: 'operator backstop',
+    // The Free taste's rungs (AGL-2925): only a Free workspace collects these.
+    account: 'free account',
+    requests: 'free requests/day',
+    refusals: 'free refusals/day',
+    platform: 'platform ceiling',
   }
   return (
     <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>

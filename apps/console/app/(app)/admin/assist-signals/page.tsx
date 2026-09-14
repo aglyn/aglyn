@@ -49,7 +49,7 @@ import type {
   AssistMiningReport,
   AssistSpendRow,
 } from '../../../../utils/assist-signal-mining'
-import { costSplitRows } from '../../../../utils/assist-signal-mining'
+import { costSplitRows, freeTasteRefusals } from '../../../../utils/assist-signal-mining'
 
 /** The month leaderboard as the route serves it beside the report. */
 interface AssistSpendLeaderboard {
@@ -484,7 +484,7 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                               color="text.secondary"
                               sx={{ display: 'block' }}
                             >
-                              {`band ${row.refusals.band} · ceiling ${row.refusals.cap} · messages ${row.refusals.messages} · backstop ${row.refusals.budget}`}
+                              {`band ${row.refusals.band} · ceiling ${row.refusals.cap} · messages ${row.refusals.messages} · backstop ${row.refusals.budget}${freeTasteRefusals(row.refusals) > 0 ? ` · free taste ${freeTasteRefusals(row.refusals)}` : ''}`}
                             </Typography>
                           ) : null}
                         </TableCell>

@@ -34,7 +34,17 @@ const row = (
   aiAddon: false,
   credits,
   estCostUsd,
-  refusals: { band: 0, cap: 0, messages: 0, budget: 0, total: 0 },
+  refusals: {
+    band: 0,
+    cap: 0,
+    messages: 0,
+    budget: 0,
+    account: 0,
+    requests: 0,
+    refusals: 0,
+    platform: 0,
+    total: 0,
+  },
 })
 
 describe('rankAssistSpend (AGL-2930)', () => {

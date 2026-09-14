@@ -192,8 +192,18 @@ export interface AssistSpendRow {
     cap: number
     messages: number
     budget: number
+    /** The Free taste's rungs (AGL-2925); zero on every paid workspace. */
+    account: number
+    requests: number
+    refusals: number
+    platform: number
     total: number
   }
+}
+
+/** The Free taste's refusals as one figure: the board names the wall, not each rung. */
+export function freeTasteRefusals(refusals: AssistSpendRow['refusals']): number {
+  return refusals.account + refusals.requests + refusals.refusals + refusals.platform
 }
 
 /**

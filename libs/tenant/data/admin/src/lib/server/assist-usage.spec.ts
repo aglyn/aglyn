@@ -1794,7 +1794,9 @@ describe('the Free taste is metered per ACCOUNT, across every workspace one pers
     const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, FREE)
     expect(reservation).toMatchObject({ allowed: false, refusedBy: 'account' })
     // Nothing moved — not the org's counters, not the account's request.
-    expect(mockDocs.get(orgMonthPath)).toBeUndefined()
+    // The org month carries only the refusal count the staff card reads
+    // (AGL-2930), never a message or a cost.
+    expect(mockDocs.get(orgMonthPath)).toEqual({ month: '2026-08', refusals: { account: 1 } })
     expect(mockDocs.get(accountPath)).toEqual({ estCostUsd: 0.3 })
   })
 

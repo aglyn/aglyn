@@ -727,6 +727,7 @@ export async function reserveAssistMessage(
       ? freeTasteRefusal(freeTasteReadsFrom(accountSnapshot, platformSnapshot, day))
       : null
     if (tasteRefusal) {
+      recordAssistRefusal(firestore, orgId, month, tasteRefusal)
       return {
         allowed: false,
         refusedBy: tasteRefusal,

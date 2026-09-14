@@ -96,6 +96,10 @@ describe('assistRefusalCounts', () => {
       cap: 12,
       messages: 0,
       budget: 0,
+      account: 0,
+      requests: 0,
+      refusals: 0,
+      platform: 0,
       total: 15,
     })
   })
@@ -107,6 +111,10 @@ describe('assistRefusalCounts', () => {
       cap: 0,
       messages: 0,
       budget: 2,
+      account: 0,
+      requests: 0,
+      refusals: 0,
+      platform: 0,
       total: 2,
     })
   })
