@@ -108,6 +108,7 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
+import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
@@ -211,7 +212,7 @@ function LayoutBesignerPage(props) {
     }),
     [linkableRoutes, screenDocs, collectionTemplates.listingTargets],
   )
-  const { doc: result } = useLayoutVersion({
+  const { doc: result, setDoc: updateLayoutVersion } = useLayoutVersion({
     hostId,
     layoutId,
     versionId,
@@ -278,6 +279,7 @@ function LayoutBesignerPage(props) {
     handleSave,
     saveWorkingDraft,
     refuseOverUnopenedDraft,
+    markOwnWrite,
     jsonOpen,
     openJsonEditor,
     closeJsonEditor,
@@ -386,6 +388,54 @@ function LayoutBesignerPage(props) {
     loaded: canvas.didSetInitial,
   })
   clearMirrorRef.current = coediting.clearMirror
+
+  /**
+   * Declared properties (AGL-2893): what this layout lets each screen that
+   * renders inside it set. Document metadata, not canvas nodes, so they save
+   * straight to the version rather than riding the node save — and, a layout
+   * being served by its version pointer, they go live with this version.
+   */
+  const [propsDialogOpen, setPropsDialogOpen] = useState(false)
+  const declaredProps = (
+    data as { props?: Aglyn.ReusableComponentProp[] } | undefined
+  )?.props
+  const handleSaveDeclaredProps = useCallback(
+    async (nextProps: Aglyn.ReusableComponentProp[]) => {
+      const save = updateLayoutVersion as unknown as (
+        value: Partial<Aglyn.AglynLayoutVersion>,
+        options?: Parameters<typeof updateLayoutVersion>[1],
+      ) => Promise<void>
+      // This bumps the version doc's `updatedAt` just like a node save, so
+      // the conflict guard has to be told it was us (AGL-674).
+      markOwnWrite()
+      await save({ props: nextProps }, { merge: true })
+      if (editingLiveVersion) {
+        // The live version: every screen inside this layout renders with the
+        // new properties from the next request, so drop what is cached.
+        void revalidateLivePages({ user, hostId, layoutId }).then((result) => {
+          const shortfall = describeRevalidateShortfall(result)
+          if (shortfall) {
+            enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+          }
+        })
+      }
+      enqueueSnackbar(
+        editingLiveVersion
+          ? 'Properties saved — the live pages using this layout are refreshing now.'
+          : 'Properties saved to this version. Publish it to use them on live pages.',
+        { variant: 'success', persist: false },
+      )
+    },
+    [
+      updateLayoutVersion,
+      markOwnWrite,
+      editingLiveVersion,
+      user,
+      hostId,
+      layoutId,
+      enqueueSnackbar,
+    ],
+  )
 
   // The site's theme with this site's overrides resolved over it
   // (AGL-1021). The editor must render exactly what the tenant will.
@@ -651,6 +701,16 @@ function LayoutBesignerPage(props) {
                             onClick: handleSave,
                           },
                           {
+                            // Declared properties (AGL-2893): what each screen
+                            // inside this layout can set. Sits with Save
+                            // because it is part of the layout's contract, not
+                            // of the selected element.
+                            id: 'center-nav-file-properties',
+                            children: 'Properties…',
+                            onClick: () => setPropsDialogOpen(true),
+                            ListItemTextProps: { inset: true },
+                          },
+                          {
                             id: 'center-nav-file-close',
                             children: 'Close',
                             href: listUrl,
@@ -783,6 +843,13 @@ function LayoutBesignerPage(props) {
                       defaultValue={canvas.nestedNodes as any}
                     />
                   )}
+                  <ComponentPropsDialog
+                    noun="layout"
+                    open={propsDialogOpen}
+                    value={declaredProps}
+                    onClose={() => setPropsDialogOpen(false)}
+                    onSave={handleSaveDeclaredProps}
+                  />
                 </BesignerMediaPickerProvider>
               </InteractionsProvider>
             </BindingPickerProvider>

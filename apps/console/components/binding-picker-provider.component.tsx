@@ -64,47 +64,59 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
     { idField: '$id' },
   )
   /**
-   * The reusable component being edited, for its declared props (AGL-1335).
+   * The reusable component or shared layout being edited, for its declared
+   * props (AGL-1335, AGL-2893).
    *
    * Read from the ROUTE rather than passed in, because that is the only
    * thing that actually distinguishes the surfaces: this provider wraps five
-   * editors and only the component one has a `componentId`, so the null ref
-   * below is what keeps the other four from subscribing to anything. The
-   * page already listens to this exact document, and the Firestore SDK
-   * shares one listener per ref — so this is a second reader, not a second
-   * read.
+   * editors and only the component and layout ones have a `componentId` or a
+   * `layoutId`, so the null ref below is what keeps the other three from
+   * subscribing to anything. The page already listens to this exact
+   * document, and the Firestore SDK shares one listener per ref — so this is
+   * a second reader, not a second read.
    *
    * Deliberately WITHOUT the version converter: only `props` is wanted here,
    * and the converter exists to decompress `nodes`, which would be pure cost
    * for a picker list.
    */
-  const params = useParams<{ componentId?: string; versionId?: string }>()
+  const params = useParams<{
+    componentId?: string
+    layoutId?: string
+    versionId?: string
+  }>()
   const componentId =
     typeof params?.componentId === 'string' ? params.componentId : ''
+  const layoutId =
+    !componentId && typeof params?.layoutId === 'string' ? params.layoutId : ''
   const versionId = typeof params?.versionId === 'string' ? params.versionId : ''
-  const { data: componentVersionDoc } = useFirestoreDoc<any>(
+  const owner: 'component' | 'layout' | undefined = componentId
+    ? 'component'
+    : layoutId
+      ? 'layout'
+      : undefined
+  const { data: ownerVersionDoc } = useFirestoreDoc<any>(
     () =>
-      hostId && componentId && versionId
+      hostId && owner && versionId
         ? doc(
             firestore,
             'hosts',
             hostId,
-            'components',
-            componentId,
+            owner === 'component' ? 'components' : 'layouts',
+            owner === 'component' ? componentId : layoutId,
             'versions',
             versionId,
           )
         : null,
-    [firestore, hostId, componentId, versionId],
+    [firestore, hostId, owner, componentId, layoutId, versionId],
   )
-  // An empty list, not `undefined`, for a component that has declared nothing
-  // yet: `undefined` is how every other editor says "not a component", and a
-  // new component is still one — its switches offer a binding and explain
-  // where properties come from, rather than hiding the feature until the
-  // first property exists.
-  const componentProps = Array.isArray(componentVersionDoc?.props)
-    ? (componentVersionDoc.props as ReusableComponentProp[])
-    : componentId && versionId
+  // An empty list, not `undefined`, for a component or layout that has
+  // declared nothing yet: `undefined` is how every other editor says "not a
+  // component", and a new one is still one — its switches offer a binding and
+  // explain where properties come from, rather than hiding the feature until
+  // the first property exists.
+  const componentProps = Array.isArray(ownerVersionDoc?.props)
+    ? (ownerVersionDoc.props as ReusableComponentProp[])
+    : owner && versionId
       ? EMPTY_COMPONENT_PROPS
       : undefined
 
@@ -189,8 +201,15 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
     }
     // The same document the Site options above preview, so the canvas fills
     // `{{host.*}}` in with exactly the values the picker promised (AGL-2881).
-    return { options, variables, functions, componentProps, host: hostDoc }
-  }, [variableDocs, functionDocs, hostDoc, componentProps])
+    return {
+      options,
+      variables,
+      functions,
+      componentProps,
+      ...(owner ? { componentPropsOwner: owner } : {}),
+      host: hostDoc,
+    }
+  }, [variableDocs, functionDocs, hostDoc, componentProps, owner])
 
   return (
     <BindingPickerContext.Provider value={value}>

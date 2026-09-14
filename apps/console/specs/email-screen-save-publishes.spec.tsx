@@ -123,7 +123,8 @@ jest.mock('@aglyn/aglyn', () => ({
     Provider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   },
   buildScreenRouteEntries: () => ({}),
-  composeLayoutChainAndScreenNodes: () => ({}),
+  composeLayoutChainWithProps: () => ({}),
+  layoutPropValuesFor: () => undefined,
   composeScreenRoutePath: () => '/promo',
   decodeStoredNodes: () => ({}),
   findScreenIdByRoutePath: () => undefined,
@@ -297,6 +298,13 @@ jest.mock('../components/besigner-media-picker-provider.component', () => passth
 jest.mock('../components/entity-picker-provider.component', () => passthrough)
 jest.mock('../components/reusable-components-provider.component', () => passthrough)
 jest.mock('../components/screen-social-image-field.component', () => nullComponent)
+// The layout property values in Screen Properties (AGL-2893) are their own
+// component with their own spec; nothing here is about them.
+jest.mock('../components/screen-layout-properties.component', () => ({
+  __esModule: true,
+  default: () => null,
+  useLayoutChainProperties: () => [],
+}))
 jest.mock('../components/console-plugins-gate.component', () => ({
   withSitePlugins: (component: unknown) => component,
 }))

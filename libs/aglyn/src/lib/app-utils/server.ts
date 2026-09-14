@@ -168,6 +168,8 @@ export * from './dynamic-list-rule'
 // catalog. No Node builtin, so it stays out of the `/server`-only group.
 export * from './email-topics'
 export * from './compose-layout-nodes'
+// Layout properties applied through the chain (AGL-2893).
+export * from './compose-layout-props'
 export * from './document-landmark'
 export * from './functions'
 export * from './compose-reusable-components'

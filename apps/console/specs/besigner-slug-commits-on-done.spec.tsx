@@ -165,7 +165,8 @@ jest.mock('@aglyn/aglyn', () => ({
   ScreenLinkContext: {
     Provider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   },
-  composeLayoutChainAndScreenNodes: () => ({}),
+  composeLayoutChainWithProps: () => ({}),
+  layoutPropValuesFor: () => undefined,
   decodeStoredNodes: () => ({}),
   collectReferencedComponentIds: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/compose-reusable-components',
@@ -319,6 +320,13 @@ jest.mock('../components/host-id-provider', () => ({
 jest.mock('../components/screen-social-image-field.component', () => ({
   __esModule: true,
   default: () => null,
+}))
+// The layout property values in Screen Properties (AGL-2893) are their own
+// component with their own spec; nothing here is about them.
+jest.mock('../components/screen-layout-properties.component', () => ({
+  __esModule: true,
+  default: () => null,
+  useLayoutChainProperties: () => [],
 }))
 jest.mock('../hooks/use-plugin-drawer-registration', () => ({
   __esModule: true,

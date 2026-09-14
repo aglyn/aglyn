@@ -1049,6 +1049,21 @@ export interface AglynScreenVersion<N = AglynNodeSchema>
    * instead the back-pointer to the owning layout document.
    */
   layoutId?: LayoutUid | null
+  /**
+   * This version's values for the properties of the layouts it renders inside
+   * (AGL-2893), stored beside the {@link layoutId} binding: layout id →
+   * property name → value, for every layout in the chain.
+   *
+   * Keyed by layout so that binding a different layout never hands this
+   * screen's values to a property of the same name there, and so that a
+   * layout nested inside another can be given values of its own. A property
+   * the screen leaves unset renders with its default. Read on screen versions
+   * only.
+   */
+  layoutPropValues?: Record<
+    LayoutUid,
+    Record<string, ReusableComponentPropValue>
+  >
 }
 
 /** Unique id of a host-level reusable component definition. */
@@ -1372,6 +1387,13 @@ export interface AglynLayoutVersion<N = AglynNodeSchema>
   extends AglynScreenVersion<N> {
   layoutId?: LayoutUid
   hostId?: HostUid
+  /**
+   * The properties this layout declares (AGL-2893), each set by the screens
+   * that render inside it. On the version rather than the layout document,
+   * beside the nodes that bind them: a layout is served by its version
+   * pointer, so a version's properties go live with its tree.
+   */
+  props?: ReusableComponentProp[]
 }
 
 export type TemplateUid = string

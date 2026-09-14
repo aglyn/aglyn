@@ -19,6 +19,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   aglyn,
+  applyLayoutProps,
   CanvasManager,
   composeReusableComponentNodes,
   NODE_ROOT_ID,
@@ -58,7 +59,19 @@ export function useLayoutChromeContext() {
 export function useLayoutChromeCanvas(
   layoutNodes: Aglyn.ProcessableNodes | undefined,
   reusableDefinitions?: Record<string, Aglyn.ReusableComponentTree>,
+  /**
+   * The layout's declared properties and this screen's values for them
+   * (AGL-2893), applied before anything is grafted — the composition the
+   * published page runs, so the chrome shows the banner, copy and choices
+   * this screen will publish with.
+   */
+  layoutProps?: {
+    props?: Aglyn.ReusableComponentProp[] | null
+    values?: Record<string, unknown> | null
+  },
 ): Aglyn.CanvasManager | undefined {
+  const declared = layoutProps?.props
+  const values = layoutProps?.values
   return useMemo(() => {
     if (!layoutNodes) return undefined
     // Separate store instance so edits, history, and persistence stay on the
@@ -70,7 +83,8 @@ export function useLayoutChromeCanvas(
     // it, and neither side is wrong about its own half of the trip.
     const nodes = {
       ...(composeReusableComponentNodes(
-        layoutNodes as any,
+        (applyLayoutProps(layoutNodes as any, declared, values) ??
+          layoutNodes) as any,
         reusableDefinitions as any,
       ) as Record<string, Aglyn.NodeSchema>),
     }
@@ -84,7 +98,7 @@ export function useLayoutChromeCanvas(
     }
     canvas.setNodes(canvas.processNodesToDenormalized(nodes))
     return canvas
-  }, [layoutNodes, reusableDefinitions])
+  }, [layoutNodes, reusableDefinitions, declared, values])
 }
 
 export default LayoutChromeContext

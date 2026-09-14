@@ -489,3 +489,115 @@ describe('every property kind on the published page (AGL-2893)', () => {
     expect(off['cmp__band__b-cta']).toBeUndefined()
   })
 })
+
+/**
+ * A LAYOUT'S PROPERTIES, SET BY THE SCREEN THAT RENDERS INSIDE IT (AGL-2893).
+ *
+ * The screen version stores its values beside its layout binding, keyed by
+ * layout. What only this can see is the whole published read: the version's
+ * values reaching the layout walked from the same document, the layout's
+ * declared properties arriving with its published version, and the rest of
+ * the pipeline leaving the typed values as they were applied.
+ */
+describe("a layout's properties on the published page (AGL-2893)", () => {
+  const mockGetScreenVersion = jest.requireMock('./get-screen-version')
+    .default as jest.Mock
+  const mockApplySchedule = jest.requireMock('./apply-publish-schedule')
+    .default as jest.Mock
+
+  const LAYOUT = {
+    nodes: {
+      [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['banner', 'slot'] },
+      banner: {
+        $id: 'banner',
+        componentId: 'muiAlert',
+        parentId: ROOT,
+        props: {
+          children: '{{prop.bannerText}}',
+          hideUnless: '{{prop.showBanner}}',
+          icon: '{{prop.showIcon}}',
+        },
+      },
+      slot: { $id: 'slot', componentId: 'layoutSlot', parentId: ROOT },
+    },
+    props: [
+      { name: 'showBanner', type: 'boolean', defaultValue: false },
+      { name: 'bannerText', type: 'text', defaultValue: 'We are hiring' },
+      { name: 'showIcon', type: 'checkbox', defaultValue: true },
+    ],
+  }
+
+  const SCREEN_NODES = {
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['copy'] },
+    copy: {
+      $id: 'copy',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'Pricing' },
+    },
+  }
+
+  const composeScreen = async (version: Record<string, unknown>) => {
+    mockGetScreenVersion.mockResolvedValue({
+      version: { nodes: SCREEN_NODES, ...version },
+    })
+    const { composeScreenNodes } = await import('./compose-screen-nodes')
+    return (await composeScreenNodes({
+      hostId: 'h1',
+      screenId: 'pricing',
+      screen: { $id: 'pricing', versionId: 'v1' } as never,
+    })) as any
+  }
+
+  /** The layout's banner, in the tree the page ships. */
+  const findBanner = (tree: Record<string, any>): any =>
+    Object.values(tree ?? {}).find((node) => node?.componentId === 'muiAlert')
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetComponents.mockResolvedValue({ definitions: {} })
+    mockGetVariables.mockResolvedValue([])
+    mockGetFunctions.mockResolvedValue([])
+    mockGetDatasets.mockResolvedValue([])
+    mockGetWorkflows.mockResolvedValue([])
+    mockGetPluginInstalls.mockResolvedValue([])
+    mockGetForms.mockResolvedValue({ forms: {} })
+    mockApplySchedule.mockResolvedValue(null)
+    mockGetPublishedLayoutVersion.mockImplementation(async ({ layoutId }: any) =>
+      layoutId === 'site'
+        ? { version: LAYOUT, layout: { $id: 'site' } }
+        : { version: undefined, layout: undefined },
+    )
+  })
+
+  it('renders the defaults where the screen sets nothing', async () => {
+    const tree = await composeScreen({ layoutId: 'site' })
+    // The layout framed the screen...
+    expect(tree['copy'].parentId).toBe('layout__slot')
+    // ...and its banner defaults to hidden, so it is not in the page at all.
+    expect(findBanner(tree)).toBeUndefined()
+    expect(tree['_@_'].nodes).toEqual(['layout__slot'])
+  })
+
+  it("renders the screen's values for its layout, typed", async () => {
+    const tree = await composeScreen({
+      layoutId: 'site',
+      layoutPropValues: {
+        site: { showBanner: true, bannerText: 'Launch week', showIcon: false },
+      },
+    })
+    expect(findBanner(tree)?.props).toMatchObject({
+      children: 'Launch week',
+      icon: false,
+    })
+  })
+
+  it('reads no values meant for a different layout', async () => {
+    const tree = await composeScreen({
+      layoutId: 'site',
+      layoutPropValues: { retired: { showBanner: true } },
+    })
+    expect(tree['copy'].parentId).toBe('layout__slot')
+    expect(findBanner(tree)).toBeUndefined()
+  })
+})
