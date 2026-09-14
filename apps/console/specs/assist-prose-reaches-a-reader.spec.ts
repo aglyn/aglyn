@@ -121,6 +121,9 @@ const fakeFirestore: any = {
           .map(([path, data]) => ({
             id: path.split('/').pop(),
             data: () => data,
+            // The spend leaderboard reads fields off month documents
+            // (AGL-2930); a snapshot without `get` would fail that read.
+            get: (field: string) => (data as Record<string, unknown>)[field],
             ref: {
               parent: { parent: { id: path.split('/')[1] } },
             },
@@ -164,6 +167,17 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
+  // The Free taste's day (AGL-2925), attached beside the report; this file
+  // is about the prose, so an idle day is enough.
+  readPlatformFreeSpend: async (_firestore: unknown, day: string) => ({
+    day,
+    estCostUsd: 0,
+    requests: 0,
+    refusals: 0,
+    ceilingUsd: 25,
+    alerted: false,
+    paused: false,
+  }),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({

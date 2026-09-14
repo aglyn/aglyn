@@ -192,6 +192,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
+        // The account-age rung (AGL-2925) reads the Auth record's creation
+        // time for a Free workspace; every account here is a month old.
+        getUser: async () => ({
+          metadata: { creationTime: 'Thu, 13 Aug 2026 00:00:00 GMT' },
+        }),
       }),
       firestore: () => mockMakeFirestore(),
     }),
@@ -582,13 +587,15 @@ describe('the gate ladder — every guard forced red once', () => {
   })
 
   it('a workspace with NO band gets the OPERATOR backstop, in its words', async () => {
-    // Free sells no assist band, so what refuses it is the operator ceiling
-    // and not a quantity anyone bought. Telling that workspace it "used its
-    // credits" would name a band it never had, and the payload carries no
-    // credit standing for it at all.
+    // Starter sells no assist band, so what refuses it is the operator
+    // ceiling and not a quantity anyone bought. Telling that workspace it
+    // "used its credits" would name a band it never had, and the payload
+    // carries no credit standing for it at all. (Free was the example until
+    // the taste gave it a band — AGL-2925; see the case below.)
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
     try {
       seedOrgs()
+      mockDocs.set(`orgs/${FREE_ORG}`, { name: 'Starters', plan: 'starter' })
       mockDocs.set(`orgs/${FREE_ORG}/assistUsage/${MONTH}`, {
         messages: 5,
         estCostUsd: 41.5,
@@ -602,6 +609,23 @@ describe('the gate ladder — every guard forced red once', () => {
     } finally {
       delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
     }
+  })
+
+  it('a FREE workspace is refused at the taste’s band, in credits, with no control named (AGL-2925)', async () => {
+    seedOrgs()
+    mockDocs.set(`orgs/${FREE_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 0.3,
+    })
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(429)
+    const payload = await response.json()
+    expect(String(payload.error)).toMatch(/used its assistant credits/i)
+    expect(payload.quota).toMatchObject({
+      refusedBy: 'band',
+      credits: { used: 300, limit: 300, remaining: 0 },
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   /** The Pro org with its own hard cap switched on (AGL-2653). */

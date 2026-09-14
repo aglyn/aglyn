@@ -282,10 +282,15 @@ describe('get — what the card reads', () => {
   })
 
   it('says a plan with no band, or no rate, sells no overage — so the card offers no switch', async () => {
-    mockDocs.set('orgs/org-1', org('free'))
+    // Starter: no band. Free: the 300-credit taste, and no rate (AGL-2925).
+    mockDocs.set('orgs/org-1', org('starter'))
     expect(
       await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
     ).toMatchObject({ bandCredits: null, overageRateUsdPer1k: null, sellsOverage: false })
+    mockDocs.set('orgs/org-1', org('free'))
+    expect(
+      await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
+    ).toMatchObject({ bandCredits: 300, overageRateUsdPer1k: null, sellsOverage: false })
     mockDocs.set('orgs/org-1', org('enterprise'))
     expect(
       await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
@@ -367,16 +372,22 @@ describe('setHardCap — the write', () => {
     expect(walled).toMatchObject({ code: 'not_sold' })
     expect(mockDocs.get('orgs/org-1')).toEqual(org('enterprise'))
 
+    mockDocs.set('orgs/org-1', org('starter'))
+    const starter = await POST(
+      post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }),
+    )
+    expect(starter.status).toBe(409)
+    const bandless = await starter.json()
+    // Two different sentences for two different facts: no band at all, or a
+    // band already walled. Free is the second since the taste (AGL-2925).
+    expect(String(bandless.error)).toMatch(/no AI assist credits/i)
+    expect(String(walled.error)).toMatch(/already stops AI assist/i)
     mockDocs.set('orgs/org-1', org('free'))
     const free = await POST(
       post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }),
     )
     expect(free.status).toBe(409)
-    const bandless = await free.json()
-    // Two different sentences for two different facts: no band at all, or a
-    // band already walled.
-    expect(String(bandless.error)).toMatch(/no AI assist credits/i)
-    expect(String(walled.error)).toMatch(/already stops AI assist/i)
+    expect(String((await free.json()).error)).toMatch(/already stops AI assist/i)
     expect(mockAudit).toEqual([])
   })
 
