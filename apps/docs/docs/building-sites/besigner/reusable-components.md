@@ -63,30 +63,55 @@ open the component.
 ## Properties
 
 A component doesn't have to look identical everywhere. Give it **properties** and each place
-you use it supplies its own text, image or link — while the layout and the styling still
-come from the one component.
+you use it supplies its own text, image, link, color or choice — while the layout and the
+styling still come from the one component.
 
-This is what stops a hero from being rebuilt on every page. Only the words differ.
+This is what stops a hero from being rebuilt on every page. Only the differences vary.
 
 ### Declare them
 
 1. Open the component and choose **File ▸ Properties…**
 2. **Add property**. Give it a name — `headline`, say — a type, an optional label for the
-   Attributes panel, and a **default**.
+   Attributes panel, optional help, and a **default**.
 3. The dialog shows each property's token under its name.
 
 ![The Component properties dialog with two properties declared](/img/besigner/component-properties-dialog.png)
 
-| Type | Field in Attributes |
+Every field a built-in element offers in the Attributes panel is a property type, listed in
+the **Type** picker by group:
+
+| Group | Types |
 | -- | -- |
-| Text | Single-line text |
-| Long text | Multi-line text |
-| Image | Image picker |
-| Link | Screen picker (screens and collection listings), or an external URL |
-| Number | Number |
-| Yes / no | **Yes** or **No**, or left to the component's default |
-| Choice | A dropdown of the answers you give the property |
-| Icon | Icon picker |
+| Text | Text · Long text · Formatted document · Table |
+| Media and links | Image · Link · Icon |
+| Numbers | Number · Slider |
+| Choices | Yes / no · Checkbox · Choice · Radio buttons · Toggle buttons · Pick list |
+| Style | Color · Size · Border · Background fill · Column span · Theme preset · Theme scale |
+| Date and time | Date · Time |
+| Site content | Element on the page · Product · Collection · Category · Dataset · Dataset field · Form · Plugin · Plugin settings |
+
+A property is edited with the control that field has on a built-in element, in the dialog's
+**Default** and on every page that places the component: **Yes / no** is a switch, **Icon**
+is the icon picker, **Color** is the color and theme-token picker, **Size** is a number with
+a unit, **Product** lists the site's products, and so on.
+
+Some types need a setting before they can be drawn, shown under the property's row:
+
+- **Slider** — the lowest value, the highest value and the step.
+- **Choice** — whether a page can pick several answers.
+- **Theme scale** — which of the theme's scales it offers: font sizes, font weights or
+  stacking layers. **Theme preset** — which presets: corner radius, shadow, font family,
+  text style or gap.
+- **Dataset field** — the dataset whose fields it lists; leave it empty to list the fields
+  of the dataset the placed component sits inside.
+- **Plugin settings** — the **Plugin** property whose chosen plugin the settings are for.
+
+A **Choice**, **Radio buttons**, **Toggle buttons** or **Pick list** property lists its
+answers under its row: **Add choice**, then give each one a **Label**, which is what a page
+picks, and a **Value**, which is what the field bound to the property receives. Bound to a
+dropdown, the values must be ones that dropdown offers; the Attributes panel lists them if
+one is missing. A **Checkbox** with no answers is a single tick box; given answers, it is a
+list a page ticks several of.
 
 A **Link** property is a screen picker at both ends — in the dialog's **Default** column and
 in each instance's Attributes panel — exactly like a Button's own **Link to screen** field.
@@ -100,17 +125,34 @@ Link properties written before the picker existed hold a typed address. They kee
 unchanged — but they are still typed addresses, so pick the screen again if you want them to
 survive a rename.
 
-A **Choice** property lists its answers under its row: **Add choice**, then give each one a
-**Label**, which is what a page picks, and a **Value**, which is what the field bound to the
-property receives. Bound to a dropdown, the values must be ones that dropdown offers; the
-Attributes panel lists them if one is missing. Pick the **Default** from the answers.
-
-An **Icon** property's default is picked with the icon picker under its row.
+**Help** is shown beside the property's field wherever a page sets it.
 
 Property names must start with a letter or underscore and contain only letters, numbers and
 underscores. A dot is rejected: the Attributes panel names its field for the storage path
 `propValues.<name>`, which splits on dots, so `hero.title` would address a level that does
 not exist and its value would silently never reach the page.
+
+### Make a property conditional
+
+A property can apply only when other properties meet a condition — a call-to-action label
+that only matters while **Show call to action** is on, say. Under the property's row,
+**Add condition**, then build each rule from a property, an operator and a value:
+
+- **is** / **is not** — the value is edited with that property's own control, so a Yes / no
+  rule is a switch and a Choice rule a dropdown of its answers.
+- **is one of** / **is none of** — for a property with answers.
+- **is empty** / **is not empty**.
+- **is more than**, **is at least**, **is less than**, **is at most** — for a Number or Slider.
+- **matches the pattern** / **does not match the pattern** — a regular expression.
+
+With more than one rule, choose whether **all** of them or **any** of them must hold. A rule
+compares what each property is worth on the page: the page's own value, or its default when
+the page set none.
+
+While the condition does not hold, the property's field is hidden in the Attributes panel,
+and the property renders as though it had no value and no default: text bound to it is
+empty, a Yes / no is **No**, and a field bound to it keeps the element's own default. A value
+the page already set is kept, and applies again when the condition does.
 
 ### Use them
 
@@ -129,19 +171,26 @@ A Link property can be bound into either of a linking element's two fields — *
 screen** or **External URL** — and resolves the same way in both.
 
 Fields you do not type into have a `{}` too, beside their help icon, and it lists only the
-properties that can drive that field:
+properties that hold the kind of value that field holds:
 
 | Field | Properties offered |
 | -- | -- |
-| Switch or checkbox | Yes / no |
-| Dropdown | Choice |
+| Switch or a single checkbox | Yes / no, Checkbox |
+| Dropdown | Choice, Radio buttons, Toggle buttons |
+| Dropdown that takes several answers, checkbox list or pick list | Choice that takes several answers, Checkbox with answers, Pick list |
 | Screen picker | Link |
 | Icon picker | Icon |
+| Slider | Number, Slider |
+| Formatted document | Long text, Formatted document |
+| Any other field — color, size, border, background fill, column span, theme preset, theme scale, date, time, table, or a site-content picker | The property type of the same name |
 
 Bind a Video's **Open in a lightbox** to a Yes / no property, and each page decides whether
-its film opens in a lightbox or plays in place; bind a Screen Link's **Screen** to a Link
-property, and each page picks where it goes. A bound field shows the property's name where
-the control was; click it to pick a different property or remove the binding.
+its film opens in a lightbox or plays in place; bind an Image's **Width** to a Size property,
+and each page sizes its own picture. A bound field shows the property's name where the
+control was; click it to pick a different property or remove the binding.
+
+Each field receives the value its property holds — a real yes or no, a number, a list of
+answers, a theme color token — never the same value written as text.
 
 ### Save, then publish
 
@@ -160,7 +209,8 @@ Publishing the component is enough. You do not republish the pages that use it.
 
 ### Fill them in per page
 
-Select any instance and the **Attributes** panel has one field per property.
+Select any instance and the **Attributes** panel has one field per property, drawn with the
+control its type names.
 
 ![The Attributes panel showing one field per declared property](/img/besigner/component-instance-attributes.png)
 
@@ -168,9 +218,16 @@ The component's default shows as the field's **placeholder**, with the exact def
 spelled out underneath. Leave a field empty and that default is what renders — so clearing
 a field restores the component's own copy rather than collapsing the section to nothing.
 
-An empty field counts as unset. `0` and **no** are real values and survive. A Yes / no field
-offers **Yes** and **No**, a Choice field offers the property's answers, and an Icon field
-is the icon picker; the ✕ on any of them hands the decision back to the component's default.
+An empty field counts as unset. `0` and **No** are real values and survive. A Yes / no field
+is a switch: until the page sets it, the switch sits where the component's default puts it
+and says *"Uses the component default (Yes)"*. Once a page has chosen, the ✕ on the field —
+on a switch, a dropdown, an icon picker or any other control that has one — hands the
+decision back to the component's default.
+
+A conditional property's field appears only while its condition holds for this instance.
+
+Shared layouts take properties the same way, and each screen sets them in Screen
+Properties — see [Layout properties](../screens-and-layouts/layouts.md#layout-properties).
 
 ### Restyle one instance
 
