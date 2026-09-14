@@ -153,15 +153,16 @@ export interface VideoProps {
   title?: string
   /**
    * What the video is about — `VideoObject.description`, which Google
-   * requires for a video rich result. Never rendered as visible text; the
-   * element is a player, not a caption.
+   * recommends for a video rich result but does not require, so a blank one
+   * drops only this field from the structured data. Never rendered as
+   * visible text; the element is a player, not a caption.
    */
   description?: string
   /**
-   * When the video was first published, as `YYYY-MM-DD`. The other field
-   * Google requires, and the one nothing else on the page can supply: a
-   * screen's own publish date is when the PAGE went up, which for a film
-   * embedded months later is simply a different fact.
+   * When the video was first published, as `YYYY-MM-DD`. Google requires it
+   * beside the title and the poster, and it is the one nothing else on the
+   * page can supply: a screen's own publish date is when the PAGE went up,
+   * which for a film embedded months later is simply a different fact.
    *
    * The day is what an author types; the page's `VideoObject` publishes it as
    * that day at noon UTC, because Google reads `uploadDate` as a date-time
@@ -826,8 +827,9 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
     {
       name: 'description',
       description:
-        'A sentence or two about what the video shows. Never displayed on ' +
-        'the page — search engines need it to list the video in results.',
+        'A sentence or two about what the video shows, different for each ' +
+        'video. Never displayed on the page. Search engines read it, and ' +
+        'can still list the video in results when it is blank.',
       component: Aglyn.FieldComponentType.TEXTAREA,
       label: 'Video description',
     },

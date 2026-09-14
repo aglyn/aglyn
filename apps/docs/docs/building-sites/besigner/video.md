@@ -1,7 +1,7 @@
 ---
 sidebar_position: 6.5
 title: Video
-description: The Video element — the poster frame that decides what a visitor downloads, captions, the lightbox, and the three fields a video search result needs.
+description: The Video element — the poster frame that decides what a visitor downloads, captions, the lightbox, and the fields a video search result reads.
 ---
 
 # Video
@@ -77,13 +77,14 @@ A button elsewhere on the page can start the film: give the button the interacti
 *When clicked → [Play a video](interactions-and-custom-html.md#play-video-step)* and
 pick this Video. It does what pressing the poster does.
 
-## The three fields a search result needs {#video-seo}
+## The fields a search result reads {#video-seo}
 
-**Video title**, **Video description** and **Publication date** are what let search
-engines list the video in results. They are not decoration: a video is only eligible
-for a video result when all three are filled in, alongside the poster. The title is
-also the name a screen reader announces for the player, and the tooltip on hover.
-None of the three is ever displayed as text on the page.
+**Video title** and **Publication date** are what let search engines list the video in
+results. They are not decoration: a video is only eligible for a video result when both
+are filled in, alongside the poster. **Video description** is recommended rather than
+required, so a video without one can still be listed; write one anyway, different for
+every video. The title is also the name a screen reader announces for the player, and
+the tooltip on hover. None of the three is ever displayed as text on the page.
 
 ## Related
 

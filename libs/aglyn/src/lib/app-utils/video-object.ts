@@ -38,13 +38,15 @@
  *
  * ## Why an incomplete block is not emitted
  *
- * Google requires `name`, `description`, `thumbnailUrl` and `uploadDate` for a
- * video result. A `VideoObject` missing one of them is not a partial win — it
- * is an invalid rich result that a search console reports as an error against
- * the page. So the block is withheld until all four are there, the way
+ * Google requires `name`, `thumbnailUrl` and `uploadDate` for a video result. A
+ * `VideoObject` missing one of them is not a partial win — it is an invalid
+ * rich result that a search console reports as an error against the page. So
+ * the block is withheld until all three are there, the way
  * `breadcrumbListJsonLd` declines a single-crumb list. Everything else
- * (`contentUrl`, `duration`) is added when known and omitted when not, because
- * none of those changes whether the page is eligible.
+ * (`description`, `contentUrl`, `embedUrl`, `duration`) is added when known and
+ * omitted when not, because none of those changes whether the page is
+ * eligible. `description` is one Google recommends rather than requires, so a
+ * blank one costs the block that field and nothing more.
  */
 
 import { videoDurationIso8601 } from './media-metadata'
@@ -188,9 +190,9 @@ export function videoObjectJsonLd(
     }),
     { hostId, origin },
   )
-  // All four, or nothing. See the module note: a block missing one of these is
-  // an error a search console reports, not a smaller win.
-  if (!name || !description || !uploadDate || !thumbnailUrl) return undefined
+  // All three, or nothing. See the module note: a block missing one of these
+  // is an error a search console reports, not a smaller win.
+  if (!name || !uploadDate || !thumbnailUrl) return undefined
   // A Wistia link names a player, not a file (AGL-2826), so it is published
   // as the player page and never as `contentUrl`: the link an author pasted
   // is Wistia's media page, whose bytes are HTML.
@@ -215,7 +217,7 @@ export function videoObjectJsonLd(
     '@context': 'https://schema.org',
     '@type': 'VideoObject',
     name,
-    description,
+    ...(description ? { description } : {}),
     thumbnailUrl,
     uploadDate,
     // Exactly one of the two. `contentUrl` is the file, for a film served from

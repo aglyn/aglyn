@@ -140,11 +140,16 @@ describe('VideoObject reaches the rendered page (AGL-2747)', () => {
   })
 
   it('says nothing about a video whose SEO fields are blank', async () => {
-    // A block missing one of the four required fields is an error a search
+    // A block missing one of the three required fields is an error a search
     // console reports against the page, not a smaller win.
-    expect(
-      await videoBlocks({ v1: videoNode({ description: '' }) }),
-    ).toEqual([])
+    expect(await videoBlocks({ v1: videoNode({ title: '' }) })).toEqual([])
+  })
+
+  it('still publishes a video whose only blank field is the description', async () => {
+    // Google recommends a description and does not require one.
+    const [block] = await videoBlocks({ v1: videoNode({ description: '' }) })
+    expect(block?.value).toMatchObject({ name: 'The 60-second tour' })
+    expect(block?.value).not.toHaveProperty('description')
   })
 
   it('still emits the site entity and breadcrumb blocks beside it', async () => {

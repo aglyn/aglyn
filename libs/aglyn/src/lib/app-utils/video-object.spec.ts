@@ -19,7 +19,7 @@ import { pageVideoObjects, videoObjectJsonLd } from './video-object'
 
 const ORIGIN = 'https://acme.example'
 
-/** Everything a video result requires, and nothing it does not. */
+/** Everything a video result requires, plus the description Google recommends. */
 const complete = {
   title: 'The 60-second tour',
   description: 'What Aglyn does, end to end.',
@@ -37,7 +37,7 @@ const build = (props: Record<string, unknown>) =>
   videoObjectJsonLd(node(props), { origin: ORIGIN, hostId: 'host1' })
 
 describe('videoObjectJsonLd', () => {
-  it('publishes the four fields a video result requires', () => {
+  it('publishes the three fields a video result requires, and the description', () => {
     expect(build(complete)).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'VideoObject',
@@ -83,20 +83,33 @@ describe('videoObjectJsonLd', () => {
     expect(build(complete)).not.toHaveProperty('embedUrl')
   })
 
-  for (const missing of [
-    'title',
-    'description',
-    'uploadDate',
-    'poster',
-  ] as const) {
+  for (const missing of ['title', 'uploadDate', 'poster'] as const) {
     it(`declines the whole block without a ${missing}`, () => {
-      // Not a smaller win: a `VideoObject` missing one of the four is an
+      // Not a smaller win: a `VideoObject` missing one of the three is an
       // error a search console reports against the page.
       const props = { ...complete }
       delete (props as Record<string, unknown>)[missing]
       expect(build(props)).toBeUndefined()
     })
   }
+
+  it('publishes without a description, which Google recommends but does not require', () => {
+    // Withholding the block here would cost the page a video result it is
+    // eligible for, over a field that only makes that result better.
+    const withoutDescription: Record<string, unknown> = { ...complete }
+    delete withoutDescription['description']
+    const block = build(withoutDescription)
+    expect(block).toMatchObject({
+      '@type': 'VideoObject',
+      name: 'The 60-second tour',
+      uploadDate: '2026-09-01T12:00:00.000Z',
+      thumbnailUrl: `${ORIGIN}/api/media/cdn/host1/still?w=1280`,
+    })
+    expect(block).not.toHaveProperty('description')
+    expect(build({ ...complete, description: '   ' })).not.toHaveProperty(
+      'description',
+    )
+  })
 
   it('treats whitespace as absent', () => {
     expect(build({ ...complete, title: '   ' })).toBeUndefined()
