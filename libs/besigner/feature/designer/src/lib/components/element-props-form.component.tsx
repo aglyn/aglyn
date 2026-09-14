@@ -44,6 +44,7 @@ import {
   hasBindings,
   inheritedMediaAlt,
   intrinsicMediaSize,
+  VIDEO_COMPONENT_ID,
   videoMediaProps,
   MISSING_BINDING_LABEL,
   NODE_ANIMATION_DELAY_PROP,
@@ -1194,6 +1195,31 @@ export function inheritedAltPatch(options: {
 }
 
 /**
+ * The one kind of file a "Browse media" pick can place in an attribute, or
+ * `undefined` where the picker stays unnarrowed (AGL-2953).
+ *
+ * The Video element's `src` plays a film and its `poster` is the still shown
+ * before anyone presses play, so each opens a picker that lists only what it
+ * can use and uploads nothing else. Every other media attribute is left as it
+ * was, because nothing on it says what the element's renderer accepts.
+ *
+ * Exported and pure for the reason {@link inheritedAltPatch} is; keyed on the
+ * persisted component id, which is never renamed.
+ */
+export function browseMediaKind(options: {
+  /** The element being written to. */
+  componentId?: unknown
+  /** The attribute the Browse button was pressed for. */
+  propName: string
+}): Aglyn.MediaPickerKind | undefined {
+  const { componentId, propName } = options ?? ({} as never)
+  if (componentId !== VIDEO_COMPONENT_ID) return undefined
+  if (propName === 'src') return 'video'
+  if (propName === 'poster') return 'image'
+  return undefined
+}
+
+/**
  * The two visibility fields every node inside a component definition gets
  * (AGL-1314), so "this part is optional" is something an author declares by
  * clicking rather than something the component hard-codes.
@@ -2227,6 +2253,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
     const handleBrowseMedia = useCallback(
       (propName: string) => () => {
+        // The one kind this attribute can hold, when there is one (AGL-2953).
+        const kind = browseMediaKind({
+          componentId: node?.componentId,
+          propName,
+        })
         // Written through verbatim: the host app decides the persisted form
         // (today a media reference — AGL-1215), the renderer resolves it.
         onPickMedia?.((value, asset) => {
@@ -2267,7 +2298,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
               assetPoster: asset?.poster,
             }),
           })
-        })
+        }, { kind })
       },
       [onPickMedia, node, declaresAlt],
     )

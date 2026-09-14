@@ -143,12 +143,14 @@ import {
   isAllowedUploadType,
   isVideoUploadType,
   MEDIA_UPLOAD_KIND_LABELS,
+  mediaPickerKindOf,
   mediaUploadKind,
   normalizeUploadContentType,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
   requiresFileUploadEntitlement,
   uploadAcceptAttribute,
   uploadAcceptForKind,
+  uploadAcceptForPickerKind,
   uploadTypesMessage,
   VIDEO_UPLOADS_PAUSED_MESSAGE,
   VIDEO_UPLOADS_RELEASE_FLAG,
@@ -215,6 +217,31 @@ export interface MediaLibraryComponentProps {
    * passes their check too.
    */
   forHostId?: string
+  /**
+   * Narrow the library to one kind of file (AGL-2953), for a picker whose
+   * field can hold nothing else: a video source, a poster still.
+   *
+   * The value is one of the Type filter's own, and the library behaves as if
+   * that filter were set and could not be changed. The query and the
+   * client-side pass both read it, the Type control shows it and is disabled,
+   * and uploads offer and accept only that kind, a drop included. Absent, the
+   * library lists every file and the Type filter belongs to the person using
+   * it.
+   */
+  kind?: Aglyn.MediaPickerKind
+}
+
+/**
+ * How a library narrowed to one kind names it (AGL-2953): in the empty state,
+ * which otherwise invites uploads of every family, and in the refusal of a
+ * dropped file of another kind.
+ */
+const PICKER_KIND_COPY: Readonly<
+  Record<Aglyn.MediaPickerKind, { plural: string; one: string }>
+> = {
+  image: { plural: 'images', one: 'an image' },
+  video: { plural: 'videos', one: 'a video' },
+  pdf: { plural: 'PDFs', one: 'a PDF' },
 }
 
 /** Page size for cursor pagination (AGL-174). */
@@ -459,7 +486,7 @@ function uploadRefusalOptions(payload: { code?: unknown } | null | undefined) {
 }
 
 export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
-  const { hostId, orgId, onSelect, forHostId } = props
+  const { hostId, orgId, onSelect, forHostId, kind } = props
   // Scope plumbing: one library serves both a site's media and the org
   // DAM — only the Firestore base path and the API identity differ.
   const scopeCollection = orgId ? 'orgs' : 'hosts'
@@ -581,7 +608,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    */
   const videoUploadsFlag = useReleaseFlag(VIDEO_UPLOADS_RELEASE_FLAG)
   const videoUploadsOpen = videoUploadsFlag.released
-  const uploadAccept = uploadAcceptAttribute({ video: videoUploadsOpen })
+  // A narrowed library offers only its kind in the chooser (AGL-2953).
+  const uploadAccept = kind
+    ? uploadAcceptForPickerKind(kind, { video: videoUploadsOpen })
+    : uploadAcceptAttribute({ video: videoUploadsOpen })
   const uploadTypesCopy = uploadTypesMessage({ video: videoUploadsOpen })
   const cdnDelivery = orgReady && checkEntitlement(org as never, 'mediaCdn')
   const fileUploadPlanLabel =
@@ -666,7 +696,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'size'>(
     'newest',
   )
-  const [typeFilter, setTypeFilter] = useState('')
+  const [typeChoice, setTypeFilter] = useState('')
+  /**
+   * The Type the grid filters by: the caller's `kind` in a narrowed library
+   * (AGL-2953), else the person's own choice. The query, the client-side pass
+   * and the Type control all read this value, so a narrowed library can
+   * neither ask for nor draw a file of another kind.
+   */
+  const typeFilter: string = kind ?? typeChoice
   const [dateFilter, setDateFilter] = useState('')
   const [sizeFilter, setSizeFilter] = useState('')
 
@@ -677,9 +714,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * `currentFolder` is deliberately not one. Opening an empty folder is not a
    * filter that matched nothing — it is a folder with nothing in it, and the
    * right answer there is the upload button, not "clear your filters".
+   *
+   * Nor is a narrowed library's `kind` (AGL-2953). Clear filters cannot lift
+   * it, so a video picker holding no video is empty rather than filtered, and
+   * the answer there is also the upload button.
    */
   const filtersActive = Boolean(
-    search || tagFilter || typeFilter || dateFilter || sizeFilter,
+    search || tagFilter || typeChoice || dateFilter || sizeFilter,
   )
   const clearFilters = useCallback(() => {
     setSearch('')
@@ -726,7 +767,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           const prefix = typeFilter === 'video' ? 'video/' : 'image/'
           constraints.push(
             where('contentType', '>=', prefix),
-            where('contentType', '<', `${prefix}`),
+            // A prefix match as a range (AGL-2952). A content type is ASCII
+            // and U+F8FF sorts above every ASCII character, so each type that
+            // starts with the prefix sorts below this bound. Written as an
+            // escape because the character is invisible, and a bound equal
+            // to `prefix` matches nothing.
+            where('contentType', '<', `${prefix}\uf8ff`),
             orderBy('contentType'),
           )
         }
@@ -2928,6 +2974,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         )
         return 0
       }
+      // A narrowed library stores only its kind (AGL-2953). The chooser is
+      // narrowed too, but a drop never passes through it, and a file of
+      // another kind would upload into a grid that then hides it.
+      if (kind && mediaPickerKindOf(contentType) !== kind) {
+        enqueueSnackbar(
+          `"${file.name}" skipped — only ${PICKER_KIND_COPY[kind].plural} ` +
+            'can be added here',
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+        return 0
+      }
       // The video flag (AGL-2830), refused before a byte leaves the browser.
       // The picker no longer offers a video, but a drag-and-drop never goes
       // through the picker, so this is the check that holds for both.
@@ -3161,6 +3218,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       logActivity,
       videoUploadsOpen,
       uploadTypesCopy,
+      kind,
     ],
   )
 
@@ -3649,6 +3707,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           label="Type"
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value)}
+          // Fixed in a narrowed library (AGL-2953). Disabled rather than
+          // hidden, so the control still says why only one kind is listed.
+          disabled={Boolean(kind)}
           sx={{ minWidth: 110 }}
         >
           <MenuItem value="">{'All types'}</MenuItem>
@@ -3857,7 +3918,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               ? 'Loading media…'
               : filtersActive
                 ? 'No media matches these filters'
-                : 'No media here yet'
+                : kind
+                  ? `No ${PICKER_KIND_COPY[kind].plural} here yet`
+                  : 'No media here yet'
           }
           description={
             loadingMedia
@@ -3865,8 +3928,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               : filtersActive
                 ? 'Try a different search, folder, or type — or clear the ' +
                   'filters to see everything in this library.'
-                : 'Upload images, video, PDFs and documents to use on your ' +
-                  'site. Drop them here or use Upload media above.'
+                : kind
+                  ? // Names only the kind the narrowed library can take
+                    // (AGL-2953), since it refuses every other one.
+                    `Upload ${PICKER_KIND_COPY[kind].one} to use it here. ` +
+                    'Drop it here or use Upload media above.'
+                  : 'Upload images, video, PDFs and documents to use on your ' +
+                    'site. Drop them here or use Upload media above.'
           }
           // Nothing is offered while the read is still in flight: an upload
           // button under "Loading media…" invites a second library.

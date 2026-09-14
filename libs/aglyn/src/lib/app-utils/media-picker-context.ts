@@ -72,6 +72,16 @@ export interface PickedMedia {
   private?: boolean
 }
 
+/**
+ * The one kind of file a picker can be narrowed to (AGL-2953).
+ *
+ * These are the values of the media library's own Type filter, not a second
+ * vocabulary: a narrowed picker is the library with that filter fixed, so the
+ * two cannot disagree about what counts as a video. `image` and `video` are
+ * whole families; `pdf` is PDF alone, as the filter offers it.
+ */
+export type MediaPickerKind = 'image' | 'video' | 'pdf'
+
 /** How a caller wants the picker to behave. */
 export interface PickMediaOptions {
   /**
@@ -82,6 +92,13 @@ export interface PickMediaOptions {
    * which a private asset cannot be.
    */
   allowPrivate?: boolean
+  /**
+   * List and upload only this kind of file (AGL-2953), for a field that can
+   * hold nothing else — a video source offers no images or PDFs to choose
+   * and takes no image as an upload. Absent, the picker offers every file
+   * the library holds.
+   */
+  kind?: MediaPickerKind
 }
 
 /**

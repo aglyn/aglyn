@@ -66,6 +66,9 @@ const mockEntries = {
       excerpt: 'A first post',
       body: 'The body nobody is editing',
       coverImage: 'https://cdn.test/cover.png',
+      // A featured video (AGL-2954) is one more field the save carries off
+      // the seed, and one that a blank seed would delete.
+      coverVideo: 'https://fast.wistia.net/embed/iframe/e4a27b971d',
       seoTitle: 'Hello world — Acme',
       seoDescription: 'What Acme said first',
       authorName: 'Ada',
@@ -506,6 +509,9 @@ describe('Content entry seed guard (AGL-1449)', () => {
     expect(payload.body).toBe('The body nobody is editing')
     expect(payload.seoTitle).toBe('Hello world — Acme')
     expect(payload.tags).toEqual(['news', 'launch'])
+    expect(payload.coverVideo).toBe(
+      'https://fast.wistia.net/embed/iframe/e4a27b971d',
+    )
     expect(options).toEqual({ merge: true })
   })
 })

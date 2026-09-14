@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { mediaNodeSrc } from '@aglyn/aglyn'
+import { type MediaPickerKind, mediaNodeSrc } from '@aglyn/aglyn'
 import { MediaPickerContext } from '@aglyn/besigner-ui'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { doc } from 'firebase/firestore'
@@ -56,10 +56,18 @@ export function BesignerMediaPickerProvider(
   const pendingPick = useRef<
     ((value: string, asset?: PickedAsset) => void) | null
   >(null)
+  // The kind the requesting attribute can hold, per open (AGL-2953): a Video
+  // element's source lists only films, and the next Browse media on an Image
+  // must not inherit that narrowing.
+  const [kind, setKind] = useState<MediaPickerKind | undefined>(undefined)
 
   const onPickMedia = useCallback(
-    (onPick: (value: string, asset?: PickedAsset) => void) => {
+    (
+      onPick: (value: string, asset?: PickedAsset) => void,
+      options?: { kind?: MediaPickerKind },
+    ) => {
       pendingPick.current = onPick
+      setKind(options?.kind)
       setOpen(true)
     },
     [],
@@ -92,6 +100,7 @@ export function BesignerMediaPickerProvider(
       </BesignerMediaAssetFactsProvider>
       <MediaPickerDialog
         hostId={hostId}
+        kind={kind}
         open={open}
         onClose={() => setOpen(false)}
         onPick={(media) => {
