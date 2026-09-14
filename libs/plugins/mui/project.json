@@ -3,7 +3,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/plugins/mui/src",
   "projectType": "library",
-  "tags": ["aglyn:addons"],
+  "tags": ["aglyn:addons", "scope:plugin", "type:feature"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",

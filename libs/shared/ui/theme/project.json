@@ -3,7 +3,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/ui/theme/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:shared", "scope:ui"],
+  "tags": ["scope:lib", "scope:shared", "scope:ui", "type:ui"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",

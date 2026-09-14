@@ -1,7 +1,29 @@
 {
   "name": "@aglyn/aglyn",
-  "version": "0.0.1",
+  "version": "1.0.0-beta.121",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./server": {
+      "types": "./src/server.d.ts",
+      "default": "./src/server.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@mui/material": "^9.3.1",
+    "@mui/system": "^9.2.0",
+    "firebase": "^12.18.0",
+    "next": "16.3.3",
+    "react": "^19.2.8"
+  },
   "sideEffects": [
     "./src/lib/foundation/constants/_internal.ts",
     "./src/lib/foundation/constants/symbol.ts"

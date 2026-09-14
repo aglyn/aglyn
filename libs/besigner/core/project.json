@@ -8,7 +8,10 @@
     "scope:aglyn",
     "scope:data",
     "scope:feature",
-    "aglyn:besigner"
+    "aglyn:besigner",
+    "scope:besigner",
+    "type:data",
+    "type:feature"
   ],
   "targets": {
     "build": {

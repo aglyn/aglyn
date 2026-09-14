@@ -3,7 +3,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/besigner/feature/designer/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:besigner"],
+  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:besigner", "scope:besigner-ui", "type:feature"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",

@@ -9,10 +9,14 @@ How a version number is decided, written, and attached to a deployed commit
 
 Not per-app and not per-lib:
 
-- **Nothing here is published.** All 40+ `@aglyn/*` libs sit at the nx scaffold
-  default `0.0.1`, and the `@aglyn` npm scope is unregistered — `npm view
-@aglyn/aglyn` is a 404. Changesets and `nx release` both exist to coordinate
-  the versions of packages that go to a registry. There is no registry here.
+- **Nothing here is published yet.** Every `@aglyn/*` lib `package.json`
+  carries the root version — `release:prepare --write` writes it into all of
+  them, and `check:lib-boundaries` refuses one that disagrees — so the number a
+  lib will publish under is the number of the commit it came from. The one
+  exception is `@aglyn/cli`, already on the registry at its own number. The
+  publish pipeline itself is the "Later" half of
+  [docs/PACKAGES.md](PACKAGES.md); until it lands, `nx release` and changesets
+  have nothing to coordinate.
 - **One SHA ships everything.** Only the `production` branch deploys
   ([docs/VERCEL_DEPLOYMENTS.md](VERCEL_DEPLOYMENTS.md), AGL-522), and console,
   tenant and docs all build from that one commit. Three app versions off one

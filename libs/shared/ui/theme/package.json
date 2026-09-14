@@ -1,10 +1,28 @@
 {
   "name": "@aglyn/shared-ui-theme",
-  "version": "0.0.1",
+  "version": "1.0.0-beta.121",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
   "dependencies": {
     "@swc/helpers": "~0.3.3"
   },
-  "devDependencies": {},
+  "peerDependencies": {
+    "@mui/material": "^9.3.1",
+    "@mui/styles": "^6.4.8",
+    "@mui/system": "^9.2.0",
+    "@mui/types": "^9.1.1",
+    "@mui/utils": "^9.2.0",
+    "react": "^19.2.8"
+  },
   "sideEffects": false
 }

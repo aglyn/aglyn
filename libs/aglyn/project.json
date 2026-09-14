@@ -8,7 +8,10 @@
     "scope:aglyn",
     "scope:data",
     "scope:feature",
-    "aglyn:framework"
+    "aglyn:framework",
+    "scope:core",
+    "type:data",
+    "type:feature"
   ],
   "targets": {
     "build": {

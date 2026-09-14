@@ -1,11 +1,24 @@
 {
   "name": "@aglyn/shared-util-fbserver",
-  "version": "0.0.1",
+  "version": "1.0.0-beta.121",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
   "dependencies": {
     "@swc/helpers": "~0.3.3"
   },
-  "devDependencies": {},
+  "peerDependencies": {
+    "firebase-admin": "^14.3.0"
+  },
   "sideEffects": [
     "./src/lib/fbserver.ts"
   ]

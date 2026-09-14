@@ -45,6 +45,7 @@ import {
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { versionedLibPackages } from './lib/lib-boundaries.mjs'
 import {
   lockfileVersionVerdict,
   readManifestPairs,
@@ -334,6 +335,21 @@ function main() {
   pkg.version = version
   write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)
 
+  // EVERY LIB CARRIES THE SAME VERSION (AGL-2941). Each `libs/**` project is
+  // a future npm package and its package.json states a version; the map in
+  // docs/PACKAGES.md says that number is the repo's, from one source, and
+  // `check:lib-boundaries` refuses a lib that disagrees. So the bump writes
+  // them here, in the same step, rather than leaving the next release to
+  // find out at the guard. `@aglyn/cli` is left alone: it is on the registry
+  // at its own number.
+  const libPackages = versionedLibPackages(repoRoot)
+  for (const lib of libPackages) {
+    const libPath = join(repoRoot, lib.path)
+    const libPkg = JSON.parse(read(libPath, 'utf8'))
+    libPkg.version = version
+    write(libPath, `${JSON.stringify(libPkg, null, 2)}\n`)
+  }
+
   // THE LOCKFILE CARRIES THE VERSION TOO (AGL-2108). Writing package.json and
   // stopping there is how the repo carried `1.0.0-alpha.0` in
   // package-lock.json for the whole of the first real release: `npm ci`
@@ -442,6 +458,7 @@ function main() {
 
   out.push('  ' + '-'.repeat(60))
   out.push('  WROTE  package.json  (version → ' + version + ')')
+  out.push(`  WROTE  ${libPackages.length} libs/**/package.json  (AGL-2941)`)
   if (lockfileWritten) out.push('  WROTE  package-lock.json  (AGL-2108)')
   out.push('  WROTE  CHANGELOG.md')
   out.push('')
@@ -461,6 +478,7 @@ function main() {
       ? '    git commit --only package.json package-lock.json CHANGELOG.md \\'
       : '    git commit --only package.json CHANGELOG.md \\',
   )
+  out.push("      $(git ls-files 'libs/**/package.json') \\")
   out.push(`      -m 'chore(release): ${tagForVersion(version)} (AGL-2089)'`)
   out.push('')
   out.push('  Then push to main and open the main→production PR as usual.')

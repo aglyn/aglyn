@@ -3,7 +3,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/tenant/feature/instance/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "scope:tenant"],
+  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "scope:tenant", "type:feature"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",

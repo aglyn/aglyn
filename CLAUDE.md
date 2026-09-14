@@ -58,3 +58,12 @@ Several sessions work in this checkout at once. Scope every check to what you
 staged rather than to the whole tree, or a peer's in-flight edit reads as your
 failure. The same applies to git: never `commit -a`, `amend`, `reset --soft`,
 or rebase a branch someone else may be standing on.
+
+## Package boundaries
+
+Every `libs/**` project is a future npm package; `docs/PACKAGES.md` is the map
+(npm name, entry points, what it may import) and `check:lib-boundaries` holds
+it. An app never holds logic a consumer would need — it goes in a lib. A plugin
+never imports another plugin or core's UI; core never imports a plugin; `shared`
+imports only `shared`. A new lib gets its `scope:`/`type:` tags and its map row
+in the same commit. The allowlist of today's cross-package edges only shrinks.

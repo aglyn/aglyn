@@ -1,16 +1,31 @@
 {
   "name": "@aglyn/tenant-data-admin",
-  "version": "0.0.1",
+  "version": "1.0.0-beta.121",
   "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/aglyn/aglyn.git",
     "directory": "libs/tenant/data/admin"
   },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
   "dependencies": {
     "@swc/helpers": "~0.3.3"
   },
-  "devDependencies": {},
+  "peerDependencies": {
+    "firebase-admin": "^14.3.0",
+    "next": "16.3.3",
+    "react": "^19.2.8"
+  },
   "sideEffects": [
     "./src/lib/server/client-error-report.ts",
     "./src/lib/server/email-marketing-gate.ts",
