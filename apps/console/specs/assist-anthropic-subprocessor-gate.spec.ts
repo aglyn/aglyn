@@ -98,7 +98,7 @@ const REPO_ROOT = join(__dirname, '..', '..', '..')
 const KEY_READERS = new Map<string, string>([
   [
     'libs/plugins/ai/src/lib/providers/anthropic.ts',
-    'The Anthropic adapter of the AI plugin (AGL-2939): the ONE module that reads the key, and it puts it on whatever request the runtime hands it. What reaches Anthropic is therefore decided by the doors that call the runtime, which `AI_DOORS` below pins one by one.',
+    'The Anthropic adapter behind the Aglyn AI provider contract (AGL-2939): it declares the key as its `apiKeyEnv` and puts it on a Messages API request to the host it names. It opens no door of its own and sends whatever request the AI runtime hands it, so what reaches Anthropic is still decided by the doors, the same content to the same subprocessor, and `AI_DOORS` below pins them one by one. The runtime calls it in place of the shared runtime that read the key in `libs/tenant/data/admin` (AGL-2903), which is why that entry left this list and this one stayed.',
   ],
 ])
 
@@ -111,15 +111,15 @@ const KEY_READERS = new Map<string, string>([
 const AI_DOORS = new Map<string, string>([
   [
     'libs/plugins/ai/src/lib/server/assist-chat.ts',
-    'Aglyn Assist (AGL-1860) at /api/assist/chat: the customer question, a trailing window of the thread, and — on Pro+ — the current route, host and org name. Gated by `release_assist` AND a ready provider.',
+    'Aglyn Assist (AGL-1860) at /api/assist/chat: the customer question, a trailing window of the thread, and — on Pro+ — the current route, host and org name. Gated by `release_assist` AND a ready provider. The same URL, content and gates it had as the console route before it moved into the AI plugin (AGL-2939): a move, not a new flow, so /legal/subprocessors still describes it.',
   ],
   [
     'libs/plugins/ai/src/lib/server/ai-assist.ts',
-    'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — a ready provider plus a Pro entitlement is the whole gate.',
+    'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — a ready provider plus a Pro entitlement is the whole gate. The same URL, content and gate it had in the marketplace plugin before it moved into the AI plugin (AGL-2939): a move, not a new flow, so /legal/subprocessors still describes it.',
   ],
   [
     'libs/plugins/ai/src/lib/jobs/ai-job-text-step.ts',
-    'A generation job’s text step (AGL-2904): the brief the job was created with. Behind `release_ai_generative`, the `aiGenerative` entitlement and the `ai-generate` lockdown key.',
+    'A generation job’s text step (AGL-2904): the brief the job was created with. Behind `release_ai_generative`, the `aiGenerative` entitlement and the `ai-generate` lockdown key. It called the shared runtime before the AI plugin existed too; it is listed because the runtime’s callers are now the list that pins each flow, not because the flow is new.',
   ],
 ])
 
@@ -159,19 +159,19 @@ const MENTIONS_ONLY = new Map<string, string>([
   ],
   [
     'libs/plugins/ai/src/lib/server/assist-chat.spec.ts',
-    'Sets a fake key to exercise the 501 gate.',
+    'Sets a fake key to exercise the 501 gate. It moved with the chat door into the AI plugin (AGL-2939); still a test double, not a flow.',
   ],
   [
     'libs/plugins/ai/src/lib/server/ai-assist.spec.ts',
-    'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow.',
+    'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow. It moved with its handler into the AI plugin (AGL-2939).',
   ],
   [
     'libs/plugins/ai/src/lib/runtime/ai-runtime.spec.ts',
-    'Sets a fake key (`sk-test`) to drive the shared runtime against a mocked fetch (AGL-2903), and asserts it refuses to run without one. A test double, not a flow.',
+    'Sets a fake key (`sk-test`) to drive the shared runtime against a mocked fetch (AGL-2903), and asserts it refuses to run without one. A test double, not a flow. It moved with the runtime into the AI plugin (AGL-2939).',
   ],
   [
     'libs/plugins/ai/src/lib/providers/conformance.spec.ts',
-    'Sets a fake key to drive both provider adapters over recorded fixtures (AGL-2939), and asserts each reads its own key and has none when unset. A test double, not a flow.',
+    'The provider conformance suite (AGL-2939). Sets a fake key (`sk-test`) so the Anthropic adapter answers recorded fixtures through a mocked `fetch`, with no network and no real key. A test double, not a flow.',
   ],
   [
     'apps/console/.env.development.local.example',
@@ -199,7 +199,7 @@ const MENTIONS_ONLY = new Map<string, string>([
   ],
   [
     'libs/plugins/ai/src/lib/components/assist-panel.component.spec.tsx',
-    'The panel suite (AGL-2486). Names the key only inside a CANNED 501 body it arms, to assert the panel does NOT relay that operator string to the user. A test double, not a flow — and the assertion is that the string stops there.',
+    'The panel suite (AGL-2486). Names the key only inside a CANNED 501 body it arms, to assert the panel does NOT relay that operator string to the user. A test double, not a flow — and the assertion is that the string stops there. It moved with the panel into the AI plugin (AGL-2939).',
   ],
   ['docs/PLATFORM_PROVISIONING.md', 'Documentation.'],
   ['apps/docs/docs/developers/self-hosting.md', 'Documentation.'],
