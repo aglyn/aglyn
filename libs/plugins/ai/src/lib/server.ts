@@ -26,6 +26,7 @@ import { GET as aiJobEvents } from './server/ai-jobs-events-route'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistFeedback } from './server/assist-feedback'
+import { GET as aiUsage } from './server/ai-usage'
 import { GET as billingCredits } from './server/billing-credits'
 import { POST as billingOverage } from './server/billing-overage'
 
@@ -47,8 +48,8 @@ const registerFirstPartyProviders = ensureFirstPartyAiProviders
  * `assist` prefixes the plugin owns. The URLs the panel and the besigner
  * call are unchanged — `/api/assist/chat`, `/api/ai/assist`,
  * `/api/ai/jobs` — because the dispatcher serves them from the registry
- * exactly where the named routes used to; the two billing doors moved
- * under the plugin's own prefix.
+ * exactly where the named routes used to; the two billing doors and the
+ * per-member usage read (`ai/usage`) live under the plugin's own prefix.
  */
 export function registerAiConsoleApi(): void {
   registerAiDeclarations()
@@ -69,6 +70,7 @@ export function registerAiConsoleApi(): void {
   })
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
+  registerPluginApiRoute('ai/usage', { web: aiUsage })
 }
 
 /**

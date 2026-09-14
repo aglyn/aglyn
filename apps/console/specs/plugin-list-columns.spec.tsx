@@ -22,7 +22,7 @@
  * a column is not a column and must not become one by accident.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material'
 
 let mockWidgets: Array<Record<string, unknown>>
@@ -36,6 +36,7 @@ jest.mock('../components/plugin-widget-slot.component', () => ({
 import {
   PluginListColumnCells,
   PluginListColumnHeaders,
+  usePluginColumnSort,
   usePluginListColumns,
 } from '../components/plugin-list-columns.component'
 
@@ -133,5 +134,103 @@ describe('usePluginListColumns', () => {
     mockWidgets = []
     render(<Team rows={[{ $id: 'u1' }]} />)
     expect(screen.getAllByRole('columnheader')).toHaveLength(1)
+  })
+})
+
+/**
+ * A column that sorts by what only its plugin reads (AGL-2939): the column's
+ * own `Header` hands the table a comparator, and the table keeps one sort at
+ * a time. Proven with a plugin that has nothing to do with AI — a reviews
+ * plugin ordering the roster by each member's reviews written.
+ */
+describe('usePluginColumnSort', () => {
+  const REVIEWS: Record<string, number> = { u1: 2, u2: 9, u3: 5 }
+
+  function ReviewsHeader(props: {
+    orgId: string
+    sorted: boolean
+    onSort: (compare: ((a: { $id: string }, b: { $id: string }) => number) | null) => void
+  }) {
+    return (
+      <span>
+        {`Reviews@${props.orgId}${props.sorted ? ' (sorted)' : ''}`}
+        <button
+          type="button"
+          onClick={() => props.onSort((a, b) => REVIEWS[b.$id] - REVIEWS[a.$id])}
+        >
+          {'most reviews'}
+        </button>
+        <button type="button" onClick={() => props.onSort(null)}>
+          {'unsorted'}
+        </button>
+      </span>
+    )
+  }
+
+  function SortableTeam(props: { rows: Array<{ $id: string }> }) {
+    const { columns } = usePluginListColumns('orgMembersListColumn')
+    const { rows, sortedBy, onSort } = usePluginColumnSort(props.rows)
+    return (
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>{'Member'}</TableCell>
+            <PluginListColumnHeaders
+              columns={columns}
+              onSort={onSort}
+              sortedBy={sortedBy}
+              orgId="org-1"
+            />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.$id}>
+              <TableCell>{row.$id}</TableCell>
+              <PluginListColumnCells columns={columns} member={row} orgId="org-1" />
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  }
+
+  const memberOrder = () =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => row.firstElementChild?.textContent)
+
+  beforeEach(() => {
+    mockWidgets = [
+      {
+        widgetId: 'reviews-written',
+        column: { header: 'Reviews', Header: ReviewsHeader },
+        Component: (props: { member: { $id: string } }) => (
+          <span>{`reviews:${REVIEWS[props.member.$id]}`}</span>
+        ),
+      },
+    ]
+  })
+
+  it("draws the column's own header with the slot's props", () => {
+    render(<SortableTeam rows={[{ $id: 'u1' }]} />)
+    expect(screen.getByText('Reviews@org-1')).toBeTruthy()
+  })
+
+  it('orders the rows by the comparator the header hands over, and restores them on null', () => {
+    render(<SortableTeam rows={[{ $id: 'u1' }, { $id: 'u2' }, { $id: 'u3' }]} />)
+    expect(memberOrder()).toEqual(['u1', 'u2', 'u3'])
+    fireEvent.click(screen.getByText('most reviews'))
+    expect(memberOrder()).toEqual(['u2', 'u3', 'u1'])
+    expect(screen.getByText('Reviews@org-1 (sorted)')).toBeTruthy()
+    fireEvent.click(screen.getByText('unsorted'))
+    expect(memberOrder()).toEqual(['u1', 'u2', 'u3'])
+  })
+
+  it('a column without a Header still draws its header text', () => {
+    mockWidgets = [{ widgetId: 'plain', column: { header: 'Plain' }, Component: UsageCell }]
+    render(<SortableTeam rows={[{ $id: 'u1' }]} />)
+    expect(screen.getByText('Plain')).toBeTruthy()
   })
 })

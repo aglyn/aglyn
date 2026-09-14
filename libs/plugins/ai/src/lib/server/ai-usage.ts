@@ -35,7 +35,7 @@ import {
   readUserAiUsageMonths,
 } from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
 import { FieldValue } from 'firebase-admin/firestore'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   AI_USAGE_CSV_HEADER,
   AI_USAGE_EXPORT_ROWS_HEADER,
@@ -43,10 +43,10 @@ import {
   toAiUsageWireRow,
   type OrgAiUsageTableWire,
   type UserAiUsageWire,
-} from '../../../../utils/ai-usage-wire'
+} from '../usage/ai-usage-wire'
 
 // lockdown-423: exempt — a READ-ONLY usage report that writes nothing to the
-// workspace, the posture of billing/assist-credits beside it: a billing-locked
+// workspace, the posture of ai/billing/credits beside it: a billing-locked
 // owner working out who spent the credits needs this table more, not less.
 
 /**
@@ -251,10 +251,9 @@ async function handler(request: Request): Promise<Response> {
     // for anything else, so a real failure keeps the answer below.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
-    console.error('[orgs/ai-usage] read failed', orgId, error)
+    console.error('[ai/usage] read failed', orgId, error)
     return json({ error: 'AI usage unavailable' }, 500)
   }
 }
 
-export const dynamic = 'force-dynamic'
 export { handler as GET }

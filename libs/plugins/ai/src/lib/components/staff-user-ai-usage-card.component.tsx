@@ -17,8 +17,11 @@
 'use client'
 
 import { aiAddonName } from '@aglyn/aglyn'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -30,12 +33,8 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { useEffect, useState } from 'react'
-import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
-import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '../constants/route-links'
-import { useIsStaff } from '../hooks/use-is-staff'
-import { aiUsageMonthLabel } from '../utils/ai-usage-wire'
+import { useEffect, useRef, useState } from 'react'
+import { aiUsageMonthLabel } from '../usage/ai-usage-wire'
 
 /** One row, as `/api/admin/users/ai-usage` answers it. */
 export interface StaffUserAiUsageRow {
@@ -52,13 +51,18 @@ export interface StaffUserAiUsageRow {
  * ONE ACCOUNT'S AI USAGE ACROSS ORGANIZATIONS (AGL-2928), on the staff user
  * page: workspace, month, credits — every month kept, newest first.
  *
- * Read on mount and only once `isStaff` is TRUE, never on its loading
- * `null`: the route records an access row about this person on every open,
- * so an open the page did not mean to make would be an access nobody made.
+ * Read on mount, and it mounts only for a confirmed staff reader: the
+ * `staffUser` zone sits inside the page's `StaffOnly`, which renders nothing
+ * while the claim is still loading. The route records an access row about
+ * this person on every open, so an open the page did not mean to make would
+ * be an access nobody made.
  */
 const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
   const { data: user } = useUser()
-  const isStaff = useIsStaff()
+  // Keyed on who is signed in, not on the user object's identity (AGL-2928).
+  const signedInUid = user?.uid ?? null
+  const userRef = useRef(user)
+  userRef.current = user
   const [rows, setRows] = useState<StaffUserAiUsageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
@@ -68,7 +72,8 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
   const visible = (rows ?? []).slice(page * pageSize, page * pageSize + pageSize)
 
   useEffect(() => {
-    if (isStaff !== true || !uid || !user) return undefined
+    const user = userRef.current
+    if (!uid || !signedInUid || !user) return undefined
     let active = true
     setReady(false)
     setError(null)
@@ -99,12 +104,12 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
     return () => {
       active = false
     }
-  }, [isStaff, uid, user])
+  }, [uid, signedInUid])
 
   return (
     <CardDisplay
       header={`${aiAddonName()} usage across organizations`}
-      help={docsHelp('aiMonitoring', {
+      help={pluginDocsHelp('aiMonitoring', {
         anchor: '#one-account',
         excerpt:
           'This account’s AI credits in every workspace it belongs to, month by month. Opening it is recorded as a staff access about this person.',

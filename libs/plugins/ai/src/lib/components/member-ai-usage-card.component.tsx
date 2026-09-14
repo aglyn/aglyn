@@ -17,6 +17,8 @@
 'use client'
 
 import { aiAddonName, aiUsageMonthKeys, topAiUsageKinds } from '@aglyn/aglyn'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -30,22 +32,20 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
-import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '../constants/route-links'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   aiUsageMonthLabel,
   formatAiUsageShare,
   type UserAiUsageMonthWire,
   type UserAiUsageWire,
-} from '../utils/ai-usage-wire'
+} from '../usage/ai-usage-wire'
 
 export interface MemberAiUsageCardProps {
   orgId: string
   uid: string
-  orgSlug: string
+  orgSlug?: string
   /** The org's sites, for naming the per-site split. */
-  hosts: ReadonlyArray<{ $id: string; displayName?: string; subdomain?: string }>
+  hosts?: ReadonlyArray<{ $id: string; displayName?: string; subdomain?: string }>
 }
 
 /**
@@ -53,7 +53,7 @@ export interface MemberAiUsageCardProps {
  *
  * Credits and the share of the workspace's pool, requests, the kinds they
  * mostly asked for, and the split by site — the agency question, answered
- * for one person. Read through `/api/orgs/ai-usage?uid=`, which admits the
+ * for one person. Read through `/api/ai/usage?uid=`, which admits the
  * person themselves and members holding `billing.view` or `org.auditLog`.
  *
  * A refusal renders NOTHING rather than a warning: the page is open to a
@@ -61,8 +61,14 @@ export interface MemberAiUsageCardProps {
  * is the correct answer, not a broken one.
  */
 export function MemberAiUsageCard(props: MemberAiUsageCardProps) {
-  const { orgId, uid, orgSlug, hosts } = props
+  const { orgId, uid } = props
+  const orgSlug = props.orgSlug ?? ''
+  const hosts = props.hosts ?? []
   const { data: user } = useUser()
+  // Keyed on who is signed in, not on the user object's identity (AGL-2928).
+  const signedInUid = user?.uid ?? null
+  const userRef = useRef(user)
+  userRef.current = user
   const [state, setState] = useState<{
     status: 'loading' | 'ready' | 'refused' | 'error'
     months: UserAiUsageMonthWire[]
@@ -71,14 +77,15 @@ export function MemberAiUsageCard(props: MemberAiUsageCardProps) {
   const [thisMonth, lastMonth] = useMemo(() => aiUsageMonthKeys(new Date(), 2), [])
 
   useEffect(() => {
-    if (!orgId || !uid || !user) return undefined
+    const user = userRef.current
+    if (!orgId || !uid || !signedInUid || !user) return undefined
     let active = true
     void (async () => {
       try {
         const params = new URLSearchParams({ orgId, uid, limit: '2' })
         const response = await authorizedFetch(
           user,
-          `/api/orgs/ai-usage?${params.toString()}`,
+          `/api/ai/usage?${params.toString()}`,
         )
         if (!active) return
         if (response.status === 403) {
@@ -99,7 +106,7 @@ export function MemberAiUsageCard(props: MemberAiUsageCardProps) {
     return () => {
       active = false
     }
-  }, [orgId, uid, user])
+  }, [orgId, uid, signedInUid])
 
   if (state.status === 'refused') return null
 
@@ -131,7 +138,7 @@ export function MemberAiUsageCard(props: MemberAiUsageCardProps) {
   return (
     <CardDisplay
       header={'AI usage'}
-      help={docsHelp('inviteTeammates', {
+      help={pluginDocsHelp('inviteTeammates', {
         anchor: '#ai-usage',
         excerpt:
           `This member's ${name} credits this month and last, their share of the workspace's pool, and the split by site and by kind.`,

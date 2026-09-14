@@ -21,7 +21,7 @@
  */
 
 /**
- * `/api/orgs/ai-usage` (AGL-2928) is the customer's read of who drew the AI
+ * `/api/ai/usage` (AGL-2928) is the customer's read of who drew the AI
  * credits, so what gets pinned is who may read it and what leaves: the table
  * behind `billing.view`, one person's months behind that OR `org.auditLog`
  * OR being that person, a month past the retention window refused rather than
@@ -138,11 +138,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { aiUsageMonthKeys } from '@aglyn/aglyn/app-utils/ai-usage-by-user'
-import { GET } from '../app/api/orgs/ai-usage/route'
+import { GET } from './ai-usage'
 import {
   AI_USAGE_CSV_HEADER,
   AI_USAGE_EXPORT_ROWS_HEADER,
-} from '../utils/ai-usage-wire'
+} from '../usage/ai-usage-wire'
 
 const MONTHS = aiUsageMonthKeys()
 const MONTH = MONTHS[0]
@@ -151,7 +151,7 @@ const LAST_MONTH = MONTHS[1]
 const get = (params: Record<string, string> = {}, token: string | null = 'tok') =>
   GET(
     new Request(
-      `https://app.aglyn.com/api/orgs/ai-usage?${new URLSearchParams({
+      `https://app.aglyn.com/api/ai/usage?${new URLSearchParams({
         orgId: 'org-1',
         ...params,
       }).toString()}`,
@@ -208,7 +208,7 @@ beforeEach(() => {
   seedRoster()
 })
 
-describe('/api/orgs/ai-usage — who may read (AGL-2928)', () => {
+describe('/api/ai/usage — who may read (AGL-2928)', () => {
   it('401s an unauthenticated caller', async () => {
     expect((await get({}, null)).status).toBe(401)
   })
@@ -270,7 +270,7 @@ describe('/api/orgs/ai-usage — who may read (AGL-2928)', () => {
   })
 })
 
-describe('/api/orgs/ai-usage — what leaves (AGL-2928)', () => {
+describe('/api/ai/usage — what leaves (AGL-2928)', () => {
   beforeEach(() => {
     signedIn()
     mockPermissions = { 'billing.view': true }

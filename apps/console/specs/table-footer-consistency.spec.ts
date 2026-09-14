@@ -1338,7 +1338,7 @@ const NOT_A_LIST: Array<[string, string]> = [
       'A pager under a search box pages what the box already filters.',
   ],
   [
-    'apps/console/components/member-ai-usage-card.component.tsx',
+    'libs/plugins/ai/src/lib/components/member-ai-usage-card.component.tsx',
     'One member’s AI usage (AGL-2928): exactly two month rows, this ' +
       'month and last, requested at `limit: 2`, and beneath them one row ' +
       'per site that member generated on in those months, bounded by the ' +

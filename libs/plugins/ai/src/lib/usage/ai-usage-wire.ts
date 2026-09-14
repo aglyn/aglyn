@@ -24,7 +24,7 @@ import {
 import { csvCell } from '@aglyn/aglyn/app-utils/csv-import'
 
 /**
- * What `/api/orgs/ai-usage` answers (AGL-2928), shared by the route and the
+ * What `/api/ai/usage` answers (AGL-2928), shared by the route and the
  * console surfaces that read it — the Usage table, the roster column, the
  * site collaborators card and the member card. Dependency-free on purpose:
  * the route imports the Admin SDK and a client component may not.

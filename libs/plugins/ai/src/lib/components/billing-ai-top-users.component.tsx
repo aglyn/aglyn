@@ -17,8 +17,10 @@
 'use client'
 
 import { aiAddonName, countCsvDataRows, topAiUsageKinds } from '@aglyn/aglyn'
-import { AppLink } from '@aglyn/shared-ui-jsx'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -35,15 +37,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { useCallback, useEffect, useState } from 'react'
-import { TABLE_PAGE_SIZE_DEFAULT } from '../../constants/shared'
-import { buildRoute, Route } from '../../constants/route-links'
-import { useOrgAiUsage } from '../../hooks/use-org-ai-usage'
+import { useOrgAiUsage } from './use-org-ai-usage'
 import {
   AI_USAGE_EXPORT_ROWS_HEADER,
   aiUsageMonthLabel,
   formatAiUsageShare,
-} from '../../utils/ai-usage-wire'
+} from '../usage/ai-usage-wire'
 
 export interface BillingAiTopUsersProps {
   orgId: string | undefined
@@ -92,7 +93,7 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
       const params = new URLSearchParams({ orgId, month: usage.month, format: 'csv' })
       const response = await authorizedFetch(
         user,
-        `/api/orgs/ai-usage?${params.toString()}`,
+        `/api/ai/usage?${params.toString()}`,
       )
       if (!response.ok) {
         const failure = await response.json().catch(() => ({}))
@@ -236,5 +237,33 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
   )
 }
 BillingAiTopUsersComponent.displayName = 'BillingAiTopUsersComponent'
+
+/**
+ * The card on Billing → Usage, through the `orgBillingUsage` zone: its own
+ * band beneath the meters, full width, because it is a table of people rather
+ * than a gauge. Registered with `billing.view`, so a manager without it sees
+ * no card rather than a refusal.
+ */
+export function AiTopUsersCard(props: { orgId?: string; org?: { slug?: string } | null }) {
+  return (
+    <div id="ai-usage-by-member">
+      <CardDisplay
+        header={'Who is generating what'}
+        help={pluginDocsHelp('billing', {
+          anchor: '#who-is-generating-what',
+          excerpt:
+            'Each member’s AI credits for a month, their share of the ' +
+            'workspace’s spend, requests and refusals — with a month picker ' +
+            'and a CSV export.',
+        })}
+        contentGutterX
+        contentGutterY
+      >
+        <BillingAiTopUsersComponent orgId={props.orgId} orgSlug={props.org?.slug ?? ''} />
+      </CardDisplay>
+    </div>
+  )
+}
+AiTopUsersCard.displayName = 'AiTopUsersCard'
 
 export default BillingAiTopUsersComponent

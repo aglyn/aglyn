@@ -554,8 +554,9 @@ export const CONSOLE_WIDGET_SLOTS = {
   staffUser: 'staffUser',
   /**
    * The org's team member detail page, below the member's activity
-   * (AGL-2940). Props: `orgId`, `uid`, `member` (the org member document as
-   * the page loaded it), `canManage` (the reader may manage the org).
+   * (AGL-2940). Props: `orgId`, `orgSlug`, `uid`, `member` (the org member
+   * document as the page loaded it), `hosts` (the org's sites, for naming
+   * them), `canManage` (the reader may manage the org).
    */
   orgMember: 'orgMember',
   /**
@@ -567,9 +568,10 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgMembersListColumn: 'orgMembersListColumn',
   /**
    * The site collaborators card (AGL-2940). A widget with a `column` is a
-   * column of its table, rendered per row with `{ member, hostId, canManage
-   * }`; a widget without one renders beneath the table with `{ hostId,
-   * canManage }`.
+   * column of its table, rendered per row with `{ member, orgId, hostId,
+   * canManage }` — the owner's row too, with `member` carrying the owner's
+   * `uid` and `role: 'owner'`; a widget without one renders beneath the
+   * table with `{ hostId, canManage }`.
    */
   hostMembers: 'hostMembers',
   /**
@@ -597,7 +599,7 @@ export type ConsoleWidgetSlot =
  * table's to draw.
  */
 export interface ConsoleWidgetColumn {
-  /** The header cell's text. */
+  /** The header cell's text, and the column's name wherever it is listed. */
   header: string
   /**
    * The row field a table that sorts orders this column by. Carried for
@@ -606,6 +608,30 @@ export interface ConsoleWidgetColumn {
    */
   sortKey?: string
   align?: 'left' | 'right' | 'center'
+  /**
+   * The header cell's content when a plain `header` is not enough
+   * (AGL-2939): a hint, or a sort over values only the plugin can read.
+   * Mounted once per table with the slot's props beside
+   * {@link ConsoleWidgetColumnHeaderProps}; without it the table draws
+   * `header` as text.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Header?: ComponentType<any>
+}
+
+/**
+ * What a column's own header receives beside the slot's props (AGL-2939).
+ * The table keeps one sort at a time, so a column that sorts replaces
+ * another's order.
+ */
+export interface ConsoleWidgetColumnHeaderProps {
+  /**
+   * Hands the table a row comparator, or `null` to put the rows back in the
+   * table's own order. Stable for the life of the table.
+   */
+  onSort: (compare: ((a: never, b: never) => number) | null) => void
+  /** Whether the rows are in this column's order. */
+  sorted: boolean
 }
 
 /**

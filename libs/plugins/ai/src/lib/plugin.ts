@@ -18,8 +18,17 @@
 import { registerConsoleExtension } from '@aglyn/aglyn'
 import { AiAssistProvider } from './components/ai-assist-provider.component'
 import AiCreditsCard from './components/ai-credits-card.component'
+import {
+  AiCollaboratorCreditsCell,
+  AiCollaboratorCreditsHeader,
+  AiMemberCreditsCell,
+  AiMemberCreditsHeader,
+} from './components/ai-credits-columns.component'
 import { AssistPanelComponent } from './components/assist-panel.component'
 import BillingAssistOverageCard from './components/billing-assist-overage-card.component'
+import { AiTopUsersCard } from './components/billing-ai-top-users.component'
+import MemberAiUsageCard from './components/member-ai-usage-card.component'
+import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -61,6 +70,46 @@ export function registerAiConsole(): void {
         widgetId: 'ai-credits-overage',
         title: 'AI credits overage',
         Component: BillingAssistOverageCard,
+      },
+      // The per-member usage (AGL-2928): who drew the credits the meter
+      // counts, on Billing → Usage, on each member's page, on the staff
+      // user page, and as a column of both member tables.
+      {
+        slot: 'orgBillingUsage',
+        widgetId: 'ai-usage-by-member',
+        title: 'Who is generating what',
+        permission: 'billing.view',
+        Component: AiTopUsersCard,
+      },
+      {
+        slot: 'orgMember',
+        widgetId: 'ai-member-usage',
+        title: 'AI usage',
+        Component: MemberAiUsageCard,
+      },
+      {
+        slot: 'staffUser',
+        widgetId: 'ai-account-usage',
+        title: 'AI usage across organizations',
+        Component: StaffUserAiUsageCard,
+      },
+      {
+        slot: 'orgMembersListColumn',
+        widgetId: 'ai-member-credits',
+        title: 'AI credits (month)',
+        column: { header: 'AI credits (month)', align: 'right', Header: AiMemberCreditsHeader },
+        Component: AiMemberCreditsCell,
+      },
+      {
+        slot: 'hostMembers',
+        widgetId: 'ai-collaborator-credits',
+        title: 'AI credits (site, month)',
+        column: {
+          header: 'AI credits (site, month)',
+          align: 'right',
+          Header: AiCollaboratorCreditsHeader,
+        },
+        Component: AiCollaboratorCreditsCell,
       },
     ],
   })
