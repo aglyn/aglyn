@@ -19,34 +19,37 @@
 import { Box, CircularProgress } from '@mui/material'
 import { type ReactNode, useEffect, useState } from 'react'
 import { consolePluginLoader } from '../constants/console-plugin-loader'
-import { STAFF_PLUGIN_IDS } from '../constants/staff-plugins'
-
-/** Once settled, a later mount of the staff area renders at once. */
-let staffPluginsSettled = false
+import {
+  markStaffPluginsSettled,
+  resetStaffPluginsSettledForTests,
+  STAFF_PLUGIN_IDS,
+  staffPluginsSettled,
+} from '../constants/staff-plugins'
 
 /**
  * Loads the staff area's plugins before a staff page renders (AGL-2939).
  *
  * The console plugins gate loads plugins for the workspace a URL names, and
  * a staff URL names none, so nothing else loads a plugin here. A staff zone
- * reads the registry synchronously as it renders; holding the pages until
- * the registry holds the staff plugins is what lets a card registered for a
- * staff zone render on the first paint, rather than never.
+ * and the generic staff route read the registry synchronously as they
+ * render; holding the pages until the registry holds the staff plugins is
+ * what lets a staff card or a staff page render on the first paint, rather
+ * than never.
  *
  * Mounted inside `StaffGuard`, so a plugin chunk is fetched only for a
  * reader the staff claim admitted. Settled, not succeeded: a chunk that
- * fails to load is logged and the staff pages render without its cards.
+ * fails to load is logged and the staff pages render without its surfaces.
  */
 export function StaffPluginsGate({ children }: { children?: ReactNode }) {
   const [settled, setSettled] = useState(staffPluginsSettled)
   useEffect(() => {
-    if (staffPluginsSettled) return undefined
+    if (staffPluginsSettled()) return undefined
     let active = true
     void consolePluginLoader
       .ensure(STAFF_PLUGIN_IDS, ['staff'])
       .catch((error) => console.error('staff plugins failed to load', error))
       .then(() => {
-        staffPluginsSettled = true
+        markStaffPluginsSettled()
         if (active) setSettled(true)
       })
     return () => {
@@ -66,7 +69,7 @@ StaffPluginsGate.displayName = 'StaffPluginsGate'
 
 /** Test seam: forget that the staff plugins settled. */
 export function resetStaffPluginsGateForTests(): void {
-  staffPluginsSettled = false
+  resetStaffPluginsSettledForTests()
 }
 
 export default StaffPluginsGate

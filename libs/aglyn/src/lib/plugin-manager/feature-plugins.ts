@@ -794,6 +794,42 @@ export interface ConsoleUpgradeNotice {
   billingAnchor?: string
 }
 
+/** What the console's generic staff route hands a staff page. */
+export interface ConsoleStaffPageProps {
+  /** The page's own console path, `/admin/{id}`. */
+  basePath: string
+}
+
+/**
+ * A page a plugin adds to the STAFF area (AGL-2939): a tab in the staff
+ * strip and a page at `/admin/{id}`, rendered by the console's generic staff
+ * route. The shell owns the layout, the header, the breadcrumbs, the staff
+ * guard and the tab; the plugin owns the body.
+ *
+ * Staff pages load with the staff area's plugins — those declaring a `staff`
+ * register surface — not with a workspace's, because no org names the plugin
+ * set on `/admin`. They are admitted by the staff claim alone, so the
+ * extension's `featureFlag` and `permission` do not apply, and every read a
+ * staff page makes is refused server-side to a caller without the claim.
+ */
+export interface ConsoleStaffPage {
+  /**
+   * The URL segment under `/admin`, and the page's identity. The console's
+   * own staff routes win a segment they use, so pick one they do not. It is
+   * in links staff keep — treat it as persisted.
+   */
+  id: string
+  /** The tab's label in the staff strip. */
+  label: string
+  /**
+   * The page header (title and icon), and the docs topic its help `?`
+   * explains — a plain string for the reason {@link ConsoleNavItem.header}
+   * gives, validated by the console.
+   */
+  header?: { title: string; icon?: MdiIconProps; docsTopic?: string }
+  Component: ComponentType<ConsoleStaffPageProps>
+}
+
 export interface ConsoleExtension {
   pluginId: PluginId
   displayName: string
@@ -836,6 +872,11 @@ export interface ConsoleExtension {
   settingsSections?: ConsoleSettingsSection[]
   /** Slot-addressed components the shell renders in place (AGL-419). */
   widgets?: ConsoleWidget[]
+  /**
+   * Pages in the STAFF area (AGL-2939) — see {@link ConsoleStaffPage}.
+   * Neither `featureFlag` nor `permission` applies to them.
+   */
+  staffPages?: readonly ConsoleStaffPage[]
   /**
    * App-level providers the shell mounts around every console page
    * (AGL-419) — e.g. the marketplace plugin's AI-assist provider.
@@ -1032,6 +1073,53 @@ export function resolveConsolePluginPage(
     return undefined
   }
   return best
+}
+
+/** A staff page flattened with its owning extension's id. */
+export interface ConsoleStaffPageEntry extends ConsoleStaffPage {
+  pluginId: PluginId
+}
+
+/**
+ * Every registered staff page, in registration order — the staff strip's
+ * plugin tabs, after the console's own.
+ */
+export function listConsoleStaffPages(
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleStaffPageEntry[] {
+  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
+    (extension.staffPages ?? []).map((page) => ({
+      ...page,
+      pluginId: extension.pluginId,
+    })),
+  )
+}
+
+/**
+ * The staff page at `/admin/{id}` (AGL-2939), or `undefined`.
+ *
+ * Two plugins claiming one id resolve to nothing, and say so: registry order
+ * is an accident of which chunk loaded first, and a staff page that is one
+ * plugin's on one load and another's on the next cannot be debugged from the
+ * symptom — the same rule {@link resolveConsolePluginPage} applies to paths.
+ */
+export function resolveConsoleStaffPage(
+  id: string,
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleStaffPageEntry | undefined {
+  const matches = listConsoleStaffPages(enabledPluginIds).filter(
+    (page) => page.id === id,
+  )
+  const owners = [...new Set(matches.map((page) => page.pluginId))]
+  if (owners.length > 1) {
+    console.error(
+      `[aglyn] staff page "/admin/${id}" is claimed by more than one plugin ` +
+        `(${owners.join(', ')}); refusing to guess which one owns it. ` +
+        "Change one plugin's staff page id.",
+    )
+    return undefined
+  }
+  return matches[0]
 }
 
 /** Widgets registered for a slot, across every extension (AGL-419). */

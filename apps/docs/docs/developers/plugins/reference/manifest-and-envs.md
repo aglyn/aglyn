@@ -135,8 +135,9 @@ A **staff** entry names the registrar the console's staff area loads,
 usually the same function as `console`. The org routes load each
 workspace's enabled plugins and a staff page names no workspace, so the
 staff area loads exactly the plugins with a `staff` entry, before a staff
-page renders, and the [staff zones](./injection-zones.md#staff-zones) read
-their widgets.
+page renders: the [staff zones](./injection-zones.md#staff-zones) read their
+widgets, and the staff strip and the generic staff route read their
+`staffPages`.
  The scaffolder (`tools/scripts/create-plugin.mjs`)
 maintains it for you; the manual follow-ups are the
 `FIRST_PARTY_PLUGINS` catalog entry and the release flag

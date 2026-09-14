@@ -84,6 +84,7 @@ jest.mock('../components/console-plugins-gate.component', () => ({
 
 jest.mock('../constants/staff-plugins', () => ({
   __esModule: true,
+  ...jest.requireActual('../constants/staff-plugins'),
   STAFF_PLUGIN_IDS: ['ai', 'acme-backups'],
 }))
 

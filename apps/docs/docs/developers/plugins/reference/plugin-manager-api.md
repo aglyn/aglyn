@@ -19,6 +19,7 @@ design: the surface is small and curated, and each entry needs semantics
 | `registerConsoleExtension(extension)` | Declares everything a plugin adds to the console shell. Idempotent by `pluginId` (re-registration replaces). |
 | `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[orgSlug]/hosts/[host]/[...pluginSlug]`. The resolver matches an exact `href`, or a declared section beneath one — longest href wins, prefixes match on a segment boundary, and a tie between two enabled plugins refuses. It answers `{ extension, navItem, section?, segments }`. |
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
+| `listConsoleStaffPages()` / `resolveConsoleStaffPage(id)` | How the shell draws a plugin's staff pages: a tab after the staff strip's own, and a page at `/admin/{id}` from the generic staff route. Two plugins claiming one id resolve to nothing, and say so. |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in screen docs — never rename**. |
 | `CONSOLE_WIDGET_SLOTS` | The typed injection-zone catalog. A widget with a `column: { header, sortKey?, align? }` is a column of a shell-owned table on the zones documented as column zones. |
@@ -29,7 +30,18 @@ design: the surface is small and curated, and each entry needs semantics
 (a nav item with a `Component` becomes a full page and receives
 `ConsolePluginPageProps { hostId, entitled, org?, permissions?, releaseFlag?,
 basePath?, sections?, section?, segments? }`), `dashboardCards?`,
-`settingsSections?`, `widgets?`, `providers?`.
+`settingsSections?`, `widgets?`, `providers?`, `staffPages?`.
+
+`ConsoleExtension.staffPages?` adds pages to the staff area: each
+`{ id, label, header?: { title, icon?, docsTopic? }, Component }` becomes a
+tab in the staff strip and a page at `/admin/{id}`, rendered inside the staff
+chrome with `ConsoleStaffPageProps { basePath }`. Staff pages load with the
+plugins that name a `staff` register surface (see
+[the manifest](./manifest-and-envs.md)), and the staff claim alone admits a
+reader: the extension's `featureFlag` and `permission` do not apply, so every
+read the page makes must be refused server-side to a caller without the
+claim. The console's own staff routes win the segments they use, and a staff
+page whose id is one of them gets no tab.
 
 `ConsoleExtension.permission?` (and `ConsoleNavItem.permission?`, which
 narrows one surface) name a permission the reader must hold. `featureFlag`

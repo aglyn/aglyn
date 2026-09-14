@@ -23,10 +23,12 @@ import {
   listConsoleExtensions,
   listConsoleNavItems,
   listConsoleProviders,
+  listConsoleStaffPages,
   listConsoleWidgets,
   MUI_BUNDLE_ID,
   registerConsoleExtension,
   resolveConsolePluginPage,
+  resolveConsoleStaffPage,
   unregisterConsoleExtension,
   type ComponentRegistrar,
 } from './feature-plugins'
@@ -309,6 +311,69 @@ describe('console extension registry', () => {
       ).toEqual(['backups-user'])
       // A plugin the staff area did not load contributes nothing.
       expect(listConsoleWidgets('staffOrg', ['ai'])).toHaveLength(1)
+    })
+  })
+
+  /**
+   * AGL-2939: a plugin adds a page to the staff area — a tab and a page at
+   * `/admin/{id}` — and two unrelated plugins each add one.
+   */
+  describe('staff pages', () => {
+    const SignalsPage = (): null => null
+    const BackupsPage = (): null => null
+
+    beforeEach(() => {
+      registerConsoleExtension({
+        pluginId: 'ai',
+        displayName: 'AI',
+        staffPages: [
+          {
+            id: 'assist-signals',
+            label: 'Assist signal',
+            header: { title: 'Assist Signal', docsTopic: 'assistSignals' },
+            Component: SignalsPage,
+          },
+        ],
+      })
+      registerConsoleExtension({
+        pluginId: 'acme-backups',
+        displayName: 'Backups',
+        staffPages: [{ id: 'backups', label: 'Backups', Component: BackupsPage }],
+      })
+    })
+
+    it('lists every plugin\'s staff pages in registration order, with the owner', () => {
+      expect(
+        listConsoleStaffPages().map((page) => [page.pluginId, page.id, page.label]),
+      ).toEqual([
+        ['ai', 'assist-signals', 'Assist signal'],
+        ['acme-backups', 'backups', 'Backups'],
+      ])
+      expect(listConsoleStaffPages(['acme-backups']).map((page) => page.id)).toEqual([
+        'backups',
+      ])
+    })
+
+    it('resolves a staff page by its id, and nothing for an unknown one', () => {
+      expect(resolveConsoleStaffPage('assist-signals')?.Component).toBe(SignalsPage)
+      expect(resolveConsoleStaffPage('backups')?.pluginId).toBe('acme-backups')
+      expect(resolveConsoleStaffPage('orgs')).toBeUndefined()
+      // A plugin outside the given set does not answer for its id.
+      expect(resolveConsoleStaffPage('backups', ['ai'])).toBeUndefined()
+    })
+
+    it('two plugins claiming one id resolve to nothing, loudly', () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+      registerConsoleExtension({
+        pluginId: 'acme-archive',
+        displayName: 'Archive',
+        staffPages: [{ id: 'backups', label: 'Archive', Component: BackupsPage }],
+      })
+      expect(resolveConsoleStaffPage('backups')).toBeUndefined()
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('"/admin/backups" is claimed by more than one plugin'),
+      )
+      error.mockRestore()
     })
   })
 })

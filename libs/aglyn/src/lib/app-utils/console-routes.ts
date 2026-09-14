@@ -83,6 +83,10 @@ export enum Route {
   // for scanning, this is where a reviewer reads the manifest, weighs the
   // verifier findings and acts.
   ADMIN_PLUGIN_REVIEW = '/admin/plugin-reviews/[listingId]',
+  // A page a plugin adds to the staff area (AGL-2939), rendered by the
+  // console's generic staff route. The console's own staff routes win the
+  // segments they use.
+  ADMIN_STAFF_PAGE = '/admin/[staffPage]',
   // Staff support-ticket queue (AGL-849): the operator side of the
   // subscriber `MANAGE_SUPPORT_TICKETS` page — every org's tickets in one place.
   ADMIN_SUPPORT = '/admin/support',
@@ -518,6 +522,7 @@ export interface RoutePayload {
   [Route.ADMIN_SETTINGS]: undefined
   [Route.ADMIN_PLUGIN_REVIEWS]: undefined
   [Route.ADMIN_PLUGIN_REVIEW]: { listingId: string }
+  [Route.ADMIN_STAFF_PAGE]: { staffPage: string }
   [Route.ADMIN_SUPPORT]: undefined
   [Route.ADMIN_CONTACT_SUPPRESSIONS]: undefined
   [Route.ADMIN_EMAILS]: undefined
