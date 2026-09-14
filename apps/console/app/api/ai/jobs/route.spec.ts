@@ -274,8 +274,12 @@ import { POST as cancelJob } from './[jobId]/cancel/route'
 import { aiJobEventStream } from '../../_lib/ai-jobs-events'
 import {
   assistUsageMonth,
-} from '../../../../../../libs/tenant/data/admin/src/lib/server/assist-usage'
-import { AI_JOB_NOT_AVAILABLE_COPY } from '../../../../../../libs/tenant/data/admin/src/lib/server/ai-jobs'
+} from '@aglyn/tenant-data-admin/server/assist-usage'
+import { AI_JOB_NOT_AVAILABLE_COPY } from '@aglyn/tenant-data-admin/server/ai-jobs'
+// The AI add-on that entitles ENTITLED_ORG is declared through the plugin
+// entitlement seam; `checkEntitlement` reads that declaration, so the spec
+// loads it as the `@aglyn/aglyn` barrel does.
+import '@aglyn/aglyn/app-utils/ai-entitlements'
 
 const ORG = 'org-1'
 /** A Pro workspace with the AI add-on: `aiGenerative` is on. */
