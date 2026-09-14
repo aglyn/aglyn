@@ -151,6 +151,16 @@ describe('Video poster resolution (AGL-1215, AGL-2741)', () => {
     ).toBe(`${CDN}/h/mine?w=${Aglyn.MEDIA_CDN_POSTER_WIDTH}`)
   })
 
+  it('narrows an authored poster that is a captured frame without breaking its query', () => {
+    // An entry template binds Poster image to the entry's cover, and a cover
+    // filled from a film is that film's `?poster=1` url (AGL-2958).
+    expect(
+      video(
+        <Video src="media:h/film" poster={`${CDN}/h/film?poster=1`} />,
+      ).getAttribute('poster'),
+    ).toBe(`${CDN}/h/film?poster=1&w=${Aglyn.MEDIA_CDN_POSTER_WIDTH}`)
+  })
+
   it('builds every lightbox srcSet candidate through the same rule', () => {
     // Pasting `?w=` onto a generated poster's url would produce
     // `?poster=1?w=320` and 404 every candidate.
