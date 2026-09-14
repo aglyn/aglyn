@@ -71,6 +71,8 @@ export interface ScreenLinkValuePickerProps {
    * stored `screen:9aXk…` is not a sentence anyone can act on.
    */
   defaultValue?: string
+  /** Whose default `defaultValue` is, in the empty option's words. */
+  defaultOwner?: 'component' | 'layout'
   name?: string
   error?: boolean
 }
@@ -105,6 +107,7 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
     size = 'small',
     emptyLabel,
     defaultValue,
+    defaultOwner = 'component',
     name,
     error,
   } = props
@@ -144,9 +147,9 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
   const resolvedEmptyLabel =
     emptyLabel ??
     (described
-      ? `Use the component default (${described})`
+      ? `Use the ${defaultOwner} default (${described})`
       : defaultValue
-        ? 'Use the component default'
+        ? `Use the ${defaultOwner} default`
         : 'Not set')
   // A default that is a screen reference is not a URL, so it must not be
   // offered as one in the text box.
@@ -276,6 +279,8 @@ export function ScreenLinkField(props: ScreenLinkFieldProps) {
     meta,
     help,
     propDefault,
+    propDefaultOwner,
+    emptyLabel,
     FormFieldGridProps = {},
     // Nothing is spread onto the controls below, so free-text leftovers
     // from a schema authored as a TEXT_FIELD (`multiline`, `inputProps`,
@@ -293,6 +298,8 @@ export function ScreenLinkField(props: ScreenLinkFieldProps) {
         label={label}
         placeholder={placeholder}
         defaultValue={propDefault}
+        defaultOwner={propDefaultOwner}
+        emptyLabel={emptyLabel}
         disabled={isDisabled || isReadOnly}
         error={Boolean(invalid)}
         helperText={invalid || helperText || description}

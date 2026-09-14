@@ -21,7 +21,12 @@ import {
   resolvePluginPropFields,
   unknownPluginPropKeys,
 } from '@aglyn/aglyn'
-import { useFieldApi, useFormApi } from '@aglyn/shared-ui-jsx-forms'
+import {
+  FormFieldGrid,
+  type FormFieldGridProps,
+  useFieldApi,
+  useFormApi,
+} from '@aglyn/shared-ui-jsx-forms'
 import {
   Alert,
   Box,
@@ -34,6 +39,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useMemo, useState } from 'react'
+
+import { readAttributeFieldValue } from '../utils/attribute-field-value'
 
 /** Mapper key for the attributes form (editor-internal, never persisted). */
 export const PLUGIN_SETTINGS_FIELD_COMPONENT = 'aglyn-plugin-settings-field'
@@ -97,15 +104,44 @@ const serialize = (settings: Record<string, unknown>): string =>
  * it is the way out.
  */
 export function PluginSettingsField(props: Record<string, unknown>) {
-  const { input, label, description, isDisabled } = useFieldApi(props as never)
+  const {
+    input,
+    label,
+    description,
+    isDisabled,
+    listingField,
+    listingFallback,
+    help,
+    FormFieldGridProps,
+  } = useFieldApi(props as never)
+  // The corner controls every field has — the help tip, and the `{}` that
+  // binds the settings to a property — ride the shared grid wrapper.
+  const grid = (children: JSX.Node) => (
+    <FormFieldGrid
+      help={help as FormFieldGridProps['help']}
+      {...((FormFieldGridProps as FormFieldGridProps | undefined) ?? {})}
+    >
+      {children}
+    </FormFieldGrid>
+  )
   const formApi = useFormApi()
   const [rawMode, setRawMode] = useState(false)
 
   // The sibling selection. `getState()` rather than a subscription: the
   // attributes form re-renders on every value change already, so reading here
   // is current without a second subscription to keep in step.
+  //
+  // A Plugin settings PROPERTY names the Plugin property it follows
+  // (`listingField`, e.g. `propValues.plugin`) and that property's default
+  // (`listingFallback`), which is what the page renders while it picks none.
+  const picked = readAttributeFieldValue(
+    formApi.getState().values as Record<string, unknown>,
+    typeof listingField === 'string' && listingField ? listingField : 'listingId',
+  )
   const listingId = String(
-    (formApi.getState().values as Record<string, unknown>)?.['listingId'] ?? '',
+    (typeof picked === 'string' && picked) ||
+      (typeof listingFallback === 'string' ? listingFallback : '') ||
+      '',
   )
   const install = getKnownPluginInstall(listingId || undefined)
   const fields = useMemo(
@@ -130,14 +166,19 @@ export function PluginSettingsField(props: Record<string, unknown>) {
   }
 
   if (!listingId) {
-    return (
-      <Typography variant="caption" color="text.secondary">
-        {'Choose a plugin above to see its settings.'}
-      </Typography>
+    return grid(
+      <Stack spacing={0.5}>
+        <Typography variant="subtitle2">{label ?? 'Plugin settings'}</Typography>
+        <Typography variant="caption" color="text.secondary">
+          {listingField
+            ? 'Choose a plugin for this page to see its settings.'
+            : 'Choose a plugin above to see its settings.'}
+        </Typography>
+      </Stack>,
     )
   }
 
-  return (
+  return grid(
     <Stack spacing={1.5}>
       <Stack
         direction="row"
@@ -296,7 +337,7 @@ export function PluginSettingsField(props: Record<string, unknown>) {
           })}
         </Stack>
       )}
-    </Stack>
+    </Stack>,
   )
 }
 PluginSettingsField.displayName = 'PluginSettingsField'

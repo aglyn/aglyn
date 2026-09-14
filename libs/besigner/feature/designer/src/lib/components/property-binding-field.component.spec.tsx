@@ -196,7 +196,7 @@ describe('binding a switch or checkbox to a property (AGL-2871)', () => {
     fireEvent.click(await bindButton('Open in a lightbox'))
     expect(
       await screen.findByText(
-        'This component has no Yes / no properties yet. Add one under File ▸ Properties…, then bind it here.',
+        'This component has no Yes / no or Checkbox properties yet. Add one under File ▸ Properties…, then bind it here.',
       ),
     ).toBeTruthy()
   })
@@ -341,22 +341,38 @@ describe('binding a dropdown or a Screen picker to a property (AGL-2871)', () =>
     ).toBeTruthy()
   })
 
-  it('negative control: a multiple-choice dropdown takes no binding', async () => {
-    mount({}, [
-      ...LINK_ATTRIBUTES,
-      {
-        name: 'tags',
-        label: 'Tags',
-        component: Aglyn.FieldComponentType.SELECT,
-        isMulti: true,
-        options: [{ value: 'a', label: 'A' }],
-      },
-    ])
-    // The single dropdown beside it is offered one, so the panel has rendered.
-    await bindButton('Variant')
-    expect(
-      screen.queryByRole('button', { name: 'Bind Tags to a property' }),
-    ).toBeNull()
+  it('offers a dropdown that takes several answers only the properties that hold several (AGL-2893)', async () => {
+    const { unmount } = mount(
+      {},
+      [
+        ...LINK_ATTRIBUTES,
+        {
+          name: 'tags',
+          label: 'Tags',
+          component: Aglyn.FieldComponentType.SELECT,
+          isMulti: true,
+          options: [{ value: 'a', label: 'A' }],
+        },
+      ],
+      [
+        ...CARD_PROPS,
+        {
+          name: 'topics',
+          type: 'choice',
+          label: 'Topics',
+          options: [{ value: 'a' }],
+          settings: { isMulti: true },
+        },
+      ],
+    )
+    fireEvent.click(await bindButton('Tags'))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByText('Topics')).toBeTruthy()
+    // One answer cannot fill a list, so a single Choice is not on offer.
+    expect(within(menu).queryByText('Link style')).toBeNull()
+    fireEvent.click(within(menu).getByText('Topics'))
+    unmount()
+    expect(lastCommit()['tags']).toBe('{{prop.topics}}')
   })
 })
 
@@ -565,17 +581,125 @@ describe('withPropertyBinding', () => {
         declaredComponent: Aglyn.FieldComponentType.TEXT_FIELD,
       }),
     ).toBe(text)
-    // A checkbox LIST holds an array of choices, not a yes or a no.
+    // A checkbox LIST holds an array of answers, so a yes or a no is never
+    // offered to it.
     const list = {
       ...field,
       component: Aglyn.FieldComponentType.CHECKBOX,
       options: [{ value: 'a', label: 'A' }],
     }
+    const wrappedList = withPropertyBinding(list, {
+      ...options,
+      declaredComponent: Aglyn.FieldComponentType.CHECKBOX,
+    }) as Record<string, any>
+    expect(wrappedList.bindingOptions).toEqual([])
+  })
+})
+
+/**
+ * Every field kind the Attributes panel draws can be bound to a property of a
+ * compatible kind (AGL-2893) — a color picker to a Color, a size to a Size, a
+ * document to formatted or long text — and never to one it could not show.
+ */
+describe('binding every field kind to a property (AGL-2893)', () => {
+  const PROPS: Aglyn.ReusableComponentProp[] = [
+    { name: 'accent', type: 'color-picker', label: 'Accent' },
+    { name: 'width', type: 'css-dimension', label: 'Width' },
+    { name: 'body', type: 'richText', label: 'Body' },
+    { name: 'doc', type: 'markdown', label: 'Document' },
+    { name: 'launch', type: 'date-picker', label: 'Launch day' },
+    { name: 'product', type: 'product-select', label: 'Product' },
+    { name: 'flag', type: 'boolean', label: 'Flag' },
+  ]
+  const control = (kind: Aglyn.FieldComponentType) =>
+    elementPropsComponentMapper[kind as keyof typeof elementPropsComponentMapper]
+
+  const offered = (declaredComponent: Aglyn.FieldComponentType, extra = {}) =>
+    (
+      withPropertyBinding(
+        { name: 'value', label: 'Value', component: declaredComponent, ...extra },
+        {
+          declaredComponent,
+          componentProps: PROPS,
+          control: (control(declaredComponent) ??
+            control(Aglyn.FieldComponentType.SELECT)) as never,
+        },
+      ) as Record<string, any>
+    ).bindingOptions?.map((option: any) => option.label)
+
+  it.each([
+    [Aglyn.FieldComponentType.COLOR_PICKER, ['Accent']],
+    [Aglyn.FieldComponentType.CSS_DIMENSION, ['Width']],
+    [Aglyn.FieldComponentType.MARKDOWN, ['Body', 'Document']],
+    [Aglyn.FieldComponentType.DATE_PICKER, ['Launch day']],
+    [Aglyn.FieldComponentType.PRODUCT_SELECT, ['Product']],
+    [Aglyn.FieldComponentType.SWITCH, ['Flag']],
+  ] as const)('offers a %s field only the properties it can show', (kind, labels) => {
+    expect(offered(kind)).toEqual(labels)
+  })
+
+  it('names what to add in the words of the kinds that would fit', () => {
+    const wrapped = withPropertyBinding(
+      { name: 'value', label: 'Value', component: Aglyn.FieldComponentType.RADIO },
+      {
+        declaredComponent: Aglyn.FieldComponentType.RADIO,
+        componentProps: [],
+        control: control(Aglyn.FieldComponentType.RADIO) as never,
+        owner: 'layout',
+      },
+    ) as Record<string, any>
+    expect(wrapped.bindingEmptyText).toBe(
+      'This layout has no Choice, Radio buttons or Toggle buttons properties yet. ' +
+        'Add one under File ▸ Properties…, then bind it here.',
+    )
+  })
+
+  it('binds a color picker in the rendered panel, committing the token the graft reads', async () => {
+    const updateNodeProps = jest
+      .spyOn(Aglyn.canvas, 'updateNodeProps')
+      .mockImplementation((() => undefined) as never)
+    const { unmount } = render(
+      <BindingPickerContext.Provider value={{ componentProps: PROPS }}>
+        <ElementPropsForm
+          node={
+            {
+              $id: 'agl2893-band',
+              type: 'node',
+              componentId: 'unregistered-band',
+              props: {},
+              componentSchema: {
+                attributes: [
+                  {
+                    name: 'color',
+                    label: 'Band color',
+                    component: Aglyn.FieldComponentType.COLOR_PICKER,
+                  },
+                ],
+              },
+              nodes: [],
+            } as never
+          }
+        />
+      </BindingPickerContext.Provider>,
+    )
+    fireEvent.click(
+      await screen.findByRole(
+        'button',
+        { name: 'Bind Band color to a property' },
+        { timeout: 10000 },
+      ),
+    )
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).queryByText('Width')).toBeNull()
+    fireEvent.click(within(menu).getByText('Accent'))
     expect(
-      withPropertyBinding(list, {
-        ...options,
-        declaredComponent: Aglyn.FieldComponentType.CHECKBOX,
-      }),
-    ).toBe(list)
+      await screen.findByText('Each page sets this with the Accent property.'),
+    ).toBeTruthy()
+    unmount()
+    const calls = updateNodeProps.mock.calls
+    expect((calls[calls.length - 1]?.[1] as Record<string, unknown>)['color']).toBe(
+      '{{prop.accent}}',
+    )
+    updateNodeProps.mockRestore()
   })
 })

@@ -17,7 +17,11 @@
 'use client'
 
 import { MarkdownField } from '@aglyn/aglyn-markdown-editor'
-import { useFieldApi } from '@aglyn/shared-ui-jsx-forms'
+import {
+  FormFieldGrid,
+  type FormFieldGridProps,
+  useFieldApi,
+} from '@aglyn/shared-ui-jsx-forms'
 import { Stack, Typography } from '@mui/material'
 import { useCallback } from 'react'
 import { useMarkdownMediaPicker } from '../hooks/use-markdown-media-picker'
@@ -60,7 +64,8 @@ export const MARKDOWN_ATTRIBUTE_FIELD_COMPONENT =
  * is already in the form before the dialog opens.
  */
 export function MarkdownAttributeField(props: Record<string, unknown>) {
-  const { input, label, description, isDisabled } = useFieldApi(props as never)
+  const { input, label, description, isDisabled, help, FormFieldGridProps } =
+    useFieldApi(props as never)
   const { editorRef, onPickImageFromMedia } = useMarkdownMediaPicker()
 
   const value = typeof input.value === 'string' ? input.value : ''
@@ -72,7 +77,13 @@ export function MarkdownAttributeField(props: Record<string, unknown>) {
     [input],
   )
 
+  // Inside the shared grid wrapper, so the corner controls every field has —
+  // the help tip, and the `{}` that binds it to a property — reach this one.
   return (
+    <FormFieldGrid
+      help={help as FormFieldGridProps['help']}
+      {...((FormFieldGridProps as FormFieldGridProps | undefined) ?? {})}
+    >
     <Stack spacing={0.5} sx={{ width: '100%' }} data-testid="markdown-attribute-field">
       <MarkdownField
         label={String(label ?? 'Content')}
@@ -93,6 +104,7 @@ export function MarkdownAttributeField(props: Record<string, unknown>) {
         </Typography>
       ) : null}
     </Stack>
+    </FormFieldGrid>
   )
 }
 

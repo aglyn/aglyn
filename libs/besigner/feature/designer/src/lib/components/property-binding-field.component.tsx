@@ -16,7 +16,14 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn'
-import { FieldComponentType, matchComponentPropToken } from '@aglyn/aglyn'
+import {
+  attributeFieldValueShape,
+  type BindableAttributeField,
+  matchComponentPropToken,
+  REUSABLE_PROP_KINDS,
+  reusablePropBindsToField,
+  reusablePropHasAnswers,
+} from '@aglyn/aglyn'
 import {
   type FieldBindAction,
   FormFieldGrid,
@@ -72,51 +79,48 @@ import { TokenPillPopover, tokenPillContainerSx } from './token-pill.component'
 export const PROPERTY_BINDING_FIELD_COMPONENT = 'aglyn-property-binding-field'
 
 /**
- * The property kinds each field kind can be bound to, keyed by the attribute
- * type a component schema DECLARES.
+ * The names of the property kinds a declared field can be bound to, in the
+ * panel's own words — `Yes / no or Checkbox` for a switch, `Color` for a color
+ * picker — for the sentences that tell an author what to add.
  *
- * Declared rather than rendered: a Screen picker renders as a plain select,
- * and what it holds is a link, not a choice.
+ * Every kind is tried as it can be declared (bare, with answers, taking
+ * several), so a list-holding dropdown names the kinds that hold lists.
  */
-export const PROPERTY_BINDING_TYPES: Readonly<
-  Partial<Record<string, readonly Aglyn.ReusableComponentPropType[]>>
-> = {
-  [FieldComponentType.SWITCH]: ['boolean'],
-  [FieldComponentType.CHECKBOX]: ['boolean'],
-  [FieldComponentType.SELECT]: ['choice'],
-  [FieldComponentType.SCREEN_SELECT]: ['href'],
-  [FieldComponentType.ICON_PICKER]: ['icon'],
-}
-
-/** What each kind of property is called in the panel's own words. */
-const PROPERTY_KIND_LABEL: Readonly<
-  Partial<Record<Aglyn.ReusableComponentPropType, string>>
-> = {
-  boolean: 'Yes / no',
-  choice: 'Choice',
-  href: 'Link',
-  icon: 'Icon',
+export function propertyKindsBindableTo(
+  declared: BindableAttributeField,
+): string {
+  const labels = (Object.keys(REUSABLE_PROP_KINDS) as Aglyn.ReusableComponentPropType[])
+    .filter((type) =>
+      [
+        { type },
+        { type, options: [{ value: 'a' }] },
+        { type, options: [{ value: 'a' }], settings: { isMulti: true } },
+      ].some((candidate) => reusablePropBindsToField(candidate, declared)),
+    )
+    .map((type) => REUSABLE_PROP_KINDS[type].label)
+  if (labels.length <= 1) return labels[0] ?? ''
+  return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`
 }
 
 /**
- * The values of a `choice` property that a dropdown does not offer.
+ * The values of a property with answers that a dropdown does not offer.
  *
- * A choice reaches the dropdown's element as its VALUE, and an element handed
+ * An answer reaches the dropdown's element as its VALUE, and an element handed
  * a value outside its own list draws as though nothing were chosen. The
- * dialog that declares a choice cannot see the dropdowns it will drive, so the
- * mismatch is only knowable here, where the two meet.
+ * dialog that declares the answers cannot see the dropdowns they will drive,
+ * so the mismatch is only knowable here, where the two meet.
  */
 export function unofferedChoiceValues(
-  prop: Pick<Aglyn.ReusableComponentProp, 'type' | 'options'> | undefined,
+  prop: Pick<Aglyn.ReusableComponentProp, 'type' | 'options' | 'settings'> | undefined,
   fieldOptions: unknown,
 ): string[] {
-  if (prop?.type !== 'choice' || !Array.isArray(fieldOptions)) return []
+  if (!reusablePropHasAnswers(prop) || !Array.isArray(fieldOptions)) return []
   const offered = new Set(
     fieldOptions.map((option) =>
       String((option as { value?: unknown } | null)?.value ?? ''),
     ),
   )
-  return (prop.options ?? [])
+  return (prop?.options ?? [])
     .map((option) => option?.value)
     .filter((value): value is string => Boolean(value) && !offered.has(value))
 }
@@ -130,6 +134,12 @@ export interface PropertyBindingOptions {
   /** The attribute type the component schema declares for this field. */
   declaredComponent: unknown
   /**
+   * The attribute as the schema declares it, for whether it holds one value
+   * or several (`isMulti`, a checkbox's `options`). The field itself is read
+   * when this is absent.
+   */
+  declaredField?: BindableAttributeField
+  /**
    * The props the edited component declares, or `undefined` outside a
    * component editor — where `{{prop.*}}` resolves to nothing, so there is
    * nothing to bind to.
@@ -139,47 +149,56 @@ export interface PropertyBindingOptions {
   control: PropertyBindingControl | undefined
   /** Display-name inputs for the bound pill. */
   tokenLabelContext?: TokenLabelContext
+  /** Whose properties these are, for what an empty picker says. */
+  owner?: 'component' | 'layout'
 }
 
 /**
  * The field, wrapped to take a property binding when it can, or unchanged.
  *
- * Unchanged outside a component editor, for a field whose kind takes no
- * binding, for a read-only or disabled field (a control that writes an
- * unwritable field is a lie), for a checkbox LIST or a multiple-choice
- * dropdown — each holds a list, and a property supplies one value — and
- * whenever the control to fall back to is unknown, since a wrapper with
- * nothing to render would blank the field.
+ * Every field kind that holds a value can be bound (AGL-2893), to the
+ * properties that hold the same shape of value (`reusablePropBindsToField`):
+ * a switch to a Yes / no, a color picker to a Color, a dropdown that takes
+ * several answers to a property that holds several.
+ *
+ * Unchanged outside a component or layout editor, for a free-text field — it
+ * takes any property's token typed into it — for a read-only or disabled
+ * field (a control that writes an unwritable field is a lie), and whenever the
+ * control to fall back to is unknown, since a wrapper with nothing to render
+ * would blank the field.
  */
 export function withPropertyBinding<T extends Record<string, unknown>>(
   field: T,
   options: PropertyBindingOptions,
 ): T {
-  const { declaredComponent, componentProps, control, tokenLabelContext } =
-    options
+  const {
+    declaredComponent,
+    declaredField,
+    componentProps,
+    control,
+    tokenLabelContext,
+    owner = 'component',
+  } = options
   if (!componentProps || !control) return field
-  const types = PROPERTY_BINDING_TYPES[String(declaredComponent)]
-  if (!types?.length) return field
-  if (field['isReadOnly'] || field['isDisabled']) return field
-  if (declaredComponent === FieldComponentType.CHECKBOX && field['options']) {
-    return field
+  const declared: BindableAttributeField = {
+    ...(declaredField ?? field),
+    component: declaredComponent,
   }
-  if (field['isMulti'] || field['multiple']) return field
-  const kinds = types
-    .map((type) => PROPERTY_KIND_LABEL[type])
-    .filter(Boolean)
-    .join(' or ')
+  if (attributeFieldValueShape(declared) === undefined) return field
+  if (field['isReadOnly'] || field['isDisabled']) return field
+  const bindable = componentProps.filter((prop) =>
+    reusablePropBindsToField(prop, declared),
+  )
+  const kinds = propertyKindsBindableTo(declared)
   return {
     ...field,
     component: PROPERTY_BINDING_FIELD_COMPONENT,
     bindingControl: control,
-    bindingOptions: componentPropBindingOptions(componentProps, types),
-    bindingProps: componentProps.filter((prop) =>
-      types.includes(prop?.type ?? 'text'),
-    ),
+    bindingOptions: componentPropBindingOptions(bindable, owner),
+    bindingProps: bindable,
     bindingKinds: kinds,
     bindingEmptyText:
-      `This component has no ${kinds || 'matching'} properties yet. Add one ` +
+      `This ${owner} has no ${kinds || 'matching'} properties yet. Add one ` +
       'under File ▸ Properties…, then bind it here.',
     tokenLabelContext,
   }

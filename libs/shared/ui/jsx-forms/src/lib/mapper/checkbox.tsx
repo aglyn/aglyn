@@ -36,12 +36,20 @@ import {
 } from '@mui/material'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
-import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
+import { useStoredFieldHasValue } from './stored-field-value'
+import FormFieldGrid, {
+  buildFieldClear,
+  type FormFieldGridProps,
+} from './form-field-grid'
 import MultipleChoiceList from './multiple-choice-list'
 import type { BaseFieldProps, OptionValue, SelectOption } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
 export interface SingleCheckboxProps extends BaseFieldProps {
+  /** Offer the reset-to-unset affordance, as the switch does. */
+  clearable?: boolean
+  /** The state shown while nothing is stored, as the switch takes it. */
+  unsetChecked?: boolean
   FormFieldGridProps?: FormFieldGridProps
   FormControlProps?: FormControlProps
   FormGroupProps?: FormGroupProps
@@ -69,6 +77,8 @@ export const SingleCheckbox = (props: SingleCheckboxProps) => {
     validateOnMount,
     meta,
     help,
+    clearable,
+    unsetChecked,
     FormFieldGridProps = {},
     FormControlProps = {},
     FormGroupProps = {},
@@ -88,9 +98,17 @@ export const SingleCheckbox = (props: SingleCheckboxProps) => {
     ((meta.touched || validateOnMount) && meta.warning) ||
     helperText ||
     description
+  const hasValue = useStoredFieldHasValue(input.name)
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue,
+    locked: Boolean(isDisabled || isReadOnly),
+    onClear: () => input.onChange(undefined),
+  })
 
   return (
-    <FormFieldGrid help={help} {...FormFieldGridProps}>
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
       <FormControl
         required={isRequired}
         error={!!invalid}
@@ -103,6 +121,7 @@ export const SingleCheckbox = (props: SingleCheckboxProps) => {
             control={
               <MuiCheckbox
                 {...input}
+                checked={hasValue ? input.checked : Boolean(unsetChecked)}
                 {...CheckboxProps}
                 disabled={isDisabled || isReadOnly}
                 value={input.name}

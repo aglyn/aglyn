@@ -33,6 +33,7 @@ import {
   elementPropsComponentMapper,
   inheritedAltPatch,
   isFormattedText,
+  resolveAttributeField,
   useDebouncedCommit,
   withoutFormatting,
 } from './element-props-form.component'
@@ -209,27 +210,35 @@ describe('buildInstancePropFields (AGL-1247)', () => {
     expect(fields[0].component).toBe(TOKEN_TEXT_FIELD_COMPONENT)
     expect(fields[2]).toMatchObject({ multiline: true })
     expect(fields[3]).toMatchObject({ type: 'number' })
-    expect(fields[4].component).toBe(Aglyn.FieldComponentType.SELECT)
+    // A Yes / no is edited with the switch a coded component's Yes / no
+    // attribute gets (AGL-2893), not a Yes / No dropdown.
+    expect(fields[4].component).toBe(Aglyn.FieldComponentType.SWITCH)
   })
 
   /**
    * A Yes / no property has THREE answers on a page — yes, no, or whatever the
-   * component defaults to (AGL-2871). A checkbox can show two, so it showed
-   * unticked on a page rendering a default of yes, and once ticked it could
-   * never hand the choice back to the component.
+   * component defaults to (AGL-2871) — and is edited with the switch a coded
+   * component's Yes / no attribute gets (AGL-2893). A switch shows two, so an
+   * unset field shows the default's position and says so, and the corner ✕ is
+   * the way back to the default once the page has chosen.
    */
   describe('a Yes / no property', () => {
     const [yesNo] = buildInstancePropFields([
       { name: 'playInLightbox', type: 'boolean', defaultValue: 'true' },
     ]) as Array<Record<string, any>>
 
-    it('offers Yes and No, and names the default it falls back to', () => {
-      expect(yesNo['options']).toEqual([
-        { value: 'true', label: 'Yes' },
-        { value: 'false', label: 'No' },
-      ])
-      expect(yesNo['placeholder']).toBe('Use the component default (Yes)')
-      // The way back to the default: the corner ✕.
+    /** The helper line the field shows with `stored` in the form. */
+    const noteWith = (field: Record<string, any>, stored: unknown) =>
+      field['resolveProps']?.({}, {}, {
+        getFieldState: () => ({ value: stored }),
+      })?.description
+
+    it('is a switch that names the default it falls back to, and clears back to it', () => {
+      expect(yesNo['component']).toBe(Aglyn.FieldComponentType.SWITCH)
+      expect(yesNo['options']).toBeUndefined()
+      expect(noteWith(yesNo, undefined)).toBe('Uses the component default (Yes)')
+      // Once the page has chosen, the ✕ is what says the default is a click away.
+      expect(noteWith(yesNo, false)).toBeUndefined()
       expect(yesNo['clearable']).toBe(true)
     })
 
@@ -237,28 +246,22 @@ describe('buildInstancePropFields (AGL-1247)', () => {
       const [unset] = buildInstancePropFields([
         { name: 'hideMedia', type: 'boolean' },
       ]) as Array<Record<string, any>>
-      expect(unset['placeholder']).toBe('Use the component default (No)')
+      expect(noteWith(unset, undefined)).toBe('Uses the component default (No)')
+      expect(unset['unsetChecked']).toBe(false)
     })
 
-    it('stores a real boolean, and nothing at all for the default', () => {
-      const { parse, format } = yesNo['FieldProps']
-      expect(parse('true')).toBe(true)
+    it("shows the default's position while unset, and stores a real boolean", () => {
+      expect(yesNo['unsetChecked']).toBe(true)
+      const { parse } = yesNo['FieldProps']
+      expect(parse(true)).toBe(true)
+      expect(parse(false)).toBe(false)
+      // A value stored as text is read as the answer it spells.
       expect(parse('false')).toBe(false)
-      expect(parse(null)).toBeUndefined()
-      expect(parse('')).toBeUndefined()
-      expect(format(true)).toBe('true')
-      // A value stored as text still shows as the answer it spells.
-      expect(format('false')).toBe('false')
-      expect(format('off')).toBe('false')
-      expect(format(undefined)).toBeUndefined()
-      expect(format('')).toBeUndefined()
-    })
-
-    it('round-trips: what it stores, it shows again unchanged', () => {
-      const { parse, format } = yesNo['FieldProps']
-      for (const value of [true, false, undefined]) {
-        expect(parse(format(value))).toBe(value)
-      }
+      expect(parse('off')).toBe(false)
+      expect(parse('true')).toBe(true)
+      // The clear button's unset stays unset, handing the page back to the
+      // default rather than storing either answer.
+      expect(parse(undefined)).toBeUndefined()
     })
   })
 
@@ -515,7 +518,8 @@ describe('inheritedAltPatch (AGL-1896)', () => {
 })
 
 /**
- * The plain Screen picker names a target the host has lost (AGL-1893).
+ * The plain Screen picker names a target the host has lost (AGL-1893), and
+ * offers collection listings (AGL-2799).
  *
  * The `Link`-typed prop picker (`ScreenLinkValuePicker`) has kept and shown
  * an unresolvable value since AGL-1335. The `SCREEN_SELECT` attribute path —
@@ -525,78 +529,54 @@ describe('inheritedAltPatch (AGL-1896)', () => {
  * "no link set", while the element goes on behaving as linked.
  *
  * The decision itself is `unresolvedScreenOption`, pinned in
- * `screen-link-context.spec.ts` against every input that matters. What this
- * can only check is that the branch CALLS it — the "written but never read"
- * failure, where a helper is perfect and nothing consults it. The option
- * list is built inside a `useMemo` in an unexported component behind the
- * besigner's context stack, so it is read from the source rather than
- * rendered; that limit is the reason the logic lives in a pure function
- * somewhere it can be exercised for real.
+ * `screen-link-context.spec.ts`, and the option list `screenLinkTargetOptions`
+ * beside it. What is pinned here is that the panel's field resolver CONSULTS
+ * both, with the field's own stored value — run for real, now that the
+ * resolver is a pure function shared with component and layout properties.
  */
-describe('the Screen picker and a target the host has lost (AGL-1893)', () => {
-  const source = readFileSync(
-    join(__dirname, 'element-props-form.component.tsx'),
-    'utf8',
-  )
-  const screenSelectBranch = source.slice(
-    source.indexOf('FieldComponentType.SCREEN_SELECT'),
-    source.indexOf('FieldComponentType.PLUGIN_SETTINGS'),
-  )
+describe('the Screen picker names a lost target and offers listings (AGL-1893, AGL-2799)', () => {
+  const screens = {
+    home: '/',
+    pricing: 'pricing',
+    'collection:blog': 'blog',
+  }
+  const labels = { home: 'Home', pricing: 'Pricing', 'collection:blog': 'Blog' }
+  const resolve = (values: Record<string, unknown>, name = 'screenId') =>
+    resolveAttributeField(
+      { name, label: 'Screen', component: Aglyn.FieldComponentType.SCREEN_SELECT },
+      { screens, labels, values },
+    )
 
-  it('is looking at the right branch', () => {
-    // Guard on the guard: if this slice ever comes back empty the checks
-    // below would pass on nothing at all.
-    expect(screenSelectBranch).toContain("label: 'None (use external URL)'")
-    expect(screenSelectBranch.length).toBeGreaterThan(200)
+  it('builds its options with the shared target builder, listings included', () => {
+    const field = resolve({})
+    expect(field['component']).toBe(Aglyn.FieldComponentType.SELECT)
+    expect(field['options']).toEqual([
+      { value: '', label: 'None (use external URL)' },
+      ...Aglyn.screenLinkTargetOptions(screens, labels, 'path').map(
+        ({ value, label }) => ({ value, label }),
+      ),
+    ])
   })
 
-  it('consults the shared rule instead of dropping the value', () => {
-    expect(screenSelectBranch).toMatch(/(?:Aglyn\.)?\bunresolvedScreenOption\(/)
-    // Fed the field's own stored value — a call passing anything else could
-    // not tell a dead reference from a healthy one.
-    expect(screenSelectBranch).toMatch(/nodeProps\?\.\[field\.name\]/)
+  it("names a stored target the host no longer has, read from the field's own value", () => {
+    const options = resolve({ screenId: 'deleted-screen' })['options'] as Array<{
+      value: string
+      label: string
+    }>
+    expect(options[options.length - 1]).toEqual(
+      Aglyn.unresolvedScreenOption('deleted-screen', screens),
+    )
+    // A value at a nested path — a property's `propValues.<name>` — is read
+    // the same way.
+    const nested = resolve(
+      { propValues: { moreLink: 'deleted-screen' } },
+      'propValues.moreLink',
+    )['options'] as Array<{ value: string }>
+    expect(nested[nested.length - 1].value).toBe('deleted-screen')
   })
 
-  it('re-runs when the node whose value it reads changes', () => {
-    // Without `nodeProps` in the memo's dependencies the option would be
-    // computed once and then describe whichever node happened to be
-    // selected first.
-    const deps = source.slice(
-      source.indexOf('knownPluginInstallsVersion,', source.indexOf('}, [')),
-    )
-    const depsList = source.slice(
-      source.lastIndexOf('}, [', source.indexOf('knownPluginInstallsVersion,')),
-      source.indexOf('])', source.indexOf('knownPluginInstallsVersion,')),
-    )
-    expect(deps.length).toBeGreaterThan(0)
-    expect(depsList).toContain('nodeProps,')
-  })
-})
-
-/**
- * The attributes panel's Screen picker offers collection listings (AGL-2799).
- *
- * Read from the source for the reason the describe above gives. The option
- * list itself is pinned where it is built, in `screen-link-context.spec.ts`;
- * what only this can check is that the panel builds its list with that
- * function, rather than mapping the routing map by hand — the private copy
- * that had no way to learn a listing exists.
- */
-describe('the Screen picker offers collection listings (AGL-2799)', () => {
-  const source = readFileSync(
-    join(__dirname, 'element-props-form.component.tsx'),
-    'utf8',
-  )
-  const screenSelectBranch = source.slice(
-    source.indexOf('FieldComponentType.SCREEN_SELECT'),
-    source.indexOf('FieldComponentType.PLUGIN_SETTINGS'),
-  )
-
-  it('builds its options with the shared target builder', () => {
-    expect(screenSelectBranch).toMatch(
-      /\bscreenLinkTargetOptions\(\s*screens,\s*labels,/,
-    )
-    expect(screenSelectBranch).not.toMatch(/Object\.entries\(\s*screens/)
+  it('adds nothing for a target the host still has', () => {
+    expect((resolve({ screenId: 'pricing' })['options'] as unknown[]).length).toBe(4)
   })
 })
 

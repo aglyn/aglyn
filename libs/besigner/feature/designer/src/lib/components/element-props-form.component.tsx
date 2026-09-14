@@ -58,7 +58,13 @@ import {
   NODE_HIDE_UNLESS_PROP,
   normalizeBindingTokens,
   readInstanceIconValue,
+  readReusablePropValue,
   readYesNoValue,
+  reusablePropConditionValue,
+  reusablePropDefaultValue,
+  reusablePropKind,
+  reusablePropTakesSeveral,
+  evaluateReusablePropRule,
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
   ScreenLinkContext,
@@ -66,6 +72,7 @@ import {
   subscribeKnownPluginInstalls,
   unresolvedScreenOption,
 } from '@aglyn/aglyn'
+import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
   FormRenderer,
   type FormRendererProps,
@@ -74,13 +81,21 @@ import {
   FIELD_MAP_BREAKPOINT_SPAN,
   FIELD_MAP_CHECKBOX,
   FIELD_MAP_COLOR_PICKER,
+  FIELD_MAP_CSS_BORDER,
   FIELD_MAP_CSS_DIMENSION,
   FIELD_MAP_CSS_GRADIENT,
   FIELD_MAP_DATA_TABLE,
+  FIELD_MAP_DUAL_LIST_SELECT,
   FIELD_MAP_ICON_PICKER,
+  FIELD_MAP_PRESET_CHOICE,
+  FIELD_MAP_RADIO,
+  FIELD_MAP_SLIDER,
+  FIELD_MAP_THEME_SCALE,
+  FIELD_MAP_TOGGLE_BUTTON,
   simpleComponentMapper,
   useFormApi,
 } from '@aglyn/shared-ui-jsx-forms'
+import { useHostThemeDocument } from '@aglyn/shared-ui-theme'
 import {
   getMdiIconPath,
   iconPathPropName,
@@ -129,7 +144,9 @@ import {
   PROPERTY_BINDING_FIELD_COMPONENT,
   withPropertyBinding,
 } from './property-binding-field.component'
+import { readAttributeFieldValue } from '../utils/attribute-field-value'
 import { besignerDocsUrl } from '../utils/docs-help'
+import { buildStyleThemeScales } from '../utils/theme-scale-options'
 import { numericTextValue } from '../utils/numeric-text-value'
 import ElementInfoDetails from './element-info-details.component'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
@@ -151,6 +168,7 @@ export {
   ATTRIBUTE_COMMIT_DEBOUNCE_MS,
   useDebouncedCommit,
 } from '../hooks/use-debounced-commit'
+export { readAttributeFieldValue } from '../utils/attribute-field-value'
 import { useDebouncedCommit } from '../hooks/use-debounced-commit'
 import { useNodeWithMediaAssetFacts } from '../hooks/use-media-asset-facts-overlay'
 
@@ -313,6 +331,17 @@ export const elementPropsComponentMapper = {
   // here or the attributes memo's unknown-editor filter drops Span and
   // Offset from the panel entirely rather than throwing (AGL-584).
   [FieldComponentType.BREAKPOINT_SPAN]: FIELD_MAP_BREAKPOINT_SPAN,
+  // The rest of the attribute schema's value-holding field kinds (AGL-2893).
+  // A coded component could always declare them and the panel silently
+  // dropped them; a component or layout property of the same kind is edited
+  // with the same control, so each is registered here once, for both.
+  [FieldComponentType.CSS_BORDER]: FIELD_MAP_CSS_BORDER,
+  [FieldComponentType.PRESET_CHOICE]: FIELD_MAP_PRESET_CHOICE,
+  [FieldComponentType.THEME_SCALE]: FIELD_MAP_THEME_SCALE,
+  [FieldComponentType.RADIO]: FIELD_MAP_RADIO,
+  [FieldComponentType.SLIDER]: FIELD_MAP_SLIDER,
+  [FieldComponentType.TOGGLE_BUTTON]: FIELD_MAP_TOGGLE_BUTTON,
+  [FieldComponentType.DUAL_LIST_SELECT]: FIELD_MAP_DUAL_LIST_SELECT,
   // Pill-rendering editor for token-capable free-text attributes
   // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
   [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,
@@ -404,31 +433,17 @@ export function withAttributeFieldContext<T extends Record<string, unknown>>(
 }
 
 /**
- * A Yes / no property's stored value as its dropdown shows it: `'true'`,
- * `'false'`, or nothing chosen.
+ * The switch's position as the page stores it: a real boolean, read with the
+ * spellings every Yes / no reader accepts, so a value stored as the text
+ * `'false'` or `'off'` shows off rather than on.
  *
- * Read with the spellings every Yes / no reader accepts, so an instance that
- * stored the string `'false'` shows No rather than a blank dropdown. Unset is
- * `undefined` rather than `''`: an empty string matches no option, and the
- * dropdown would warn about a value it cannot show.
- */
-export function formatYesNoPropValue(value: unknown): string | undefined {
-  if (value == null || value === '') return undefined
-  const truth = readYesNoValue(value)
-  return truth === undefined ? undefined : truth ? 'true' : 'false'
-}
-
-/**
- * The dropdown's choice as the instance stores it: a real boolean, or unset.
- *
- * Unset is the whole point of the field — it is how a page hands the choice
- * back to the component's default — so everything that is not Yes or No,
- * including the clear button's `null`, removes the value.
+ * Unset is not a position a switch has, and it is the one a page needs to hand
+ * the choice back to the default — so the field's clear button is the way
+ * there, and it removes the value rather than storing either answer.
  */
 export function parseYesNoPropValue(value: unknown): boolean | undefined {
-  if (value === 'true' || value === true) return true
-  if (value === 'false' || value === false) return false
-  return undefined
+  if (value === undefined || value === null || value === '') return undefined
+  return readYesNoValue(value)
 }
 
 /**
@@ -499,10 +514,365 @@ export function parseIconPropValue(
   return iconPath ? { iconId: value, iconPath } : { iconId: value }
 }
 
+/** Who a property belongs to, in the words its fields speak. */
+export type PropertyOwnerNoun = 'component' | 'layout'
+
+/** How {@link buildPropertyField} draws one property. */
+export interface PropertyFieldOptions {
+  /** The form path the field saves to, e.g. `propValues.headline`. */
+  name: string
+  /**
+   * `value` for a page setting the property, where an empty field means "use
+   * the default" and says so; `default` for the Properties dialog declaring
+   * that default, where it means "no default".
+   */
+  role: 'value' | 'default'
+  /** Every property the owner declares, so a condition can read the others. */
+  declared?: readonly Aglyn.ReusableComponentProp[]
+  /** The form path a declared property's value sits at, by name. */
+  valuePath?: (propName: string) => string
+  noun?: PropertyOwnerNoun
+  /** Token-capable fields offer these in their `{}` menu. */
+  tokenOptions?: unknown
+  tokenLabelContext?: unknown
+  /** The site theme's scales, for the Theme scale and Theme preset kinds. */
+  themeScales?: Partial<Record<string, unknown>>
+}
+
+/** The attribute controls that draw the reset-to-unset corner button. */
+const CLEARABLE_FIELD_KINDS: ReadonlySet<string> = new Set([
+  FieldComponentType.CHECKBOX,
+  FieldComponentType.COLOR_PICKER,
+  FieldComponentType.CSS_BORDER,
+  FieldComponentType.CSS_DIMENSION,
+  FieldComponentType.CSS_GRADIENT,
+  FieldComponentType.ICON_PICKER,
+  FieldComponentType.PRESET_CHOICE,
+  FieldComponentType.RADIO,
+  FieldComponentType.SELECT,
+  FieldComponentType.SLIDER,
+  FieldComponentType.SWITCH,
+  FieldComponentType.THEME_SCALE,
+  FieldComponentType.TOGGLE_BUTTON,
+  // Drawn as dropdowns once resolved.
+  FieldComponentType.CATEGORY_SELECT,
+  FieldComponentType.COLLECTION_SELECT,
+  FieldComponentType.DATASET_FIELD_SELECT,
+  FieldComponentType.DATASET_SELECT,
+  FieldComponentType.FORM_SELECT,
+  FieldComponentType.NODE_SELECT,
+  FieldComponentType.PLUGIN_SELECT,
+  FieldComponentType.PRODUCT_SELECT,
+])
+
+/** A property's answers as a field's options: by label, falling back to the value. */
+function propertyAnswers(
+  prop: Aglyn.ReusableComponentProp,
+): Array<{ value: string; label: string }> {
+  return (prop.options ?? [])
+    .filter((option) => option?.value)
+    .map((option) => ({ value: option.value, label: option.label || option.value }))
+}
+
+/**
+ * The line under a page's field naming the default an empty field falls back
+ * to, or `undefined` where there is none to name or the control names it
+ * itself.
+ */
+function describePropertyDefault(
+  prop: Aglyn.ReusableComponentProp,
+  answers: Array<{ value: string; label: string }>,
+): string | undefined {
+  const fallback = reusablePropDefaultValue(prop)
+  if (fallback === undefined) return undefined
+  if (answers.length) {
+    const chosen = (Array.isArray(fallback) ? fallback : [fallback])
+      .map((value) => answers.find((answer) => answer.value === value)?.label)
+      .filter(Boolean)
+    return chosen.length ? `Defaults to ${chosen.join(', ')}` : undefined
+  }
+  const text = Array.isArray(fallback) ? fallback.join(', ') : String(fallback)
+  return text ? `Defaults to "${text}"` : undefined
+}
+
+/**
+ * A property's condition as the form renderer evaluates one (AGL-2893): each
+ * rule reads the named property's field, and compares what that property is
+ * worth on the page — its own value, else its default — the way the published
+ * page compares it, so the field shows exactly where the value applies.
+ *
+ * The operators are data-driven-forms' own; each rule becomes a function `is`
+ * only so an unset field can be read as its default first.
+ */
+export function propertyFieldCondition(
+  condition: Aglyn.ReusableComponentProp['condition'],
+  declared: readonly Aglyn.ReusableComponentProp[],
+  valuePath: (propName: string) => string,
+): unknown {
+  if (condition == null) return undefined
+  const byName = new Map(declared.map((prop) => [prop.name, prop]))
+  const convert = (entry: unknown): unknown => {
+    if (Array.isArray(entry)) return entry.map(convert)
+    if (!entry || typeof entry !== 'object') return entry
+    if ('and' in entry) {
+      const and = (entry as { and: unknown }).and
+      return { and: (Array.isArray(and) ? and : [and]).map(convert) }
+    }
+    if ('or' in entry) {
+      const or = (entry as { or: unknown }).or
+      return { or: (Array.isArray(or) ? or : [or]).map(convert) }
+    }
+    if ('not' in entry) return { not: convert((entry as { not: unknown }).not) }
+    const { when, ...rule } = entry as Aglyn.ReusableComponentPropRule
+    const target = byName.get(when)
+    return {
+      when: valuePath(when),
+      is: (value: unknown) => {
+        const own = readReusablePropValue(value, target)
+        return evaluateReusablePropRule(
+          rule,
+          reusablePropConditionValue(
+            target,
+            own === undefined ? reusablePropDefaultValue(target) : own,
+          ),
+        )
+      },
+    }
+  }
+  return convert(condition)
+}
+
+/**
+ * One component or layout property as an Attributes field (AGL-1247,
+ * AGL-2893): the attribute schema field its kind names — a switch for a
+ * Yes / no, the icon picker for an Icon, the color picker for a Color — with
+ * the kind's options and settings, and the property's condition.
+ *
+ * The result is an attribute field like any coded component's, so it is
+ * finished by {@link resolveAttributeField} and drawn by
+ * `elementPropsComponentMapper`: the Properties dialog's Default, an
+ * instance's Attributes and a screen's layout values all edit a property with
+ * the control a coded component's attribute of that kind gets.
+ */
+export function buildPropertyField(
+  prop: Aglyn.ReusableComponentProp,
+  options: PropertyFieldOptions,
+): Record<string, unknown> {
+  const {
+    name,
+    role,
+    declared = [],
+    valuePath = (propName: string) => propName,
+    noun = 'component',
+    tokenOptions,
+    tokenLabelContext,
+    themeScales,
+  } = options
+  const kind = reusablePropKind(prop.type)
+  const type = prop.type ?? 'text'
+  const label = prop.label || prop.name
+  const settings = prop.settings ?? {}
+  const answers = propertyAnswers(prop)
+  const pageSets = role === 'value'
+  const defaultNote = pageSets ? describePropertyDefault(prop, answers) : undefined
+  const condition = pageSets
+    ? propertyFieldCondition(prop.condition, declared, valuePath)
+    : undefined
+  const base: Record<string, unknown> = {
+    name,
+    label,
+    component: kind.field,
+    ...(kind.fieldProps ?? {}),
+    ...(prop.description
+      ? { help: { title: label, excerpt: prop.description } }
+      : {}),
+    ...(defaultNote ? { description: defaultNote } : {}),
+    ...(condition ? { condition } : {}),
+    // The corner ✕ that hands a value back to unset, on the controls that
+    // draw one; a free-text field empties by being emptied.
+    ...(CLEARABLE_FIELD_KINDS.has(kind.field) ? { clearable: true } : {}),
+  }
+  const ownersDefault = `the ${noun} default`
+
+  switch (type) {
+    case 'boolean':
+    case FieldComponentType.CHECKBOX: {
+      if (reusablePropTakesSeveral(prop)) {
+        return { ...base, clearable: undefined, options: answers }
+      }
+      // Yes, No, or the owner's default — three answers, and a switch shows
+      // two. So an empty field shows the position of the default it renders
+      // with, says that is where the position comes from, and the corner ✕
+      // is the way back to it once the page has chosen.
+      const fallback = pageSets ? prop.defaultValue : undefined
+      const fallbackAnswer = readYesNoValue(fallback) === true ? 'Yes' : 'No'
+      return {
+        ...base,
+        description: undefined,
+        // The default's position while the page has set nothing, since that
+        // is what the page renders.
+        unsetChecked: readYesNoValue(fallback) === true,
+        // Read with the spellings every Yes / no reader accepts, so a value
+        // stored as the text `'false'` shows off rather than on.
+        FieldProps: { parse: parseYesNoPropValue },
+        ...(pageSets
+          ? {
+              resolveProps: (
+                _props: unknown,
+                _field: unknown,
+                formOptions?: { getFieldState?: (path: string) => { value?: unknown } | undefined },
+              ) => {
+                const stored = formOptions?.getFieldState?.(name)?.value
+                return stored === undefined || stored === null || stored === ''
+                  ? { description: `Uses ${ownersDefault} (${fallbackAnswer})` }
+                  : {}
+              },
+            }
+          : {}),
+      }
+    }
+    case 'choice': {
+      const several = reusablePropTakesSeveral(prop)
+      const fallback = reusablePropDefaultValue(prop)
+      const fallbackLabels = (Array.isArray(fallback) ? fallback : [fallback])
+        .map((value) => answers.find((answer) => answer.value === value)?.label)
+        .filter(Boolean)
+      return {
+        ...base,
+        options: answers,
+        ...(several ? { isMulti: true } : {}),
+        description: undefined,
+        placeholder: pageSets
+          ? fallbackLabels.length
+            ? `Use ${ownersDefault} (${fallbackLabels.join(', ')})`
+            : 'Not set'
+          : 'No default',
+      }
+    }
+    case FieldComponentType.RADIO:
+    case FieldComponentType.TOGGLE_BUTTON:
+    case FieldComponentType.DUAL_LIST_SELECT:
+      return { ...base, options: answers }
+    case 'icon':
+      // An icon has no placeholder to show, so what unset means is said in
+      // the help tip, and the corner ✕ is the way back to it.
+      return {
+        ...base,
+        description: undefined,
+        ...(pageSets
+          ? {
+              help: {
+                title: label,
+                excerpt: [
+                  prop.description,
+                  prop.defaultValue
+                    ? `Leave it unset to show the ${noun}'s default icon.`
+                    : 'Leave it unset to show no icon.',
+                ]
+                  .filter(Boolean)
+                  .join(' '),
+              },
+            }
+          : {}),
+        FieldProps: {
+          format: formatIconPropValue,
+          parse: parseIconPropValue,
+        },
+      }
+    case 'href':
+      // The screen picker a Button's own "Link to screen" field offers, with
+      // the external-address escape hatch built in (AGL-1335). The default
+      // travels under its own key: `defaultValue` would be read by the form
+      // renderer as an initial value and saved onto every instance.
+      return {
+        ...base,
+        component: SCREEN_LINK_FIELD_COMPONENT,
+        description: undefined,
+        ...(pageSets
+          ? { propDefault: prop.defaultValue, propDefaultOwner: noun }
+          : { emptyLabel: 'No default' }),
+      }
+    case 'number':
+      return {
+        ...base,
+        ...(pageSets && prop.defaultValue !== undefined
+          ? { placeholder: String(prop.defaultValue) }
+          : {}),
+      }
+    case FieldComponentType.SLIDER:
+      return {
+        ...base,
+        ...(['min', 'max', 'step'] as const).reduce<Record<string, number>>(
+          (range, key) => {
+            const numeric = Number(settings[key])
+            if (settings[key] !== undefined && Number.isFinite(numeric)) {
+              range[key] = numeric
+            }
+            return range
+          },
+          {},
+        ),
+      }
+    case FieldComponentType.THEME_SCALE:
+      return {
+        ...base,
+        scaleOptions: themeScales?.[String(settings['scale'] ?? '')] ?? [],
+      }
+    case FieldComponentType.PRESET_CHOICE: {
+      const presets = String(settings['presets'] ?? '')
+      return {
+        ...base,
+        choices: themeScales?.[presets] ?? [],
+        ...(presets === 'shadow' || presets === 'fontFamily'
+          ? { previewKind: presets === 'shadow' ? 'shadow' : 'font' }
+          : {}),
+      }
+    }
+    case FieldComponentType.DATASET_FIELD_SELECT:
+      return {
+        ...base,
+        ...(settings['datasetId'] ? { datasetId: String(settings['datasetId']) } : {}),
+      }
+    case FieldComponentType.PLUGIN_SETTINGS: {
+      const pluginProperty = String(settings['pluginProperty'] ?? '')
+      const plugin = declared.find((entry) => entry.name === pluginProperty)
+      const pluginDefault = reusablePropDefaultValue(plugin)
+      return {
+        ...base,
+        ...(pluginProperty
+          ? {
+              listingField: pageSets ? valuePath(pluginProperty) : undefined,
+              listingFallback:
+                typeof pluginDefault === 'string' ? pluginDefault : undefined,
+            }
+          : {}),
+      }
+    }
+    case 'text':
+    case 'richText':
+    case 'image':
+      // Token-capable, so an override can itself carry a `{{var:id}}`: the
+      // graft substitutes first and the binding resolver runs after it, so
+      // those still resolve.
+      return {
+        ...base,
+        ...(pageSets && prop.defaultValue !== undefined
+          ? { placeholder: String(prop.defaultValue) }
+          : {}),
+        tokenOptions,
+        tokenLabelContext,
+      }
+    default:
+      return base
+  }
+}
+
 /**
  * One Attributes field per prop a reusable component declares (AGL-1247),
  * so the same hero can carry different copy on eleven pages instead of
- * being copied onto each.
+ * being copied onto each — each drawn by {@link buildPropertyField} and
+ * finished by {@link resolveAttributeField}, like the component's own
+ * attributes.
  *
  * Fields are named for the `propValues.<name>` path the graft reads, so the
  * form round-trips them through final-form's nested-path handling with no
@@ -513,131 +883,263 @@ export function buildInstancePropFields(
   declared: Aglyn.ReusableComponentProp[] | undefined,
   tokenOptions?: unknown,
   tokenLabelContext?: unknown,
+  context?: AttributeFieldResolveContext & {
+    themeScales?: Partial<Record<string, unknown>>
+  },
+): Array<Record<string, unknown>> {
+  return buildPropertyValueFields(declared, {
+    pathOf: (name) => `${REUSABLE_INSTANCE_PROP_VALUES_KEY}.${name}`,
+    noun: 'component',
+    context: { ...context, insertOptions: tokenOptions, tokenLabelContext },
+    themeScales: context?.themeScales,
+  })
+}
+
+/**
+ * One field per declared property for a page setting their values, at the
+ * paths `pathOf` names — an instance's `propValues`, or a screen's values for
+ * its layout.
+ */
+export function buildPropertyValueFields(
+  declared: readonly Aglyn.ReusableComponentProp[] | undefined,
+  options: {
+    pathOf: (propName: string) => string
+    noun: PropertyOwnerNoun
+    context?: AttributeFieldResolveContext
+    themeScales?: Partial<Record<string, unknown>>
+  },
 ): Array<Record<string, unknown>> {
   if (!declared?.length) return []
-  return declared
-    .filter((prop) => COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? ''))
-    .map((prop) => {
-      const base = {
-        name: `${REUSABLE_INSTANCE_PROP_VALUES_KEY}.${prop.name}`,
-        label: prop.label || prop.name,
-        // The definition's default shows as the field's placeholder, which
-        // is literally true: leave the field empty and that is what the
-        // page renders.
-        placeholder: prop.defaultValue,
-        ...(prop.defaultValue && {
-          description: `Defaults to "${prop.defaultValue}"`,
-        }),
-      }
-      switch (prop.type) {
-        case 'boolean':
-          // Yes, No, or the component's default — three answers, which a
-          // checkbox cannot give. Unticked read as No on a page rendering a
-          // default of Yes, and once ticked the field had no way back to
-          // the default at all. The corner ✕ is that way back here.
-          return {
-            ...base,
-            component: FieldComponentType.SELECT,
-            options: [
-              { value: 'true', label: 'Yes' },
-              { value: 'false', label: 'No' },
-            ],
-            placeholder: `Use the component default (${
-              readYesNoValue(prop.defaultValue) === true ? 'Yes' : 'No'
-            })`,
-            description: undefined,
-            clearable: true,
-            FieldProps: {
-              format: formatYesNoPropValue,
-              parse: parseYesNoPropValue,
-            },
-          }
-        case 'choice': {
-          // The component's own answers, by label. Unset is the default
-          // again, the way it is for a Yes / no: the placeholder names it and
-          // the corner ✕ returns to it.
-          const choices = (prop.options ?? [])
-            .filter((option) => option?.value)
-            .map((option) => ({
-              value: option.value,
-              label: option.label || option.value,
-            }))
-          const fallback = choices.find(
-            (option) => option.value === prop.defaultValue,
-          )
-          return {
-            ...base,
-            component: FieldComponentType.SELECT,
-            options: choices,
-            placeholder: fallback
-              ? `Use the component default (${fallback.label})`
-              : 'Not set',
-            description: undefined,
-            clearable: true,
-          }
-        }
-        case 'icon':
-          // The picker the Icon element uses, storing the pick with its path
-          // (see `parseIconPropValue`). An icon has no placeholder to show,
-          // so what unset means is said in the help tip, and the corner ✕
-          // is the way back to it.
-          return {
-            ...base,
-            component: FieldComponentType.ICON_PICKER,
-            placeholder: undefined,
-            description: undefined,
-            help: {
-              title: base.label,
-              excerpt: prop.defaultValue
-                ? "Leave it unset to show the component's default icon."
-                : 'Leave it unset to show no icon.',
-            },
-            clearable: true,
-            FieldProps: {
-              format: formatIconPropValue,
-              parse: parseIconPropValue,
-            },
-          }
-        case 'number':
-          return {
-            ...base,
-            component: FieldComponentType.TEXT_FIELD,
-            type: 'number',
-          }
-        case 'href':
-          // The screen picker the Button's own "Link to screen" field uses
-          // (AGL-1335). A `Link` prop was a text box at both ends, so nine
-          // live CTAs stored the literal `/pricing` and a rename of that
-          // screen would have broken all nine silently — the exact
-          // regression the prop introduced against the field it replaced.
-          return {
-            ...base,
-            component: SCREEN_LINK_FIELD_COMPONENT,
-            // The default travels under its own key, and the generic
-            // `Defaults to "…"` text is dropped: the picker names it
-            // itself, resolving a screen reference to the screen's NAME.
-            // `defaultValue` is NOT the key to use — data-driven-forms
-            // treats that as an initial value, which would persist the
-            // component's default onto every instance that touched it.
-            propDefault: prop.defaultValue,
-            description: undefined,
-          }
-        case 'richText':
-        case 'text':
-        case 'image':
-        default:
-          // Token-capable, so an override can itself carry a `{{var:id}}`:
-          // the graft substitutes first and the binding resolver runs after
-          // it, so those still resolve.
-          return {
-            ...base,
-            component: TOKEN_TEXT_FIELD_COMPONENT,
-            multiline: prop.type === 'richText',
-            tokenOptions,
-            tokenLabelContext,
-          }
-      }
-    })
+  const valid = declared.filter((prop) =>
+    COMPONENT_PROP_NAME_PATTERN.test(prop?.name ?? ''),
+  )
+  return valid.map((prop) =>
+    resolveAttributeField(
+      buildPropertyField(prop, {
+        name: options.pathOf(prop.name),
+        role: 'value',
+        declared: valid,
+        valuePath: options.pathOf,
+        noun: options.noun,
+        tokenOptions: options.context?.insertOptions,
+        tokenLabelContext: options.context?.tokenLabelContext,
+        themeScales: options.themeScales,
+      }),
+      options.context,
+    ),
+  )
+}
+
+/** What {@link resolveAttributeField} reads beyond the field itself. */
+export interface AttributeFieldResolveContext {
+  /** The routing map and screen names, for Screen pickers. */
+  screens?: Aglyn.ScreenLinkContextValue['screens']
+  labels?: Aglyn.ScreenLinkContextValue['labels']
+  /** The values the form holds, so a picker can name what is stored. */
+  values?: Record<string, unknown> | null
+  entityOptions?: Aglyn.EntityPickerContextValue
+  /** The canvas's other elements, for element pickers. */
+  nodeOptions?: ReadonlyArray<{ value: string; label: string }>
+  /** The dataset of the nearest ancestor that chose one. */
+  ancestorDatasetId?: string
+  /** Whether the edited element's text is formatted markup. */
+  hasFormattedText?: boolean
+  insertOptions?: unknown
+  tokenLabelContext?: unknown
+  /**
+   * Bumped when the installed-plugin set changes, so a memo holding this
+   * context re-resolves the Plugin picker (AGL-1030).
+   */
+  pluginInstallsVersion?: number
+}
+
+/**
+ * An attribute field as the panel draws it: a declared kind that needs the
+ * site's data resolved into a dropdown the form renderer knows, a free-text
+ * field upgraded to the token editor, and every other field as declared.
+ *
+ * Pure, and the one place this happens — the element's own attributes, a
+ * component instance's properties and a screen's layout values all pass
+ * through it, so a kind cannot draw one way as an attribute and another as a
+ * property.
+ */
+export function resolveAttributeField<T extends Record<string, any>>(
+  field: T,
+  context: AttributeFieldResolveContext = {},
+): Record<string, any> {
+  const {
+    screens,
+    labels,
+    values,
+    entityOptions = {} as Aglyn.EntityPickerContextValue,
+    nodeOptions = [],
+    ancestorDatasetId,
+    hasFormattedText,
+    insertOptions,
+    tokenLabelContext,
+  } = context
+  const stored = readAttributeFieldValue(values, field.name)
+  if (field.component === FieldComponentType.SCREEN_SELECT) {
+    // The host's screens by path, then its collection listings
+    // (AGL-2799) — built by the function the `Link`-typed prop picker
+    // uses too, so neither can offer a target the other does not.
+    const options = [
+      { value: '', label: 'None (use external URL)' },
+      ...screenLinkTargetOptions(screens, labels, 'path').map(
+        ({ value, label }) => ({ value, label }),
+      ),
+    ]
+    // A stored target the host no longer has renders as a BLANK
+    // picker, which reads as "no link set" while the element still
+    // behaves as linked (AGL-1893). Naming it is the only way the
+    // author finds out before publishing rather than after.
+    const stranded = unresolvedScreenOption(stored, screens)
+    if (stranded && !options.some((o) => o.value === stranded.value)) {
+      options.push(stranded)
+    }
+    return {
+      ...field,
+      component: FieldComponentType.SELECT,
+      options,
+    }
+  }
+  if (field.component === FieldComponentType.PLUGIN_SETTINGS) {
+    // Rendered by a bespoke editor rather than expanded into N fields
+    // here: the settings live in ONE stored JSON attribute, and the
+    // editor reads the sibling plugin selection to know which manifest's
+    // props to offer.
+    return {
+      ...field,
+      component: PLUGIN_SETTINGS_FIELD_COMPONENT,
+    }
+  }
+  if (field.component === FieldComponentType.PLUGIN_SELECT) {
+    // Installed plugins (AGL-1030), from the set the console publishes
+    // for the drawer — host and org pins both, host winning where it
+    // shadows. No extra read: the pins already carry the display name.
+    const installs = getKnownPluginInstalls()
+    return {
+      ...field,
+      component: FieldComponentType.SELECT,
+      options: [
+        {
+          value: '',
+          label: installs.length
+            ? 'None'
+            : 'No plugins installed for this site',
+        },
+        ...installs.map((install) => ({
+          value: install.listingId,
+          label:
+            install.displayName ??
+            /* An install with no name is still choosable — better a raw
+               id in one option than a plugin that cannot be placed. */
+            install.listingId,
+        })),
+      ],
+    }
+  }
+  if (field.component === FieldComponentType.NODE_SELECT) {
+    // Canvas-element picker (AGL-557).
+    return {
+      ...field,
+      component: FieldComponentType.SELECT,
+      options: [{ value: '', label: 'None' }, ...nodeOptions],
+    }
+  }
+  if (field.component === FieldComponentType.DATASET_FIELD_SELECT) {
+    // Model order, never alphabetized — it mirrors the schema dialog. A
+    // field naming its own dataset (a Dataset field property) reads that
+    // one; every other reads the nearest ancestor's.
+    const datasetId =
+      typeof field['datasetId'] === 'string' && field['datasetId']
+        ? field['datasetId']
+        : ancestorDatasetId
+    const modelFields = datasetId
+      ? entityOptions.datasetFields?.[datasetId] ?? []
+      : []
+    return {
+      ...field,
+      component: FieldComponentType.SELECT,
+      options: [
+        {
+          value: '',
+          label: modelFields.length
+            ? 'None (match by field name)'
+            : 'No dataset selected on the form',
+        },
+        ...modelFields.map((modelField) => ({
+          value: modelField.id,
+          label: modelField.label,
+        })),
+      ],
+    }
+  }
+  // Id-based entity pickers (AGL-343/344), including the Form element's
+  // `formId`. Recognised by the attribute's declared type, so a surface
+  // whose picker context is missing renders a picker that SAYS so instead
+  // of one that is not there. The stored value travels with the field: a
+  // selection outside the browse window is offered from its own keyed read,
+  // so a bound element never renders as unbound.
+  const entityKind = ENTITY_PICKER_KINDS[field.component as Aglyn.FieldComponentType]
+  if (entityKind) {
+    return buildEntityPickerField(
+      field as unknown as Aglyn.AglynAttributeSchema,
+      entityKind,
+      entityOptions,
+      stored,
+    )
+  }
+  if (
+    field.component === FieldComponentType.DATE_PICKER ||
+    field.component === FieldComponentType.TIME_PICKER
+  ) {
+    // The browser's own date and time inputs, storing `YYYY-MM-DD` and
+    // `HH:mm` — the text every renderer reads (a Video's publication date is
+    // one). The date-picker editors hand back a date object instead, and need
+    // a date adapter the besigner does not load, so a field declared as one
+    // is drawn as the input that stores what it means.
+    return {
+      ...field,
+      component: FieldComponentType.TEXT_FIELD,
+      type: field.component === FieldComponentType.DATE_PICKER ? 'date' : 'time',
+    }
+  }
+  // Formatted text is owned by the canvas (AGL-2486). Shown, with
+  // the reason, rather than silently editable into a prop the
+  // renderer ignores.
+  if (field.name === 'children' && hasFormattedText) {
+    return {
+      ...field,
+      component: TOKEN_TEXT_FIELD_COMPONENT,
+      multiline: true,
+      isReadOnly: true,
+      description:
+        'This text is formatted — double-click the element on the ' +
+        'canvas to edit it. Remove formatting to edit it here.',
+      tokenOptions: insertOptions,
+      tokenLabelContext,
+    }
+  }
+  if (
+    (field.component === FieldComponentType.TEXT_FIELD ||
+      field.component === FieldComponentType.TEXTAREA) &&
+    !(field as any).isReadOnly
+  ) {
+    // Token-capable free-text fields (children, href, src, …)
+    // render through the pill editor (AGL-586): stored `{{...}}`
+    // tokens display as named colored pills, the {x} adornment
+    // inserts at the caret (AGL-583), and raw {{...}} typing keeps
+    // working (it materializes into a pill on blur).
+    return {
+      ...field,
+      component: TOKEN_TEXT_FIELD_COMPONENT,
+      multiline: field.component === FieldComponentType.TEXTAREA,
+      tokenOptions: field['tokenOptions'] ?? insertOptions,
+      tokenLabelContext: field['tokenLabelContext'] ?? tokenLabelContext,
+    }
+  }
+  return field
 }
 
 /**
@@ -1228,6 +1730,36 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const nodeProps = node?.props
     const deleteElementCallback = useDeleteElementCallback()
     const rawAttributes = schema?.attributes
+    // Reusable-component flows (AGL-35): actions appear only when the host
+    // app provides callbacks; locked nodes (layout chrome) never promote.
+    const { onPromote, onDemote, onEditComponent, definitions } = useContext(
+      ComponentPromotionContext,
+    )
+    const isInstance =
+      node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
+    const unlocked = Besigner.dnd.canDragNode(node)
+    // The properties the placed component declares (AGL-1247), when this is
+    // an instance.
+    const instanceDeclared = useMemo(() => {
+      if (!isInstance) return undefined
+      const refId = (node?.props as { refId?: string } | undefined)?.refId
+      return refId ? definitions?.[refId]?.props : undefined
+    }, [isInstance, node, definitions])
+    // Every field the panel will draw, as its schema DECLARES it — the
+    // element's attributes and the instance's properties as the attribute
+    // kinds they are edited with. What the panel reads for its pickers
+    // (entity lists, canvas elements, the ancestor dataset) follows this, so
+    // a property of a picker kind is fed exactly as an attribute of one.
+    const demandAttributes = useMemo<Aglyn.AglynAttributeSchema[]>(
+      () => [
+        ...(rawAttributes ?? []),
+        ...(instanceDeclared ?? []).map((prop) => ({
+          name: `${REUSABLE_INSTANCE_PROP_VALUES_KEY}.${prop?.name}`,
+          component: reusablePropKind(prop?.type).field,
+        })),
+      ],
+      [rawAttributes, instanceDeclared],
+    )
     // Screen-select fields can't carry static options (the host's screens
     // are only known at edit time), so resolve them here from the routing
     // map + labels the console provides via ScreenLinkContext. Entity
@@ -1252,10 +1784,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const requestEntities = entityOptions.request
     useEffect(() => {
       if (!requestEntities) return
-      for (const kind of entityKindsForAttributes(rawAttributes)) {
+      for (const kind of entityKindsForAttributes(demandAttributes)) {
         requestEntities(kind)
       }
-    }, [rawAttributes, requestEntities])
+    }, [demandAttributes, requestEntities])
     /**
      * Learn the name of the entity this node is ALREADY bound to.
      *
@@ -1268,24 +1800,24 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const resolveEntity = entityOptions.resolve
     useEffect(() => {
       if (!resolveEntity) return
-      for (const field of rawAttributes ?? []) {
+      for (const field of demandAttributes) {
         const kind = ENTITY_PICKER_KINDS[field.component]
         if (!kind) continue
         const id = entityValueNeedsResolution(
           entityOptions,
           kind,
-          nodeProps?.[field.name],
+          readAttributeFieldValue(nodeProps, field.name),
         )
         if (id) resolveEntity(kind, id)
       }
-    }, [rawAttributes, nodeProps, entityOptions, resolveEntity])
+    }, [demandAttributes, nodeProps, entityOptions, resolveEntity])
 
     // Canvas-node options for NODE_SELECT attributes (AGL-557): every
     // other element on the canvas, labeled by component name + a text
     // snippet, with a short id suffix to tell repeats apart. The edited
     // node itself is excluded (revealing yourself is never meaningful).
     const nodeOptions = useMemo(() => {
-      const wantsNodes = (rawAttributes ?? []).some(
+      const wantsNodes = demandAttributes.some(
         (field) =>
           field.component === FieldComponentType.NODE_SELECT,
       )
@@ -1315,12 +1847,12 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           }
         })
         .sort((a, b) => a.label.localeCompare(b.label))
-    }, [rawAttributes, node?.$id])
+    }, [demandAttributes, node?.$id])
     // Dataset-field selects (AGL-556) list the model fields of the nearest
     // ancestor's chosen dataset (e.g. the form field's parent form). The
     // ancestor persists the dataset id; legacy nodes carrying only a name
     // resolve it by matching the current display labels.
-    const hasDatasetFieldSelect = (rawAttributes ?? []).some(
+    const hasDatasetFieldSelect = demandAttributes.some(
       (field) =>
         field.component === FieldComponentType.DATASET_FIELD_SELECT,
     )
@@ -1381,8 +1913,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // keys `{{prop.*}}` off. It decides whether a field with no text box can
     // be bound to a property, and whether the visibility directives below
     // are offered.
-    const { componentProps: editedComponentProps } =
-      useContext(BindingPickerContext)
+    const {
+      componentProps: editedComponentProps,
+      componentPropsOwner,
+    } = useContext(BindingPickerContext)
 
     // What an attribute's `resolveProps` may read beyond the element's props:
     // the element itself and the canvas lookup for what is inside it.
@@ -1390,6 +1924,52 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       () =>
         node ? { node, getNode: (id: string) => canvas.getNode(id) } : undefined,
       [node],
+    )
+
+    // The site theme's own scales, for Theme scale and Theme preset
+    // properties — the lists the Styles panel offers through the same
+    // controls (AGL-2486).
+    const hostThemeDoc = useHostThemeDocument()
+    const siteTheme = useAglynSiteTheme({ theme: hostThemeDoc })
+    const themeScales = useMemo(
+      () => buildStyleThemeScales(siteTheme as any) as unknown as Record<string, unknown>,
+      [siteTheme],
+    )
+
+    // What `resolveAttributeField` reads beyond each field. Its identity
+    // moves when a different node is selected or a save commits — the form
+    // owns the values the author is typing, so not on every keystroke.
+    const resolveContext = useMemo<AttributeFieldResolveContext>(
+      () => ({
+        screens,
+        labels,
+        // Read by the Screen pickers to name a target the map has lost
+        // (AGL-1893), and by entity pickers to offer what is stored.
+        values: nodeProps,
+        entityOptions,
+        nodeOptions,
+        ancestorDatasetId,
+        hasFormattedText,
+        insertOptions,
+        tokenLabelContext,
+        // The installed-plugin set arrives from a live subscription and can
+        // land after this memo first ran (AGL-1030) — without it the picker
+        // would sit on "No plugins installed for this site" until the panel
+        // remounted.
+        pluginInstallsVersion: knownPluginInstallsVersion,
+      }),
+      [
+        screens,
+        labels,
+        nodeProps,
+        entityOptions,
+        nodeOptions,
+        ancestorDatasetId,
+        hasFormattedText,
+        insertOptions,
+        tokenLabelContext,
+        knownPluginInstallsVersion,
+      ],
     )
 
     const attributes = useMemo(() => {
@@ -1409,157 +1989,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             }
           : field
 
-      return (rawAttributes ?? []).map(withAttributeHelp).map((field) => {
-        if (field.component === FieldComponentType.SCREEN_SELECT) {
-          // The host's screens by path, then its collection listings
-          // (AGL-2799) — built by the function the `Link`-typed prop picker
-          // uses too, so neither can offer a target the other does not.
-          const options = [
-            { value: '', label: 'None (use external URL)' },
-            ...screenLinkTargetOptions(screens, labels, 'path').map(
-              ({ value, label }) => ({ value, label }),
-            ),
-          ]
-          // A stored target the host no longer has renders as a BLANK
-          // picker, which reads as "no link set" while the element still
-          // behaves as linked (AGL-1893). Naming it is the only way the
-          // author finds out before publishing rather than after.
-          const stranded = unresolvedScreenOption(
-            nodeProps?.[field.name],
-            screens,
-          )
-          if (stranded && !options.some((o) => o.value === stranded.value)) {
-            options.push(stranded)
-          }
-          return {
-            ...field,
-            component: FieldComponentType.SELECT,
-            options,
-          }
-        }
-        if (field.component === FieldComponentType.PLUGIN_SETTINGS) {
-          // Rendered by a bespoke editor rather than expanded into N fields
-          // here: the settings live in ONE stored JSON attribute, and the
-          // editor reads the sibling `listingId` to know which manifest's
-          // props to offer. Expanding in this memo would need the field list
-          // to change identity whenever the selection did, which is exactly
-          // the render-loop shape the panel avoids elsewhere.
-          return {
-            ...field,
-            component: PLUGIN_SETTINGS_FIELD_COMPONENT,
-          }
-        }
-        if (field.component === FieldComponentType.PLUGIN_SELECT) {
-          // Installed plugins (AGL-1030), from the set the console publishes
-          // for the drawer — host and org pins both, host winning where it
-          // shadows. No extra read: the pins already carry the display name.
-          const installs = getKnownPluginInstalls()
-          return {
-            ...field,
-            component: FieldComponentType.SELECT,
-            options: [
-              {
-                value: '',
-                label: installs.length
-                  ? 'None'
-                  : 'No plugins installed for this site',
-              },
-              ...installs.map((install) => ({
-                value: install.listingId,
-                label:
-                  install.displayName ??
-                  /* An install with no name is still choosable — better a raw
-                     id in one option than a plugin that cannot be placed. */
-                  install.listingId,
-              })),
-            ],
-          }
-        }
-        if (field.component === FieldComponentType.NODE_SELECT) {
-          // Canvas-element picker (AGL-557), resolved above.
-          return {
-            ...field,
-            component: FieldComponentType.SELECT,
-            options: [{ value: '', label: 'None' }, ...nodeOptions],
-          }
-        }
-        if (
-          field.component === FieldComponentType.DATASET_FIELD_SELECT
-        ) {
-          // Model order, never alphabetized — it mirrors the schema dialog.
-          const modelFields = ancestorDatasetId
-            ? entityOptions.datasetFields?.[ancestorDatasetId] ?? []
-            : []
-          return {
-            ...field,
-            component: FieldComponentType.SELECT,
-            options: [
-              {
-                value: '',
-                label: modelFields.length
-                  ? 'None (match by field name)'
-                  : 'No dataset selected on the form',
-              },
-              ...modelFields.map((modelField) => ({
-                value: modelField.id,
-                label: modelField.label,
-              })),
-            ],
-          }
-        }
-        // Id-based entity pickers (AGL-343/344), including the Form
-        // element's `formId`. Recognised by the attribute's declared type,
-        // so a surface whose picker context is missing renders a picker
-        // that SAYS so instead of one that is not there.
-        const entityKind = ENTITY_PICKER_KINDS[field.component]
-        if (entityKind) {
-          // The stored value travels with the field: a selection outside the
-          // browse window is offered from its own keyed read, so a bound
-          // element never renders as unbound.
-          return buildEntityPickerField(
-            field,
-            entityKind,
-            entityOptions,
-            nodeProps?.[field.name],
-          )
-        }
-        // Formatted text is owned by the canvas (AGL-2486). Shown, with
-        // the reason, rather than silently editable into a prop the
-        // renderer ignores.
-        if (field.name === 'children' && hasFormattedText) {
-          return {
-            ...field,
-            component: TOKEN_TEXT_FIELD_COMPONENT,
-            multiline: true,
-            isReadOnly: true,
-            description:
-              'This text is formatted — double-click the element on the ' +
-              'canvas to edit it. Remove formatting to edit it here.',
-            tokenOptions: insertOptions,
-            tokenLabelContext,
-          }
-        }
-        if (
-          (field.component === FieldComponentType.TEXT_FIELD ||
-            field.component === FieldComponentType.TEXTAREA) &&
-          !(field as any).isReadOnly
-        ) {
-          // Token-capable free-text fields (children, href, src, …)
-          // render through the pill editor (AGL-586): stored `{{...}}`
-          // tokens display as named colored pills, the {x} adornment
-          // inserts at the caret (AGL-583), and raw {{...}} typing keeps
-          // working (it materializes into a pill on blur).
-          return {
-            ...field,
-            component: TOKEN_TEXT_FIELD_COMPONENT,
-            multiline:
-              field.component === FieldComponentType.TEXTAREA,
-            tokenOptions: insertOptions,
-            tokenLabelContext,
-          }
-        }
-        return field
-      })
+      return (rawAttributes ?? [])
+        .map(withAttributeHelp)
+        .map((field) => resolveAttributeField(field, resolveContext))
         .map((field, index) =>
           // One field in, one out, so `index` still names the attribute as
           // the schema DECLARED it. The rewrites above change `component` —
@@ -1567,7 +1999,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           // be bound to follows what it holds, not how it is drawn.
           withPropertyBinding(field, {
             declaredComponent: rawAttributes?.[index]?.component,
+            declaredField: rawAttributes?.[index],
             componentProps: editedComponentProps,
+            owner: componentPropsOwner,
             control: (
               elementPropsComponentMapper as Record<
                 string,
@@ -1597,52 +2031,36 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           return known
         })
     }, [
-      hasFormattedText,
       rawAttributes,
-      screens,
-      labels,
-      // Read by the Screen pickers to name a target the map has lost
-      // (AGL-1893). Safe as a dependency: the form owns the values the
-      // author is typing, so this object's identity moves when a different
-      // node is selected or a save commits — not on every keystroke.
-      nodeProps,
-      entityOptions,
-      nodeOptions,
-      // The installed-plugin set arrives from a live subscription and can land
-      // after this memo first ran (AGL-1030) — without it the picker would sit
-      // on "No plugins installed for this site" until the panel remounted.
-      knownPluginInstallsVersion,
-      ancestorDatasetId,
-      insertOptions,
+      resolveContext,
       tokenLabelContext,
       editedComponentProps,
+      componentPropsOwner,
       fieldContext,
     ])
 
-    // Reusable-component flows (AGL-35): actions appear only when the host
-    // app provides callbacks; locked nodes (layout chrome) never promote.
-    const { onPromote, onDemote, onEditComponent, definitions } = useContext(
-      ComponentPromotionContext,
-    )
-    const isInstance =
-      node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
-    const unlocked = Besigner.dnd.canDragNode(node)
-
-    const instancePropFields = useMemo(() => {
-      if (!isInstance) return []
-      const refId = (node?.props as { refId?: string } | undefined)?.refId
-      return buildInstancePropFields(
-        refId ? definitions?.[refId]?.props : undefined,
+    // The placed component's properties (AGL-1247), each drawn with the
+    // control its kind names and finished by the same resolver as the
+    // attributes above (AGL-2893).
+    const instancePropFields = useMemo(
+      () =>
+        isInstance
+          ? buildInstancePropFields(
+              instanceDeclared,
+              insertOptions,
+              tokenLabelContext,
+              { ...resolveContext, themeScales },
+            )
+          : [],
+      [
+        isInstance,
+        instanceDeclared,
         insertOptions,
         tokenLabelContext,
-      )
-    }, [
-      isInstance,
-      node,
-      definitions,
-      insertOptions,
-      tokenLabelContext,
-    ])
+        resolveContext,
+        themeScales,
+      ],
+    )
 
     // Visibility directives (AGL-1314), inside a component editor only —
     // `componentProps` is the same "am I editing a definition" signal the
@@ -1674,9 +2092,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // component's own media attributes get (AGL-341).
     const instanceMediaProps = useMemo(() => {
       if (!isInstance) return []
-      const refId = (node?.props as { refId?: string } | undefined)?.refId
-      const declared = refId ? definitions?.[refId]?.props : undefined
-      return (declared ?? [])
+      return (instanceDeclared ?? [])
         .filter(
           (prop) =>
             prop?.type === 'image' &&
@@ -1686,7 +2102,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           name: prop.name,
           label: prop.label || prop.name,
         }))
-    }, [isInstance, node, definitions])
+    }, [isInstance, instanceDeclared])
 
     // AI copy assist (AGL-89, widened by AGL-130): text-editable elements
     // and any element declaring text attributes, when the host app

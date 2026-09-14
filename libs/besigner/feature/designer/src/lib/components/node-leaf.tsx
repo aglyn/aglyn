@@ -18,6 +18,7 @@
 import {
   buildComponentDefaultIconPaths,
   buildComponentDefaultTokens,
+  buildComponentDefaultValues,
   composeReusableComponentNodes,
   displayBindingTokens,
   FORM_COMPONENT_ID,
@@ -295,6 +296,12 @@ export const NodeLeaf = observer(
       () => buildComponentDefaultIconPaths(componentProps),
       [componentProps],
     )
+    // The values the defaults hand their bound fields (AGL-2893), so a list
+    // stays a list and a theme multiple a number on the editor's canvas too.
+    const defaultValues = useMemo(
+      () => buildComponentDefaultValues(componentProps),
+      [componentProps],
+    )
     const renderNode = useMemo(() => {
       const hasDeclaredProps = Boolean(componentProps?.length)
       if (
@@ -339,6 +346,7 @@ export const NodeLeaf = observer(
           componentProps,
           resolveFlag === false ? undefined : defaultPropTokens,
           resolveFlag === false ? undefined : defaultIconPaths,
+          resolveFlag === false ? undefined : defaultValues,
         )[String(node?.$id)] ?? next
       )
     }, [
@@ -350,6 +358,7 @@ export const NodeLeaf = observer(
       componentProps,
       defaultPropTokens,
       defaultIconPaths,
+      defaultValues,
     ])
 
     // Host variables (AGL-2881), filled in on the same render copy and after

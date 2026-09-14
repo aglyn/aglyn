@@ -38,7 +38,10 @@ import {
 } from '@mui/material'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
-import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
+import FormFieldGrid, {
+  buildFieldClear,
+  type FormFieldGridProps,
+} from './form-field-grid'
 import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
@@ -57,6 +60,8 @@ export interface SliderProps extends BaseFieldProps {
   min?: number
   max?: number
   step?: number
+  /** Offer the reset-to-unset affordance (AGL-2486). */
+  clearable?: boolean
   SliderProps?: Omit<
     MuiSliderProps,
     'name' | 'value' | 'onChange' | 'onBlur' | 'onFocus'
@@ -88,6 +93,7 @@ export const Slider = (props: SliderProps) => {
     AfterGridProps = {},
     min = 0,
     max = 100,
+    clearable,
     SliderProps = {},
     ...rest
   } = useFieldApi(props)
@@ -100,9 +106,20 @@ export const Slider = (props: SliderProps) => {
     description
 
   const defaultValue = (max + min) / 2
+  // `0` is a position a slider can hold, so only nothing at all shows the
+  // midpoint — a falsy test drew a stored 0 in the middle of the track.
+  const unset =
+    input.value === '' || input.value === undefined || input.value === null
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue: !unset,
+    locked: Boolean(isDisabled || isReadOnly),
+    onClear: () => input.onChange(undefined),
+  })
 
   return (
-    <FormFieldGrid help={help} {...FormFieldGridProps}>
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
       <FormControl
         fullWidth
         required={isRequired}
@@ -119,7 +136,7 @@ export const Slider = (props: SliderProps) => {
             <Grid size="grow" {...SliderGridProps}>
               <MuiSlider
                 {...input}
-                value={input.value || defaultValue}
+                value={unset ? defaultValue : input.value}
                 min={min}
                 max={max}
                 disabled={isDisabled || isReadOnly}

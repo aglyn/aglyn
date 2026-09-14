@@ -66,6 +66,12 @@ export interface BindingPickerContextValue {
    */
   componentProps?: import('@aglyn/aglyn').ReusableComponentProp[]
   /**
+   * Whose properties {@link componentProps} are: a reusable component's, or a
+   * shared layout's (AGL-2893). Both bind the same way; what an empty binding
+   * picker tells the author to add names the right one.
+   */
+  componentPropsOwner?: 'component' | 'layout'
+  /**
    * The site being edited, for `{{host.*}}` tokens (AGL-2881): the canvas
    * fills them in from it through the resolver the published page composes
    * with. Optional — without it the tokens draw as written.
