@@ -34,6 +34,7 @@ import {
   type CrmRecordKind,
 } from './console-record-links'
 import { hostEventLabel } from './workflows'
+import { aiActivityActionLabel, isAiActivityAction } from './ai-activity-actions'
 
 /** The stored `target` sub-object, read defensively (any field may be absent). */
 export interface ActivityTargetLike {
@@ -103,6 +104,12 @@ const TYPE_LABELS: Record<string, string> = {
   template: 'Template',
   org: 'Organization',
   invite: 'Invitation',
+  subscription: 'Subscription',
+  // A custom role's AI permission flipped (AGL-2929).
+  role: 'Role',
+  // A generation job (AGL-2904): the org feed names the job, and each of its
+  // outputs names the resource it produced.
+  aiJob: 'AI generation',
   // CRM records (AGL-2622): a person added, a company or a deal created or
   // deleted, a lead converted — logged into the feed of the site whose
   // console did it, and linked to the record the way a screen is.
@@ -144,12 +151,28 @@ export function activityTargetLabel(
 }
 
 /**
+ * What the action column reads (AGL-2929). Most actions are the sentence
+ * their writer stored; the AI rows store a code (`ai.job.output`) so that
+ * three surfaces can recognize them without parsing prose, and the code is
+ * translated here — once — rather than shown to a reader as a dotted path.
+ */
+export function activityActionLabel(action: string | undefined): string {
+  const stored = action?.trim() ?? ''
+  return aiActivityActionLabel(stored) ?? stored
+}
+
+/** Whether an entry is one the feed's "AI" chip keeps. */
+export function isAiActivityEntry(entry: ActivityEntryLike): boolean {
+  return isAiActivityAction(entry.action?.trim())
+}
+
+/**
  * The primary line for a feed entry: the action, suffixed with the target
  * name when one is known, so "Saved the screen" becomes "Saved the screen —
  * Home". A missing action degrades to the target label rather than blank.
  */
 export function activityPrimaryText(entry: ActivityEntryLike): string {
-  const action = entry.action?.trim()
+  const action = activityActionLabel(entry.action)
   const name = entry.target?.name?.trim()
   if (action && name) return `${action} — ${name}`
   if (action) return action

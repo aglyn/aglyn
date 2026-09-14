@@ -50,6 +50,16 @@ let orgDoc: any
 let aiItem: any
 let stripeCalls: Array<{ href: string; method: string; body: string }> = []
 let orgMirrorWrites: any[] = []
+/** Every org activity row the AI add-on writer handed `logOrgActivity` (AGL-2929). */
+let mockActivityRows: unknown[][] = []
+
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  logOrgActivity: async (...args: unknown[]) => {
+    mockActivityRows.push(args)
+  },
+  logHostActivity: async () => undefined,
+}))
 
 const orgRef = {
   get: async () => ({
@@ -68,10 +78,16 @@ const orgRef = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The REAL feed writer, over the recording `logOrgActivity` above.
+  ...jest.requireActual('../../../libs/tenant/data/admin/src/lib/server/ai-activity'),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
-        verifyIdToken: async () => ({ uid: 'user-1', email_verified: true }),
+        verifyIdToken: async () => ({
+          uid: 'user-1',
+          email: 'owner@example.test',
+          email_verified: true,
+        }),
       }),
       firestore: () => ({ collection: () => ({ doc: () => orgRef }) }),
     }),
@@ -168,6 +184,7 @@ function stripeCall(method: string, fragment: string) {
 beforeEach(() => {
   stripeCalls = []
   orgMirrorWrites = []
+  mockActivityRows = []
   orgDoc = { plan: 'starter', seatAddons: {} }
   aiItem = null
   global.fetch = jest.fn(async (url: unknown, init: any) => {
@@ -291,6 +308,23 @@ describe('buying the AI add-on is immediate (AGL-2897)', () => {
     expect(stripeCall('POST', '/subscription_schedules')).toBeUndefined()
     expect(orgMirrorWrites).toHaveLength(1)
     expect(orgMirrorWrites[0].seatAddons.aiAddon).toBe(1)
+  })
+
+  it('writes ai.addon.purchased to the org feed, attributed to the buyer (AGL-2929)', async () => {
+    await call({ action: 'set', kind: 'aiAddon', quantity: 1 })
+    expect(mockActivityRows).toEqual([
+      [
+        ORG_ID,
+        { uid: 'user-1', email: 'owner@example.test' },
+        'ai.addon.purchased',
+        { type: 'subscription', name: expect.stringMatching(/ AI$/) },
+      ],
+    ])
+  })
+
+  it('another add-on kind writes no AI row', async () => {
+    await call({ action: 'set', kind: 'hosts', quantity: 1 })
+    expect(mockActivityRows).toEqual([])
   })
 
   it('refuses a second one — the add-on is the whole thing', async () => {

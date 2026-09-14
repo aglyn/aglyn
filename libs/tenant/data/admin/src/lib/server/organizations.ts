@@ -1106,8 +1106,17 @@ export interface OrgActivityTarget {
     // where there is no one site's feed to hold it. The org feed's presenter
     // links them into the org-level hub.
     | 'contact' | 'company' | 'deal' | 'lead' | 'task'
+    // AI rows (AGL-2929): a generation job, the resources it produced, and
+    // a custom role whose AI permission moved. The job's outputs are org
+    // events with a resource target because the job is org-scoped and the
+    // org feed is the one place every output of one job is listed together;
+    // the host feed gets its own copy of the host-scoped ones.
+    | 'aiJob' | 'role'
+    | 'screen' | 'layout' | 'component' | 'template' | 'workflow' | 'content'
   id?: string
   name?: string
+  /** Present on a generated screen output so the deep link can hit the exact version. */
+  versionId?: string
 }
 
 /**
@@ -1143,6 +1152,7 @@ export async function logOrgActivity(
         type: target.type,
         ...(target.id ? { id: target.id } : {}),
         ...(target.name ? { name: target.name } : {}),
+        ...(target.versionId ? { versionId: target.versionId } : {}),
       },
       createdAt: FieldValue.serverTimestamp(),
     })

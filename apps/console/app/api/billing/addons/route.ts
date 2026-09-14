@@ -29,6 +29,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   isServerReleaseFlagOnForOrg,
+  logAiAddonChanged,
   memberHasOrgPermission,
   readOrgBilling,
   resolveOrgMembership,
@@ -928,6 +929,16 @@ async function handler(request: Request): Promise<Response> {
     // the webhook re-derives the same map on the subscription event.
     const quantities = addonQuantitiesFromItems(updated?.items?.data ?? [])
     await orgSnapshot.ref.set({ seatAddons: quantities }, { merge: true })
+    // The AI add-on in the workspace's own feed (AGL-2929), attributed to the
+    // member who bought it — the webhook confirming the same map afterwards
+    // sees no change and writes no second row.
+    if (kind === 'aiAddon') {
+      await logAiAddonChanged(
+        orgId,
+        { uid: decoded.uid, email: decoded.email ?? null },
+        { before: org?.seatAddons, after: quantities },
+      )
+    }
     return Response.json(
       {
         ok: true,

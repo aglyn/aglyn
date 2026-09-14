@@ -21,6 +21,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { GridColDef, GridFilterModel } from '@mui/x-data-grid'
 import { Alert, Stack, Typography } from '@mui/material'
+import type { ReactNode } from 'react'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 
 export interface ActivityTableProps {
@@ -29,6 +30,12 @@ export interface ActivityTableProps {
   help?: HelpTipContent
   /** What this table is OF, in the caller's own words. */
   description?: string
+  /**
+   * Quick filters the caller owns, rendered above the grid — the feed's
+   * "AI" chip (AGL-2929). The grid's own panel narrows by column; a chip
+   * names a slice of the feed a reader asks for by name.
+   */
+  toolbar?: ReactNode
   columns: GridColDef[]
   rows: readonly any[]
   getRowId: (row: any) => string
@@ -93,6 +100,7 @@ export function ActivityTable(props: ActivityTableProps) {
     header,
     help,
     description,
+    toolbar,
     columns,
     rows,
     getRowId,
@@ -122,6 +130,11 @@ export function ActivityTable(props: ActivityTableProps) {
           <Typography variant="body2" color="text.secondary">
             {description}
           </Typography>
+        ) : null}
+        {toolbar ? (
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+            {toolbar}
+          </Stack>
         ) : null}
         {unreadable ? (
           <Alert severity="warning">{unreadableLabel}</Alert>

@@ -206,6 +206,18 @@ const mockAiPermissionAsks: unknown[][] = []
 let mockFirestoreFactory: () => unknown
 let mockEntitled = true
 const mockGetOrgCalls: Array<[string, string | null | undefined]> = []
+/** Every feed row the section writer handed the two loggers (AGL-2929). */
+const mockActivityRows: Array<{ log: 'org' | 'host'; args: unknown[] }> = []
+
+jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  logOrgActivity: async (...args: unknown[]) => {
+    mockActivityRows.push({ log: 'org', args })
+  },
+  logHostActivity: async (...args: unknown[]) => {
+    mockActivityRows.push({ log: 'host', args })
+  },
+}))
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
@@ -234,6 +246,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ),
   ...jest.requireActual(
     '../../../../../tenant/data/admin/src/lib/server/api-http',
+  ),
+  // The REAL section writer, over the recording loggers above.
+  ...jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/ai-activity',
   ),
   firebaseAdmin: {
     app: () => ({
@@ -354,6 +370,7 @@ beforeEach(() => {
   mockAutoId = 0
   mockTxChain = Promise.resolve()
   mockGetOrgCalls.length = 0
+  mockActivityRows.length = 0
   mockEntitled = true
   process.env.ANTHROPIC_API_KEY = 'sk-test'
   delete process.env.ASSIST_ENTITLED_MONTHLY_LIMIT
@@ -669,6 +686,61 @@ describe('every answered call is metered per org (AGL-2073)', () => {
       path.startsWith(`orgs/${ORG}/assistSignals/`),
     )
     expect(signals[0][1]).toMatchObject({ route: '/api/ai/assist/section' })
+  })
+
+  it('a returned section is one row in the site feed — its size, never its copy (AGL-2929)', async () => {
+    mockVerifyIdToken = async () => ({ uid: 'uid-ada', email: 'ada@example.test' })
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              rootId: 'n1',
+              nodes: {
+                n1: { $id: 'n1', componentId: 'muiStack', parentId: null, props: {}, nodes: ['n2'] },
+                n2: {
+                  $id: 'n2',
+                  componentId: 'muiTypography',
+                  parentId: 'n1',
+                  props: { children: 'Welcome to Acme' },
+                  nodes: [],
+                },
+              },
+            }),
+          },
+        ],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 700, output_tokens: 900 },
+      }),
+    }))
+    const result = await call({
+      ...BODY,
+      mode: 'section',
+      hostId: 'host-1',
+      instruction: 'A hero section for Acme',
+    })
+    expect(result.status).toBe(200)
+    expect(mockActivityRows).toEqual([
+      {
+        log: 'host',
+        args: [
+          'host-1',
+          { uid: 'uid-ada', email: 'ada@example.test' },
+          'ai.assist.section',
+          { type: 'host', id: 'host-1', name: '2 elements' },
+        ],
+      },
+    ])
+    expect(JSON.stringify(mockActivityRows)).not.toContain('Acme')
+  })
+
+  it('an element rewrite writes no feed row — the rollup carries the count', async () => {
+    const result = await call({ ...BODY, hostId: 'host-1' })
+    expect(result.status).toBe(200)
+    expect(mockActivityRows).toEqual([])
   })
 })
 

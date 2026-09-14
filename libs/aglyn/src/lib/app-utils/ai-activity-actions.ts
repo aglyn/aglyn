@@ -1,0 +1,140 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * The AI actions an activity log can carry (AGL-2929).
+ *
+ * Every other action in `orgs/{orgId}/activity` and `hosts/{hostId}/activity`
+ * is a prose sentence written at the call site — "Saved the screen". The AI
+ * rows are CODES instead, because they are read by more than a person: the
+ * org feed's "AI" chip, the staff audit facet and the actor table all need
+ * to recognize an AI row without parsing a sentence, and a sentence that
+ * three writers phrase three ways is three rows that look unrelated.
+ *
+ * One list, so the writers in `ai-activity.ts`, the feed presenter and the
+ * staff facet cannot disagree about what counts as AI. A code missing from
+ * `AI_ACTIVITY_ACTION_LABELS` fails the type, not the reader.
+ */
+
+/** The action code each AI writer stores. */
+export const AI_ACTIVITY_ACTIONS = {
+  jobCreated: 'ai.job.created',
+  jobOutput: 'ai.job.output',
+  jobCanceled: 'ai.job.canceled',
+  jobNeedsInput: 'ai.job.needs_input',
+  editApplied: 'ai.edit.applied',
+  assistSection: 'ai.assist.section',
+  overageHardCap: 'ai.overage.hardCap',
+  overageCap: 'ai.overage.cap',
+  permissionChanged: 'ai.permission.changed',
+  addonPurchased: 'ai.addon.purchased',
+  addonRemoved: 'ai.addon.removed',
+} as const
+
+export type AiActivityAction =
+  (typeof AI_ACTIVITY_ACTIONS)[keyof typeof AI_ACTIVITY_ACTIONS]
+
+/** What a person reads for each code, in the feed and the actor table. */
+export const AI_ACTIVITY_ACTION_LABELS: Record<AiActivityAction, string> = {
+  'ai.job.created': 'Started an AI generation',
+  'ai.job.output': 'AI generated',
+  'ai.job.canceled': 'Canceled an AI generation',
+  'ai.job.needs_input': 'AI generation paused for input',
+  'ai.edit.applied': 'Applied AI edits',
+  'ai.assist.section': 'AI generated a section',
+  'ai.overage.hardCap': 'AI stop-at-band switch',
+  'ai.overage.cap': 'AI overage ceiling',
+  'ai.permission.changed': 'AI permission changed',
+  'ai.addon.purchased': 'Added the AI add-on',
+  'ai.addon.removed': 'Removed the AI add-on',
+}
+
+/** Every code, in catalog order — what a filter sends as `isAnyOf`. */
+export const AI_ACTIVITY_ACTION_LIST: readonly AiActivityAction[] =
+  Object.values(AI_ACTIVITY_ACTIONS)
+
+/** The feed's filter chip and the staff facet's group, by one name. */
+export const AI_ACTIVITY_FILTER_LABEL = 'AI'
+
+/**
+ * Why a generation stopped and asked for a person (AGL-2904): the plan's
+ * band ran out, the org's own ceiling refused, the monthly message cap or
+ * the job's own token budget did.
+ */
+export type AiJobNeedsInputReason = 'band' | 'cap' | 'messages' | 'budget'
+
+export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
+  AiJobNeedsInputReason,
+  string
+> = {
+  band: 'the included AI band is used up',
+  cap: 'the overage ceiling was reached',
+  messages: 'the monthly message cap was reached',
+  budget: 'the job budget was reached',
+}
+
+/** Whether a stored action is one of the AI codes above. */
+export function isAiActivityAction(action: unknown): action is AiActivityAction {
+  return (
+    typeof action === 'string' &&
+    (AI_ACTIVITY_ACTION_LIST as readonly string[]).includes(action)
+  )
+}
+
+/** The readable label for an AI code; `undefined` for any other action. */
+export function aiActivityActionLabel(action: unknown): string | undefined {
+  return isAiActivityAction(action)
+    ? AI_ACTIVITY_ACTION_LABELS[action]
+    : undefined
+}
+
+/**
+ * Staff audit rows that are ABOUT AI without carrying an `ai.` code: the
+ * customer's overage controls already write `billing.assistOverage.*`, and
+ * the platform's free-spend auto-pause writes `platform.aiFreeSpend.*`
+ * (AGL-2925). The audit page's facet folds them under the same group as the
+ * codes, because "what did we do about AI this week" is one question.
+ */
+export const AI_STAFF_AUDIT_ACTION_PREFIXES: readonly string[] = [
+  'ai.',
+  'billing.assistOverage.',
+  'platform.aiFreeSpend.',
+]
+
+/** The facet group an `adminAudit` action belongs to. */
+export const STAFF_AUDIT_AI_GROUP = 'ai'
+
+/**
+ * The group the staff audit facet files an action under: `ai` for every
+ * AI row, otherwise the action's leading namespace (`billing`, `org`,
+ * `plugins`). Roughly seventy distinct actions write to `adminAudit`, so
+ * the facet offers namespaces rather than a seventy-entry menu.
+ */
+export function staffAuditActionGroup(action: unknown): string {
+  const text = typeof action === 'string' ? action.trim() : ''
+  if (!text) return ''
+  if (AI_STAFF_AUDIT_ACTION_PREFIXES.some((prefix) => text.startsWith(prefix))) {
+    return STAFF_AUDIT_AI_GROUP
+  }
+  const dot = text.indexOf('.')
+  return dot > 0 ? text.slice(0, dot) : text
+}
+
+/** How a facet group reads in the menu: `ai` → `AI`, `billing` → `billing`. */
+export function staffAuditActionGroupLabel(group: string): string {
+  return group === STAFF_AUDIT_AI_GROUP ? AI_ACTIVITY_FILTER_LABEL : group
+}

@@ -400,7 +400,9 @@ fully read, and export the working papers for the Webfile session.
 
 ### Audit log viewer {#audit-log}
 
-A record of staff actions.
+A record of staff actions. The **Action** menu groups the page's entries by their
+namespace, with every AI-related entry — the customer overage controls, the free-spend
+pause, and the AI actions themselves — under one **AI** group.
 
 ### Coupons {#coupons}
 

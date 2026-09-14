@@ -16,7 +16,14 @@
  */
 'use client'
 
-import { activityTargetLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
+import {
+  activityActionLabel,
+  activityTargetLabel,
+} from '@aglyn/aglyn/app-utils/activity-presenter'
+import {
+  AI_ACTIVITY_ACTION_LIST,
+  AI_ACTIVITY_FILTER_LABEL,
+} from '@aglyn/aglyn/app-utils/ai-activity-actions'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import {
   gridFilterRequest,
@@ -98,6 +105,20 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
    * from before the reader changed it.
    */
   const filterRef = useRef<ListFilterRequest | null>(null)
+  /*
+   * The "AI" chip (AGL-2929): the AI rows are stored as catalog codes, and
+   * the route already answers `action isAnyOf …`, so the chip is that one
+   * request with the catalog as its value. It replaces the grid's clause
+   * while it is on and hands it back when it is off, so a reader who had
+   * narrowed by date does not lose the narrowing by asking for AI.
+   */
+  const [aiOnly, setAiOnly] = useState(false)
+  const gridFilterRef = useRef<ListFilterRequest | null>(null)
+  const aiFilter: ListFilterRequest = {
+    field: 'action',
+    op: 'isAnyOf',
+    value: AI_ACTIVITY_ACTION_LIST.join(','),
+  }
 
   const loadPage = useCallback(
     async (targetPage: number, cursor: string | null) => {
@@ -161,7 +182,11 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         flex: 1.2,
         minWidth: 180,
         ...listFilterColumn(ACTIVITY_LIST_FILTER_FIELDS, 'action'),
+        // The STORED action stays the cell's value — it is what the route's
+        // equality filter compares — and the label is only what is drawn,
+        // so an AI code reads as a sentence without breaking the filter.
         valueGetter: (_value, row: ActorActivityEntry) => row.action ?? '—',
+        renderCell: ({ row }: any) => activityActionLabel(row.action) || '—',
       },
       {
         field: 'target',
@@ -215,6 +240,23 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
       header={header}
       help={help}
       description={description}
+      toolbar={
+        <Chip
+          size="small"
+          label={AI_ACTIVITY_FILTER_LABEL}
+          clickable
+          color={aiOnly ? 'primary' : 'default'}
+          variant={aiOnly ? 'filled' : 'outlined'}
+          aria-pressed={aiOnly}
+          onClick={() => {
+            const next = !aiOnly
+            setAiOnly(next)
+            filterRef.current = next ? aiFilter : gridFilterRef.current
+            setCursors([null])
+            void loadPage(0, null)
+          }}
+        />
+      }
       columns={activityColumns}
       rows={rows}
       getRowId={(row: any) => `${row.scopeId}:${row.$id}`}
@@ -228,7 +270,11 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
        * the grid in server-filter mode.
        */
       onFilterModelChange={(model) => {
-        filterRef.current = gridFilterRequest(model)
+        gridFilterRef.current = gridFilterRequest(model)
+        // A clause from the panel is the reader choosing; it takes over
+        // from the chip rather than being silently ignored under it.
+        setAiOnly(false)
+        filterRef.current = gridFilterRef.current
         setCursors([null])
         void loadPage(0, null)
       }}

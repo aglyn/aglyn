@@ -41,6 +41,20 @@ let mockStaff = false
 let mockPermissions = new Set<string>(['billing.manage'])
 /** Every `adminAudit` row the route added. */
 let mockAudit: Record<string, unknown>[] = []
+/** Every org activity row the route's AI writer handed `logOrgActivity` (AGL-2929). */
+let mockActivity: unknown[][] = []
+
+/**
+ * The REAL writer over a recording `logOrgActivity`, so the row asserted is
+ * the one the helper composes rather than the arguments a stub was handed.
+ */
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  logOrgActivity: async (...args: unknown[]) => {
+    mockActivity.push(args)
+  },
+  logHostActivity: async () => undefined,
+}))
 
 jest.mock('@aglyn/aglyn/server', () => {
   const entitlements = jest.requireActual(
@@ -63,6 +77,9 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/ai-activity',
+  ),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -167,6 +184,7 @@ beforeEach(() => {
   mockStaff = false
   mockPermissions = new Set(['billing.manage'])
   mockAudit = []
+  mockActivity = []
 })
 
 describe('who may throw the switch', () => {
@@ -369,6 +387,55 @@ describe('setHardCap — the write', () => {
       before: { hardCap: true },
       after: { hardCap: false },
     })
+  })
+})
+
+describe('the customer sees who threw the switch (AGL-2929)', () => {
+  it('ON writes ai.overage.hardCap to the org feed, attributed to the caller', async () => {
+    mockDocs.set('orgs/org-1', org('pro'))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }))
+    expect(mockActivity).toEqual([
+      [
+        'org-1',
+        { uid: 'user-1', email: 'admin@example.com' },
+        'ai.overage.hardCap',
+        { type: 'org', name: 'On' },
+      ],
+    ])
+  })
+
+  it('OFF from ON writes Off; the same value again writes nothing', async () => {
+    mockDocs.set('orgs/org-1', org('pro', { hardCap: true }))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: false }))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: false }))
+    // The `adminAudit` row lands on both writes; the feed row only on the
+    // one that moved the switch.
+    expect(mockAudit).toHaveLength(2)
+    expect(mockActivity).toEqual([
+      ['org-1', expect.anything(), 'ai.overage.hardCap', { type: 'org', name: 'Off' }],
+    ])
+  })
+
+  it('a ceiling set, then cleared, writes ai.overage.cap twice with the figure and Cleared', async () => {
+    mockDocs.set('orgs/org-1', org('pro'))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 1250 }))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 1250 }))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: null }))
+    expect(mockActivity.map((row) => [row[2], row[3]])).toEqual([
+      ['ai.overage.cap', { type: 'org', name: '$1,250' }],
+      ['ai.overage.cap', { type: 'org', name: 'Cleared' }],
+    ])
+    expect(mockActivity[0][1]).toEqual({ uid: 'user-1', email: 'admin@example.com' })
+  })
+
+  it('a refused write leaves the feed alone', async () => {
+    mockDocs.set('orgs/org-1', org('enterprise'))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    mockPermissions = new Set(['billing.view'])
+    mockDocs.set('orgs/org-1', org('pro'))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }))
+    expect(mockActivity).toEqual([])
   })
 })
 

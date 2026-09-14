@@ -28,6 +28,7 @@ import {
   firebaseAdmin,
   getOrgForUser,
   lockdownRefusal,
+  logAiAssistSection,
   memberHasAiPermission,
   rateLimitHeaders,
   recordAssistCost,
@@ -420,6 +421,12 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
       if (sanitized.ok === false) {
         return res.status(422).json({ error: sanitized.error })
       }
+      // A subtree is going back (AGL-2929): the act, its size and its site in
+      // the customer's feed — never the instruction or the copy generated.
+      await logAiAssistSection(
+        { uid: decoded.uid, email: decoded.email ?? null },
+        { orgId, hostId: hostId || null, nodeCount: Object.keys(sanitized.nodes).length },
+      )
       return res
         .status(200)
         .json({ section: { rootId: sanitized.rootId, nodes: sanitized.nodes } })

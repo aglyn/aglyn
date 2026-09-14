@@ -139,6 +139,29 @@ Entries name the thing that changed and link straight to it, so "Saved the scree
 takes you to that screen. Entries recorded before this shipped show a plain description
 instead of a link.
 
+### AI actions in the log {#ai-actions}
+
+Everything the AI does in your workspace is recorded in the same feed, attributed to the
+member who asked for it — or to nobody, when nothing a person did caused it (a generation
+that paused because the included band ran out, or the add-on leaving at the end of a billing
+period). The feed shows an **AI** chip whenever the page holds one of these rows; press it to
+see only them.
+
+| Entry | What it records |
+| --- | --- |
+| **Started an AI generation** | A generation was briefed: what it builds, how long the brief was, and the site. |
+| **AI generated** | One thing a generation produced — a screen, a layout, a component — linked like any other change. A site's own activity carries a copy. |
+| **Canceled an AI generation** | A generation was stopped before it finished. |
+| **AI generation paused for input** | A generation stopped and asked for a person, and why: the included band, the overage ceiling, the monthly message cap, or the job's own budget. |
+| **Applied AI edits** | Edits from a proposal landed on a screen version, with a count of what changed. |
+| **AI generated a section** | The assistant returned a section for a page. Single-element rewrites are not logged one by one; their count is in the AI usage rollup. |
+| **AI stop-at-band switch** / **AI overage ceiling** | Someone changed the workspace's AI overage controls on the Billing page. |
+| **AI permission changed** | An AI permission moved on a role, a member, or a site collaborator. |
+| **Added the AI add-on** / **Removed the AI add-on** | The AI add-on joined or left the subscription. |
+
+The feed records the act and its size, never the brief you wrote or the copy the AI
+produced — that is your site's content and stays in the site.
+
 ## Tips
 
 - Start people on a least-privilege [role](custom-roles.md) and widen it with per-member

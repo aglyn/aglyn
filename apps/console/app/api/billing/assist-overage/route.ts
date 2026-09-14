@@ -33,6 +33,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  logAiOverageControl,
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -202,6 +203,14 @@ async function handler(request: Request): Promise<Response> {
           at: FieldValue.serverTimestamp(),
         })
         .catch(() => undefined)
+      // The customer's own feed (AGL-2929): `adminAudit` is staff-only, and
+      // the workspace should see who set its ceiling. Nothing when the value
+      // did not move.
+      await logAiOverageControl(
+        orgId,
+        { uid: decoded.uid, email: decoded.email ?? null },
+        { control: 'cap', before: capUsd, after: requestedCap },
+      )
       return Response.json({ ok: true, capUsd: requestedCap }, { status: 200 })
     }
 
@@ -254,6 +263,11 @@ async function handler(request: Request): Promise<Response> {
         at: FieldValue.serverTimestamp(),
       })
       .catch(() => undefined)
+    await logAiOverageControl(
+      orgId,
+      { uid: decoded.uid, email: decoded.email ?? null },
+      { control: 'hardCap', before: hardCap, after: requested },
+    )
 
     return Response.json({ ok: true, hardCap: requested }, { status: 200 })
   } catch (error) {

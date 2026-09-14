@@ -16,11 +16,13 @@
  */
 
 import {
+  activityActionLabel,
   activityActorLabel,
   activityHref,
   activityPrimaryText,
   activityTargetLabel,
   activityTypeLabel,
+  isAiActivityEntry,
 } from './activity-presenter'
 
 describe('activityTypeLabel', () => {
@@ -74,6 +76,38 @@ describe('activityPrimaryText', () => {
 
   it('falls back to the target label when there is no action', () => {
     expect(activityPrimaryText({ target: { type: 'theme' } })).toBe('Theme')
+  })
+
+  it('renders an AI code by its label, never as the dotted path (AGL-2929)', () => {
+    expect(
+      activityPrimaryText({
+        action: 'ai.job.output',
+        target: { type: 'screen', id: 'abc', name: 'Home', versionId: 'v1' },
+      }),
+    ).toBe('AI generated — Home')
+    expect(activityPrimaryText({ action: 'ai.overage.cap', target: { type: 'org', name: '$25' } })).toBe(
+      'AI overage ceiling — $25',
+    )
+  })
+})
+
+describe('activityActionLabel and isAiActivityEntry (AGL-2929)', () => {
+  it('translates every catalog code and passes a stored sentence through', () => {
+    expect(activityActionLabel('ai.addon.purchased')).toBe('Added the AI add-on')
+    expect(activityActionLabel('Saved the screen')).toBe('Saved the screen')
+    expect(activityActionLabel(undefined)).toBe('')
+  })
+
+  it('tells an AI row from any other', () => {
+    expect(isAiActivityEntry({ action: 'ai.edit.applied' })).toBe(true)
+    expect(isAiActivityEntry({ action: 'Saved the screen' })).toBe(false)
+    expect(isAiActivityEntry({})).toBe(false)
+  })
+
+  it('labels the AI target types the org feed now carries', () => {
+    expect(activityTypeLabel('aiJob')).toBe('AI generation')
+    expect(activityTypeLabel('subscription')).toBe('Subscription')
+    expect(activityTypeLabel('role')).toBe('Role')
   })
 })
 

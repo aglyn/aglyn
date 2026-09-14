@@ -21,6 +21,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import {
   Alert,
   Button,
+  Chip,
   List,
   ListItem,
   ListItemText,
@@ -33,10 +34,13 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
+  activityActionLabel,
   activityActorLabel,
   activityHref,
   activityPrimaryText,
+  isAiActivityEntry,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { AI_ACTIVITY_FILTER_LABEL } from '@aglyn/aglyn/app-utils/ai-activity-actions'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
@@ -210,6 +214,18 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   // when the entries carry one. Both are page-scoped; see the docblock.
   const [filter, setFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  /*
+   * The "AI" chip (AGL-2929): every generation, applied edit and control
+   * change is stored as a catalog code, so "what did AI do here" is one
+   * toggle rather than a search term a reader has to guess. Page-scoped
+   * like the other two, and offered only when the page holds an AI row —
+   * a chip that can never match is furniture.
+   */
+  const [aiOnly, setAiOnly] = useState(false)
+  const hasAi = useMemo(
+    () => (entries ?? []).some((entry: any) => isAiActivityEntry(entry)),
+    [entries],
+  )
   const types = useMemo(
     () =>
       [
@@ -226,9 +242,12 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
     return [...(entries ?? [])]
       .filter(
         (entry: any) =>
+          (!aiOnly || isAiActivityEntry(entry)) &&
           (!typeFilter || entry.type === typeFilter) &&
           (!term ||
-            [entry.action, entry.actorEmail]
+            // The label as well as the stored code, so "generated" finds an
+            // AI row the same way the words on screen suggest it would.
+            [entry.action, activityActionLabel(entry.action), entry.actorEmail]
               .filter(Boolean)
               .join(' ')
               .toLowerCase()
@@ -243,7 +262,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       .sort(
         (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
       )
-  }, [entries, filter, typeFilter])
+  }, [entries, filter, typeFilter, aiOnly])
 
   // A pager on a single-page feed is furniture. It appears once there is
   // somewhere to go, which the org-wide fan-out can now say as well.
@@ -263,8 +282,8 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       contentBordered="all"
     >
       <Stack spacing={1.5}>
-        {(entries ?? []).length > 5 ? (
-          <Stack direction="row" spacing={1}>
+        {(entries ?? []).length > 5 || hasAi ? (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <TextField
               size="small"
               label="Filter this page"
@@ -272,6 +291,17 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
               onChange={(event) => setFilter(event.target.value)}
               sx={{ maxWidth: 240, flexGrow: 1 }}
             />
+            {hasAi ? (
+              <Chip
+                size="small"
+                label={AI_ACTIVITY_FILTER_LABEL}
+                clickable
+                color={aiOnly ? 'primary' : 'default'}
+                variant={aiOnly ? 'filled' : 'outlined'}
+                aria-pressed={aiOnly}
+                onClick={() => setAiOnly((current) => !current)}
+              />
+            ) : null}
             {types.length > 1 ? (
               <TextField
                 select

@@ -67,6 +67,16 @@ const BASE_ENV = {
 
 /** Every `writeOrgBilling(orgId, payload)` the route made. */
 const mockBillingWrites: Array<{ orgId: string; payload: any }> = []
+/** Every org activity row the AI add-on writer handed `logOrgActivity` (AGL-2929). */
+const mockActivityRows: unknown[][] = []
+
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  logOrgActivity: async (...args: unknown[]) => {
+    mockActivityRows.push(args)
+  },
+  logHostActivity: async () => undefined,
+}))
 
 let docs = new Map<string, Record<string, unknown>>()
 
@@ -147,6 +157,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The REAL AI add-on feed writer, over the recording `logOrgActivity`
+  // above; the subscription lifecycle writer below stays a no-op.
+  ...jest.requireActual('../../../libs/tenant/data/admin/src/lib/server/ai-activity'),
   firebaseAdmin: {
     app: () => ({ firestore: () => mockMakeFirestore() }),
     firestore: {
@@ -257,6 +270,7 @@ function mirrored() {
 describe('the AI add-on item becomes seatAddons.aiAddon (AGL-2897)', () => {
   beforeEach(() => {
     docs = new Map()
+    mockActivityRows.length = 0
     docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'pro' })
     mockBillingWrites.length = 0
     global.fetch = jest.fn(async () => ({
@@ -326,6 +340,71 @@ describe('the AI add-on item becomes seatAddons.aiAddon (AGL-2897)', () => {
       ),
     )
     expect(mirrored().seatAddons.aiAddon).toBe(0)
+  })
+
+  it('the add-on ARRIVING by a path the route did not mirror writes ai.addon.purchased with no actor (AGL-2929)', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(subscriptionEvent(subscription([
+        item('price_pro_monthly'),
+        item('price_pro_ai_addon'),
+      ]))),
+    )
+    expect(mockActivityRows).toEqual([
+      [
+        'org-real',
+        // Nobody is present at a Stripe delivery, and the row says so rather
+        // than naming whoever last touched billing.
+        { uid: null, email: null },
+        'ai.addon.purchased',
+        { type: 'subscription', name: expect.stringMatching(/ AI$/) },
+      ],
+    ])
+  })
+
+  it('a purchase the add-ons route already mirrored writes NO second row', async () => {
+    docs.set('orgs/org-real', {
+      name: 'Acme Ltd',
+      slug: 'acme',
+      plan: 'pro',
+      seatAddons: { aiAddon: 1 },
+    })
+    const post = loadWebhook()
+    await post(
+      signed(subscriptionEvent(subscription([
+        item('price_pro_monthly'),
+        item('price_pro_ai_addon'),
+      ]))),
+    )
+    expect(mirrored().seatAddons.aiAddon).toBe(1)
+    expect(mockActivityRows).toEqual([])
+  })
+
+  it('the item LEAVING at the period end writes ai.addon.removed, once', async () => {
+    docs.set('orgs/org-real', {
+      name: 'Acme Ltd',
+      slug: 'acme',
+      plan: 'pro',
+      seatAddons: { aiAddon: 1, hosts: 2 },
+    })
+    const post = loadWebhook()
+    await post(
+      signed(subscriptionEvent(subscription([
+        item('price_pro_monthly'),
+        item('price_pro_extra_host', 2),
+      ]))),
+    )
+    expect(mockActivityRows.map((row) => [row[1], row[2]])).toEqual([
+      [{ uid: null, email: null }, 'ai.addon.removed'],
+    ])
+  })
+
+  it('an org that never held it gets no row when the item is absent', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(subscriptionEvent(subscription([item('price_pro_monthly')]))),
+    )
+    expect(mockActivityRows).toEqual([])
   })
 
   it('the written map flips aiGenerative and widens the assist band', async () => {
