@@ -1319,8 +1319,12 @@ export function composeReusableComponentNodes<
  * Ids of every descendant of `rootId` reachable through `nodes` arrays —
  * the root itself excluded, unknown and repeated ids skipped, so a cycle
  * cannot hang the walk.
+ *
+ * Child lists are the only edges followed, never `parentId`. That is the
+ * published renderer's own reach from the document root, which is why
+ * `pageVideoObjects` asks this which Video nodes a page draws (AGL-2957).
  */
-function collectDescendantIds<N extends AglynNodeSchema>(
+export function collectDescendantIds<N extends AglynNodeSchema>(
   nodes: NormalizedNodes<N>,
   rootId: NodeId,
 ): Set<NodeId> {

@@ -34,7 +34,8 @@
  * whose children are id STRINGS under `nodes`, never a nested `children`
  * array. The commerce enricher's first version recursed `children`, matched
  * nothing on any page, and shipped green because its fixture was a tree. This
- * walks the values, which needs no recursion at all.
+ * finds Video nodes by walking the values, and then keeps only the ones the
+ * page draws — see {@link pageVideoObjects}.
  *
  * ## Why an incomplete block is not emitted
  *
@@ -49,6 +50,9 @@
  * blank one costs the block that field and nothing more.
  */
 
+import { NODE_ROOT_ID } from '../canvas-manager/canvas-manager'
+import type { AglynNodeSchema, NodeId } from '../foundation'
+import { collectDescendantIds } from './compose-reusable-components'
 import { videoDurationIso8601 } from './media-metadata'
 import {
   MEDIA_CDN_POSTER_WIDTH,
@@ -241,14 +245,57 @@ export function videoObjectJsonLd(
  * A video inside a withheld lazy tab panel is not in the HTML, and a
  * `VideoObject` describing a player that is not on the page is precisely the
  * mismatch a video rich result is checked for.
+ *
+ * ## Only the videos the page draws (AGL-2957)
+ *
+ * Being in the map is not being on the page. The renderer starts at
+ * {@link NODE_ROOT_ID} and follows child id lists, and nothing else, so a node
+ * no list names is carried in the payload and never drawn. Composition leaves
+ * such nodes on purpose: `expandCollectionEntries` and `expandRepeatables`
+ * point a block's list at its clones and keep the template in the map. On a
+ * list page that template publishes a block named `{{entry.title}}`; on an
+ * entry page, where entry tokens are substituted across the whole map, it
+ * publishes a copy of the page's own film.
+ *
+ * So when the map has a root, a Video counts only if a child list reaches it
+ * from there. Every stage that moves a subtree does so through those lists —
+ * a layout slot adopts the screen's top-level ids, a reusable component or a
+ * placed form hands its definition's list to the placement, a tab panel lists
+ * its content — so each of those is followed by the same walk, and a panel
+ * the route withheld has already lost its list. `parentId` is never followed:
+ * a template keeps its parent's id after its parent stops listing it.
+ *
+ * A map with no root is a fragment with no entry point to measure reach from,
+ * and keeps the whole-map walk.
+ *
+ * One rule of the renderer's is not in the map: a self-closing element draws
+ * no children, and which components are self-closing is registry knowledge.
+ * The editor refuses a child under one (`nodeAcceptsChildren`), so a Video
+ * there is a hand-edited document rather than an authored page.
+ *
+ * The reach is computed only for a map that holds a Video at all, so a page
+ * without one costs a single pass over its values and no walk.
  */
 export function pageVideoObjects(
   nodes: Record<string, unknown> | null | undefined,
   context?: VideoObjectContext,
 ): Record<string, unknown>[] {
   if (!nodes) return []
-  const found: Record<string, unknown>[] = []
+  const videoIds: string[] = []
   for (const id in nodes) {
+    const node = nodes[id] as ComposedVideoNode | null | undefined
+    if (node?.componentId === VIDEO_COMPONENT_ID) videoIds.push(id)
+  }
+  if (!videoIds.length) return []
+  const drawn = nodes[NODE_ROOT_ID]
+    ? collectDescendantIds(
+        nodes as Record<NodeId, AglynNodeSchema>,
+        NODE_ROOT_ID,
+      )
+    : undefined
+  const found: Record<string, unknown>[] = []
+  for (const id of videoIds) {
+    if (drawn && id !== NODE_ROOT_ID && !drawn.has(id)) continue
     const block = videoObjectJsonLd(nodes[id] as ComposedVideoNode, context)
     if (block) found.push(block)
   }
