@@ -716,6 +716,13 @@ const JOB_SITES: JobSite[] = JOB_ROOTS.flatMap((root) =>
  * than left as a stale entry.
  */
 const PLATFORM_JOBS: Record<string, string> = {
+  'apps/tenant/utils/ai-jobs-beat.ts#ai-jobs':
+    'Runs the queued steps of AI generation jobs (AGL-2904). It reads jobs ' +
+    'by collection group across every org and writes only unpublished ' +
+    'drafts under orgs/{orgId}/aiJobs, never a publish, so a site lock has ' +
+    'nothing here to withhold. The lock that applies is the ai-generate ' +
+    'feature switch, which bounds provider spend, and the handler asks it ' +
+    'before it claims a step.',
   'apps/tenant/utils/sending-domain-recheck-job.ts#recheck-sending-domains':
     'Reads DNS for org-owned sending domains at ' +
     'orgs/{orgId}/sendingDomains/{domain} and resolves no host, so it has ' +

@@ -24,6 +24,10 @@ export * from './lib/server/assist-usage'
 // (AGL-2903). Beside the meters they price with.
 export * from './lib/server/ai-runtime'
 export * from './lib/server/ai-gate'
+// AI generation jobs (AGL-2904): the Firestore state machine, the step
+// registry with its one real step, and the beat's sweep.
+export * from './lib/server/ai-jobs'
+export * from './lib/server/ai-job-text-step'
 export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
 export * from './lib/server/client-error-report'

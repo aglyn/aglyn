@@ -340,6 +340,35 @@ describe('the gate is a scope check, not a kill switch (AGL-1934)', () => {
 })
 
 /**
+ * The AI jobs drawer (AGL-2904) rides inside the panel, scoped to the same
+ * org the thread is. It is a mount check, not a behavior one: the drawer's
+ * own spec drives its list, stream and cancel; what this pins is that the
+ * panel puts it on the page for a workspace that carries the add-on and
+ * not for one that does not.
+ */
+describe('the AI jobs drawer is mounted in the panel (AGL-2904)', () => {
+  it('is on the page for a workspace with the AI add-on, collapsed', async () => {
+    currentOrg.org = {
+      plan: 'pro',
+      billingStatus: 'active',
+      seatAddons: { aiAddon: true },
+    }
+    render(<AssistPanelComponent />)
+    fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
+    expect(await screen.findByLabelText('Show AI jobs')).toBeTruthy()
+    // Collapsed, so opening the panel made no request the thread did not.
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('is absent on a plan without aiGenerative', async () => {
+    render(<AssistPanelComponent />)
+    fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
+    await screen.findByPlaceholderText('How do I…')
+    expect(screen.queryByLabelText('Show AI jobs')).toBeNull()
+  })
+})
+
+/**
  * What a person reads when the server can go no further (AGL-2486).
  *
  * "Aglyn Assist is not configured on this deployment" names a deployment the

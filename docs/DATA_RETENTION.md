@@ -83,10 +83,11 @@ that blurs the two is worse than one that admits the gap. Commands in
 | Collection group | Field | Period | Contents | Evidence |
 | --- | --- | --- | --- | --- |
 | `assistExchanges` | `expiresAt` | **180 days** | The **verbatim** half of an Assist exchange: the question, the answer, the asking `uid`, the host. | `assist-usage.ts` `ASSIST_EXCHANGE_RETENTION_DAYS` (AGL-1972) |
+| `aiJobs` | `expiresAt` | **180 days** — the same clock as an exchange | An AI generation job: the customer's **brief verbatim**, the step ledger with its credit figures, the outputs it named (a `text` output carries its copy on the document), the creating `uid`. Written only by the server; the drafts a job creates are ordinary content and live as long as the workspace does. **Declared and written; the gcloud policy is owed** (`docs/FIRESTORE_MANUAL_CONFIG.md`). | `ai-jobs.ts` `createAiJob` stamps `assistExchangeExpiry(now)` (AGL-2904) |
 | `churnSurveyDetails` | `expiresAt` | **365 days** | The churn survey's ≤500 characters of free text, split off the survey document. | `_lib/retention.ts` `CHURN_SURVEY_DETAIL_RETENTION_DAYS` (AGL-1978) |
 | `apiIdempotency` | `expiresAt` | **30 days** | Replay keys **and the original response body** — for the REST API, a copy of the created record's `values`. | `api-idempotency.ts` `API_IDEMPOTENCY_RETENTION_DAYS` (AGL-1978) |
 
-`apps/console/specs/retention-ttl-config.spec.ts` asserts all eight policies as
+`apps/console/specs/retention-ttl-config.spec.ts` asserts every policy as
 a three-part configuration — declared in the index file, documented with a
 gcloud command, and actually stamped by **every** writer. It cannot see the
 live project; that read-back is the `ttls list` command below.
@@ -135,6 +136,12 @@ The same is true of everything under `users/{uid}/…` — profile, org
 memberships, host memberships, notifications, passkeys, `legalAcceptances` —
 which `eraseUser` removes with `recursiveDelete(userRef)`
 (`erase.ts:938`, AGL-1140).
+
+**AI generation jobs (AGL-2904) are one more org subcollection**,
+`orgs/{orgId}/aiJobs/{jobId}`, so the cascade reaches them too. Each carries
+the customer's brief verbatim and expires at 180 days on the exchange's clock
+(the owed-policy table above); the drafts a job creates are ordinary screens,
+components and versions under the host, retained as content is.
 
 **Aglyn Assist writes four subcollections and all four are under the org**, so
 the cascade reaches them with no extra sweep:

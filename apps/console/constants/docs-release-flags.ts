@@ -201,12 +201,14 @@ export const FLAG_DOC_PAGES: Partial<
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
 export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
-  // AGL-2903. The flag arrived with the shared runtime and the gate ladder,
-  // ahead of any door it gates: no generative route is registered yet, so
-  // there is no customer-facing page to disclose a rollout on. The first
-  // generative page moves this key to FLAG_DOC_PAGES.
+  // AGL-2903 / AGL-2904. The flag gates the AI job routes and the console's
+  // jobs drawer, which are staff preview only and describe themselves in
+  // `docs/AI_JOBS.md` rather than on a customer page: the one job kind that
+  // runs today produces draft copy, and no published page tells a customer
+  // to expect it. The first customer-facing generative page moves this key
+  // to FLAG_DOC_PAGES.
   release_ai_generative:
-    'No generative door is registered yet — the flag gates routes that do not exist, and the docs describe nothing behind it.',
+    'The generative doors are staff preview only and no customer-facing page describes them yet; the job model is documented for operators in docs/AI_JOBS.md.',
 }
 
 /**

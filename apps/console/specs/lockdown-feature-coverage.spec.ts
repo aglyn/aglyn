@@ -157,6 +157,16 @@ const CHOKEPOINTS: Chokepoint[] = [
       'or not it is served through the plugin dispatcher',
   },
   {
+    feature: 'ai-generate',
+    file: 'apps/tenant/utils/ai-jobs-beat.ts',
+    wiring: [`featureLockdownRefusal({ feature: 'ai-generate' })`],
+    why:
+      'the AI jobs beat (AGL-2904) is the one generative caller with no ' +
+      'request to refuse, so it asks the feature verdict itself before it ' +
+      'claims a step — a lock that stopped the doors and not the beat would ' +
+      'keep spending on every job already queued',
+  },
+  {
     feature: '(writer)',
     covers: [],
     file: 'apps/console/app/api/admin/lockdown/route.ts',

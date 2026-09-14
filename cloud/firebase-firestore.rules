@@ -706,6 +706,18 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // AI generation jobs (AGL-2904): one document per brief carried
+      // through the model by the console route and the platform job beat.
+      // Member-readable so a workspace can watch its own jobs and open the
+      // drafts they name; server-written only, because the document IS the
+      // state machine — its lease, its step ledger and its credit figures
+      // are what stop a step being run and metered twice, and a client that
+      // could write them could re-run a step for free or clear its spend.
+      match /aiJobs/{jobId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if false;
+      }
+
       // Monthly usage rollups (AGL-41) + the live API-request meter
       // (AGL-635): readable by the org so the Billing page usage meters show
       // real numbers — and org-wide only (AGL-1026), because how much the

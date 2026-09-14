@@ -138,6 +138,13 @@ const POLICIES: Array<{
     writers: ['libs/tenant/data/admin/src/lib/server/assist-usage.ts'],
     stamp: 'expiresAt: assistExchangeExpiry(now)',
   },
+  // AGL-2904: an AI generation job carries the customer's brief verbatim,
+  // so it expires on the exchange's clock, stamped by the one writer.
+  {
+    collectionGroup: 'aiJobs',
+    writers: ['libs/tenant/data/admin/src/lib/server/ai-jobs.ts'],
+    stamp: 'expiresAt: assistExchangeExpiry(now)',
+  },
   // AGL-1978: the churn survey's free text, split off the survey document so
   // it could expire without taking the reason breakdown with it.
   {

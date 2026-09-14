@@ -62,6 +62,7 @@ import {
 } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { AssistJobsDrawer } from './assist-jobs-drawer.component'
 import { DocsHelpTip } from './docs-help-tip.component'
 import { HostIdContext } from './host-id-provider'
 import useAiPermissions from '../hooks/use-ai-permissions'
@@ -779,6 +780,15 @@ export function AssistPanelComponent() {
           </Stack>
 
           <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
+            {/* The generation jobs (AGL-2904), scoped to the same org the
+                thread is: a job listed here is one this page may act as. */}
+            <AssistJobsDrawer
+              orgId={scopedOrgId}
+              org={org}
+              orgReady={orgReady}
+              orgSlug={billingSlug}
+              user={user}
+            />
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 {`Ask anything about using ${branding.productName} — building `}
