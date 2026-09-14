@@ -2109,6 +2109,30 @@ export const CRON_BEAT_WATCH_DOC = 'watch-window'
 export const CRON_BEAT_DEGRADED_DOC = 'last-degraded'
 
 /**
+ * Every job's latest mark in one document, `{ beats: { [jobId]: atMs } }`.
+ *
+ * The reader's fast path (AGL-2946). Listing the collection costs one read per
+ * job on every uncached probe — ~23 reads, several hundred times a day, on a
+ * project that pays for reads past the free tier — to answer a question this
+ * one document answers.
+ *
+ * A COPY, never the authority. `writeCronBeat` writes it second, so a job
+ * whose own mark landed can still be missing or stale here, and the reader
+ * confirms any job this document calls late against that job's own mark
+ * before reporting it. Stale costs a read; it never costs a false red.
+ *
+ * Same collision argument as the other two: a plain slug no job id equals.
+ */
+export const CRON_BEAT_SUMMARY_DOC = 'summary'
+
+/** The reserved documents in `CRON_BEAT_COLLECTION` that are not job marks. */
+export const CRON_BEAT_RESERVED_DOCS: ReadonlySet<string> = new Set([
+  CRON_BEAT_WATCH_DOC,
+  CRON_BEAT_DEGRADED_DOC,
+  CRON_BEAT_SUMMARY_DOC,
+])
+
+/**
  * How long a gap may be before the next degraded probe counts as a NEW
  * window rather than a continuation of the one on file.
  *
@@ -2677,7 +2701,7 @@ export function cronJobsHealth(
 }
 
 /**
- * The mark a run leaves, and the only write on the beat path.
+ * The mark a run leaves — the only writes on the beat path.
  *
  * Structurally typed against firebase-admin's Firestore rather than importing
  * it: this module is pure and is imported by tenant Server Components, and a
@@ -2685,10 +2709,17 @@ export function cronJobsHealth(
  * for a page to fail. The console routes, the marketing plugin's scheduled
  * campaign processor and the tenant job runner all pass their own handle.
  *
+ * Two writes, in order: the job's own document, which is the authority, then
+ * its entry in {@link CRON_BEAT_SUMMARY_DOC}, which is what the reader reads
+ * first. The summary merges one map key, so jobs beating at the same moment
+ * do not overwrite each other's entries.
+ *
  * NEVER THROWS. A beat that cannot be written must not take down the job it
  * is describing — the monitor becoming the outage is its own failure mode.
- * It returns false instead, and a write that keeps failing shows up where it
- * should: as a silent job on the board.
+ * It returns false when the job's own mark could not be written, and a write
+ * that keeps failing shows up where it should: as a silent job on the board.
+ * A failed summary write still returns true, because the mark that decides
+ * the verdict landed.
  */
 export interface CronBeatStore {
   collection(name: string): {
@@ -2704,14 +2735,35 @@ export async function writeCronBeat(
   now: number = Date.now(),
 ): Promise<boolean> {
   try {
-    await store
-      .collection(CRON_BEAT_COLLECTION)
+    const beats = store.collection(CRON_BEAT_COLLECTION)
+    await beats
       .doc(jobId)
       .set({ jobId, atMs: now, at: new Date(now).toISOString() }, { merge: true })
+    try {
+      await beats
+        .doc(CRON_BEAT_SUMMARY_DOC)
+        .set({ beats: { [jobId]: now } }, { merge: true })
+    } catch {
+      // The reader confirms a stale summary entry against the mark above.
+    }
     return true
   } catch {
     return false
   }
+}
+
+/**
+ * The beats a summary document holds, ignoring anything malformed.
+ *
+ * `raw` is the document's `beats` field as Firestore returns it — a plain map,
+ * or undefined when the document does not exist yet.
+ */
+export function cronBeatsFromSummary(raw: unknown): CronBeat[] {
+  if (!raw || typeof raw !== 'object') return []
+  return Object.entries(raw as Record<string, unknown>)
+    .map(([jobId, atMs]) => ({ jobId, atMs: Number(atMs) }))
+    .filter((beat) => !CRON_BEAT_RESERVED_DOCS.has(beat.jobId))
+    .filter((beat) => Number.isFinite(beat.atMs))
 }
 
 /**

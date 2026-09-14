@@ -42,6 +42,7 @@
  */
 import {
   CRON_BEAT_DEGRADED_DOC,
+  CRON_BEAT_SUMMARY_DOC,
   CRON_DEGRADED_WINDOW_CONTINUITY_MS,
   SCHEDULED_JOBS,
 } from '@aglyn/aglyn/server'
@@ -52,10 +53,36 @@ const DAY = 86_400_000
 let mockStore: Record<string, Record<string, unknown>> = {}
 /** Every write the route makes, so the bootstrap can be asserted exactly. */
 let mockWrites: Array<{ doc: string; data: Record<string, unknown> }> = []
+/** Every document the route reads, in order — each one is a billed read. */
+let mockReads: string[] = []
+/** How many times the route listed the whole collection. */
+let mockListCalls = 0
 /** Set to make the collection read throw, i.e. we cannot see the jobs. */
 let mockListThrows = false
 /** Set to make writes throw, i.e. the record cannot be kept. */
 let mockWriteThrows = false
+
+const mockIsPlainObject = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * Firestore's `set(…, { merge: true })`: nested maps merge key by key.
+ * `mock`-prefixed so the hoisted `jest.mock` factory may call it.
+ */
+function mockMergeDeep(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...target }
+  for (const [key, value] of Object.entries(source)) {
+    const existing = out[key]
+    out[key] =
+      mockIsPlainObject(value) && mockIsPlainObject(existing)
+        ? mockMergeDeep(existing, value)
+        : value
+  }
+  return out
+}
 
 jest.mock('firebase-admin/app', () => ({
   __esModule: true,
@@ -71,6 +98,7 @@ jest.mock('firebase-admin/firestore', () => ({
       }
       return {
         get: async () => {
+          mockListCalls += 1
           if (mockListThrows) throw new Error('firestore is having a day')
           return {
             docs: Object.entries(mockStore).map(([id, data]) => ({
@@ -81,13 +109,19 @@ jest.mock('firebase-admin/firestore', () => ({
         },
         doc: (id: string) => ({
           get: async () => {
+            mockReads.push(id)
             if (mockListThrows) throw new Error('firestore is having a day')
             return { get: (field: string) => mockStore[id]?.[field] }
           },
-          set: async (data: Record<string, unknown>) => {
+          set: async (
+            data: Record<string, unknown>,
+            options?: { merge?: boolean },
+          ) => {
             if (mockWriteThrows) throw new Error('firestore refused the write')
             mockWrites.push({ doc: id, data })
-            mockStore[id] = { ...(mockStore[id] ?? {}), ...data }
+            mockStore[id] = options?.merge
+              ? mockMergeDeep(mockStore[id] ?? {}, data)
+              : { ...data }
           },
         }),
       }
@@ -107,15 +141,39 @@ async function freshRoute(): Promise<RouteModule> {
   return import('../app/api/health/crons/route')
 }
 
-/** Every job reported a minute ago, and we have been watching for a month. */
+/**
+ * Every job reported a minute ago, and we have been watching for a month —
+ * each mark in its own document AND in the summary, as `writeCronBeat`
+ * leaves them.
+ */
 function healthyStore(now: number) {
   const seeded: Record<string, Record<string, unknown>> = {
     'watch-window': { startedAtMs: now - 30 * DAY },
   }
+  const beats: Record<string, number> = {}
   for (const job of SCHEDULED_JOBS) {
     seeded[job.id] = { jobId: job.id, atMs: now - 60_000 }
+    beats[job.id] = now - 60_000
   }
+  seeded[CRON_BEAT_SUMMARY_DOC] = { beats }
   return seeded
+}
+
+/** A job's latest mark, written where `writeCronBeat` writes it: both places. */
+function markJob(jobId: string, atMs: number) {
+  mockStore[jobId] = { jobId, atMs }
+  summaryBeats()[jobId] = atMs
+}
+
+/** A job that has never reported: in neither place. */
+function forgetJob(jobId: string) {
+  delete mockStore[jobId]
+  delete summaryBeats()[jobId]
+}
+
+function summaryBeats(): Record<string, number> {
+  const summary = (mockStore[CRON_BEAT_SUMMARY_DOC] ??= { beats: {} })
+  return summary['beats'] as Record<string, number>
 }
 
 /**
@@ -129,7 +187,10 @@ let errorLog: jest.SpyInstance
 beforeEach(() => {
   mockStore = {}
   mockWrites = []
+  mockReads = []
+  mockListCalls = 0
   mockListThrows = false
+  mockWriteThrows = false
   errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
 
@@ -163,7 +224,7 @@ describe('/api/health/crons', () => {
     // or paused, or the route 404s in production. Nothing else changes: no
     // error is logged, no delivery fails, the workflow never goes red, and
     // before this endpoint existed the board stayed entirely green.
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
 
     const { GET } = await freshRoute()
     const response = await GET()
@@ -189,7 +250,7 @@ describe('/api/health/crons', () => {
     mockStore = healthyStore(now)
     // The plugin job beat is the project's only real Cloud Scheduler job and
     // the only one no workflow file mentions.
-    delete mockStore['plugin-jobs-beat']
+    forgetJob('plugin-jobs-beat')
 
     const { GET } = await freshRoute()
     const body = await (await GET()).json()
@@ -218,10 +279,7 @@ describe('/api/health/crons', () => {
     // this job used to carry — so this test also fails if the grace is ever
     // widened back. `health-report-crons.spec.ts` pins the exact 45/46
     // boundary against a frozen clock.
-    mockStore['campaigns-process-scheduled'] = {
-      jobId: 'campaigns-process-scheduled',
-      atMs: now - 75 * 60_000,
-    }
+    markJob('campaigns-process-scheduled', now - 75 * 60_000)
 
     const { GET } = await freshRoute()
     const response = await GET()
@@ -288,7 +346,7 @@ describe('/api/health/crons', () => {
     const { GET } = await freshRoute()
     await GET()
     const before = Object.keys(mockStore).length
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: 0 }
+    markJob('report-usage', 0)
     const body = await (await GET()).json()
     // Still the memoised healthy answer — the TTL, not a fresh read.
     expect(body.checks['report-usage'].ok).toBe(true)
@@ -316,7 +374,7 @@ describe('/api/health/crons', () => {
   it('HEAD goes RED with GET — the defect that made a HEAD monitor useless', async () => {
     const now = Date.now()
     mockStore = healthyStore(now)
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
 
     const { GET, HEAD } = await freshRoute()
     // Asserted against GET in the same test rather than against a literal:
@@ -340,7 +398,7 @@ describe('/api/health/crons', () => {
     const writesAfterGet = mockWrites.length
     // The bootstrap document is written once by the first probe; HEAD must
     // not re-read the collection or write anything of its own.
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: 0 }
+    markJob('report-usage', 0)
     expect((await HEAD()).status).toBe(200)
     expect(mockWrites.length).toBe(writesAfterGet)
   })
@@ -358,7 +416,7 @@ describe('/api/health/crons', () => {
     // it decided.
     const now = Date.now()
     mockStore = healthyStore(now)
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
     const { GET } = await freshRoute()
     expect((await GET()).status).toBe(503)
 
@@ -389,7 +447,7 @@ describe('/api/health/crons', () => {
     // turn a seven-hour outage into thousands.
     const now = Date.now()
     mockStore = healthyStore(now)
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
     const { GET, HEAD } = await freshRoute()
     await GET()
     await GET()
@@ -420,7 +478,7 @@ describe('/api/health/crons', () => {
     // the endpoint already holds a handle to.
     const now = Date.now()
     mockStore = healthyStore(now)
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
     const { GET } = await freshRoute()
     expect((await GET()).status).toBe(503)
 
@@ -453,7 +511,7 @@ describe('/api/health/crons', () => {
     const now = Date.now()
     const opened = now - 3 * 60 * 60_000
     mockStore = healthyStore(now)
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
     mockStore[CRON_BEAT_DEGRADED_DOC] = {
       signature: 'report-usage',
       firstSeenAtMs: opened,
@@ -474,7 +532,7 @@ describe('/api/health/crons', () => {
     // absorb today's, or the span it reports is fiction.
     const now = Date.now()
     mockStore = healthyStore(now)
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
     mockStore[CRON_BEAT_DEGRADED_DOC] = {
       signature: 'audit-archive',
       firstSeenAtMs: now - 5 * 60 * 60_000,
@@ -496,7 +554,7 @@ describe('/api/health/crons', () => {
     // window weeks long.
     const now = Date.now()
     mockStore = healthyStore(now)
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
     mockStore[CRON_BEAT_DEGRADED_DOC] = {
       signature: 'report-usage',
       firstSeenAtMs: now - 2 * DAY,
@@ -516,7 +574,7 @@ describe('/api/health/crons', () => {
     // the worse failure. The verdict is still owed to the caller.
     const now = Date.now()
     mockStore = healthyStore(now)
-    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+    markJob('report-usage', now - 3 * DAY)
     mockWriteThrows = true
 
     const { GET } = await freshRoute()
@@ -547,5 +605,102 @@ describe('/api/health/crons', () => {
     expect(Object.keys(body.checks).sort()).toEqual(
       SCHEDULED_JOBS.map((job) => job.id).sort(),
     )
+  })
+
+  /*==========================================
+   * What a probe costs (AGL-2946). Every read below is a billed read, and
+   * this door is probed several hundred times a day.
+   *=========================================*/
+  it('costs two reads on a green board — the watch window and the summary', async () => {
+    mockStore = healthyStore(Date.now())
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(200)
+
+    // Listing the collection was one read per job, ~23 on every probe.
+    expect(mockListCalls).toBe(0)
+    expect(mockReads).toEqual(['watch-window', CRON_BEAT_SUMMARY_DOC])
+  })
+
+  it('confirms a job the summary calls late against its own mark before going red', async () => {
+    // The summary is written after the job's own mark, so it can trail it.
+    // The job's document is the authority: a stale summary entry costs one
+    // read, never a false red.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    summaryBeats()['report-usage'] = now - 3 * DAY
+
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.checks['report-usage'].ok).toBe(true)
+    expect(mockReads).toEqual([
+      'watch-window',
+      CRON_BEAT_SUMMARY_DOC,
+      'report-usage',
+    ])
+    // And the summary is repaired, so the next probe is two reads again.
+    expect(summaryBeats()['report-usage']).toBe(now - 60_000)
+    expect(mockWrites).toHaveLength(1)
+    expect(mockWrites[0].doc).toBe(CRON_BEAT_SUMMARY_DOC)
+    expect(mockWrites[0].data).toEqual({ beats: { 'report-usage': now - 60_000 } })
+    // Only the repaired key is written, so a job beating at the same moment
+    // keeps its own entry.
+    expect(Object.keys(summaryBeats()).sort()).toEqual(
+      SCHEDULED_JOBS.map((job) => job.id).sort(),
+    )
+  })
+
+  it('still reds when the job\'s own mark agrees it is late', async () => {
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    markJob('report-usage', now - 3 * DAY)
+
+    const { GET } = await freshRoute()
+    const body = await (await GET()).json()
+
+    expect(body.checks['report-usage'].code).toBe('job-silent')
+    // The confirming read happened, and the degraded record was read to
+    // continue its window — both only because something is red.
+    expect(mockReads).toEqual([
+      'watch-window',
+      CRON_BEAT_SUMMARY_DOC,
+      'report-usage',
+      CRON_BEAT_DEGRADED_DOC,
+    ])
+  })
+
+  it('fills the summary on the first probe after it ships, and stays green', async () => {
+    // The day this deploys, every job has its own mark and the summary does
+    // not exist. That must not red the board, and must not cost every probe
+    // a full census until each job next runs — `usage-email` is monthly.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    delete mockStore[CRON_BEAT_SUMMARY_DOC]
+
+    const { GET } = await freshRoute()
+    expect((await GET()).status).toBe(200)
+
+    expect(Object.keys(summaryBeats()).sort()).toEqual(
+      SCHEDULED_JOBS.map((job) => job.id).sort(),
+    )
+    for (const job of SCHEDULED_JOBS) {
+      expect(summaryBeats()[job.id]).toBe(now - 60_000)
+    }
+  })
+
+  it('answers from the marks it read when the summary cannot be repaired', async () => {
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    summaryBeats()['report-usage'] = now - 3 * DAY
+    mockWriteThrows = true
+
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.checks['report-usage'].ok).toBe(true)
   })
 })

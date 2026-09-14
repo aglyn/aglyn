@@ -42,10 +42,11 @@
  * the twenty-nine days it is deliberately idle. See `cronJobsHealth`.
  *
  * Same three rules as its sibling health endpoints — never cached, checks
- * the real thing, cost-bounded. The read is one small collection (one
- * document per job) memoised per instance. The body carries job ids,
- * schedules and ages, all of which are already in the open-source repo, and
- * never a secret, a customer or a resource path.
+ * the real thing, cost-bounded. A green probe is two reads — the watch window
+ * and the summary of every job's latest mark — memoised per instance. Only a
+ * job the summary calls late costs a read of its own mark (AGL-2946). The
+ * body carries job ids, schedules and ages, all of which are already in the
+ * open-source repo, and never a secret, a customer or a resource path.
  */
 import { getApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
@@ -55,8 +56,10 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   CRON_BEAT_COLLECTION,
   CRON_BEAT_DEGRADED_DOC,
+  CRON_BEAT_SUMMARY_DOC,
   CRON_BEAT_WATCH_DOC,
   CRON_DEGRADED_WINDOW_CONTINUITY_MS,
+  cronBeatsFromSummary,
   cronJobsHealth,
   deploymentCommitRef,
   deploymentEnvironmentLabel,
@@ -258,6 +261,56 @@ async function recordDegradedCrons(
   }
 }
 
+/**
+ * Check the jobs the summary calls late against their own marks.
+ *
+ * The summary is written after each job's own mark, so it can trail it: a
+ * summary write that failed, or the first probe after the summary existed at
+ * all. Each job's own document is the authority, so a row the summary reds is
+ * only reported once that document agrees. The cost is one read per suspect,
+ * and a green board has none.
+ *
+ * Marks found newer than the summary's entry are written back to it, so one
+ * probe repairs the gap instead of every probe paying for it until that job
+ * next runs — which for `usage-email` is the 1st of next month. Only those
+ * keys are merged, so every other job's entry is untouched. A suspect that
+ * beats in the instant between the read and the write-back can be left one
+ * mark behind, which costs the next probe the same confirming read and
+ * nothing else. A write-back that fails is swallowed for the same reason.
+ */
+async function confirmSuspects(
+  db: FirebaseFirestore.Firestore,
+  beats: CronBeat[],
+  suspects: string[],
+): Promise<CronBeat[]> {
+  const collection = db.collection(CRON_BEAT_COLLECTION)
+  const known = new Map(beats.map((beat) => [beat.jobId, beat.atMs]))
+  const marks = await Promise.all(
+    suspects.map(async (jobId) => {
+      const snapshot = await collection.doc(jobId).get()
+      return { jobId, atMs: Number(snapshot.get('atMs')) }
+    }),
+  )
+  const newer = marks.filter(
+    (mark) =>
+      Number.isFinite(mark.atMs) &&
+      mark.atMs > (known.get(mark.jobId) ?? Number.NEGATIVE_INFINITY),
+  )
+  if (!newer.length) return beats
+  try {
+    await collection
+      .doc(CRON_BEAT_SUMMARY_DOC)
+      .set(
+        { beats: Object.fromEntries(newer.map((mark) => [mark.jobId, mark.atMs])) },
+        { merge: true },
+      )
+  } catch {
+    // The verdict below uses the marks it read; the summary heals next time.
+  }
+  for (const mark of newer) known.set(mark.jobId, mark.atMs)
+  return [...known].map(([jobId, atMs]) => ({ jobId, atMs }))
+}
+
 const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
   PROBE_TTL_MS,
   async () => {
@@ -269,25 +322,31 @@ const cronsProbe = memoizeWithTtl<Record<string, CronJobCheck>>(
       const db = getFirestore(getApp())
       const now = Date.now()
       const watchStartedAtMs = await readWatchStart(db, now)
-      const snapshot = await db.collection(CRON_BEAT_COLLECTION).get()
-      const beats: CronBeat[] = snapshot.docs
-        .filter(
-          (doc) =>
-            doc.id !== CRON_BEAT_WATCH_DOC && doc.id !== CRON_BEAT_DEGRADED_DOC,
-        )
-        .map((doc) => ({ jobId: doc.id, atMs: Number(doc.get('atMs')) }))
-        .filter((beat) => Number.isFinite(beat.atMs))
-      const checks = reportDegradedCrons(
-        cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now),
-      )
-      // The previous record rides in on the census above, so continuity is
-      // free. A no-op unless something is actually red.
-      await recordDegradedCrons(
-        db,
-        checks,
-        snapshot.docs.find((doc) => doc.id === CRON_BEAT_DEGRADED_DOC),
-        now,
-      )
+      const summary = await db
+        .collection(CRON_BEAT_COLLECTION)
+        .doc(CRON_BEAT_SUMMARY_DOC)
+        .get()
+      let beats = cronBeatsFromSummary(summary.get('beats'))
+      const judge = () =>
+        cronJobsHealth(beats, watchStartedAtMs, Date.now() - startedAt, now)
+      let checks = judge()
+      const suspects = Object.entries(checks)
+        .filter(([, check]) => !check.ok)
+        .map(([jobId]) => jobId)
+      if (suspects.length) {
+        beats = await confirmSuspects(db, beats, suspects)
+        checks = judge()
+      }
+      reportDegradedCrons(checks)
+      // The previous record is only needed to continue a red window, so a
+      // green board never reads it.
+      if (Object.values(checks).some((check) => !check.ok)) {
+        const prior = await db
+          .collection(CRON_BEAT_COLLECTION)
+          .doc(CRON_BEAT_DEGRADED_DOC)
+          .get()
+        await recordDegradedCrons(db, checks, prior, now)
+      }
       return checks
     } catch {
       // A null census is degraded for every row, by contract. "We cannot see

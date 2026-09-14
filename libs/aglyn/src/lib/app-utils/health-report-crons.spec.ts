@@ -26,7 +26,10 @@
  */
 import {
   CRON_BEAT_COLLECTION,
+  CRON_BEAT_RESERVED_DOCS,
+  CRON_BEAT_SUMMARY_DOC,
   SCHEDULED_JOBS,
+  cronBeatsFromSummary,
   cronJobsHealth,
   healthStatus,
   previousCronFire,
@@ -401,13 +404,19 @@ describe('cronJobsHealth', () => {
 })
 
 describe('writeCronBeat', () => {
-  function fakeStore() {
-    const writes: Array<{ collection: string; doc: string; data: unknown }> = []
+  function fakeStore(failingDoc?: string) {
+    const writes: Array<{
+      collection: string
+      doc: string
+      data: unknown
+      options: unknown
+    }> = []
     const store = {
       collection: (collection: string) => ({
         doc: (doc: string) => ({
-          set: async (data: Record<string, unknown>) => {
-            writes.push({ collection, doc, data })
+          set: async (data: Record<string, unknown>, options?: unknown) => {
+            if (doc === failingDoc) throw new Error('firestore refused it')
+            writes.push({ collection, doc, data, options })
           },
         }),
       }),
@@ -415,7 +424,7 @@ describe('writeCronBeat', () => {
     return { store, writes }
   }
 
-  it('stamps one document per job id', async () => {
+  it('stamps the job document first, then merges its entry into the summary', async () => {
     const { store, writes } = fakeStore()
     expect(await writeCronBeat(store, 'audit-archive', NOW)).toBe(true)
     expect(writes).toEqual([
@@ -427,8 +436,25 @@ describe('writeCronBeat', () => {
           atMs: NOW,
           at: '2026-08-19T12:00:00.000Z',
         },
+        options: { merge: true },
+      },
+      {
+        collection: CRON_BEAT_COLLECTION,
+        doc: CRON_BEAT_SUMMARY_DOC,
+        // One key under a merge, so two jobs beating at once cannot overwrite
+        // each other's entry (AGL-2946).
+        data: { beats: { 'audit-archive': NOW } },
+        options: { merge: true },
       },
     ])
+  })
+
+  it('still reports the beat when only the summary write fails', async () => {
+    // The job's own mark is the authority, and the reader confirms a stale
+    // summary entry against it — so the beat did land.
+    const { store, writes } = fakeStore(CRON_BEAT_SUMMARY_DOC)
+    expect(await writeCronBeat(store, 'audit-archive', NOW)).toBe(true)
+    expect(writes.map((write) => write.doc)).toEqual(['audit-archive'])
   })
 
   it('never throws, so the monitor cannot become the outage', async () => {
@@ -444,5 +470,38 @@ describe('writeCronBeat', () => {
     await expect(writeCronBeat(exploding, 'audit-archive', NOW)).resolves.toBe(
       false,
     )
+  })
+})
+
+describe('cronBeatsFromSummary', () => {
+  it('reads every job the summary holds', () => {
+    expect(
+      cronBeatsFromSummary({ 'audit-archive': NOW, 'report-usage': NOW - DAY }),
+    ).toEqual([
+      { jobId: 'audit-archive', atMs: NOW },
+      { jobId: 'report-usage', atMs: NOW - DAY },
+    ])
+  })
+
+  it('reads a summary that does not exist yet as no beats, not as an error', () => {
+    expect(cronBeatsFromSummary(undefined)).toEqual([])
+    expect(cronBeatsFromSummary(null)).toEqual([])
+    expect(cronBeatsFromSummary('corrupt')).toEqual([])
+  })
+
+  it('drops entries that are not a usable time, or not a job', () => {
+    expect(
+      cronBeatsFromSummary({
+        'audit-archive': 'yesterday',
+        [CRON_BEAT_SUMMARY_DOC]: NOW,
+        'report-usage': NOW,
+      }),
+    ).toEqual([{ jobId: 'report-usage', atMs: NOW }])
+  })
+
+  it('shares no id with a job, so no mark can land on a reserved document', () => {
+    for (const job of SCHEDULED_JOBS) {
+      expect(CRON_BEAT_RESERVED_DOCS.has(job.id)).toBe(false)
+    }
   })
 })

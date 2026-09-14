@@ -1161,8 +1161,12 @@ Notes that keep these honest:
   audit archive and scheduled publishing** — a silently unscheduled job means
   customers are not billed, or data is not reaped, with every other row on
   this page green.
-  Each job stamps `platformCronBeats/{jobId}` when it is invoked; the endpoint
-  compares each mark against that job's own cron expression and 503s naming
+  Each job stamps `platformCronBeats/{jobId}` when it is invoked, and merges
+  the same time into `platformCronBeats/summary`. The endpoint reads the
+  summary (two reads per probe with the watch window, not one per job) and
+  confirms any job the summary calls late against that job's own document
+  before reporting it, so a stale summary costs a read and never a false red.
+  It compares each mark against that job's own cron expression and 503s naming
   the ones that should have run and did not (`job-silent`), never ran at all
   since we started watching (`job-never-reported`), or whose marks it could
   not read (`beats-unavailable`). The inventory and verdict logic are
