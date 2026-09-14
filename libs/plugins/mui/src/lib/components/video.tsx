@@ -16,7 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { readStoredVisitorConsent } from '@aglyn/aglyn/app-utils/visitor-consent'
+import {
+  readStoredVisitorConsent,
+  VISITOR_CONSENT_CHANGED_EVENT,
+} from '@aglyn/aglyn/app-utils/visitor-consent'
 import {
   wistiaMediaId,
   wistiaPlayerSrc,
@@ -121,7 +124,8 @@ export interface VideoProps {
    *
    * A Wistia link is read differently (AGL-2826): the element keeps only the
    * media id and plays Wistia's own player, which loads when a visitor
-   * presses play and never before. See `wistia-embed.ts`.
+   * presses play and never before, unless {@link loadPlayer} loads it with the
+   * page. See `wistia-embed.ts`.
    */
   src?: string
   /**
@@ -186,11 +190,29 @@ export interface VideoProps {
    * nothing to click without one — and falls back to inline playback when
    * there is none, rather than rendering a button with no face.
    *
-   * A Wistia video waits for a press whether this is on or off; the switch
+   * A Wistia poster waits for a press whether this is on or off; the switch
    * decides only where its player opens, in the dialog or in place of the
-   * poster.
+   * poster. A Wistia player that {@link loadPlayer} put in the page stays in
+   * the page either way.
    */
   lightbox?: boolean
+  /**
+   * Load a Wistia video's player with the page (AGL-2962), in place of the
+   * poster and without autoplay, for a visitor whose stored consent grants
+   * analytics.
+   *
+   * For a page built to show this one film. A search engine lists a video
+   * only from a page whose main content it is, and it can only find a player
+   * that is in the page once the page has loaded; a poster that must be
+   * pressed first is the case Search Console reports as "Cannot determine
+   * video position and size".
+   *
+   * Default OFF, so every document published before this renders the poster
+   * it was authored against. No effect on any other source: a library film or
+   * a video URL already renders its `<video>` into the page's HTML. The
+   * page-load state below says who gets the player and when.
+   */
+  loadPlayer?: boolean
   /** Captions file — a WebVTT (`.vtt`) URL or media reference. */
   captionsSrc?: string
   /** What the captions track is called in the player's menu. */
@@ -279,6 +301,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     uploadDate: _uploadDate,
     durationSeconds: _durationSeconds,
     lightbox,
+    loadPlayer,
     captionsSrc,
     captionsLabel,
     captionsLang,
@@ -385,10 +408,11 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   /**
    * A Wistia video (AGL-2826), and the player address a press produced.
    *
-   * Nothing of Wistia's renders before that press. The poster is a button, as
-   * it is for the lightbox, so a visitor who only looks at the page makes no
-   * request to Wistia and is handed no storage by it. `playerSrc` stays empty
-   * until the press, and setting it is what brings the frame in.
+   * Unless the page loads the player (see `pageLoadSrc` below), nothing of
+   * Wistia's renders before that press. The poster is a button, as it is for
+   * the lightbox, so a visitor who only looks at the page makes no request to
+   * Wistia and is handed no storage by it. `playerSrc` stays empty until the
+   * press, and setting it is what brings the frame in.
    */
   const wistiaId = wistiaMediaId(storedSrc)
   const [playerSrc, setPlayerSrc] = useState<string>()
@@ -412,13 +436,86 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
     )
   }, [storedSrc, hostId, muted, loop])
   /**
+   * The player address "Load the player with the page" produced (AGL-2962):
+   * Wistia's player without autoplay, in place of the poster before anyone has
+   * pressed anything, so a search engine rendering the page finds the player
+   * in it.
+   *
+   * Only for a visitor whose stored consent grants analytics, which is why the
+   * address never carries `doNotTrack`. The unpressed frame is not free of
+   * storage: measured on 2026-09-14 in headless Chrome, it set no cookie but
+   * wrote two keys to its own `localStorage`, a random resume key and a record
+   * of its load times, with `doNotTrack` on as well as off. A visitor in a
+   * prior-consent region has to say yes before that. Everyone else keeps the
+   * poster, and a press on it loads the player as it does with the switch
+   * off, `doNotTrack` included.
+   *
+   * Set from an effect and never during render, for the reason a press reads
+   * consent at the click: the record is in this browser's storage, which the
+   * server HTML and the first paint cannot vary on, so both are the poster for
+   * every visitor. The effect reads the record on mount and again on every
+   * consent change, because the decision can land after the element mounts:
+   * the implied default is recorded when the region lookup answers, and a
+   * banner is answered whenever the visitor gets to it. A withdrawal before
+   * any press on the element puts the poster back, even over a film started
+   * from the play button inside Wistia's frame, which the element cannot see.
+   *
+   * Never on the besigner canvas, where the poster button is inert too, and
+   * never for a Wistia video without a poster, which has no first paint to
+   * give. A press ends it: from then on the pressed address is the one in the
+   * frame, and a later change of consent moves nothing, as it moves nothing
+   * for a player a press loaded with the switch off.
+   */
+  const [pageLoadSrc, setPageLoadSrc] = useState<string>()
+  useEffect(() => {
+    if (!loadPlayer || !wistiaId || !poster || editorInert || playerSrc) {
+      return undefined
+    }
+    const sync = () =>
+      setPageLoadSrc(
+        readStoredVisitorConsent(hostId)?.analytics
+          ? wistiaPlayerSrc(storedSrc, {
+              autoPlay: false,
+              muted: Boolean(muted),
+              loop: Boolean(loop),
+            })
+          : undefined,
+      )
+    sync()
+    window.addEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+    return () => window.removeEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
+  }, [
+    loadPlayer,
+    wistiaId,
+    poster,
+    editorInert,
+    playerSrc,
+    hostId,
+    storedSrc,
+    muted,
+    loop,
+  ])
+  /** Read through the switch, so switching it off removes a loaded player. */
+  const loadedSrc = loadPlayer ? pageLoadSrc : undefined
+  /**
+   * The address of the Wistia player standing in place of the poster, if one
+   * is: a pressed player while the lightbox is off, and a player the page
+   * loaded whatever the lightbox is set to. The pressed address outranks the
+   * loaded one, because it is the one that plays.
+   */
+  const inPlaceSrc =
+    wistiaId && (!lightbox || loadedSrc) ? (playerSrc ?? loadedSrc) : undefined
+  /**
    * What pressing the poster does. The poster's own button and a press sent
    * from outside the element both call this one function, so the two cannot
    * come to disagree about what a press is.
+   *
+   * A player the page loaded is already in place, so a press plays it there
+   * and never opens the lightbox.
    */
   const press = () => {
     if (wistiaId) playWistia()
-    if (lightbox) openLightbox()
+    if (lightbox && !loadedSrc) openLightbox()
   }
   /**
    * A press sent from outside the element (AGL-2867) — a "Play a video"
@@ -427,10 +524,15 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    *
    * - nothing that can play (no source, or a Wistia video with no poster):
    *   nothing happens;
-   * - a Wistia player already in place of its poster: it is playing already;
-   * - a poster that is a button: that button's own press, which is the only
-   *   thing that ever loads a hosted player or the lightbox chunk, and which
-   *   reads consent at that moment;
+   * - a Wistia player a press put in place of its poster: it is playing
+   *   already;
+   * - a Wistia player the page loaded and nothing has pressed: `press()`,
+   *   whose autoplaying address replaces the loaded one. That is what the play
+   *   button inside the frame does, and the element cannot reach that button
+   *   across Wistia's origin, so a film already started from it starts over;
+   * - a poster that is a button: that button's own press, which reads consent
+   *   at that moment and is the only thing that ever loads the lightbox chunk
+   *   or a player the page did not load;
    * - the inline player: `play()`, which is what a press on it does.
    *
    * Inert on the besigner canvas, as the poster button is, for the same
@@ -444,7 +546,7 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   const answerVideoCommand = useEventCallback((element: HTMLElement) => {
     if (editorInert || !src) return
     if (wistiaId && !poster) return
-    if (wistiaId && !lightbox && playerSrc) return
+    if (inPlaceSrc && playerSrc) return
     if ((lightbox || wistiaId) && poster) return press()
     if (element instanceof HTMLVideoElement) {
       // A play the browser refuses (a trigger that was not a press, on an
@@ -520,18 +622,22 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
   ) : null
   /**
    * A Wistia video with no poster has nothing to press, and the alternative —
-   * loading the player up front — is the request this element exists to
-   * withhold. So it says what it needs instead.
+   * loading the player up front for every visitor — is the request this
+   * element exists to withhold. So it says what it needs instead, with "Load
+   * the player with the page" on as well: the poster is that switch's server
+   * HTML and first paint, and what every visitor without analytics consent
+   * goes on seeing.
    */
   if (wistiaId && !poster) {
     return placeholder('Video — add a poster image to play this Wistia video')
   }
   /**
-   * The Wistia player after a press, in place of the poster, when the lightbox
-   * is off. The wrapper is the same element the poster sat in, so the node's
-   * styles and ref stay where they were and only its contents change.
+   * The Wistia player in place of the poster: after a press when the lightbox
+   * is off, or loaded with the page (AGL-2962). The wrapper is the same element
+   * the poster sat in, so the node's styles and ref stay where they were and
+   * only its contents change.
    */
-  if (wistiaId && !lightbox && playerSrc) {
+  if (inPlaceSrc) {
     return (
       <Box
         ref={rootRef}
@@ -547,12 +653,23 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
         ]}
       >
         <VideoPlayerFrame
-          src={playerSrc}
+          // A press on a player the page loaded mounts a new frame rather than
+          // handing the loaded one a new address. Navigating a frame that has
+          // already loaded a document adds an entry to the tab's history, so
+          // Back would first take the frame back to the unpressed player
+          // instead of leaving the page. Measured on 2026-09-14 in Chrome 154:
+          // a new `src` on a loaded frame took `history.length` from 1 to 2,
+          // and a new frame element in its place added nothing.
+          key={playerSrc ? 'pressed' : 'loaded'}
+          src={inPlaceSrc}
           title={title}
           aspectRatio={aspectRatio}
           height={height}
           radius={radius}
-          focusOnMount
+          // Focus follows a press into the player. A player the page loaded
+          // takes none: nobody asked for it, and focusing a frame as the page
+          // loads would scroll the page to it and take the keyboard with it.
+          focusOnMount={Boolean(playerSrc)}
         />
       </Box>
     )
@@ -565,9 +682,11 @@ const Video = forwardRef<HTMLElement, VideoProps>((props, ref) => {
    * around — a lightbox trigger with nothing to show is a blank rectangle
    * that claims to be a film.
    *
-   * A Wistia video always takes this branch (AGL-2826). With the lightbox off
-   * its press swaps the player in above, and the lazy dialog is never armed,
-   * because nothing is going to open it.
+   * A Wistia video takes this branch until a player stands in place of its
+   * poster (AGL-2826), which includes the server HTML and first paint of one
+   * that loads its player with the page. With the lightbox off its press swaps
+   * the player in above, and the lazy dialog is never armed, because nothing is
+   * going to open it.
    */
   if ((lightbox || wistiaId) && poster) {
     const playsInPlace = Boolean(wistiaId) && !lightbox
@@ -801,8 +920,8 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       description:
         'Pick the film from your media library with "Browse media", or ' +
         'paste the URL of a video hosted somewhere else. A Wistia media ' +
-        "link plays in Wistia's player, which loads only when a visitor " +
-        'presses play.',
+        "link plays in Wistia's player, which loads when a visitor presses " +
+        'play. Load the player with the page can load it sooner.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Video source',
     },
@@ -855,10 +974,22 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
       description:
         'Show the poster as a play button and open the film full size in a ' +
         'dialog. Needs a poster image; without one the player stays in the ' +
-        'page. A Wistia video waits for a press either way, and plays in ' +
-        'place of the poster when this is off.',
+        "page. A Wistia video's poster waits for a press either way, and the " +
+        'video plays in place of the poster when this is off. A Wistia player ' +
+        'that loads with the page stays in the page.',
       component: Aglyn.FieldComponentType.SWITCH,
       label: 'Open in a lightbox',
+    },
+    {
+      name: 'loadPlayer',
+      description:
+        "For a Wistia video: show Wistia's player as soon as the page loads, " +
+        'instead of a poster to press, to visitors whose privacy choices ' +
+        'allow analytics. Everyone else still gets the poster. Use it on a ' +
+        'page built to show this one video, so search engines can find the ' +
+        'player. The player stays in the page even with the lightbox on.',
+      component: Aglyn.FieldComponentType.SWITCH,
+      label: 'Load the player with the page',
     },
     {
       name: 'preload',

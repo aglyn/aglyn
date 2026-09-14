@@ -16,7 +16,11 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { visitorConsentStorageKey } from '@aglyn/aglyn/app-utils/visitor-consent'
+import {
+  storeVisitorConsent,
+  VISITOR_CONSENT_CHANGED_EVENT,
+  visitorConsentStorageKey,
+} from '@aglyn/aglyn/app-utils/visitor-consent'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
 import Video, { resolveVideoPreload, schema } from './video'
@@ -647,6 +651,312 @@ describe('Video answers a press sent from outside it (AGL-2867)', () => {
     unmount()
     expect(Aglyn.dispatchVideoCommand(film, 'play')).toBe(false)
     expect(play).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * "Load the player with the page" (AGL-2962): Wistia's player in place of the
+ * poster once the page has loaded, so a search engine rendering a watch page
+ * finds the player. Only for a visitor whose stored consent grants analytics,
+ * because the unpressed frame writes to its own storage; everyone else, the
+ * server HTML and the besigner canvas keep the poster the switch-off element
+ * renders, and a press on it does what it always did.
+ */
+describe('Video loads a Wistia player with the page for a visitor who allows analytics (AGL-2962)', () => {
+  const LINK = 'https://aglyn.wistia.com/medias/e4a27b971d'
+  const PLAYER = 'https://fast.wistia.net/embed/iframe/e4a27b971d'
+
+  const onSite = (element: JSX.Element) => (
+    <Aglyn.SiteContext.Provider value={{ hostId: 'host1' }}>
+      {element}
+    </Aglyn.SiteContext.Provider>
+  )
+  const frameUrl = (root: ParentNode) =>
+    new URL((root.querySelector('iframe') as HTMLIFrameElement).src)
+  /** A record already in storage when the page loads, from an earlier visit. */
+  const recordConsent = (status: string) =>
+    window.localStorage.setItem(
+      visitorConsentStorageKey('host1'),
+      JSON.stringify({ v: 1, at: 1, status }),
+    )
+  /** A decision made while the page is open, through the shared writer. */
+  const decide = (status: 'implied' | 'accepted' | 'opted-out') =>
+    act(() => {
+      storeVisitorConsent('host1', { status })
+    })
+  const press = (container: HTMLElement) =>
+    fireEvent.click(container.querySelector('button') as HTMLButtonElement)
+  /** What a `playVideo` step does once its selector has found the element. */
+  const sendPlay = (container: HTMLElement) =>
+    act(() => {
+      Aglyn.dispatchVideoCommand(container.firstElementChild as Element, 'play')
+    })
+
+  afterEach(() => window.localStorage.clear())
+
+  it('mounts the player with no press, no autoplay and no doNotTrack once analytics is granted', () => {
+    for (const status of ['implied', 'accepted']) {
+      recordConsent(status)
+      const { container, unmount } = render(
+        onSite(<Video src={LINK} poster="media:h/p" title="Tour" loadPlayer />),
+      )
+      expect(container.querySelector('button')).toBeNull()
+      const url = frameUrl(container)
+      expect(`${url.origin}${url.pathname}`).toBe(PLAYER)
+      expect(url.searchParams.get('autoPlay')).toBe('false')
+      expect(url.searchParams.has('doNotTrack')).toBe(false)
+      expect(container.querySelector('iframe')?.getAttribute('title')).toBe(
+        'Tour',
+      )
+      // Nobody asked for the film, so focus stays where the page left it.
+      expect(document.activeElement).not.toBe(container.querySelector('iframe'))
+      unmount()
+    }
+  })
+
+  it('keeps the poster, and nothing from Wistia, for a visitor with no record', () => {
+    const { container, baseElement } = render(
+      onSite(<Video src={LINK} poster="media:h/p" title="Tour" loadPlayer />),
+    )
+    expect(container.querySelector('button')?.getAttribute('aria-label')).toBe(
+      'Play video: Tour',
+    )
+    expect(baseElement.querySelector('iframe')).toBeNull()
+    expect(baseElement.innerHTML).not.toContain('wistia')
+  })
+
+  it('keeps the poster for every refusal on record', () => {
+    for (const status of ['declined', 'opted-out', 'gpc-opt-out']) {
+      recordConsent(status)
+      const { container, unmount } = render(
+        onSite(<Video src={LINK} poster="media:h/p" loadPlayer />),
+      )
+      expect(container.querySelector('button')).toBeTruthy()
+      expect(container.querySelector('iframe')).toBeNull()
+      unmount()
+    }
+  })
+
+  it('still loads the player with doNotTrack when a visitor without consent presses', () => {
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" loadPlayer />),
+    )
+    press(container)
+    const url = frameUrl(container)
+    expect(url.searchParams.get('autoPlay')).toBe('true')
+    expect(url.searchParams.get('doNotTrack')).toBe('true')
+  })
+
+  it('mounts the player when the grant lands after the element did', () => {
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" loadPlayer />),
+    )
+    expect(container.querySelector('iframe')).toBeNull()
+    // The implied default, recorded once the region lookup answers.
+    decide('implied')
+    const url = frameUrl(container)
+    expect(url.searchParams.get('autoPlay')).toBe('false')
+    expect(url.searchParams.has('doNotTrack')).toBe(false)
+  })
+
+  it('puts the poster back when the grant is withdrawn before any press', () => {
+    recordConsent('implied')
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" loadPlayer />),
+    )
+    expect(container.querySelector('iframe')).toBeTruthy()
+    decide('opted-out')
+    expect(container.querySelector('iframe')).toBeNull()
+    expect(container.querySelector('button')).toBeTruthy()
+  })
+
+  it('leaves a pressed player alone when a grant lands after the press', () => {
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" loadPlayer />),
+    )
+    press(container)
+    const pressed = container.querySelector('iframe')
+    decide('accepted')
+    expect(container.querySelectorAll('iframe')).toHaveLength(1)
+    expect(container.querySelector('iframe')).toBe(pressed)
+    expect(frameUrl(container).searchParams.get('autoPlay')).toBe('true')
+  })
+
+  it('loads no second player beside a lightbox a press opened before the grant', async () => {
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" lightbox loadPlayer />),
+    )
+    press(container)
+    const dialog = await screen.findByRole('dialog')
+    decide('accepted')
+    // The film is playing in the dialog; a paused player loaded in place of
+    // the poster behind it would be a second Wistia frame nobody asked for.
+    expect(container.querySelector('iframe')).toBeNull()
+    expect(container.querySelector('button')).toBeTruthy()
+    expect(document.body.querySelectorAll('iframe')).toHaveLength(1)
+    expect(dialog.querySelector('iframe')).toBeTruthy()
+  })
+
+  it('plays a loaded player when a press arrives from outside, in a new frame', () => {
+    recordConsent('implied')
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" title="Tour" loadPlayer />),
+    )
+    const loaded = container.querySelector('iframe')
+    expect(frameUrl(container).searchParams.get('autoPlay')).toBe('false')
+
+    sendPlay(container)
+
+    const frames = container.querySelectorAll('iframe')
+    expect(frames).toHaveLength(1)
+    // A new frame, not a new address in the loaded one, which would add an
+    // entry to the tab's history.
+    expect(frames[0]).not.toBe(loaded)
+    const url = frameUrl(container)
+    expect(`${url.origin}${url.pathname}`).toBe(PLAYER)
+    expect(url.searchParams.get('autoPlay')).toBe('true')
+    expect(url.searchParams.has('doNotTrack')).toBe(false)
+    expect(document.activeElement).toBe(frames[0])
+
+    // Playing now, so a second press changes nothing.
+    sendPlay(container)
+    expect(container.querySelector('iframe')).toBe(frames[0])
+  })
+
+  it('loads the player in place with the lightbox on, and plays it there', () => {
+    recordConsent('implied')
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" lightbox loadPlayer />),
+    )
+    expect(container.querySelector('button')).toBeNull()
+    expect(frameUrl(container).searchParams.get('autoPlay')).toBe('false')
+    sendPlay(container)
+    expect(container.querySelectorAll('iframe')).toHaveLength(1)
+    expect(frameUrl(container).searchParams.get('autoPlay')).toBe('true')
+  })
+
+  it('opens the lightbox as before for a visitor without consent', async () => {
+    const { container } = render(
+      onSite(<Video src={LINK} poster="media:h/p" lightbox loadPlayer />),
+    )
+    expect(container.querySelector('iframe')).toBeNull()
+    press(container)
+    const dialog = await screen.findByRole('dialog')
+    expect(frameUrl(dialog).searchParams.get('doNotTrack')).toBe('true')
+    expect(container.querySelector('iframe')).toBeNull()
+  })
+
+  it('server-renders the poster and no Wistia address, whatever consent says', () => {
+    recordConsent('implied')
+    for (const lightbox of [false, true]) {
+      const html = renderToString(
+        onSite(
+          <Video
+            src={LINK}
+            poster="media:h/p"
+            lightbox={lightbox}
+            loadPlayer
+            title="T"
+          />,
+        ),
+      )
+      expect(html).toContain('aria-label="Play video: T"')
+      expect(html).not.toContain('<iframe')
+      expect(html).not.toContain('wistia')
+    }
+  })
+
+  it('loads nothing into the besigner canvas, even with analytics granted', () => {
+    recordConsent('implied')
+    const { container } = render(
+      <Aglyn.ScreenLinkContext.Provider
+        value={{ suppressNavigation: true, editorInert: true }}
+      >
+        {onSite(<Video src={LINK} poster="media:h/p" title="Tour" loadPlayer />)}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    expect(container.querySelector('button')).toBeTruthy()
+    decide('accepted')
+    expect(document.body.querySelector('iframe')).toBeNull()
+  })
+
+  it('is off by default: analytics granted, and still the poster until a press', () => {
+    recordConsent('implied')
+    const add = jest.spyOn(window, 'addEventListener')
+    try {
+      const { container } = render(
+        onSite(<Video src={LINK} poster="media:h/p" />),
+      )
+      expect(container.querySelector('button')).toBeTruthy()
+      expect(container.querySelector('iframe')).toBeNull()
+      // Not even a listener: with the switch off, consent is read at a press
+      // and nowhere else.
+      expect(
+        add.mock.calls.some(([type]) => type === VISITOR_CONSENT_CHANGED_EVENT),
+      ).toBe(false)
+    } finally {
+      add.mockRestore()
+    }
+  })
+
+  it('still asks for a poster rather than loading the player without one', () => {
+    recordConsent('implied')
+    const { container, getByText } = render(
+      onSite(<Video src={LINK} title="Tour" loadPlayer />),
+    )
+    expect(getByText(/add a poster image/i)).toBeTruthy()
+    expect(container.querySelector('iframe')).toBeNull()
+  })
+
+  it('changes nothing for a source that is not Wistia', () => {
+    recordConsent('implied')
+    const inline = render(
+      onSite(<Video src="https://x/a.mp4" poster="https://x/a.png" loadPlayer />),
+    ).container
+    const film = inline.querySelector('video') as HTMLVideoElement
+    expect(film.getAttribute('src')).toBe('https://x/a.mp4')
+    expect(film.getAttribute('preload')).toBe('none')
+    expect(inline.querySelector('iframe')).toBeNull()
+
+    const boxed = render(
+      onSite(<Video src="https://x/a.mp4" poster="media:h/p" lightbox loadPlayer />),
+    ).container
+    expect(boxed.querySelector('button')).toBeTruthy()
+    expect(boxed.querySelector('iframe')).toBeNull()
+  })
+
+  it('keeps the switch off the DOM, like every other field that is not markup', () => {
+    // A string, because React writes an unknown prop with a string value into
+    // the markup and leaves a boolean one out, so only a string shows the
+    // leak; and the value that reaches an element is not always the boolean
+    // the switch stores.
+    const props = {
+      src: 'https://x/a.mp4',
+      loadPlayer: 'on',
+    } as unknown as React.ComponentProps<typeof Video>
+    expect(video(<Video {...props} />).hasAttribute('loadplayer')).toBe(false)
+  })
+
+  it('stops listening for consent once it leaves the page', () => {
+    const add = jest.spyOn(window, 'addEventListener')
+    const remove = jest.spyOn(window, 'removeEventListener')
+    try {
+      const { unmount } = render(
+        onSite(<Video src={LINK} poster="media:h/p" loadPlayer />),
+      )
+      const listener = add.mock.calls.find(
+        ([type]) => type === VISITOR_CONSENT_CHANGED_EVENT,
+      )?.[1]
+      expect(listener).toBeTruthy()
+      unmount()
+      expect(remove).toHaveBeenCalledWith(
+        VISITOR_CONSENT_CHANGED_EVENT,
+        listener,
+      )
+    } finally {
+      add.mockRestore()
+      remove.mockRestore()
+    }
   })
 })
 

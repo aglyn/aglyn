@@ -107,6 +107,11 @@ export function wistiaEmbedUrl(value: unknown): string | undefined {
 
 export interface WistiaPlayerOptions {
   /**
+   * Start playing as soon as the player is ready. On unless this is exactly
+   * `false`; see {@link wistiaPlayerSrc} for which frame turns it off.
+   */
+  autoPlay?: boolean
+  /**
    * Ask Wistia not to record the viewing session (its `doNotTrack` embed
    * option). The element sets it for every visitor whose analytics consent is
    * not on record.
@@ -119,10 +124,17 @@ export interface WistiaPlayerOptions {
 }
 
 /**
- * The frame a visitor's press loads.
+ * The address of a Wistia player frame.
  *
- * `autoPlay` is always on: the frame exists only because somebody pressed
- * play, and a second play button inside the player would ask them twice.
+ * `autoPlay` is on by default, because the usual frame is the one a visitor's
+ * press loads: it exists only because somebody pressed play, and a second play
+ * button inside the player would ask them twice.
+ *
+ * The frame a page loads before anyone has pressed anything ("Load the player
+ * with the page", AGL-2962) passes `autoPlay: false`. The address then says
+ * `autoPlay=false` rather than leaving the option out: an option in the embed
+ * overrides the media's own settings in the Wistia account, and those may be
+ * set to autoplay.
  */
 export function wistiaPlayerSrc(
   value: unknown,
@@ -130,7 +142,9 @@ export function wistiaPlayerSrc(
 ): string | undefined {
   const embedUrl = wistiaEmbedUrl(value)
   if (!embedUrl) return undefined
-  const params = new URLSearchParams({ autoPlay: 'true' })
+  const params = new URLSearchParams({
+    autoPlay: options.autoPlay === false ? 'false' : 'true',
+  })
   if (options.doNotTrack) params.set('doNotTrack', 'true')
   if (options.muted) params.set('muted', 'true')
   if (options.loop) params.set('endVideoBehavior', 'loop')
