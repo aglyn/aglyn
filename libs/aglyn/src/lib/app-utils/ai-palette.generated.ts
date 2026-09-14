@@ -3693,6 +3693,9 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
         lightbox: {
           type: 'boolean',
         },
+        loadPlayer: {
+          type: 'boolean',
+        },
         preload: {
           type: 'string',
           enum: ['none', 'metadata', 'auto'],

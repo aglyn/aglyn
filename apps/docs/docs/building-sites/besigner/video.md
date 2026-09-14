@@ -60,16 +60,34 @@ control, leaving full screen first if it is on.
 Paste a Wistia media link into **Video source**: the address of the video's page in
 your Wistia account, or its embed link. Then pick a **Poster image** from your media
 library. The poster becomes a play button, and Wistia's player loads only when a
-visitor presses it, so someone who never presses play never contacts Wistia. The
-player opens in the lightbox when **Open in a lightbox** is on, and in place of the
-poster when it is off. Without a poster the element asks for one instead of loading
-the player.
+visitor presses it, so someone who never presses play never contacts Wistia, unless
+you turn on **Load the player with the page** (below). The player opens in the
+lightbox when **Open in a lightbox** is on, and in place of the poster when it is off.
+Without a poster the element asks for one instead of loading the player.
 
 Wistia's player brings its own controls. In the lightbox, `Esc` closes it until you
 move into the player; from inside the player, `Shift`+`Tab` reaches the close button.
 Wistia records a viewing only for a visitor whose analytics consent your site has on
 record, and plays with its tracking off for everyone else. Type the running time into
 **Duration (seconds)**, because a Wistia link does not carry it.
+
+Turn on **Load the player with the page** for a page whose main content is this one
+video, such as the entry page of a video collection. Search engines list a video only
+from a page like that, and they only find a player that is on the page when it loads.
+With the switch on, Wistia's player replaces the poster as soon as the page loads,
+without starting the video, for each visitor whose analytics consent your site has on
+record. Everyone else still gets the poster to press, with Wistia's tracking off. The
+player stays in the page even when **Open in a lightbox** is on. Keep the switch off on
+your home page, and on any page where the video is secondary.
+
+Wistia's player keeps data in the visitor's browser from the moment it loads, which is
+why the switch waits for consent. In the geo-conditional
+[consent mode](../../marketing-and-automation/analytics/cookie-consent.md), a visitor
+outside the EU, the UK and the other prior-consent regions has that consent on record
+from their first visit. Google's crawler normally visits from the US, so it is treated
+the same way. In *Opt-in everywhere* mode, search engines get the poster. A site
+without Google Analytics or Google Tag Manager, or with the consent banner turned off,
+records no consent, so every visitor there gets the poster.
 
 ## Starting the film from a button {#video-play-from-a-button}
 
