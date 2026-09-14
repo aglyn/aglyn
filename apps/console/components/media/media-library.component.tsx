@@ -726,7 +726,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           const prefix = typeFilter === 'video' ? 'video/' : 'image/'
           constraints.push(
             where('contentType', '>=', prefix),
-            where('contentType', '<', `${prefix}`),
+            // A prefix match as a range (AGL-2952). A content type is ASCII
+            // and U+F8FF sorts above every ASCII character, so each type that
+            // starts with the prefix sorts below this bound. Written as an
+            // escape because the character is invisible, and a bound equal
+            // to `prefix` matches nothing.
+            where('contentType', '<', `${prefix}\uf8ff`),
             orderBy('contentType'),
           )
         }
