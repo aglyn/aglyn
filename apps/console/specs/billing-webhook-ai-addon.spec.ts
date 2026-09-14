@@ -42,6 +42,17 @@ export {}
 
 import { createHmac } from 'node:crypto'
 import type { Ga4SendResult } from '@aglyn/tenant-data-admin'
+// The REAL resolver, by its own path rather than the mocked server barrel:
+// the assertion is that the map the webhook wrote flips the feature, and a
+// stubbed resolver would answer whatever this file told it to.
+import {
+  AI_ADDON_CREDITS_PER_MONTH,
+  PLAN_ENTITLEMENTS,
+  resolveOrgEntitlements,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+// The add-on is declared through the plugin entitlement seam; the resolver
+// reads that declaration, so the spec loads it as the `@aglyn/aglyn` barrel does.
+import '@aglyn/aglyn/app-utils/ai-entitlements'
 
 /** Env without a trace of the developer's own Stripe config (`nx test` leaks the root env). */
 const CLEAN_ENV = (() => {
@@ -195,15 +206,6 @@ jest.mock('../utils/server-plugin-loader', () => ({
   __esModule: true,
   serverPluginLoader: { ensureAll: async () => undefined },
 }))
-
-// The REAL resolver, outside the mock: the assertion is that the map the
-// webhook wrote flips the feature, and a stubbed resolver would answer
-// whatever this file told it to.
-const {
-  AI_ADDON_CREDITS_PER_MONTH,
-  PLAN_ENTITLEMENTS,
-  resolveOrgEntitlements,
-} = require('../../../libs/aglyn/src/lib/app-utils/plan-entitlements')
 
 function signed(body: unknown, secret = 'whsec_fake') {
   const payload = JSON.stringify(body)

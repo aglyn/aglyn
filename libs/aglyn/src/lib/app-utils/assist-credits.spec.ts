@@ -64,6 +64,9 @@ import {
   PLAN_PRICING,
   resolveEffectivePlan,
 } from './plan-entitlements'
+// The AI add-on is declared through the plugin entitlement seam; the resolver
+// reads that declaration, so the spec loads it as the barrel does.
+import './ai-entitlements'
 /**
  * Measured cost of one grounded answer, and of one generated screen, at the
  * shipped Sonnet rates.
