@@ -158,6 +158,7 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
+import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import {
   buildScreenSeoUpdate,
   type ScreenSocialImageDraft,
@@ -275,6 +276,13 @@ function BesignerPage(props) {
   })
   const { data: user } = useUser()
   const { doc: hostResult } = useHost({ hostId: hostId as string })
+  // The live routing map, and this screen's address in it. Read up here,
+  // above the Screen Properties handlers that name them: a `useCallback`
+  // dependency array is evaluated during render, so a `const` declared
+  // further down is read in its temporal dead zone and throws on the way in.
+  const routingMap = hostResult?.data?.screens as
+    Record<string, string> | undefined
+  const publishedPath = routingMap?.[screenId]
   const { doc: screenResult, setDoc: updateScreenDoc } = useScreen({
     hostId,
     screenId,
@@ -642,6 +650,19 @@ function BesignerPage(props) {
           { variant: 'success', persist: false },
         )
         setProtectPassword(null)
+        // The tenant decides whether to withhold a page's content when it
+        // RENDERS the page, from its cached copy of this document, and the
+        // unlock route checks a password against that same copy. Undropped,
+        // a page protected just now goes on serving its content publicly —
+        // and a changed password goes on accepting the old one — until the
+        // caches lapse.
+        announceLiveScreenChange({
+          user,
+          hostId,
+          screenId,
+          livePath: publishedPath,
+          notify: enqueueSnackbar,
+        })
       })
       .catch((e) => {
         enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -649,7 +670,15 @@ function BesignerPage(props) {
           allowDuplicate: true,
         })
       })
-  }, [protectPassword, updateScreenDoc, enqueueSnackbar])
+  }, [
+    protectPassword,
+    updateScreenDoc,
+    enqueueSnackbar,
+    user,
+    hostId,
+    screenId,
+    publishedPath,
+  ])
 
   const handleSeoSave = useCallback(async () => {
     /**
@@ -697,6 +726,17 @@ function BesignerPage(props) {
             setSeoTitle(null)
             setSeoDescription(null)
             setSeoImage(null)
+            // The live page's head is rendered from the screen document, and
+            // both the page and the document are cached on the tenant — so
+            // on a published screen the old title and description stay in
+            // the served HTML until this drops them.
+            announceLiveScreenChange({
+              user,
+              hostId,
+              screenId,
+              livePath: publishedPath,
+              notify: enqueueSnackbar,
+            })
           })
           .catch((e) => {
             enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -718,6 +758,10 @@ function BesignerPage(props) {
     seoDescription,
     seoImage,
     enqueueSnackbar,
+    user,
+    hostId,
+    screenId,
+    publishedPath,
   ])
 
   const handleLayoutChange = useCallback(
@@ -748,6 +792,17 @@ function BesignerPage(props) {
               persist: false,
             },
           )
+          // The tenant composes the live page's chrome from the binding on
+          // the version it serves. On that version this reframes the live
+          // page; on any other it changes nothing a visitor can see, so
+          // there is nothing to drop.
+          announceLiveScreenChange({
+            user,
+            hostId,
+            screenId,
+            livePath: editingLiveVersion ? publishedPath : undefined,
+            notify: enqueueSnackbar,
+          })
         })
         .catch((e) => {
           enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -756,7 +811,15 @@ function BesignerPage(props) {
           })
         })
     },
-    [updateVersionDoc, enqueueSnackbar],
+    [
+      updateVersionDoc,
+      enqueueSnackbar,
+      editingLiveVersion,
+      user,
+      hostId,
+      screenId,
+      publishedPath,
+    ],
   )
 
   /**
@@ -827,15 +890,12 @@ function BesignerPage(props) {
     }
     return map
   }, [screenDocs])
-  const routingMap = hostResult?.data?.screens as
-    Record<string, string> | undefined
 
   const isCollectionTemplate = templateScreenIds.has(screenId)
   const templateRoutes = collectionTemplateRoutesSummary(
     routesByScreenId.get(screenId),
   )
 
-  const publishedPath = routingMap?.[screenId]
   const parentId = screenResult?.data?.parentId
   const [slugInput, setSlugInput] = useState<string | null>(null)
   // The field holds ONE segment, so a screen with no stored slug falls back to
