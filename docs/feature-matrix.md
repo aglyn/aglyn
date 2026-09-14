@@ -24,7 +24,7 @@ this file is the last step, not the decision.
 | `abandonedCart` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `actions` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `aiAssist` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `aiGenerative` | — | — | — | — | — | — | — | ✓ |
+| `aiGenerative` | ✓ | — | — | — | — | — | — | ✓ |
 | `apiAccess` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `bookings` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `commerce` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
