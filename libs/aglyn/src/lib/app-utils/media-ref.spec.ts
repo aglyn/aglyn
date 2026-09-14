@@ -305,6 +305,45 @@ describe('media references (AGL-1215)', () => {
       expect(mediaRefPattern('../').test('media:site-a/med123')).toBe(false)
       expect(mediaRefPattern('').test('media:site-a/med123')).toBe(false)
     })
+
+    /**
+     * The same asset stored as the CDN path a reference resolves to.
+     *
+     * A picker for a plugin page hands back the site-qualified path of an
+     * asset shared with one site, and an entry cover filled from a film's
+     * frame stores `mediaPosterSrc`'s path, qualified whenever the film is an
+     * org asset. Neither contains the `media:` scheme or the document's own
+     * unqualified `cdnPath`, so the scan reported both as used nowhere, and
+     * the delete confirmation quotes that answer.
+     */
+    it('finds the asset spelled as a CDN path, in every scope form', () => {
+      const pattern = mediaRefPattern('med123')
+      for (const stored of [
+        `${MEDIA_CDN_ROUTE}/site-a/med123`,
+        `${MEDIA_CDN_ROUTE}/org:acme/med123`,
+        `${MEDIA_CDN_ROUTE}/org:acme:site-a/med123`,
+        `${MEDIA_CDN_ROUTE}/org:acme:site-a/med123?poster=1`,
+        `${MEDIA_CDN_ROUTE}/org:acme/med123/4f2a9c1e0b7d3a55`,
+        `https://acme.aglyn.app${MEDIA_CDN_ROUTE}/org:acme:site-a/med123?w=640`,
+      ]) {
+        expect([stored, pattern.test(JSON.stringify({ coverImage: stored }))]).toEqual([
+          stored,
+          true,
+        ])
+      }
+    })
+
+    it('does not match another asset, or another route, spelled as a path', () => {
+      expect(
+        mediaRefPattern('med12').test(`${MEDIA_CDN_ROUTE}/org:acme:site-a/med123`),
+      ).toBe(false)
+      expect(
+        mediaRefPattern('med123').test(`${MEDIA_CDN_ROUTE}/org:acme:site-a/other`),
+      ).toBe(false)
+      expect(mediaRefPattern('med123').test('/api/media/upload/org:acme/med123')).toBe(
+        false,
+      )
+    })
   })
 
   /**

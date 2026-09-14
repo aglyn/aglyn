@@ -366,6 +366,7 @@ beforeEach(() => {
     ['category-png', 'widgets-category.png'],
     ['retired-product-png', 'retired-widget.png'],
     ['order-snapshot-png', 'sold-widget.png'],
+    ['film-mp4', 'harbor.mp4'],
   ] as const) {
     seed(`orgs/${ORG_ID}/media`, id, {
       fileName,
@@ -536,6 +537,13 @@ beforeEach(() => {
   seed(`hosts/${HOST_ID}/collections/blog/entries`, 'entry-launch', {
     title: 'Launch',
     coverImage: refTo('cover-png'),
+  })
+  // An entry whose cover is a film's captured frame (AGL-2954): the poster's
+  // CDN path, qualified for the site, with no `media:` reference beside it
+  // once the video itself has been cleared.
+  seed(`hosts/${HOST_ID}/collections/blog/entries`, 'entry-film-still', {
+    title: 'Harbor at dawn',
+    coverImage: `/api/media/cdn/org:${ORG_ID}:${HOST_ID}/film-mp4?poster=1`,
   })
 })
 
@@ -897,6 +905,21 @@ describe('media usage scan — the wrong-prefix trap', () => {
 
   it('does not match a longer id that merely starts the same', async () => {
     expect(mediaRefPattern('mockup').test(refTo('mockup-png'))).toBe(false)
+  })
+})
+
+describe('media usage scan — an asset stored as a site-qualified CDN path', () => {
+  /**
+   * The document's own `cdnPath` is the bare org form, and it is one of the
+   * needles, so a path that names the site in its scope matched neither it
+   * nor the `media:` pattern. That is the path a film's frame is stored under
+   * when it fills an entry's cover, and the one a plugin picker hands back
+   * for an asset shared with one site.
+   */
+  it("finds an entry whose cover is a film's frame, with no reference beside it", async () => {
+    const result = await scan('film-mp4')
+    expect(result.status).toBe(200)
+    expect(kindsFor(result)).toEqual(['entry:entry-film-still'])
   })
 })
 

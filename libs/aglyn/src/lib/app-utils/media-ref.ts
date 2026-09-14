@@ -707,13 +707,23 @@ export function mediaRefFromCdnPath(
  * on its own. Had it not, the where-used scan would have started reporting
  * live assets as used nowhere the day pins shipped — a scan whose every error
  * already points at "safe to delete".
+ *
+ * It matches the same asset spelled as a CDN PATH as well (AGL-2969), in the
+ * same scope forms. The scan's needles include the document's own `cdnPath`,
+ * but that is the bare org form, and two writers store the path with the site
+ * in its scope: a plugin page's picker, for an asset shared with one site
+ * (`hostQualifiedCdnPath`), and an entry cover filled from a film's frame
+ * (`mediaPosterSrc`, qualified for every org film). A query, a content-hash
+ * segment and an origin in front all leave the match intact, and the same
+ * trailing guard applies.
  */
 export function mediaRefPattern(mediaId: string): RegExp {
   const id = mediaId.replace(/[^A-Za-z0-9_-]/g, '')
   // An id that sanitizes to nothing must match NOTHING — never everything.
   if (!id) return /(?!)/
   return new RegExp(
-    `${MEDIA_REF_PREFIX}(?:org:${SEGMENT_SOURCE}(?::${SEGMENT_SOURCE})?` +
+    `(?:${MEDIA_REF_PREFIX}|${MEDIA_CDN_ROUTE}/)` +
+      `(?:org:${SEGMENT_SOURCE}(?::${SEGMENT_SOURCE})?` +
       `|${SEGMENT_SOURCE})/${id}(?![A-Za-z0-9_-])`,
   )
 }
