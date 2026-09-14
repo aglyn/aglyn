@@ -378,6 +378,24 @@ page.
 **Composition, not ranking:** a platform lock implies every feature; a feature
 lock implies nothing about the platform, workspace, site, or account scopes.
 
+### Pausing AI for one workspace {#ai-pause}
+
+A feature lock can also be scoped to **one workspace**: the same `lockdowns`
+carrier at `feature--{key}--org--{orgId}`, written by the same route with an
+`orgId` in the body, audited the same way, and read only by the AI doors that
+name that org. The staff org page offers it as **Pause AI** in its Staff actions,
+which writes both `ai-assist` and `ai-generate` for the org in one click, and
+**Resume AI** lifts both.
+
+Reach for it to stop a customer's AI spend **without touching what they bought**:
+the plan, the add-on and every entitlement override stay exactly as they are, so
+resuming restores them untouched — unlike forcing `aiAssist` off in the override
+dialog, which changes the entitlement record and has to be remembered and undone.
+Members of the paused workspace see the ordinary feature-pause notice on every AI
+request; every other workspace is unaffected; staff calls still pass, to verify
+the pause. The chip **AI paused** on the org page reflects the state the route
+reads back.
+
 **Confirm weight:** feature locks do *not* require the type-to-confirm phrase.
 The platform phrase exists because one request can take everything down; a
 feature lock is one named capability with the platform still serving — the same

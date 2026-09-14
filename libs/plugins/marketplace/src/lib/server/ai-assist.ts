@@ -22,10 +22,13 @@ import {
 } from '@aglyn/aglyn/server'
 import { assistOwnControlRefusalText } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
+  aiPermissionRefusal,
   checkRateLimit,
+  featureLockdownRefusal,
   firebaseAdmin,
   getOrgForUser,
   lockdownRefusal,
+  memberHasAiPermission,
   rateLimitHeaders,
   recordAssistCost,
   releaseAssistMessage,
@@ -132,8 +135,10 @@ const REFUSED = {
  * The ladder now, in order, each rung able to go red on its own:
  * 405 → 501 no ANTHROPIC_API_KEY → 401 no token → 400 bad body (the request
  * must NAME the org it is metered against) → 403 not a member of that org →
- * 403 no `aiAssist` entitlement → 423 org lockdown → 429 rate limit → 429
- * quota → the model call → meter.
+ * 423 the workspace's AI pause → 403 the member's role lacks `ai.use`, or
+ * `ai.generate` for a section (AGL-2927; staff pass) → 403 no `aiAssist`
+ * entitlement → 423 org lockdown → 429 rate limit → 429 quota → the model
+ * call → meter.
  *
  * Two deliberate choices about which way each rung fails:
  *
@@ -227,6 +232,31 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'You are not a member of that organization' })
     }
     const org = resolved.org ?? {}
+
+    // Permission (AGL-2927), directly after membership. The element and
+    // blog modes are assistance and sell under `ai.use`; a generated
+    // section is a generation and sells under `ai.generate`. Decided on the
+    // caller's own axis — the org catalog for an org-wide member, the site
+    // the body named for a collaborator, who is refused when it named none.
+    // A fact about the caller, so it is answered before the plan is. Staff
+    // pass, as at every other org route. Beside it, the workspace-scoped
+    // pause on `ai-assist`: the dispatcher already applied the platform-wide
+    // switch by path, before it knew which org the body would name.
+    const staff = decoded['staff'] === true
+    const aiPaused = await featureLockdownRefusal({
+      feature: 'ai-assist',
+      staff,
+      orgId,
+    })
+    if (aiPaused) return forwardRefusal(res, aiPaused)
+    const permission = mode === 'section' ? 'ai.generate' : 'ai.use'
+    if (
+      !staff &&
+      !(await memberHasAiPermission(orgId, hostId, resolved.member, permission))
+    ) {
+      return forwardRefusal(res, aiPermissionRefusal(permission))
+    }
+
     const entitled = checkEntitlement(org, 'aiAssist')
     if (!entitled) {
       return res.status(403).json({ error: 'AI assist requires a Pro plan' })
@@ -236,7 +266,6 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     // scope plus the `ai-assist` feature kill switch, but its org scope needs
     // a `hostId` this route's callers do not send — so a suspended workspace
     // kept spending. The org doc is already in hand, so the verdict is free.
-    const staff = decoded['staff'] === true
     const locked = await lockdownRefusal({
       request: { method: req.method },
       staff,

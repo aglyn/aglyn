@@ -55,6 +55,7 @@
 import {
   domainLockdownDocId,
   featureLockdownDocId,
+  orgFeatureLockdownDocId,
   isLockableDomain,
   isLockdownEnforcement,
   isLockdownFeatureKey,
@@ -104,6 +105,19 @@ const SCOPES = new Set([
   'user',
   'feature',
 ])
+
+/**
+ * The workspace a feature lock is scoped to (AGL-2927), read off a body or
+ * a query. `null` when none was named — the platform-wide document —
+ * `false` when one was named and cannot be a document id, which is refused
+ * rather than written into a doc id that no door would ever read.
+ */
+function lockScopeOrgId(value: unknown): string | null | false {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string') return false
+  const orgId = value.trim()
+  return /^[A-Za-z0-9_-]{1,128}$/.test(orgId) ? orgId : false
+}
 
 /**
  * The platform scope's server-side type-to-confirm. The UI asks the
@@ -278,8 +292,15 @@ async function readLockState(
   firestore: AdminFirestore,
   scope: string,
   targetId: string,
+  /** The workspace a feature lock is scoped to (AGL-2927); absent = platform-wide. */
+  orgId?: string,
 ): Promise<LockState> {
-  const base = { scope, targetId, readAtMs: Date.now() }
+  const base = {
+    scope,
+    targetId,
+    ...(scope === 'feature' && orgId ? { orgId } : {}),
+    readAtMs: Date.now(),
+  }
   if (scope === 'org' || scope === 'host') {
     const snapshot = await firestore
       .collection(scope === 'org' ? 'orgs' : 'hosts')
@@ -305,9 +326,14 @@ async function readLockState(
     scope === 'platform'
       ? PLATFORM_LOCKDOWN_DOC_ID
       : scope === 'feature'
-        ? featureLockdownDocId(
-            targetId as Parameters<typeof featureLockdownDocId>[0],
-          )
+        ? orgId
+          ? orgFeatureLockdownDocId(
+              targetId as Parameters<typeof featureLockdownDocId>[0],
+              orgId,
+            )
+          : featureLockdownDocId(
+              targetId as Parameters<typeof featureLockdownDocId>[0],
+            )
         : // AGL-1513: `domain--{hostname}`, the same existence-is-the-lever
           // shape as platform/feature/user, so it needs only its own id.
           scope === 'domain'
@@ -513,12 +539,14 @@ async function actionResponse(options: {
   scope: string
   targetId: string
   action: 'lock' | 'unlock'
+  orgId?: string
   extra?: object
 }): Promise<Response> {
   const verified = await readLockState(
     options.firestore,
     options.scope,
     options.targetId,
+    options.orgId,
   )
   return Response.json(
     {
@@ -593,8 +621,22 @@ async function handler(request: Request): Promise<Response> {
             { status: 400 },
           )
         }
+        // A feature probe may name the workspace it asks about (AGL-2927):
+        // the staff org page reads its AI pause through this.
+        const probeOrgId =
+          probeScope === 'feature' ? lockScopeOrgId(query?.['orgId']) : null
+        if (probeOrgId === false) {
+          return Response.json({ error: 'Malformed orgId' }, { status: 400 })
+        }
         return Response.json(
-          { state: await readLockState(firestore, probeScope, probeTarget) },
+          {
+            state: await readLockState(
+              firestore,
+              probeScope,
+              probeTarget,
+              probeOrgId ?? undefined,
+            ),
+          },
           { status: 200 },
         )
       }
@@ -877,14 +919,26 @@ async function handler(request: Request): Promise<Response> {
           { status: 400 },
         )
       }
-      const ref = firestore
-        .collection(LOCKDOWNS_COLLECTION)
-        .doc(featureLockdownDocId(targetId))
+      // WORKSPACE-scoped (AGL-2927) when the body names an org: the same
+      // capability switched off for ONE customer, on its own carrier, so
+      // the platform-wide document is neither written nor implied. The
+      // staff org page's AI pause is this with `ai-assist` and
+      // `ai-generate` — a spend stop that leaves the entitlement in place,
+      // so lifting it restores exactly what the customer bought.
+      const featureOrgId = lockScopeOrgId(body?.orgId)
+      if (featureOrgId === false) {
+        return Response.json({ error: 'Malformed orgId' }, { status: 400 })
+      }
+      const featureDocId = featureOrgId
+        ? orgFeatureLockdownDocId(targetId, featureOrgId)
+        : featureLockdownDocId(targetId)
+      const ref = firestore.collection(LOCKDOWNS_COLLECTION).doc(featureDocId)
       const before = (await ref.get()).data() ?? null
       if (action === 'lock') {
         await ref.set({
           scope: 'feature',
           feature: targetId,
+          ...(featureOrgId ? { orgId: featureOrgId } : {}),
           // Stored ONLY for takedowns (AGL-1621), same discipline as `mode`:
           // a standard lock's document stays byte-identical to one written
           // before the field existed, so absent keeps meaning fail-open.
@@ -905,11 +959,12 @@ async function handler(request: Request): Promise<Response> {
         ...actor,
         action: `lockdown.${action}`,
         scope: 'feature',
-        target: `lockdowns/${featureLockdownDocId(targetId)}`,
+        target: `lockdowns/${featureDocId}`,
         before: { locked: before != null, ...auditLockShape(before ?? {}) },
         after: {
           locked: action === 'lock',
           feature: targetId,
+          ...(featureOrgId ? { orgId: featureOrgId } : {}),
           ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
@@ -918,7 +973,11 @@ async function handler(request: Request): Promise<Response> {
         scope,
         targetId,
         action,
-        extra: { feature: targetId },
+        orgId: featureOrgId ?? undefined,
+        extra: {
+          feature: targetId,
+          ...(featureOrgId ? { orgId: featureOrgId } : {}),
+        },
       })
     }
 

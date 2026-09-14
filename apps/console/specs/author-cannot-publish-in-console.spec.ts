@@ -139,16 +139,20 @@ describe('the hook fails CLOSED, because it guards an enforced boundary', () => 
     // that flipped the initial state to `true`, because the catch branch
     // further down still contained the string it was looking for — a guard
     // satisfied by a line other than the one it is about.
+    // The AI fields (AGL-2927) follow in the same initializer; what this
+    // pins is the role and the publish verdict, not the field count.
     expect(readCode(HOOK)).toMatch(
-      /useState<HostRoleState>\(\{\s*hostRole: null,\s*canPublish: false,\s*loaded: false,\s*\}\)/,
+      /useState<HostRoleState>\(\{\s*hostRole: null,\s*canPublish: false,\s*loaded: false,[^}]*\}\)/,
     )
   })
 
   it('a failed read also leaves it un-permitted', () => {
     // The catch branch: `loaded` true so the caller stops waiting, and
     // `canPublish` false so nothing invites a click the rules will refuse.
+    // The AI fields (AGL-2927) ride the same failure shape; what this pins
+    // is that the role is null and publishing is off, not the field count.
     expect(readCode(HOOK)).toMatch(
-      /setState\(\{\s*hostRole: null,\s*canPublish: false,\s*loaded: true\s*\}\)/,
+      /setState\(\{\s*hostRole: null,\s*canPublish: false,\s*loaded: true[^}]*\}\)/,
     )
   })
 

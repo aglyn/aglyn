@@ -26,6 +26,7 @@
 
 const mockVerifyIdToken = jest.fn()
 const mockGetOrgForUser = jest.fn()
+const mockHasAiPermission = jest.fn()
 const mockFlagOn = jest.fn()
 const mockLockdownRefusal = jest.fn()
 const mockFeatureLockdownRefusal = jest.fn()
@@ -58,6 +59,12 @@ jest.mock('./id-token-refusal', () => ({
 jest.mock('./organizations', () => ({
   __esModule: true,
   getOrgForUser: (...args: unknown[]) => mockGetOrgForUser(...args),
+  memberHasAiPermission: (...args: unknown[]) => mockHasAiPermission(...args),
+  aiPermissionRefusal: (permission: string) =>
+    Response.json(
+      { error: `Your role does not include ${permission}`, reason: 'permission', permission },
+      { status: 403 },
+    ),
 }))
 jest.mock('./release-flags', () => ({
   __esModule: true,
@@ -144,6 +151,7 @@ beforeEach(() => {
   jest.resetAllMocks()
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
   mockGetOrgForUser.mockResolvedValue({ orgId: 'org-1', org: ORG, member: {} })
+  mockHasAiPermission.mockResolvedValue(true)
   mockFlagOn.mockResolvedValue(true)
   mockCheckEntitlement.mockReturnValue(true)
   mockLockdownRefusal.mockResolvedValue(null)
@@ -157,13 +165,31 @@ afterEach(() => jest.restoreAllMocks())
 
 /** Nothing below the refusing rung may have been consulted. */
 function expectNothingBelowRan(
-  from: 'auth' | 'org' | 'flag' | 'entitlement' | 'lockdown' | 'rate' | 'reservation',
+  from:
+    | 'auth'
+    | 'org'
+    | 'permission'
+    | 'flag'
+    | 'entitlement'
+    | 'lockdown'
+    | 'rate'
+    | 'reservation',
 ): void {
-  const order = ['auth', 'org', 'flag', 'entitlement', 'lockdown', 'rate', 'reservation']
+  const order = [
+    'auth',
+    'org',
+    'permission',
+    'flag',
+    'entitlement',
+    'lockdown',
+    'rate',
+    'reservation',
+  ]
   const below = order.slice(order.indexOf(from) + 1)
   const probes: Record<string, jest.Mock[]> = {
     auth: [mockVerifyIdToken],
     org: [mockGetOrgForUser],
+    permission: [mockHasAiPermission],
     flag: [mockFlagOn],
     entitlement: [mockCheckEntitlement],
     lockdown: [mockLockdownRefusal, mockFeatureLockdownRefusal],
@@ -230,6 +256,45 @@ describe('the ladder, one rung red at a time', () => {
     expect(mockGetOrgForUser).toHaveBeenLastCalledWith('user-1', 'org-1')
   })
 
+  it('403 when the role lacks the door’s permission — after membership, before the flag (AGL-2927)', async () => {
+    const member = { $id: 'user-1', role: 'viewer', allHosts: true }
+    mockGetOrgForUser.mockResolvedValue({ orgId: 'org-1', org: ORG, member })
+    mockHasAiPermission.mockResolvedValueOnce(false)
+    const response = (await aiGateLadder(
+      { request: request(), orgId: 'org-1', hostId: 'host-1' },
+      { ...CONFIG, permission: 'ai.generate' },
+    )) as Response
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({
+      reason: 'permission',
+      permission: 'ai.generate',
+    })
+    // Resolved for the NAMED org, on the site the body named, for the key
+    // the door sells under — and nothing about the workspace was disclosed.
+    expect(mockHasAiPermission).toHaveBeenCalledWith(
+      'org-1',
+      'host-1',
+      member,
+      'ai.generate',
+    )
+    expectNothingBelowRan('permission')
+  })
+
+  it('a door that names no permission skips the rung; a staff claim passes it', async () => {
+    expect(await climb()).not.toBeInstanceOf(Response)
+    expect(mockHasAiPermission).not.toHaveBeenCalled()
+
+    mockVerifyIdToken.mockResolvedValueOnce({ uid: 'staff-1', email_verified: true, staff: true })
+    mockHasAiPermission.mockResolvedValue(false)
+    expect(
+      await aiGateLadder(
+        { request: request(), orgId: 'org-1' },
+        { ...CONFIG, permission: 'ai.use' },
+      ),
+    ).not.toBeInstanceOf(Response)
+    expect(mockHasAiPermission).not.toHaveBeenCalled()
+  })
+
   it('404 when the release flag is off — a released-off feature does not exist', async () => {
     mockFlagOn.mockResolvedValueOnce(false)
     const response = (await climb()) as Response
@@ -268,9 +333,12 @@ describe('the ladder, one rung red at a time', () => {
     )
     mockFeatureLockdownRefusal.mockResolvedValueOnce(featureLocked)
     expect(await climb()).toBe(featureLocked)
+    // The org rides along (AGL-2927), so the workspace-scoped pause on the
+    // same key — the staff org page's spend stop — is a rung here too.
     expect(mockFeatureLockdownRefusal).toHaveBeenCalledWith({
       feature: 'ai-generate',
       staff: false,
+      orgId: 'org-1',
     })
   })
 

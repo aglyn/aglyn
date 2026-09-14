@@ -45,6 +45,7 @@
 
 import {
   featureLockdownDocId,
+  orgFeatureLockdownDocId,
   isLockdownActive,
   isTakedownLockdown,
   LOCKDOWN_FEATURE_STAFF_BYPASS,
@@ -301,14 +302,14 @@ export async function getPlatformLockdown(): Promise<LockdownState | null> {
  * lag between staff flipping a feature switch and a warm process enforcing
  * it. One map for all keys; the admin route invalidates after every write.
  */
-const featureCache = new Map<
-  LockdownFeatureKey,
-  { at: number; state: LockdownState | null }
->()
-const featurePending = new Map<
-  LockdownFeatureKey,
-  Promise<LockdownState | null>
->()
+/**
+ * Keyed by DOCUMENT ID rather than by feature key since AGL-2927, so the
+ * platform-wide `feature--{key}` entry and each workspace's
+ * `feature--{key}--org--{orgId}` entry share one map, one TTL and one
+ * invalidation — the admin route's write clears both kinds at once.
+ */
+const featureCache = new Map<string, { at: number; state: LockdownState | null }>()
+const featurePending = new Map<string, Promise<LockdownState | null>>()
 
 /** Drop the in-process feature cache (all keys) after an admin write. */
 export function invalidateFeatureLockdownCache(): void {
@@ -316,13 +317,11 @@ export function invalidateFeatureLockdownCache(): void {
   featurePending.clear()
 }
 
-/** `lockdowns/feature--{key}`, normalized; null = not locked (incl. error). */
-export async function getFeatureLockdown(
-  feature: LockdownFeatureKey,
-): Promise<LockdownState | null> {
-  const cached = featureCache.get(feature)
+/** One feature-scope carrier, by document id — see `getFeatureLockdown`. */
+async function readFeatureLockdownDoc(docId: string): Promise<LockdownState | null> {
+  const cached = featureCache.get(docId)
   if (cached && Date.now() - cached.at < PLATFORM_TTL_MS) return cached.state
-  let pending = featurePending.get(feature)
+  let pending = featurePending.get(docId)
   if (!pending) {
     pending = (async () => {
       let state: LockdownState | null
@@ -331,7 +330,7 @@ export async function getFeatureLockdown(
           .app()
           .firestore()
           .collection(LOCKDOWNS_COLLECTION)
-          .doc(featureLockdownDocId(feature))
+          .doc(docId)
           .get()
         state = snapshot.exists
           ? normalizeLockdownDoc(
@@ -339,21 +338,40 @@ export async function getFeatureLockdown(
               'feature',
             )
           : null
-        rememberTakedown(featureLedgerKey(feature), state)
+        rememberTakedown(docId, state)
       } catch {
         // Fail open, matching the platform read: an unreachable Firestore is
         // an outage, not a feature lockdown. A takedown-class feature lock
         // this process has already observed still holds (AGL-1621).
-        state = heldTakedown(featureLedgerKey(feature), Date.now())
+        state = heldTakedown(docId, Date.now())
       }
-      featureCache.set(feature, { at: Date.now(), state })
+      featureCache.set(docId, { at: Date.now(), state })
       return state
     })().finally(() => {
-      featurePending.delete(feature)
+      featurePending.delete(docId)
     })
-    featurePending.set(feature, pending)
+    featurePending.set(docId, pending)
   }
   return pending
+}
+
+/** `lockdowns/feature--{key}`, normalized; null = not locked (incl. error). */
+export async function getFeatureLockdown(
+  feature: LockdownFeatureKey,
+): Promise<LockdownState | null> {
+  return readFeatureLockdownDoc(featureLedgerKey(feature))
+}
+
+/**
+ * `lockdowns/feature--{key}--org--{orgId}` (AGL-2927): the same capability
+ * paused for ONE workspace. Same cache, same TTL, same fail-open posture as
+ * the platform-wide document; null = not paused for that org.
+ */
+export async function getOrgFeatureLockdown(
+  feature: LockdownFeatureKey,
+  orgId: string,
+): Promise<LockdownState | null> {
+  return readFeatureLockdownDoc(orgFeatureLockdownDocId(feature, orgId))
 }
 
 /**
@@ -373,11 +391,21 @@ export async function getFeatureLockdown(
  * session is still a real charge). A feature lock implies nothing about the
  * org/host/user scopes — those stay with `lockdownRefusal` at the routes
  * that carry it.
+ *
+ * A door that names the org it serves passes `orgId` (AGL-2927), and the
+ * workspace-scoped carrier for the same feature is checked third, under the
+ * same per-feature staff bypass: the staff AI pause is a spend stop on one
+ * customer, and a staff call made to verify the pause is ours to spend. A
+ * door that names no org — the plugin dispatcher, which gates by path
+ * before the body is read — sees the platform-wide document only, which is
+ * what it saw before.
  */
 export async function featureLockdownRefusal(options: {
   feature: LockdownFeatureKey
   /** Verified `staff` custom claim — from a VERIFIED token only. */
   staff?: boolean
+  /** The workspace the request is metered against, where the door knows it. */
+  orgId?: string | null
   nowMs?: number
 }): Promise<Response | null> {
   const nowMs = options.nowMs ?? Date.now()
@@ -387,15 +415,17 @@ export async function featureLockdownRefusal(options: {
     if (options.staff === true) return null
     return lockdownJsonResponse(platform as LockdownState)
   }
+  const bypass =
+    options.staff === true && LOCKDOWN_FEATURE_STAFF_BYPASS[options.feature]
   const state = await getFeatureLockdown(options.feature)
-  if (!isLockdownActive(state, nowMs)) return null
-  if (
-    options.staff === true &&
-    LOCKDOWN_FEATURE_STAFF_BYPASS[options.feature]
-  ) {
-    return null
+  if (isLockdownActive(state, nowMs)) {
+    return bypass ? null : lockdownJsonResponse(state as LockdownState)
   }
-  return lockdownJsonResponse(state as LockdownState)
+  const orgId = options.orgId?.trim()
+  if (!orgId) return null
+  const paused = await getOrgFeatureLockdown(options.feature, orgId)
+  if (!isLockdownActive(paused, nowMs)) return null
+  return bypass ? null : lockdownJsonResponse(paused as LockdownState)
 }
 
 /**

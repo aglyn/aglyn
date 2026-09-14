@@ -44,7 +44,11 @@ import {
 } from './firebase-admin'
 import { isRefusedIdToken } from './id-token-refusal'
 import { featureLockdownRefusal, lockdownRefusal } from './lockdown'
-import { getOrgForUser } from './organizations'
+import {
+  aiPermissionRefusal,
+  getOrgForUser,
+  memberHasAiPermission,
+} from './organizations'
 import { isServerReleaseFlagOnForOrg } from './release-flags'
 
 /**
@@ -59,6 +63,9 @@ import { isServerReleaseFlagOnForOrg } from './release-flags'
  *   403  email unverified (an impersonation session is exempt)
  *   400  the body did not NAME the org it is metered against (AGL-1934)
  *   403  the caller is not a member of that org
+ *   403  the member's role lacks the door's AI permission (AGL-2927) — only
+ *        when the door names one; a verified staff claim passes, as it does
+ *        at every other org route
  *   404  the release flag is off — a released-off feature does not exist;
  *        a verified staff claim previews through it
  *   403  the org's plan lacks the entitlement — a plan-less org resolves as
@@ -91,6 +98,16 @@ export interface AiGateConfig {
   releaseFlag: ReleaseFlagKey
   /** The feature kill switch on the staff lockdown page. */
   lockdownFeature: LockdownFeatureKey
+  /**
+   * The org permission the door sells under (AGL-2927): `ai.use` for the
+   * assistants, `ai.generate` for a generation job. Resolved by
+   * `memberHasAiPermission` on the org axis or, for a site collaborator, on
+   * the host the body named (`AiGateInput.hostId`). Omitted, the rung is
+   * skipped — which is the right reading for a door that has not decided
+   * which key it sells under, and the wrong one for any door a customer
+   * can reach, so every shipped door names one.
+   */
+  permission?: 'ai.use' | 'ai.generate'
   rateLimit: {
     /** Prefix of the per-uid key, so two doors do not share one window. */
     key: string
@@ -103,6 +120,12 @@ export interface AiGateInput {
   request: Request
   /** The org the parsed body named; empty when it named none. */
   orgId: string
+  /**
+   * The site the parsed body named, when it named one. A collaborator's
+   * permission is decided on this site; an org-wide member's is the same
+   * everywhere, so a door on an org-level surface may leave it empty.
+   */
+  hostId?: string | null
   now?: Date
 }
 
@@ -181,6 +204,23 @@ export async function aiGateLadder(
   }
   const org = resolved.org ?? {}
 
+  // Permission (AGL-2927), directly after membership: it is a fact about
+  // the CALLER, so it is answered before anything about the workspace —
+  // the plan, the lockdown state, the quota — is disclosed. Staff pass, as
+  // they do at every other org route.
+  if (
+    config.permission &&
+    !staff &&
+    !(await memberHasAiPermission(
+      orgId,
+      input.hostId,
+      resolved.member,
+      config.permission,
+    ))
+  ) {
+    return aiPermissionRefusal(config.permission)
+  }
+
   // The flag closes the ROUTE, not just the UI (AGL-1653): a released-off
   // feature does not exist, so nothing below this line — not the plan, not
   // the lockdown state — is disclosed while it is off.
@@ -208,6 +248,9 @@ export async function aiGateLadder(
   const featureLocked = await featureLockdownRefusal({
     feature: config.lockdownFeature,
     staff,
+    // The workspace-scoped pause on the same key (AGL-2927): the staff org
+    // page's spend stop, which leaves the entitlement in place.
+    orgId,
   })
   if (featureLocked) return featureLocked
 

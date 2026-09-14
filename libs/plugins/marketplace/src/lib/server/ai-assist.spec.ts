@@ -190,6 +190,12 @@ let mockGetOrgForUser: (
   orgId?: string | null,
 ) => Promise<unknown>
 let mockLockdownRefusal: () => Promise<Response | null>
+/** The workspace-scoped AI pause (AGL-2927), recorded with what it was asked. */
+let mockFeatureLockdownRefusal: (options: unknown) => Promise<Response | null>
+const mockFeatureLockdownAsks: unknown[] = []
+/** The permission verdict (AGL-2927), recorded with the arguments it was asked. */
+let mockAiPermitted = true
+const mockAiPermissionAsks: unknown[][] = []
 /**
  * The Firestore the handler is handed. A variable rather than a `jest.spyOn`
  * on the barrel: reaching for the module with a bare `require()` inside a test
@@ -242,6 +248,23 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     return mockGetOrgForUser(uid, orgId)
   },
   lockdownRefusal: () => mockLockdownRefusal(),
+  featureLockdownRefusal: (options: unknown) => {
+    mockFeatureLockdownAsks.push(options)
+    return mockFeatureLockdownRefusal(options)
+  },
+  memberHasAiPermission: async (...args: unknown[]) => {
+    mockAiPermissionAsks.push(args)
+    return mockAiPermitted
+  },
+  aiPermissionRefusal: (permission: string) =>
+    Response.json(
+      {
+        error: `Your role does not include ${permission}`,
+        reason: 'permission',
+        permission,
+      },
+      { status: 403 },
+    ),
 }))
 
 const { aiAssistHandler } = require('./ai-assist') as typeof import('./ai-assist')
@@ -339,6 +362,10 @@ beforeEach(() => {
   mockGetOrgForUser = async (uid: string, orgId?: string | null) =>
     orgId === ORG ? { orgId: ORG, org: { plan: 'pro' }, member: { $id: uid } } : null
   mockLockdownRefusal = async () => null
+  mockFeatureLockdownRefusal = async () => null
+  mockFeatureLockdownAsks.length = 0
+  mockAiPermitted = true
+  mockAiPermissionAsks.length = 0
   mockFirestoreFactory = () => mockMakeFirestore()
   mockFetch = jest.fn(async () => anthropicOk('Rewritten copy.'))
   ;(globalThis as any).fetch = mockFetch
@@ -686,6 +713,43 @@ describe('the ladder refuses before it spends (AGL-2073)', () => {
     mockEntitled = false
     const result = await call(BODY, 'token-free')
     expect(result.status).toBe(403)
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.size).toBe(0)
+  })
+
+  it('403s a member whose role lacks the mode’s permission, before the plan (AGL-2927)', async () => {
+    mockAiPermitted = false
+    mockEntitled = false
+    const result = await call({ ...BODY, hostId: 'host-1' }, 'token-viewer')
+    expect(result.status).toBe(403)
+    expect(result.body).toMatchObject({ reason: 'permission', permission: 'ai.use' })
+    // The element mode is assistance; a section is a generation. Both are
+    // asked about the NAMED org and the site the body named.
+    expect(mockAiPermissionAsks).toEqual([
+      [ORG, 'host-1', { $id: 'uid-token-viewer' }, 'ai.use'],
+    ])
+    mockAiPermissionAsks.length = 0
+    const section = await call(
+      { orgId: ORG, mode: 'section', instruction: 'A hero' },
+      'token-viewer',
+    )
+    expect(section.body).toMatchObject({ permission: 'ai.generate' })
+    expect(mockAiPermissionAsks[0]).toEqual([ORG, '', { $id: 'uid-token-viewer' }, 'ai.generate'])
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.size).toBe(0)
+  })
+
+  it('423s the WORKSPACE-scoped AI pause, which the dispatcher’s path gate could not see', async () => {
+    mockFeatureLockdownRefusal = async () =>
+      Response.json({ error: 'locked', scope: 'feature', feature: 'ai-assist' }, { status: 423 })
+    const result = await call(BODY, 'token-paused')
+    expect([result.status, result.body]).toEqual([
+      423,
+      { error: 'locked', scope: 'feature', feature: 'ai-assist' },
+    ])
+    expect(mockFeatureLockdownAsks).toEqual([
+      { feature: 'ai-assist', staff: false, orgId: ORG },
+    ])
     expect(mockFetch).not.toHaveBeenCalled()
     expect(mockDocs.size).toBe(0)
   })

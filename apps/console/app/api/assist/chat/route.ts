@@ -22,6 +22,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { assistOwnControlRefusalText } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
+  aiPermissionRefusal,
   checkRateLimit,
   emailUnverifiedResponse,
   featureLockdownRefusal,
@@ -30,6 +31,7 @@ import {
   isImpersonationSession,
   isServerReleaseFlagOnForOrg,
   lockdownRefusal,
+  memberHasAiPermission,
   rateLimitHeaders,
   readAssistAnswerCache,
   recordAssistExchange,
@@ -81,7 +83,8 @@ import {
  *
  * The gate ladder, in order (every step can go red and each has a spec that
  * forces it): 405 → 401 no token → 403 email-unverified → 400 bad body → 403
- * not a member → 404 release flag off (a released-off feature does not exist;
+ * not a member → 403 the member's role lacks `ai.use` (AGL-2927; staff pass)
+ * → 404 release flag off (a released-off feature does not exist;
  * staff bypass) → 403 unscoped/wrong org (AGL-1934 — the request must NAME
  * the org it meters) → 423 lockdown (platform/org/user + the `ai-assist`
  * feature kill switch) → 429 rate limit → **the docs answer, if retrieval is
@@ -672,6 +675,25 @@ async function handler(request: Request): Promise<Response> {
     }
     const org = resolved.org ?? {}
 
+    // Permission (AGL-2927), directly after membership: `ai.use` covers the
+    // whole assistant, the docs-grounded free rung included — an org admin
+    // may switch AI off for a viewer on any plan. Decided on the caller's
+    // own axis: the org catalog for an org-wide member, the site the page
+    // named for a collaborator. A fact about the caller, so it is answered
+    // before anything about the workspace is disclosed. Staff pass, as at
+    // every other org route.
+    if (
+      !staff &&
+      !(await memberHasAiPermission(
+        body.orgId,
+        body.context?.hostId,
+        resolved.member,
+        'ai.use',
+      ))
+    ) {
+      return aiPermissionRefusal('ai.use')
+    }
+
     // Release flag (AGL-1653 rule: the flag closes the ROUTE, not just the
     // UI). A released-off feature does not exist → 404. Staff previews.
     if (!staff && !(await isServerReleaseFlagOnForOrg('release_assist', body.orgId))) {
@@ -710,6 +732,9 @@ async function handler(request: Request): Promise<Response> {
     const featureLocked = await featureLockdownRefusal({
       feature: 'ai-assist',
       staff,
+      // The workspace-scoped pause on the same key (AGL-2927): the staff
+      // org page's spend stop, which leaves the entitlement in place.
+      orgId: body.orgId,
     })
     if (featureLocked) return featureLocked
 

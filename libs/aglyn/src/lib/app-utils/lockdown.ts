@@ -361,6 +361,12 @@ export interface LockdownState {
   scope: LockdownScope
   /** Set only when `scope === 'feature'` — which capability is locked. */
   feature?: LockdownFeatureKey
+  /**
+   * Set only on a feature lock placed for ONE workspace (AGL-2927): the
+   * org it pauses the capability for. Absent on the platform-wide feature
+   * lock, which implies every workspace.
+   */
+  orgId?: string
   /** Absent = `full` (AGL-1511). Read through `lockdownMode`, never bare. */
   mode?: LockdownMode
   /**
@@ -399,6 +405,18 @@ export const userLockdownDocId = (uid: string): string => `user--${uid}`
 /** `feature--{key}` — same collection, same rules, same audited writer. */
 export const featureLockdownDocId = (feature: LockdownFeatureKey): string =>
   `feature--${feature}`
+/**
+ * `feature--{key}--org--{orgId}` — the same capability switched off for ONE
+ * workspace (AGL-2927). The carrier the staff org page's AI pause writes:
+ * a spend stop that touches neither the org's entitlements nor its plan, so
+ * lifting it restores exactly what the customer bought. Read only by the
+ * doors that carry that feature key and name the org, and never implied by
+ * the platform-wide document's absence.
+ */
+export const orgFeatureLockdownDocId = (
+  feature: LockdownFeatureKey,
+  orgId: string,
+): string => `feature--${feature}--org--${orgId}`
 
 /**
  * `domain--{hostname}` — the DOMAIN scope's carrier (AGL-1513).
@@ -459,6 +477,8 @@ export interface LockdownDoc {
   scope: LockdownScope
   /** Present on `feature--{key}` docs only. */
   feature?: LockdownFeatureKey
+  /** Present on `feature--{key}--org--{orgId}` docs only (AGL-2927). */
+  orgId?: string
   /** Written only for read-only locks; absent = `full`. */
   mode?: LockdownMode
   /** Written only for takedowns; absent = `standard` (fail open). */
@@ -874,6 +894,9 @@ export function normalizeLockdownDoc(
     scope,
     ...(scope === 'feature' && isLockdownFeatureKey(doc.feature)
       ? { feature: doc.feature }
+      : {}),
+    ...(scope === 'feature' && typeof doc.orgId === 'string' && doc.orgId
+      ? { orgId: doc.orgId }
       : {}),
     // Same posture as the org/host carriers: only the exact string relaxes
     // the lock. A malformed or unknown `mode` leaves it full.

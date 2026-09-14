@@ -25,7 +25,26 @@ Control what each teammate can do with **roles** — named permission sets — p
 
 The permission catalog covers organization settings, the activity log, billing (view
 and manage separately), member management, site creation and deletion, organization
-data, marketplace publishing, and plugin installs.
+data, marketplace publishing, plugin installs, and the two AI keys.
+
+### The AI permissions {#ai-permissions}
+
+Two keys decide who may spend the workspace's AI credits:
+
+| Permission | What it opens | Owner / Admin | Editor | Viewer |
+|---|---|---|---|---|
+| **Use AI assistance** (`ai.use`) | The assistant, copy rewrites, and "generate a section" in the Besigner | Yes | Yes | No |
+| **Generate with AI** (`ai.generate`) | AI generation jobs and AI edits — pages, components, emails, campaigns, products, CRM, insights, workflows | Yes | Yes | No |
+
+Both are ordinary catalog keys: a custom role can grant or deny either, and a
+per-member override wins over the role. They are enforced at the AI endpoints
+themselves — a member whose role lacks a key is refused with a message naming it
+and asking them to see an organization admin, whichever button they reached it
+by. A viewer may not ask the assistant even on the Free plan, so an admin can
+switch AI off for a read-only teammate without changing their role.
+
+Site collaborators are not decided by these keys. Their AI access is set per site,
+from the site role — see [AI access for collaborators](overview.md#collaborator-ai-access).
 
 Permissions are enforced on the server — every one of them is checked by the API that
 performs the action, not merely used to hide a button — so a role reliably limits what

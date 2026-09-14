@@ -2237,7 +2237,8 @@ service cloud.firestore {
       allow update: if isStaff() ||
         (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain',
+            .hasAny(['memberRoles', 'memberPermissions', 'orgId', 'admins',
+                     'hosts', 'subdomain',
                      'cname', 'cnameAttachmentPending',
                      'cnameDetachmentPending', 'themeInstalledFrom',
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',

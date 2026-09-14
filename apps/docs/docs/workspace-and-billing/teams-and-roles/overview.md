@@ -83,6 +83,25 @@ as they like. Someone with a publishing role reviews the draft and publishes it.
 This is enforced in the database itself, not just hidden in the console — an Author
 cannot publish through any route into Aglyn.
 
+### AI access for collaborators {#collaborator-ai-access}
+
+A site collaborator's AI access is decided **per site**, on the site's **Users**
+card, with two boxes beside each collaborator: **Assist** (the assistant, copy
+rewrites, generating a section) and **Generate** (AI generation jobs and AI
+edits). The site role sets the default — Admin, Editor and Author get both,
+Viewer gets neither — and the boxes refine it for that person on that site. A
+collaborator on two sites can have AI on one and off on the other.
+
+The boxes are not a hide-the-button control: every AI request from the site
+names the site, and the request is refused when the box is unticked, whichever
+surface it came from. A collaborator whose request names no site at all is
+refused too. Changing a box is recorded in the site's activity feed, and the
+boxes become settable once a pending invite has been accepted.
+
+Organization-wide members are not affected by these boxes; their AI access
+follows their org role, custom role and overrides — see
+[Custom roles & permissions](custom-roles.md#ai-permissions).
+
 ### What a site collaborator sees
 
 Someone invited to a **specific site** rather than the whole organization gets a console

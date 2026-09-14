@@ -40,6 +40,9 @@ export {}
 let mockDocs = new Map<string, Record<string, unknown>>()
 let mockAutoId = 0
 let mockFlagOn = true
+/** The permission verdict (AGL-2927), recorded with the arguments it was asked. */
+let mockAiPermitted = true
+const mockAiPermissionAsks: unknown[][] = []
 let mockFeatureLockdown: Response | null = null
 let mockLockdownResponse: Response | null = null
 let mockRateAllowed = true
@@ -217,6 +220,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isServerReleaseFlagOnForOrg: async () => mockFlagOn,
   lockdownRefusal: async () => mockLockdownResponse,
   featureLockdownRefusal: async () => mockFeatureLockdown,
+  memberHasAiPermission: async (...args: unknown[]) => {
+    mockAiPermissionAsks.push(args)
+    return mockAiPermitted
+  },
+  aiPermissionRefusal: (permission: string) =>
+    Response.json(
+      {
+        error: `Your role does not include ${permission}`,
+        reason: 'permission',
+        permission,
+      },
+      { status: 403 },
+    ),
 }))
 
 const { POST } = require('./route') as {
@@ -373,6 +389,8 @@ beforeEach(() => {
   mockDocs = new Map()
   mockAutoId = 0
   mockFlagOn = true
+  mockAiPermitted = true
+  mockAiPermissionAsks.length = 0
   mockFeatureLockdown = null
   mockLockdownResponse = null
   mockRateAllowed = true
@@ -438,6 +456,38 @@ describe('the gate ladder — every guard forced red once', () => {
     seedOrgs()
     const response = await POST(post(QUESTION_BODY('org-else')))
     expect(response.status).toBe(403)
+  })
+
+  it('403 when the role lacks `ai.use` — on the free rung too, before the flag (AGL-2927)', async () => {
+    seedOrgs()
+    mockAiPermitted = false
+    mockFlagOn = false
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({
+      reason: 'permission',
+      permission: 'ai.use',
+    })
+    // Asked about the NAMED org, on the site the page named, for the
+    // caller's own membership.
+    expect(mockAiPermissionAsks).toEqual([
+      [FREE_ORG, 'host-1', { $id: 'user-1' }, 'ai.use'],
+    ])
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('staff pass the permission rung, as they do every other org gate', async () => {
+    seedOrgs()
+    mockAiPermitted = false
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'staff-1',
+      email_verified: true,
+      staff: true,
+    })
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(200)
+    expect(mockAiPermissionAsks).toEqual([])
   })
 
   it('404 when the release flag is off — the feature does not exist', async () => {

@@ -92,6 +92,14 @@ jest.mock('next/navigation', () => ({ usePathname: () => '/' }))
 jest.mock('../components/docs-help-tip.component', () => ({
   DocsHelpTip: () => null,
 }))
+/** The reader's AI verdict (AGL-2927); the module is imported, so the hook must resolve. */
+const aiPermissions = { loaded: true, use: true, generate: true }
+jest.mock('../hooks/use-ai-permissions', () => ({
+  __esModule: true,
+  default: () => aiPermissions,
+  useAiPermissions: () => aiPermissions,
+}))
+
 jest.mock('../hooks/use-branding', () => ({
   __esModule: true,
   default: () => ({ branding: {} }),

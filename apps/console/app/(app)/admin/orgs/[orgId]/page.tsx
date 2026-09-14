@@ -210,6 +210,35 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   }, [isStaff, orgId, user, orgNonce])
   // Billing is merged server-side now, so there is one source and one shape.
   const orgBilling = null
+  /**
+   * Whether staff have paused this workspace's AI (AGL-2927): the
+   * `ai-assist` feature lock scoped to the org, read through the lockdown
+   * probe rather than the collection so the answer is the route's own.
+   * `null` until read (and on a failed read), so the pause control is not
+   * offered on a state nobody has confirmed; re-read with the org.
+   */
+  const [aiPaused, setAiPaused] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!isStaff || !orgId) return undefined
+    let active = true
+    setAiPaused(null)
+    void (async () => {
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/admin/lockdown?scope=feature&targetId=ai-assist&orgId=${encodeURIComponent(orgId)}`,
+        )
+        if (!active || !response.ok) return
+        const payload = await response.json()
+        if (active) setAiPaused(payload?.state?.locked === true)
+      } catch {
+        // Unread stays unread: the control is withheld, never mislabeled.
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [isStaff, orgId, user, orgNonce])
 
   const org = useMemo(
     () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
@@ -1095,9 +1124,13 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     variant="outlined"
                   />
                 ) : null}
+                {aiPaused ? (
+                  <Chip label="AI paused" size="small" color="warning" />
+                ) : null}
                 <StaffOrgActions
                   org={org}
                   onChanged={() => setOrgNonce((nonce) => nonce + 1)}
+                  aiPaused={aiPaused ?? undefined}
                 />
               </Stack>
             </CardDisplay>

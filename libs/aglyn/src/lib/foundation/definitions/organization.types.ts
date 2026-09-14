@@ -73,6 +73,16 @@ export type OrgRole = 'owner' | 'admin' | 'editor' | 'viewer'
 export type HostAccessRole = 'admin' | 'editor' | 'author' | 'viewer'
 
 /**
+ * The per-site permission keys a collaborator can carry (AGL-2927). The
+ * host role decides what a collaborator may do to the SITE; these decide
+ * which AI doors that collaborator may open on it, and they are the same
+ * dotted keys the org catalog names so one label serves both rosters.
+ * Spelled here rather than imported from the catalog because the catalog
+ * imports this file for its member type.
+ */
+export type HostPermissionKey = 'ai.use' | 'ai.generate'
+
+/**
  * Every host role, as a value — for `where('memberRoles.{uid}', 'in', …)`.
  *
  * `/hosts/{hostId}` is gated per document on `memberRoles.{uid}`, and
@@ -187,6 +197,14 @@ export interface AglynOrgMember extends AglynDocument {
   /** Org-wide host access shortcut; otherwise `hostAccess` decides. */
   allHosts?: boolean
   hostAccess?: Record<HostUid, HostAccessRole>
+  /**
+   * Per-site permission overrides for a COLLABORATOR (AGL-2927), keyed by
+   * the host the grant is for. Absent keys resolve by the host role's
+   * default, so a document written before this field existed reads the same
+   * as one written after it. Org-wide members are never consulted here:
+   * their org role, custom role and `permissions` map decide.
+   */
+  hostPermissions?: Record<HostUid, Partial<Record<HostPermissionKey, boolean>>>
   /**
    * Denormalized reach as scope tokens (AGL-1038), so rules can intersect
    * it with a resource's `visibleTo` — they cannot derive it from
