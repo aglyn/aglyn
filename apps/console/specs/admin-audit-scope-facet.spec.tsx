@@ -47,10 +47,20 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-jest.mock('@aglyn/aglyn', () => ({
-  __esModule: true,
-  orgOverrideReasonSummary: () => null,
-}))
+jest.mock('@aglyn/aglyn', () => {
+  // The action facet groups entries through the plugin activity-action
+  // catalog; the real grouping, with no plugin registered, is what the page
+  // shows for core actions.
+  const actions = jest.requireActual(
+    '@aglyn/aglyn/plugin-manager/plugin-activity-actions',
+  )
+  return {
+    __esModule: true,
+    orgOverrideReasonSummary: () => null,
+    pluginStaffAuditActionGroup: actions.pluginStaffAuditActionGroup,
+    pluginStaffAuditActionGroupLabel: actions.pluginStaffAuditActionGroupLabel,
+  }
+})
 
 jest.mock('@aglyn/shared-data-enums', () => ({
   __esModule: true,
