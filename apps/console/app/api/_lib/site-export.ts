@@ -350,6 +350,10 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     // its description silently un-does the author's accessibility work on
     // every round trip, and the loss is invisible — the image comes back.
     'coverImageAlt',
+    // The featured video (AGL-2954). A restore writes with `merge: false`, so
+    // a list without it ERASES the film from every restored entry, and
+    // nothing reports the loss.
+    'coverVideo',
     'seoTitle',
     'seoDescription',
     'authorName',

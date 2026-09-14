@@ -94,6 +94,19 @@ export const COVER_IMAGE_HINT =
   'share card.'
 
 /**
+ * An entry's featured video (AGL-2954), whose captured frame can also become
+ * its cover.
+ *
+ * MP4, because H.264 video in an MP4 container plays in every major browser
+ * without a fallback. 1920×1080, because the frame the library captures at
+ * upload is kept up to 1920 pixels wide, so a film that size gives a cover
+ * that fills the 1200×630 share card without being scaled up.
+ */
+export const COVER_VIDEO_HINT =
+  'Recommended: an MP4 at 1920×1080 — every major browser plays MP4, and a ' +
+  'frame that size makes a sharp cover.'
+
+/**
  * An email logo, which is the one that must NOT be an SVG.
  *
  * Most email clients refuse SVG outright and none of them resize an image the

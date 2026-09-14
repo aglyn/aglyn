@@ -707,6 +707,10 @@ const SEEDS: Array<{
       coverImage: 'https://cdn/cover.png',
       // AGL-2418: the cover's description survives the round trip with it.
       coverImageAlt: 'A pallet of boxes on a loading dock',
+      // The featured video (AGL-2954), as the editor stores a library film.
+      // The import writes with `merge: false`, so a field missing from the
+      // allow-list would come back erased rather than merely unset.
+      coverVideo: 'media:org:org-1/film-1',
       seoTitle: 'Shipping the export',
       seoDescription: 'How the bundle works',
       authorName: 'Zach',

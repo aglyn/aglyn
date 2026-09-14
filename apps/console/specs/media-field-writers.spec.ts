@@ -200,6 +200,18 @@ describe('content entry picker (AGL-1407, AGL-1705)', () => {
   })
 
   /**
+   * The featured video (AGL-2954) is the same kind of field as the cover, and
+   * the same regression would reach it: `media.url` names the film's current
+   * location, so a folder move 404s it and a replace re-tokens it. The pick
+   * takes the `src` the page's one handler made with `mediaNodeSrc`.
+   */
+  it('writes the featured video as a reference', () => {
+    expect(contentCode).toMatch(/featuredVideoPick\(\{\s*media,\s*src,/)
+    expect(contentCode).toMatch(/coverVideo:\s*src\b/)
+    expect(contentCode).not.toMatch(/coverVideo:\s*(?:media\.)?url\b/)
+  })
+
+  /**
    * INVERTED by AGL-1705, and the inversion is the record of why. This spec
    * used to pin the opposite — "still writes the raw URL into a markdown BODY
    * image" — on the grounds that markdown-lite had no resolver, so a reference
