@@ -56,6 +56,13 @@ import { operatorContactLine } from './operator-identity'
 // the product (AGL-2153), and "Aglyn cannot reach the database" is a
 // sentence their operators would be shown about their own install.
 import { PLATFORM_BRAND_NAME } from './platform-brand'
+// The plugin-declared levers (AGL-2940). `plugin-entitlements` reaches only
+// the plugin catalog and the permission registry, neither of which imports
+// anything, so the leaf argument above still holds.
+import {
+  listPluginLockdownFeatures,
+  type PluginLockdownFeatureDeclaration,
+} from '../plugin-manager/plugin-entitlements'
 
 export type LockdownScope =
   | 'platform'
@@ -70,52 +77,29 @@ export type LockdownScope =
  * everything else keeps serving. The launch set maps one-to-one onto the
  * incident shapes the issue names — bot wave → `signups`, malware report →
  * `uploads`, billing bug → `checkout`, malicious listing →
- * `marketplace-installs`, provider incident/cost runaway → `ai-assist`.
- * `ai-generate` (AGL-2903) is the same lever for the generative doors —
- * separate from `ai-assist` because the two spend at different rates and
- * an incident on one need not stop the other.
+ * `marketplace-installs`. A plugin that can be switched off in an incident
+ * declares its own lever through `registerPluginEntitlements` (AGL-2940):
+ * the label, the staff-bypass rule, the visitor notice and the API paths it
+ * gates all arrive with the declaration, and the staff checklist, the
+ * writer and the dispatcher read the two sets as one.
  *
  * Precedence COMPOSES rather than ranks: a platform lock implies every
  * feature (the feature verdict helpers check platform first), while a
  * feature lock implies nothing about the platform/org/host/user scopes —
  * feature states never enter `resolveLockdown`.
  */
-export type LockdownFeatureKey =
+export type CoreLockdownFeatureKey =
   | 'signups'
   | 'uploads'
   | 'checkout'
   | 'marketplace-installs'
-  | 'ai-assist'
-  | 'ai-generate'
 
-const LOCKDOWN_FEATURE_KEY_SET: Record<LockdownFeatureKey, true> = {
-  signups: true,
-  uploads: true,
-  checkout: true,
-  'marketplace-installs': true,
-  'ai-assist': true,
-  'ai-generate': true,
-}
-/** Extensible launch set — the staff surface renders its checklist from it. */
-export const LOCKDOWN_FEATURE_KEYS = Object.keys(
-  LOCKDOWN_FEATURE_KEY_SET,
-) as LockdownFeatureKey[]
-
-export function isLockdownFeatureKey(
-  value: unknown,
-): value is LockdownFeatureKey {
-  return typeof value === 'string' && value in LOCKDOWN_FEATURE_KEY_SET
-}
-
-/** Staff-surface labels; the key stays the wire/API identity. */
-export const LOCKDOWN_FEATURE_LABELS: Record<LockdownFeatureKey, string> = {
-  signups: 'New signups',
-  uploads: 'Media uploads',
-  checkout: 'Checkout (new subscriptions)',
-  'marketplace-installs': 'Marketplace installs',
-  'ai-assist': 'AI assist',
-  'ai-generate': 'AI generation',
-}
+/**
+ * A lever's wire identity: one of the core four, or a key a plugin
+ * declared. A string rather than a union because the set is only complete
+ * once every declaring plugin has registered, which no type can know.
+ */
+export type LockdownFeatureKey = CoreLockdownFeatureKey | (string & {})
 
 /**
  * The un-panic invariant, per feature (AGL-1510). At the PLATFORM scope a
@@ -129,12 +113,6 @@ export const LOCKDOWN_FEATURE_LABELS: Record<LockdownFeatureKey, string> = {
  *   before lifting the lock for everyone.
  * - `marketplace-installs: true` — same shape: a malicious listing slipped
  *   review, and reproducing the install is part of investigating it.
- * - `ai-assist: true` — a provider incident is verified recovered by staff
- *   making one real call, not by lifting the lock and watching customers
- *   find out.
- * - `ai-generate: true` — the same verification, on the dearer door: one
- *   staff generation proves the provider and the runtime are back before
- *   every workspace's builds are let through again.
  * - `checkout: false` — a checkout lock answers a billing/Stripe bug, and a
  *   staff-created checkout session is still a real charge against a real
  *   card. There is no incident-response step that needs money to move;
@@ -142,16 +120,110 @@ export const LOCKDOWN_FEATURE_LABELS: Record<LockdownFeatureKey, string> = {
  * - `signups: false` — an account being created has no staff claim yet, so
  *   a bypass here could never fire honestly; declaring `false` states that
  *   rather than leaving a bypass that only a misattributed claim could use.
+ *
+ * A plugin's lever carries its own answer on its declaration.
+ *
+ * Each notice says what is paused AND what still works — a feature lock's
+ * whole point is that everything else keeps serving, and the copy must not
+ * let a narrow pause read as a wider outage. The checkout notice in
+ * particular must NEVER read as a payment failure: "your card was declined"
+ * and "we turned checkout off" are different sentences, and only one of them
+ * sends a customer to their bank.
  */
-export const LOCKDOWN_FEATURE_STAFF_BYPASS: Record<LockdownFeatureKey, boolean> =
+const CORE_LOCKDOWN_FEATURES: readonly PluginLockdownFeatureDeclaration[] = [
   {
-    signups: false,
-    uploads: true,
-    checkout: false,
-    'marketplace-installs': true,
-    'ai-assist': true,
-    'ai-generate': true,
-  }
+    key: 'signups',
+    label: 'New signups',
+    staffBypass: false,
+    notice: {
+      title: 'New signups are paused',
+      body: 'New signups are temporarily paused. Existing accounts can sign in and work as usual.',
+    },
+  },
+  {
+    key: 'uploads',
+    label: 'Media uploads',
+    staffBypass: true,
+    notice: {
+      title: 'Uploads are paused',
+      body: 'Media uploads are temporarily disabled while we address an issue. Your existing media and published sites are unaffected.',
+    },
+  },
+  {
+    key: 'checkout',
+    label: 'Checkout (new subscriptions)',
+    staffBypass: false,
+    notice: {
+      title: 'Checkout is temporarily unavailable',
+      body: 'Checkout is temporarily unavailable — this is not a payment failure, and your account, subscription, and sites are unaffected. Please try again shortly.',
+    },
+    // `marketplace/checkout` creates NEW Stripe checkout sessions exactly
+    // like the billing route (AGL-1545); it is also the front door of a paid
+    // install, so it carries BOTH keys and each keeps its own bypass rule.
+    apiPaths: { exact: ['marketplace/checkout'] },
+  },
+  {
+    key: 'marketplace-installs',
+    label: 'Marketplace installs',
+    staffBypass: true,
+    notice: {
+      title: 'Marketplace installs are paused',
+      body: 'Installing from the marketplace is temporarily disabled. Everything already installed keeps working.',
+    },
+    // Installs-as-a-class, every artifact kind. `marketplace/update-artifact`
+    // re-copies a publisher's version into the org, which is an install by
+    // another name and the same vector a malicious listing would ride.
+    // Publish/review/report paths map to nothing: a marketplace incident
+    // must not stop publishers reporting or staff reviewing.
+    apiPaths: {
+      exact: ['marketplace/checkout', 'marketplace/install', 'marketplace/update-artifact'],
+      prefixes: ['marketplace/install-'],
+    },
+  },
+]
+
+/**
+ * Every lever, core first and then the plugin declarations in catalog
+ * order — the list the staff checklist renders and the writer validates
+ * against. Read live rather than snapshotted: plugin declarations arrive
+ * at module scope, which can run after any constant here was evaluated.
+ */
+export function listLockdownFeatures(): PluginLockdownFeatureDeclaration[] {
+  return [...CORE_LOCKDOWN_FEATURES, ...listPluginLockdownFeatures()]
+}
+
+/** The keys of {@link listLockdownFeatures}, in the same order. */
+export function listLockdownFeatureKeys(): LockdownFeatureKey[] {
+  return listLockdownFeatures().map((feature) => feature.key)
+}
+
+/** One lever's declaration — core or plugin — or `undefined`. */
+export function lockdownFeatureDeclaration(
+  key: unknown,
+): PluginLockdownFeatureDeclaration | undefined {
+  if (typeof key !== 'string') return undefined
+  return listLockdownFeatures().find((feature) => feature.key === key)
+}
+
+export function isLockdownFeatureKey(
+  value: unknown,
+): value is LockdownFeatureKey {
+  return lockdownFeatureDeclaration(value) !== undefined
+}
+
+/** Staff-surface label; the key stays the wire/API identity. */
+export function lockdownFeatureLabel(key: LockdownFeatureKey): string {
+  return lockdownFeatureDeclaration(key)?.label ?? key
+}
+
+/**
+ * Whether a verified staff claim passes this feature's lock. A key nothing
+ * declared answers `false`: an undeclared lever has no bypass argument on
+ * record, and the safe reading of "no argument" is "no bypass".
+ */
+export function lockdownFeatureStaffBypass(key: LockdownFeatureKey): boolean {
+  return lockdownFeatureDeclaration(key)?.staffBypass === true
+}
 
 /**
  * HOW HARD the lock bites (AGL-1511).
@@ -1221,12 +1293,11 @@ export function lockdownPausedNotice(
 }
 
 /**
- * Per-feature visitor copy (AGL-1510). Each notice says what is paused AND
- * what still works — a feature lock's whole point is that everything else
- * keeps serving, and the copy must not let a narrow pause read as a wider
- * outage. The checkout notice in particular must NEVER read as a payment
- * failure: "your card was declined" and "we turned checkout off" are
- * different sentences, and only one of them sends a customer to their bank.
+ * Per-feature visitor copy (AGL-1510), read off the lever's declaration —
+ * core or plugin — so a plugin's lever explains itself in its own words. A
+ * key nothing declared (a document written before its plugin was removed)
+ * gets the generic pause: the lock is still honored, it just cannot name
+ * what it pauses.
  */
 function featureLockdownNotice(
   feature: LockdownFeatureKey,
@@ -1237,56 +1308,16 @@ function featureLockdownNotice(
     typeof untilMs === 'number'
       ? ` Expected back by ${new Date(untilMs).toUTCString()}.`
       : ''
-  switch (feature) {
-    case 'signups':
-      return {
-        title: 'New signups are paused',
-        body:
-          custom ??
-          `New signups are temporarily paused. Existing accounts can sign in and work as usual.${window}`,
-        contact: lockdownSupportEmail() ?? undefined,
-      }
-    case 'uploads':
-      return {
-        title: 'Uploads are paused',
-        body:
-          custom ??
-          `Media uploads are temporarily disabled while we address an issue. Your existing media and published sites are unaffected.${window}`,
-        contact: lockdownSupportEmail() ?? undefined,
-      }
-    case 'checkout':
-      return {
-        title: 'Checkout is temporarily unavailable',
-        body:
-          custom ??
-          `Checkout is temporarily unavailable — this is not a payment failure, and your account, subscription, and sites are unaffected. Please try again shortly.${window}`,
-        contact: lockdownSupportEmail() ?? undefined,
-      }
-    case 'marketplace-installs':
-      return {
-        title: 'Marketplace installs are paused',
-        body:
-          custom ??
-          `Installing from the marketplace is temporarily disabled. Everything already installed keeps working.${window}`,
-        contact: lockdownSupportEmail() ?? undefined,
-      }
-    case 'ai-generate':
-      return {
-        title: 'AI generation is temporarily unavailable',
-        body:
-          custom ??
-          `Generating sections, pages and automations with AI is temporarily unavailable. Everything already built is unaffected — please try again shortly.${window}`,
-        contact: lockdownSupportEmail() ?? undefined,
-      }
-    case 'ai-assist':
-    default:
-      return {
-        title: 'AI assist is temporarily unavailable',
-        body:
-          custom ??
-          `AI assist is temporarily unavailable. Your content is unaffected — please try again shortly.${window}`,
-        contact: lockdownSupportEmail() ?? undefined,
-      }
+  const declared = lockdownFeatureDeclaration(feature)
+  return {
+    title: declared?.notice.title ?? 'Temporarily paused',
+    body:
+      custom ??
+      `${
+        declared?.notice.body ??
+        'This action is paused for a few minutes. Browsing works as normal — please try again shortly.'
+      }${window}`,
+    contact: lockdownSupportEmail() ?? undefined,
   }
 }
 
@@ -1486,46 +1517,40 @@ export function lockdownPausedSurfaceForPluginApiPath(
 
 /**
  * Which feature keys gate a plugin-API dispatcher path (AGL-1510, plural
- * since AGL-1545). Lives here (pure, beside the enum) so the dispatcher's
+ * since AGL-1545). Lives here (pure, beside the catalog) so the dispatcher's
  * wiring is one call and the mapping is unit-testable without a route
  * harness.
  *
- * - `ai/assist` → `ai-assist` (gated even while the route 501s without an
- *   API key — the switch predates the key on purpose).
- * - `ai/generate` and everything under it → `ai-generate` (AGL-2903). The
- *   mapping precedes the first generative door for the same reason the
- *   `ai-assist` switch preceded the key: a door registered under this path
- *   is gated by existing, not by remembering to wire it.
- * - `marketplace/install*` → `marketplace-installs`: installs-as-a-class,
- *   every artifact kind. `marketplace/update-artifact` is included — it
- *   re-copies a publisher's version into the org, which is an install by
- *   another name and the same vector a malicious listing would ride.
- * - `marketplace/checkout` → BOTH `checkout` and `marketplace-installs`
- *   (AGL-1545): it creates NEW Stripe checkout sessions exactly like the
- *   billing route, and it is also the front door of a paid install — a
- *   malicious-listing incident must stop buyers PAYING for the artifact
- *   under investigation, not merely refuse the install after the money
- *   moved. Each key keeps its own staff-bypass rule when composed.
+ * Every lever declares the paths it gates: exact paths, and prefixes matched
+ * on a SEGMENT boundary, so `ai/generate` gates `ai/generate/section` and
+ * never `ai/generated-report`. A path several levers name is gated by all
+ * of them, each keeping its own staff-bypass rule when composed —
+ * `marketplace/checkout` carries both `checkout` and `marketplace-installs`
+ * (AGL-1545): it creates NEW Stripe checkout sessions exactly like the
+ * billing route, and it is also the front door of a paid install, so a
+ * malicious-listing incident must stop buyers PAYING for the artifact under
+ * investigation, not merely refuse the install after the money moved.
  *
- * Publish/review/report paths map to nothing: a marketplace incident must
- * not stop publishers reporting or staff reviewing.
+ * A plugin's lever gates its paths by existing (AGL-2903): a door
+ * registered under a declared prefix is gated before anyone remembers to
+ * wire it, which is the reason the mapping is declared beside the lever
+ * rather than beside the route.
  */
 export function lockdownFeaturesForPluginApiPath(
   path: string,
 ): LockdownFeatureKey[] {
-  if (path === 'ai/assist') return ['ai-assist']
-  if (path === 'ai/generate' || path.startsWith('ai/generate/')) {
-    return ['ai-generate']
+  const keys: LockdownFeatureKey[] = []
+  for (const feature of listLockdownFeatures()) {
+    const exact = feature.apiPaths?.exact ?? []
+    const prefixes = feature.apiPaths?.prefixes ?? []
+    const hit =
+      exact.includes(path) ||
+      prefixes.some(
+        (prefix) =>
+          path === prefix ||
+          path.startsWith(prefix.endsWith('/') || prefix.endsWith('-') ? prefix : `${prefix}/`),
+      )
+    if (hit && !keys.includes(feature.key)) keys.push(feature.key)
   }
-  if (path === 'marketplace/checkout') {
-    return ['checkout', 'marketplace-installs']
-  }
-  if (
-    path === 'marketplace/install' ||
-    path.startsWith('marketplace/install-') ||
-    path === 'marketplace/update-artifact'
-  ) {
-    return ['marketplace-installs']
-  }
-  return []
+  return keys
 }

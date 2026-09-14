@@ -532,10 +532,81 @@ export const CONSOLE_WIDGET_SLOTS = {
   hostSettings: 'hostSettings',
   /** Staff admin org detail (staff-only surfaces). Props: orgId. */
   adminOrgDetail: 'adminOrgDetail',
+  /**
+   * Billing → Usage, below the meters (AGL-2940). Props: `orgId`, `org` (the
+   * billing-merged org doc), `canManage` (the reader holds
+   * `billing.manage`). A card here explains or controls consumption the
+   * meters above it show.
+   */
+  orgBillingUsage: 'orgBillingUsage',
+  /**
+   * Billing → Overview, among the plan and add-on cards (AGL-2940). Props:
+   * `orgId`, `org`, `plan` (the page's own defaulted plan), `canManage`.
+   */
+  orgBillingOverview: 'orgBillingOverview',
+  /**
+   * The staff org page, among its cards (AGL-2940). Props: `orgId`. Staff
+   * only — the page is behind `StaffOnly`, and a widget here may read the
+   * staff-only routes.
+   */
+  staffOrg: 'staffOrg',
+  /** The staff user page, below the account's activity. Props: `uid`. */
+  staffUser: 'staffUser',
+  /**
+   * The org's team member detail page, below the member's activity
+   * (AGL-2940). Props: `orgId`, `uid`, `member` (the org member document as
+   * the page loaded it), `canManage` (the reader may manage the org).
+   */
+  orgMember: 'orgMember',
+  /**
+   * A COLUMN of the org Team table (AGL-2940) — see
+   * {@link ConsoleWidget.column}: the widget declares the header and the
+   * shell renders its component once per row with `{ member, orgId,
+   * canManage }`. A widget on this slot without a `column` renders nothing.
+   */
+  orgMembersListColumn: 'orgMembersListColumn',
+  /**
+   * The site collaborators card (AGL-2940). A widget with a `column` is a
+   * column of its table, rendered per row with `{ member, hostId, canManage
+   * }`; a widget without one renders beneath the table with `{ hostId,
+   * canManage }`.
+   */
+  hostMembers: 'hostMembers',
+  /**
+   * The console shell's assistant dock (AGL-2940): the one position above
+   * every route boundary in both the `(app)` and `(editor)` shells, where a
+   * floating helper survives a navigation. Props: none — a widget here
+   * resolves its own scope from the URL, as the shell's own chrome does.
+   */
+  assistPanel: 'assistPanel',
+  /**
+   * A section at the bottom of the besigner's Attributes panel (AGL-2940),
+   * under the selected element's own fields. Props: `hostId`.
+   */
+  besignerInspector: 'besignerInspector',
 } as const
 
 export type ConsoleWidgetSlot =
   (typeof CONSOLE_WIDGET_SLOTS)[keyof typeof CONSOLE_WIDGET_SLOTS]
+
+/**
+ * A column a widget contributes to a shell-owned table (AGL-2940) — the org
+ * Team table and the site collaborators table read these. The widget's
+ * `Component` is the CELL renderer, mounted once per row with the row as a
+ * prop beside the slot's own props; the header and the sort key are the
+ * table's to draw.
+ */
+export interface ConsoleWidgetColumn {
+  /** The header cell's text. */
+  header: string
+  /**
+   * The row field a table that sorts orders this column by. Carried for
+   * every column contract so a sortable table can honor it; the two member
+   * tables render in fetch order and do not read it today.
+   */
+  sortKey?: string
+  align?: 'left' | 'right' | 'center'
+}
 
 /**
  * A component a plugin renders into a NAMED console slot (AGL-419/433) —
@@ -544,6 +615,12 @@ export type ConsoleWidgetSlot =
  */
 export interface ConsoleWidget {
   slot: string
+  /**
+   * Present when the widget is a table COLUMN rather than a card (AGL-2940)
+   * — see {@link ConsoleWidgetColumn}. Only the slots documented as column
+   * slots read it; elsewhere it is ignored.
+   */
+  column?: ConsoleWidgetColumn
   /**
    * Stable identity for this widget, unique within the plugin per slot.
    * The id names the CARD, not its placement: the same card registered on

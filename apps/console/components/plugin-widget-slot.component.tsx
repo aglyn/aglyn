@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { listConsoleWidgets } from '@aglyn/aglyn'
+import { listConsoleWidgets, type ConsoleWidgetColumn } from '@aglyn/aglyn'
 import type { ComponentType } from 'react'
 import { useEnabledPluginIds } from './console-plugins-gate.component'
 import { useDashboardWidgetPrefs } from './dashboard-widget-prefs.context'
@@ -46,6 +46,8 @@ export interface EntitledSlotWidget {
    * which is ugly and still better than an unnamed switch.
    */
   title: string
+  /** Present when the widget is a table column rather than a card (AGL-2940). */
+  column?: ConsoleWidgetColumn
   Component: ComponentType<any>
 }
 
@@ -126,6 +128,7 @@ export function useSlotWidgets(slots: readonly string[]): {
         slot,
         widgetId: widget.widgetId,
         title: widget.title ?? extension.displayName ?? widget.widgetId,
+        column: widget.column,
         Component: widget.Component,
       },
     })),

@@ -213,6 +213,13 @@ export * from './upload-cors'
 export * from './docs-help'
 export * from './platform-brand'
 export * from './plan-entitlements'
+// The Aglyn AI plugin's keys, declared through the generic entitlement seam
+// (AGL-2940) and loaded with the barrel so every reader of the plan tables
+// and the lockdown catalog sees them registered.
+export * from './ai-entitlements'
+// The AI activity catalog registers through the generic activity-action seam
+// (AGL-2940) at module scope, so it rides the barrel for the same reason.
+export * from './ai-activity-actions'
 // The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'

@@ -73,6 +73,7 @@ import ElementStylesForm from './element-styles-form.component'
 import NodeTreeView, { type NodeTreeViewProps } from './node-tree-view'
 import SiteThemeColorTokensProvider from './site-theme-color-tokens-provider.component'
 import { usePublishActiveHostTheme } from '../utils/active-host-theme'
+import { useBesignerInspectorExtras } from '../contexts/inspector-extras-context'
 import { besignerDocsUrl } from '../utils/docs-help'
 import WorkspacePanelComponent, {
   type WorkspacePanelComponentProps,
@@ -233,6 +234,21 @@ const withTabPanelInner = (Component: ComponentType<any>) => (props: any) => {
   )
 }
 
+/**
+ * The Attributes form with the host app's section beneath it (AGL-2940):
+ * whatever `BesignerInspectorExtrasContext` carries, drawn under the
+ * selected element's own fields and nothing when the host supplied nothing.
+ */
+const ElementPropsFormWithExtras = (props: any) => {
+  const extras = useBesignerInspectorExtras()
+  return (
+    <>
+      <ElementPropsForm {...props} />
+      {extras ? <Box sx={{ pt: 2 }}>{extras}</Box> : null}
+    </>
+  )
+}
+
 const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
   const handleAddElementClick = useAddElementDrawerCallback()
   return (
@@ -321,7 +337,7 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
           label: 'Attributes',
         },
         panel: {
-          Component: withLastSelectedNode(withTabPanelInner(ElementPropsForm)),
+          Component: withLastSelectedNode(withTabPanelInner(ElementPropsFormWithExtras)),
         },
       },
       {

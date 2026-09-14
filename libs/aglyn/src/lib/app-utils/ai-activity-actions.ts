@@ -31,6 +31,12 @@
  */
 
 import type { AiJobOutputResource } from '../foundation/definitions/ai-jobs.types'
+import {
+  pluginStaffAuditActionGroup,
+  pluginStaffAuditActionGroupLabel,
+  registerPluginActivityActions,
+  type PluginActivityScope,
+} from '../plugin-manager/plugin-activity-actions'
 
 /** The action code each AI writer stores. */
 export const AI_ACTIVITY_ACTIONS = {
@@ -179,22 +185,60 @@ export const AI_STAFF_AUDIT_ACTION_PREFIXES: readonly string[] = [
 export const STAFF_AUDIT_AI_GROUP = 'ai'
 
 /**
+ * Which log each code is written to. The job and edit codes land in both
+ * the org feed and the host's copy; the billing and permission codes are
+ * org-level facts and land in the org feed alone.
+ */
+const AI_ACTIVITY_ACTION_SCOPES: Record<
+  AiActivityAction,
+  PluginActivityScope | readonly PluginActivityScope[]
+> = {
+  'ai.job.created': ['org', 'host'],
+  'ai.job.output': ['org', 'host'],
+  'ai.job.canceled': ['org', 'host'],
+  'ai.job.needs_input': ['org', 'host'],
+  'ai.edit.applied': ['org', 'host'],
+  'ai.assist.section': ['org', 'host'],
+  'ai.overage.hardCap': 'org',
+  'ai.overage.cap': 'org',
+  'ai.permission.changed': 'org',
+  'ai.addon.purchased': 'org',
+  'ai.addon.removed': 'org',
+}
+
+/**
+ * The catalog, declared through the generic activity-action seam
+ * (AGL-2940) so the feed's chip, the actor table's filter and the staff
+ * facet read it from the registry beside every other plugin's codes.
+ */
+registerPluginActivityActions({
+  pluginId: 'ai',
+  group: {
+    id: STAFF_AUDIT_AI_GROUP,
+    label: AI_ACTIVITY_FILTER_LABEL,
+    staffAuditPrefixes: AI_STAFF_AUDIT_ACTION_PREFIXES.filter(
+      (prefix) => prefix !== 'ai.',
+    ),
+  },
+  actions: AI_ACTIVITY_ACTION_LIST.map((key) => ({
+    key,
+    label: AI_ACTIVITY_ACTION_LABELS[key],
+    scope: AI_ACTIVITY_ACTION_SCOPES[key],
+  })),
+})
+
+/**
  * The group the staff audit facet files an action under: `ai` for every
  * AI row, otherwise the action's leading namespace (`billing`, `org`,
  * `plugins`). Roughly seventy distinct actions write to `adminAudit`, so
- * the facet offers namespaces rather than a seventy-entry menu.
+ * the facet offers namespaces rather than a seventy-entry menu. Answered
+ * by the registry, so every plugin's group is filed the same way.
  */
 export function staffAuditActionGroup(action: unknown): string {
-  const text = typeof action === 'string' ? action.trim() : ''
-  if (!text) return ''
-  if (AI_STAFF_AUDIT_ACTION_PREFIXES.some((prefix) => text.startsWith(prefix))) {
-    return STAFF_AUDIT_AI_GROUP
-  }
-  const dot = text.indexOf('.')
-  return dot > 0 ? text.slice(0, dot) : text
+  return pluginStaffAuditActionGroup(action)
 }
 
 /** How a facet group reads in the menu: `ai` → `AI`, `billing` → `billing`. */
 export function staffAuditActionGroupLabel(group: string): string {
-  return group === STAFF_AUDIT_AI_GROUP ? AI_ACTIVITY_FILTER_LABEL : group
+  return pluginStaffAuditActionGroupLabel(group)
 }

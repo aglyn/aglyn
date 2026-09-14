@@ -76,6 +76,11 @@ import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import { aiUsageMonthLabel } from '../utils/ai-usage-wire'
 import MemberAvatar from './member-avatar.component'
+import {
+  PluginListColumnCells,
+  PluginListColumnHeaders,
+  usePluginListColumns,
+} from './plugin-list-columns.component'
 
 const ASSIGNABLE_ROLES: OrgRole[] = ['admin', 'editor', 'viewer']
 /**
@@ -142,6 +147,9 @@ export function OrgMembersCard() {
   )
   const orgId = currentOrg?.$id
   const canManage = canManageOrg(currentOrg?.role)
+  // Columns a plugin contributes to this table (AGL-2940), drawn between
+  // Access and the actions.
+  const { columns: pluginColumns } = usePluginListColumns('orgMembersListColumn')
   // Manager-seat quota hint (AGL-530): the roster counts against
   // managersPerOrg; extra seats sell on the Billing add-ons card.
   // Only MANAGERS count (AGL-1113) — this list also shows site-scoped
@@ -513,6 +521,7 @@ export function OrgMembersCard() {
                   </TableSortLabel>
                 </Tooltip>
               </TableCell>
+              <PluginListColumnHeaders columns={pluginColumns} />
               <TableCell align="right" />
             </TableRow>
           </TableHead>
@@ -707,6 +716,12 @@ export function OrgMembersCard() {
                     })()}
                   </Stack>
                 </TableCell>
+                <PluginListColumnCells
+                  columns={pluginColumns}
+                  member={member}
+                  orgId={orgId}
+                  canManage={canManage}
+                />
                 <TableCell align="right">
                   {aiUsage.status === 'ready'
                     ? (aiUsage.creditsByUid.get(member.$id as string) ?? 0).toLocaleString()

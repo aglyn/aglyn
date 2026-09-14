@@ -25,6 +25,15 @@ The guaranteed zones are the exported `CONSOLE_WIDGET_SLOTS` catalog —
 | `orgSettings` | Organization → Settings, below the tabs | `orgId`, `org` |
 | `hostSettings` | Host setup page, below the built-in cards | `hostId` |
 | `adminOrgDetail` | Staff admin org detail page (staff-only) | `orgId` |
+| `orgBillingUsage` | Billing → Usage, below the meters | `orgId`, `org` (the billing-merged org doc), `canManage` |
+| `orgBillingOverview` | Billing → Overview, among the plan and add-on cards | `orgId`, `org`, `plan`, `canManage` |
+| `staffOrg` | Staff org page, among its cards (staff-only) | `orgId` |
+| `staffUser` | Staff user page, below the account's activity (staff-only) | `uid` |
+| `orgMember` | Team → member detail, below the member's activity | `orgId`, `uid`, `member`, `canManage` |
+| `orgMembersListColumn` | A **column** of the org Team table — see [Column zones](#column-zones) | per row: `member`, `orgId`, `canManage` |
+| `hostMembers` | The site collaborators card: a column of its table when the widget declares `column`, a card beneath it otherwise | per row: `member`, `hostId`, `canManage`; as a card: `hostId`, `canManage` |
+| `assistPanel` | The console shell's assistant dock, above every route boundary in both the app and editor shells | none — resolve your own scope from the URL |
+| `besignerInspector` | A section at the bottom of the besigner's Attributes panel, under the selected element's fields | `hostId` |
 
 Rules of thumb: widgets receive shell-resolved context as props and must
 not reach for console-app hooks; data access goes through
@@ -32,6 +41,28 @@ not reach for console-app hooks; data access goes through
 `usePluginConfig`, …). A widget renders for a workspace only when its
 plugin is enabled and released — the shell never mounts widgets from
 unloaded plugins.
+
+## Column zones
+
+A zone documented as a **column** (`orgMembersListColumn`, and `hostMembers`
+when you want a column rather than a card) takes a widget with a `column`:
+
+```ts
+widgets: [
+  {
+    slot: 'orgMembersListColumn',
+    widgetId: 'ai-usage-column',
+    column: { header: 'AI this month', sortKey: 'aiCredits', align: 'right' },
+    Component: AiUsageCell, // rendered once per row with { member, orgId, canManage }
+  },
+]
+```
+
+The table draws the header and mounts your component once per row with the
+row beside the zone's props; `sortKey` names the row field a sortable table
+orders by (the two member tables render in fetch order today and carry it
+for the ones that will). A widget on a column zone without a `column` is not
+a column and renders nothing there — register a card on a card zone instead.
 
 ## `widgetId` is a persisted identifier
 

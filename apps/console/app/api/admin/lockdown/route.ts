@@ -62,7 +62,7 @@ import {
   isLockdownMode,
   isLockdownReasonCode,
   LOCKDOWN_ENFORCEMENTS,
-  LOCKDOWN_FEATURE_KEYS,
+  listLockdownFeatureKeys,
   LOCKDOWN_MESSAGE_MAX,
   LOCKDOWN_MODES,
   LOCKDOWNS_COLLECTION,
@@ -466,7 +466,7 @@ async function evaluateVerdict(
   // so "what is this customer seeing" is incomplete without it — a caller
   // whose org is fine may still be unable to upload or check out.
   const features = await Promise.all(
-    LOCKDOWN_FEATURE_KEYS.map(async (feature) => {
+    listLockdownFeatureKeys().map(async (feature) => {
       const response = await featureLockdownRefusal({
         feature,
         staff: subjectStaff,
@@ -616,7 +616,7 @@ async function handler(request: Request): Promise<Response> {
         if (probeScope === 'feature' && !isLockdownFeatureKey(probeTarget)) {
           return Response.json(
             {
-              error: `Unknown feature — one of: ${LOCKDOWN_FEATURE_KEYS.join(', ')}`,
+              error: `Unknown feature — one of: ${listLockdownFeatureKeys().join(', ')}`,
             },
             { status: 400 },
           )
@@ -914,7 +914,7 @@ async function handler(request: Request): Promise<Response> {
       if (!isLockdownFeatureKey(targetId)) {
         return Response.json(
           {
-            error: `Unknown feature — one of: ${LOCKDOWN_FEATURE_KEYS.join(', ')}`,
+            error: `Unknown feature — one of: ${listLockdownFeatureKeys().join(', ')}`,
           },
           { status: 400 },
         )

@@ -38,9 +38,9 @@ import {
   activityActorLabel,
   activityHref,
   activityPrimaryText,
-  isAiActivityEntry,
+  activityEntryGroupId,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
-import { AI_ACTIVITY_FILTER_LABEL } from '@aglyn/aglyn/app-utils/ai-activity-actions'
+import { listPluginActivityFilters } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
@@ -221,11 +221,19 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
    * like the other two, and offered only when the page holds an AI row —
    * a chip that can never match is furniture.
    */
-  const [aiOnly, setAiOnly] = useState(false)
-  const hasAi = useMemo(
-    () => (entries ?? []).some((entry: any) => isAiActivityEntry(entry)),
-    [entries],
-  )
+  const [groupOnly, setGroupOnly] = useState<string | null>(null)
+  // One chip per plugin-declared group the page holds a row of (AGL-2940):
+  // the registry says which groups exist, the page says which ones matter.
+  const groups = useMemo(() => {
+    const present = new Set(
+      (entries ?? [])
+        .map((entry: any) => activityEntryGroupId(entry))
+        .filter(Boolean),
+    )
+    return listPluginActivityFilters()
+      .map((filter) => filter.group)
+      .filter((group) => present.has(group.id))
+  }, [entries])
   const types = useMemo(
     () =>
       [
@@ -242,7 +250,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
     return [...(entries ?? [])]
       .filter(
         (entry: any) =>
-          (!aiOnly || isAiActivityEntry(entry)) &&
+          (!groupOnly || activityEntryGroupId(entry) === groupOnly) &&
           (!typeFilter || entry.type === typeFilter) &&
           (!term ||
             // The label as well as the stored code, so "generated" finds an
@@ -262,7 +270,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       .sort(
         (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
       )
-  }, [entries, filter, typeFilter, aiOnly])
+  }, [entries, filter, typeFilter, groupOnly])
 
   // A pager on a single-page feed is furniture. It appears once there is
   // somewhere to go, which the org-wide fan-out can now say as well.
@@ -282,7 +290,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       contentBordered="all"
     >
       <Stack spacing={1.5}>
-        {(entries ?? []).length > 5 || hasAi ? (
+        {(entries ?? []).length > 5 || groups.length ? (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <TextField
               size="small"
@@ -291,17 +299,20 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
               onChange={(event) => setFilter(event.target.value)}
               sx={{ maxWidth: 240, flexGrow: 1 }}
             />
-            {hasAi ? (
+            {groups.map((group) => (
               <Chip
+                key={group.id}
                 size="small"
-                label={AI_ACTIVITY_FILTER_LABEL}
+                label={group.label}
                 clickable
-                color={aiOnly ? 'primary' : 'default'}
-                variant={aiOnly ? 'filled' : 'outlined'}
-                aria-pressed={aiOnly}
-                onClick={() => setAiOnly((current) => !current)}
+                color={groupOnly === group.id ? 'primary' : 'default'}
+                variant={groupOnly === group.id ? 'filled' : 'outlined'}
+                aria-pressed={groupOnly === group.id}
+                onClick={() =>
+                  setGroupOnly((current) => (current === group.id ? null : group.id))
+                }
               />
-            ) : null}
+            ))}
             {types.length > 1 ? (
               <TextField
                 select

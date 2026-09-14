@@ -18,6 +18,7 @@
 
 import type { ReactNode } from 'react'
 import AssistPanelComponent from '../../components/assist-panel-mount.component'
+import PluginWidgetSlot from '../../components/plugin-widget-slot.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import LegalReacceptanceBanner from '../../components/legal-reacceptance-banner.component'
@@ -60,6 +61,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               reason the secondary app bar lives here. Release-flag gated
               inside the component (hidden entirely when released off). */}
           <AssistPanelComponent />
+          {/* The assistant dock's plugin slot (AGL-2940): the same position
+              above every route boundary, for a helper a plugin owns. */}
+          <PluginWidgetSlot slot="assistPanel" />
         </MainLayout>
       </PlatformLockdownGate>
     </AuthenticatedLayout>

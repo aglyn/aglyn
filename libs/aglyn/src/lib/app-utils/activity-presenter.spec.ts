@@ -22,8 +22,9 @@ import {
   activityPrimaryText,
   activityTargetLabel,
   activityTypeLabel,
-  isAiActivityEntry,
+  activityEntryGroupId,
 } from './activity-presenter'
+import './ai-activity-actions'
 
 describe('activityTypeLabel', () => {
   it('maps known types to human nouns', () => {
@@ -91,7 +92,7 @@ describe('activityPrimaryText', () => {
   })
 })
 
-describe('activityActionLabel and isAiActivityEntry (AGL-2929)', () => {
+describe('activityActionLabel and activityEntryGroupId (AGL-2929)', () => {
   it('translates every catalog code and passes a stored sentence through', () => {
     expect(activityActionLabel('ai.addon.purchased')).toBe('Added the AI add-on')
     expect(activityActionLabel('Saved the screen')).toBe('Saved the screen')
@@ -99,9 +100,9 @@ describe('activityActionLabel and isAiActivityEntry (AGL-2929)', () => {
   })
 
   it('tells an AI row from any other', () => {
-    expect(isAiActivityEntry({ action: 'ai.edit.applied' })).toBe(true)
-    expect(isAiActivityEntry({ action: 'Saved the screen' })).toBe(false)
-    expect(isAiActivityEntry({})).toBe(false)
+    expect(activityEntryGroupId({ action: 'ai.edit.applied' })).toBe('ai')
+    expect(activityEntryGroupId({ action: 'Saved the screen' })).toBeUndefined()
+    expect(activityEntryGroupId({})).toBeUndefined()
   })
 
   it('labels the AI target types the org feed now carries', () => {

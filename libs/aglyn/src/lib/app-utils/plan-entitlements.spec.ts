@@ -87,6 +87,9 @@ import {
   hasAiAddon,
 } from './plan-entitlements'
 import { ASSIST_CREDIT_COST_USD, assistBandRefuses } from './assist-credits'
+// The add-on is declared through the entitlement seam (AGL-2940); the
+// resolver reads the declaration, so the spec loads it as the barrel does.
+import './ai-entitlements'
 import type { OrgPlan } from '../foundation'
 
 describe('plan entitlements', () => {

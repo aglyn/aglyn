@@ -103,7 +103,7 @@ async function handler(request: Request): Promise<Response> {
   // receives is a signup door — AGL-1497), so a signups lock refuses it
   // with the honest 423 body the client can show. The `staff` claim is
   // passed for the platform-scope un-panic bypass only; the feature stage
-  // grants no bypass (LOCKDOWN_FEATURE_STAFF_BYPASS.signups = false).
+  // grants no bypass (`lockdownFeatureStaffBypass('signups')` = false).
   const locked = await featureLockdownRefusal({ feature: 'signups', staff })
   if (locked) return locked
 

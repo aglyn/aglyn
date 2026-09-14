@@ -29,6 +29,11 @@ import {
   PLATFORM_BRAND_NAME,
   PLATFORM_BRANDING_PROFILE,
 } from './platform-brand'
+import {
+  listPluginFeatures,
+  listPluginSeatAddons,
+  pluginSeatAddon,
+} from '../plugin-manager/plugin-entitlements'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
 export const UNLIMITED = Number.POSITIVE_INFINITY
@@ -2749,11 +2754,12 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
  * per-key overrides applied (features merge key-by-key too), then
  * purchased add-ons stacked on top (AGL-524): `seatAddons.hosts` raises
  * `hostLimit`, `seatAddons.eventCalendar` switches the `eventCalendar`
- * feature on, and `seatAddons.aiAddon` (AGL-2896) adds the plan's
- * `AI_ADDON_CREDITS_PER_MONTH` band to `assistCreditsPerMonth` and switches
- * `aiGenerative` and `aiAssist` on. (Seat/dataset add-ons instead fold in at
- * `checkSeatQuota` / `checkDatasetQuota`, where the per-plan hard max clamps
- * them.)
+ * feature on, and every seat add-on a plugin declared through
+ * `registerPluginEntitlements` (AGL-2940) widens the quota it names by its
+ * per-plan figure per unit and switches its features on — the Aglyn AI
+ * add-on (AGL-2896) is the first such declaration. (Seat/dataset add-ons
+ * instead fold in at `checkSeatQuota` / `checkDatasetQuota`, where the
+ * per-plan hard max clamps them.)
  * Missing or unknown plans resolve as `free`.
  *
  * EVERY NUMERIC KEY of `OrgEntitlements` is an override axis, not a chosen
@@ -2793,7 +2799,10 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
 export function resolveOrgEntitlements(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): ResolvedOrgEntitlements {
-  const defaults = PLAN_ENTITLEMENTS[resolvePlan(org)]
+  const defaults = withPluginFeatureDefaults(
+    PLAN_ENTITLEMENTS[resolvePlan(org)],
+    resolvePlan(org),
+  )
   const overrides = org?.entitlements
   let resolved = defaults
   if (overrides) {
@@ -2836,24 +2845,104 @@ export function resolveOrgEntitlements(
   const purchased = resolvePurchasedAddons(org)
   const extraHosts = Math.max(0, purchased.hosts ?? 0)
   const eventCalendar = (purchased.eventCalendar ?? 0) >= 1
-  const aiAddon = aiAddonUnits(purchased) === 1
-  if (!extraHosts && !eventCalendar && !aiAddon) return resolved
-  // The add-on's band is added AFTER the per-org override, so a contracted
-  // `assistCreditsPerMonth` and a purchased add-on stack the way a raised
-  // `hostLimit` and purchased sites do. The band is the PLAN's, read off the
-  // effective plan rather than the stored one, so a dead subscription that
-  // resolved to free adds free's zero.
-  const aiCredits = aiAddon ? AI_ADDON_CREDITS_PER_MONTH[resolvePlan(org)] : 0
+  // A declared add-on's quota is added AFTER the per-org override, so a
+  // contracted figure and a purchased add-on stack the way a raised
+  // `hostLimit` and purchased sites do. The per-unit figure is the PLAN's,
+  // read off the effective plan rather than the stored one, so a dead
+  // subscription that resolved to free adds free's figure.
+  const folded = foldPluginSeatAddons(resolved, purchased, resolvePlan(org))
+  if (!extraHosts && !eventCalendar && folded === resolved) return resolved
   return {
-    ...resolved,
-    hostLimit: resolved.hostLimit + extraHosts,
-    assistCreditsPerMonth: resolved.assistCreditsPerMonth + aiCredits,
+    ...folded,
+    hostLimit: folded.hostLimit + extraHosts,
     features: {
-      ...resolved.features,
+      ...folded.features,
       ...(eventCalendar ? { eventCalendar: true } : {}),
-      ...(aiAddon ? { aiGenerative: true, aiAssist: true } : {}),
     },
   }
+}
+
+/**
+ * How many units of a plugin-declared seat add-on a purchase map counts as
+ * (AGL-2940): the stored quantity, capped at the declaration's `maxUnits`
+ * — 1 for an org-wide add-on, where a doubled webhook item or a hand edit
+ * above one is still one purchase. A non-number, `NaN`, a negative, or a
+ * key nothing declared is none.
+ */
+export function pluginSeatAddonUnits(
+  addons: OrgSeatAddons | null | undefined,
+  key: string,
+): number {
+  const declared = pluginSeatAddon(key)
+  if (!declared) return 0
+  const quantity = Number((addons as Record<string, unknown> | null)?.[key] ?? 0)
+  if (!Number.isFinite(quantity) || quantity < 1) return 0
+  const units = Math.floor(quantity)
+  return declared.maxUnits != null ? Math.min(units, declared.maxUnits) : units
+}
+
+/**
+ * Whether a plugin-declared seat add-on currently applies to the org: bought,
+ * and on a subscription that is still paying for it — the one reading every
+ * surface that shows or charges for the add-on goes through, so a dead
+ * subscription drops the quota and the feature together.
+ */
+export function hasPluginSeatAddon(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  key: string,
+): boolean {
+  return pluginSeatAddonUnits(resolvePurchasedAddons(org), key) > 0
+}
+
+/**
+ * Every declared seat add-on the org holds, folded in catalog order: the
+ * quota each names gains its per-plan figure per unit, and its features
+ * switch on. Returns the input object untouched when nothing applies, so a
+ * caller can tell "nothing folded" from "folded to the same numbers".
+ */
+function foldPluginSeatAddons(
+  resolved: ResolvedOrgEntitlements,
+  purchased: OrgSeatAddons,
+  plan: OrgPlan,
+): ResolvedOrgEntitlements {
+  let out = resolved
+  for (const addon of listPluginSeatAddons()) {
+    const units = pluginSeatAddonUnits(purchased, addon.key)
+    if (!units) continue
+    const next: ResolvedOrgEntitlements = { ...out, features: { ...out.features } }
+    if (addon.quota) {
+      const perUnit = addon.quota.perUnitByPlan[plan] ?? 0
+      const bag = next as unknown as Record<string, unknown>
+      const current = Number(bag[addon.quota.key] ?? 0)
+      bag[addon.quota.key] = (Number.isFinite(current) ? current : 0) + perUnit * units
+    }
+    const features = next.features as unknown as Record<string, boolean>
+    for (const feature of addon.features ?? []) features[feature] = true
+    out = next
+  }
+  return out
+}
+
+/**
+ * The plan row with every plugin-declared feature's default filled in
+ * (AGL-2940). A feature the plan tables already carry keeps the table's
+ * answer; a feature only a declaration knows reads its `defaultByPlan`, or
+ * `false`. Returns the row itself when no declaration adds anything.
+ */
+function withPluginFeatureDefaults(
+  row: ResolvedOrgEntitlements,
+  plan: OrgPlan,
+): ResolvedOrgEntitlements {
+  const features = row.features as unknown as Record<string, boolean | undefined>
+  let out: Record<string, boolean | undefined> | undefined
+  for (const declared of listPluginFeatures()) {
+    if (features[declared.key] !== undefined) continue
+    out = out ?? { ...features }
+    out[declared.key] = declared.defaultByPlan?.[plan] ?? false
+  }
+  return out
+    ? { ...row, features: out as unknown as ResolvedOrgEntitlements['features'] }
+    : row
 }
 
 /**
@@ -3691,12 +3780,20 @@ export function planLabelGrantingFeature(
   return plan ? PLAN_LABELS[plan] : undefined
 }
 
-/** True when the org's plan (or overrides) enables the boolean feature. */
+/**
+ * True when the org's plan (or overrides) enables the boolean feature. A
+ * key outside `OrgFeatureFlags` is one a plugin declared (AGL-2940) and is
+ * answered the same way.
+ */
 export function checkEntitlement(
   org: Partial<AglynOrgBilling> | null | undefined,
-  feature: keyof OrgFeatureFlags,
+  feature: keyof OrgFeatureFlags | (string & {}),
 ): boolean {
-  return Boolean(resolveOrgEntitlements(org).features[feature])
+  const features = resolveOrgEntitlements(org).features as unknown as Record<
+    string,
+    boolean | undefined
+  >
+  return Boolean(features[feature])
 }
 
 /**

@@ -17,7 +17,7 @@
 
 'use client'
 
-import { canManageOrg } from '@aglyn/aglyn'
+import { canManageOrg, CONSOLE_WIDGET_SLOTS } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import {
@@ -121,7 +121,15 @@ export default function SettingsSectionsLayout({
         ) : (
           <HubSections sections={sections}>{children}</HubSections>
         )}
-        <PluginWidgetSlot slot="org.settings" />
+        {/* The organization's settings zone (AGL-2943): the catalog key,
+            with the props the zone documents. `org.settings` is the
+            permission that gates this page, not a zone, and a widget
+            registered for the documented key never appeared here. */}
+        <PluginWidgetSlot
+          slot={CONSOLE_WIDGET_SLOTS.orgSettings}
+          orgId={currentOrg?.$id}
+          org={currentOrg}
+        />
       </Container>
     </DashboardLayout>
   )

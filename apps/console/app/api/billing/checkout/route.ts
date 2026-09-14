@@ -315,7 +315,7 @@ async function handler(request: Request): Promise<Response> {
     // The 423 body is explicit that this is NOT a payment failure. The
     // verified `staff` claim is passed for the platform-scope un-panic
     // bypass only — at the feature stage there is deliberately NO staff
-    // bypass (LOCKDOWN_FEATURE_STAFF_BYPASS.checkout = false): a
+    // bypass (`lockdownFeatureStaffBypass('checkout')` = false): a
     // staff-created session is still a real charge against a real card,
     // and no incident-response step needs money to move.
     const locked = await featureLockdownRefusal({

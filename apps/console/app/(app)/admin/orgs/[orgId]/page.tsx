@@ -75,7 +75,9 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../components/plugin-widget-slot.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
@@ -761,6 +763,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // dialog and the sign-in all live in `useImpersonationReason` (AGL-2125) —
   // the route requires a reason and this page must not be able to reach it
   // around the dialog that collects one.
+  const { widgets: staffOrgWidgets } = useSlotWidgets(['staffOrg'])
   const impersonation = useImpersonationReason({ auth, user })
 
   // Per-org discount (AGL-1105): staff attaches a Stripe coupon to this org's
@@ -1549,6 +1552,18 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   // and margin. The card fetches its own read.
                   children: <StaffOrgAiCard orgId={orgId} />,
                 },
+                // Plugin cards among the staff cards (AGL-2940), where a
+                // plugin's own staff view of the org sits beside the
+                // platform's. No column at all when nothing registered.
+                ...(staffOrgWidgets.length
+                  ? [
+                      {
+                        children: (
+                          <PluginWidgetSlot slot="staffOrg" orgId={orgId} />
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   children: (
                     // Metered usage (AGL-939): consumption alongside the

@@ -114,7 +114,7 @@ async function lockdownScopeError(
   // `feature: 'uploads'`; sign/folders/references/restore do not — an
   // uploads lock stops new bytes arriving, not the library working. Staff
   // bypass at the feature stage is granted (uploads=true in
-  // LOCKDOWN_FEATURE_STAFF_BYPASS): the responder needs to upload a test
+  // lockdownFeatureStaffBypass): the responder needs to upload a test
   // asset to verify the malware fix before lifting the lock.
   if (feature) {
     const refusal = await featureLockdownRefusal({

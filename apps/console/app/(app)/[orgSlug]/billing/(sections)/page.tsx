@@ -112,6 +112,9 @@ import {
 import { platformAdvertisingAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../../../../../components/lockdown-notice.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../components/plugin-widget-slot.component'
 import { useReleaseFlag } from '../../../../../hooks/use-release-flags'
 import { docsHelp } from '../../../../../constants/docs-links'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -326,6 +329,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // Workspace-scoped (AGL-236): meters cover the selected org's sites.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
   const plan = (org?.plan ?? 'free') as OrgPlan
+  // The plugin cards among the plan and add-on cards (AGL-2940); no item
+  // at all when nothing survives the slot's gates.
+  const { widgets: overviewWidgets } = useSlotWidgets(['orgBillingOverview'])
   // Enterprise is a real plan (AGL-1118); orgs provisioned before that still
   // read as Enterprise off a base plan + custom price / comped marker
   // (AGL-1110). Either way it bills the negotiated amount, not a list price.
@@ -1762,6 +1768,22 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                 />
               ),
             },
+            ...(overviewWidgets.length
+              ? [
+                  {
+                    size: { xs: 12 },
+                    children: (
+                      <PluginWidgetSlot
+                        slot="orgBillingOverview"
+                        orgId={orgId}
+                        org={org}
+                        plan={plan}
+                        canManage={can('billing.manage')}
+                      />
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
 

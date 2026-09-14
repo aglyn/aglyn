@@ -36,6 +36,10 @@ import {
 import { hostEventLabel } from './workflows'
 import { aiActivityActionLabel, isAiActivityAction } from './ai-activity-actions'
 import { duplicateActivityActionLabel } from './duplicate-resource'
+import {
+  pluginActivityActionLabel,
+  pluginActivityGroupForAction,
+} from '../plugin-manager/plugin-activity-actions'
 
 /** The stored `target` sub-object, read defensively (any field may be absent). */
 export interface ActivityTargetLike {
@@ -153,21 +157,27 @@ export function activityTargetLabel(
 
 /**
  * What the action column reads (AGL-2929). Most actions are the sentence
- * their writer stored; the AI rows store a code (`ai.job.output`) and the
- * duplicate rows another (`screen.duplicated`, AGL-2936) so that three
- * surfaces can recognize them without parsing prose, and the code is
- * translated here — once — rather than shown to a reader as a dotted path.
+ * their writer stored; a plugin's rows store a code (`ai.job.output`) so
+ * that three surfaces can recognize them without parsing prose, and the
+ * code is translated here — once, from the plugin-declared catalog
+ * (AGL-2940) — rather than shown to a reader as a dotted path.
  */
 export function activityActionLabel(action: string | undefined): string {
   const stored = action?.trim() ?? ''
   return (
-    aiActivityActionLabel(stored) ?? duplicateActivityActionLabel(stored) ?? stored
+    pluginActivityActionLabel(stored) ??
+    aiActivityActionLabel(stored) ??
+    duplicateActivityActionLabel(stored) ??
+    stored
   )
 }
 
-/** Whether an entry is one the feed's "AI" chip keeps. */
-export function isAiActivityEntry(entry: ActivityEntryLike): boolean {
-  return isAiActivityAction(entry.action?.trim())
+/**
+ * The filter group an entry's code belongs to — the chip that keeps it —
+ * or `undefined` for a prose action no plugin declared.
+ */
+export function activityEntryGroupId(entry: ActivityEntryLike): string | undefined {
+  return pluginActivityGroupForAction(entry.action?.trim())?.id
 }
 
 /**

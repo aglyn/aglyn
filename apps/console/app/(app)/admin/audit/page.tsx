@@ -18,9 +18,9 @@
 
 import { orgOverrideReasonSummary } from '@aglyn/aglyn'
 import {
-  staffAuditActionGroup,
-  staffAuditActionGroupLabel,
-} from '@aglyn/aglyn/app-utils/ai-activity-actions'
+  pluginStaffAuditActionGroup as staffAuditActionGroup,
+  pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'

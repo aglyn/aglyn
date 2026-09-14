@@ -200,7 +200,7 @@ async function dispatch(
   // `marketplace/checkout` → checkout AND marketplace-installs (AGL-1545:
   // a paid purchase is a new Stripe session and the front door of an
   // install — either incident stops it). Staff bypass follows
-  // LOCKDOWN_FEATURE_STAFF_BYPASS per key: granted for installs/ai-assist/
+  // lockdownFeatureStaffBypass per key: granted for installs/ai-assist/
   // ai-generate (staff reproduce and verify during the incident), refused for
   // checkout (a staff session still charges a real card).
   for (const feature of lockdownFeaturesForPluginApiPath(path)) {

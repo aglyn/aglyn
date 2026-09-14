@@ -17,8 +17,8 @@
 'use client'
 
 import {
-  LOCKDOWN_FEATURE_KEYS,
-  LOCKDOWN_FEATURE_LABELS,
+  listLockdownFeatureKeys,
+  lockdownFeatureLabel,
   LOCKDOWN_REASON_CODES,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
@@ -718,7 +718,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   />
                 </Stack>
                 <Stack spacing={1}>
-                  {LOCKDOWN_FEATURE_KEYS.map((feature) => {
+                  {listLockdownFeatureKeys().map((feature) => {
                     const record = records.find(
                       (candidate) => candidate.id === `feature--${feature}`,
                     )
@@ -739,7 +739,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           size="small"
                         />
                         <Typography variant="body2" sx={{ minWidth: 220 }}>
-                          {LOCKDOWN_FEATURE_LABELS[feature]}
+                          {lockdownFeatureLabel(feature)}
                         </Typography>
                         <Typography
                           variant="body2"

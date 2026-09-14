@@ -222,7 +222,7 @@ describe('AGL-1510 · the checkout feature gate on billing/checkout', () => {
     expect(mockFeatureLockdownRefusal).toHaveBeenCalledWith({
       feature: 'checkout',
       // Off the verified token. Whether staff are bypassed is NOT the
-      // route's decision — LOCKDOWN_FEATURE_STAFF_BYPASS.checkout=false
+      // route's decision — lockdownFeatureStaffBypass('checkout')=false
       // lives in the lib and is unit-tested there.
       staff: true,
     })

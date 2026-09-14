@@ -66,6 +66,12 @@ import { docsHelp } from '../constants/docs-links'
 import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import MemberAvatar from './member-avatar.component'
+import {
+  PluginListColumnCells,
+  PluginListColumnHeaders,
+  usePluginListColumns,
+} from './plugin-list-columns.component'
+import PluginWidgetSlot from './plugin-widget-slot.component'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -121,6 +127,9 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const { org, ready: orgReady } = useCurrentOrg()
   const { permissions } = useOrgPermissions()
   const canManage = permissions.manageMembers
+  // Columns a plugin contributes to this table (AGL-2940), between the AI
+  // toggles and the actions; cards a plugin adds render under the table.
+  const { columns: pluginColumns } = usePluginListColumns('hostMembers')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('editor')
   const [busy, setBusy] = useState(false)
@@ -591,6 +600,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   <span>{'AI credits (site, month)'}</span>
                 </Tooltip>
               </TableCell>
+              <PluginListColumnHeaders columns={pluginColumns} />
               <TableCell align="right">{'Actions'}</TableCell>
             </TableRow>
           </TableHead>
@@ -627,6 +637,9 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   ? (aiUsage.hostCreditsByUid.get(ownerUid) ?? 0).toLocaleString()
                   : '—'}
               </TableCell>
+              {pluginColumns.map((column) => (
+                <TableCell key={column.widgetId} align={column.align} />
+              ))}
               <TableCell align="right">{'--'}</TableCell>
             </TableRow>
             {members.map((member) => (
@@ -722,6 +735,12 @@ export function HostMembersCard(props: HostMembersCardProps) {
                     ))}
                   </Stack>
                 </TableCell>
+                <PluginListColumnCells
+                  columns={pluginColumns}
+                  member={member}
+                  hostId={hostId}
+                  canManage={canManage}
+                />
                 <TableCell align="right">
                   {aiUsage.status === 'ready' && member.status !== 'invited'
                     ? (
@@ -760,6 +779,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
             'per-role restrictions for editors and viewers roll out with ' +
             'granular permissions.'}
         </Typography>
+        <PluginWidgetSlot slot="hostMembers" hostId={hostId} canManage={canManage} />
       </Stack>
     </CardDisplay>
   )

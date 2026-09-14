@@ -26,14 +26,18 @@
  * audit actions under one group. The function's own truth table is in
  * `ai-activity-actions.spec.ts`; the group's members are re-asserted here
  * through the page's import so a drift in either is caught at the page.
+ *
+ * Since AGL-2940 the grouping is the plugin-declared catalog's: the page
+ * imports the registry's grouping, and the AI catalog is one registration
+ * in it, loaded here the way the page loads it — through the barrel.
  */
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  staffAuditActionGroup,
-  staffAuditActionGroupLabel,
-} from '@aglyn/aglyn/app-utils/ai-activity-actions'
+  pluginStaffAuditActionGroup as staffAuditActionGroup,
+  pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,
+} from '@aglyn/aglyn'
 
 const PAGE = readFileSync(
   join(__dirname, '..', 'app', '(app)', 'admin', 'audit', 'page.tsx'),
@@ -41,9 +45,9 @@ const PAGE = readFileSync(
 )
 
 describe('the audit page wires an Action facet through the shared catalog', () => {
-  it('imports the grouping and its label from the catalog, not a local prefix list', () => {
+  it('imports the grouping and its label from the registry, not a local prefix list', () => {
     expect(PAGE).toMatch(
-      /import \{\s*staffAuditActionGroup,\s*staffAuditActionGroupLabel,?\s*\} from '@aglyn\/aglyn\/app-utils\/ai-activity-actions'/,
+      /import \{\s*pluginStaffAuditActionGroup as staffAuditActionGroup,\s*pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,?\s*\} from '@aglyn\/aglyn'/,
     )
     expect(PAGE).not.toMatch(/['"]billing\.assistOverage\.['"]/)
   })

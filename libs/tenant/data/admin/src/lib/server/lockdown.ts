@@ -48,7 +48,7 @@ import {
   orgFeatureLockdownDocId,
   isLockdownActive,
   isTakedownLockdown,
-  LOCKDOWN_FEATURE_STAFF_BYPASS,
+  lockdownFeatureStaffBypass,
   type LockdownFeatureKey,
   LOCKDOWNS_COLLECTION,
   lockdownBlocks,
@@ -385,7 +385,7 @@ export async function getOrgFeatureLockdown(
  * checked first (TTL-cached — routes that already ran the scope verdict pay
  * no extra read), and the platform-scope staff bypass there is UNCHANGED
  * and unconditional. The feature doc is checked second, and its staff
- * bypass is per-feature (`LOCKDOWN_FEATURE_STAFF_BYPASS`): granted where a
+ * bypass is per-feature (`lockdownFeatureStaffBypass`): granted where a
  * staff action aids incident response (uploads, installs, ai-assist),
  * withheld where it would BE the incident (checkout — a staff checkout
  * session is still a real charge). A feature lock implies nothing about the
@@ -416,7 +416,7 @@ export async function featureLockdownRefusal(options: {
     return lockdownJsonResponse(platform as LockdownState)
   }
   const bypass =
-    options.staff === true && LOCKDOWN_FEATURE_STAFF_BYPASS[options.feature]
+    options.staff === true && lockdownFeatureStaffBypass(options.feature)
   const state = await getFeatureLockdown(options.feature)
   if (isLockdownActive(state, nowMs)) {
     return bypass ? null : lockdownJsonResponse(state as LockdownState)

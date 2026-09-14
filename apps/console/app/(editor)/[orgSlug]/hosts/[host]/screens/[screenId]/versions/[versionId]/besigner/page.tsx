@@ -46,6 +46,7 @@ import {
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerInspectorExtrasContext,
   besignerDocsUrl,
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
@@ -120,6 +121,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
 import BesignerFunctionsButton from '../../../../../../../../../../components/besigner-functions-button.component'
+import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
@@ -257,6 +259,12 @@ function BesignerPage(props) {
   // File ▸ New version drives the versions panel's own create flow (AGL-1218)
   // rather than re-implementing the entitlement gate and the save-first rule.
   const versionsActions = useRef<BesignerVersionsActions>(null)
+  // One element for the Attributes panel's plugin section (AGL-2940), so the
+  // context's consumers re-render with the site rather than with this page.
+  const inspectorExtras = useMemo(
+    () => <PluginWidgetSlot slot="besignerInspector" hostId={hostId} />,
+    [hostId],
+  )
   // Installed plugins appear as named drawer entries (AGL-190).
   usePluginDrawerRegistration(hostId)
   const detailUrl = buildRoute(Route.SCREEN_DETAILS, {
@@ -1698,6 +1706,11 @@ function BesignerPage(props) {
                 disabled={screenKind === 'email'}
               >
                 <BesignerMediaPickerProvider hostId={hostId}>
+                {/* The Attributes panel's plugin section (AGL-2940): the
+                    designer draws whatever this context carries under the
+                    selected element's fields, and this is the one place
+                    that knows what a plugin widget is. */}
+                <BesignerInspectorExtrasContext.Provider value={inspectorExtras}>
                   {hostFontsHref ? (
                     <>
                       <link
@@ -2288,6 +2301,7 @@ function BesignerPage(props) {
                       defaultValue={canvas.nestedNodes as any}
                     />
                   )}
+                </BesignerInspectorExtrasContext.Provider>
                 </BesignerMediaPickerProvider>
               </InteractionsProvider>
             </BindingPickerProvider>

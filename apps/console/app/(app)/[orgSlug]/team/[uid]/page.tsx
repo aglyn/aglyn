@@ -49,6 +49,7 @@ import MemberAiUsageCard from '../../../../../components/member-ai-usage-card.co
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
+import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { readOutcome } from '../../../../../utils/read-outcome'
 import { docsHelp } from '../../../../../constants/docs-links'
@@ -564,6 +565,17 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                 'Everything they have done in this organization, on its ' +
                 'sites as well as at organization level.'
               }
+            />
+          ) : null}
+          {currentOrg?.$id ? (
+            // Plugin cards about this member (AGL-2940), below the
+            // platform's own.
+            <PluginWidgetSlot
+              slot="orgMember"
+              orgId={currentOrg.$id}
+              uid={uid}
+              member={member}
+              canManage={canManage}
             />
           ) : null}
         </Stack>

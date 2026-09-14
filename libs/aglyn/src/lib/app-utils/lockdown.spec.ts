@@ -21,9 +21,10 @@ import {
   isLockableDomain,
   isLockdownActive,
   isLockdownFeatureKey,
-  LOCKDOWN_FEATURE_KEYS,
-  LOCKDOWN_FEATURE_LABELS,
-  LOCKDOWN_FEATURE_STAFF_BYPASS,
+  listLockdownFeatureKeys,
+  listLockdownFeatures,
+  lockdownFeatureLabel,
+  lockdownFeatureStaffBypass,
   LOCKDOWN_ENFORCEMENTS,
   LOCKDOWN_MESSAGE_MAX,
   isLockdownEnforcement,
@@ -52,6 +53,19 @@ import {
   userLockdownDocId,
 } from './lockdown'
 import type { LockdownState } from './lockdown'
+import {
+  registerPluginEntitlements,
+  resetPluginEntitlementsForTests,
+} from '../plugin-manager/plugin-entitlements'
+import { AI_PLUGIN_ENTITLEMENTS } from './ai-entitlements'
+
+// The AI levers arrive through the generic seam (AGL-2940); the reset in
+// `beforeEach` below forgets them, so every case re-registers what the
+// barrel would have.
+beforeEach(() => {
+  resetPluginEntitlementsForTests()
+  registerPluginEntitlements(AI_PLUGIN_ENTITLEMENTS)
+})
 
 const NOW = 1_755_000_000_000
 
@@ -259,8 +273,8 @@ describe('normalizeLockdownDoc — lockdowns/{platform|user--uid}', () => {
 })
 
 describe('FEATURE scope (AGL-1510) — the pure half', () => {
-  it('the launch set is exactly the six incident levers, extensible by enum', () => {
-    expect(LOCKDOWN_FEATURE_KEYS).toEqual([
+  it('the launch set is the four core levers plus every plugin-declared one, in catalog order', () => {
+    expect(listLockdownFeatureKeys()).toEqual([
       'signups',
       'uploads',
       'checkout',
@@ -268,12 +282,61 @@ describe('FEATURE scope (AGL-1510) — the pure half', () => {
       'ai-assist',
       'ai-generate',
     ])
-    for (const key of LOCKDOWN_FEATURE_KEYS) {
+    for (const key of listLockdownFeatureKeys()) {
       expect(isLockdownFeatureKey(key)).toBe(true)
       // Every key the staff checklist renders has a label.
-      expect(LOCKDOWN_FEATURE_LABELS[key]).toBeTruthy()
+      expect(lockdownFeatureLabel(key)).toBeTruthy()
+      expect(lockdownFeatureLabel(key)).not.toBe(key)
     }
     expect(isLockdownFeatureKey('everything')).toBe(false)
+    expect(lockdownFeatureLabel('everything')).toBe('everything')
+  })
+
+  it('a second, unrelated plugin adds a lever with its own label, bypass, notice and paths (AGL-2940)', () => {
+    registerPluginEntitlements({
+      pluginId: 'zeta-backups',
+      lockdownFeatures: [
+        {
+          key: 'backups',
+          label: 'Backups',
+          staffBypass: false,
+          notice: { title: 'Backups are paused', body: 'Restores still work.' },
+          apiPaths: { exact: ['backups/snapshot'], prefixes: ['backups/export'] },
+        },
+      ],
+    })
+    expect(listLockdownFeatureKeys()).toContain('backups')
+    expect(listLockdownFeatureKeys().indexOf('backups')).toBeGreaterThan(
+      listLockdownFeatureKeys().indexOf('ai-generate'),
+    )
+    expect(isLockdownFeatureKey('backups')).toBe(true)
+    expect(lockdownFeatureLabel('backups')).toBe('Backups')
+    expect(lockdownFeatureStaffBypass('backups')).toBe(false)
+    expect(lockdownFeaturesForPluginApiPath('backups/snapshot')).toEqual(['backups'])
+    expect(lockdownFeaturesForPluginApiPath('backups/export/all')).toEqual(['backups'])
+    expect(lockdownFeaturesForPluginApiPath('backups/exporter')).toEqual([])
+    const notice = lockdownNotice({
+      scope: 'feature',
+      feature: 'backups',
+      reason: 'manual',
+      untilMs: Date.parse('2026-09-01'),
+    })
+    expect(notice.title).toBe('Backups are paused')
+    expect(notice.body).toContain('Restores still work.')
+    expect(notice.body).toContain('Expected back by')
+  })
+
+  it('a lever nothing declared is refused as a key, grants no bypass, and reads generically', () => {
+    resetPluginEntitlementsForTests()
+    expect(listLockdownFeatures().map((feature) => feature.key)).toEqual([
+      'signups',
+      'uploads',
+      'checkout',
+      'marketplace-installs',
+    ])
+    expect(isLockdownFeatureKey('ai-generate')).toBe(false)
+    expect(lockdownFeatureStaffBypass('ai-generate')).toBe(false)
+    expect(lockdownFeaturesForPluginApiPath('ai/generate')).toEqual([])
   })
 
   it('doc id helper encodes the feature scope in the shared collection', () => {
@@ -282,8 +345,12 @@ describe('FEATURE scope (AGL-1510) — the pure half', () => {
 
   it('PINS the per-feature staff bypass decisions — change these on purpose only', () => {
     // Bypass where a staff action aids incident response; withheld where it
-    // would BE the incident. Justifications live on the map's declaration.
-    expect(LOCKDOWN_FEATURE_STAFF_BYPASS).toEqual({
+    // would BE the incident. Justifications live on each declaration.
+    expect(
+      Object.fromEntries(
+        listLockdownFeatureKeys().map((key) => [key, lockdownFeatureStaffBypass(key)]),
+      ),
+    ).toEqual({
       signups: false,
       uploads: true,
       checkout: false,

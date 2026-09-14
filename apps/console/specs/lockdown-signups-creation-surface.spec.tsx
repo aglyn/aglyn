@@ -44,7 +44,7 @@
  * type but rendered nowhere.
  */
 
-import { LOCKDOWN_FEATURE_KEYS } from '@aglyn/aglyn'
+import { listLockdownFeatureKeys } from '@aglyn/aglyn'
 import { render, screen, waitFor, within } from '@testing-library/react'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -208,7 +208,7 @@ describe('AGL-1531 · an unresolved lock state does not read as unlocked', () =>
     // One row per lockdown capability, none of them yet known to be
     // anything; the count follows the catalog so a new key is not a red.
     await waitFor(() =>
-      expect(screen.getAllByText('checking…').length).toBe(LOCKDOWN_FEATURE_KEYS.length),
+      expect(screen.getAllByText('checking…').length).toBe(listLockdownFeatureKeys().length),
     )
     expect(screen.queryByText('on')).toBeNull()
     // And the controls do not act on a state nobody has read.
@@ -236,7 +236,7 @@ describe('AGL-1531 · an unresolved lock state does not read as unlocked', () =>
     await waitFor(() => expect(within(card).getByText('LOCKED')).toBeTruthy())
     expect(within(card).queryByText('checking…')).toBeNull()
     // Every other capability is genuinely on, and now says so.
-    expect(within(card).getAllByText('on').length).toBe(LOCKDOWN_FEATURE_KEYS.length - 1)
+    expect(within(card).getAllByText('on').length).toBe(listLockdownFeatureKeys().length - 1)
   })
 
   it('names who pulled the lever', async () => {

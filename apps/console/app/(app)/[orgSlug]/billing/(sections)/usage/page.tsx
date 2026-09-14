@@ -36,6 +36,9 @@ import BillingStorageOverageCardComponent from '../../../../../../components/bil
 import BillingUsageBudgetCardComponent from '../../../../../../components/billing/billing-usage-budget-card.component'
 import BillingUsageHistoryComponent from '../../../../../../components/billing/billing-usage-history.component'
 import BillingUsageComponent from '../../../../../../components/billing/billing-usage.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../../components/plugin-widget-slot.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import useConfirmedDoc from '../../../../../../hooks/use-confirmed-doc'
@@ -88,6 +91,10 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
     () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
+  // The plugin band below the meters (AGL-2940). Consulted here as well as
+  // inside the slot so a band with nothing to draw is no band: no grid
+  // item, no gap under the cards.
+  const { widgets: usageWidgets } = useSlotWidgets(['orgBillingUsage'])
 
   /*
    * Hold until the org is known. The plan defaults to `free` while the read
@@ -305,6 +312,21 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
             />
           ),
         },
+        ...(usageWidgets.length
+          ? [
+              {
+                size: { xs: 12 },
+                children: (
+                  <PluginWidgetSlot
+                    slot="orgBillingUsage"
+                    orgId={orgId}
+                    org={org}
+                    canManage={can('billing.manage')}
+                  />
+                ),
+              },
+            ]
+          : []),
       ]}
     />
   )
