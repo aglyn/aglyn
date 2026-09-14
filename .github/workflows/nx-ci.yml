@@ -425,6 +425,12 @@ jobs:
       # reason as the two above: the input is a root-level plugins.config.json
       # that is no app's source, and the outputs land in two apps at once.
       - run: npm run generate:plugin-manifests:check
+      # Fourth of the same shape (AGL-2905): the element palette a model
+      # composes from is generated from the plugin bundles, and goes stale
+      # when a bundle gains a component or a schema changes an attribute.
+      # The input is six libraries' registries at once and the output lands
+      # in core, so affected-scoping cannot own it either.
+      - run: npm run check:ai-palette
       # Revenue-truth guard (AGL-1070): org.plan is NOT revenue — a staff
       # override sets `plan` and writes no `subscription`, and three of four
       # production orgs are in that state, so summing PLAN_PRICING[org.plan]

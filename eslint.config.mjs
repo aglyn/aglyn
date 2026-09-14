@@ -285,9 +285,12 @@ export default [
       ],
     },
   },
-  ...scopeTo(nx.configs['flat/typescript'], ['**/*.ts']),
+  // `.mts` alongside `.ts` (AGL-2926): the two `.mts` tools scripts were
+  // matched by NO block — the `.mjs` hole AGL-1815 closed, one extension
+  // over — so `eslint tools` evaluated nothing for them and exited 0.
+  ...scopeTo(nx.configs['flat/typescript'], ['**/*.ts', '**/*.mts']),
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.mts'],
     rules: {
       ...nextPlugin.configs['core-web-vitals'].rules,
       ...tsRuleOverrides,

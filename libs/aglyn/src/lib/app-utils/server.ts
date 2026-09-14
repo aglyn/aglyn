@@ -39,6 +39,13 @@ export * from './content-author-profile'
 export * from './url-slug'
 export * from './child-contract'
 export * from './child-contract-compose'
+// The one reading of `restrictChildren`/`restrictParent`, shared by the
+// besigner's drop check and the AI node-tree validator (AGL-2905). The
+// generated palette beside it (`ai-palette.generated.ts`) is deep-imported
+// by its consumers, not re-exported here: it is data sized for a server
+// route, not for every client that opens this barrel.
+export * from './lineal-order'
+export * from './ai-palette'
 export * from './console-routes'
 export * from './console-record-links'
 // What a stored screen-link value means, with no React attached — the

@@ -132,6 +132,7 @@ const REPO_WIDE = new Set([
   'generate:docs-help:check',
   'generate:plugin-manifests:check',
   'sync:next-tsconfigs:check',
+  'check:ai-palette',
   'check:manifest-versions',
   // Walk every app's routes and every lib they reach; a cost only a bundler
   // or a graph walk can see, which a green typecheck and green tests miss.
