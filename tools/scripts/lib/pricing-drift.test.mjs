@@ -140,21 +140,17 @@ test('comparePlansToStripe', async (t) => {
     assert.ok(v.some((x) => x.key === 'aglyn_free_v2' && x.status === 'in-sync'))
   })
 
-  // The Aglyn AI add-on (AGL-2897) ships in code before the owner mints its
-  // live prices, so its rows are marked `unminted` in PRICE_FIELD_MAP.
-  await t.test('an UNMINTED add-on price is REPORTED, and does not fail the run', () => {
+  // The Aglyn AI add-on (AGL-2897) prices were minted live on 2026-09-14, so
+  // a missing one is no longer a first-mint report: it is a deleted or
+  // archived price, and the run turns red for it like any other.
+  await t.test('a MISSING add-on price is UNREADABLE now that the prices are minted', () => {
     const v = comparePlansToStripe(code, indexStripePrices(stripePayload()))
     const monthly = v.find((x) => x.key === 'aglyn_pro_ai_addon')
     const yearly = v.find((x) => x.key === 'aglyn_pro_ai_addon_yearly')
-    assert.equal(monthly.status, 'unminted')
-    assert.match(monthly.detail, /\$19 .*setup-stripe/)
-    assert.equal(yearly.status, 'unminted')
-    assert.match(yearly.detail, /\$228 /)
-    // Silence would be the defect: the row exists so the gap is named daily —
-    // and it is a report, not a verdict. (The fixture carries three live
-    // prices, so the OTHER missing rows are `unreadable`; they are set aside
-    // to isolate what the unminted rows contribute, which is nothing.)
-    assert.equal(overallExitCode(v.filter((x) => x.status !== 'unreadable')), 0)
+    assert.equal(monthly.status, 'unreadable')
+    assert.equal(yearly.status, 'unreadable')
+    assert.equal(v.some((x) => x.status === 'unminted'), false)
+    assert.equal(overallExitCode(v), 2)
   })
 
   await t.test('a MINTED add-on price is compared exactly, yearly = monthly x 12', () => {
@@ -169,7 +165,7 @@ test('comparePlansToStripe', async (t) => {
     assert.equal(v.find((x) => x.key === 'aglyn_pro_ai_addon_yearly').status, 'in-sync')
   })
 
-  await t.test('CATCHES a minted add-on price at the wrong amount — unminted is not a pass', () => {
+  await t.test('CATCHES a minted add-on price at the wrong amount', () => {
     const payload = stripePayload({
       extra: [
         { lookup_key: 'aglyn_pro_ai_addon', unit_amount: 2100, active: true, recurring: { interval: 'month' } },

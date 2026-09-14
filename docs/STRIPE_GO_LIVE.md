@@ -50,11 +50,12 @@ and `POST /api/billing/addons` with `kind: 'aiAddon'` on a live subscription.
 Either way the webhook mirrors the item onto `org.seatAddons.aiAddon`, which
 is what switches `features.aiGenerative` on and widens the assist band.
 
-Until the twelve `STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]` envs are set, the
-add-on is refused at purchase (501 naming the env) rather than sold on a
-missing price, and `npm run check:pricing-drift` lists each unminted lookup
-key as `UNMINTED` without failing. Mint them with the command above against
-the live key, then set the envs.
+The twelve `aglyn_{plan}_ai_addon[_yearly]` prices were minted live on
+2026-09-14 and the matching `STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]` envs are
+set in production. Where an env is unset (a fresh environment, a self-host),
+the add-on is refused at purchase (501 naming the env) rather than sold on a
+missing price, and `npm run check:pricing-drift` reports the missing lookup
+key as `UNREADABLE` like any other minted price that has gone missing.
 
 ### `STRIPE_PRICE_*` are deliberately NOT `sensitive` (AGL-1362)
 

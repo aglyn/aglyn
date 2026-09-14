@@ -88,18 +88,15 @@ export const PRICE_FIELD_MAP = Object.freeze([
   { field: 'extraCollaboratorMonthlyUsd', key: (p) => `aglyn_${p}_extra_member_yearly`, mult: 12 },
   { field: 'extraDatasetMonthlyUsd', key: (p) => `aglyn_${p}_extra_dataset`, mult: 1 },
   { field: 'extraDatasetMonthlyUsd', key: (p) => `aglyn_${p}_extra_dataset_yearly`, mult: 12 },
-  // The Aglyn AI add-on (AGL-2896/2897). `unminted: true` says the live price
-  // may not exist YET — the code shipped before the owner ran
-  // `setup-stripe.mjs` against the live key — so a missing price is REPORTED
-  // as `unminted` rather than counted as `unreadable` (which exits 2 and turns
-  // the daily run red for a step only a human can take). Everything else
-  // about the row is checked the same way: once the price exists, its
-  // amount, its interval multiplier and its active flag are compared exactly,
-  // and a live price for a plan whose code says null is still drift. Drop the
-  // flag once the prices are minted so a later deletion reads as the fault
-  // it is.
-  { field: 'aiAddonMonthlyUsd', key: (p) => `aglyn_${p}_ai_addon`, mult: 1, unminted: true },
-  { field: 'aiAddonMonthlyUsd', key: (p) => `aglyn_${p}_ai_addon_yearly`, mult: 12, unminted: true },
+  // The Aglyn AI add-on (AGL-2896/2897), minted live on 2026-09-14. Its rows
+  // are checked like every other purchasable price: a missing one is
+  // `unreadable` (a deleted or archived price is the fault it looks like),
+  // the amount, interval multiplier and active flag are compared exactly, and
+  // a live price for a plan whose code says null is drift. A row awaiting its
+  // FIRST mint may carry `unminted: true` so the gap is reported daily
+  // without turning the run red for a step only a human can take.
+  { field: 'aiAddonMonthlyUsd', key: (p) => `aglyn_${p}_ai_addon`, mult: 1 },
+  { field: 'aiAddonMonthlyUsd', key: (p) => `aglyn_${p}_ai_addon_yearly`, mult: 12 },
 ])
 
 /**
