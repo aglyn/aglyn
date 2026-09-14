@@ -716,7 +716,7 @@ const JOB_SITES: JobSite[] = JOB_ROOTS.flatMap((root) =>
  * than left as a stale entry.
  */
 const PLATFORM_JOBS: Record<string, string> = {
-  'apps/tenant/utils/ai-jobs-beat.ts#ai-jobs':
+  'libs/plugins/ai/src/lib/jobs/ai-jobs-beat.ts#ai-jobs':
     'Runs the queued steps of AI generation jobs (AGL-2904). It reads jobs ' +
     'by collection group across every org and writes only unpublished ' +
     'drafts under orgs/{orgId}/aiJobs, never a publish, so a site lock has ' +

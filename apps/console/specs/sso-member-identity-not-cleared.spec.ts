@@ -51,7 +51,12 @@ const mockUpsertOrgMember = jest.fn()
 const mockMemberExists = jest.fn()
 /** The org-axis AI verdict, read on either side of the write (AGL-2929). */
 const mockResolveMemberAiPermissionsOnOrg = jest.fn()
-const mockLogAiPermissionChanged = jest.fn()
+/**
+ * Every `org.permissions.changed` payload the route raised (AGL-2939),
+ * received by a subscriber on the real registry — where the AI plugin's own
+ * handler turns each one into the org feed's coded row.
+ */
+const mockPermissionEvents = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -89,7 +94,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgDoc: async () => null,
   lockdownRefusal: async () => null,
   listOrgMembers: jest.fn(async () => []),
-  logAiPermissionChanged: (...a: unknown[]) => mockLogAiPermissionChanged(...a),
   logOrgActivity: jest.fn(),
   memberHasOrgPermission: jest.fn(async () => true),
   meterOrgEmail: jest.fn(),
@@ -112,7 +116,18 @@ jest.mock('../app/api/_lib/render-system-email', () => ({
   renderSystemEmail: jest.fn(),
 }))
 
+import { registerPluginEventHandler } from '@aglyn/aglyn/server'
 import { POST } from '../app/api/orgs/members/route'
+
+beforeAll(() => {
+  registerPluginEventHandler(
+    'org.permissions.changed',
+    (payload) => {
+      mockPermissionEvents(payload)
+    },
+    { pluginId: 'ai' },
+  )
+})
 
 /**
  * What `upsertOrgMember` actually does with the mirror fields, modelled from
@@ -283,27 +298,27 @@ describe('POST /api/orgs/members upsert — an AI key that moved is an activity 
     expect(mockUpsertOrgMember.mock.invocationCallOrder[0]).toBeLessThan(
       mockResolveMemberAiPermissionsOnOrg.mock.invocationCallOrder[1],
     )
-    expect(mockLogAiPermissionChanged).toHaveBeenCalledTimes(1)
-    expect(mockLogAiPermissionChanged).toHaveBeenCalledWith(
-      'jWmGooWE3L',
-      { uid: 'actor', email: undefined },
-      {
-        subject: { type: 'member', id: SSO_AUTH_RECORD.uid, name: 'staff@aglyn.com' },
-        permission: 'ai.generate',
-        granted: false,
-      },
-    )
+    expect(mockPermissionEvents).toHaveBeenCalledTimes(1)
+    expect(mockPermissionEvents).toHaveBeenCalledWith({
+      orgId: 'jWmGooWE3L',
+      // The token carries no email, and the event says so rather than
+      // leaving the field out.
+      actor: { uid: 'actor', email: null },
+      subject: { type: 'member', id: SSO_AUTH_RECORD.uid, name: 'staff@aglyn.com' },
+      permission: 'ai.generate',
+      granted: false,
+    })
   })
 
   it('nothing when the verdict did not move, and no reads at all for a member added just now', async () => {
     await post({ action: 'upsert', uid: SSO_AUTH_RECORD.uid, role: 'editor' })
     expect(mockResolveMemberAiPermissionsOnOrg).toHaveBeenCalledTimes(2)
-    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
+    expect(mockPermissionEvents).not.toHaveBeenCalled()
 
     // A person added just now had no verdict to move; the add is its own row.
     mockMemberExists.mockReturnValue(false)
     await post({ action: 'upsert', uid: SSO_AUTH_RECORD.uid, role: 'editor' })
     expect(mockResolveMemberAiPermissionsOnOrg).toHaveBeenCalledTimes(2)
-    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
+    expect(mockPermissionEvents).not.toHaveBeenCalled()
   })
 })

@@ -127,7 +127,7 @@ const EXEMPT = [
  * to.
  */
 const GENERATED_DOCS_PROSE = [
-  'apps/console/constants/assist-docs-index.generated.ts',
+  'libs/aglyn/src/lib/app-utils/docs-index.generated.ts',
   'apps/console/constants/docs-help-excerpts.generated.ts',
   'apps/console/constants/docs-help.generated.ts',
   'libs/aglyn/src/lib/app-utils/docs-help.generated.ts',

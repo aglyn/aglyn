@@ -33,6 +33,9 @@
  */
 
 import { readFileSync } from 'node:fs'
+// The plugins' declarations (AGL-2939), as the console loads them: the AI
+// plugin's levers and activity codes come from its declaration, not core.
+import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
 import { join } from 'node:path'
 import {
   pluginStaffAuditActionGroup as staffAuditActionGroup,
@@ -43,6 +46,8 @@ const PAGE = readFileSync(
   join(__dirname, '..', 'app', '(app)', 'admin', 'audit', 'page.tsx'),
   'utf8',
 )
+
+beforeAll(() => registerPluginDeclarations())
 
 describe('the audit page wires an Action facet through the shared catalog', () => {
   it('imports the grouping and its label from the registry, not a local prefix list', () => {

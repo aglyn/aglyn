@@ -18,8 +18,6 @@
 
 import {
   type AglynOrgBilling,
-  AI_ADDON_CREDITS_PER_MONTH,
-  aiAddonName,
   checkApiRequestQuota,
   checkCrmRecordsQuota,
   checkDatasetQuota,
@@ -27,7 +25,6 @@ import {
   CRM_EMAIL_USAGE_COLLECTION,
   crmEmailUsageDayKey,
   emailSendsOverage,
-  hasAiAddon,
   PLAN_PRICING,
   planLabelGrantingFeature,
   priceEmailSendOverage,
@@ -36,7 +33,8 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
-import { HelpTip, type HelpTipContent } from '@aglyn/shared-ui-jsx'
+import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
+import { UsageMeter as SharedUsageMeter } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
 import {
   collection,
@@ -96,77 +94,18 @@ async function fetchBillableScreens(
   }
 }
 
-function formatLimit(limit: number, unit?: string) {
-  if (limit === UNLIMITED) return 'Unlimited'
-  return unit ? `${limit} ${unit}` : String(limit)
-}
-
 /**
- * One quota meter: used/limit progress with warning at ≥80%, error at the
- * cap, an "Upgrade" link once warning, "Unlimited" for uncapped plans, and
- * a "not yet metered" state for usage sources that don't exist yet
- * (storage/site size/bandwidth arrive with the AGL-41 pipeline).
+ * The platform's meter, on the shared component (AGL-2939): the same bar a
+ * plugin's meter draws, with the plan's unlimited sentinel applied here.
  */
 export function UsageMeter(props: {
   label: string
   used: number | null
   limit: number
   unit?: string
-  /**
-   * Optional help affordance beside the label (AGL-2201).
-   *
-   * A meter is a number against a limit and says nothing about what happens
-   * when the two meet — which for bandwidth is the whole question, and is
-   * different on Free (the site pauses) than on a paid plan (the extra bills).
-   */
   help?: HelpTipContent
 }) {
-  const { label, used, limit, unit, help } = props
-  const unlimited = limit === UNLIMITED
-  const unmetered = used == null
-  const pct =
-    unlimited || unmetered || limit <= 0
-      ? 0
-      : Math.min(100, (used / limit) * 100)
-  const warning = !unlimited && !unmetered && pct >= 80
-  return (
-    <Stack spacing={0.5} sx={{ mb: 2 }}>
-      <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-        {/*
-          The tip renders INSIDE the label, not beside it in a wrapper.
-          `usage-org-wide-denominator` and `contacts-overage-caption-release-gate`
-          both find a meter by `getByText(label).parentElement` and read the
-          row's text from it; a wrapper makes that parent the wrapper, whose
-          text is the label alone. The icon contributes no text, so the label
-          still matches and the row is still the parent.
-        */}
-        <Typography variant="body2">
-          {label}
-          {help ? <HelpTip {...help} sx={{ ml: 0.5, fontSize: '0.8em' }} /> : null}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {unmetered
-            ? `not yet metered · limit ${formatLimit(limit, unit)}`
-            : `${used} / ${formatLimit(limit, unit)}`}
-          {warning ? (
-            <>
-              {' · '}
-              <Link href="#plans" color="primary" underline="hover">
-                {'Upgrade'}
-              </Link>
-            </>
-          ) : null}
-        </Typography>
-      </Stack>
-      {unlimited || unmetered ? null : (
-        <LinearProgress
-          variant="determinate"
-          value={pct}
-          color={pct >= 100 ? 'error' : warning ? 'warning' : 'primary'}
-        />
-      )}
-    </Stack>
-  )
+  return <SharedUsageMeter {...props} unlimited={props.limit === UNLIMITED} />
 }
 
 function HostUsageMeters(props: {
@@ -348,8 +287,6 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * bought it gets the link to where it is bought.
    */
   const plan = resolveEffectivePlan(org)
-  const aiAddonCredits = hasAiAddon(org) ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0
-  const aiAddonSold = PLAN_PRICING[plan].aiAddonMonthlyUsd != null
   // Team seats (AGL-119, org roster since AGL-238). "The roster is
   // member-readable so the count is a client aggregate query" stopped being
   // true in AGL-1026 and the count moved to the server in AGL-1255 — the
@@ -395,23 +332,6 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // A primitive for the effect below to depend on, so a plan change re-reads
   // the counter and an object identity change does not.
   const crmEmailCap = entitlements.crmEmailsPerDay
-  /*
-   * Aglyn Assist credits drawn this month, ORG-WIDE.
-   *
-   * From the server, not from Firestore like its neighbours:
-   * `orgs/{orgId}/assistUsage` is absent from the rules file and therefore
-   * default-deny for every client, so a browser read would fail silently and
-   * leave this meter reading "not yet metered" forever.
-   *
-   * Credits, never dollars. The stored figure is our provider bill at the
-   * serving model's list rates; `/api/billing/assist-credits` is where the
-   * one conversion happens and no dollar figure crosses it.
-   */
-  const [assistCredits, setAssistCredits] = useState<{
-    used: number
-    limit: number | null
-    remaining: number | null
-  } | null>(null)
   // Month bandwidth (AGL-1106/1371): org-wide, summed across the org's sites
   // below — `entitlements.bandwidthGb` is an org-wide band, and the invoice
   // and the cron both compare it against the org-wide total.
@@ -515,20 +435,6 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
       })
-    void (async () => {
-      try {
-        const response = await authorizedFetch(
-          user,
-          `/api/billing/assist-credits?orgId=${encodeURIComponent(orgId)}`,
-        )
-        if (!response.ok) return
-        const result = await response.json()
-        if (active && result?.credits) setAssistCredits(result.credits)
-      } catch {
-        // Meter keeps its "not yet metered" state on failure — deliberately
-        // not 0, which reads as "you have used none of your credits".
-      }
-    })()
     void getDoc(
       doc(
         firestore,
@@ -923,66 +829,6 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           used={apiRequests}
           limit={entitlements.apiRequestsPerMonth}
         />
-      ) : null}
-      {/*
-        Credits, because assist actions differ in cost by up to two orders of
-        magnitude — a question against generating a screen — and a message
-        count would price them the same. The band is refused at the cap, so
-        this readout is the only thing standing between a customer and
-        learning their limit by being turned down mid-build.
-
-        Rendered only where a band is sold. Free and Starter carry
-        `assistCreditsPerMonth: 0` and no `aiAssist`, and a "0 of 0" meter is
-        not a readout of anything. Starter WITH the AI add-on carries the
-        add-on's band and renders like any Pro-and-up plan.
-
-        ONE meter for one pool (AGL-2899): the AI add-on widens
-        `assistCreditsPerMonth` rather than opening a second band, so the
-        limit here is already plan plus add-on and the caption under it says
-        how much of that the add-on is.
-      */}
-      {entitlements.assistCreditsPerMonth > 0 ? (
-        <UsageMeter
-          label="AI credits (this month)"
-          used={assistCredits ? assistCredits.used : null}
-          limit={entitlements.assistCreditsPerMonth}
-        />
-      ) : null}
-      {entitlements.assistCreditsPerMonth > 0 && aiAddonCredits > 0 ? (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'block', mt: -1.5, mb: 2 }}
-        >
-          {`Includes ${aiAddonCredits.toLocaleString()} credits a month from ` +
-            `the ${aiAddonName()} add-on.`}
-        </Typography>
-      ) : null}
-      {/* A plan with a band that sells the add-on and has not bought it:
-          the one line on the meters that points at more capacity rather
-          than at an upgrade. Not shown where the plan sells no band at all
-          (Free, Starter without the add-on) — no meter renders there, and
-          this caption belongs under one. */}
-      {entitlements.assistCreditsPerMonth > 0 &&
-      !entitlements.features.aiGenerative &&
-      aiAddonSold ? (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'block', mt: -1.5, mb: 2 }}
-        >
-          {`Generate pages, emails, campaigns and more with ${aiAddonName()}, ` +
-            `and add ${AI_ADDON_CREDITS_PER_MONTH[plan].toLocaleString()} ` +
-            'credits a month to this pool: '}
-          <Link
-            href={`${billingHref}#addons`}
-            color="primary"
-            underline="hover"
-          >
-            {`Add ${aiAddonName()}`}
-          </Link>
-          {' in Billing → Plans.'}
-        </Typography>
       ) : null}
       {/* No caption while the counter is still loading, and no separate guard
           for it: the quota is computed from `apiRequests ?? 0`, and zero is

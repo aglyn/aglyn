@@ -24,6 +24,7 @@
  * `./server` barrel and only reachable via the full `@aglyn/aglyn` barrel
  * (client) — never `@aglyn/aglyn/server` (AGL-405).
  */
+export * from './designer-assist-context'
 export * from './enabled-plugins-context'
 export * from './entity-picker-context'
 export * from './media-picker-context'

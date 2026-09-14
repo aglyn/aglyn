@@ -30,7 +30,6 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useMemo } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import BillingAiTopUsersComponent from '../../../../../../components/billing/billing-ai-top-users.component'
-import BillingAssistOverageCardComponent from '../../../../../../components/billing/billing-assist-overage-card.component'
 import BillingMeteredEstimateComponent from '../../../../../../components/billing/billing-metered-estimate.component'
 import BillingStorageOverageCardComponent from '../../../../../../components/billing/billing-storage-overage-card.component'
 import BillingUsageBudgetCardComponent from '../../../../../../components/billing/billing-usage-budget-card.component'
@@ -249,37 +248,6 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  key: 'assist-overage',
-                  children: (
-                    <div id="assist-overage">
-                      <CardDisplay
-                        header={'AI credits overage'}
-                        subheader={
-                          'Extra AI credits past your included band are ' +
-                          'billed on your monthly invoice. Stop at the band, ' +
-                          'or stop once the overage reaches an amount you ' +
-                          'choose.'
-                        }
-                        help={docsHelp('billing', {
-                          anchor: '#assist-overage',
-                          excerpt:
-                            'On a paid plan the assistant keeps answering past ' +
-                            'your included credits and the extra is billed at ' +
-                            "your plan's per-1,000 rate, unless you switch on " +
-                            'the stop at the included band.',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <BillingAssistOverageCardComponent
-                          orgId={orgId}
-                          canManage={can('billing.manage')}
-                        />
-                      </CardDisplay>
-                    </div>
-                  ),
-                },
-                {
                   key: 'usage-budget',
                   children: (
                     <div id="usage-budget">
@@ -322,6 +290,7 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                     orgId={orgId}
                     org={org}
                     canManage={can('billing.manage')}
+                    billingHref={billingHref}
                   />
                 ),
               },

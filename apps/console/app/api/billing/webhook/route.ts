@@ -41,7 +41,6 @@ import {
 import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
-  logAiAddonChanged,
   logOrgActivity,
   sendGa4Purchase,
   sendGa4Refund,
@@ -51,6 +50,7 @@ import {
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
+import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 // The branch decision, kept in its own module so it can be exercised without
 // a signed payload, an idempotency claim and a Firestore double standing
 // between a test and the question it is asking (AGL-118).
@@ -771,11 +771,12 @@ async function handler(request: Request): Promise<Response> {
           const heldAiAddon = Number(previousSeatAddons?.aiAddon ?? 0) > 0
           const holdsAiAddon = Number(seatAddons.aiAddon ?? 0) > 0
           if (heldAiAddon !== holdsAiAddon) {
-            await logAiAddonChanged(
-              String(orgId),
-              { uid: null, email: null },
-              { before: previousSeatAddons as never, after: seatAddons },
-            )
+            await runPluginEventHandlers('org.seatAddons.changed', {
+              orgId: String(orgId),
+              actor: { uid: null, email: null },
+              before: previousSeatAddons as never,
+              after: seatAddons,
+            })
           }
         }
 

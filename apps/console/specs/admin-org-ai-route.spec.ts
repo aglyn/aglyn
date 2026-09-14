@@ -119,6 +119,11 @@ import {
   PLAN_PRICING,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { GET, resetAddonSinceCache } from '../app/api/admin/org-ai/route'
+import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
+
+// The AI add-on's band is the AI plugin's declaration (AGL-2939): without it
+// the pool resolves no add-on credits at all.
+beforeAll(() => registerPluginDeclarations())
 
 const get = (opts: { token?: string; orgId?: string } = {}) =>
   GET(

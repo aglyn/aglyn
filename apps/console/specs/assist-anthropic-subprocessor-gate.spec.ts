@@ -72,7 +72,7 @@ import { recordAssistExchange, reserveAssistMessage } from '@aglyn/tenant-data-a
  * turns Anthropic into a production subprocessor. It is not, and the
  * difference matters for the ordering the issue exists to protect:
  * `/api/ai/assist` — the besigner copy assistant, AGL-89/130/169, registered
- * unconditionally in `libs/plugins/marketplace/src/lib/server.ts` — carries no
+ * unconditionally in `libs/plugins/ai/src/lib/server.ts` — carries no
  * release flag at all. It sends customer site copy, blog bodies and section
  * briefs to Anthropic on `ANTHROPIC_API_KEY` plus a Pro entitlement, and
  * nothing else. So setting that key in production makes Anthropic a
@@ -97,20 +97,29 @@ const REPO_ROOT = join(__dirname, '..', '..', '..')
  */
 const KEY_READERS = new Map<string, string>([
   [
-    'apps/console/app/api/assist/chat/route.ts',
-    'Aglyn Assist (AGL-1860): the customer question, a trailing window of the thread, and — on Pro+ — the current route, host and org name. Gated by `release_assist` AND the key.',
-  ],
-  [
-    'libs/plugins/marketplace/src/lib/server/ai-assist.ts',
-    'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — the key plus a Pro entitlement is the whole gate.',
-  ],
-  [
-    'libs/tenant/data/admin/src/lib/server/ai-runtime.ts',
-    'The shared Anthropic runtime (AGL-2903): the ONE module that puts the key on a request. It sends whatever prompt a door hands it, so what reaches Anthropic is decided by the doors above — both of which still read the key themselves to answer 501 before they call it. A third door on the runtime is a third entry here.',
-  ],
-  [
     'libs/plugins/ai/src/lib/providers/anthropic.ts',
-    'The Anthropic adapter behind the Aglyn AI provider contract (AGL-2939): it declares the key as its `apiKeyEnv` and puts it on a Messages API request to the host it names. It opens no door of its own and sends whatever request the AI runtime hands it, so what reaches Anthropic is still decided by the doors above, the same content to the same subprocessor. No door reaches it while the plugin is absent from `plugins.config.json`; once the runtime calls it instead of `ai-runtime.ts`, that entry leaves this list and this one stays.',
+    'The Anthropic adapter of the AI plugin (AGL-2939): the ONE module that reads the key, and it puts it on whatever request the runtime hands it. What reaches Anthropic is therefore decided by the doors that call the runtime, which `AI_DOORS` below pins one by one.',
+  ],
+])
+
+/**
+ * Every tracked source file that calls the AI runtime, and what customer
+ * content it sends to the active provider. The adapter above is the only
+ * key reader, so a new door no longer adds a reader — it adds a caller, and
+ * this is the list that goes red for it.
+ */
+const AI_DOORS = new Map<string, string>([
+  [
+    'libs/plugins/ai/src/lib/server/assist-chat.ts',
+    'Aglyn Assist (AGL-1860) at /api/assist/chat: the customer question, a trailing window of the thread, and — on Pro+ — the current route, host and org name. Gated by `release_assist` AND a ready provider.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/server/ai-assist.ts',
+    'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — a ready provider plus a Pro entitlement is the whole gate.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/jobs/ai-job-text-step.ts',
+    'A generation job’s text step (AGL-2904): the brief the job was created with. Behind `release_ai_generative`, the `aiGenerative` entitlement and the `ai-generate` lockdown key.',
   ],
 ])
 
@@ -149,20 +158,20 @@ const MENTIONS_ONLY = new Map<string, string>([
     'The DEPLOYED flag seed and its staff-facing description — the one that actually decides the flag in production.',
   ],
   [
-    'apps/console/app/api/assist/chat/route.spec.ts',
+    'libs/plugins/ai/src/lib/server/assist-chat.spec.ts',
     'Sets a fake key to exercise the 501 gate.',
   ],
   [
-    'libs/plugins/marketplace/src/lib/server/ai-assist.spec.ts',
+    'libs/plugins/ai/src/lib/server/ai-assist.spec.ts',
     'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow.',
   ],
   [
-    'libs/tenant/data/admin/src/lib/server/ai-runtime.spec.ts',
+    'libs/plugins/ai/src/lib/runtime/ai-runtime.spec.ts',
     'Sets a fake key (`sk-test`) to drive the shared runtime against a mocked fetch (AGL-2903), and asserts it refuses to run without one. A test double, not a flow.',
   ],
   [
     'libs/plugins/ai/src/lib/providers/conformance.spec.ts',
-    'The provider conformance suite (AGL-2939). Sets a fake key (`sk-test`) so the Anthropic adapter answers recorded fixtures through a mocked `fetch`, with no network and no real key. A test double, not a flow.',
+    'Sets a fake key to drive both provider adapters over recorded fixtures (AGL-2939), and asserts each reads its own key and has none when unset. A test double, not a flow.',
   ],
   [
     'apps/console/.env.development.local.example',
@@ -185,19 +194,11 @@ const MENTIONS_ONLY = new Map<string, string>([
     'The self-host runbook (AGL-2014). Documents the same key as an optional operator-supplied credential. Documentation, not a flow.',
   ],
   [
-    'libs/plugins/marketplace/src/lib/components/ai-assist-provider.component.tsx',
-    'Client component; names the key only to explain the 501 degrade.',
-  ],
-  [
-    'apps/console/app/api/_lib/assist-deflection.ts',
-    'The deflection gate (AGL-2486). Names the key only in prose, explaining why a keyless deployment must still answer follow-ups from the docs. It never reads `process.env` and holds no client — it takes retrieved sections and returns strings, which is the reason the route can answer at all with no provider configured.',
-  ],
-  [
     'libs/tenant/data/admin/src/lib/server/assist-usage.ts',
     'The meters (AGL-2486). Names the key only in the comment on the `docs-links` zero-rate sentinel, explaining which deployments produce it. Rates and counters; no provider call and no `process.env` read.',
   ],
   [
-    'apps/console/components/assist-panel.component.spec.tsx',
+    'libs/plugins/ai/src/lib/components/assist-panel.component.spec.tsx',
     'The panel suite (AGL-2486). Names the key only inside a CANNED 501 body it arms, to assert the panel does NOT relay that operator string to the user. A test double, not a flow — and the assertion is that the string stops there.',
   ],
   ['docs/PLATFORM_PROVISIONING.md', 'Documentation.'],
@@ -321,20 +322,37 @@ describe('every Anthropic data flow is a known one (AGL-1909)', () => {
     }
   })
 
-  it('records the besigner assistant as unflagged, so nobody re-derives it', () => {
-    const besigner = KEY_READERS.get(
-      'libs/plugins/marketplace/src/lib/server/ai-assist.ts',
+  it('has exactly the expected doors calling the AI runtime', () => {
+    // The adapter is the only key reader, so a new customer-content path is a
+    // new CALLER of the runtime rather than a new reader of the key. Specs
+    // drive the runtime with doubles and are not doors.
+    const tracked = execSync('git ls-files libs apps', {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    })
+      .split('\n')
+      .filter((path) => /\.(ts|tsx)$/.test(path) && !/\.spec\.tsx?$/.test(path))
+    const callers = tracked.filter(
+      (path) =>
+        path !== 'libs/plugins/ai/src/lib/runtime/ai-runtime.ts' &&
+        /\brunAiRequest\(/.test(readFileSync(join(REPO_ROOT, path), 'utf8')),
     )
+    expect(callers.sort()).toEqual([...AI_DOORS.keys()].sort())
+  })
+
+  it('records the besigner assistant as unflagged, so nobody re-derives it', () => {
+    const besigner = AI_DOORS.get('libs/plugins/ai/src/lib/server/ai-assist.ts')
     expect(besigner).toContain('NO release flag')
     // And the claim is checked against the source, not just asserted about
     // the comment: the handler is registered with no flag around it.
     const server = readFileSync(
-      join(REPO_ROOT, 'libs/plugins/marketplace/src/lib/server.ts'),
+      join(REPO_ROOT, 'libs/plugins/ai/src/lib/server.ts'),
       'utf8',
     )
     expect(server).toContain("registerPluginApiRoute('ai/assist', aiAssistHandler)")
     const handler = readFileSync(
-      join(REPO_ROOT, 'libs/plugins/marketplace/src/lib/server/ai-assist.ts'),
+      join(REPO_ROOT, 'libs/plugins/ai/src/lib/server/ai-assist.ts'),
       'utf8',
     )
     expect(handler).not.toMatch(/isServerReleaseFlagOnForOrg|release_/)

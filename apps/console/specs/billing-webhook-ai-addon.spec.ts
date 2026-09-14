@@ -50,9 +50,6 @@ import {
   PLAN_ENTITLEMENTS,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-// The add-on is declared through the plugin entitlement seam; the resolver
-// reads that declaration, so the spec loads it as the `@aglyn/aglyn` barrel does.
-import '@aglyn/aglyn/app-utils/ai-entitlements'
 
 /** Env without a trace of the developer's own Stripe config (`nx test` leaks the root env). */
 const CLEAN_ENV = (() => {
@@ -78,7 +75,7 @@ const BASE_ENV = {
 
 /** Every `writeOrgBilling(orgId, payload)` the route made. */
 const mockBillingWrites: Array<{ orgId: string; payload: any }> = []
-/** Every org activity row the AI add-on writer handed `logOrgActivity` (AGL-2929). */
+/** Every `org.seatAddons.changed` event the route raised (AGL-2929, AGL-2939). */
 const mockActivityRows: unknown[][] = []
 
 jest.mock('../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
@@ -137,6 +134,12 @@ jest.mock('next/server', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The event the route raises (AGL-2939); the AI plugin's handler — proven
+  // in its own spec — is what writes the row.
+  runPluginEventHandlers: async (_event: string, payload: unknown) => {
+    mockActivityRows.push([payload])
+    return { handled: 1, failed: [] }
+  },
   classifyDeliveryLag: jest.requireActual(
     '@aglyn/aglyn/app-utils/webhook-delivery',
   ).classifyDeliveryLag,
@@ -168,9 +171,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  // The REAL AI add-on feed writer, over the recording `logOrgActivity`
-  // above; the subscription lifecycle writer below stays a no-op.
-  ...jest.requireActual('../../../libs/tenant/data/admin/src/lib/server/ai-activity'),
   firebaseAdmin: {
     app: () => ({ firestore: () => mockMakeFirestore() }),
     firestore: {
@@ -270,6 +270,15 @@ function mirrored() {
 }
 
 describe('the AI add-on item becomes seatAddons.aiAddon (AGL-2897)', () => {
+  // The add-on is the AI plugin's declaration (AGL-2939), and the resolver
+  // folds only what is declared: loaded the way the console server loads it.
+  beforeAll(async () => {
+    const { registerPluginDeclarations } = await import(
+      '../constants/plugins.declarations.generated'
+    )
+    await registerPluginDeclarations()
+  })
+
   beforeEach(() => {
     docs = new Map()
     mockActivityRows.length = 0
@@ -354,12 +363,13 @@ describe('the AI add-on item becomes seatAddons.aiAddon (AGL-2897)', () => {
     )
     expect(mockActivityRows).toEqual([
       [
-        'org-real',
-        // Nobody is present at a Stripe delivery, and the row says so rather
-        // than naming whoever last touched billing.
-        { uid: null, email: null },
-        'ai.addon.purchased',
-        { type: 'subscription', name: expect.stringMatching(/ AI$/) },
+        {
+          orgId: 'org-real',
+          // Nobody is present at a Stripe delivery, and the event says so
+          // rather than naming whoever last touched billing.
+          actor: { uid: null, email: null },
+          after: expect.objectContaining({ aiAddon: 1 }),
+        },
       ],
     ])
   })
@@ -396,9 +406,12 @@ describe('the AI add-on item becomes seatAddons.aiAddon (AGL-2897)', () => {
         item('price_pro_extra_host', 2),
       ]))),
     )
-    expect(mockActivityRows.map((row) => [row[1], row[2]])).toEqual([
-      [{ uid: null, email: null }, 'ai.addon.removed'],
-    ])
+    expect(mockActivityRows).toHaveLength(1)
+    expect(mockActivityRows[0][0]).toMatchObject({
+      actor: { uid: null, email: null },
+      before: { aiAddon: 1 },
+    })
+    expect((mockActivityRows[0][0] as { after: { aiAddon?: number } }).after.aiAddon ?? 0).toBe(0)
   })
 
   it('an org that never held it gets no row when the item is absent', async () => {

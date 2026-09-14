@@ -93,7 +93,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plugin-api-cross-origin',
   ),
-  resolvePluginApiRoute: jest.fn(() => ({ path: 'bookings/reserve' })),
+  resolvePluginApiMatch: jest.fn(() => ({ route: { path: 'bookings/reserve' }, params: {} })),
+  // The real runner: a legacy route reaches `runLegacyHandler` through it.
+  runPluginApiMatch: jest.requireActual('@aglyn/aglyn/app-utils/api-plugins').runPluginApiMatch,
   runLegacyHandler: jest.fn(async () => {
     mockHandlerCalls += 1
     return Response.json({ reserved: true }, { status: 200 })

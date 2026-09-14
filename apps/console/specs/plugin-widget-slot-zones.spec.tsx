@@ -128,7 +128,7 @@ const MOUNTS: Record<
     props: { hostId: 'host-1', canManage: true },
   },
   assistPanel: {
-    file: 'apps/console/app/(app)/layout.tsx',
+    file: 'apps/console/components/assist-dock-slot.component.tsx',
     how: 'slot',
     props: {},
   },
@@ -151,6 +151,7 @@ function mountedZones(): Set<string> {
     'git',
     [
       'grep',
+      '--untracked',
       '-h',
       '-o',
       '-E',
@@ -206,8 +207,9 @@ describe('AGL-2940 · the new zones are in the catalog and mounted', () => {
     }
   })
 
-  it('the editor shell mounts the assistant dock zone as the app shell does', () => {
-    expect(read('apps/console/app/(editor)/layout.tsx')).toContain('slot="assistPanel"')
+  it('both shells mount the assistant dock above every route boundary', () => {
+    expect(read('apps/console/app/(app)/layout.tsx')).toContain('<AssistDockSlot />')
+    expect(read('apps/console/app/(editor)/layout.tsx')).toContain('<AssistDockSlot />')
   })
 })
 

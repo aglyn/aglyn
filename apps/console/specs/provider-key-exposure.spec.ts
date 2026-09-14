@@ -118,20 +118,19 @@ describe('no provider key reaches the browser (AGL-2240)', () => {
     expect(report.serverModules).toBeGreaterThan(1000)
   })
 
-  it('found the three real Anthropic readers and put each in the SERVER graph', () => {
+  it('found the real provider-key readers and put each in the SERVER graph', () => {
     // The positive control. Without it, a regex that stopped matching
-    // `process.env.ANTHROPIC_API_KEY` would report zero readers and zero
-    // exposures — a passing suite that is watching nothing. The two doors
-    // read the key to answer 501; the shared runtime (AGL-2903) reads it to
-    // put it on the request.
+    // `process.env.<KEY>` would report zero readers and zero exposures — a
+    // passing suite that is watching nothing. Each provider adapter of the
+    // AI plugin reads its own key (AGL-2939): the runtime asks the adapter,
+    // and no door names a vendor's variable.
     const byFile = new Map(report.readers.map((reader) => [reader.file, reader]))
-    for (const path of [
-      'apps/console/app/api/assist/chat/route.ts',
-      'libs/plugins/marketplace/src/lib/server/ai-assist.ts',
-      'libs/tenant/data/admin/src/lib/server/ai-runtime.ts',
+    for (const [path, key] of [
+      ['libs/plugins/ai/src/lib/providers/anthropic.ts', 'ANTHROPIC_API_KEY'],
+      ['libs/plugins/ai/src/lib/providers/openai-compatible.ts', 'AI_OPENAI_COMPAT_API_KEY'],
     ]) {
       const reader = byFile.get(path)
-      expect([path, reader?.keys]).toEqual([path, ['ANTHROPIC_API_KEY']])
+      expect([path, reader?.keys]).toEqual([path, [key]])
       expect([path, reader?.inServerGraph]).toEqual([path, true])
       expect([path, reader?.inClientGraph]).toEqual([path, false])
     }

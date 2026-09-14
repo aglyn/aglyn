@@ -175,6 +175,11 @@ jest.mock('../hooks/use-org-scope', () => {
   }
   return { __esModule: true, useOrgSlug: () => 'acme', useOrgScope: () => scope, default: () => scope }
 })
+// The plugin column zone (AGL-2940) asks which plugins the workspace runs.
+jest.mock('./console-plugins-gate.component', () => ({
+  __esModule: true,
+  useEnabledPluginIds: () => [],
+}))
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
   default: () => ({ permissions: { manageMembers: true } }),

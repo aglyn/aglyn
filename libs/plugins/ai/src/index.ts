@@ -16,5 +16,7 @@
  */
 
 export * from './lib/constants'
+export * from './lib/plugin'
 export * from './lib/plugin-config'
 export * from './lib/providers/catalog'
+export { registerAiDeclarations, AI_PLUGIN_ENTITLEMENTS } from './lib/declarations'

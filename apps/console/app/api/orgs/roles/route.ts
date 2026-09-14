@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb, runPluginEventHandlers } from '@aglyn/aglyn/server'
 import {
   aiPermissionChanges,
   createResourceUid,
@@ -29,7 +29,6 @@ import {
   getOrgDoc,
   isImpersonationSession,
   lockdownRefusal,
-  logAiPermissionChanged,
   logOrgActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
@@ -190,15 +189,13 @@ async function handler(request: Request): Promise<Response> {
       // Beside the sentence above, a coded row per AI key that moved, so
       // the feed's AI chip finds who switched generation off for a role.
       for (const change of aiPermissionChanges(stored?.permissions, permissions)) {
-        await logAiPermissionChanged(
+        await runPluginEventHandlers('org.permissions.changed', {
           orgId,
-          { uid: decoded.uid, email: decoded.email },
-          {
-            subject: { type: 'role', id: roleId, name },
-            permission: change.permission,
-            granted: change.granted,
-          },
-        )
+          actor: { uid: decoded.uid, email: decoded.email ?? null },
+          subject: { type: 'role', id: roleId, name },
+          permission: change.permission,
+          granted: change.granted,
+        })
       }
       return Response.json({ ok: true, roleId }, { status: 200 })
     }

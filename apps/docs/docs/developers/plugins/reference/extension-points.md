@@ -19,6 +19,8 @@ The surface matrix: what a plugin can extend, from which entry
 | Redirect resolvers / page resolvers / enrichers | `/server` | Tenant page pipeline | Per request, in that order; enricher errors isolated |
 | API routes (`registerPluginApiRoute`) | `/server` | `/api/*` on both apps | Per request behind the org + release gates |
 | Billing webhook handlers | `/server` | Platform Stripe events | Per event; errors → redelivery |
+| Platform events (`registerPluginEventHandler`) | `/server` (`serverDeclarations`) | A core route's write — the AI add-on bought or dropped, a permission moved | After the write, in the route; errors logged, never the route's |
+| Declarations (`declarations` / `serverDeclarations` entries) | both | Every registry a core surface reads before the plugin has loaded | Once per process, at boot and with the console's plugin loader |
 | Config schemas (`registerPluginConfigSchema`) | both | Settings UI + typed reads | Declared at module scope |
 | Custom field types (`registerCustomFieldType`) | both | Dataset schema/record editors + validation | Declared at module scope |
 | Permissions (`registerPluginPermissions`) | both | Every resolved role set | Declared at module scope |

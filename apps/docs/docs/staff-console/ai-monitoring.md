@@ -1,7 +1,7 @@
 ---
 sidebar_position: 14
 title: AI monitoring
-description: How staff watch one organization's AI usage — the add-on, the credit pool, overage and refusals, generation jobs, the people spending the most, the margin — and where those figures appear across the staff console.
+description: How staff watch one organization's AI usage — the add-on, the credit pool, overage and refusals, generation jobs, the top spenders, the margin — and where those figures appear across the staff console.
 ---
 
 # AI monitoring

@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { AiAssistProvider } from './components/ai-assist-provider.component'
 import MarketplaceBrowse from './components/marketplace-browse.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
@@ -41,9 +40,6 @@ export function registerMarketplaceConsole(): void {
   // Custom field type (AGL-434): rating rides int32 with a starred input.
   Aglyn.registerCustomFieldType({ ...RATING_FIELD, Input: RatingInput })
   Aglyn.registerConsoleExtension({
-    // AI assist (AGL-89/419): mounted by the shell around every console
-    // page; besigner consumes AiAssistContext from besigner-ui.
-    providers: [AiAssistProvider],
     // Listing detail content (AGL-419): the app route keeps the chrome
     // and renders this through the 'marketplaceListing' slot.
     widgets: [

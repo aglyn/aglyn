@@ -356,7 +356,7 @@ value shape, the default and the symptom for each one.
 | Transactional & campaign email | [`RESEND_API_KEY`, `USAGE_EMAIL_FROM`](./self-hosting-environment.md#email) — the sender address gates *all* outbound mail, not just usage mail |
 | One-click unsubscribe | [`EMAIL_UNSUBSCRIBE_SECRET`](./self-hosting-environment.md#secrets), which falls back to `CRON_SECRET` |
 | Publishing that takes effect immediately | [`REVALIDATE_SECRET`](./self-hosting-environment.md#secrets) — without it a publish reports success and the live page stays stale for up to ten minutes |
-| AI assist | [`ANTHROPIC_API_KEY`](./self-hosting-environment.md#assist), plus the spend caps beside it |
+| AI | [a provider key](./self-hosting-environment.md#assist) — `ANTHROPIC_API_KEY`, or an OpenAI-compatible endpoint and its key — plus the spend caps beside it |
 | Scheduled jobs | `CRON_SECRET` — the job routes stay dormant without it. See [below](#scheduled-jobs) for what that silently switches off |
 | Scheduled plugin jobs | [`PLUGIN_JOBS_SECRET`](./self-hosting-environment.md#secrets) — without it no scheduled publishing and no booking-hold expiry ever runs |
 | Customer issue reports | `LINEAR_API_KEY` and `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required. See [below](#issue-reports) |

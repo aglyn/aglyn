@@ -40,12 +40,12 @@ export * from './url-slug'
 export * from './child-contract'
 export * from './child-contract-compose'
 // The one reading of `restrictChildren`/`restrictParent`, shared by the
-// besigner's drop check and the AI node-tree validator (AGL-2905). The
-// generated palette beside it (`ai-palette.generated.ts`) is deep-imported
-// by its consumers, not re-exported here: it is data sized for a server
-// route, not for every client that opens this barrel.
+// besigner's drop check and the AI plugin's node-tree validator (AGL-2905).
 export * from './lineal-order'
-export * from './ai-palette'
+// What a node tree must satisfy before it lands on a canvas that did not
+// author it (AGL-2939): the marketplace's install sanitizer and the AI
+// plugin's node-tree validator both pass through it.
+export * from './node-definition-sanitizer'
 export * from './console-routes'
 // The per-user AI usage rollup's shape and arithmetic (AGL-2928): the
 // month keys, the retention window, the share, kind buckets.
@@ -213,13 +213,6 @@ export * from './upload-cors'
 export * from './docs-help'
 export * from './platform-brand'
 export * from './plan-entitlements'
-// The Aglyn AI plugin's keys, declared through the generic entitlement seam
-// (AGL-2940) and loaded with the barrel so every reader of the plan tables
-// and the lockdown catalog sees them registered.
-export * from './ai-entitlements'
-// The AI activity catalog registers through the generic activity-action seam
-// (AGL-2940) at module scope, so it rides the barrel for the same reason.
-export * from './ai-activity-actions'
 // The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'

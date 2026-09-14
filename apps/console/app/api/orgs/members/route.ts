@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  pluginRequestFromWeb,
+  Route,
+  runPluginEventHandlers,
+} from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   aiPermissionChanges,
@@ -39,7 +44,6 @@ import {
   isImpersonationSession,
   listOrgMembers,
   lockdownRefusal,
-  logAiPermissionChanged,
   logOrgActivity,
   memberHasOrgPermission,
   meterOrgEmail,
@@ -348,15 +352,13 @@ async function handler(request: Request): Promise<Response> {
         // comparison says nothing moved on this axis.
         const aiAfter = await resolveMemberAiPermissionsOnOrg(orgId, targetUid)
         for (const change of aiPermissionChanges(aiBefore, aiAfter)) {
-          await logAiPermissionChanged(
+          await runPluginEventHandlers('org.permissions.changed', {
             orgId,
-            { uid: decoded.uid, email: decoded.email },
-            {
-              subject: { type: 'member', id: targetUid, name: targetName },
-              permission: change.permission,
-              granted: change.granted,
-            },
-          )
+            actor: { uid: decoded.uid, email: decoded.email ?? null },
+            subject: { type: 'member', id: targetUid, name: targetName },
+            permission: change.permission,
+            granted: change.granted,
+          })
         }
       }
       // In-app notification to the affected account (AGL-259).

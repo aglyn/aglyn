@@ -142,7 +142,7 @@ const POLICIES: Array<{
   // so it expires on the exchange's clock, stamped by the one writer.
   {
     collectionGroup: 'aiJobs',
-    writers: ['libs/tenant/data/admin/src/lib/server/ai-jobs.ts'],
+    writers: ['libs/plugins/ai/src/lib/jobs/ai-jobs.ts'],
     stamp: 'expiresAt: assistExchangeExpiry(now)',
   },
   // AGL-2928: a person's monthly AI usage under the org, keyed by uid, kept

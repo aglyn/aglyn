@@ -91,4 +91,10 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"console":"registerWorkflowsConsole"},
     load: () => import('@aglyn/plugins-workflows'),
   },
+  {
+    id: 'ai',
+    apiPrefixes: ["ai","assist"],
+    register: {"console":"registerAiConsole"},
+    load: () => import('@aglyn/plugins-ai'),
+  },
 ]

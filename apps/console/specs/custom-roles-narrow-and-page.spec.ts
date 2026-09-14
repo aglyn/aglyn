@@ -56,8 +56,20 @@ import {
 
 const mockVerifyIdToken = jest.fn()
 const mockLogOrgActivity = jest.fn(async () => undefined)
-/** The coded AI row per key a save moved (AGL-2929), captured at the barrel. */
-const mockLogAiPermissionChanged = jest.fn(async () => undefined)
+/**
+ * Every platform event the route raised (AGL-2929, AGL-2939): an AI key a
+ * save moved is `org.permissions.changed`, which the AI plugin's handler
+ * turns into the coded row.
+ */
+const mockRunPluginEventHandlers = jest.fn(async (..._args: unknown[]) => ({
+  handled: 1,
+  failed: [] as string[],
+}))
+/** The payloads of the `org.permissions.changed` events, in order. */
+const raisedPermissionChanges = () =>
+  mockRunPluginEventHandlers.mock.calls
+    .filter((args: unknown[]) => args[0] === 'org.permissions.changed')
+    .map((args: unknown[]) => args[1])
 /**
  * The projection re-run this route owes the rules.
  *
@@ -164,8 +176,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgDoc: async () => ({ $id: 'org-1', plan: 'enterprise' }),
   lockdownRefusal: async () => null,
   logOrgActivity: (...args: unknown[]) => mockLogOrgActivity(...(args as [])),
-  logAiPermissionChanged: (...args: unknown[]) =>
-    mockLogAiPermissionChanged(...(args as [])),
   memberHasOrgPermission: async () => mockHasPermission,
   syncOrgAuthProjections: (...args: unknown[]) =>
     mockSyncOrgAuthProjections(...(args as [])),
@@ -187,6 +197,7 @@ jest.mock('@aglyn/aglyn/server', () => {
     __esModule: true,
     ...permissions,
     aiPermissionChanges: ai.aiPermissionChanges,
+    runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
     createResourceUid: () => 'role-new',
     pluginRequestFromWeb: async (request: Request) => {
       const url = new URL(request.url)
@@ -495,12 +506,15 @@ describe('an AI key moved on a role is an activity row (AGL-2929)', () => {
     })
     expect(response.status).toBe(200)
     // `members.manage` moved too, and is not an AI key: no row for it.
-    expect(mockLogAiPermissionChanged).toHaveBeenCalledTimes(1)
-    expect(mockLogAiPermissionChanged).toHaveBeenCalledWith('org-1', ACTOR, {
-      subject: { type: 'role', id: 'role-mk', name: 'Marketing' },
-      permission: 'ai.generate',
-      granted: false,
-    })
+    expect(raisedPermissionChanges()).toEqual([
+      {
+        orgId: 'org-1',
+        actor: ACTOR,
+        subject: { type: 'role', id: 'role-mk', name: 'Marketing' },
+        permission: 'ai.generate',
+        granted: false,
+      },
+    ])
   })
 
   it('nothing when the save leaves the AI keys where they were', async () => {
@@ -511,7 +525,7 @@ describe('an AI key moved on a role is an activity row (AGL-2929)', () => {
     })
     expect(response.status).toBe(200)
     expect(mockLogOrgActivity).toHaveBeenCalledTimes(1)
-    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
+    expect(raisedPermissionChanges()).toEqual([])
   })
 
   it('a new role that sets an AI key writes the row for that key', async () => {
@@ -520,13 +534,17 @@ describe('an AI key moved on a role is an activity row (AGL-2929)', () => {
       permissions: { 'ai.use': true, 'ai.generate': false },
     })
     expect(response.status).toBe(200)
-    expect(mockLogAiPermissionChanged.mock.calls.map((args: unknown[]) => args[2])).toEqual([
+    expect(raisedPermissionChanges()).toEqual([
       {
+        orgId: 'org-1',
+        actor: ACTOR,
         subject: { type: 'role', id: 'role-new', name: 'Writers' },
         permission: 'ai.use',
         granted: true,
       },
       {
+        orgId: 'org-1',
+        actor: ACTOR,
         subject: { type: 'role', id: 'role-new', name: 'Writers' },
         permission: 'ai.generate',
         granted: false,

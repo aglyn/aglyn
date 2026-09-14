@@ -6,11 +6,13 @@ work longer than a request survives the request. The console route runs what
 it can inline; the platform job beat resumes whatever is left. The document is
 the whole state — no process holds anything the next beat cannot read back.
 
-Code: `libs/aglyn/src/lib/foundation/definitions/ai-jobs.types.ts` (the model),
-`libs/tenant/data/admin/src/lib/server/ai-jobs.ts` (the machine, the step
-registry, the sweep), `ai-job-text-step.ts` (the one step kind that runs
-today), `apps/console/app/api/ai/jobs/**` (the doors),
-`apps/tenant/utils/ai-jobs-beat.ts` (the beat).
+Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939) except the model:
+`libs/aglyn/src/lib/foundation/definitions/ai-jobs.types.ts` (the model),
+`src/lib/jobs/ai-jobs.ts` (the machine, the step registry, the sweep),
+`src/lib/jobs/ai-job-text-step.ts` (the one step kind that runs today),
+`src/lib/server/ai-jobs-route.ts`, `ai-jobs-events-route.ts` and
+`ai-jobs-cancel.ts` (the doors, registered on the console dispatcher by
+`src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` (the beat).
 
 ## Outputs are drafts, never a publish
 
@@ -82,7 +84,7 @@ the meter or the lease.
 
 ## The doors
 
-`apps/console/app/api/ai/jobs`:
+Registered under `/api/ai/jobs` by the plugin's console API surface:
 
 - `POST /api/ai/jobs` `{ orgId, hostId?, kind, brief, inputs? }` climbs the
   whole gate ladder (`aiGenerative`, `release_ai_generative`, the `ai-generate`
@@ -99,14 +101,14 @@ the meter or the lease.
 
 The read and cancel doors climb the ladder's rungs up to the lockdown verdict
 and stop there — no rate window, no reservation — through
-`apps/console/app/api/_lib/ai-jobs-gate.ts`. Every door requires the request
+`libs/plugins/ai/src/lib/server/ai-jobs-gate.ts`. Every door requires the request
 to NAME the org (AGL-1934).
 
 ## The beat
 
 `ai:ai-jobs` registers on the platform job beat every minute
-(`apps/tenant/utils/ai-jobs-beat.ts`, imported by the run-jobs route for its
-registration side effect like the other core jobs). `sweepAiJobs` reads
+(`libs/plugins/ai/src/lib/jobs/ai-jobs-beat.ts`, registered by the plugin's
+tenant API surface, which the run-jobs route loads like every plugin's). `sweepAiJobs` reads
 queued and running jobs across every org oldest-first by `updatedAt`, plus a
 few parked jobs that have rested, and runs steps until 45 s of wall clock is
 spent — checked between jobs, with the time left handed to the step in flight

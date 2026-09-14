@@ -40,8 +40,8 @@ import {
   sectionLabel,
   sectionUrl,
   trimToSentence,
-} from '../_lib/assist-deflection'
-import { retrieveDocsSections } from '../_lib/assist-retrieval'
+} from '@aglyn/aglyn/app-utils/docs-deflection'
+import { retrieveDocsSections } from '@aglyn/aglyn/app-utils/docs-retrieval'
 import {
   buildReportBody,
   createLinearIssue,
@@ -321,7 +321,7 @@ export async function POST(request: Request): Promise<Response> {
           {
             deflected: true,
             // Verbatim docs text and the page it came from — never a
-            // paraphrase. `assist-deflection` owns that guarantee and its
+            // paraphrase. `docs-deflection` owns that guarantee and its
             // spec asserts it by reconstruction.
             sections: deflection.quoted.slice(0, 3).map((section) => ({
               title: sectionLabel(section),

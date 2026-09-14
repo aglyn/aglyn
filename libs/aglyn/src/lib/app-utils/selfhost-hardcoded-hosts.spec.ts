@@ -50,7 +50,7 @@ import { resolve } from 'path'
  *
  * Out of scope on purpose:
  *  - `*.spec.*` / `specs/` — fixtures naming our hosts are fixtures.
- *  - `assist-docs-index.generated.ts` — a build artefact of `apps/docs`, whose
+ *  - `docs-index.generated.ts` — a build artefact of `apps/docs`, whose
  *    prose is Aglyn's own documentation and is regenerated, not edited.
  *  - `apps/docs/**`, `*.md`, `.env*.example`, `constants/legal/**` — prose and
  *    published legal snapshots, which are Aglyn's own by construction
@@ -63,7 +63,7 @@ const AGLYN_HOST = /aglyn\.(app|com|io)\b/g
 
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/
 const NOT_A_TEST = /\.spec\.|\.e2e\.|\.test\.|\/specs\//
-const GENERATED = /assist-docs-index\.generated\./
+const GENERATED = /docs-index\.generated\./
 
 /**
  * Comments removed, so the prose explaining a decision cannot pass for the

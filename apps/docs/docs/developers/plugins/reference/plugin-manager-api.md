@@ -79,8 +79,10 @@ batch, so read registries lazily rather than snapshotting.
 
 | API | Semantics |
 | --- | --- |
-| `registerPluginApiRoute(path, handler)` | Registers an exact path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. |
+| `registerPluginApiRoute(path, handler)` | Registers a path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. `path` may carry `:name` segments (`ai/jobs/:jobId/cancel`); an exact registration wins over a pattern. |
+| `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
+| `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
 
 ## Site pipeline — `site-runtime`, `site-page-hooks` (`/server` for hooks)
 
@@ -202,6 +204,23 @@ registerPluginService(AI_PROVIDERS, ollamaProvider, { pluginId: 'acme-llm', prio
 // back in the AI plugin, at call time
 const providers = resolvePluginServices(AI_PROVIDERS) // acme-llm first, then ai
 ```
+
+## Platform events — `plugin-events` (`/server`)
+
+Core raises the events; a plugin that must react to what a core route did
+subscribes from its `serverDeclarations` entry, so the subscription is in
+place before the first request. Payloads carry the actor and the before /
+after, never a reference to the plugin.
+
+| Event | Raised by | Payload |
+| --- | --- | --- |
+| `org.seatAddons.changed` | the add-on checkout and the billing webhook | `{ orgId, actor, before, after }` — the `org.seatAddons` maps |
+| `org.permissions.changed` | the member, role and host-member routes | `{ orgId, actor, subject: { type, id?, name? }, permission, granted }` |
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginEventHandler(event, handler, { pluginId? })` | Subscribes; attributed to the registering plugin. Idempotence is the subscriber's to keep — check `listPluginEventHandlers(event)` before subscribing again after a registry reset. |
+| `runPluginEventHandlers(event, payload)` | What the core route calls after its write: every handler in registration order, a failure logged and counted (`{ handled, failed }`), never the route's failure. |
 
 ## Activity actions — `plugin-activity-actions`
 

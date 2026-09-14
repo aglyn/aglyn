@@ -18,21 +18,11 @@
 export * from './lib/server/analytics-retention'
 export * from './lib/server/api-http'
 export * from './lib/server/api-keys'
-export * from './lib/server/assist-answer-cache'
 export * from './lib/server/assist-usage'
 // The Free taste's precautions (AGL-2925): the account and platform half
-// of the meter, and the request-level rungs every AI door climbs.
+// of the meter.
 export * from './lib/server/assist-free-taste'
-export * from './lib/server/ai-abuse-guards'
 export * from './lib/server/ai-usage-by-user'
-// The one Anthropic runtime and the gate ladder every AI door composes
-// (AGL-2903). Beside the meters they price with.
-export * from './lib/server/ai-runtime'
-export * from './lib/server/ai-gate'
-// AI generation jobs (AGL-2904): the Firestore state machine, the step
-// registry with its one real step, and the beat's sweep.
-export * from './lib/server/ai-jobs'
-export * from './lib/server/ai-job-text-step'
 export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
 export * from './lib/server/client-error-report'
@@ -102,7 +92,6 @@ export * from './lib/server/host-email-tokens'
 export * from './lib/server/notifications'
 export * from './lib/server/org-billing'
 export * from './lib/server/organizations'
-export * from './lib/server/ai-activity'
 export * from './lib/server/duplicate-activity'
 export * from './lib/server/duplicate-resource'
 export * from './lib/server/workspace-domains'

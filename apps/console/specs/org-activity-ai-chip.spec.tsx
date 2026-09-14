@@ -91,6 +91,11 @@ jest.mock('firebase/firestore', () => {
 })
 
 import OrgActivityCard from '../components/org-activity-card.component'
+import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
+
+// The AI codes' labels and group are the AI plugin's declaration (AGL-2939),
+// loaded the way the console shell loads it.
+beforeAll(() => registerPluginDeclarations())
 
 beforeEach(() => {
   response = { entries: AI_ROWS }

@@ -67,6 +67,7 @@ jest.mock('../components/host-id-provider', () => ({
 }))
 jest.mock('../constants/console-plugin-loader', () => ({
   consolePluginLoader: { ensure: jest.fn(), ensureAll: jest.fn() },
+  pluginDeclarationsReady: Promise.resolve(),
 }))
 jest.mock('../utils/realm-plugins.client', () => ({
   loadOrgRealmPlugins: jest.fn(async () => []),

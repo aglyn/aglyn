@@ -197,6 +197,12 @@ describe.each(SUBJECTS)('$prefix adapter conforms to the provider contract', (su
     Object.assign(process.env, subject.env)
   })
 
+  it('reads its own key, and has none when its environment is unset', () => {
+    expect(subject.provider.readApiKey()).toBe(subject.env[subject.provider.apiKeyEnv])
+    for (const key of Object.keys(subject.env)) delete process.env[key]
+    expect(subject.provider.readApiKey()).toBeUndefined()
+  })
+
   it('describes itself: an id, a key variable, a host, and the catalog models it serves', () => {
     expect(subject.provider.id).toBe(subject.prefix)
     expect(subject.provider.apiKeyEnv).toBeTruthy()
