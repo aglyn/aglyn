@@ -114,8 +114,8 @@ publish ──▶ submitted ──▶ in_review ──▶ listed ──▶ verif
 ## `plugins.config.json` (first-party contributors)
 
 The single source mapping plugin ids to packages, register entry points
-per surface (`site`, `console`, `tenantApi`, `consoleApi`, and the two
-declaration surfaces `declarations` and `serverDeclarations`), and
+per surface (`site`, `console`, `staff`, `tenantApi`, `consoleApi`, and the
+two declaration surfaces `declarations` and `serverDeclarations`), and
 `apiPrefixes`. `node tools/scripts/generate-plugin-manifests.mjs` turns it
 into the four generated loader manifests and the three declarations
 manifests — the only files allowed to reference `@aglyn/plugins-*` outside
@@ -130,6 +130,13 @@ actions, a config schema — and a **serverDeclarations** entry
 The apps run them once per process: at boot from `instrumentation.ts`, and
 with the console's plugin loader module, whose plugins gate holds the first
 paint on them. Anything heavy stays behind a lazy import inside a handler.
+
+A **staff** entry names the registrar the console's staff area loads,
+usually the same function as `console`. The org routes load each
+workspace's enabled plugins and a staff page names no workspace, so the
+staff area loads exactly the plugins with a `staff` entry, before a staff
+page renders, and the [staff zones](./injection-zones.md#staff-zones) read
+their widgets.
  The scaffolder (`tools/scripts/create-plugin.mjs`)
 maintains it for you; the manual follow-ups are the
 `FIRST_PARTY_PLUGINS` catalog entry and the release flag

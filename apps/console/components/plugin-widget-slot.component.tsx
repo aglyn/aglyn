@@ -16,8 +16,13 @@
  */
 'use client'
 
-import { listConsoleWidgets, type ConsoleWidgetColumn } from '@aglyn/aglyn'
+import {
+  isConsoleStaffWidgetSlot,
+  listConsoleWidgets,
+  type ConsoleWidgetColumn,
+} from '@aglyn/aglyn'
 import type { ComponentType } from 'react'
+import { STAFF_PLUGIN_IDS } from '../constants/staff-plugins'
 import { useEnabledPluginIds } from './console-plugins-gate.component'
 import { useDashboardWidgetPrefs } from './dashboard-widget-prefs.context'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -107,32 +112,47 @@ export function useSlotWidgets(slots: readonly string[]): {
    */
   const { can, permissions, loaded: permissionsLoaded } = useOrgPermissions()
   const answers = { can, permissions, loaded: permissionsLoaded }
-  const resolved = slots.flatMap((slot) =>
-    listConsoleWidgets(slot, enabledPluginIds).map(({ extension, widget }) => ({
-      // The extension's flag AND the widget's own (AGL-2611), exactly as
-      // the permission below composes: a card gated narrower than its
-      // extension, on a plan that has the extension and not the card's
-      // entitlement, is absent, without an upsell.
-      entitlement: composeExtensionEntitlements(
-        resolveExtensionEntitlement(extension.featureFlag, org, orgReady),
-        resolveExtensionEntitlement(widget.featureFlag, org, orgReady),
-      ),
-      // The extension's requirement AND the widget's own, exactly as a nav
-      // item composes with its extension's: a card cannot escape its
-      // extension's gate by declaring a key its reader happens to hold.
-      permission: resolveExtensionPermission(
-        requiredExtensionPermissions(extension, widget),
-        answers,
-      ),
-      widget: {
-        slot,
-        widgetId: widget.widgetId,
-        title: widget.title ?? extension.displayName ?? widget.widgetId,
-        column: widget.column,
-        Component: widget.Component,
-      },
-    })),
-  )
+  const resolved = slots.flatMap((slot) => {
+    /*
+     * A staff zone (AGL-2939) names no workspace: its widgets come from the
+     * plugins the staff area loaded, and neither gate below applies, because
+     * both answer for the workspace the reader happens to have open rather
+     * than for the org or account the staff page is about. The staff area's
+     * guard is what admits the reader.
+     */
+    const staff = isConsoleStaffWidgetSlot(slot)
+    return listConsoleWidgets(slot, staff ? STAFF_PLUGIN_IDS : enabledPluginIds).map(
+      ({ extension, widget }) => ({
+        staff,
+        // The extension's flag AND the widget's own (AGL-2611), exactly as
+        // the permission below composes: a card gated narrower than its
+        // extension, on a plan that has the extension and not the card's
+        // entitlement, is absent, without an upsell.
+        entitlement: staff
+          ? ('entitled' as const)
+          : composeExtensionEntitlements(
+              resolveExtensionEntitlement(extension.featureFlag, org, orgReady),
+              resolveExtensionEntitlement(widget.featureFlag, org, orgReady),
+            ),
+        // The extension's requirement AND the widget's own, exactly as a nav
+        // item composes with its extension's: a card cannot escape its
+        // extension's gate by declaring a key its reader happens to hold.
+        permission: staff
+          ? ('granted' as const)
+          : resolveExtensionPermission(
+              requiredExtensionPermissions(extension, widget),
+              answers,
+            ),
+        widget: {
+          slot,
+          widgetId: widget.widgetId,
+          title: widget.title ?? extension.displayName ?? widget.widgetId,
+          column: widget.column,
+          Component: widget.Component,
+        },
+      }),
+    )
+  })
   return {
     widgets: resolved
       .filter(
@@ -148,9 +168,14 @@ export function useSlotWidgets(slots: readonly string[]): {
      * the list is final and then grows it — a switch appearing under the
      * reader's cursor. A slot whose widgets declare no permission never waits:
      * `resolveExtensionPermission` returns `granted` for an empty requirement
-     * without consulting `loaded` at all.
+     * without consulting `loaded` at all. Staff zones wait on neither: the
+     * org read is not theirs, and the staff area loaded their plugins before
+     * the page rendered.
      */
-    ready: orgReady && resolved.every((entry) => entry.permission !== 'pending'),
+    ready:
+      (orgReady ||
+        (slots.length > 0 && slots.every((slot) => isConsoleStaffWidgetSlot(slot)))) &&
+      resolved.every((entry) => entry.staff || entry.permission !== 'pending'),
   }
 }
 

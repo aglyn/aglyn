@@ -530,7 +530,10 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgSettings: 'orgSettings',
   /** Host setup page, below the built-in cards. Props: hostId, org. */
   hostSettings: 'hostSettings',
-  /** Staff admin org detail (staff-only surfaces). Props: orgId. */
+  /**
+   * Staff admin org detail (staff-only surfaces). Props: orgId. A staff
+   * zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
   adminOrgDetail: 'adminOrgDetail',
   /**
    * Billing → Usage, below the meters (AGL-2940). Props: `orgId`, `org` (the
@@ -547,10 +550,13 @@ export const CONSOLE_WIDGET_SLOTS = {
   /**
    * The staff org page, among its cards (AGL-2940). Props: `orgId`. Staff
    * only — the page is behind `StaffOnly`, and a widget here may read the
-   * staff-only routes.
+   * staff-only routes. A staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
    */
   staffOrg: 'staffOrg',
-  /** The staff user page, below the account's activity. Props: `uid`. */
+  /**
+   * The staff user page, below the account's activity. Props: `uid`. A
+   * staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
   staffUser: 'staffUser',
   /**
    * The org's team member detail page, below the member's activity
@@ -590,6 +596,29 @@ export const CONSOLE_WIDGET_SLOTS = {
 
 export type ConsoleWidgetSlot =
   (typeof CONSOLE_WIDGET_SLOTS)[keyof typeof CONSOLE_WIDGET_SLOTS]
+
+/**
+ * The zones on the STAFF pages (AGL-2939): the staff org page, its detail
+ * zone, and the staff user page.
+ *
+ * No workspace names the plugin set there. A staff page is ABOUT an org or
+ * an account, and the reader's own memberships have nothing to do with what
+ * it shows, so the console reads these zones from the plugins it loads for
+ * the staff area — every plugin that declares a `staff` register surface —
+ * and consults neither a widget's entitlement nor its permission: both are
+ * answers about a workspace, and the staff area's guard is what admits the
+ * reader.
+ */
+export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
+  CONSOLE_WIDGET_SLOTS.adminOrgDetail,
+  CONSOLE_WIDGET_SLOTS.staffOrg,
+  CONSOLE_WIDGET_SLOTS.staffUser,
+]
+
+/** Whether a slot is one of the {@link CONSOLE_STAFF_WIDGET_SLOTS}. */
+export function isConsoleStaffWidgetSlot(slot: string): boolean {
+  return (CONSOLE_STAFF_WIDGET_SLOTS as readonly string[]).includes(slot)
+}
 
 /**
  * A column a widget contributes to a shell-owned table (AGL-2940) — the org

@@ -206,11 +206,18 @@ const DECLARATION_MANIFESTS = [
   },
 ]
 
+/**
+ * `staff` (AGL-2939) is the console surface the STAFF area loads. The org
+ * routes load each workspace's enabled plugins, and a staff page names no
+ * workspace, so a plugin with widgets on the staff zones names the
+ * registrar that carries them here — usually its `console` one — and the
+ * staff area loads exactly those plugins.
+ */
 const MANIFESTS = [
   {
     file: 'apps/console/constants/plugins.client.generated.ts',
     entryPoint: 'client',
-    surfaces: ['console', 'site'],
+    surfaces: ['console', 'site', 'staff'],
     constName: 'CONSOLE_PLUGIN_MANIFEST',
   },
   {

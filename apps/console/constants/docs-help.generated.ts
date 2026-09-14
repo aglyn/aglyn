@@ -701,7 +701,7 @@ export const DOCS_HELP_ANCHORS = {
   googleAnalytics: ['#setup', '#consent', '#automatic', '#engagement', '#commerce', '#web-vitals', '#authored-events', '#never-sent', '#related'],
   import: ['#three-steps', '#what-each-column-can-hold', '#what-is-skipped-and-why', '#related'],
   importExport: ['#export', '#export-contents', '#large-exports', '#import', '#upsert-on-a-key-field', '#tips', '#related'],
-  injectionZones: ['#column-zones', '#widgetid-is-a-persisted-identifier'],
+  injectionZones: ['#staff-zones', '#column-zones', '#widgetid-is-a-persisted-identifier'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],
   interactions: ['#fluent-interactions', '#interactions-belong-to-the-page-they-are-on', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#scroll-to-element-step', '#play-video-step', '#analytics-event-step', '#analytics-event-name', '#analytics-event-parameters', '#analytics-event-delivery', '#custom-html-block', '#related'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#an-invitation-never-changes-who-owns-the-workspace', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#ai-actions', '#ai-usage', '#tips', '#related'],

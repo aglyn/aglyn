@@ -16,7 +16,10 @@
  */
 
 import {
+  CONSOLE_STAFF_WIDGET_SLOTS,
+  CONSOLE_WIDGET_SLOTS,
   defineUiFeatureBundle,
+  isConsoleStaffWidgetSlot,
   listConsoleExtensions,
   listConsoleNavItems,
   listConsoleProviders,
@@ -255,6 +258,57 @@ describe('console extension registry', () => {
       expect(listConsoleNavItems()).toHaveLength(2)
       expect(listConsoleWidgets('dashboard')).toHaveLength(2)
       expect(listConsoleProviders()).toHaveLength(2)
+    })
+  })
+
+  /**
+   * AGL-2939: the staff pages name no workspace, so their zones are read
+   * from the plugins loaded for the staff area rather than from an org's
+   * enabled set. Two unrelated plugins contribute to the same staff zone.
+   */
+  describe('staff zones', () => {
+    const Card = (): null => null
+
+    beforeEach(() => {
+      registerConsoleExtension({
+        pluginId: 'ai',
+        displayName: 'AI',
+        widgets: [
+          { widgetId: 'ai-org-usage', slot: CONSOLE_WIDGET_SLOTS.staffOrg, Component: Card },
+          { widgetId: 'ai-credits', slot: CONSOLE_WIDGET_SLOTS.orgBillingUsage, Component: Card },
+        ],
+      })
+      registerConsoleExtension({
+        pluginId: 'acme-backups',
+        displayName: 'Backups',
+        widgets: [
+          { widgetId: 'backups-org', slot: CONSOLE_WIDGET_SLOTS.staffOrg, Component: Card },
+          { widgetId: 'backups-user', slot: CONSOLE_WIDGET_SLOTS.staffUser, Component: Card },
+        ],
+      })
+    })
+
+    it('names the staff pages\' zones and no workspace zone', () => {
+      expect([...CONSOLE_STAFF_WIDGET_SLOTS].sort()).toEqual([
+        'adminOrgDetail',
+        'staffOrg',
+        'staffUser',
+      ])
+      expect(isConsoleStaffWidgetSlot('staffOrg')).toBe(true)
+      expect(isConsoleStaffWidgetSlot('orgBillingUsage')).toBe(false)
+      expect(isConsoleStaffWidgetSlot('somewhereElse')).toBe(false)
+    })
+
+    it('lists each staff-loaded plugin\'s widgets for the zone', () => {
+      const staffPluginIds = ['ai', 'acme-backups']
+      expect(
+        listConsoleWidgets('staffOrg', staffPluginIds).map((entry) => entry.widget.widgetId),
+      ).toEqual(['ai-org-usage', 'backups-org'])
+      expect(
+        listConsoleWidgets('staffUser', staffPluginIds).map((entry) => entry.widget.widgetId),
+      ).toEqual(['backups-user'])
+      // A plugin the staff area did not load contributes nothing.
+      expect(listConsoleWidgets('staffOrg', ['ai'])).toHaveLength(1)
     })
   })
 })

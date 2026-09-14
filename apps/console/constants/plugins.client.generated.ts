@@ -94,7 +94,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'ai',
     apiPrefixes: ["ai","assist"],
-    register: {"console":"registerAiConsole"},
+    register: {"console":"registerAiConsole","staff":"registerAiConsole"},
     load: () => import('@aglyn/plugins-ai'),
   },
 ]

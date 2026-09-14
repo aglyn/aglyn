@@ -154,6 +154,7 @@
       "package": "@aglyn/plugins-ai",
       "register": {
         "console": "registerAiConsole",
+        "staff": "registerAiConsole",
         "tenantApi": "registerAiApi",
         "consoleApi": "registerAiConsoleApi",
         "declarations": "registerAiDeclarations",
