@@ -21,7 +21,7 @@
  */
 
 /**
- * `/api/admin/users/ai-usage` (AGL-2928) backs the staff user page's card,
+ * `/api/ai/admin/user` (AGL-2928) backs the staff user page's card,
  * so the staff gate is pinned (401 / 403 / 200) together with the two things
  * the card relies on: every membership's months land in one list, newest
  * month first and dearest workspace first within it, and the open is
@@ -99,7 +99,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email to continue' }, { status: 403 }),
 }))
 
-jest.mock('../app/api/_lib/admin-audit', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/admin-audit', () => ({
   __esModule: true,
   recordAdminAudit: (...args: unknown[]) => mockRecordAdminAudit(...args),
 }))
@@ -119,11 +119,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 
-import { GET } from '../app/api/admin/users/ai-usage/route'
+import { GET } from './ai-admin-user'
 
 const get = (token: string | null = 'tok', uid = 'user-a') =>
   GET(
-    new Request(`https://app.aglyn.com/api/admin/users/ai-usage?uid=${uid}`, {
+    new Request(`https://app.aglyn.com/api/ai/admin/user?uid=${uid}`, {
       headers: token ? { authorization: `Bearer ${token}` } : {},
     }),
   )
@@ -146,7 +146,7 @@ beforeEach(() => {
   }
 })
 
-describe('/api/admin/users/ai-usage (AGL-2928)', () => {
+describe('/api/ai/admin/user (AGL-2928)', () => {
   it('401s an unauthenticated caller', async () => {
     expect((await get(null)).status).toBe(401)
   })

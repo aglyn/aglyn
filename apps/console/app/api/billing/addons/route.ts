@@ -46,7 +46,7 @@ import {
   planPriceId,
   type AddonKind,
   type BillingInterval,
-} from '../../../../utils/server/billing-addons'
+} from '@aglyn/tenant-data-admin/server/billing-addons'
 import {
   buildTargetItems,
   phaseItemsOf,

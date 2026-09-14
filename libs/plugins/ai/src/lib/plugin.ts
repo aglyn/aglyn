@@ -28,15 +28,16 @@ import { AssistPanelComponent } from './components/assist-panel.component'
 import BillingAssistOverageCard from './components/billing-assist-overage-card.component'
 import { AiTopUsersCard } from './components/billing-ai-top-users.component'
 import MemberAiUsageCard from './components/member-ai-usage-card.component'
+import StaffOrgAiCard from './components/staff-org-ai-card.component'
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
 /**
  * The Aglyn AI plugin's console half (AGL-2939): the assistant dock, the
- * besigner copy assistant's provider, and the billing cards — each mounted
- * through a shell-owned zone (AGL-2940), so no console page imports this
- * plugin.
+ * besigner copy assistant's provider, the billing, member and staff cards,
+ * and the member tables' credit columns — each mounted through a
+ * shell-owned zone (AGL-2940), so no console page imports this plugin.
  *
  * No `featureFlag` on the extension: the plugin's doors are gated one by
  * one — the dock reads the `release_assist` verdict the shell hands it, the
@@ -86,6 +87,12 @@ export function registerAiConsole(): void {
         widgetId: 'ai-member-usage',
         title: 'AI usage',
         Component: MemberAiUsageCard,
+      },
+      {
+        slot: 'staffOrg',
+        widgetId: 'ai-org-usage',
+        title: 'AI usage',
+        Component: StaffOrgAiCard,
       },
       {
         slot: 'staffUser',

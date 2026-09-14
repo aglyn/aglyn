@@ -146,6 +146,24 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 /*
+ * The staff audit writer's own handle on the admin SDK. The writer lives in
+ * the admin lib and imports the SDK module beside it rather than the barrel
+ * mocked above, so the same double stands at that module too — the rows the
+ * assertions read are the rows the REAL writer wrote.
+ */
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => {
+  const admin = {
+    app: () => ({
+      auth: () => ({
+        verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
+      }),
+      firestore: () => mockFirestore,
+    }),
+  }
+  return { __esModule: true, firebaseAdmin: admin, default: admin }
+})
+
+/*
  * The subject resolver, a DEEP import outside the barrel mock above.
  *
  * `subjectUid` is no longer "the first account whose primary matched" — that

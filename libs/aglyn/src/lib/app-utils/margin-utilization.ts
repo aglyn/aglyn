@@ -19,8 +19,8 @@
 // serves it — so it may import neither entry barrel, for the reason
 // `usage-metering.ts` states at its own head. The specific modules underneath
 // are safe in both.
-import type { AglynOrgBilling, OrgPlan } from '@aglyn/aglyn/foundation'
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import type { AglynOrgBilling, OrgPlan } from '../foundation'
+import { assistCreditsFromUsd } from './assist-credits'
 import {
   hasAiAddon,
   INFRA_COGS_PER_SITE_USD,
@@ -38,7 +38,7 @@ import {
   type DiscountMarginRating,
   type OrgCogsResult,
   type OrgUsageRollupInput,
-} from '@aglyn/aglyn/app-utils/plan-entitlements'
+} from './plan-entitlements'
 
 export { MARGIN_SCOPE_NOTE }
 

@@ -1345,7 +1345,7 @@ const NOT_A_LIST: Array<[string, string]> = [
       'workspace’s sites.',
   ],
   [
-    'apps/console/components/staff-org-ai-card.component.tsx',
+    'libs/plugins/ai/src/lib/components/staff-org-ai-card.component.tsx',
     'Staff previews, each capped by the route (AGL-2930): the ' +
       '`JOBS_RECENT` (10) most recent generation jobs, and the ' +
       '`TOP_USERS` (10) dearest members this month. The counts beside the ' +

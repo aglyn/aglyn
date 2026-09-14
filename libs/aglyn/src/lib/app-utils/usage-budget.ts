@@ -18,7 +18,7 @@
 // The ONE unit conversion between our provider bill and what a customer is
 // shown. Imported here so `publicOrgMonthlySpend` cannot grow a second copy of
 // it — see that function, and the module header of `assist-credits.ts`.
-import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistCreditsFromUsd } from './assist-credits'
 
 /**
  * Per-org USAGE BUDGETS, modelled on a Google Cloud billing budget (AGL-1528).

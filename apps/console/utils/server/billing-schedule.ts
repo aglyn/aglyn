@@ -24,7 +24,7 @@ import {
   isMeteredPriceId,
   type AddonKind,
   type BillingInterval,
-} from './billing-addons'
+} from '@aglyn/tenant-data-admin/server/billing-addons'
 
 /** One item as a `subscription_schedules` phase wants it. */
 export interface PhaseItem {

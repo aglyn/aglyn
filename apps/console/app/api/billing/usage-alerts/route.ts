@@ -83,7 +83,7 @@ import {
   BUDGET_GUARD_KEY,
   orgMonthlySpend,
   resolveUsageBudget,
-} from '../../../../utils/usage-budget'
+} from '@aglyn/aglyn/app-utils/usage-budget'
 import {
   consoleOrigin,
   emailFailureReason,

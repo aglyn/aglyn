@@ -36,16 +36,16 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import type { StaffOrgAiResponse } from '../utils/staff-org-ai'
+import type { StaffOrgAiResponse } from '../usage/staff-org-ai'
 
 jest.mock('@aglyn/aglyn', () => ({
   __esModule: true,
   aiAddonName: () => 'Acme AI',
 }))
 
-jest.mock('../constants/docs-links', () => ({
+jest.mock('@aglyn/aglyn/app-utils/docs-help', () => ({
   __esModule: true,
-  docsHelp: () => undefined,
+  pluginDocsHelp: () => undefined,
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
@@ -58,14 +58,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
 }))
 
+/** ONE signed-in staff user, held: a provider hands back the same instance. */
+const mockStaffUser = { uid: 'staff-1', getIdToken: async () => 'tok' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
-  useUser: () => ({ data: { uid: 'staff-1', getIdToken: async () => 'tok' } }),
-}))
-
-jest.mock('../hooks/use-is-staff', () => ({
-  __esModule: true,
-  useIsStaff: () => true,
+  useUser: () => ({ data: mockStaffUser }),
 }))
 
 let mockAnswer: { ok: boolean; status: number; payload: unknown }
@@ -167,16 +164,21 @@ beforeEach(() => {
 
 describe('StaffOrgAiCard (AGL-2930)', () => {
   it('is mounted on the staff org page between entitlements and metered usage', () => {
-    const source = readFileSync(
-      join(__dirname, '../app/(app)/admin/orgs/[orgId]/page.tsx'),
+    // Through the `staffOrg` zone the page draws in that position, with this
+    // card registered on it.
+    const repo = join(__dirname, '..', '..', '..', '..', '..', '..')
+    const page = readFileSync(
+      join(repo, 'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx'),
       'utf8',
     )
-    const entitlements = source.indexOf("header={'Effective entitlements'}")
-    const card = source.indexOf('<StaffOrgAiCard orgId={orgId} />')
-    const usage = source.indexOf("header={'Metered usage'}")
+    const entitlements = page.indexOf("header={'Effective entitlements'}")
+    const zone = page.indexOf('<PluginWidgetSlot slot="staffOrg" orgId={orgId} />')
+    const usage = page.indexOf("header={'Metered usage'}")
     expect(entitlements).toBeGreaterThan(0)
-    expect(card).toBeGreaterThan(entitlements)
-    expect(usage).toBeGreaterThan(card)
+    expect(zone).toBeGreaterThan(entitlements)
+    expect(usage).toBeGreaterThan(zone)
+    const plugin = readFileSync(join(repo, 'libs/plugins/ai/src/lib/plugin.ts'), 'utf8')
+    expect(plugin).toMatch(/slot: 'staffOrg',[\s\S]{0,120}Component: StaffOrgAiCard/)
   })
 
   it('names the add-on as on, at its price, since its Stripe date', async () => {

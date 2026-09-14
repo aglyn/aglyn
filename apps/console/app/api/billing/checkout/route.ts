@@ -42,7 +42,7 @@ import {
   addonPriceId,
   addonUnitUsd,
   meteredPriceId,
-} from '../../../../utils/server/billing-addons'
+} from '@aglyn/tenant-data-admin/server/billing-addons'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay

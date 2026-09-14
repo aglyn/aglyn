@@ -22,8 +22,8 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { readUserAiUsageMonths } from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
-import { recordAdminAudit } from '../../../_lib/admin-audit'
-import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
+import { recordAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**
  * ONE ACCOUNT'S AI USAGE ACROSS ORGANIZATIONS (AGL-2928) — the staff user
@@ -97,7 +97,7 @@ async function handler(request: Request): Promise<Response> {
         note: `AI usage opened across ${reverse.size} workspace(s)`,
       })
     } catch (error) {
-      console.error('[admin/users/ai-usage] audit write failed', error)
+      console.error('[ai/admin/user] audit write failed', error)
     }
 
     const rows: StaffUserAiUsageRow[] = []
@@ -128,10 +128,9 @@ async function handler(request: Request): Promise<Response> {
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
-    console.error('[admin/users/ai-usage]', error)
+    console.error('[ai/admin/user]', error)
     return Response.json({ error: 'AI usage lookup failed' }, { status: 500 })
   }
 }
 
-export const dynamic = 'force-dynamic'
 export { handler as GET }

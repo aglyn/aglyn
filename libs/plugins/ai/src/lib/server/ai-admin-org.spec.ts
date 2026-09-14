@@ -21,7 +21,7 @@
  */
 
 /**
- * `/api/admin/org-ai` (AGL-2930) backs the staff AI card, so three things
+ * `/api/ai/admin/org` (AGL-2930) backs the staff AI card, so three things
  * get pinned: the staff gate (401 / 403 / 200, the same contract as
  * `org-usage`), the ACCESS audit row an open writes — action, target, and
  * that no subject is named — and the composition, asserted against the real
@@ -93,7 +93,7 @@ jest.mock('@aglyn/tenant-data-admin/server/assist-usage', () => ({
   assistUsageMonth: () => '2026-09',
 }))
 
-jest.mock('../app/api/_lib/admin-audit', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/admin-audit', () => ({
   __esModule: true,
   recordAdminAudit: (...args: unknown[]) => mockRecordAdminAudit(...(args as [])),
 }))
@@ -118,17 +118,15 @@ import {
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { GET, resetAddonSinceCache } from '../app/api/admin/org-ai/route'
-import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
-
-// The AI add-on's band is the AI plugin's declaration (AGL-2939): without it
-// the pool resolves no add-on credits at all.
-beforeAll(() => registerPluginDeclarations())
+import { GET, resetAddonSinceCache } from './ai-admin-org'
+// The AI add-on's band is this plugin's declaration: without it the pool
+// resolves no add-on credits at all.
+import '../declarations'
 
 const get = (opts: { token?: string; orgId?: string } = {}) =>
   GET(
     new Request(
-      `https://app.aglyn.com/api/admin/org-ai?orgId=${opts.orgId ?? 'org-1'}`,
+      `https://app.aglyn.com/api/ai/admin/org?orgId=${opts.orgId ?? 'org-1'}`,
       {
         headers: opts.token ? { authorization: `Bearer ${opts.token}` } : {},
       },
@@ -142,7 +140,7 @@ const staff = () =>
     staff: true,
   })
 
-describe('/api/admin/org-ai (AGL-2930)', () => {
+describe('/api/ai/admin/org (AGL-2930)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     resetAddonSinceCache()

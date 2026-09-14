@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-// From the LEAVES: the barrel reaches the admin SDK and route specs mock it
-// wholesale. A mocked-away resolver silently answers "no subject", which is
-// indistinguishable from the refusal-to-guess this module now relies on.
-import { attributableAccountForAddress } from '@aglyn/tenant-data-admin/server/account-addresses'
-import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppression'
+import { isPluginStaffAuditAccess } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
+import { attributableAccountForAddress } from './account-addresses'
+import { emailSuppressionKey } from './email-suppression'
+import { firebaseAdmin } from './firebase-admin'
 
 /**
  * THE STAFF AUDIT TRAIL: WHO A ROW IS ABOUT, AND HOW MANY TIMES IT HAPPENED.
@@ -80,18 +78,19 @@ export type AdminAuditKind = 'access' | 'change'
  */
 const ADMIN_AUDIT_ACCESS_ACTIONS: ReadonlySet<string> = new Set([
   'email.message-viewed',
-  // The staff AI card opening on an org (AGL-2930): a read of spend and
-  // per-user attribution, and nothing altered.
-  'org.ai-viewed',
-  // The staff user page's AI usage card (AGL-2928): one account's months
-  // across its workspaces, read and nothing altered.
-  'user.ai-usage-viewed',
 ])
 
+/**
+ * An access when the platform or a plugin declares the action a read — a
+ * plugin's staff card opening on an org or an account names its own read
+ * actions through its activity group (AGL-2939) — and a change otherwise.
+ */
 export function adminAuditKind(
   action: string | null | undefined,
 ): AdminAuditKind {
-  return action && ADMIN_AUDIT_ACCESS_ACTIONS.has(action) ? 'access' : 'change'
+  return action && (ADMIN_AUDIT_ACCESS_ACTIONS.has(action) || isPluginStaffAuditAccess(action))
+    ? 'access'
+    : 'change'
 }
 
 export interface AdminAuditWrite {

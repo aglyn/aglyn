@@ -36,7 +36,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { aiUsageMonthLabel } from '../usage/ai-usage-wire'
 
-/** One row, as `/api/admin/users/ai-usage` answers it. */
+/** One row, as `/api/ai/admin/user` answers it. */
 export interface StaffUserAiUsageRow {
   orgId: string
   orgName: string | null
@@ -82,7 +82,7 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
       try {
         const response = await authorizedFetch(
           user,
-          `/api/admin/users/ai-usage?uid=${encodeURIComponent(uid)}`,
+          `/api/ai/admin/user?uid=${encodeURIComponent(uid)}`,
         )
         const payload = await response.json().catch(() => null)
         if (!active) return

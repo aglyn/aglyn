@@ -17,6 +17,8 @@
 'use client'
 
 import { aiAddonName } from '@aglyn/aglyn'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -31,10 +33,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { useEffect, useState } from 'react'
-import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '../constants/route-links'
-import { useIsStaff } from '../hooks/use-is-staff'
+import { useEffect, useRef, useState } from 'react'
 import type {
   StaffOrgAiJobs,
   StaffOrgAiMargin,
@@ -42,15 +41,15 @@ import type {
   StaffOrgAiPool,
   StaffOrgAiRefusals,
   StaffOrgAiResponse,
-} from '../utils/staff-org-ai'
+} from '../usage/staff-org-ai'
 
 /**
  * THE STAFF AI CARD (AGL-2930): everything about one org's AI usage on the
  * page staff already open to look at that org.
  *
- * Read through `/api/admin/org-ai`, one request on mount. Every figure on it
+ * Read through `/api/ai/admin/org`, one request on mount. Every figure on it
  * is the route's, and every figure the route serves is composed from the
- * same helpers the meter refuses with — see `utils/staff-org-ai.ts`. This
+ * same helpers the meter refuses with — see `usage/staff-org-ai.ts`. This
  * file only lays them out.
  *
  * ## What each section is for
@@ -228,16 +227,22 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
 
 const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
   const { data: user } = useUser()
-  const isStaff = useIsStaff()
+  // Keyed on who is signed in, not on the user object's identity.
+  const signedInUid = user?.uid ?? null
+  const userRef = useRef(user)
+  userRef.current = user
   const [data, setData] = useState<StaffOrgAiResponse | null>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Gated on `isStaff === true`, never on its loading `null` — the route
-    // records an access row on every successful open, so an open the page
-    // did not mean to make would be an access nobody made.
-    if (isStaff !== true || !orgId || !user) return undefined
+    // Mounted only for a confirmed staff reader — the `staffOrg` zone sits
+    // inside the page's `StaffOnly`, which renders nothing while the claim
+    // loads — because the route records an access row on every successful
+    // open, and an open the page did not mean to make would be an access
+    // nobody made.
+    const user = userRef.current
+    if (!orgId || !signedInUid || !user) return undefined
     let active = true
     setReady(false)
     setError(null)
@@ -245,7 +250,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
       try {
         const response = await authorizedFetch(
           user,
-          `/api/admin/org-ai?orgId=${encodeURIComponent(orgId)}`,
+          `/api/ai/admin/org?orgId=${encodeURIComponent(orgId)}`,
         )
         const payload = await response.json().catch(() => null)
         if (!active) return
@@ -267,13 +272,13 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
     return () => {
       active = false
     }
-  }, [isStaff, orgId, user])
+  }, [orgId, signedInUid])
 
   const name = aiAddonName()
   return (
     <CardDisplay
       header={name}
-      help={docsHelp('aiMonitoring', {
+      help={pluginDocsHelp('aiMonitoring', {
         anchor: '#the-ai-card',
         excerpt:
           'The add-on, the credit pool and its parts, this month’s overage and refusals, generation jobs, the people spending the most, and the margin — for this organization.',

@@ -16,6 +16,7 @@
  */
 
 import {
+  isLiveSubscriptionStatus,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
   isLiveSubscriptionStatus,
@@ -31,14 +32,14 @@ import {
 import { assistUsageMonth } from '@aglyn/tenant-data-admin/server/assist-usage'
 import { assistRefusalCounts } from '@aglyn/tenant-data-admin/server/assist-refusals'
 import { readOrgAiUsageByUser } from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
-import { recordAdminAudit } from '../../_lib/admin-audit'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { addonKindFromPriceId } from '../../../../utils/server/billing-addons'
-import { orgMarginRow } from '../../../../utils/margin-utilization'
+import { recordAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { addonKindFromPriceId } from '@aglyn/tenant-data-admin/server/billing-addons'
+import { orgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
 import {
   assistCogsAlertThresholdUsd,
   assistMarginMultiple,
-} from '../../../../utils/usage-budget'
+} from '@aglyn/aglyn/app-utils/usage-budget'
 import {
   composeStaffOrgAiAddon,
   composeStaffOrgAiMargin,
@@ -51,7 +52,7 @@ import {
   type StaffOrgAiJobs,
   type StaffOrgAiResponse,
   type StaffOrgAiUser,
-} from '../../../../utils/staff-org-ai'
+} from '../usage/staff-org-ai'
 
 /**
  * THE STAFF AI CARD'S BACKING READ (AGL-2930).
@@ -146,7 +147,7 @@ async function readAddonSince(orgId: string): Promise<AddonSince> {
     )
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
-      console.error('[admin/org-ai] Stripe subscription lookup failed', {
+      console.error('[ai/admin/org] Stripe subscription lookup failed', {
         orgId,
         status: response.status,
         detail: payload?.error?.message ?? null,
@@ -178,7 +179,7 @@ async function readAddonSince(orgId: string): Promise<AddonSince> {
     }
     return { since: null, sinceSource: 'stripe', at }
   } catch (error) {
-    console.error('[admin/org-ai] Stripe subscription lookup threw', error)
+    console.error('[ai/admin/org] Stripe subscription lookup threw', error)
     return { since: null, sinceSource: 'unavailable', at }
   }
 }
@@ -242,7 +243,7 @@ export async function readOrgAiJobsSummary(
     }
     return { counts, recent, truncated }
   } catch (error) {
-    console.error('[admin/org-ai] jobs read failed', error)
+    console.error('[ai/admin/org] jobs read failed', error)
     return null
   }
 }
@@ -275,7 +276,7 @@ async function readOrgAiTopUsers(
       byHost: row.byHost,
     }))
   } catch (error) {
-    console.error('[admin/org-ai] per-user read failed', error)
+    console.error('[ai/admin/org] per-user read failed', error)
     return []
   }
 }
@@ -345,7 +346,7 @@ async function handler(request: Request): Promise<Response> {
         note: `AI card opened for ${month}`,
       })
     } catch (error) {
-      console.error('[admin/org-ai] audit write failed', error)
+      console.error('[ai/admin/org] audit write failed', error)
     }
 
     const [jobs, users, since] = await Promise.all([
@@ -409,10 +410,9 @@ async function handler(request: Request): Promise<Response> {
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
-    console.error('[admin/org-ai]', error)
+    console.error('[ai/admin/org]', error)
     return Response.json({ error: 'AI lookup failed' }, { status: 500 })
   }
 }
 
-export const dynamic = 'force-dynamic'
 export { handler as GET }

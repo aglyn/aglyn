@@ -66,7 +66,7 @@ import {
   addonQuantitiesFromItems,
   findPlanItem,
   planFromPriceId,
-} from '../../../../utils/server/billing-addons'
+} from '@aglyn/tenant-data-admin/server/billing-addons'
 import {
   backfillMeteredItem,
   meteredBackfillDecision,

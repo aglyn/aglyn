@@ -28,7 +28,7 @@ import {
   maskEmailAddresses,
   recordAdminAudit,
   subjectAddressKeyForRecipients,
-} from '../../../_lib/admin-audit'
+} from '@aglyn/tenant-data-admin/server/admin-audit'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 /**

@@ -50,7 +50,7 @@ import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
 import {
   isMeteredPriceId,
   meteredPriceId,
-} from '../../../../utils/server/billing-addons'
+} from '@aglyn/tenant-data-admin/server/billing-addons'
 import {
   currentMonth,
   monthIsClosed,

@@ -26,7 +26,7 @@ import {
   type ContactChannel,
   type LegalAcceptanceStatus,
 } from '@aglyn/tenant-data-admin'
-import { adminAuditKind } from '../../../_lib/admin-audit'
+import { adminAuditKind } from '@aglyn/tenant-data-admin/server/admin-audit'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
 import { type DeviceRow, readDeviceRows } from '../../../_lib/device-registry'

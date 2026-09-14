@@ -219,6 +219,9 @@ registerPluginActivityActions({
     staffAuditPrefixes: AI_STAFF_AUDIT_ACTION_PREFIXES.filter(
       (prefix) => prefix !== 'ai.',
     ),
+    // The staff cards opening on an org (AGL-2930) and on one account
+    // (AGL-2928): reads of spend and attribution, and nothing altered.
+    staffAuditAccessActions: ['org.ai-viewed', 'user.ai-usage-viewed'],
   },
   actions: AI_ACTIVITY_ACTION_LIST.map((key) => ({
     key,
