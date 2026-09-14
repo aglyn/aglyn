@@ -91,6 +91,14 @@ export const TTL_POLICIES = Object.freeze([
     why: 'verbatim Assist exchanges, 180 days',
   },
   {
+    collection: 'aiJobs',
+    field: 'expiresAt',
+    // AGL-2904 — an AI generation job holds the customer's brief verbatim, the
+    // step ledger and the creating uid. `createAiJob` stamps the same 180-day
+    // clock as an Assist exchange.
+    why: 'AI generation jobs (verbatim brief), 180 days',
+  },
+  {
     collection: 'churnSurveyDetails',
     field: 'expiresAt',
     // AGL-1978 — churn survey free text, split out so it can expire without
