@@ -780,7 +780,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
       starter: '—',
       pro: '$3',
       business: '$2.75',
-      scale: '$2.5',
+      scale: '$2.50',
       advanced: '$2.25',
       agency: '$2',
       enterprise: 'Custom',
