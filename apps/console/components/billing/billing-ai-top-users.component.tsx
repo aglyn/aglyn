@@ -18,6 +18,7 @@
 
 import { aiAddonName, countCsvDataRows, topAiUsageKinds } from '@aglyn/aglyn'
 import { AppLink } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -34,7 +35,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../../constants/shared'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgAiUsage } from '../../hooks/use-org-ai-usage'
 import {
@@ -75,6 +77,12 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
   const [month, setMonth] = useState<string | undefined>(undefined)
   const [exporting, setExporting] = useState(false)
   const usage = useOrgAiUsage(orgId, { month })
+  // One row per member, so the table pages in memory over the month it read.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  useEffect(() => {
+    setPage(0)
+  }, [usage.month])
   const name = aiAddonName()
 
   const handleExport = useCallback(async () => {
@@ -117,6 +125,7 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
   }, [orgId, exporting, usage.month, user, enqueueSnackbar])
 
   const rows = usage.data?.rows ?? []
+  const visible = rows.slice(page * pageSize, page * pageSize + pageSize)
 
   return (
     <Stack spacing={1.5}>
@@ -168,47 +177,60 @@ export function BillingAiTopUsersComponent(props: BillingAiTopUsersProps) {
           {`No ${name} usage attributed to a member in ${aiUsageMonthLabel(usage.month)}.`}
         </Typography>
       ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{'Member'}</TableCell>
-              <TableCell align="right">{'Credits'}</TableCell>
-              <TableCell align="right">{'Share'}</TableCell>
-              <TableCell align="right">{'Requests'}</TableCell>
-              <TableCell align="right">{'Refusals'}</TableCell>
-              <TableCell>{'Mostly'}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.uid} hover>
-                <TableCell>
-                  <AppLink
-                    href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug, uid: row.uid })}
-                    color="inherit"
-                    underline="hover"
-                  >
-                    {row.name}
-                  </AppLink>
-                  {row.email && row.email !== row.name ? (
-                    <Typography variant="caption" color="text.secondary" component="div">
-                      {row.email}
-                    </Typography>
-                  ) : null}
-                </TableCell>
-                <TableCell align="right">{row.credits.toLocaleString()}</TableCell>
-                <TableCell align="right">{formatAiUsageShare(row.share)}</TableCell>
-                <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
-                <TableCell align="right">{row.refusals.toLocaleString()}</TableCell>
-                <TableCell>
-                  {topAiUsageKinds(row.byKind, 2)
-                    .map((entry) => entry.kind)
-                    .join(', ') || '—'}
-                </TableCell>
+        <>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>{'Member'}</TableCell>
+                <TableCell align="right">{'Credits'}</TableCell>
+                <TableCell align="right">{'Share'}</TableCell>
+                <TableCell align="right">{'Requests'}</TableCell>
+                <TableCell align="right">{'Refusals'}</TableCell>
+                <TableCell>{'Mostly'}</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {visible.map((row) => (
+                <TableRow key={row.uid} hover>
+                  <TableCell>
+                    <AppLink
+                      href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug, uid: row.uid })}
+                      color="inherit"
+                      underline="hover"
+                    >
+                      {row.name}
+                    </AppLink>
+                    {row.email && row.email !== row.name ? (
+                      <Typography variant="caption" color="text.secondary" component="div">
+                        {row.email}
+                      </Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell align="right">{row.credits.toLocaleString()}</TableCell>
+                  <TableCell align="right">{formatAiUsageShare(row.share)}</TableCell>
+                  <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.refusals.toLocaleString()}</TableCell>
+                  <TableCell>
+                    {topAiUsageKinds(row.byKind, 2)
+                      .map((entry) => entry.kind)
+                      .join(', ') || '—'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visible.length}
+            count={rows.length}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setPage(0)
+            }}
+          />
+        </>
       )}
     </Stack>
   )

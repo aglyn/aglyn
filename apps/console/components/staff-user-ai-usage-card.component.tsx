@@ -18,6 +18,7 @@
 
 import { aiAddonName } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -30,6 +31,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import { useIsStaff } from '../hooks/use-is-staff'
@@ -60,12 +62,17 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
   const [rows, setRows] = useState<StaffUserAiUsageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
+  // One row per workspace per month kept, paged in memory over the one read.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const visible = (rows ?? []).slice(page * pageSize, page * pageSize + pageSize)
 
   useEffect(() => {
     if (isStaff !== true || !uid || !user) return undefined
     let active = true
     setReady(false)
     setError(null)
+    setPage(0)
     void (async () => {
       try {
         const response = await authorizedFetch(
@@ -118,36 +125,49 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
           {'No AI usage attributed to this account in any workspace it belongs to.'}
         </Typography>
       ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{'Organization'}</TableCell>
-              <TableCell>{'Month'}</TableCell>
-              <TableCell align="right">{'Credits'}</TableCell>
-              <TableCell align="right">{'Requests'}</TableCell>
-              <TableCell align="right">{'Refusals'}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={`${row.orgId}-${row.month}`}>
-                <TableCell>
-                  <AppLink
-                    href={buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: row.orgId })}
-                    color="primary"
-                    underline="hover"
-                  >
-                    {row.orgName ?? row.orgId}
-                  </AppLink>
-                </TableCell>
-                <TableCell>{aiUsageMonthLabel(row.month)}</TableCell>
-                <TableCell align="right">{row.credits.toLocaleString()}</TableCell>
-                <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
-                <TableCell align="right">{row.refusals.toLocaleString()}</TableCell>
+        <>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>{'Organization'}</TableCell>
+                <TableCell>{'Month'}</TableCell>
+                <TableCell align="right">{'Credits'}</TableCell>
+                <TableCell align="right">{'Requests'}</TableCell>
+                <TableCell align="right">{'Refusals'}</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {visible.map((row) => (
+                <TableRow key={`${row.orgId}-${row.month}`}>
+                  <TableCell>
+                    <AppLink
+                      href={buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: row.orgId })}
+                      color="primary"
+                      underline="hover"
+                    >
+                      {row.orgName ?? row.orgId}
+                    </AppLink>
+                  </TableCell>
+                  <TableCell>{aiUsageMonthLabel(row.month)}</TableCell>
+                  <TableCell align="right">{row.credits.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.refusals.toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={visible.length}
+            count={rows.length}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setPage(0)
+            }}
+          />
+        </>
       )}
     </CardDisplay>
   )

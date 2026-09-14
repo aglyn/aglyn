@@ -1337,6 +1337,20 @@ const NOT_A_LIST: Array<[string, string]> = [
       'two records being folded, which is the schema and not a collection. ' +
       'A pager under a search box pages what the box already filters.',
   ],
+  [
+    'apps/console/components/member-ai-usage-card.component.tsx',
+    'One member’s AI usage (AGL-2928): exactly two month rows, this ' +
+      'month and last, requested at `limit: 2`, and beneath them one row ' +
+      'per site that member generated on in those months, bounded by the ' +
+      'workspace’s sites.',
+  ],
+  [
+    'apps/console/components/staff-org-ai-card.component.tsx',
+    'Staff previews, each capped by the route (AGL-2930): the ' +
+      '`JOBS_RECENT` (10) most recent generation jobs, and the ' +
+      '`TOP_USERS` (10) dearest members this month. The counts beside the ' +
+      'jobs table are the whole population; the rows are a sample of it.',
+  ],
 ]
 
 /**
@@ -1652,7 +1666,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // under its own limit and scanned at once, and the services picker
     // inside the booking-link dialog, which is dismissed as soon as one is
     // chosen. Neither is a view of a collection a customer grows.
-    expect(NOT_A_LIST).toHaveLength(55)
+    //
+    // 57 since Aglyn AI gained its usage surfaces (AGL-2928, AGL-2930): one
+    // member's two months with the sites beneath them, and the staff org
+    // card's ten most recent jobs and ten dearest members, each capped by a
+    // constant at the route.
+    expect(NOT_A_LIST).toHaveLength(57)
   })
 })
 
