@@ -54,11 +54,11 @@ import { normalizeContactEmail } from './contacts'
  *
  * Trimmed and lower-cased by `normalizeContactEmail`, the function every
  * member address and every message address is compared through, so an
- * alias typed `Zach@Aglyn.IO ` matches a From of `zach@aglyn.io`. Plus
+ * alias typed `Avery@Example.ORG ` matches a From of `avery@example.org`. Plus
  * addressing is NOT folded, for the reason `account-emails.ts` gives:
  * `a+b@x.com` is another mailbox almost everywhere but Gmail, so
- * `zach+news@aglyn.io` is a different address from a confirmed
- * `zach@aglyn.io`, exactly as it is from a sign-in address of that name.
+ * `avery+news@example.org` is a different address from a confirmed
+ * `avery@example.org`, exactly as it is from a sign-in address of that name.
  */
 
 /** The collection under an org that holds each member's added addresses. */

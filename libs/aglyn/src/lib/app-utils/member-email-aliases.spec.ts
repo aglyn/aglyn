@@ -45,7 +45,7 @@ describe('reading a stored document', () => {
     expect(
       readMemberEmailAliases({
         aliases: [
-          { address: '  Zach@Aglyn.IO ', addedAtMs: 10, verifiedAtMs: 20 },
+          { address: '  Avery@Example.ORG ', addedAtMs: 10, verifiedAtMs: 20 },
           { address: 'not an address', addedAtMs: 11 },
           { address: 'ops@aglyn.io', addedAtMs: 0 },
           { address: 'sales@aglyn.io', addedAtMs: 12, verifiedAtMs: 'yesterday' },
@@ -53,11 +53,11 @@ describe('reading a stored document', () => {
         ],
       }),
     ).toEqual([
-      { address: 'zach@aglyn.io', addedAtMs: 10, verifiedAtMs: 20 },
+      { address: 'avery@example.org', addedAtMs: 10, verifiedAtMs: 20 },
       { address: 'sales@aglyn.io', addedAtMs: 12 },
     ])
     expect(readMemberEmailAliases(undefined)).toEqual([])
-    expect(readMemberEmailAliases({ aliases: 'zach@aglyn.io' })).toEqual([])
+    expect(readMemberEmailAliases({ aliases: 'avery@example.org' })).toEqual([])
   })
 
   it('keeps the first entry of a repeated address and never more than the ceiling', () => {
@@ -69,16 +69,16 @@ describe('reading a stored document', () => {
     expect(
       readMemberEmailAliases({
         aliases: [
-          { address: 'zach@aglyn.io', addedAtMs: 1 },
-          { address: 'ZACH@aglyn.io', addedAtMs: 2, verifiedAtMs: 3 },
+          { address: 'avery@example.org', addedAtMs: 1 },
+          { address: 'AVERY@example.org', addedAtMs: 2, verifiedAtMs: 3 },
         ],
       }),
-    ).toEqual([{ address: 'zach@aglyn.io', addedAtMs: 1 }])
+    ).toEqual([{ address: 'avery@example.org', addedAtMs: 1 }])
   })
 
   it('answers only the CONFIRMED addresses to a reader deciding whose an address is', () => {
-    const document = { aliases: [confirmed('zach@aglyn.io'), pending('typo@aglyn.io')] }
-    expect(verifiedMemberEmailAliases(document)).toEqual(['zach@aglyn.io'])
+    const document = { aliases: [confirmed('avery@example.org'), pending('typo@aglyn.io')] }
+    expect(verifiedMemberEmailAliases(document)).toEqual(['avery@example.org'])
     expect(isVerifiedMemberEmailAlias(pending('typo@aglyn.io'))).toBe(false)
     expect(isVerifiedMemberEmailAlias({ verifiedAtMs: Number.NaN })).toBe(false)
     expect(isVerifiedMemberEmailAlias(null)).toBe(false)
@@ -87,30 +87,30 @@ describe('reading a stored document', () => {
 
 describe('normalization, the same as a sign-in address', () => {
   it('folds case and whitespace, and keeps plus addressing as another address', () => {
-    expect(normalizeMemberEmailAlias('  Zach@Aglyn.IO\t')).toBe('zach@aglyn.io')
-    expect(normalizeMemberEmailAlias('zach+news@aglyn.io')).toBe('zach+news@aglyn.io')
-    expect(normalizeMemberEmailAlias('zach')).toBeNull()
+    expect(normalizeMemberEmailAlias('  Avery@Example.ORG\t')).toBe('avery@example.org')
+    expect(normalizeMemberEmailAlias('avery+news@example.org')).toBe('avery+news@example.org')
+    expect(normalizeMemberEmailAlias('avery')).toBeNull()
   })
 
   it('reads a member’s addresses — sign-in first, then confirmed aliases — each once', () => {
     expect(
       memberEmailAddresses({
-        email: 'Zach@Aglyn.com',
-        verifiedAliases: [' zach@aglyn.io', 'ZACH@AGLYN.IO', 'zach@aglyn.com'],
+        email: 'Avery@Example.com',
+        verifiedAliases: [' avery@example.org', 'AVERY@EXAMPLE.ORG', 'avery@example.com'],
       }),
-    ).toEqual(['zach@aglyn.com', 'zach@aglyn.io'])
+    ).toEqual(['avery@example.com', 'avery@example.org'])
     expect(memberEmailAddresses({ email: '' })).toEqual([])
     expect(memberEmailAddresses(null)).toEqual([])
   })
 })
 
 describe('whose address it is', () => {
-  const zach = { uid: 'u-zach', email: 'zach@aglyn.com', verifiedAliases: ['zach@aglyn.io'] }
+  const avery = { uid: 'u-avery', email: 'avery@example.com', verifiedAliases: ['avery@example.org'] }
   const kim = { uid: 'u-kim', email: 'kim@aglyn.com', verifiedAliases: ['sales@aglyn.io'] }
   const sam = { uid: 'u-sam', email: 'sam@aglyn.com', verifiedAliases: ['sales@aglyn.io'] }
 
   it('finds the member by a confirmed alias, in any case or spacing', () => {
-    expect(findMemberByEmailAddress([kim, zach], ' ZACH@aglyn.io ')?.uid).toBe('u-zach')
+    expect(findMemberByEmailAddress([kim, avery], ' AVERY@example.org ')?.uid).toBe('u-avery')
   })
 
   it('lets a sign-in address decide over an alias somebody else confirmed', () => {
@@ -119,37 +119,37 @@ describe('whose address it is', () => {
   })
 
   it('names nobody for an alias two members confirmed, or a plus-addressed variant', () => {
-    expect(findMemberByEmailAddress([zach, kim, sam], 'sales@aglyn.io')).toBeNull()
-    expect(findMemberByEmailAddress([zach], 'zach+news@aglyn.io')).toBeNull()
-    expect(findMemberByEmailAddress([zach], 'not an address')).toBeNull()
+    expect(findMemberByEmailAddress([avery, kim, sam], 'sales@aglyn.io')).toBeNull()
+    expect(findMemberByEmailAddress([avery], 'avery+news@example.org')).toBeNull()
+    expect(findMemberByEmailAddress([avery], 'not an address')).toBeNull()
   })
 })
 
 describe('adding an address', () => {
-  const base = { signInEmail: 'zach@aglyn.com', reservedDomains: ['in.aglyn.com'] }
+  const base = { signInEmail: 'avery@example.com', reservedDomains: ['in.aglyn.com'] }
 
   it('accepts a new address, normalized', () => {
-    expect(evaluateMemberEmailAliasAdd({ ...base, address: ' Zach@Aglyn.IO', aliases: [] })).toEqual({
+    expect(evaluateMemberEmailAliasAdd({ ...base, address: ' Avery@Example.ORG', aliases: [] })).toEqual({
       ok: true,
-      address: 'zach@aglyn.io',
+      address: 'avery@example.org',
       existing: null,
     })
   })
 
   it('answers an unconfirmed duplicate with the entry, so the caller sends another link', () => {
-    const entry = pending('zach@aglyn.io', 42)
+    const entry = pending('avery@example.org', 42)
     expect(
-      evaluateMemberEmailAliasAdd({ ...base, address: 'zach@aglyn.io', aliases: [entry] }),
-    ).toEqual({ ok: true, address: 'zach@aglyn.io', existing: entry })
+      evaluateMemberEmailAliasAdd({ ...base, address: 'avery@example.org', aliases: [entry] }),
+    ).toEqual({ ok: true, address: 'avery@example.org', existing: entry })
   })
 
   it.each([
     ['not an address', [], 'invalid-address'],
-    ['"Zach" <zach@aglyn.io>', [], 'invalid-address'],
-    ['zach,ops@aglyn.io', [], 'invalid-address'],
-    [' ZACH@aglyn.com', [], 'sign-in-address'],
+    ['"Avery" <avery@example.org>', [], 'invalid-address'],
+    ['avery,ops@aglyn.io', [], 'invalid-address'],
+    [' AVERY@example.com', [], 'sign-in-address'],
     [`crm+${'a'.repeat(32)}@in.aglyn.com`, [], 'reserved-domain'],
-    ['zach@aglyn.io', [confirmed('zach@aglyn.io')], 'already-confirmed'],
+    ['avery@example.org', [confirmed('avery@example.org')], 'already-confirmed'],
   ] as const)('refuses %s', (address, aliases, refusal) => {
     expect(evaluateMemberEmailAliasAdd({ ...base, address, aliases })).toMatchObject({
       ok: false,

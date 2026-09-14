@@ -170,18 +170,18 @@ beforeEach(() => {
   delete process.env['AUTH_ACTION_ALLOWED_ORIGINS']
   delete process.env['CRM_INBOUND_DOMAIN']
   mockStore.set(`orgs/${ORG}`, { name: 'Acme' })
-  mockStore.set(`orgs/${ORG}/members/u-zach`, {
+  mockStore.set(`orgs/${ORG}/members/u-avery`, {
     role: 'admin',
-    email: 'zach@aglyn.com',
-    displayName: 'Zach Gover',
+    email: 'avery@example.com',
+    displayName: 'Avery Quinn',
   })
   mockStore.set(`orgs/${ORG}/members/u-kim`, { role: 'editor', email: 'kim@aglyn.com' })
-  mockSessions.set('zach', { uid: 'u-zach', email: 'zach@aglyn.com', email_verified: true })
+  mockSessions.set('avery', { uid: 'u-avery', email: 'avery@example.com', email_verified: true })
   mockSessions.set('kim', { uid: 'u-kim', email: 'kim@aglyn.com', email_verified: true })
   mockSessions.set('outsider', { uid: 'u-out', email: 'out@else.example', email_verified: true })
-  mockSessions.set('staff-as-zach', {
-    uid: 'u-zach',
-    email: 'zach@aglyn.com',
+  mockSessions.set('staff-as-avery', {
+    uid: 'u-avery',
+    email: 'avery@example.com',
     email_verified: false,
     impersonatedBy: 'u-staff',
   })
@@ -193,14 +193,14 @@ describe('/api/orgs/members/email-aliases', () => {
     expect((await call('GET', { query: `?orgId=${ORG}` })).status).toBe(401)
     expect((await call('GET', { token: 'forged', query: `?orgId=${ORG}` })).status).toBe(401)
     expect((await call('GET', { token: 'unverified', query: `?orgId=${ORG}` })).status).toBe(403)
-    expect((await call('PUT', { token: 'zach' })).status).toBe(405)
-    expect((await call('POST', { token: 'zach', body: { orgId: ORG, action: 'grant' } })).status).toBe(400)
+    expect((await call('PUT', { token: 'avery' })).status).toBe(405)
+    expect((await call('POST', { token: 'avery', body: { orgId: ORG, action: 'grant' } })).status).toBe(400)
   })
 
   it('refuses somebody who is not a member of the workspace', async () => {
     const response = await call('POST', {
       token: 'outsider',
-      body: { orgId: ORG, action: 'add', address: 'zach@aglyn.io' },
+      body: { orgId: ORG, action: 'add', address: 'avery@example.org' },
     })
     expect(response.status).toBe(403)
     expect(mockSent).toHaveLength(0)
@@ -208,65 +208,65 @@ describe('/api/orgs/members/email-aliases', () => {
 
   it('adds an address, mails a link on the console origin whatever Origin was sent, and confirms it for the member', async () => {
     const added = await call('POST', {
-      token: 'zach',
+      token: 'avery',
       origin: 'https://attacker.example',
-      body: { orgId: ORG, action: 'add', address: ' Zach@Aglyn.IO', returnPath: '/acme/crm/settings' },
+      body: { orgId: ORG, action: 'add', address: ' Avery@Example.ORG', returnPath: '/acme/crm/settings' },
     })
     expect(added.status).toBe(200)
     expect(await added.json()).toEqual({
       ok: true,
       sent: true,
-      alias: { address: 'zach@aglyn.io', addedAtMs: expect.any(Number), verified: false, verifiedAtMs: null },
+      alias: { address: 'avery@example.org', addedAtMs: expect.any(Number), verified: false, verifiedAtMs: null },
     })
     expect(mockSent).toHaveLength(1)
-    expect(mockSent[0]).toMatchObject({ to: 'zach@aglyn.io', subject: 'Confirm your address for Acme' })
+    expect(mockSent[0]).toMatchObject({ to: 'avery@example.org', subject: 'Confirm your address for Acme' })
     expect(mockSent[0]['text']).toContain('https://app.aglyn.com/acme/crm/settings?confirmEmailAlias=')
     expect(mockSent[0]['text']).not.toContain('attacker.example')
 
-    const listed = await call('GET', { token: 'zach', query: `?orgId=${ORG}` })
+    const listed = await call('GET', { token: 'avery', query: `?orgId=${ORG}` })
     expect(await listed.json()).toEqual({
-      signInEmail: 'zach@aglyn.com',
-      aliases: [expect.objectContaining({ address: 'zach@aglyn.io', verified: false })],
+      signInEmail: 'avery@example.com',
+      aliases: [expect.objectContaining({ address: 'avery@example.org', verified: false })],
     })
 
-    const confirmed = await call('POST', { token: 'zach', body: { action: 'confirm', token: lastLinkToken() } })
+    const confirmed = await call('POST', { token: 'avery', body: { action: 'confirm', token: lastLinkToken() } })
     expect(confirmed.status).toBe(200)
     expect(await confirmed.json()).toEqual({
       ok: true,
       orgId: ORG,
-      address: 'zach@aglyn.io',
+      address: 'avery@example.org',
       alreadyConfirmed: false,
     })
-    expect(aliasesOf('u-zach')[0]['verifiedAtMs']).toEqual(expect.any(Number))
+    expect(aliasesOf('u-avery')[0]['verifiedAtMs']).toEqual(expect.any(Number))
     expect(mockActivity).toEqual([
       [
         ORG,
-        { uid: 'u-zach', email: 'zach@aglyn.com' },
+        { uid: 'u-avery', email: 'avery@example.com' },
         'Confirmed a sending address for email capture',
-        { type: 'member', id: 'u-zach' },
+        { type: 'member', id: 'u-avery' },
       ],
     ])
   })
 
   it('refuses the link to another member, and to an impersonated session, writing nothing', async () => {
-    await call('POST', { token: 'zach', body: { orgId: ORG, action: 'add', address: 'zach@aglyn.io' } })
+    await call('POST', { token: 'avery', body: { orgId: ORG, action: 'add', address: 'avery@example.org' } })
     const token = lastLinkToken()
     const other = await call('POST', { token: 'kim', body: { action: 'confirm', token } })
     expect(other.status).toBe(403)
     expect(await other.json()).toMatchObject({ reason: 'wrong-member' })
-    const impersonated = await call('POST', { token: 'staff-as-zach', body: { action: 'confirm', token } })
+    const impersonated = await call('POST', { token: 'staff-as-avery', body: { action: 'confirm', token } })
     expect(impersonated.status).toBe(403)
-    const tampered = await call('POST', { token: 'zach', body: { action: 'confirm', token: `${token}x` } })
+    const tampered = await call('POST', { token: 'avery', body: { action: 'confirm', token: `${token}x` } })
     expect(tampered.status).toBe(400)
-    expect(aliasesOf('u-zach')[0]['verifiedAtMs']).toBeUndefined()
+    expect(aliasesOf('u-avery')[0]['verifiedAtMs']).toBeUndefined()
   })
 
   it('refuses the sign-in address and a capture-domain address, sending nothing', async () => {
-    const own = await call('POST', { token: 'zach', body: { orgId: ORG, action: 'add', address: 'ZACH@aglyn.com' } })
+    const own = await call('POST', { token: 'avery', body: { orgId: ORG, action: 'add', address: 'AVERY@example.com' } })
     expect(own.status).toBe(400)
     expect(await own.json()).toMatchObject({ reason: 'sign-in-address' })
     const capture = await call('POST', {
-      token: 'zach',
+      token: 'avery',
       body: { orgId: ORG, action: 'add', address: `crm+${'a'.repeat(32)}@in.aglyn.com` },
     })
     expect(await capture.json()).toMatchObject({ reason: 'reserved-domain' })
@@ -275,32 +275,32 @@ describe('/api/orgs/members/email-aliases', () => {
 
   it('re-sends only for an address already on the list and waiting', async () => {
     const unknown = await call('POST', {
-      token: 'zach',
+      token: 'avery',
       body: { orgId: ORG, action: 'resend', address: 'someone@else.example' },
     })
     expect(unknown.status).toBe(404)
     expect(mockSent).toHaveLength(0)
-    await call('POST', { token: 'zach', body: { orgId: ORG, action: 'add', address: 'zach@aglyn.io' } })
-    const again = await call('POST', { token: 'zach', body: { orgId: ORG, action: 'resend', address: 'zach@aglyn.io' } })
+    await call('POST', { token: 'avery', body: { orgId: ORG, action: 'add', address: 'avery@example.org' } })
+    const again = await call('POST', { token: 'avery', body: { orgId: ORG, action: 'resend', address: 'avery@example.org' } })
     expect(again.status).toBe(200)
     expect(mockSent).toHaveLength(2)
   })
 
   it('removes an address from the caller’s own list only', async () => {
-    await call('POST', { token: 'zach', body: { orgId: ORG, action: 'add', address: 'zach@aglyn.io' } })
-    const notTheirs = await call('DELETE', { token: 'kim', body: { orgId: ORG, address: 'zach@aglyn.io' } })
+    await call('POST', { token: 'avery', body: { orgId: ORG, action: 'add', address: 'avery@example.org' } })
+    const notTheirs = await call('DELETE', { token: 'kim', body: { orgId: ORG, address: 'avery@example.org' } })
     expect(notTheirs.status).toBe(404)
-    expect(aliasesOf('u-zach')).toHaveLength(1)
-    const removed = await call('DELETE', { token: 'zach', body: { orgId: ORG, address: 'zach@aglyn.io' } })
+    expect(aliasesOf('u-avery')).toHaveLength(1)
+    const removed = await call('DELETE', { token: 'avery', body: { orgId: ORG, address: 'avery@example.org' } })
     expect(removed.status).toBe(200)
-    expect(mockStore.has(`orgs/${ORG}/memberEmailAliases/u-zach`)).toBe(false)
+    expect(mockStore.has(`orgs/${ORG}/memberEmailAliases/u-avery`)).toBe(false)
   })
 
   it('answers a locked workspace with the 423 before any write', async () => {
     mockLocked = true
-    const response = await call('POST', { token: 'zach', body: { orgId: ORG, action: 'add', address: 'zach@aglyn.io' } })
+    const response = await call('POST', { token: 'avery', body: { orgId: ORG, action: 'add', address: 'avery@example.org' } })
     expect(response.status).toBe(423)
-    expect(mockStore.has(`orgs/${ORG}/memberEmailAliases/u-zach`)).toBe(false)
+    expect(mockStore.has(`orgs/${ORG}/memberEmailAliases/u-avery`)).toBe(false)
     expect(mockSent).toHaveLength(0)
   })
 })

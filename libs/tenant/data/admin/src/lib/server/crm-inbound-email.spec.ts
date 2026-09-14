@@ -384,13 +384,13 @@ describe('filing a message', () => {
 })
 
 describe("a send from a member's alias (AGL-2975)", () => {
-  // Zach signs in as zach@aglyn.com, sends outreach from the send-as alias
-  // zach@aglyn.io, and copies the capture address in BCC. The alias is ALSO
+  // Avery signs in as avery@example.com, sends outreach from the send-as alias
+  // avery@example.org, and copies the capture address in BCC. The alias is ALSO
   // a contact — an earlier capture filed it as a stranger — which is what
   // makes a misreading visible: the row lands on the alias, not the prospect.
   const outreach = () =>
     message({
-      from: 'Zach Gover <zach@aglyn.io>',
+      from: 'Avery Quinn <avery@example.org>',
       to: ['Pat Prospect <pat@prospect.example>'],
       bcc: [CAPTURE],
       subject: 'Aglyn for Prospect Co',
@@ -400,7 +400,7 @@ describe("a send from a member's alias (AGL-2975)", () => {
     })
 
   const seedAlias = (alias: Record<string, unknown>) =>
-    store.set(`orgs/${ORG}/memberEmailAliases/u-zach`, { uid: 'u-zach', aliases: [alias], updatedAtMs: 1 })
+    store.set(`orgs/${ORG}/memberEmailAliases/u-avery`, { uid: 'u-avery', aliases: [alias], updatedAtMs: 1 })
 
   const fileWithRoster = async (msg: ReceivedEmail) =>
     fileCrmInboundEmail(firestore, {
@@ -413,21 +413,21 @@ describe("a send from a member's alias (AGL-2975)", () => {
     })
 
   beforeEach(() => {
-    store.set(`orgs/${ORG}/members/u-zach`, { role: 'admin', email: 'zach@aglyn.com', displayName: 'Zach Gover' })
+    store.set(`orgs/${ORG}/members/u-avery`, { role: 'admin', email: 'avery@example.com', displayName: 'Avery Quinn' })
     store.set(`orgs/${ORG}/contacts/con-pat`, {
       email: 'pat@prospect.example',
       hostId: 'site-1',
       visibleTo: ['host:site-1'],
     })
     store.set(`orgs/${ORG}/contacts/con-alias`, {
-      email: 'zach@aglyn.io',
+      email: 'avery@example.org',
       hostId: 'site-1',
       visibleTo: ['host:site-1'],
     })
   })
 
   it('files it on the prospect in To, as outbound, stamped with the member, once the alias is confirmed', async () => {
-    seedAlias({ address: 'zach@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 })
+    seedAlias({ address: 'avery@example.org', addedAtMs: 1, verifiedAtMs: 2 })
     const result = await fileWithRoster(outreach())
     expect(result.outcome).toBe('filed')
     if (result.outcome !== 'filed') return
@@ -439,22 +439,22 @@ describe("a send from a member's alias (AGL-2975)", () => {
     expect(activities()).toEqual([
       expect.objectContaining({
         direction: 'outbound',
-        from: 'zach@aglyn.io',
+        from: 'avery@example.org',
         to: 'pat@prospect.example',
-        byUid: 'u-zach',
-        byName: 'Zach Gover',
+        byUid: 'u-avery',
+        byName: 'Avery Quinn',
         contactId: 'con-pat',
       }),
     ])
   })
 
   it('reads an alias the member has not confirmed as a stranger, exactly as before', async () => {
-    seedAlias({ address: 'zach@aglyn.io', addedAtMs: 1 })
+    seedAlias({ address: 'avery@example.org', addedAtMs: 1 })
     const result = await fileWithRoster(outreach())
     expect(result.outcome).toBe('filed')
     if (result.outcome !== 'filed') return
     expect(result.match).toMatchObject({
-      email: 'zach@aglyn.io',
+      email: 'avery@example.org',
       direction: 'inbound',
       link: { contactId: 'con-alias' },
     })
@@ -475,13 +475,13 @@ describe("a send from a member's alias (AGL-2975)", () => {
   })
 
   it('reads the roster: confirmed aliases only, no suspended member, no alias without a member', async () => {
-    seedAlias({ address: 'zach@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 })
+    seedAlias({ address: 'avery@example.org', addedAtMs: 1, verifiedAtMs: 2 })
     store.set(`orgs/${ORG}/members/u-off`, { email: 'off@aglyn.com', orgSuspended: true })
     store.set(`orgs/${ORG}/memberEmailAliases/u-left`, {
       aliases: [{ address: 'left@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }],
     })
     expect(await loadCrmInboundRoster(firestore, ORG)).toEqual([
-      { uid: 'u-zach', email: 'zach@aglyn.com', name: 'Zach Gover', verifiedAliases: ['zach@aglyn.io'] },
+      { uid: 'u-avery', email: 'avery@example.com', name: 'Avery Quinn', verifiedAliases: ['avery@example.org'] },
     ])
   })
 })

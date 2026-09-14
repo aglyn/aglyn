@@ -97,17 +97,17 @@ const firestore = {
 // ---------------------------------------------------------------------------
 
 const ORG = 'org-1'
-const ZACH = 'u-zach'
+const AVERY = 'u-avery'
 const KIM = 'u-kim'
 const ALIASES = (uid: string) => `orgs/${ORG}/memberEmailAliases/${uid}`
 const T0 = 1_757_300_000_000
 
-const add = (address: unknown, uid = ZACH, nowMs = T0) =>
+const add = (address: unknown, uid = AVERY, nowMs = T0) =>
   addMemberEmailAlias(firestore, {
     orgId: ORG,
     uid,
     address,
-    signInEmail: 'zach@aglyn.com',
+    signInEmail: 'avery@example.com',
     reservedDomains: ['in.aglyn.com'],
     nowMs,
   })
@@ -120,50 +120,50 @@ beforeEach(() => {
   mockConsumeRateLimit.mockReset().mockResolvedValue({ allowed: true })
   mockMeterOrgEmail.mockReset().mockResolvedValue(undefined)
   store.set(`orgs/${ORG}`, { name: 'Acme' })
-  store.set(`orgs/${ORG}/members/${ZACH}`, { role: 'admin', email: 'zach@aglyn.com' })
+  store.set(`orgs/${ORG}/members/${AVERY}`, { role: 'admin', email: 'avery@example.com' })
   store.set(`orgs/${ORG}/members/${KIM}`, { role: 'editor', email: 'kim@aglyn.com' })
 })
 
 describe('adding an address', () => {
   it('stores it unconfirmed, normalized, for a member of the workspace', async () => {
-    expect(await add('  Zach@Aglyn.IO ')).toEqual({
+    expect(await add('  Avery@Example.ORG ')).toEqual({
       ok: true,
-      alias: { address: 'zach@aglyn.io', addedAtMs: T0 },
+      alias: { address: 'avery@example.org', addedAtMs: T0 },
       created: true,
     })
-    expect(store.get(ALIASES(ZACH))).toEqual({
-      uid: ZACH,
-      aliases: [{ address: 'zach@aglyn.io', addedAtMs: T0 }],
+    expect(store.get(ALIASES(AVERY))).toEqual({
+      uid: AVERY,
+      aliases: [{ address: 'avery@example.org', addedAtMs: T0 }],
       updatedAtMs: T0,
     })
-    expect(await listMemberEmailAliases(firestore, ORG, ZACH)).toEqual([
-      { address: 'zach@aglyn.io', addedAtMs: T0 },
+    expect(await listMemberEmailAliases(firestore, ORG, AVERY)).toEqual([
+      { address: 'avery@example.org', addedAtMs: T0 },
     ])
   })
 
   it('answers an unconfirmed address added again with the entry it already has', async () => {
-    await add('zach@aglyn.io', ZACH, T0)
-    expect(await add('zach@aglyn.io', ZACH, T0 + 5_000)).toEqual({
+    await add('avery@example.org', AVERY, T0)
+    expect(await add('avery@example.org', AVERY, T0 + 5_000)).toEqual({
       ok: true,
-      alias: { address: 'zach@aglyn.io', addedAtMs: T0 },
+      alias: { address: 'avery@example.org', addedAtMs: T0 },
       created: false,
     })
   })
 
   it('refuses somebody who is not a member, and writes nothing', async () => {
-    expect(await add('zach@aglyn.io', 'u-stranger')).toMatchObject({ ok: false, refusal: 'not-a-member' })
+    expect(await add('avery@example.org', 'u-stranger')).toMatchObject({ ok: false, refusal: 'not-a-member' })
     expect(store.has(ALIASES('u-stranger'))).toBe(false)
   })
 
   it('refuses the sign-in address and a capture-domain address', async () => {
-    expect(await add('ZACH@aglyn.com')).toMatchObject({ ok: false, refusal: 'sign-in-address' })
+    expect(await add('AVERY@example.com')).toMatchObject({ ok: false, refusal: 'sign-in-address' })
     expect(await add('crm+abc@in.aglyn.com')).toMatchObject({ ok: false, refusal: 'reserved-domain' })
-    expect(store.has(ALIASES(ZACH))).toBe(false)
+    expect(store.has(ALIASES(AVERY))).toBe(false)
   })
 })
 
 describe('the confirmation link', () => {
-  const claims = { orgId: ORG, uid: ZACH, address: 'zach@aglyn.io', addedAtMs: T0 }
+  const claims = { orgId: ORG, uid: AVERY, address: 'avery@example.org', addedAtMs: T0 }
 
   it('carries what it was minted for, and nothing once tampered with', () => {
     const token = mintMemberEmailAliasToken(claims, T0)
@@ -173,7 +173,7 @@ describe('the confirmation link', () => {
     })
     const [version, payload, signed] = token.split('.')
     const forged = Buffer.from(
-      JSON.stringify({ o: ORG, u: KIM, a: 'zach@aglyn.io', t: T0, e: T0 + 1e9 }),
+      JSON.stringify({ o: ORG, u: KIM, a: 'avery@example.org', t: T0, e: T0 + 1e9 }),
     ).toString('base64url')
     expect(readMemberEmailAliasToken(`${version}.${forged}.${signed}`, T0)).toMatchObject({
       refusal: 'token-invalid',
@@ -219,31 +219,31 @@ describe('the confirmation link', () => {
 })
 
 describe('confirming an address', () => {
-  const tokenFor = async (address = 'zach@aglyn.io') => {
+  const tokenFor = async (address = 'avery@example.org') => {
     const added = await add(address)
     if (added.ok === false) throw new Error(added.message)
     return mintMemberEmailAliasToken(
-      { orgId: ORG, uid: ZACH, address: added.alias.address, addedAtMs: added.alias.addedAtMs },
+      { orgId: ORG, uid: AVERY, address: added.alias.address, addedAtMs: added.alias.addedAtMs },
       T0,
     )
   }
 
   it('confirms it for the member who added it', async () => {
     const token = await tokenFor()
-    expect(await confirmMemberEmailAlias(firestore, { token, callerUid: ZACH, nowMs: T0 + 60_000 })).toEqual({
+    expect(await confirmMemberEmailAlias(firestore, { token, callerUid: AVERY, nowMs: T0 + 60_000 })).toEqual({
       ok: true,
       orgId: ORG,
-      address: 'zach@aglyn.io',
+      address: 'avery@example.org',
       alreadyConfirmed: false,
     })
-    expect(store.get(ALIASES(ZACH))?.['aliases']).toEqual([
-      { address: 'zach@aglyn.io', addedAtMs: T0, verifiedAtMs: T0 + 60_000 },
+    expect(store.get(ALIASES(AVERY))?.['aliases']).toEqual([
+      { address: 'avery@example.org', addedAtMs: T0, verifiedAtMs: T0 + 60_000 },
     ])
     // Opening the link again is not an error, and moves nothing.
     expect(
-      await confirmMemberEmailAlias(firestore, { token, callerUid: ZACH, nowMs: T0 + 120_000 }),
+      await confirmMemberEmailAlias(firestore, { token, callerUid: AVERY, nowMs: T0 + 120_000 }),
     ).toMatchObject({ ok: true, alreadyConfirmed: true })
-    expect(store.get(ALIASES(ZACH))?.['aliases'][0].verifiedAtMs).toBe(T0 + 60_000)
+    expect(store.get(ALIASES(AVERY))?.['aliases'][0].verifiedAtMs).toBe(T0 + 60_000)
   })
 
   it('refuses whoever else opens it — the mailbox is not the member — and writes nothing', async () => {
@@ -255,26 +255,26 @@ describe('confirming an address', () => {
     expect(await confirmMemberEmailAlias(firestore, { token, callerUid: '', nowMs: T0 })).toMatchObject({
       refusal: 'wrong-member',
     })
-    expect(store.get(ALIASES(ZACH))?.['aliases'][0].verifiedAtMs).toBeUndefined()
+    expect(store.get(ALIASES(AVERY))?.['aliases'][0].verifiedAtMs).toBeUndefined()
   })
 
   it('retires a link once its address is removed, even after the address is added again', async () => {
     const stale = await tokenFor()
-    await removeMemberEmailAlias(firestore, { orgId: ORG, uid: ZACH, address: 'zach@aglyn.io', nowMs: T0 + 1 })
-    expect(await confirmMemberEmailAlias(firestore, { token: stale, callerUid: ZACH, nowMs: T0 + 2 })).toMatchObject({
+    await removeMemberEmailAlias(firestore, { orgId: ORG, uid: AVERY, address: 'avery@example.org', nowMs: T0 + 1 })
+    expect(await confirmMemberEmailAlias(firestore, { token: stale, callerUid: AVERY, nowMs: T0 + 2 })).toMatchObject({
       refusal: 'link-retired',
     })
-    await add('zach@aglyn.io', ZACH, T0 + 3)
-    expect(await confirmMemberEmailAlias(firestore, { token: stale, callerUid: ZACH, nowMs: T0 + 4 })).toMatchObject({
+    await add('avery@example.org', AVERY, T0 + 3)
+    expect(await confirmMemberEmailAlias(firestore, { token: stale, callerUid: AVERY, nowMs: T0 + 4 })).toMatchObject({
       refusal: 'link-retired',
     })
-    expect(store.get(ALIASES(ZACH))?.['aliases'][0].verifiedAtMs).toBeUndefined()
+    expect(store.get(ALIASES(AVERY))?.['aliases'][0].verifiedAtMs).toBeUndefined()
   })
 
   it('refuses a member who has since left the workspace', async () => {
     const token = await tokenFor()
-    store.delete(`orgs/${ORG}/members/${ZACH}`)
-    expect(await confirmMemberEmailAlias(firestore, { token, callerUid: ZACH, nowMs: T0 })).toMatchObject({
+    store.delete(`orgs/${ORG}/members/${AVERY}`)
+    expect(await confirmMemberEmailAlias(firestore, { token, callerUid: AVERY, nowMs: T0 })).toMatchObject({
       refusal: 'not-a-member',
     })
   })
@@ -282,24 +282,24 @@ describe('confirming an address', () => {
 
 describe('removing an address', () => {
   it('removes one entry, and the document with the last one', async () => {
-    await add('zach@aglyn.io', ZACH, T0)
-    await add('outreach@aglyn.io', ZACH, T0 + 1)
+    await add('avery@example.org', AVERY, T0)
+    await add('outreach@aglyn.io', AVERY, T0 + 1)
     expect(
-      await removeMemberEmailAlias(firestore, { orgId: ORG, uid: ZACH, address: ' ZACH@aglyn.io', nowMs: T0 + 2 }),
-    ).toEqual({ ok: true, removed: { address: 'zach@aglyn.io', addedAtMs: T0 } })
-    expect(store.get(ALIASES(ZACH))?.['aliases']).toEqual([
+      await removeMemberEmailAlias(firestore, { orgId: ORG, uid: AVERY, address: ' AVERY@example.org', nowMs: T0 + 2 }),
+    ).toEqual({ ok: true, removed: { address: 'avery@example.org', addedAtMs: T0 } })
+    expect(store.get(ALIASES(AVERY))?.['aliases']).toEqual([
       { address: 'outreach@aglyn.io', addedAtMs: T0 + 1 },
     ])
-    await removeMemberEmailAlias(firestore, { orgId: ORG, uid: ZACH, address: 'outreach@aglyn.io' })
-    expect(store.has(ALIASES(ZACH))).toBe(false)
+    await removeMemberEmailAlias(firestore, { orgId: ORG, uid: AVERY, address: 'outreach@aglyn.io' })
+    expect(store.has(ALIASES(AVERY))).toBe(false)
   })
 
   it('refuses an address that is not on the list', async () => {
     expect(
-      await removeMemberEmailAlias(firestore, { orgId: ORG, uid: ZACH, address: 'nobody@aglyn.io' }),
+      await removeMemberEmailAlias(firestore, { orgId: ORG, uid: AVERY, address: 'nobody@aglyn.io' }),
     ).toMatchObject({ ok: false, refusal: 'unknown-address' })
     expect(
-      await removeMemberEmailAlias(firestore, { orgId: ORG, uid: ZACH, address: 'nope' }),
+      await removeMemberEmailAlias(firestore, { orgId: ORG, uid: AVERY, address: 'nope' }),
     ).toMatchObject({ ok: false, refusal: 'invalid-address' })
   })
 })
@@ -309,28 +309,28 @@ describe('the confirmation email', () => {
     sendMemberEmailAliasConfirmation({
       orgId: ORG,
       org: { name: 'Acme' },
-      uid: ZACH,
-      memberName: 'Zach Gover',
-      address: 'zach@aglyn.io',
+      uid: AVERY,
+      memberName: 'Avery Quinn',
+      address: 'avery@example.org',
       confirmUrl: 'https://app.aglyn.com/acme/crm/settings?confirmEmailAlias=t',
     })
 
   it('sends the link to the address, names the member and the workspace, and meters the workspace', async () => {
     expect(await send()).toEqual({ sent: true })
     expect(mockConsumeRateLimit.mock.calls.map(([key]) => key)).toEqual([
-      `member-email-alias-confirm:${ZACH}`,
-      'member-email-alias-target:zach@aglyn.io',
+      `member-email-alias-confirm:${AVERY}`,
+      'member-email-alias-target:avery@example.org',
     ])
     expect(mockSendEmail).toHaveBeenCalledTimes(1)
     const [options] = mockSendEmail.mock.calls[0]
     expect(options).toMatchObject({
-      to: 'zach@aglyn.io',
+      to: 'avery@example.org',
       subject: 'Confirm your address for Acme',
       context: 'member-email-alias-confirmation',
     })
     expect(options.text).toContain('https://app.aglyn.com/acme/crm/settings?confirmEmailAlias=t')
-    expect(options.text).toContain('Zach Gover asked to add zach@aglyn.io')
-    expect(options.text).toContain('signed in as Zach Gover')
+    expect(options.text).toContain('Avery Quinn asked to add avery@example.org')
+    expect(options.text).toContain('signed in as Avery Quinn')
     expect(options).not.toHaveProperty('from')
     expect(mockMeterOrgEmail).toHaveBeenCalledWith(ORG)
   })
