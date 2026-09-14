@@ -184,11 +184,12 @@ describe('the bands are real, and the plan is what selects them', () => {
       }),
     )
     expect(noAllowance).toEqual({
+      // Free sells an assist band since the AI taste (AGL-2925): 300 credits
+      // behind a wall, so its utilization has a real denominator.
       free: [
         'dataStorageMb',
         'apiRequests',
         'emailSends',
-        'assistCredits',
         'workflowRuns',
         'actionRuns',
       ],
