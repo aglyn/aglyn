@@ -346,11 +346,14 @@ afterwards, so moving a file into a "Client A" folder later does not re-share it
 a file that sites are already using names those sites first and asks you to confirm.
 Only workspace owners and admins can change sharing.
 
-A new folder starts shared with **All sites**, so it appears everywhere the moment you
-create it — or with the site you were working in, if your workspace has been set to make
-new resources site-scoped by default. That default is **Default sharing for new data and
-media**, at the top of the workspace's **Media** page; it applies to new files and changes
-nothing that already exists. It applies to new datasets the same way: one created on a
+A new folder or file starts shared with **All sites**, so it appears everywhere the moment
+you create it — or with the site you were working in, if your workspace has been set to
+make new resources site-scoped by default. That default is **Default sharing for new data
+and media**, at the top of the workspace's **Media** page, and it changes nothing that
+already exists. The site you were working in is the one whose **Media** tab you uploaded
+on, or the one you were editing when you opened the media picker. A folder or file
+created on the workspace **Media** page has no site to limit it to, so it starts on **All
+sites** either way. The default applies to new datasets the same way: one created on a
 site's **Data** page follows it, and one created on the organization **Data** page starts
 on **All sites**. If the **Shared with** dialog ever opens on
 "Not shared with any site", that folder or file has no sharing stored at all: it is hidden
