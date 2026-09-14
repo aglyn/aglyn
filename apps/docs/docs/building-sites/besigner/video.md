@@ -86,6 +86,11 @@ required, so a video without one can still be listed; write one anyway, differen
 every video. The title is also the name a screen reader announces for the player, and
 the tooltip on hover. None of the three is ever displayed as text on the page.
 
+To give each video a page of its own, build a
+[video collection](../site-templates/build-a-blog.md#video-collection): its entry template
+fills these fields from each entry, with **Publication date** set to
+`{{entry.publishedAt}}`.
+
 ## Related
 
 - [Element catalog](element-catalog.md) — every other element in the drawer
