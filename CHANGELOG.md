@@ -9,6 +9,95 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.122 — 2026-09-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.121...v1.0.0-beta.122)
+
+### Added
+
+- **plugins:** service registry, nine widget zones, activity actions, entitlement seams ([AGL-2940](https://linear.app/aglyn/issue/AGL-2940), [AGL-2943](https://linear.app/aglyn/issue/AGL-2943))
+- **console:** a Duplicate action copies any resource whole, as a draft ([AGL-2936](https://linear.app/aglyn/issue/AGL-2936))
+- **tools:** the package map, with scope tags, boundary rules and a shrink-only allowlist ([AGL-2941](https://linear.app/aglyn/issue/AGL-2941))
+- **marketing:** /pricing tables carry the Aglyn AI add-on, credits band and overage rate ([AGL-2900](https://linear.app/aglyn/issue/AGL-2900))
+- **ai:** per-user AI usage — a uid-keyed monthly rollup and every surface that reads it ([AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+- **activity:** wire the AI job machine and permission routes to the activity writers ([AGL-2929](https://linear.app/aglyn/issue/AGL-2929), [AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **billing:** the Free taste's refusals are counted and shown beside the workspace's ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **billing:** the Free AI taste: 300 credits behind a wall, with abuse precautions ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925), [AGL-2900](https://linear.app/aglyn/issue/AGL-2900))
+- **besigner:** a layout declares properties, and each screen inside it sets the values ([AGL-2893](https://linear.app/aglyn/issue/AGL-2893))
+- **besigner:** a property takes its attribute's own control, so a Yes / no is a switch ([AGL-2893](https://linear.app/aglyn/issue/AGL-2893))
+- **aglyn:** property kinds are the attribute field kinds, each reaching its field typed ([AGL-2893](https://linear.app/aglyn/issue/AGL-2893))
+- **console:** staff AI monitoring — org AI card, AI columns, margin side, leaderboard ([AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **activity:** every AI generation, edit and control change lands in the activity logs ([AGL-2929](https://linear.app/aglyn/issue/AGL-2929), [AGL-2904](https://linear.app/aglyn/issue/AGL-2904), [AGL-2906](https://linear.app/aglyn/issue/AGL-2906), [AGL-2927](https://linear.app/aglyn/issue/AGL-2927))
+- **ai:** the jobs door asks for ai.generate on the named site before it admits ([AGL-2904](https://linear.app/aglyn/issue/AGL-2904))
+- **ai:** generation jobs — state machine, per-step credits, SSE progress, beat resume ([AGL-2904](https://linear.app/aglyn/issue/AGL-2904), [AGL-1934](https://linear.app/aglyn/issue/AGL-1934))
+- **permissions:** ai.use and ai.generate for members and collaborators at every AI door ([AGL-2927](https://linear.app/aglyn/issue/AGL-2927))
+- **console:** buy Aglyn AI from Billing, one AI credits meter, overage controls, cards ([AGL-2899](https://linear.app/aglyn/issue/AGL-2899), [AGL-2896](https://linear.app/aglyn/issue/AGL-2896), [AGL-2898](https://linear.app/aglyn/issue/AGL-2898))
+- **billing:** sell the Aglyn AI add-on — prices, checkout, add-ons and the webhook ([AGL-2897](https://linear.app/aglyn/issue/AGL-2897), [AGL-2896](https://linear.app/aglyn/issue/AGL-2896))
+- **ai:** a generated element palette and a validator for AI-emitted node trees ([AGL-2905](https://linear.app/aglyn/issue/AGL-2905), [AGL-2926](https://linear.app/aglyn/issue/AGL-2926))
+- **billing:** a dollar ceiling on AI overage, Free as a wall, and AI credit alerts ([AGL-2898](https://linear.app/aglyn/issue/AGL-2898))
+- **ai:** one Anthropic runtime for every AI door, with caching and the gate ladder ([AGL-2903](https://linear.app/aglyn/issue/AGL-2903), [AGL-2352](https://linear.app/aglyn/issue/AGL-2352), [AGL-2815](https://linear.app/aglyn/issue/AGL-2815))
+- **billing:** the Aglyn AI add-on as a seat add-on with its credit band ([AGL-2896](https://linear.app/aglyn/issue/AGL-2896), [AGL-2897](https://linear.app/aglyn/issue/AGL-2897), [AGL-2900](https://linear.app/aglyn/issue/AGL-2900), [AGL-2895](https://linear.app/aglyn/issue/AGL-2895), [AGL-2923](https://linear.app/aglyn/issue/AGL-2923))
+
+### Fixed
+
+- **console:** the per-member and per-account AI usage tables page under the shared footer ([AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+- **ai:** the account-age read resolves the caller's auth pool through authForPool ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122))
+- **console:** the staff org AI route reads live subscriptions via the shared predicate ([AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **console:** the Free AI taste does not read as the AI add-on included in its plan ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **tools:** the TTL policy list carries months.expiresAt, as the config doc records ([AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+- **tools:** the TTL policy list carries aiJobs.expiresAt, as the config doc records ([AGL-2904](https://linear.app/aglyn/issue/AGL-2904))
+- **marketplace:** a published component or layout keeps its declared properties ([AGL-2933](https://linear.app/aglyn/issue/AGL-2933))
+- **console:** saving a live screen's SEO or protection refreshes the live page ([AGL-2934](https://linear.app/aglyn/issue/AGL-2934))
+- **console:** the per-user AI usage read keys on the uid, not the user object's identity ([AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+- **marketing:** a fractional add-on rate prints to the cent, "$2.50" beside "$0.50" ([AGL-2900](https://linear.app/aglyn/issue/AGL-2900))
+- **ai:** the jobs door answers the Free taste's refusals and meters on its account ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925), [AGL-2899](https://linear.app/aglyn/issue/AGL-2899))
+- **templates:** a component or layout template keeps its properties and their tokens ([AGL-2932](https://linear.app/aglyn/issue/AGL-2932))
+- **console:** the staff AI card reads the job model's own field names ([AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **flags:** label release_ai_generative for the doors it switches, not the add-on's name ([AGL-2931](https://linear.app/aglyn/issue/AGL-2931), [AGL-2896](https://linear.app/aglyn/issue/AGL-2896))
+- **billing:** the checkout's AI add-on refusals read the configured brand ([AGL-2897](https://linear.app/aglyn/issue/AGL-2897))
+
+### Performance
+
+- **health:** the crons door reads one summary of every beat, not one document per job ([AGL-2946](https://linear.app/aglyn/issue/AGL-2946))
+- **tenant-feature-instance:** a refused listen backs off with the length of its outage ([AGL-2945](https://linear.app/aglyn/issue/AGL-2945), [AGL-2944](https://linear.app/aglyn/issue/AGL-2944))
+- **tenant-feature-instance:** a hidden tab holds refused listens until it is visible ([AGL-2944](https://linear.app/aglyn/issue/AGL-2944))
+
+### Documentation
+
+- **staff-console:** the AI monitoring description fits the tooltip excerpt limit ([AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **billing:** document the three Free AI abuse-precaution env vars for self-hosters ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **billing:** regenerate the feature matrix for Free's aiGenerative entitlement ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **besigner:** every property type, conditional properties, and layout properties ([AGL-2893](https://linear.app/aglyn/issue/AGL-2893))
+- **pricing:** the Aglyn AI add-on decision is confirmed by the owner ([AGL-2895](https://linear.app/aglyn/issue/AGL-2895))
+
+<details>
+<summary>Also in this release: 19 test, 3 chore</summary>
+
+- **console:** the assist chat route spec carries authForPool for the account-age read ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **plugins:** the CRM settings and forms header specs stub the Duplicate flow ([AGL-2936](https://linear.app/aglyn/issue/AGL-2936))
+- **tenant:** the image-sink inventory declares the generated AI palette as no sink ([AGL-2905](https://linear.app/aglyn/issue/AGL-2905))
+- **console:** the margin spec pins the assist band Free sells since the AI taste ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **console:** the metered sweep records the staff org AI route as a read-only list ([AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **console:** the AI jobs route spec loads the AI entitlement declaration ([AGL-2940](https://linear.app/aglyn/issue/AGL-2940), [AGL-2904](https://linear.app/aglyn/issue/AGL-2904))
+- **billing:** the AI add-on specs load the plugin entitlement declaration ([AGL-2940](https://linear.app/aglyn/issue/AGL-2940))
+- **tenant-data-admin:** the assist usage spec imports plan entitlements statically ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **console:** the org-less plugins gate spec stubs the AI permissions the gate reads ([AGL-2927](https://linear.app/aglyn/issue/AGL-2927))
+- **console:** staff audit specs carry the plugin action-group functions the page reads ([AGL-2940](https://linear.app/aglyn/issue/AGL-2940))
+- **console:** billing page specs stub the plugin widget zones the page now mounts ([AGL-2940](https://linear.app/aglyn/issue/AGL-2940))
+- **console:** the screen view announce spec imports the visibility enum statically ([AGL-2934](https://linear.app/aglyn/issue/AGL-2934))
+- **console:** the Screen Properties announce spec stubs the plugin widget zones ([AGL-2934](https://linear.app/aglyn/issue/AGL-2934))
+- **console:** seat-count and checkout spec doubles carry what the plugin zones reach ([AGL-2940](https://linear.app/aglyn/issue/AGL-2940))
+- **instance:** the Duplicate dialog's MUI import is a declared peer of the instance lib ([AGL-2936](https://linear.app/aglyn/issue/AGL-2936))
+- **tools:** the self-test's AI credits fixture prints Scale's rate to the cent ([AGL-2900](https://linear.app/aglyn/issue/AGL-2900))
+- **console:** four suites stop using Free to mean "no band" and mock the taste's reads ([AGL-2925](https://linear.app/aglyn/issue/AGL-2925))
+- **console:** the cost-breakdown spec's shared-lib mock carries aiAddonName ([AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **aglyn:** type the layout properties spec's node maps as node schemas ([AGL-2893](https://linear.app/aglyn/issue/AGL-2893))
+- **tools:** raise the checked-in Linear ceiling to AGL-2932 ([AGL-2932](https://linear.app/aglyn/issue/AGL-2932), [AGL-2893](https://linear.app/aglyn/issue/AGL-2893), [AGL-2921](https://linear.app/aglyn/issue/AGL-2921))
+- **console:** the lockdown page spec counts capabilities from the catalog ([AGL-2903](https://linear.app/aglyn/issue/AGL-2903), [AGL-1531](https://linear.app/aglyn/issue/AGL-1531))
+- **billing:** the AI add-on prices are minted, so a missing one is drift again ([AGL-2897](https://linear.app/aglyn/issue/AGL-2897))
+
+</details>
+
 ## v1.0.0-beta.121 — 2026-09-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.120...v1.0.0-beta.121)
