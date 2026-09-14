@@ -105,6 +105,10 @@ export * from './crm-task-reminders'
 // captured message becomes. Pure like `crm-digest`; the webhook route and
 // the address route are the readers with Firestore.
 export * from './crm-inbound'
+// A member's own addresses in a workspace (AGL-2975): the ones they have
+// confirmed count as theirs wherever the roster is asked who wrote a
+// message. Pure; the store and the confirmation link are server-side.
+export * from './member-email-aliases'
 // Reading a spreadsheet of people INTO the CRM (AGL-2602): the column
 // mapping, the per-row normalizer and the chunk-result arithmetic the
 // console drawer and the `crm/contacts-import` route both read. Pure, and

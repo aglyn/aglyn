@@ -216,9 +216,12 @@ A message that arrives is filed as **one** email entry on the timeline:
 
 - **Whose record.** The first address among **From**, **To** and **Cc** that
   is not a workspace member's and belongs to a contact or a lead in the CRM.
-  A lead's message files on the lead. The record's own site is the site the
-  entry lands under, so at the organization level a capture works for every
-  site at once.
+  A member's addresses are the one they sign in with and each one they have
+  verified under [Your sending addresses](./settings.md#your-sending-addresses),
+  so a message sent from a verified send-as alias is filed on the person it
+  was written to. A lead's message files on the lead. The record's own site
+  is the site the entry lands under, so at the organization level a capture
+  works for every site at once.
 - **Which way.** A message a correspondent wrote reads **Received**, with
   the sender beside the time; a message a member wrote and copied in reads
   **Sent**, without a delivery chip, because the platform did not carry it.

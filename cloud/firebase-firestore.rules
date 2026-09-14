@@ -699,6 +699,23 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // A member's own addresses in this workspace (AGL-2975): one document
+      // per member, keyed by uid, listing the addresses they added and which
+      // of them they have confirmed. The capture webhook reads a confirmed
+      // address as the member's, so `verifiedAtMs` decides whose timeline a
+      // stranger's mail lands on — a client that could write it would mark
+      // any address it liked as its own. Every write, and the confirmation
+      // itself, runs through /api/orgs/members/email-aliases behind the
+      // member's session.
+      //
+      // Reads are closed too: an address a member has not confirmed is not
+      // the team's business, and the member reads their own list through
+      // the same route. Staff are denied like everyone else; nothing here
+      // is consulted client-side.
+      match /memberEmailAliases/{memberUid} {
+        allow read, write: if false;
+      }
+
       // Custom roles (AGL-243): named permission sets members resolve
       // their own access from — member-readable, API-written only.
       match /roles/{roleId} {

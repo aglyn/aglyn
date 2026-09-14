@@ -75,6 +75,13 @@ jest.mock('./email-capture-card', () => ({
   default: () => null,
   EmailCaptureCard: () => null,
 }))
+// Your sending addresses (AGL-2975) has a spec of its own, and asks its
+// route once the scope resolves; stubbed for the same reason.
+jest.mock('./sending-addresses-card', () => ({
+  __esModule: true,
+  default: () => null,
+  SendingAddressesCard: () => null,
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // Duplicate (AGL-2936) is a door of its own; these specs exercise the
   // rest of the card, so the flow is a stub and its dialog is not mounted.

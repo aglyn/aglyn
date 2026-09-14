@@ -138,5 +138,8 @@ export * from './lib/server/crm-booking-activity'
 // The org's email capture token and the filing of one received message
 // on the record it was with (AGL-2657).
 export * from './lib/server/crm-inbound-email'
+// A member's own addresses in a workspace, and the signed link that
+// confirms one (AGL-2975).
+export * from './lib/server/member-email-aliases'
 export * from './lib/server/user-profiles'
 export * from './lib/server/legal-acceptance'

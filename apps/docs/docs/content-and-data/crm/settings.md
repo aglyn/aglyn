@@ -17,9 +17,11 @@ wherever a contact is captured. The section lives in the CRM hub at
 
 Only a workspace **owner or admin** can change a setting. Everyone who can
 open the CRM can read the page; a member who cannot change a switch sees it
-disabled, with a note saying why. The one exception is the
+disabled, with a note saying why. Two cards are exceptions: the
 [Email templates](#email-templates) card, which every CRM editor may write
-to: a template is working material, not policy.
+to, because a template is working material, not policy; and
+[Your sending addresses](#your-sending-addresses), which is each member's
+own list.
 
 ## Companies
 
@@ -167,6 +169,41 @@ Rotate when the address has leaked outside the team — anybody who holds it
 can file mail on your records, though only mail from or to somebody already
 in the CRM is ever filed.
 
+## Your sending addresses
+
+Directly under **Email capture**, **Your sending addresses** lists the
+addresses you send from besides the one you sign in with, such as a Gmail
+**Send mail as** alias on an outbound domain. Emails you send from these
+addresses and BCC to your capture address are filed under the person you
+wrote to.
+
+Without the list, a message from an address the workspace does not know is
+yours reads as a stranger writing in. The capture files it under the alias
+itself, as **Received**, or drops it when the alias is on no record, and the
+person you wrote to gets nothing on their timeline.
+
+- **Add** an address and a verification email is sent to it. The row reads
+  **Verification email sent**, and **Resend** sends another.
+- Open the link in that email **while signed in as yourself**. The row then
+  reads **Verified**, and from then on mail from that address is filed as
+  yours: **Sent**, on the record of the person in **To**, with your name on
+  the entry.
+- An address that is not verified changes nothing. A link opened while
+  signed in as anyone else confirms nothing, and a link stops working after
+  24 hours or once its address is removed.
+- **Remove** takes an address off the list. Removing a verified address asks
+  first, and adding it again sends a new verification email.
+
+Each member keeps their own list in each workspace, and nobody else can see
+or change it. It reads the same under every site and at the organization
+level. The address you sign in with already counts, so it is never listed.
+You can keep up to five addresses. Leaving the workspace, or erasing your
+account, removes your list.
+
+An address that two members have both verified, such as a shared mailbox,
+is treated as the team's: mail from it is filed as **Sent** on the
+recipient's record, without a name on the entry.
+
 ## Recipes
 
 At the **organization level** only — `…/{organization}/crm/settings` —
@@ -200,6 +237,7 @@ delete the site's copy from its Actions page first if you want a fresh one.
 ## Related
 
 - [CRM overview](./overview.md)
+- [Captured email](./activities.md#captured-email) — how a message sent to the capture address is matched to a record
 - [Email templates & snippets](./email-templates.md) — what the Email templates card keeps, and the merge fields
 - [Automations for the CRM](./automations.md#recipes) — what each recipe builds
 - [Companies](./companies.md) — the records these settings create and link
