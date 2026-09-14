@@ -69,6 +69,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     subdomain: 'demo',
   }),
   useHostResourceApi: () => jest.fn().mockResolvedValue(undefined),
+  // The forms card offers Duplicate; nothing here opens it.
+  useDuplicateResource: () => ({ request: jest.fn(), dialog: null }),
   useLiveArtifactCount: (hostId: string, kind: string) => {
     mockCountCalls.push(`useLiveArtifactCount:${hostId}/${kind}`)
     return mockLiveCount
