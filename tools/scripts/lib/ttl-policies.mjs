@@ -99,6 +99,14 @@ export const TTL_POLICIES = Object.freeze([
     why: 'AI generation jobs (verbatim brief), 180 days',
   },
   {
+    collection: 'months',
+    field: 'expiresAt',
+    // AGL-2928 — a person's monthly AI usage rollup under
+    // `orgs/{orgId}/aiUsageByUser/{uid}/months/{YYYY-MM}`. Kept thirteen months
+    // past the month it describes (`AI_USAGE_BY_USER_RETENTION_MONTHS`).
+    why: 'per-user monthly AI usage, 13 months',
+  },
+  {
     collection: 'churnSurveyDetails',
     field: 'expiresAt',
     // AGL-1978 — churn survey free text, split out so it can expire without
