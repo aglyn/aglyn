@@ -146,6 +146,18 @@ export const FLAG_DOC_PAGES: Partial<
         'A changelog prices the whole product; the admin bar itself carries no price claim anywhere.',
     },
   ],
+  // AGL-2974. The flag closes Outreach's console hub and its API routes
+  // together, and the one page about it is ABOUT the feature, so it takes the
+  // admonition treatment, whole-file. No plan carries the entitlement either,
+  // which the price assertions keep the page from implying.
+  release_outreach: [
+    {
+      path: 'docs/content-and-data/crm/outreach.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+  ],
+
   // AGL-1860. The flag closes the console PANEL and the chat ROUTE together
   // (a released-off feature 404s), and the one page about it is ABOUT the
   // feature — the admonition treatment, whole-file. While

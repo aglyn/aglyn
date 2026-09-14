@@ -69,6 +69,27 @@ function storageBucket() {
 const SUPPLIER_DELIVERY_COLLECTION = 'supplierDeliveries'
 
 /**
+ * `outreachMailboxCredentials` — the OAuth grant behind each mailbox a rep
+ * connects to Outreach, keyed by the mailbox id and carrying `orgId` as a
+ * FIELD.
+ *
+ * The literal rather than an import, for `SUPPLIER_DELIVERY_COLLECTION`'s
+ * reason: the collection belongs to `libs/plugins/outreach`
+ * (`OUTREACH_COLLECTIONS.mailboxCredentials` in
+ * `src/lib/model/outreach.types.ts`), and this `scope:data` library may not
+ * import a plugin. The plugin's own spec asserts the two spellings agree, so
+ * a rename fails a test rather than silently un-wiring the sweep.
+ *
+ * A static sweep here, not a hook the plugin registers, because an erasure
+ * cannot rely on the plugin being present. An org that switched Outreach off
+ * still holds the tokens its reps granted, and the process running the
+ * erasure — the cron, the operator script, a replay — may never have loaded
+ * the plugin's bundle at all. A credential's lifetime cannot depend on which
+ * bundles an erasing process happened to load.
+ */
+const OUTREACH_MAILBOX_CREDENTIALS_COLLECTION = 'outreachMailboxCredentials'
+
+/**
  * Destroy the site's DEAD-LETTERED supplier deliveries (AGL-1448).
  *
  * `supplierDeliveries/{id}` is TOP-LEVEL and carries `hostId` as a field, so
@@ -304,6 +325,38 @@ async function deleteStripeCustomer(customerId?: string): Promise<void> {
  */
 async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
   return deleteDocsByOrgId('apiKeys', orgId, dryRun)
+}
+
+/**
+ * Delete every Outreach mailbox credential the org holds (AGL-2974).
+ *
+ * `outreachMailboxCredentials` is a TOP-LEVEL collection keyed by the mailbox
+ * id and carrying `orgId` as a FIELD, so `recursiveDelete(orgRef)` cannot see
+ * it — the blindness `eraseOrgApiKeys` answers, on a more dangerous document.
+ * Left standing, the OAuth grant a rep gave for their own mailbox would
+ * outlive the workspace it was given to: tokens that can still send as that
+ * person, held for an organization that no longer exists and that nobody can
+ * ask to disconnect them.
+ *
+ * This destroys the platform's copy of the grant; it does not call the
+ * provider's revocation endpoint, which needs the plugin's provider adapter.
+ * With the tokens gone the grant has nothing left to act through.
+ *
+ * Bounded by the `orgId` field, never a collection sweep: this collection
+ * holds every other workspace's connected mailboxes too.
+ *
+ * Returns the number destroyed, for the audit row — an erasure trail that
+ * understates what it removed is the one record that has to be right.
+ */
+async function eraseOrgOutreachMailboxCredentials(
+  orgId: string,
+  dryRun = false,
+): Promise<number> {
+  return deleteDocsByOrgId(
+    OUTREACH_MAILBOX_CREDENTIALS_COLLECTION,
+    orgId,
+    dryRun,
+  )
 }
 
 /**
@@ -900,6 +953,8 @@ export interface EraseOrgResult {
   members?: number
   /** API credentials destroyed (AGL-1444) — outside the org path. */
   apiKeys?: number
+  /** Outreach mailbox grants destroyed (AGL-2974) — outside the org path. */
+  outreachMailboxCredentials?: number
   /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
   ssoDomains?: number
   /** Custom console domains released (AGL-1448) — outside the org path. */
@@ -1076,11 +1131,12 @@ async function recordErasureFailure(entry: {
  *   3. Revoke the org's API credentials (AGL-1444), its public routing — SSO
  *      domains and custom console domains (AGL-1448) — and its public
  *      marketplace identity: the publisher profile and every handle it
- *      reserved (AGL-1970). All of them are top-level collections keyed by
- *      something other than a path under the org, so the org-tree delete
- *      cannot reach them; doing them before the content delete also closes
- *      the mid-erasure window, in which a credential, a domain or a public
- *      publisher page still resolves to a half-deleted workspace.
+ *      reserved (AGL-1970); and destroy the OAuth grants behind its reps'
+ *      Outreach mailboxes (AGL-2974). All of them are top-level collections
+ *      keyed by something other than a path under the org, so the org-tree
+ *      delete cannot reach them; doing them before the content delete also
+ *      closes the mid-erasure window, in which a credential, a domain or a
+ *      public publisher page still resolves to a half-deleted workspace.
  *   4. Delete each host (eraseHost), org-level Storage, the Stripe customer
  *      AND its local reverse index, member back-references, then the org tree
  *      and every slug the org ever held — tombstones included (AGL-1448).
@@ -1189,6 +1245,10 @@ export async function eraseOrg(
     // pass the org gate and reach a half-deleted workspace. Revoking first
     // closes that window as well as the permanent one.
     progress.apiKeys = await eraseOrgApiKeys(orgId, dryRun)
+    progress.outreachMailboxCredentials = await eraseOrgOutreachMailboxCredentials(
+      orgId,
+      dryRun,
+    )
     progress.ssoDomains = await eraseOrgSsoDomains(orgId, dryRun)
     progress.consoleDomains = await releaseOrgConsoleDomains(orgId, dryRun)
     progress.apiIdempotency = await eraseOrgIdempotencyKeys(orgId, dryRun)

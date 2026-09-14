@@ -16,6 +16,7 @@
  */
 
 import type { AglynOrgMember, OrgRole } from '../foundation'
+import { ORG_ROLE_PERMISSION_KEYS } from './org-roles'
 
 /**
  * Granular org permissions (AGL-243) layered on the 4 org roles: each
@@ -231,6 +232,79 @@ export function resolveOrgPermissions(
     }
   }
   return merged
+}
+
+/**
+ * The values a custom role and a per-member override set EXPLICITLY for
+ * permission keys outside this catalog — the keys plugins declare through
+ * `registerPluginPermissions` (AGL-2974).
+ *
+ * `resolveOrgPermissions` walks the catalog alone, so a plugin key stored on
+ * a custom role or a member document never reached the `resolvedPermissions`
+ * stamp the Firestore rules read. A rule gating on one could then honor
+ * neither a grant to an editor nor a revocation from an admin. This carries
+ * exactly those stored decisions, custom role first and the per-member
+ * override over it, which is the precedence the resolver applies.
+ *
+ * Tier DEFAULTS are deliberately absent. They live in the plugin registry,
+ * which is populated per process by whichever plugin bundles that process
+ * loaded, and a stamp computed from it would differ by which route happened
+ * to write it. A rule supplies the default itself from the member's role,
+ * the way `memberResolves` is always conjoined with a role gate.
+ *
+ * The legacy six camelCase keys are excluded as well: they are the catalog's
+ * older projection, not plugin keys, and no rule reads them.
+ */
+export function explicitPluginPermissionValues(
+  member:
+    | {
+        roleId?: string
+        permissions?: Partial<Record<string, unknown>> | null
+      }
+    | null
+    | undefined,
+  customRole?: { permissions?: Partial<Record<string, unknown>> | null } | null,
+): Record<string, boolean> {
+  const values: Record<string, boolean> = {}
+  if (!member) return values
+  const layers = [
+    member.roleId ? customRole?.permissions : undefined,
+    member.permissions,
+  ]
+  for (const layer of layers) {
+    for (const [key, value] of Object.entries(layer ?? {})) {
+      if (typeof value !== 'boolean') continue
+      if (CATALOG_AND_LEGACY_KEYS.has(key)) continue
+      values[key] = value
+    }
+  }
+  return values
+}
+
+/** Keys {@link explicitPluginPermissionValues} leaves to the catalog. */
+const CATALOG_AND_LEGACY_KEYS: ReadonlySet<string> = new Set<string>([
+  ...ORG_PERMISSION_KEYS,
+  ...ORG_ROLE_PERMISSION_KEYS,
+])
+
+/**
+ * The `resolvedPermissions` map stamped on a member document for the
+ * Firestore rules: the catalog verdict with every layer applied, and beside
+ * it the plugin keys a custom role or an override set explicitly.
+ *
+ * One function for every writer of the stamp, so the org-create transaction
+ * and `syncOrgAuthProjections` cannot project different maps. The catalog
+ * spreads last; the two key spaces do not overlap, and the order keeps it
+ * true that nothing but the resolver decides a catalog key.
+ */
+export function projectMemberResolvedPermissions(
+  member: Parameters<typeof resolveOrgPermissions>[0],
+  customRole?: AglynOrgCustomRole | null,
+): Record<string, boolean> {
+  return {
+    ...explicitPluginPermissionValues(member, customRole),
+    ...resolveOrgPermissions(member, customRole),
+  }
 }
 
 /** Single-permission convenience over `resolveOrgPermissions`. */

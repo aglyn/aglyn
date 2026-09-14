@@ -49,7 +49,7 @@
  * satisfy a fixture built from role defaults alone.
  */
 
-import { resolveOrgPermissions } from '@aglyn/aglyn'
+import { ORG_PERMISSION_KEYS, resolveOrgPermissions } from '@aglyn/aglyn'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -65,6 +65,8 @@ let members: Record<string, StoredDoc>
 let roles: Record<string, StoredDoc>
 /** What the batched writes left on each member document. */
 let written: Record<string, StoredDoc>
+/** The `set` options each member document was last written with. */
+let writeOptions: Record<string, unknown>
 
 /**
  * A small in-memory Admin SDK, covering exactly the shape
@@ -111,16 +113,17 @@ const makeFirestore = () => {
       throw new Error(`unexpected collection ${name}`)
     },
     batch: () => {
-      const ops: Array<[{ _path: string }, StoredDoc]> = []
+      const ops: Array<[{ _path: string }, StoredDoc, unknown]> = []
       return {
-        set: (ref: { _path: string }, data: StoredDoc) => {
-          ops.push([ref, data])
+        set: (ref: { _path: string }, data: StoredDoc, options?: unknown) => {
+          ops.push([ref, data, options])
         },
         commit: async () => {
-          for (const [ref, data] of ops) {
+          for (const [ref, data, options] of ops) {
             if (!ref._path.startsWith('members/')) continue
             const id = ref._path.slice('members/'.length)
             written[id] = { ...(written[id] ?? {}), ...data }
+            writeOptions[id] = options
           }
         },
       }
@@ -146,12 +149,19 @@ import { syncOrgAuthProjections } from '@aglyn/tenant-data-admin'
 beforeEach(() => {
   roleReads = []
   written = {}
+  writeOptions = {}
   roles = {
     // Revokes the key an editor holds by default.
     'role-limited': { name: 'Limited', permissions: { 'data.manage': false } },
     // Grants a key a viewer does not hold. The resolver applies it; the
     // ROLE gate downstream is what still refuses the write.
     'role-granting': { name: 'Granting', permissions: { 'data.manage': true } },
+    // Grants a PLUGIN-declared key (AGL-2974), which the catalog resolver
+    // does not walk, beside a legacy camelCase key that is not a plugin key.
+    'role-outreach': {
+      name: 'Sales rep',
+      permissions: { 'outreach.use': true, createHosts: true },
+    },
   }
   members = {
     'uid-owner': { role: 'owner', allHosts: true },
@@ -179,8 +189,28 @@ beforeEach(() => {
       allHosts: true,
       roleId: 'role-deleted',
     },
+    'uid-viewer-outreach': {
+      role: 'viewer',
+      allHosts: true,
+      roleId: 'role-outreach',
+    },
+    // The same role, with the plugin key withdrawn for this one person.
+    'uid-viewer-outreach-withdrawn': {
+      role: 'viewer',
+      allHosts: true,
+      roleId: 'role-outreach',
+      permissions: { 'outreach.use': false },
+    },
   }
 })
+
+/** The catalog half of a stamped map — what `resolveOrgPermissions` decides. */
+const catalogKeysOf = (stamp: unknown): Record<string, boolean> =>
+  Object.fromEntries(
+    Object.entries((stamp ?? {}) as Record<string, boolean>).filter(([key]) =>
+      (ORG_PERMISSION_KEYS as readonly string[]).includes(key),
+    ),
+  )
 
 describe('syncOrgAuthProjections writes the resolved permission map', () => {
   it('stamps every member with the resolver’s own verdict', async () => {
@@ -191,9 +221,61 @@ describe('syncOrgAuthProjections writes the resolved permission map', () => {
       const customRole = roleId
         ? ((roles[roleId] ?? null) as never)
         : null
-      expect(written[uid]?.['resolvedPermissions']).toEqual(
+      expect(catalogKeysOf(written[uid]?.['resolvedPermissions'])).toEqual(
         resolveOrgPermissions(member as never, customRole),
       )
+    }
+  })
+
+  it('carries a plugin-declared key a custom role GRANTS, which the rules read (AGL-2974)', async () => {
+    await syncOrgAuthProjections(ORG)
+    const stamp = written['uid-viewer-outreach']?.['resolvedPermissions'] as
+      | Record<string, boolean>
+      | undefined
+    expect(stamp?.['outreach.use']).toBe(true)
+    // The catalog half is still the resolver's alone.
+    expect(catalogKeysOf(stamp)).toEqual(
+      resolveOrgPermissions(
+        members['uid-viewer-outreach'] as never,
+        roles['role-outreach'] as never,
+      ),
+    )
+  })
+
+  it('a per-member override WITHDRAWING a plugin key beats the custom role', async () => {
+    await syncOrgAuthProjections(ORG)
+    const stamp = written['uid-viewer-outreach-withdrawn']?.[
+      'resolvedPermissions'
+    ] as Record<string, boolean>
+    expect(stamp['outreach.use']).toBe(false)
+  })
+
+  it('leaves a plugin key nobody set ABSENT, so the rules fall to the role', async () => {
+    // A stamped tier default would be computed from whichever plugin bundles
+    // the writing process had loaded; absence is the only answer every
+    // process agrees on.
+    await syncOrgAuthProjections(ORG)
+    const plain = written['uid-editor']?.['resolvedPermissions'] as Record<
+      string,
+      boolean
+    >
+    expect(Object.keys(plain)).not.toContain('outreach.use')
+  })
+
+  it('stamps no legacy camelCase key as if it were a plugin key', async () => {
+    await syncOrgAuthProjections(ORG)
+    const stamp = written['uid-viewer-outreach']?.[
+      'resolvedPermissions'
+    ] as Record<string, boolean>
+    expect(Object.keys(stamp)).not.toContain('createHosts')
+  })
+
+  it('REPLACES the projection on write, so a withdrawn key cannot survive a merge', async () => {
+    await syncOrgAuthProjections(ORG)
+    for (const uid of Object.keys(members)) {
+      expect(writeOptions[uid]).toEqual({
+        mergeFields: ['scopeTokens', 'resolvedPermissions'],
+      })
     }
   })
 
@@ -246,6 +328,8 @@ describe('syncOrgAuthProjections writes the resolved permission map', () => {
       'role-deleted',
       'role-granting',
       'role-limited',
+      // Two members carry it too, and it is still read once.
+      'role-outreach',
     ])
   })
 

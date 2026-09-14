@@ -130,6 +130,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<
   commerce: 'elements',
   marketplace: 'console-only',
   crm: 'console-only',
+  outreach: 'console-only',
   data: 'console-only',
   email: 'elements',
   'events-calendar': 'elements',
@@ -189,6 +190,10 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   // `crm` was `contacts` until AGL-2595 widened one list into the hub; the
   // release flag kept its key because it is persisted in Remote Config.
   { id: 'crm', label: 'CRM', description: 'Leads, contacts, companies, deals, tasks and reports.', releaseFlag: 'release_crm' },
+  // Outreach (AGL-2974) works the CRM's records but is released and entitled
+  // on its own: sending sequences from a rep's mailbox is a capability a
+  // workspace can hold the CRM without.
+  { id: 'outreach', label: 'Outreach', description: 'One-to-one email sequences sent from connected mailboxes.', releaseFlag: 'release_outreach' },
   { id: 'data', label: 'Data', description: 'Datasets, records, and CSV import/export.', releaseFlag: 'release_data_store' },
   { id: 'email', label: 'Email', description: 'Designed emails and campaign sending.', releaseFlag: 'release_email' },
   { id: 'events-calendar', label: 'Events Calendar', description: 'Event lists and calendars.', releaseFlag: 'release_events' },

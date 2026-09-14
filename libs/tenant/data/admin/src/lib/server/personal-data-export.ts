@@ -172,6 +172,13 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'EXISTENCE ONLY — label, scopes, creating uid, dates. Never the credential, and never the document id, which is the SHA-256 of the token.',
   },
   {
+    collection: 'outreachMailboxCredentials',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY — which connected mailbox a credential authorizes, its provider, granted scopes and dates (AGL-2974). Every token is redacted by name and by shape (see redactSecrets) and never disclosed. The document id is the mailbox id, not derived from any secret, so it is disclosed.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -943,6 +950,16 @@ export async function exportOrgData(
   data['apiKeys'] = await readByField(db, 'apiKeys', 'orgId', orgId, {
     includeIds: false,
   })
+
+  // Which mailboxes the reps connected, never the grant behind one: the
+  // tokens are withheld by `redactSecrets` like every other read here. The id
+  // is the mailbox's own, so unlike `apiKeys` it stays.
+  data['outreachMailboxCredentials'] = await readByField(
+    db,
+    'outreachMailboxCredentials',
+    'orgId',
+    orgId,
+  )
 
   data['publisherProfiles'] = await readDoc(db, 'publisherProfiles', orgId)
   data['marketplaceListings'] = await readByField(

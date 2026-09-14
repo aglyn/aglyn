@@ -34,6 +34,7 @@ import {
   countManagerSeatsExcluding,
   createResourceUid,
   generateOrgSlug,
+  projectMemberResolvedPermissions,
   resolveOrgPermissions,
   isOrgWideMember,
   isValidOrgSlug,
@@ -386,7 +387,7 @@ export async function createOrganization(
          * It is written anyway: an unstamped owner is a row the drift check
          * has to keep explaining.
          */
-        resolvedPermissions: resolveOrgPermissions(
+        resolvedPermissions: projectMemberResolvedPermissions(
           { role: 'owner', allHosts: true },
           null,
         ),
@@ -1026,9 +1027,9 @@ async function loadOrgCustomRoles(
  * member removed from the organization, drops out of the recomputed
  * `memberRoles` — and kept their old key on the host document, which is the
  * one thing the Firestore rules read to let a person edit and publish a
- * site. `memberPermissions` kept their AI verdict the same way. The member
- * projections are written by the same rule, so no recomputed field can keep
- * a value its recomputation dropped.
+ * site. `memberPermissions` kept their AI verdict the same way, and the
+ * plugin half of a member's `resolvedPermissions` would keep a withdrawn
+ * grant `true` (AGL-2974).
  *
  * `mergeFields` overwrites exactly the listed fields whole and leaves the
  * rest of the document untouched, which is all the merge was for. Every
@@ -1070,7 +1071,9 @@ const MEMBER_PROJECTION_WRITE: FirebaseFirestore.SetOptions = {
  * already makes for a reason the rules language shares: it has no `.map()`
  * either.
  *
- * The map is `resolveOrgPermissions`' own output, so the rules and every
+ * The map is `projectMemberResolvedPermissions`: `resolveOrgPermissions`'
+ * own catalog verdict, plus the plugin-declared keys a custom role or an
+ * override set explicitly (AGL-2974), so the rules and every
  * server route are reading one resolver's verdict rather than two
  * implementations of it.
  *
@@ -1125,7 +1128,7 @@ export async function syncOrgAuthProjections(
           orgRef.collection('members').doc(member.$id),
           {
             scopeTokens: projectMemberScopeTokens(member),
-            resolvedPermissions: resolveOrgPermissions(
+            resolvedPermissions: projectMemberResolvedPermissions(
               member,
               // `?? null`, never `?? undefined`: a member whose `roleId`
               // points at a DELETED role must resolve to their role

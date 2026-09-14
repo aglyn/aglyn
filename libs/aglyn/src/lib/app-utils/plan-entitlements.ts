@@ -404,6 +404,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // with the suite included is the competitive entry, and gating a
       // tier higher hands the small-business buyer to a free CRM elsewhere.
       crm: false,
+      // Outreach (AGL-2974) is on NO plan, this one through Enterprise: which
+      // tiers carry sequences and connected mailboxes, and at what caps, is
+      // an owner decision still to be made. Until then an organization gets
+      // it only through the per-org `entitlements.features.outreach`
+      // override, and the Firestore rules read that override alone.
+      outreach: false,
       interactions: true,
       actions: false,
       webhooks: false,
@@ -536,6 +542,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       // 2026-09-05 has the arithmetic — and it is the upgrade motive from
       // Free, not a line on top of a plan.
       crm: true,
+      outreach: false,
       interactions: true,
       actions: false,
       webhooks: false,
@@ -651,6 +658,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       videoMedia: true,
       bookings: true,
       crm: true,
+      outreach: false,
       interactions: true,
       actions: true,
       webhooks: false,
@@ -729,6 +737,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       videoMedia: true,
       bookings: true,
       crm: true,
+      outreach: false,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -809,6 +818,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       videoMedia: true,
       bookings: true,
       crm: true,
+      outreach: false,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -888,6 +898,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       videoMedia: true,
       bookings: true,
       crm: true,
+      outreach: false,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -981,6 +992,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       videoMedia: true,
       bookings: true,
       crm: true,
+      outreach: false,
       interactions: true,
       actions: true,
       webhooks: true,
@@ -1103,6 +1115,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       videoMedia: true,
       bookings: true,
       crm: true,
+      outreach: false,
       interactions: true,
       actions: true,
       webhooks: true,

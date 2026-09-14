@@ -18,6 +18,7 @@ design: the surface is small and curated, and each entry needs semantics
 | --- | --- |
 | `registerConsoleExtension(extension)` | Declares everything a plugin adds to the console shell. Idempotent by `pluginId` (re-registration replaces). |
 | `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[orgSlug]/hosts/[host]/[...pluginSlug]`. The resolver matches an exact `href`, or a declared section beneath one — longest href wins, prefixes match on a segment boundary, and a tie between two enabled plugins refuses. It answers `{ extension, navItem, section?, segments }`. |
+| `listConsoleOrgNavItems()` / `resolveConsoleOrgPluginPage(href)` | The same pair for **organization-level** surfaces — the extension's `orgNavItems`, listed on the organization's tab strip and served under `/[orgSlug]/[...pluginSlug]` with the same matching rules. Neither pair reads the other's list. |
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in screen docs — never rename**. |
@@ -28,7 +29,12 @@ design: the surface is small and curated, and each entry needs semantics
 `permission?` (authorization gate the shell applies — see below), `navItems?`
 (a nav item with a `Component` becomes a full page and receives
 `ConsolePluginPageProps { hostId, entitled, org?, permissions?, releaseFlag?,
-basePath?, sections?, section?, segments? }`), `dashboardCards?`,
+basePath?, sections?, section?, segments? }`), `orgNavItems?` (the same
+shape, mounted at the organization level rather than under a site: the page
+receives `hostId: null` and an `orgMount` naming the organization and its
+sites, and the shell admits only a member whose access spans the whole
+organization; an `href` that names one of the console's own organization
+routes, such as `/team` or `/settings`, never renders), `dashboardCards?`,
 `settingsSections?`, `widgets?`, `providers?`.
 
 `ConsoleExtension.permission?` (and `ConsoleNavItem.permission?`, which

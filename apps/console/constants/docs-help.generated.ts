@@ -413,6 +413,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/onboarding-deep-links',
     title: 'Onboarding deep links (marketing → console)',
   },
+  outreach: {
+    path: '/content-and-data/crm/outreach',
+    title: 'Outreach',
+  },
   passwordAScreen: {
     path: '/building-sites/site-protection/password-a-screen',
     title: 'Password-protect a screen',
@@ -726,6 +730,7 @@ export const DOCS_HELP_ANCHORS = {
   multilingual: ['#locale-variants', '#hreflang--discovery', '#language-switcher', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
+  outreach: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#related'],
   passwordAScreen: ['#steps', '#password-vs-members-only', '#related'],
   platformHealth: ['#three-states-never-two', '#the-probes', '#serving', '#backups--exports', '#rate-limiters', '#signup-volume', '#email-delivery', '#csp-violations', '#sharing-scope-drift', '#pending-erasures', '#people-waiting-beside-the-workspaces', '#idempotency-claims', '#resolved-server-config', '#when-the-configured-text-does-not-mean-what-it-says', '#values-are-never-shown', '#re-checking', '#related'],
   pluginConfig: ['#layers', '#declare', '#field-types', '#read', '#no-schema', '#resolution', '#console-ui', '#api', '#related'],

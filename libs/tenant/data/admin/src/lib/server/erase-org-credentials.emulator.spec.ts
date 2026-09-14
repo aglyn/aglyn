@@ -20,12 +20,19 @@
  */
 
 /**
- * An org erasure must take its API credentials with it (AGL-1444).
+ * An org erasure must take its API credentials, and the OAuth grants behind
+ * its reps' Outreach mailboxes, with it (AGL-1444, AGL-2974).
  *
  * `eraseOrg` walks `orgs/{orgId}` with `recursiveDelete`. `apiKeys` is a
  * TOP-LEVEL collection keyed by the SHA-256 of the token, carrying `orgId`
  * as a FIELD — so it is structurally invisible to a path-scoped cascade, and
  * the credential outlived the workspace it belonged to.
+ *
+ * `outreachMailboxCredentials` has the same shape — keyed by the mailbox id,
+ * `orgId` as a field — and a worse document: tokens that send as a person.
+ * Its rows are written straight to Firestore below rather than through a
+ * connect flow, because the collection belongs to the Outreach plugin, which
+ * this library may not import, and the sweep keys on nothing but `orgId`.
  *
  * The route gate happens to fail closed today (`authenticateApiV1` reads the
  * org doc and 401s when it is gone), and the third test below pins that so a
@@ -65,6 +72,11 @@ const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 const ORG = 'e2e-erase-credentials-org'
 const OTHER_ORG = 'e2e-erase-credentials-bystander'
 
+/** Outreach mailbox credentials are keyed by the mailbox id they authorize. */
+const MAILBOX_CREDENTIALS = 'outreachMailboxCredentials'
+const ERASED_MAILBOX = 'e2e-erase-credentials-mailbox'
+const BYSTANDER_MAILBOX = 'e2e-erase-credentials-bystander-mailbox'
+
 if (EMULATED && !getApps().length) {
   initializeApp({ projectId: 'aglyn-main' })
 }
@@ -87,7 +99,7 @@ jest.mock('firebase-admin/storage', () => ({
 
 const describeEmulated = EMULATED ? describe : describe.skip
 
-describeEmulated('an erased org leaves no live API credential (AGL-1444)', () => {
+describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)', () => {
   let db: Firestore
   let erase: typeof import('./erase')
   let apiKeys: typeof import('./api-keys')
@@ -96,6 +108,7 @@ describeEmulated('an erased org leaves no live API credential (AGL-1444)', () =>
   /** The raw tokens exist in plaintext only here, exactly as at mint time. */
   let erasedOrgToken: string
   let bystanderToken: string
+  let result: import('./erase').EraseOrgResult
 
   beforeAll(async () => {
     db = getFirestore()
@@ -108,6 +121,11 @@ describeEmulated('an erased org leaves no live API credential (AGL-1444)', () =>
     for (const orgId of [ORG, OTHER_ORG]) {
       const stale = await db.collection('apiKeys').where('orgId', '==', orgId).get()
       await Promise.all(stale.docs.map((doc) => doc.ref.delete()))
+      const staleMailboxes = await db
+        .collection(MAILBOX_CREDENTIALS)
+        .where('orgId', '==', orgId)
+        .get()
+      await Promise.all(staleMailboxes.docs.map((doc) => doc.ref.delete()))
       await db.recursiveDelete(db.collection('orgs').doc(orgId))
     }
 
@@ -142,7 +160,21 @@ describeEmulated('an erased org leaves no live API credential (AGL-1444)', () =>
       })
     ).token
 
-    const result = await erase.eraseOrg(ORG)
+    // One connected mailbox per org. The ciphertext is a placeholder — the
+    // sweep never reads the body, only the `orgId` it is bounded by.
+    for (const [orgId, mailboxId] of [
+      [ORG, ERASED_MAILBOX],
+      [OTHER_ORG, BYSTANDER_MAILBOX],
+    ]) {
+      await db.collection(MAILBOX_CREDENTIALS).doc(mailboxId).set({
+        orgId,
+        mailboxId,
+        provider: 'google',
+        tokenCiphertext: `fixture-ciphertext-${mailboxId}`,
+      })
+    }
+
+    result = await erase.eraseOrg(ORG)
     // Guard the premise: if the erasure itself was skipped there is nothing
     // to assert about, and a green run would mean nothing.
     expect(result).toMatchObject({ ok: true })
@@ -155,6 +187,7 @@ describeEmulated('an erased org leaves no live API credential (AGL-1444)', () =>
       .where('orgId', '==', OTHER_ORG)
       .get()
     await Promise.all(rows.docs.map((doc) => doc.ref.delete()))
+    await db.collection(MAILBOX_CREDENTIALS).doc(BYSTANDER_MAILBOX).delete()
     await db.recursiveDelete(db.collection('orgs').doc(OTHER_ORG))
   }, 60_000)
 
@@ -182,5 +215,27 @@ describeEmulated('an erased org leaves no live API credential (AGL-1444)', () =>
     // other customer's integration.
     const verified = await apiKeys.verifyApiKey(bystanderToken)
     expect(verified?.orgId).toBe(OTHER_ORG)
+  }, 60_000)
+
+  it('THE DEFECT: no mailbox credential still references the erased org', async () => {
+    const rows = await db
+      .collection(MAILBOX_CREDENTIALS)
+      .where('orgId', '==', ORG)
+      .get()
+    expect(rows.size).toBe(0)
+    // And the sweep reached the row rather than finding nothing: the seeded
+    // credential is the one the audit count names.
+    expect(result.outreachMailboxCredentials).toBe(1)
+  }, 60_000)
+
+  it('leaves another org\'s mailbox credential untouched', async () => {
+    // Bounded by the field, for the reason the key test above gives: a
+    // collection-wide delete here disconnects every other workspace's reps.
+    const row = await db
+      .collection(MAILBOX_CREDENTIALS)
+      .doc(BYSTANDER_MAILBOX)
+      .get()
+    expect(row.exists).toBe(true)
+    expect(row.get('orgId')).toBe(OTHER_ORG)
   }, 60_000)
 })

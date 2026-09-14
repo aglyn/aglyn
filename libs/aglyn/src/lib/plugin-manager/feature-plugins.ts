@@ -177,8 +177,10 @@ export interface ConsolePluginPageProps {
   /**
    * The site this surface is mounted under — or `null` when it is mounted at
    * the ORGANIZATION level, where there is no site and {@link orgMount} says
-   * which org (AGL-2630). Only the CRM mounts there today; every other
-   * surface is reached through a site route and always receives a string.
+   * which org (AGL-2630). Two things mount there: the CRM's own org route,
+   * and every {@link ConsoleExtension.orgNavItems} surface through the
+   * generic org route (AGL-2974). A surface reached through a site route
+   * always receives a string.
    */
   hostId: string | null
   /** Present only at an org-level mount — see {@link ConsolePluginOrgMount}. */
@@ -777,6 +779,30 @@ export interface ConsoleExtension {
    */
   upgradeNotice?: ConsoleUpgradeNotice
   navItems?: ConsoleNavItem[]
+  /**
+   * Surfaces mounted at the ORGANIZATION level rather than under a site
+   * (AGL-2974): each is served at `/[orgSlug]{href}` by the console's generic
+   * org route and listed on the organization's tab strip.
+   *
+   * A separate list rather than a flag on {@link ConsoleNavItem}, because the
+   * two levels are read by different consumers. The site strip, the site
+   * route and every title and section lookup iterate `navItems`, and a scope
+   * field on one of those entries would reach each of them as a site surface
+   * until every one of them learned to skip it. Nothing that reads `navItems`
+   * sees these.
+   *
+   * The same contract a site nav item has, with the site taken away: the
+   * page receives `hostId: null` and an `orgMount` naming the organization
+   * and its sites, sections resolve and gate the same way, and the
+   * extension's `featureFlag` and `permission` apply unchanged. The shell
+   * admits only a reader whose reach is the whole organization, because a
+   * surface with no site has no scope to narrow a site collaborator to.
+   *
+   * The href must not name one of the console's own organization routes
+   * (`/hosts`, `/team`, `/settings`, `/crm` and the rest): a named route
+   * always wins over the generic one, so such a surface would never render.
+   */
+  orgNavItems?: ConsoleNavItem[]
   dashboardCards?: ConsoleDashboardCard[]
   settingsSections?: ConsoleSettingsSection[]
   /** Slot-addressed components the shell renders in place (AGL-419). */
@@ -941,11 +967,66 @@ export function resolveConsolePluginPage(
   href: string,
   enabledPluginIds?: readonly PluginId[],
 ): ResolvedConsolePluginPage | undefined {
+  return resolvePluginPageAmong(
+    href,
+    enabledPluginIds,
+    (extension) => extension.navItems,
+  )
+}
+
+/** One organization-level nav item with the extension that declared it. */
+export interface ConsoleOrgNavEntry {
+  extension: ConsoleExtension
+  navItem: ConsoleNavItem
+}
+
+/**
+ * Every registered {@link ConsoleExtension.orgNavItems} entry, in
+ * registration order, for the organization's tab strip (AGL-2974).
+ *
+ * Carries the extension whole rather than a flattened copy of two of its
+ * fields: a tab for a surface the reader cannot open is hidden, and deciding
+ * that takes the extension's `permission`, `featureFlag` and
+ * `upgradeNotice`, which is the same set the org route reads.
+ */
+export function listConsoleOrgNavItems(
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleOrgNavEntry[] {
+  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
+    (extension.orgNavItems ?? []).map((navItem) => ({ extension, navItem })),
+  )
+}
+
+/**
+ * {@link resolveConsolePluginPage} for the ORGANIZATION level (AGL-2974): an
+ * org-relative href (`/outreach/sequences`) against every enabled
+ * extension's `orgNavItems`, with the same matching, the same longest-href
+ * rule and the same refusal of a tie between two plugins. Site nav items are
+ * never candidates, so a surface registered under a site cannot be opened
+ * without one.
+ */
+export function resolveConsoleOrgPluginPage(
+  href: string,
+  enabledPluginIds?: readonly PluginId[],
+): ResolvedConsolePluginPage | undefined {
+  return resolvePluginPageAmong(
+    href,
+    enabledPluginIds,
+    (extension) => extension.orgNavItems,
+  )
+}
+
+/** The resolver both levels share; `navItemsOf` picks which list is read. */
+function resolvePluginPageAmong(
+  href: string,
+  enabledPluginIds: readonly PluginId[] | undefined,
+  navItemsOf: (extension: ConsoleExtension) => ConsoleNavItem[] | undefined,
+): ResolvedConsolePluginPage | undefined {
   let best: ResolvedConsolePluginPage | undefined
   /** Extensions matching at `best`'s length — more than one is the tie. */
   let contenders: PluginId[] = []
   for (const extension of listConsoleExtensions(enabledPluginIds)) {
-    for (const navItem of extension.navItems ?? []) {
+    for (const navItem of navItemsOf(extension) ?? []) {
       if (!navItem.Component) continue
       const match = matchNavItem(navItem, href)
       if (!match) continue

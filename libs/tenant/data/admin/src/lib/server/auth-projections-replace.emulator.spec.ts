@@ -34,6 +34,9 @@
  *
  * Driven through the real membership functions, not through the writer
  * alone, because the defect is what a revoke and a removal leave behind.
+ * The member stamp is held to the same rule: a plugin-declared permission
+ * it carries only while one is explicitly set (AGL-2974) has to leave it
+ * when the override does.
  *
  * Skipped unless FIRESTORE_EMULATOR_HOST is set, so a normal run is
  * unaffected and this can never touch production. The functions it calls
@@ -45,7 +48,7 @@
  */
 
 import { getApps, initializeApp } from 'firebase-admin/app'
-import { getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore, type Firestore } from 'firebase-admin/firestore'
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 
@@ -56,6 +59,8 @@ const OWNER = 'e2e-projection-owner'
 const LEAVER = 'e2e-projection-leaver'
 /** A collaborator scoped to the one site, whose access is revoked. */
 const COLLABORATOR = 'e2e-projection-collaborator'
+/** An org-wide viewer handed a plugin permission by override, then not. */
+const VIEWER = 'e2e-projection-viewer'
 
 if (EMULATED && !getApps().length) {
   initializeApp({ projectId: 'aglyn-main' })
@@ -69,11 +74,15 @@ describeEmulated('the auth projections replace what they recompute (AGL-2985)', 
 
   const hostData = async () =>
     (await db.collection('hosts').doc(HOST).get()).data() ?? {}
+  const memberData = async (uid: string) =>
+    (
+      await db.collection('orgs').doc(ORG).collection('members').doc(uid).get()
+    ).data() ?? {}
 
   const cleanUp = async () => {
     await db.recursiveDelete(db.collection('orgs').doc(ORG))
     await db.collection('hosts').doc(HOST).delete()
-    for (const uid of [OWNER, LEAVER, COLLABORATOR]) {
+    for (const uid of [OWNER, LEAVER, COLLABORATOR, VIEWER]) {
       await db.recursiveDelete(db.collection('users').doc(uid))
     }
   }
@@ -99,6 +108,11 @@ describeEmulated('the auth projections replace what they recompute (AGL-2985)', 
       allHosts: false,
       hostAccess: { [HOST]: 'editor' },
     })
+    await members.doc(VIEWER).set({
+      role: 'viewer',
+      allHosts: true,
+      permissions: { 'outreach.use': true },
+    })
 
     await organizations.syncOrgAuthProjections(ORG)
   }, 120_000)
@@ -114,6 +128,11 @@ describeEmulated('the auth projections replace what they recompute (AGL-2985)', 
     expect(roles[OWNER]).toBeDefined()
     expect(roles[LEAVER]).toBeDefined()
     expect(roles[COLLABORATOR]).toBe('editor')
+    expect(
+      ((await memberData(VIEWER))['resolvedPermissions'] as Record<string, boolean>)[
+        'outreach.use'
+      ],
+    ).toBe(true)
   }, 60_000)
 
   it('THE DEFECT: a revoked collaborator no longer holds a site role', async () => {
@@ -135,5 +154,20 @@ describeEmulated('the auth projections replace what they recompute (AGL-2985)', 
     // Fields the projection does not own survive the replacement.
     expect(host['displayName']).toBe('Fixture site')
     expect(host['subdomain']).toBe('fixture')
+  }, 60_000)
+
+  it('a withdrawn plugin permission leaves the member stamp', async () => {
+    await db
+      .collection('orgs')
+      .doc(ORG)
+      .collection('members')
+      .doc(VIEWER)
+      .update({ permissions: FieldValue.delete() })
+    await organizations.syncOrgAuthProjections(ORG)
+    const stamp = (await memberData(VIEWER))['resolvedPermissions'] as Record<
+      string,
+      boolean
+    >
+    expect(Object.keys(stamp)).not.toContain('outreach.use')
   }, 60_000)
 })

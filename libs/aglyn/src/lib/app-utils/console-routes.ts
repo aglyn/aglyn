@@ -131,6 +131,15 @@ export enum Route {
    * captured BY a site.
    */
   ORG_CRM = '/[orgSlug]/crm',
+  /*
+   * The generic ORGANIZATION-level plugin route (AGL-2974): every surface an
+   * extension declares in `orgNavItems` is served here, at
+   * `/[orgSlug]/<href>[/<section>…]`, by
+   * `app/(app)/[orgSlug]/[...pluginSlug]/page.tsx`. The org twin of
+   * `HOST_PLUGIN`, and like it the one org route whose leaf segment is data:
+   * every named org route in this enum wins over it.
+   */
+  ORG_PLUGIN = '/[orgSlug]/[pluginSlug]',
   ORG_PLUGINS = '/[orgSlug]/plugins',
   // One plugin, as installed in this workspace (AGL-1007): scope, settings
   // and permissions in one place. The segment takes EITHER identifier
@@ -532,6 +541,7 @@ export interface RoutePayload {
   [Route.ORG_DATA]: { orgSlug: string }
   [Route.ORG_CONTACTS]: { orgSlug: string }
   [Route.ORG_CRM]: { orgSlug: string }
+  [Route.ORG_PLUGIN]: { orgSlug: string; pluginSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }
   [Route.ORG_PLUGIN_INSTALLATION]: { orgSlug: string; pluginRef: string }
   [Route.ORG_MARKETPLACE]: { orgSlug: string }

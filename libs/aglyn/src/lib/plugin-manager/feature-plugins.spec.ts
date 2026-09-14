@@ -19,10 +19,12 @@ import {
   defineUiFeatureBundle,
   listConsoleExtensions,
   listConsoleNavItems,
+  listConsoleOrgNavItems,
   listConsoleProviders,
   listConsoleWidgets,
   MUI_BUNDLE_ID,
   registerConsoleExtension,
+  resolveConsoleOrgPluginPage,
   resolveConsolePluginPage,
   unregisterConsoleExtension,
   type ComponentRegistrar,
@@ -576,5 +578,97 @@ describe('resolveConsolePluginPage sections', () => {
         resolveConsolePluginPage('/products/orders', ['commerce'])?.section?.id,
       ).toBe('orders')
     })
+  })
+})
+
+describe('organization-level surfaces (AGL-2974)', () => {
+  const Outreach = (): null => null
+  const Events = (): null => null
+
+  afterEach(() => {
+    for (const extension of listConsoleExtensions()) {
+      unregisterConsoleExtension(extension.pluginId)
+    }
+  })
+
+  function registerOrgSurface() {
+    registerConsoleExtension({
+      pluginId: 'outreach',
+      displayName: 'Outreach',
+      featureFlag: 'outreach',
+      permission: 'outreach.use',
+      orgNavItems: [
+        {
+          label: 'Outreach',
+          href: '/outreach',
+          Component: Outreach,
+          sections: [
+            { id: 'sequences', label: 'Sequences' },
+            { id: 'mailboxes', label: 'Mailboxes' },
+          ],
+        },
+      ],
+    })
+  }
+
+  it('lists org nav items with the extension that declared them', () => {
+    registerOrgSurface()
+    const entries = listConsoleOrgNavItems()
+    expect(entries).toHaveLength(1)
+    expect(entries[0].extension.pluginId).toBe('outreach')
+    expect(entries[0].extension.featureFlag).toBe('outreach')
+    expect(entries[0].navItem.href).toBe('/outreach')
+  })
+
+  it('resolves an org section URL to that section of that page', () => {
+    registerOrgSurface()
+    const resolved = resolveConsoleOrgPluginPage('/outreach/mailboxes')
+    expect(resolved?.navItem.Component).toBe(Outreach)
+    expect(resolved?.section?.id).toBe('mailboxes')
+    expect(resolved?.segments).toEqual(['mailboxes'])
+    expect(resolveConsoleOrgPluginPage('/outreach')?.section).toBeUndefined()
+    expect(resolveConsoleOrgPluginPage('/outreach/nope')).toBeUndefined()
+  })
+
+  it('keeps the two levels apart: neither resolver reads the other list', () => {
+    registerOrgSurface()
+    registerConsoleExtension({
+      pluginId: 'events-calendar',
+      displayName: 'Events',
+      navItems: [{ label: 'Events', href: '/events', Component: Events }],
+    })
+    // An org surface is not a site page, and a site page is not an org one.
+    expect(resolveConsolePluginPage('/outreach/sequences')).toBeUndefined()
+    expect(resolveConsoleOrgPluginPage('/events')).toBeUndefined()
+    // The site strip's list never carries an org item.
+    expect(listConsoleNavItems().map((item) => item.href)).toEqual(['/events'])
+    expect(
+      listConsoleOrgNavItems().map((entry) => entry.navItem.href),
+    ).toEqual(['/outreach'])
+  })
+
+  it('scopes both the list and the resolver to the enabled plugins', () => {
+    registerOrgSurface()
+    expect(listConsoleOrgNavItems(['crm'])).toEqual([])
+    expect(
+      resolveConsoleOrgPluginPage('/outreach/sequences', ['crm']),
+    ).toBeUndefined()
+    expect(
+      resolveConsoleOrgPluginPage('/outreach/sequences', ['outreach'])?.section
+        ?.id,
+    ).toBe('sequences')
+  })
+
+  it('refuses a tie between two plugins on the same org path', () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    registerOrgSurface()
+    registerConsoleExtension({
+      pluginId: 'outreach-plus',
+      displayName: 'Outreach Plus',
+      orgNavItems: [{ label: 'Outreach', href: '/outreach', Component: Events }],
+    })
+    expect(resolveConsoleOrgPluginPage('/outreach')).toBeUndefined()
+    expect(error).toHaveBeenCalled()
+    error.mockRestore()
   })
 })

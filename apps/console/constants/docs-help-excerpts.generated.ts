@@ -130,6 +130,7 @@ export const DOCS_HELP_EXCERPTS = {
   multilingual: 'Offer your site in multiple languages with locale variants, hreflang, and a language switcher.',
   multiSelect: 'Select several elements at once and move the whole selection together.',
   onboardingDeepLinks: 'The plan-aware signup contract the marketing pricing page links into, and what the console does with it.',
+  outreach: 'One-to-one email sequences a rep sends to a person from their own connected mailbox, kept with the CRM. Rolling out.',
   passwordAScreen: 'Require a password to view a specific screen.',
   platformHealth: 'The staff health board — serving, backups, rate limiters, signup volume, email delivery and CSP violations, with what each red light means and what to do.',
   pluginConfig: 'Declare a settings schema and get a console form for free — plus the three layers a setting is answered at, workspace defaults with per-site overrides, and the one write that clears one.',

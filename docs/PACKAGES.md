@@ -105,6 +105,7 @@ changes, because every rule is by tag.
 | `plugins-marketing` | `@aglyn/plugins-marketing` | `libs/plugins/marketing` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-marketplace` | `@aglyn/plugins-marketplace` | `libs/plugins/marketplace` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-mui` | `@aglyn/plugins-mui` | `libs/plugins/mui` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-outreach` | `@aglyn/plugins-outreach` | `libs/plugins/outreach` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-redirects` | `@aglyn/plugins-redirects` | `libs/plugins/redirects` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-workflows` | `@aglyn/plugins-workflows` | `libs/plugins/workflows` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 

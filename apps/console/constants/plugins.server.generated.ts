@@ -36,6 +36,12 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     load: () => import('@aglyn/plugins-crm/server'),
   },
   {
+    id: 'outreach',
+    apiPrefixes: ["outreach"],
+    register: {"consoleApi":"registerOutreachConsoleApi"},
+    load: () => import('@aglyn/plugins-outreach/server'),
+  },
+  {
     id: 'email',
     apiPrefixes: ["email"],
     register: {"consoleApi":"registerEmailConsoleApi"},

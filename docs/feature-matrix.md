@@ -43,6 +43,7 @@ this file is the last step, not the decision.
 | `marketplaceSelling` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `mediaCdn` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `multilingual` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `outreach` | — | — | — | — | — | — | — | — |
 | `pos` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `productReviews` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `redirects` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -59,4 +60,4 @@ this file is the last step, not the decision.
 | `whiteLabel` | — | — | — | — | — | — | ✓ | ✓ |
 | `workflows` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-_38 features across 8 plans._
+_39 features across 8 plans._

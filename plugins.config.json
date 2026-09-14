@@ -67,6 +67,17 @@
       ]
     },
     {
+      "id": "outreach",
+      "package": "@aglyn/plugins-outreach",
+      "register": {
+        "console": "registerOutreachConsole",
+        "consoleApi": "registerOutreachConsoleApi"
+      },
+      "apiPrefixes": [
+        "outreach"
+      ]
+    },
+    {
       "id": "data",
       "package": "@aglyn/plugins-data",
       "register": {
