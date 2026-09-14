@@ -21,7 +21,8 @@ import { isCustomPricedPlan } from './plan-entitlements'
 /**
  * The marketing → console onboarding deep link (AGL-1117).
  *
- * `app.aglyn.com/signup?plan=pro&interval=year`
+ * `app.aglyn.com/signup?plan=pro&interval=year`, optionally `&ai=1` for the
+ * Aglyn AI add-on (AGL-2897).
  *
  * This is a CONTRACT with a site we do not control and cannot deploy in
  * lockstep with. So it is parsed defensively and in one place: the pricing
@@ -55,6 +56,17 @@ export interface OnboardingPlanIntent {
    * (AGL-1110).
    */
   contactSales: boolean
+  /**
+   * The Aglyn AI add-on, asked for alongside the plan (AGL-2897):
+   * `?plan=pro&interval=month&ai=1`.
+   *
+   * Present only when the link said so, and only ever `true` — the add-on
+   * rides the plan checkout as a second subscription item, so a flag that
+   * was never stated must not be told apart from one that was set to false
+   * by every hop that re-serializes the intent. Enterprise never carries it:
+   * the add-on is quoted with the deal, not bought through a checkout.
+   */
+  ai?: true
 }
 
 const SELF_SERVE_PLANS: readonly OrgPlan[] = [
@@ -105,6 +117,11 @@ export function parseOnboardingPlanIntent(
   if (!SELF_SERVE_PLANS.includes(plan as OrgPlan)) return null
   const interval = read('interval')
   const known = interval === 'year' || interval === 'annual' || interval === 'month'
+  // The add-on is opt-in by an explicit affirmative. Anything else — absent,
+  // empty, `0`, `false`, a typo — is "not asked for": a checkout that adds a
+  // paid item off a malformed link is the expensive direction to be wrong in.
+  const ai = read('ai')
+  const aiStated = ai === '1' || ai === 'true' || ai === 'yes'
   return {
     plan: plan as OrgPlan,
     // Anything unrecognized falls to monthly, never to yearly: guessing the
@@ -116,6 +133,7 @@ export function parseOnboardingPlanIntent(
     // org rather than be told "monthly" with a straight face.
     intervalStated: known,
     contactSales: false,
+    ...(aiStated ? { ai: true } : {}),
   }
 }
 
@@ -131,7 +149,8 @@ export function parseOnboardingPlanIntent(
 export function onboardingPlanQuery(intent: OnboardingPlanIntent): string {
   return (
     `plan=${encodeURIComponent(intent.plan)}` +
-    (intent.intervalStated ? `&interval=${intent.interval}` : '')
+    (intent.intervalStated ? `&interval=${intent.interval}` : '') +
+    (intent.ai ? '&ai=1' : '')
   )
 }
 
@@ -163,6 +182,7 @@ export function onboardingSignupHref(
   signupUrl: string,
   plan: OrgPlan,
   interval: OnboardingInterval | null,
+  options: { ai?: boolean } = {},
 ): string {
   const contactSales = isCustomPricedPlan(plan)
   // A custom-priced plan is quoted, not bought, so `parseOnboardingPlanIntent`
@@ -177,6 +197,10 @@ export function onboardingSignupHref(
     interval: stated ? interval : 'month',
     intervalStated: stated,
     contactSales,
+    // The add-on CTA (AGL-2897). Dropped for a custom-priced plan for the
+    // same reason the interval is: the parser refuses it there, so writing
+    // it would publish a claim no reader honors.
+    ...(options.ai && !contactSales ? { ai: true } : {}),
   })}`
 }
 

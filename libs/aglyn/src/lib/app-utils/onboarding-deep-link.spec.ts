@@ -236,3 +236,70 @@ describe('onboardingSignupHref — the CTA the marketing site publishes (AGL-198
     })
   })
 })
+
+describe('the Aglyn AI add-on rides the same link (AGL-2897)', () => {
+  const pro = {
+    plan: 'pro' as const,
+    interval: 'month' as const,
+    intervalStated: true,
+    contactSales: false,
+  }
+
+  it('reads ai=1 as the add-on asked for, beside the plan and interval', () => {
+    expect(parseOnboardingPlanIntent(query('plan=pro&interval=month&ai=1'))).toEqual({
+      ...pro,
+      ai: true,
+    })
+  })
+
+  it('is ABSENT — not false — when the link did not say', () => {
+    // Every hop re-serializes the intent; a `false` that was never stated
+    // would be indistinguishable from one that was, and an unstated add-on
+    // must not be sold off a malformed link.
+    for (const search of ['plan=pro', 'plan=pro&ai=', 'plan=pro&ai=0', 'plan=pro&ai=false', 'plan=pro&ai=maybe']) {
+      const intent = parseOnboardingPlanIntent(query(search))
+      expect(intent).not.toBeNull()
+      expect('ai' in (intent ?? {})).toBe(false)
+    }
+  })
+
+  it('accepts the affirmatives a hand-typed CTA is likely to carry', () => {
+    for (const value of ['1', 'true', 'yes', 'TRUE']) {
+      expect(parseOnboardingPlanIntent(query(`plan=pro&ai=${value}`))?.ai).toBe(true)
+    }
+  })
+
+  it('never rides an enterprise link — the add-on is quoted with the deal', () => {
+    const intent = parseOnboardingPlanIntent(query('plan=enterprise&ai=1'))
+    expect(intent?.contactSales).toBe(true)
+    expect('ai' in (intent ?? {})).toBe(false)
+  })
+
+  it('round-trips through onboardingPlanQuery, with and without an interval', () => {
+    const stated = { ...pro, ai: true as const }
+    expect(onboardingPlanQuery(stated)).toBe('plan=pro&interval=month&ai=1')
+    expect(parseOnboardingPlanIntent(query(onboardingPlanQuery(stated)))).toEqual(stated)
+    const unstated = { ...stated, intervalStated: false }
+    expect(onboardingPlanQuery(unstated)).toBe('plan=pro&ai=1')
+    expect(parseOnboardingPlanIntent(query(onboardingPlanQuery(unstated)))).toEqual(unstated)
+  })
+
+  it('lands on billing with the add-on still on the URL', () => {
+    expect(onboardingDestination('acme', { ...pro, ai: true })).toBe(
+      '/acme/billing?plan=pro&interval=month&ai=1',
+    )
+  })
+
+  it('is written by onboardingSignupHref on request, and dropped for enterprise', () => {
+    const SIGNUP = 'https://app.aglyn.com/signup'
+    expect(onboardingSignupHref(SIGNUP, 'pro', 'year', { ai: true })).toBe(
+      `${SIGNUP}?plan=pro&interval=year&ai=1`,
+    )
+    expect(onboardingSignupHref(SIGNUP, 'pro', 'year')).toBe(
+      `${SIGNUP}?plan=pro&interval=year`,
+    )
+    expect(onboardingSignupHref(SIGNUP, 'enterprise', 'year', { ai: true })).toBe(
+      `${SIGNUP}?plan=enterprise`,
+    )
+  })
+})

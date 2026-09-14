@@ -294,4 +294,35 @@ describe('AGL-1535 · the remembered intent is read once and re-validated', () =
     mockStoredUserDoc = {}
     expect(await consumeOnboardingPlanIntent({} as any, 'u-new')).toBeNull()
   })
+
+  it('carries the Aglyn AI add-on across the verification wall (AGL-2897)', async () => {
+    // The add-on is a paid item on the checkout the intent replays into, so
+    // losing it here would land the visitor on a plan card missing the thing
+    // they clicked.
+    await rememberOnboardingPlanIntent({} as any, 'u-new', {
+      plan: 'pro',
+      interval: 'month',
+      intervalStated: true,
+      contactSales: false,
+      ai: true,
+    })
+    expect(intentWrites()[0].query).toBe('plan=pro&interval=month&ai=1')
+    mockStoredUserDoc = { onboardingPlanIntent: intentWrites()[0] }
+    expect(await consumeOnboardingPlanIntent({} as any, 'u-new')).toEqual({
+      plan: 'pro',
+      interval: 'month',
+      intervalStated: true,
+      contactSales: false,
+      ai: true,
+    })
+  })
+
+  it('does not invent the add-on for an intent that never stated it', async () => {
+    mockStoredUserDoc = {
+      onboardingPlanIntent: { query: 'plan=pro&interval=year', createdAtMs: Date.now() },
+    }
+    const intent = await consumeOnboardingPlanIntent({} as any, 'u-new')
+    expect(intent).not.toBeNull()
+    expect('ai' in (intent ?? {})).toBe(false)
+  })
 })

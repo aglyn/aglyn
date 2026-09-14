@@ -12,8 +12,13 @@ STRIPE_SECRET_KEY=sk_live_... node tools/scripts/setup-stripe.mjs \
 ```
 
 Idempotent — prices are keyed by `lookup_key` (`aglyn_{plan}_v2` monthly,
-`aglyn_{plan}_v2_yearly` annual, plus `_extra_host` variants; plans:
-starter/pro/business/advanced), so re-running reuses them.
+`aglyn_{plan}_v2_yearly` annual, the per-plan add-ons
+`aglyn_{plan}_extra_host` / `_extra_seat` / `_extra_member` / `_extra_dataset`
+/ `_ai_addon` each with a `_yearly` twin, the flat
+`aglyn_pos_register_addon` / `aglyn_event_calendar_addon` pairs, and the
+`aglyn_metered_usage` pair; plans: starter/pro/business/scale/advanced/agency),
+so re-running reuses them. `--dry-run` resolves every key and creates nothing
+— run that first against a live key, because a Stripe price cannot be deleted.
 
 **Grandfathering (AGL-307):** the original `aglyn_{plan}` prices are left
 untouched — existing subscriptions keep billing at their old price until
@@ -23,9 +28,33 @@ The script prints the env block to paste into the console app's environment
 (Vercel project settings):
 
 - `STRIPE_SECRET_KEY`
-- `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS`
-- `STRIPE_PRICE_*_EXTRA_HOST` (consumed when the extra-host purchase path lands, AGL-39 follow-on)
-- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_{PLAN}` and `STRIPE_PRICE_{PLAN}_YEARLY` for STARTER, PRO,
+  BUSINESS, SCALE, ADVANCED and AGENCY
+- `STRIPE_PRICE_{PLAN}_EXTRA_HOST`, `_EXTRA_SEAT`, `_EXTRA_MEMBER`,
+  `_EXTRA_DATASET` and `_AI_ADDON`, each with a `_YEARLY` variant, for the
+  same six plans (the per-plan add-ons read by
+  `apps/console/utils/server/billing-addons.ts`)
+- `STRIPE_PRICE_POS_REGISTER`, `STRIPE_PRICE_EVENT_CALENDAR` and their
+  `_YEARLY` variants (the flat add-ons)
+- `STRIPE_PRICE_METERED`, `STRIPE_PRICE_METERED_YEARLY`, `STRIPE_METER_ID`,
+  `STRIPE_METER_EVENT_NAME`
+- `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`
+
+### The Aglyn AI add-on (AGL-2896/2897)
+
+Sold as a second recurring item on the org's one subscription, quantity 1,
+priced per plan from `PLAN_PRICING[plan].aiAddonMonthlyUsd` (annual is ×12).
+It reaches Stripe two ways: `POST /api/billing/checkout` with `aiAddon: true`
+(what the `?plan=pro&ai=1` signup deep link asks the Billing page to send),
+and `POST /api/billing/addons` with `kind: 'aiAddon'` on a live subscription.
+Either way the webhook mirrors the item onto `org.seatAddons.aiAddon`, which
+is what switches `features.aiGenerative` on and widens the assist band.
+
+Until the twelve `STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]` envs are set, the
+add-on is refused at purchase (501 naming the env) rather than sold on a
+missing price, and `npm run check:pricing-drift` lists each unminted lookup
+key as `UNMINTED` without failing. Mint them with the command above against
+the live key, then set the envs.
 
 ### `STRIPE_PRICE_*` are deliberately NOT `sensitive` (AGL-1362)
 

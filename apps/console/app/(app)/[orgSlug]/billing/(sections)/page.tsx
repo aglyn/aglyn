@@ -699,6 +699,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             plan: targetPlan,
             interval,
             promotionCode,
+            // The Aglyn AI add-on the deep link asked for (AGL-2897), quoted
+            // on the same invoice so the total shown is the total charged.
+            ...(planIntent?.ai ? { aiAddon: true } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -757,7 +760,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         return null
       }
     },
-    [user, orgId, interval, enqueueSnackbar],
+    [user, orgId, interval, planIntent, enqueueSnackbar],
   )
 
   /**
@@ -879,6 +882,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // priced quote the customer just confirmed, so the purchase and
             // the confirmed figure describe the same invoice.
             ...(pricedCode ? { promotionCode: pricedCode } : {}),
+            // The same add-on the quote above priced (AGL-2897).
+            ...(planIntent?.ai ? { aiAddon: true } : {}),
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -1049,6 +1054,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       user,
       orgId,
       interval,
+      planIntent,
       appliedPromotionCode,
       priceSubscribe,
       confirm,

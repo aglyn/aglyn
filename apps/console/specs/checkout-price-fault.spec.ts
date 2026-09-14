@@ -86,6 +86,49 @@ describe('configuredPriceFault (AGL-1137)', () => {
     expect(message).toContain('STRIPE_PRICE_METERED_YEARLY')
   })
 
+  it('names the AI add-on env when the failed item is the add-on (AGL-2897)', () => {
+    // The add-on follows the metered item, so it sits at [2] when metered is
+    // configured and at [1] when it is not — the caller says which.
+    const message = configuredPriceFault(
+      { ...REAL_DEAD_PRICE_ERROR, param: 'items[2][price]' },
+      'pro',
+      'month',
+      2,
+    )
+    expect(message).toContain('STRIPE_PRICE_PRO_AI_ADDON')
+    expect(message).not.toContain('STRIPE_PRICE_METERED')
+    expect(
+      configuredPriceFault(
+        { ...REAL_DEAD_PRICE_ERROR, param: 'items[2][price]' },
+        'pro',
+        'year',
+        2,
+      ),
+    ).toContain('STRIPE_PRICE_PRO_AI_ADDON_YEARLY')
+  })
+
+  it('tells the add-on at [1] from the metered item at [1] by the index it was given', () => {
+    // No metered price configured: the add-on took slot [1]. Naming the
+    // metered var would send someone to a variable the request never used.
+    const atOne = configuredPriceFault(
+      { ...REAL_DEAD_PRICE_ERROR, param: 'items[1][price]' },
+      'pro',
+      'month',
+      1,
+    )
+    expect(atOne).toContain('STRIPE_PRICE_PRO_AI_ADDON')
+    expect(atOne).not.toContain('STRIPE_PRICE_METERED')
+    // Metered configured, add-on at [2]: a failure at [1] is still metered.
+    const metered = configuredPriceFault(
+      { ...REAL_DEAD_PRICE_ERROR, param: 'items[1][price]' },
+      'pro',
+      'month',
+      2,
+    )
+    expect(metered).toContain('STRIPE_PRICE_METERED')
+    expect(metered).not.toContain('AI_ADDON')
+  })
+
   it('stays out of the way of every other Stripe failure', () => {
     // The control that keeps this honest: if it matched broadly, a genuine
     // outage would be relabelled as a config fault and nobody would look at

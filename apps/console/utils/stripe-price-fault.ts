@@ -26,6 +26,12 @@ export function configuredPriceFault(
   error: { code?: string; param?: string; message?: string } | undefined,
   plan: string,
   interval: 'month' | 'year',
+  /**
+   * Where the Aglyn AI add-on item sits in the request (AGL-2897), when the
+   * checkout attached one. It follows the metered item, so its index depends
+   * on whether that item was configured — the caller knows, this cannot.
+   */
+  aiAddonItemIndex: number | null = null,
 ): string | null {
   if (!error || error.code !== 'resource_missing') return null
   const param = String(error.param ?? '')
@@ -35,9 +41,12 @@ export function configuredPriceFault(
   // twin — naming the monthly var for a failed ANNUAL checkout would send
   // someone to fix a variable that was never consulted.
   const yearly = interval === 'year' ? '_YEARLY' : ''
-  const envVar = param.includes('[1]')
-    ? `STRIPE_PRICE_METERED${yearly}`
-    : `STRIPE_PRICE_${plan.toUpperCase()}${yearly}`
+  const envVar =
+    aiAddonItemIndex !== null && param.includes(`[${aiAddonItemIndex}]`)
+      ? `STRIPE_PRICE_${plan.toUpperCase()}_AI_ADDON${yearly}`
+      : param.includes('[1]')
+        ? `STRIPE_PRICE_METERED${yearly}`
+        : `STRIPE_PRICE_${plan.toUpperCase()}${yearly}`
   return (
     `Billing is misconfigured: ${envVar} points at a price that does not ` +
     `exist in this Stripe account/mode. This is the shape you get when the ` +
