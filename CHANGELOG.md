@@ -9,6 +9,44 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.123 — 2026-09-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.122...v1.0.0-beta.123)
+
+### Added
+
+- **content:** a collection entry holds a featured video ([AGL-2954](https://linear.app/aglyn/issue/AGL-2954))
+- **video:** load a Wistia player with the page for visitors who allow analytics ([AGL-2962](https://linear.app/aglyn/issue/AGL-2962), [AGL-2826](https://linear.app/aglyn/issue/AGL-2826), [AGL-2867](https://linear.app/aglyn/issue/AGL-2867))
+- **media:** a media picker can be narrowed to one kind of file ([AGL-2953](https://linear.app/aglyn/issue/AGL-2953), [AGL-2952](https://linear.app/aglyn/issue/AGL-2952))
+- **content:** entry templates bind a featured video and an ISO publish instant ([AGL-2956](https://linear.app/aglyn/issue/AGL-2956))
+- **ai:** the AI plugin's scaffold, provider contract, two adapters and model catalog ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+### Fixed
+
+- **media:** the usage scan finds an asset stored as a site-qualified CDN path ([AGL-2969](https://linear.app/aglyn/issue/AGL-2969), [AGL-2954](https://linear.app/aglyn/issue/AGL-2954))
+- **export:** a restored video keeps its duration, poster and renditions ([AGL-2955](https://linear.app/aglyn/issue/AGL-2955))
+- **media:** the Images and Video filters list media again under a date sort ([AGL-2952](https://linear.app/aglyn/issue/AGL-2952))
+- **video:** a page publishes a VideoObject only for a Video its renderer draws ([AGL-2957](https://linear.app/aglyn/issue/AGL-2957))
+- **media:** an image srcSet merges each width into the query its url already carries ([AGL-2958](https://linear.app/aglyn/issue/AGL-2958))
+- **video:** a video with no description still publishes its VideoObject ([AGL-2950](https://linear.app/aglyn/issue/AGL-2950), [AGL-2948](https://linear.app/aglyn/issue/AGL-2948))
+- **video:** a video's uploadDate publishes as a zoned date-time, not a bare day ([AGL-2948](https://linear.app/aglyn/issue/AGL-2948))
+- **health:** every door reuses its verdict for two minutes, inside a ten-minute budget ([AGL-2947](https://linear.app/aglyn/issue/AGL-2947))
+
+### Documentation
+
+- **content:** a collection entry's featured video, and building a video collection ([AGL-2959](https://linear.app/aglyn/issue/AGL-2959), [AGL-2956](https://linear.app/aglyn/issue/AGL-2956))
+- **monitoring:** record the alert on a Firestore rules-denial storm ([AGL-2949](https://linear.app/aglyn/issue/AGL-2949))
+
+<details>
+<summary>Also in this release: 1 test, 3 chore</summary>
+
+- **console:** the Anthropic subprocessor gate knows the AI plugin's adapter and its spec ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-1909](https://linear.app/aglyn/issue/AGL-1909))
+- **tools:** raise the Linear issue ceiling to the AGL-2969 Linear assigned ([AGL-2969](https://linear.app/aglyn/issue/AGL-2969), [AGL-2950](https://linear.app/aglyn/issue/AGL-2950), [AGL-2952](https://linear.app/aglyn/issue/AGL-2952), [AGL-2962](https://linear.app/aglyn/issue/AGL-2962))
+- **ai:** the AI plugin's package version follows the repo's 1.0.0-beta.122 ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **tools:** raise the Linear issue ceiling to the AGL-2950 Linear assigned ([AGL-2950](https://linear.app/aglyn/issue/AGL-2950), [AGL-2949](https://linear.app/aglyn/issue/AGL-2949))
+
+</details>
+
 ## v1.0.0-beta.122 — 2026-09-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.121...v1.0.0-beta.122)
