@@ -351,3 +351,141 @@ describe('component properties driving non-text fields on the published page', (
     })
   })
 })
+
+/**
+ * EVERY PROPERTY KIND REACHES ITS FIELD TYPED, ON THE PUBLISHED PAGE
+ * (AGL-2893).
+ *
+ * The graft hands each bound field the value its property's kind holds — a
+ * color token, a CSS length, a list of answers, a date, a number from a
+ * slider — and switches a property off where its condition does not hold.
+ * What only this can see is every later stage of the published pipeline
+ * leaving those values as the graft handed them.
+ */
+describe('every property kind on the published page (AGL-2893)', () => {
+  const BAND = {
+    rootId: 'b-root',
+    nodes: {
+      'b-root': {
+        $id: 'b-root',
+        componentId: 'muiStack',
+        nodes: ['b-card', 'b-cta'],
+        props: {
+          bgcolor: '{{prop.accent}}',
+          maxWidth: '{{prop.width}}',
+          spacing: '{{prop.gap}}',
+        },
+      },
+      'b-card': {
+        $id: 'b-card',
+        componentId: 'productGrid',
+        parentId: 'b-root',
+        props: {
+          productId: '{{prop.product}}',
+          tags: '{{prop.topics}}',
+          publishedOn: '{{prop.launch}}',
+          columns: '{{prop.columns}}',
+          media: '{{prop.poster}}',
+        },
+      },
+      'b-cta': {
+        $id: 'b-cta',
+        componentId: 'muiButton',
+        parentId: 'b-root',
+        props: {
+          children: '{{prop.ctaLabel}}',
+          hideUnless: '{{prop.ctaLink}}',
+          screenId: '{{prop.ctaLink}}',
+        },
+      },
+    },
+    props: [
+      { name: 'accent', type: 'color-picker', defaultValue: 'primary.main' },
+      { name: 'width', type: 'css-dimension' },
+      { name: 'gap', type: 'preset-choice', settings: { presets: 'gap' } },
+      { name: 'product', type: 'product-select' },
+      {
+        name: 'topics',
+        type: 'dual-list-select',
+        options: [{ value: 'crm' }, { value: 'dam' }],
+      },
+      { name: 'launch', type: 'date-picker' },
+      { name: 'columns', type: 'slider', settings: { min: 1, max: 4 } },
+      { name: 'poster', type: 'image', defaultValue: 'media:org:acme/poster' },
+      { name: 'showCta', type: 'boolean', defaultValue: 'true' },
+      {
+        name: 'ctaLabel',
+        type: 'text',
+        defaultValue: 'Talk to sales',
+        condition: { when: 'showCta', is: true },
+      },
+      {
+        name: 'ctaLink',
+        type: 'href',
+        defaultValue: 'screen:contact',
+        condition: { when: 'showCta', is: true },
+      },
+    ],
+  }
+
+  const pagePlacingBand = (propValues?: Record<string, unknown>) => ({
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['band'] },
+    band: {
+      $id: 'band',
+      componentId: 'reusableInstance',
+      parentId: ROOT,
+      props: { refId: 'band', ...(propValues ? { propValues } : {}) },
+      nodes: [],
+    },
+  })
+
+  beforeEach(() => {
+    mockGetComponents.mockResolvedValue({ definitions: { band: BAND } })
+  })
+
+  it("ships each field the page's value exactly as its kind holds it", async () => {
+    const nodes = await compose(
+      pagePlacingBand({
+        accent: 'secondary.dark',
+        width: '960px',
+        gap: 3,
+        product: 'prod_42',
+        topics: ['crm', 'dam'],
+        launch: '2026-09-13',
+        columns: 3,
+      }),
+    )
+    // The instance and its definition's root are one element.
+    expect(nodes['band'].props).toMatchObject({
+      bgcolor: 'secondary.dark',
+      maxWidth: '960px',
+      spacing: 3,
+    })
+    expect(nodes['cmp__band__b-card'].props).toMatchObject({
+      productId: 'prod_42',
+      tags: ['crm', 'dam'],
+      publishedOn: '2026-09-13',
+      columns: 3,
+      media: 'media:org:acme/poster',
+    })
+  })
+
+  it('leaves each field its own default where neither page nor component chose', async () => {
+    const card = (await compose(pagePlacingBand()))['cmp__band__b-card'].props
+    for (const key of ['productId', 'tags', 'publishedOn', 'columns']) {
+      expect(key in card).toBe(false)
+    }
+  })
+
+  it('switches a property off where its condition does not hold', async () => {
+    const on = await compose(pagePlacingBand())
+    expect(on['cmp__band__b-cta'].props).toMatchObject({
+      children: 'Talk to sales',
+      screenId: 'screen:contact',
+    })
+    // With the call to action off, its link is off too, so the button that
+    // hides without a link is not on the page at all.
+    const off = await compose(pagePlacingBand({ showCta: false }))
+    expect(off['cmp__band__b-cta']).toBeUndefined()
+  })
+})
