@@ -28,6 +28,7 @@ import {
   createResourceUid,
   datasetIntegrityFields,
   effectiveDatasetModel,
+  memberCanSee,
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
@@ -38,6 +39,7 @@ import {
   isServerReleaseFlagOnForOrg,
   lockdownRefusal,
   memberHasOrgPermission,
+  resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
@@ -89,7 +91,9 @@ const IMPORT_CHUNK = 400
  * and deletes stay client-direct, they don't consume quota). Actions:
  *
  * - `create-dataset`: `dataStore` entitlement + `checkDatasetQuota`
- *   (addon-aware, org-scoped).
+ *   (addon-aware, org-scoped). An optional `hostId` names the site the
+ *   dataset is created from, which the org's Default sharing can narrow it
+ *   to.
  * - `create-record`:  `recordsPerDataset` quota; values are re-coerced
  *   and re-validated against the dataset's model server-side.
  * - `import-records`: batch create with the whole batch fitting the cap.
@@ -197,6 +201,56 @@ async function handler(request: Request): Promise<Response> {
       if (!displayName || fields.length === 0) {
         return Response.json({ error: 'Missing displayName or fields' }, { status: 400 })
       }
+      /**
+       * The site the dataset is created from — null on the organization Data
+       * page, which has none.
+       *
+       * It reaches the document only through the org's Default sharing: with
+       * `defaultResourceScope: 'host'` the new dataset is visible to this site
+       * alone. That makes it a client claim deciding who can see the result,
+       * so it is honored only when it holds on both counts:
+       *
+       *  * The site is one of THIS org's. `hostIndex` is the mirror the Data
+       *    card resolved `orgId` from in the first place, so a create made
+       *    from a real site page cannot disagree with it. Another org's site
+       *    would stamp a token that no site and no scoped member of this org
+       *    holds: a dataset only the org's admins could ever find.
+       *  * The caller's own access reaches the scope it produces. A scoped
+       *    member naming a site outside their access would create a dataset
+       *    they cannot see afterwards, which is the create the rules'
+       *    `canCreateScoped()` refuses on the collections clients create.
+       *
+       * Both are refused rather than widened to All sites. Widening is the
+       * direction that shows a dataset to sites nobody chose.
+       */
+      const hostId = String(body?.hostId ?? '').trim() || null
+      if (
+        hostId &&
+        (hostId.includes('/') || (await resolveOrgIdForHost(hostId)) !== orgId)
+      ) {
+        return Response.json(
+          { error: 'That site is not one of this organization’s' },
+          { status: 400 },
+        )
+      }
+      // Honors the org's `defaultResourceScope` (AGL-1048), falling back to
+      // org-wide — which is also the only answer with no site in context.
+      const visibleTo = defaultScopeForNewResource({
+        defaultResourceScope: (org as {
+          defaultResourceScope?: 'org' | 'host'
+        })?.defaultResourceScope,
+        hostId,
+      })
+      if (
+        hostId &&
+        decoded['staff'] !== true &&
+        !memberCanSee(member, visibleTo)
+      ) {
+        return Response.json(
+          { error: 'Your access to this organization does not reach that site' },
+          { status: 403 },
+        )
+      }
       const datasetsRef = orgRef.collection('datasets')
       const overDatasetQuota = (quota: ReturnType<typeof checkDatasetQuota>) =>
         quota.upgradeRequired
@@ -254,12 +308,9 @@ async function handler(request: Request): Promise<Response> {
             displayName,
             fields,
             ...(model ? { model } : {}),
-            // Honours the org's `defaultResourceScope` (AGL-1048), falling
-            // back to org-wide — which is both today's behavior and the only
-            // safe answer with no site in context. Stamping SOMETHING is
-            // mandatory either way: `array-contains-any` matches nothing on a
-            // doc missing the field, so an unstamped dataset renders on no
-            // site at all (AGL-1044).
+            // The scope decided above. Stamping SOMETHING is mandatory: an
+            // `array-contains-any` matches nothing on a doc missing the field,
+            // so an unstamped dataset renders on no site at all (AGL-1044).
             //
             // Through `newResourceScopeFields` since AGL-1484: AGL-1478 built
             // that helper as the type-level gate for exactly the collections
@@ -268,14 +319,7 @@ async function handler(request: Request): Promise<Response> {
             // while the two ordinary dataset creates went on writing the field
             // by hand. A required argument that three of four callers bypass
             // is a convention, not a guarantee.
-            ...newResourceScopeFields(
-              defaultScopeForNewResource({
-                defaultResourceScope: (org as {
-                  defaultResourceScope?: 'org' | 'host'
-                })?.defaultResourceScope,
-                hostId: String(body?.hostId ?? '') || null,
-              }),
-            ),
+            ...newResourceScopeFields(visibleTo),
             createdAt: Timestamp.now(),
           })
           return null

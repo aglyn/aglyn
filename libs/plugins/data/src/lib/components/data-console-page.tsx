@@ -20,7 +20,9 @@ import { buildRoute, type ConsolePluginPageProps, Route } from '@aglyn/aglyn'
 import { useConsoleHostRoute } from '@aglyn/tenant-feature-instance'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Stack } from '@mui/material'
-import HostDatasetsCard from './host-datasets-card.component'
+import HostDatasetsCard, {
+  newDatasetSharingNote,
+} from './host-datasets-card.component'
 
 /**
  * Data page (AGL-239 → AGL-395): the host-scoped view of the org's shared
@@ -54,8 +56,11 @@ export function DataConsolePage(props: ConsolePluginPageProps) {
           ) : undefined
         }
       >
-        {'Datasets belong to your organization. Each one is shared with ' +
-          'every site by default — use Schema to narrow that.'}
+        {/* Always a site page, so the org's Default sharing decides. */}
+        {newDatasetSharingNote(
+          (org as { defaultResourceScope?: 'org' | 'host' } | undefined)
+            ?.defaultResourceScope === 'host',
+        )}
       </Alert>
       <HostDatasetsCard hostId={hostId} org={org} />
     </Stack>

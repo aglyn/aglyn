@@ -350,8 +350,9 @@ A new folder starts shared with **All sites**, so it appears everywhere the mome
 create it — or with the site you were working in, if your workspace has been set to make
 new resources site-scoped by default. That default is **Default sharing for new data and
 media**, at the top of the workspace's **Media** page; it applies to new files and changes
-nothing that already exists. A dataset created on a **Data** page starts shared with
-**All sites** either way. If the **Shared with** dialog ever opens on
+nothing that already exists. It applies to new datasets the same way: one created on a
+site's **Data** page follows it, and one created on the organization **Data** page starts
+on **All sites**. If the **Shared with** dialog ever opens on
 "Not shared with any site", that folder or file has no sharing stored at all: it is hidden
 from every site, and any file inside it turns up under **No folder** there. Pick a value
 and save to fix it.
