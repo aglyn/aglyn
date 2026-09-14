@@ -994,11 +994,11 @@ export interface RateLimitsCheck extends HealthCheck {
  * Trailing window the degradation counts cover.
  *
  * Bounded from below by the alert path, not by taste. The probe memoizes for
- * 5 minutes, the uptime check runs every 5, and the alert policy wants ~10
- * minutes of sustained failure before it emails — so a window shorter than
- * ~20 minutes can go red and green again before anyone is told, which is a
- * check that reports nothing while looking like it works. 30 leaves ten
- * minutes of margin and still clears itself inside half an hour.
+ * `HEALTH_PROBE_TTL_MS` (2 minutes), the slowest check on this door runs
+ * every 15, and the alert policy wants a minute of sustained failure — so a
+ * window shorter than ~18 minutes can go red and green again before that
+ * check tells anyone, which is a check that reports nothing while looking
+ * like it works. 30 leaves margin and still clears itself inside half an hour.
  */
 export const RATE_LIMIT_DEGRADED_WINDOW_MINUTES = 30
 
@@ -1162,11 +1162,11 @@ export interface ServerErrorsCheck extends HealthCheck {
  * Trailing window the error count covers.
  *
  * Bounded from below by the alert path, not by taste — the same arithmetic as
- * `RATE_LIMIT_DEGRADED_WINDOW_MINUTES`: the probe memoizes for 5 minutes, the
- * external checks run every 5, and an alert policy wants ~10 minutes of
- * sustained failure before it emails, so a window under ~20 minutes can go red
- * and green again before anyone is told. 30 leaves ten minutes of margin and
- * still clears itself inside half an hour of the last error.
+ * `RATE_LIMIT_DEGRADED_WINDOW_MINUTES`: the probe memoizes for 2 minutes, the
+ * slowest external check runs every 15, and an alert policy wants a minute of
+ * sustained failure, so a window under ~18 minutes can go red and green again
+ * before that check tells anyone. 30 leaves margin and still clears itself
+ * inside half an hour of the last error.
  */
 export const SERVER_ERROR_WINDOW_MINUTES = 30
 
@@ -1260,6 +1260,23 @@ export function serverErrorsHealth(
 }
 
 /**
+ * How long a health door may reuse its verdict (AGL-2947).
+ *
+ * Cut from one budget: an outage must reach a person within ten minutes. A
+ * green verdict computed just before the onset keeps being served for this
+ * long, and only then can a prober see red. The fastest prober on most doors
+ * is UptimeRobot, every five minutes, which then confirms before it notifies.
+ * So the worst case is this + 5 + that confirmation: at two minutes the budget
+ * holds for any confirmation delay up to three. The five minutes every door
+ * used before spent the whole ten minutes before a notification could leave.
+ *
+ * It still bounds what a public door can be made to cost: at most one
+ * computation per instance per two minutes, and {@link memoizeWithTtl} shares
+ * a computation among the callers that arrive while it runs.
+ */
+export const HEALTH_PROBE_TTL_MS = 2 * 60_000
+
+/**
  * Reuse a probe result for `ttlMs`, per instance.
  *
  * The endpoint is public and unauthenticated, so an unthrottled dependency
@@ -1267,9 +1284,16 @@ export function serverErrorsHealth(
  * our account. This bounds the cost to one probe per instance per interval
  * however hard it is hit.
  *
+ * Callers that arrive while a probe is running share it rather than starting
+ * their own. The uptime check's regions, UptimeRobot and a HEAD twin routinely
+ * land within the same second of an expired entry, and each used to pay for a
+ * full probe.
+ *
  * FAILURES ARE CACHED TOO, deliberately. A dependency that is down will be
  * down for the next caller as well, and re-probing per request turns an
- * outage into a stampede against the thing that is already failing.
+ * outage into a stampede against the thing that is already failing. A probe
+ * that THROWS is not cached: its callers all see the throw, and the next
+ * caller probes again.
  */
 export function memoizeWithTtl<T>(
   ttlMs: number,
@@ -1277,6 +1301,7 @@ export function memoizeWithTtl<T>(
   now: () => number = Date.now,
 ): () => Promise<T> {
   let cached: { at: number; value: T } | null = null
+  let inFlight: Promise<T> | null = null
   return async () => {
     const at = now()
     const elapsed = cached ? at - cached.at : Infinity
@@ -1286,9 +1311,21 @@ export function memoizeWithTtl<T>(
     // reporting healthy through an outage. Serverless instances outlive more
     // clock weirdness than a local run suggests.
     if (cached && elapsed >= 0 && elapsed < ttlMs) return cached.value
-    const value = await probe()
-    cached = { at, value }
-    return value
+    if (inFlight) return inFlight
+    const flight = (async () => {
+      const value = await probe()
+      cached = { at, value }
+      return value
+    })()
+    inFlight = flight
+    // Cleared once settled, and only if it is still this flight. Clearing
+    // inside the flight would run BEFORE the assignment above when `probe`
+    // throws synchronously, and leave a rejected promise in the slot forever.
+    const clear = () => {
+      if (inFlight === flight) inFlight = null
+    }
+    flight.then(clear, clear)
+    return flight
   }
 }
 

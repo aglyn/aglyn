@@ -65,6 +65,7 @@ import {
   healthHeaders,
   healthHttpStatus,
   healthStatus,
+  HEALTH_PROBE_TTL_MS,
   memoizeWithTtl,
   platformVersion,
   type BackupsCheck,
@@ -79,10 +80,11 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 /**
- * Backups change weekly; five minutes bounds the probe cost without letting a
- * failed Sunday run hide for longer than one monitor interval.
+ * The shared health memo — see `HEALTH_PROBE_TTL_MS` for the ten-minute detection budget it fits.
+ * Backups change weekly; it bounds the probe cost, which here is a storage
+ * listing billed per call.
  */
-const PROBE_TTL_MS = 5 * 60_000
+const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 
 const EMPTY_STATES: BackupsCheck['states'] = {}
 

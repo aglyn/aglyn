@@ -67,6 +67,7 @@ import {
   healthHeaders,
   healthHttpStatus,
   healthStatus,
+  HEALTH_PROBE_TTL_MS,
   memoizeWithTtl,
   platformVersion,
   type BeaconCheck,
@@ -80,12 +81,13 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 /**
- * Five minutes bounds both the Logging write volume and the probe cost
- * without letting a dead beacon hide longer than one monitor interval. The
- * uptime check runs every 15 minutes (a beacon that died needs finding within
- * the hour, not the minute), so this TTL is never the limiting factor.
+ * The shared health memo — see `HEALTH_PROBE_TTL_MS` for the ten-minute detection budget it fits.
+ * It bounds both the Logging write volume and the probe cost. The beacon's
+ * own verdict forgives a transient failure for longer than this, so that
+ * grace decides how soon a dead beacon reds; the memo adds at most its own
+ * length on top.
  */
-const PROBE_TTL_MS = 5 * 60_000
+const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 
 /**
  * The service name stamped on the heartbeat, matching the `serviceContext`

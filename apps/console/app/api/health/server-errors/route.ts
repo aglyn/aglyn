@@ -74,6 +74,7 @@ import {
   healthHeaders,
   healthHttpStatus,
   healthStatus,
+  HEALTH_PROBE_TTL_MS,
   memoizeWithTtl,
   platformVersion,
   SERVER_ERROR_WINDOW_MINUTES,
@@ -90,12 +91,12 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 /**
- * Five minutes bounds the probe cost (the endpoint is public) without letting
- * a spike hide longer than one monitor interval. The trailing window is sized
- * against this plus the check period plus the alert's sustained-failure
+ * The shared health memo — see `HEALTH_PROBE_TTL_MS` for the ten-minute detection budget it fits.
+ * It bounds the probe cost (the endpoint is public). The trailing window is
+ * sized against this plus the check period plus the alert's sustained-failure
  * window — see `SERVER_ERROR_WINDOW_MINUTES`.
  */
-const PROBE_TTL_MS = 5 * 60_000
+const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 
 /**
  * Documents read per probe. One marker per minute bucket per writing instance,

@@ -87,6 +87,7 @@ import {
   healthHeaders,
   healthHttpStatus,
   healthStatus,
+  HEALTH_PROBE_TTL_MS,
   memoizeWithTtl,
   ORG_CREATION_WINDOW_MINUTES,
   platformVersion,
@@ -111,11 +112,11 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 /**
- * Five minutes bounds the probe cost (the endpoint is public) without letting
- * a wave hide longer than one monitor interval. Detection latency worst case:
- * one TTL + one check period + the alert's sustained-failure window.
+ * The shared health memo — see `HEALTH_PROBE_TTL_MS` for the ten-minute detection budget it fits.
+ * It bounds the probe cost (the endpoint is public). Detection latency worst
+ * case: one TTL + one check period + the alert's sustained-failure window.
  */
-const PROBE_TTL_MS = 5 * 60_000
+const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 
 /**
  * `SIGNUP_ALARM_MAX_PER_HOUR` overrides the shared default (10/h) without a
