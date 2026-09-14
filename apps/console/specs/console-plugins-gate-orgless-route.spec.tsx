@@ -96,6 +96,12 @@ jest.mock('../hooks/use-current-org', () => ({
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlags: () => ({ ready: true, isStaff: false, flags: {} }),
 }))
+// The gate hands the reader's AI permissions to the AI doors; which plugins
+// load on an org-less route does not depend on them.
+jest.mock('../hooks/use-ai-permissions', () => ({
+  __esModule: true,
+  default: () => ({ loaded: false, use: false, generate: false }),
+}))
 
 function SiteProbe() {
   const ready = useSitePluginsReady()
