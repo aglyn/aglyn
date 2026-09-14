@@ -35,6 +35,7 @@ import {
   collectionSourceReachedBound,
   collectionEntryAuthorValues,
   collectionEntryMetaValues,
+  collectionEntryPublishedAtIso,
   collectionEntryTokens,
   collectionListUrl,
   collectionPaginationLinks,
@@ -229,6 +230,30 @@ describe('collectionEntryTokens (AGL-551)', () => {
     expect(
       collectionEntryTokens({ categoryId: 'guides' }, 'blog')['entry.category'],
     ).toBe('')
+  })
+
+  it('exposes the featured video raw, as the cover image is (AGL-2956)', () => {
+    // Raw for the reason `entry.coverImage` is: the Video element resolves a
+    // reference against the site rendering it, which this map cannot know.
+    for (const coverVideo of [
+      'media:org:acme/film',
+      'https://aglyn.wistia.com/medias/e4a27b971d',
+    ]) {
+      expect(
+        collectionEntryTokens({ coverVideo }, 'videos')['entry.coverVideo'],
+      ).toBe(coverVideo)
+    }
+    expect(collectionEntryTokens({}, 'videos')['entry.coverVideo']).toBe('')
+  })
+
+  it('exposes the publish instant as an ISO date-time (AGL-2956)', () => {
+    // `entry.date` is for reading; a Video's publication date needs a value
+    // a parser can read, and `8/9/2026` is not one.
+    const at = { seconds: 1_784_116_800 }
+    const tokens = collectionEntryTokens({ publishedAt: at }, 'videos')
+    expect(tokens['entry.publishedAt']).toBe('2026-07-15T12:00:00.000Z')
+    expect(tokens['entry.publishedAt']).toBe(collectionEntryPublishedAtIso(at))
+    expect(collectionEntryTokens({}, 'videos')['entry.publishedAt']).toBe('')
   })
 })
 
@@ -2221,6 +2246,28 @@ describe('formatCollectionEntryDate (AGL-1459)', () => {
     expect(formatCollectionEntryDate(undefined, 'monthYear')).toBe('')
     expect(formatCollectionEntryDate(null, 'monthYear')).toBe('')
     expect(formatCollectionEntryDate({ seconds: 0 }, 'monthYear')).toBe('')
+  })
+
+  it('spells the same instant for a machine as an ISO date-time in UTC (AGL-2956)', () => {
+    expect(collectionEntryPublishedAtIso(at)).toBe('2026-07-15T12:00:00.000Z')
+    // Undated exactly when the readable date is, so the two tokens never
+    // disagree about whether an entry has a date.
+    for (const undated of [undefined, null, { seconds: 0 }]) {
+      expect(collectionEntryPublishedAtIso(undated)).toBe('')
+      expect(formatCollectionEntryDate(undated)).toBe('')
+    }
+  })
+
+  it('empties a timestamp no date can hold rather than throwing mid-compose', () => {
+    // `toISOString` throws a RangeError past ±8.64e15 ms, and a hand-edited
+    // document is enough to reach it.
+    expect(() =>
+      collectionEntryPublishedAtIso({ seconds: 9e15 }),
+    ).not.toThrow()
+    expect(collectionEntryPublishedAtIso({ seconds: 9e15 })).toBe('')
+    expect(
+      collectionEntryPublishedAtIso({ seconds: Number.NaN }),
+    ).toBe('')
   })
 
   it('offers only values that can actually be persisted (AGL-1451/AGL-1453)', () => {

@@ -91,6 +91,9 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
   See [Authors](#authors).
 - **SEO title / SEO description** — search & social overrides; they fall back to the
   title and excerpt when blank.
+- **Featured video** — a film for the entry's page: one from your media library, a video
+  link, or a Wistia link. It plays where the cover image would sit. See
+  [Build a video collection](#video-collection).
 
 ### Scheduling
 
@@ -465,9 +468,11 @@ on the empty listing above. Prefer linking with the pills.
 | `{{entry.excerpt}}` | Short summary |
 | `{{entry.body}}` | Raw markdown source (use the Entry Body block to render it) |
 | `{{entry.date}}` | Published date |
+| `{{entry.publishedAt}}` | Published date and time in ISO 8601, e.g. `2026-08-09T15:30:00.000Z` — for a field that needs a machine-readable date, such as a Video element's **Publication date** |
 | `{{entry.slug}}` | Entry slug |
 | `{{entry.url}}` | Entry route, e.g. `/blog/my-post` |
 | `{{entry.coverImage}}` | Cover image URL |
+| `{{entry.coverVideo}}` | Featured video, as picked: a media library film, a video link or a Wistia link |
 | `{{entry.category}}` | Entry category |
 | `{{entry.tags}}` | Comma-joined tags, e.g. `nextjs, seo` |
 | `{{entry.seoTitle}}` | SEO title (falls back to the title) |
@@ -493,8 +498,8 @@ id, so it keeps working across renames.
 When no template screen is set, the built-in list and article render **inside your site
 theme and default shared layout** (the home screen's layout), so blog pages never look
 detached from the rest of the site. The built-in article includes the entry meta line
-under the title, the cover image, the body, related posts, and a share bar. The built-in
-list is **paginated** (see below).
+under the title, the cover image (or the [featured video](#video-collection) in its place),
+the body, related posts, and a share bar. The built-in list is **paginated** (see below).
 
 ### Paginated page sets
 
@@ -553,6 +558,42 @@ feed categories, newest first. Link it from your own footer or share it with
 aggregators. Feed readers also find it on their own: every collection page — the list,
 each paginated page, each category, and each entry — declares the feed in its page head,
 so pasting your blog's own address into a reader subscribes it to the feed.
+
+## Build a video collection {#video-collection}
+
+Give every film **a page of its own**: a collection whose entries are articles with the
+film where a post's cover image would sit. Search engines list a video from a page that
+is about that video, and an entry page is exactly that.
+
+**Give each entry its film.** In the entry editor, **Featured video** takes a film from
+your media library, a video link, or a Wistia link. Picking a library film that has a
+captured frame also fills an empty **Cover image** with that frame; a cover you already
+chose is kept.
+
+**Place the player on the entry template.** Add a **Video** element where the cover would
+go and set its fields to the entry's tokens, typed or picked with the field's **`{x}`**
+button under **Entry**:
+
+| Video field | Token |
+| --- | --- |
+| **Video source** | `{{entry.coverVideo}}` |
+| **Poster image** | `{{entry.coverImage}}` |
+| **Video title** | `{{entry.title}}` |
+| **Video description** | `{{entry.excerpt}}` |
+| **Publication date** | `{{entry.publishedAt}}` |
+
+Use `{{entry.publishedAt}}` for the date, not `{{entry.date}}`: the date token is written
+for readers, like `8/9/2026`, which a search engine cannot read as a date. See
+[the fields a search result reads](../besigner/video.md#video-seo).
+
+**Keep list cards to a picture.** In the list template's Collection Entries card, show
+each film as an **Image** bound to `{{entry.coverImage}}`. Don't put a **Video** element in
+a card: a list with a player in every card is one page holding many videos, not a page
+about any one of them.
+
+**No entry template?** The built-in entry page plays the featured video with no setup,
+in the cover's place, with the cover as its poster. A Wistia film needs a cover image to
+show as its poster; without one, the page shows the article without the player.
 
 ## Tips
 

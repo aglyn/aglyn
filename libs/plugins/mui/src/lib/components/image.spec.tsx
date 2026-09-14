@@ -101,6 +101,46 @@ describe('Image src resolution (AGL-1215)', () => {
   })
 })
 
+/**
+ * srcSet candidates on a url that already carries a query (AGL-2958).
+ *
+ * A film's captured frame is served as `?poster=1` on the film's own CDN url,
+ * and that url is a legitimate image source: a collection entry's cover image
+ * holds it, and a card template binds an Image to that cover. The CDN parses
+ * `?poster=1?w=320` as a `poster` whose value is `1?w=320`, which is not a
+ * request for the still, and with no `w` either it answers with the master
+ * FILM. So each candidate has to merge its width into the query it finds.
+ */
+describe('Image srcSet candidates (AGL-2958)', () => {
+  const img = (element: JSX.Element) =>
+    render(element).container.querySelector('img') as HTMLImageElement
+
+  it('merges each width into the query a poster url already carries', () => {
+    const poster = '/api/media/cdn/site-a/film?poster=1'
+    const element = img(<Image src={poster} alt="a" />)
+    expect(element.getAttribute('src')).toBe(poster)
+    expect(element.getAttribute('srcset')).toBe(
+      Aglyn.MEDIA_CDN_VARIANT_WIDTHS.map(
+        (variant) => `${poster}&w=${variant} ${variant}w`,
+      ).join(', '),
+    )
+    expect(element.getAttribute('srcset')).not.toContain('?poster=1?w=')
+    // The query is still a CDN url, so it keeps its `sizes` as well.
+    expect(element.getAttribute('sizes')).toBe('100vw')
+  })
+
+  it('renders a plain CDN url exactly as a bare `?w=` append would', () => {
+    // The byte-identical case: no existing query, so every candidate is the
+    // url, `?w=`, and the width, in the constant's order.
+    const plain = '/api/media/cdn/org:acme/med123'
+    expect(img(<Image src={plain} alt="a" />).getAttribute('srcset')).toBe(
+      Aglyn.MEDIA_CDN_VARIANT_WIDTHS.map(
+        (variant) => `${plain}?w=${variant} ${variant}w`,
+      ).join(', '),
+    )
+  })
+})
+
 describe('Image metadata (AGL-1305)', () => {
   const img = (element: JSX.Element) =>
     render(element).container.querySelector('img') as HTMLImageElement

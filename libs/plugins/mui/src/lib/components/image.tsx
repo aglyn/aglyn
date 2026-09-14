@@ -344,10 +344,18 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // Reading `MEDIA_CDN_VARIANT_WIDTHS` rather than restating it is the
       // other half: the literal here is why adding a width to the generator
       // never used to reach the markup.
+      //
+      // Each candidate comes from `mediaVariantSrc`, which merges the width
+      // into a query the url already carries (AGL-2958). A film's captured
+      // frame is `?poster=1` on the film's url, and a cover image filled from
+      // a film holds exactly that; `?poster=1?w=320` is a request the CDN
+      // answers with the master film. A url with no query gets the same
+      // `?w=` it always has.
       srcSet={
         isCdnUrl
           ? Aglyn.MEDIA_CDN_VARIANT_WIDTHS.map(
-              (variant) => `${src}?w=${variant} ${variant}w`,
+              (variant) =>
+                `${Aglyn.mediaVariantSrc(src, { width: variant })} ${variant}w`,
             ).join(', ')
           : undefined
       }

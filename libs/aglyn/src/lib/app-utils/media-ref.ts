@@ -510,6 +510,14 @@ export function isMediaCdnUrl(url: string | undefined | null): boolean {
  * Shared rather than restated at each call site because a poster attribute and
  * the `thumbnailUrl` describing it must name the SAME bytes — two spellings of
  * "resolve the poster" is how those drift apart.
+ *
+ * The width MERGES into a query the url already carries (AGL-2958). A film's
+ * captured frame is `?poster=1` on the film's own url and a signed private
+ * asset carries `exp`/`sig`, and both are values an image or poster field can
+ * hold. A bare `?w=` append turns the first into `?poster=1?w=640`, which the
+ * CDN reads as a `poster` of `1?w=640` — not a request for the still, and no
+ * width either — so it answers with the master film. `image.tsx` builds every
+ * `srcSet` candidate through here for the same reason.
  */
 export function mediaVariantSrc(
   value: unknown,
@@ -520,7 +528,9 @@ export function mediaVariantSrc(
     options,
   )
   if (!resolved) return undefined
-  return isMediaCdnUrl(resolved) ? `${resolved}?w=${options.width}` : resolved
+  return isMediaCdnUrl(resolved)
+    ? withMediaCdnQuery(resolved, [['w', String(options.width)]])
+    : resolved
 }
 
 /**

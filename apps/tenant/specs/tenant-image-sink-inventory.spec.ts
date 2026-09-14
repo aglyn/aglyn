@@ -435,7 +435,7 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
   'libs/tenant/runtime/src/lib/collection-fallback-nodes.ts': {
     markers: 1,
     guard: 'scheme-guard',
-    why: "The collection cover background-image, https-or-relative since 8ebf69f9c. It rides props.sx composed by us from a stored field, NOT node.sx, so the leaf scrub does not reach it and this guard is load-bearing.",
+    why: "The collection cover background-image, https-or-relative since 8ebf69f9c. It rides props.sx composed by us from a stored field, NOT node.sx, so the leaf scrub does not reach it and this guard is load-bearing. An entry with a featured video (AGL-2956) hands the same stored cover to a Video node as its `poster` instead, and only when that same https-or-relative rule passes; `video.tsx` resolves it through `videoPosterSrc`. The handoff is an object-literal prop, so no marker counts it.",
   },
   'libs/tenant/runtime/src/lib/compose-collection-page.ts': {
     markers: 2,

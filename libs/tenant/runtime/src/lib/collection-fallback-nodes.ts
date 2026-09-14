@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { wistiaMediaId } from '@aglyn/aglyn/app-utils/wistia-embed'
 import * as Aglyn from '@aglyn/aglyn/server'
 
 /** Namespaces the synthetic fallback node ids (never persisted). */
@@ -39,6 +40,10 @@ interface FallbackEntry {
   authorName?: string
   body?: string
   coverImage?: string
+  /** The featured video (AGL-2956); plays in the cover's place. */
+  coverVideo?: string
+  /** Meta description override (AGL-582); falls back to `excerpt`. */
+  seoDescription?: string
   /** Stable taxonomy reference (AGL-582); wins over `category`. */
   categoryId?: string
   /** Legacy free-typed category (AGL-582); read-only fallback. */
@@ -221,6 +226,63 @@ const typography = (
 type AglynNodeEntry = [string, Aglyn.AglynNodeSchema]
 
 /**
+ * The Video node's props for an entry's featured video, or `undefined` when
+ * the entry has none this page can play (AGL-2956).
+ *
+ * An entry of a video collection is an article whose film sits where a post's
+ * cover would, and on the built-in page nobody is there to bind one. So the
+ * props carry what a designer would bind by hand: the source, the cover as
+ * the poster, and the three facts the page's `VideoObject` is built from —
+ * the title, the SEO description falling back to the excerpt as
+ * `{{entry.seoDescription}}` does, and the ISO publish instant
+ * `{{entry.publishedAt}}` resolves to. An instant rather than a calendar day:
+ * the builder publishes `uploadDate` as a date-time with a zone, and it keeps
+ * an instant as given where it would publish a bare day at noon UTC.
+ *
+ * `undefined` rather than a Video node in two cases, because the element's
+ * answer to each is a labeled placeholder, which a published article must
+ * never show:
+ *
+ * - a source nothing resolves, such as an empty field or a malformed `media:`
+ *   reference;
+ * - a Wistia link with no poster. Its player loads only when a visitor
+ *   presses the poster, so without one there is nothing to press.
+ *
+ * The page then renders as a cover article, exactly as it does for an entry
+ * with no video.
+ *
+ * The poster is the stored reference, not a resolved URL, so the element and
+ * the structured data each resolve it against the site rendering the page. It
+ * is passed only when the cover's own scheme rule would render it, so this
+ * page never shows a still as a poster that it refuses as a cover.
+ *
+ * The film takes the cover's whole slot in the reading column, whose stock
+ * `md` container bounds it; the column is the width limit rather than a pixel
+ * cap (AGL-1298).
+ */
+function featuredVideoProps(
+  entry: FallbackEntry,
+  options: { hostId?: string; posterRenders: boolean },
+): Record<string, unknown> | undefined {
+  const src = (entry.coverVideo ?? '').trim()
+  if (!src || !Aglyn.resolveMediaSrc(src, { hostId: options.hostId })) {
+    return undefined
+  }
+  const poster = options.posterRenders ? entry.coverImage : undefined
+  if (wistiaMediaId(src) && !poster) return undefined
+  const description = entry.seoDescription || entry.excerpt || ''
+  const uploadDate = Aglyn.collectionEntryPublishedAtIso(entry.publishedAt)
+  return {
+    src,
+    ...(poster ? { poster } : {}),
+    title: entry.title ?? '',
+    ...(description ? { description } : {}),
+    ...(uploadDate ? { uploadDate } : {}),
+    width: '100%',
+  }
+}
+
+/**
  * Built-in entry article as canvas nodes (AGL-551): when a collection has
  * no entry-template screen, `/{collection}/{entry}` renders these through
  * the normal compose pipeline — site theme, shared layout chrome, and the
@@ -272,7 +334,27 @@ export function buildCollectionEntryFallbackNodes(
   // AGL-175 CDN path and an author's own hotlinked URL all pass through
   // untouched, which is the documented precedence in `media-ref.ts`.
   const coverImage = Aglyn.resolveMediaSrc(entry.coverImage, { hostId })
-  if (coverImage && RENDERABLE_COVER_URL.test(coverImage)) {
+  const coverRenders = Boolean(
+    coverImage && RENDERABLE_COVER_URL.test(coverImage),
+  )
+  // A featured video takes the cover's slot, with the cover as its poster
+  // (AGL-2956); see `featuredVideoProps` for when an entry has one to play.
+  const video = featuredVideoProps(entry, {
+    hostId,
+    posterRenders: coverRenders,
+  })
+  if (video) {
+    entries.push([
+      id('video'),
+      {
+        $id: id('video'),
+        componentId: Aglyn.VIDEO_COMPONENT_ID,
+        pluginId: 'mui',
+        parentId: id('stack'),
+        props: video,
+      },
+    ])
+  } else if (coverRenders) {
     // Rendered as a background image on a plain stack, NOT through the
     // first-party `image` component — that component crashes tenant SSR
     // (AGL-579); the background-image approach is proven safe.
