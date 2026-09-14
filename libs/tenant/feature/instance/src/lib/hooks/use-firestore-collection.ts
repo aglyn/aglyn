@@ -29,9 +29,9 @@ import { CONFIRMABLE_LISTEN_OPTIONS } from './helpers/listen-options'
 import {
   DENIAL_STREAK_TO_REPORT,
   denialLabelForQuery,
-  refusedRetryDelayMs,
   reportFirestoreDenial,
   reportFirestoreServerRead,
+  scheduleRefusedReopen,
   subscribeFirestoreSessionHeal,
 } from './firestore-denial-reporter'
 
@@ -40,13 +40,14 @@ const MAX_RETRIES = 5
 
 /*
  * The cadence once a refusal streak has outlived the retry budget lives in
- * `firestore-denial-reporter.ts` (`refusedRetryDelayMs`), shared by all
- * three listener hooks: 2s while the fault could be the whole session — that
- * is what recovers the page after a heal nobody announced, and the ceiling
- * on it is the 38 AGL-1358 write guards — and 60s once another listener's
- * server answer proves the session reads and this refusal is about the ref
- * (AGL-1440). A heal broadcast reopens instantly regardless (see
- * `subscribeFirestoreSessionHeal`).
+ * `firestore-denial-reporter.ts` (`scheduleRefusedReopen`), shared by all
+ * three listener hooks. It starts at 2s while the fault could be the whole
+ * session and at 60s once another listener's server answer proves the
+ * session reads and this refusal is about the ref (AGL-1440), then grows
+ * with the streak's age to a five-minute ceiling (AGL-2945). A hidden tab
+ * sets no timer (AGL-2944). The tab becoming visible, the window regaining
+ * focus and a heal broadcast (`subscribeFirestoreSessionHeal`) all reopen
+ * at once.
  */
 
 export type FirestoreCollectionStatus = 'loading' | 'success' | 'error'
@@ -147,6 +148,8 @@ export function useFirestoreCollection<T = DocumentData>(
     let cancelled = false
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
+    /** Cancels a pending reopen on the refused cadence (AGL-2944). */
+    let cancelRefusedReopen: (() => void) | null = null
     let attempt = 0
     /**
      * Refusals since the last SERVER snapshot (AGL-1066).
@@ -319,12 +322,14 @@ export function useFirestoreCollection<T = DocumentData>(
           }
           if (attempt < MAX_RETRIES) {
             attempt += 1
-            timer = setTimeout(
-              subscribe,
-              deniedStreak > MAX_RETRIES
-                ? refusedRetryDelayMs(deniedStreakStartedAt)
-                : RETRY_DELAY_MS,
-            )
+            if (deniedStreak > MAX_RETRIES) {
+              cancelRefusedReopen = scheduleRefusedReopen(
+                subscribe,
+                deniedStreakStartedAt,
+              )
+            } else {
+              timer = setTimeout(subscribe, RETRY_DELAY_MS)
+            }
           } else {
             terminal = true
             setStatus('error')
@@ -343,12 +348,14 @@ export function useFirestoreCollection<T = DocumentData>(
              * Any OTHER terminal error still stops exactly as before — this
              * is deliberately keyed on the refusal streak, not on `attempt`.
              * How slow the road is depends on whether the refusal looks like
-             * the session or the ref — see `refusedRetryDelayMs` (AGL-1440).
+             * the session or the ref (AGL-1440) and on how long it has
+             * lasted (AGL-2945), and a hidden tab waits to be looked at
+             * (AGL-2944) — see `scheduleRefusedReopen`.
              */
             if (deniedStreak > MAX_RETRIES) {
-              timer = setTimeout(
+              cancelRefusedReopen = scheduleRefusedReopen(
                 subscribe,
-                refusedRetryDelayMs(deniedStreakStartedAt),
+                deniedStreakStartedAt,
               )
             }
           }
@@ -385,6 +392,8 @@ export function useFirestoreCollection<T = DocumentData>(
         clearTimeout(timer)
         timer = null
       }
+      cancelRefusedReopen?.()
+      cancelRefusedReopen = null
       unsubscribe?.()
       attempt = 0
       denialReported = false
@@ -395,6 +404,7 @@ export function useFirestoreCollection<T = DocumentData>(
       cancelled = true
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
+      cancelRefusedReopen?.()
       unsubscribe?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

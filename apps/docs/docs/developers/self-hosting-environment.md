@@ -486,6 +486,7 @@ variable the code looks up:
 | Extra members | `STRIPE_PRICE_{…}_EXTRA_MEMBER[_YEARLY]` |
 | Extra datasets | `STRIPE_PRICE_{…}_EXTRA_DATASET[_YEARLY]` |
 | Extra hosts | `STRIPE_PRICE_{…}_EXTRA_HOST[_YEARLY]` |
+| Aglyn AI | `STRIPE_PRICE_{…}_AI_ADDON[_YEARLY]` |
 
 Flat add-ons, priced the same across plans:
 
@@ -665,10 +666,13 @@ own Firebase project. See [Firebase client config](#firebase-client).
 
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Feature | Runtime | `sk-ant-…`. Powers the console Assist panel and the besigner's "Rewrite with AI". Without it both answer `501` and say they are not configured. The console panel is additionally behind the `release_assist` flag, which is **off** by default in Remote Config. |
+| `ANTHROPIC_API_KEY` | Feature | Runtime | `sk-ant-…`. Powers the console Assist panel, the besigner's "Rewrite with AI" and the generative doors — one key for every AI surface. Without it each answers `501` and says it is not configured. The console panel is additionally behind the `release_assist` flag and generation behind `release_ai_generative`, both **off** by default in Remote Config. |
 | `ASSIST_MODEL` | Optional | Runtime | The model id Assist calls. Default `claude-sonnet-5`. An id absent from the built-in rate table falls back to approximate rates, so cost telemetry and the margin alarm become estimates — and the prompt-cache minimum moves with the model, so a swap can silently stop caching. |
 | `ASSIST_FREE_DAILY_LIMIT` | Optional | Runtime | Messages per free workspace per UTC day. Default **10**. |
 | `ASSIST_ENTITLED_MONTHLY_LIMIT` | Optional | Runtime | Messages per entitled workspace per month. Default **1000**. |
+| `AI_FREE_DAILY_REQUESTS` | Optional | Runtime | AI requests one account may make per UTC day across all the Free workspaces it owns, counted at every AI door. Default **30**. `0` means no free requests; junk and empty values take the default. |
+| `AI_FREE_DAILY_PLATFORM_CEILING_USD` | Optional | Runtime | Ceiling on one UTC day of Free-tier provider spend across the whole deployment. At 80% staff are emailed; at 100% every Free workspace is refused AI generation until the day rolls, and paid workspaces are unaffected. Default **25**. Empty, zero, negative and junk values take the default. There is no `off` value, so set a figure you are willing to spend. The email goes to `STAFF_ALERT_EMAIL` and is skipped when that is unset; the pause applies regardless. |
+| `AI_FREE_MIN_ACCOUNT_AGE_HOURS` | Optional | Runtime | Hours an account must exist before a Free workspace it belongs to may generate with AI. Paid workspaces never check it. Default **24**. `0` turns the check off, for example on an invite-only deployment; junk and empty values take the default. |
 | `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` | Optional | Runtime | Dollar ceiling per workspace per month, measured against metered cost rather than an assumed cost per message. Default **40**. The literal word `off` removes the ceiling. Junk, empty, zero and negative values all read as unconfigured and take the default, so a typo can neither open the ceiling nor close it to `$0`. |
 | `ASSIST_ORG_MONTHLY_COGS_ALERT_USD` | Optional | Runtime | Dollar figure at which a workspace's spend raises a **staff** margin alarm, below the hard ceiling. Default **25**. Delivery needs `STAFF_ALERT_EMAIL` and `USAGE_EMAIL_FROM`. |
 

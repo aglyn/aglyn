@@ -41,7 +41,11 @@
  *      This is the one that fails when a route is added to the workflow and
  *      the beat is forgotten.
  */
-import { CRON_BEAT_COLLECTION, SCHEDULED_JOBS } from '@aglyn/aglyn/server'
+import {
+  CRON_BEAT_COLLECTION,
+  CRON_BEAT_SUMMARY_DOC,
+  SCHEDULED_JOBS,
+} from '@aglyn/aglyn/server'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -70,15 +74,24 @@ describe('the beat a scheduled run leaves (AGL-1955)', () => {
     mockSets.length = 0
   })
 
-  it('writes the document /api/health/crons reads', async () => {
+  it('writes the documents /api/health/crons reads', async () => {
     const { recordCronBeat } = await import('../utils/cron-beat')
     await recordCronBeat('audit-archive')
-    expect(mockSets).toHaveLength(1)
-    expect(mockSets[0].collection).toBe(CRON_BEAT_COLLECTION)
+    // The job's own mark, which is the authority, then its summary entry,
+    // which is what the endpoint reads first (AGL-2946).
+    expect(mockSets).toHaveLength(2)
+    expect(mockSets.map((set) => set.collection)).toEqual([
+      CRON_BEAT_COLLECTION,
+      CRON_BEAT_COLLECTION,
+    ])
     expect(mockSets[0].doc).toBe('audit-archive')
     expect(mockSets[0].data).toMatchObject({
       jobId: 'audit-archive',
       atMs: expect.any(Number),
+    })
+    expect(mockSets[1].doc).toBe(CRON_BEAT_SUMMARY_DOC)
+    expect(mockSets[1].data).toEqual({
+      beats: { 'audit-archive': (mockSets[0].data as { atMs: number }).atMs },
     })
   })
 

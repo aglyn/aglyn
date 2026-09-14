@@ -70,8 +70,20 @@ jest.mock('firebase/firestore', () => ({
   }),
 }))
 
+/**
+ * STABLE identities for the provider hooks. The banner's effects list the
+ * Firestore handle and the user among their dependencies, so a mock that
+ * returned a fresh `{}` on every call re-ran every effect on every render,
+ * and each effect's `setQuotas` scheduled the next render — an unbounded
+ * loop that re-issued the count queries hundreds of times a second, filled
+ * `countedPaths` without limit, and exhausted the heap once the suite grew.
+ * One object each, as the real providers hand back, and the loop is gone.
+ */
+const firestoreHandle = {}
+const viewer = { uid: 'viewer', getIdToken: async () => 'tok' }
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
+  useFirestore: () => firestoreHandle,
   useScopeTokens: () => scope,
   // The seat count is fetched from `/api/orgs/members?counts=1` now
   // (AGL-1253) rather than read from Firestore, so the banner asks for an ID
@@ -79,7 +91,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // renders; the seat row is not among their assertions, and `fetch` is
   // stubbed in `beforeEach` so the new call cannot reach the network or throw
   // into the noise.
-  useUser: () => ({ data: { uid: 'viewer', getIdToken: async () => 'tok' } }),
+  useUser: () => ({ data: viewer }),
 }))
 
 // Small enough that the mocked count of 3 breaches every host row, so the
@@ -514,5 +526,117 @@ describe('a subscription whose first payment never completed', () => {
     const said = screen.getByRole('alert').textContent ?? ''
     expect(said).toMatch(/while Stripe retries/i)
     expect(said).not.toMatch(/never completed/i)
+  })
+})
+
+/**
+ * The AI credits row (AGL-2898).
+ *
+ * Read from `/api/billing/assist-credits` — the meter's own route, answering
+ * in credits — never from Firestore, which denies `assistUsage` to every
+ * client. Its sentence is its own because what happens at the band differs
+ * by plan: sold past at a rate unless a stop is set, or a wall until next
+ * month. The predicate is the one the reservation refuses on.
+ */
+describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
+  const assistFetches = () => seatFetches.filter((url) => url.includes('assist-credits'))
+
+  /**
+   * Answer the credits route with a standing; the seat route as before.
+   *
+   * A plain object, not `new Response(...)`: this suite runs under jsdom,
+   * where `Response` is not a constructor, and a stub that throws is a
+   * fetch that never answered — which the seats effect swallows and the
+   * credits effect would too, leaving these cases unfalsifiable.
+   */
+  function answerCredits(credits: { used: number; limit: number } | null) {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      seatFetches.push(url)
+      const body = url.includes('assist-credits')
+        ? { credits: credits && { ...credits, remaining: Math.max(0, credits.limit - credits.used) } }
+        : { managerSeats: 1, memberCount: 1 }
+      return { ok: true, status: 200, json: async () => body } as unknown as Response
+    }) as unknown as typeof fetch
+  }
+
+  beforeEach(() => {
+    // Every host row under its limit, so the only breach is the AI row.
+    mockCountFor['hosts/host-1/screens'] = 1
+    mockCountFor['orgs/org-1/datasets'] = 1
+    scope.loaded = true
+    scope.orgWide = true
+  })
+
+  afterEach(() => {
+    delete mockCountFor['hosts/host-1/screens']
+    delete mockCountFor['orgs/org-1/datasets']
+  })
+
+  it('asks the credits route for an org-wide viewer, and renders the 80% warning', async () => {
+    answerCredits({ used: 2_300, limit: 2_750 })
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/above 80% of your included AI assist credits/)
+    expect(assistFetches().join('\n')).toContain('/api/billing/assist-credits?orgId=org-1')
+  })
+
+  it('at the band on a plan that sells past it: billed at the rate unless a stop is set, with a Usage link', async () => {
+    // FORCED RED by rendering the generic "upgrade to keep adding" for this
+    // row: the sentence would tell a Business org it was stuck.
+    answerCredits({ used: 2_800, limit: 2_750 })
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/extra credits are billed at your plan’s rate unless you set a stop under Billing → Usage/)
+    const links = billingLinks()
+    expect(links.map((link) => link.textContent)).toEqual(['Usage', 'Upgrade'])
+    expect(links[0].getAttribute('href')).toBe('/acme/billing/usage')
+  })
+
+  it('at the band with the org’s own switch on: AI stops, nothing billed', async () => {
+    currentOrg.org = { plan: 'business', assistOverage: { hardCap: true } }
+    answerCredits({ used: 2_800, limit: 2_750 })
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/AI assist stops until next month or an upgrade, and nothing is billed/)
+  })
+
+  it('at the band on a plan with no rate: the same wall wording', async () => {
+    currentOrg.org = { plan: 'enterprise' }
+    answerCredits({ used: 90_000, limit: 87_000 })
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/AI assist stops until next month or an upgrade/)
+    expect(screen.queryByText(/billed at your plan/)).toBeNull()
+  })
+
+  it('renders no AI row for a plan with no band, and none under 80%', async () => {
+    answerCredits(null)
+    const { unmount } = render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(assistFetches()).toHaveLength(1))
+    expect(screen.queryByText(/AI assist/)).toBeNull()
+    unmount()
+    answerCredits({ used: 1_000, limit: 2_750 })
+    render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(assistFetches()).toHaveLength(2))
+    expect(screen.queryByText(/AI assist/)).toBeNull()
+  })
+
+  it('sits beside the other rows rather than replacing them', async () => {
+    mockCountFor['hosts/host-1/screens'] = 3
+    answerCredits({ used: 2_800, limit: 2_750 })
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/reached your screens limit/)
+    await screen.findByText(/used your included AI assist credits/)
+  })
+
+  it('asks for no credits for a scoped collaborator, or while the scope loads', async () => {
+    answerCredits({ used: 2_800, limit: 2_750 })
+    scope.orgWide = false
+    const { unmount } = render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(countedPaths).toContain('hosts/host-1/screens'))
+    expect(assistFetches()).toEqual([])
+    unmount()
+    scope.orgWide = true
+    scope.loaded = false
+    render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(countedPaths.length).toBeGreaterThan(1))
+    expect(assistFetches()).toEqual([])
   })
 })

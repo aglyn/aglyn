@@ -125,38 +125,41 @@ describe("an instance's property fields (AGL-2871)", () => {
       },
     ]
 
-    it('names the default it falls back to while the page sets nothing', async () => {
+    /** The switch drawn for a property, found by its label. */
+    const findSwitch = (label: string) =>
+      screen.findByRole('switch', { name: label }, { timeout: 10000 }) as Promise<
+        HTMLInputElement
+      >
+
+    it('is edited with a switch, not a Yes / No dropdown (AGL-2893)', async () => {
       mount(PROPS)
-      const input = await screen.findByRole(
-        'combobox',
-        { name: 'Play in a lightbox' },
-        { timeout: 10000 },
-      )
-      expect(input.getAttribute('placeholder')).toBe(
-        'Use the component default (Yes)',
-      )
+      expect(await findSwitch('Play in a lightbox')).toBeTruthy()
+      expect(
+        screen.queryByRole('combobox', { name: 'Play in a lightbox' }),
+      ).toBeNull()
+    })
+
+    it("shows the default's position, and names it, while the page sets nothing", async () => {
+      mount(PROPS)
+      expect((await findSwitch('Play in a lightbox')).checked).toBe(true)
+      expect(screen.getByText('Uses the component default (Yes)')).toBeTruthy()
+      // Nothing is set, so there is nothing for the ✕ to take back.
+      expect(
+        screen.queryByRole('button', { name: 'Clear Play in a lightbox' }),
+      ).toBeNull()
     })
 
     it('stores the choice as a real boolean', async () => {
       const { unmount } = mount(PROPS)
-      await openDropdown('Play in a lightbox')
-      expect(
-        screen.getAllByRole('option').map((option) => option.textContent),
-      ).toEqual(['Yes', 'No'])
-
-      fireEvent.click(screen.getByRole('option', { name: 'No' }))
+      fireEvent.click(await findSwitch('Play in a lightbox'))
       unmount()
       expect(committedValues()['playInLightbox']).toBe(false)
     })
 
-    it('shows a stored no as No, even one stored as text', async () => {
+    it('shows a stored no as off, even one stored as text', async () => {
       mount(PROPS, { playInLightbox: 'false' })
-      const input = await screen.findByRole(
-        'combobox',
-        { name: 'Play in a lightbox' },
-        { timeout: 10000 },
-      )
-      expect((input as HTMLInputElement).value).toBe('No')
+      expect((await findSwitch('Play in a lightbox')).checked).toBe(false)
+      expect(screen.queryByText('Uses the component default (Yes)')).toBeNull()
     })
 
     it('hands the choice back to the default with the clear button (Yes / no)', async () => {

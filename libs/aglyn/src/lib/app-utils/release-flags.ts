@@ -48,6 +48,7 @@ export type ReleaseFlagKey =
   | 'release_edit_bar'
   | 'release_assist'
   | 'release_video_uploads'
+  | 'release_ai_generative'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -255,6 +256,27 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'Off: refused with 403 video_uploads_paused, as DAM video delivery is ' +
       'not yet metered or bounded per org (AGL-2810, AGL-2812). Images, ' +
       'documents and stored videos are unaffected.',
+    defaultEnabled: false,
+  },
+  // The generative doors share one runtime with Assist (AGL-2903) but not
+  // its flag: `release_assist` answers questions, this builds things, and
+  // the two are sold, metered and disclosed separately. The server-side
+  // gate lives in `aiGateLadder` (404 when off, staff preview).
+  // Labeled for what it switches — the generative doors — and not with the
+  // add-on's own name, which is sold and live whether or not the doors are
+  // released: the docs name the add-on, and a flag wearing the same words
+  // reads as documented when it is not.
+  {
+    key: 'release_ai_generative',
+    label: `${PLATFORM_BRAND_NAME} AI generation`,
+    description:
+      'Generative building and automation behind the AI add-on ' +
+      '(AGL-2903): sections, pages and workflows written by a model from ' +
+      'a brief, on the shared Anthropic runtime. OFF by default and staff ' +
+      'preview only; every generative route answers 404 while it is off. ' +
+      'Turning it on sends customer briefs and site content to Anthropic ' +
+      'on the same ANTHROPIC_API_KEY and under the same subprocessor ' +
+      'disclosure as Assist (AGL-1909).',
     defaultEnabled: false,
   },
 ]

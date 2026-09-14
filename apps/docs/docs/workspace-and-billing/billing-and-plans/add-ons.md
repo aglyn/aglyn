@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Add-ons
-description: Buy extra seats, sites, datasets, POS registers, and the Event Calendar from the Billing page — prorated, self-serve, no support ticket.
+description: Buy extra seats, sites, datasets, POS registers, the Event Calendar, and Aglyn AI from the Billing page — prorated, self-serve, no support ticket.
 ---
 
 # Add-ons
@@ -31,6 +31,7 @@ just be a second copy to keep in step.
 | Extra sites | Publish more sites than your plan includes | Per site, per month — cheaper on higher plans |
 | POS registers | One extra point-of-sale register, assigned to one site | Flat per register, per month — the same on every plan |
 | Event Calendar | The event manager + calendar elements, workspace-wide | Flat per month — the same on every plan |
+| Aglyn AI | Generative building — pages, emails, campaigns, products and more — plus a monthly band of AI credits added to your plan's, workspace-wide | Flat per month, priced by plan — higher on higher plans, and so is the band it adds |
 
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.
@@ -41,6 +42,8 @@ just be a second copy to keep in step.
   [Assigning collaborator seats](#assigning-collaborator-seats).
 - **Event Calendar** is a single workspace-wide toggle, not a per-site charge — see
   [Events calendar](../../content-and-data/events/overview.md).
+- **Aglyn AI** is a single workspace-wide toggle too, bought once for the workspace
+  rather than per seat or per site — see [Aglyn AI](#aglyn-ai).
 
 ## Assigning register seats
 
@@ -102,6 +105,35 @@ site. The same numbers appear on each site's own Collaborators card.
 If every purchased seat is already assigned and a site needs another collaborator,
 either move a seat off a site that isn't using it, or buy another seat under Plan
 add-ons.
+
+## Aglyn AI {#aglyn-ai}
+
+**Aglyn AI** is the generative add-on: with it on, the assistant builds for you —
+pages, components, emails, campaigns, products and more — rather than only answering
+questions about them. It is bought once for the workspace, on any paid plan, and
+applies to every member who has the permission to generate. On Starter it also
+unlocks the guided AI assist that Pro and up already include.
+
+- **One pool, one meter.** The add-on adds a band of **AI credits** to the band your
+  plan already includes, every month. There is no second meter: the AI credits meter
+  on **Billing → Usage** shows your plan's credits and the add-on's as one figure, and
+  the same overage rate, stop switch and monthly ceiling apply to the whole band — see
+  [AI credits and overage](overview.md#assist-overage).
+- **Priced by plan.** The add-on's monthly price and the credits it adds both rise with
+  the plan. The figures are on [aglyn.com/pricing](https://aglyn.com/pricing) and in
+  **Billing** before you confirm; on annual billing it bills yearly with the plan, like
+  every add-on. Enterprise workspaces carry generative building in their agreement
+  instead of buying it.
+- **Starter gains a band.** Starter includes no AI credits on its own, so without the
+  add-on there is nothing to generate against. With it, Starter has the add-on's band
+  and credits past it are sold at the same rate as Pro, so the stop switch and the
+  ceiling appear on its billing page as they do on Pro.
+- **Free workspaces** do not buy it. They generate against the
+  [monthly taste](overview.md#free-ai-credits) instead, which stops at its band and
+  never bills.
+- **Removing it** is immediate and prorated, like every add-on. The band shrinks back to
+  your plan's own credits and generative building turns off; what the assistant already
+  built stays exactly as it is.
 
 ## How changes bill
 

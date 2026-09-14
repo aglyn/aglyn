@@ -18,6 +18,8 @@
 
 import {
   type AglynOrgBilling,
+  AI_ADDON_CREDITS_PER_MONTH,
+  aiAddonName,
   checkApiRequestQuota,
   checkCrmRecordsQuota,
   checkDatasetQuota,
@@ -25,8 +27,11 @@ import {
   CRM_EMAIL_USAGE_COLLECTION,
   crmEmailUsageDayKey,
   emailSendsOverage,
+  hasAiAddon,
+  PLAN_PRICING,
   planLabelGrantingFeature,
   priceEmailSendOverage,
+  resolveEffectivePlan,
   resolveHostCollaboratorCap,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -59,6 +64,14 @@ import { docsHelp } from '../../constants/docs-links'
 export interface BillingUsageProps {
   org: Partial<AglynOrgBilling> | null | undefined
   hosts: any[]
+  /**
+   * The org's Billing overview path (`/[orgSlug]/billing`), where the plan
+   * grid and the add-ons card live. The meters render on the Usage section,
+   * so a bare `#plans` from here resolves to nothing; the "Add … AI" link
+   * (AGL-2899) is built on this instead. Optional so a mount without a slug
+   * still renders every meter.
+   */
+  billingHref?: string
 }
 
 /**
@@ -325,8 +338,18 @@ function HostUsageMeters(props: {
  * screens/layouts/members/storage meters, and the org-level bandwidth row.
  */
 export function BillingUsageComponent(props: BillingUsageProps) {
-  const { org, hosts } = props
+  const { org, hosts, billingHref = '' } = props
   const entitlements = resolveOrgEntitlements(org)
+  /*
+   * The AI add-on's share of the one AI pool (AGL-2899). The meter's
+   * limit is the RESOLVED band — the plan's credits plus the add-on's, folded
+   * by `resolveOrgEntitlements` — so the caption under it says how much of
+   * that figure the add-on is, and a plan that sells the add-on but has not
+   * bought it gets the link to where it is bought.
+   */
+  const plan = resolveEffectivePlan(org)
+  const aiAddonCredits = hasAiAddon(org) ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0
+  const aiAddonSold = PLAN_PRICING[plan].aiAddonMonthlyUsd != null
   // Team seats (AGL-119, org roster since AGL-238). "The roster is
   // member-readable so the count is a client aggregate query" stopped being
   // true in AGL-1026 and the count moved to the server in AGL-1255 — the
@@ -910,14 +933,56 @@ export function BillingUsageComponent(props: BillingUsageProps) {
 
         Rendered only where a band is sold. Free and Starter carry
         `assistCreditsPerMonth: 0` and no `aiAssist`, and a "0 of 0" meter is
-        not a readout of anything.
+        not a readout of anything. Starter WITH the AI add-on carries the
+        add-on's band and renders like any Pro-and-up plan.
+
+        ONE meter for one pool (AGL-2899): the AI add-on widens
+        `assistCreditsPerMonth` rather than opening a second band, so the
+        limit here is already plan plus add-on and the caption under it says
+        how much of that the add-on is.
       */}
       {entitlements.assistCreditsPerMonth > 0 ? (
         <UsageMeter
-          label="Aglyn Assist credits (this month)"
+          label="AI credits (this month)"
           used={assistCredits ? assistCredits.used : null}
           limit={entitlements.assistCreditsPerMonth}
         />
+      ) : null}
+      {entitlements.assistCreditsPerMonth > 0 && aiAddonCredits > 0 ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+        >
+          {`Includes ${aiAddonCredits.toLocaleString()} credits a month from ` +
+            `the ${aiAddonName()} add-on.`}
+        </Typography>
+      ) : null}
+      {/* A plan with a band that sells the add-on and has not bought it:
+          the one line on the meters that points at more capacity rather
+          than at an upgrade. Not shown where the plan sells no band at all
+          (Free, Starter without the add-on) — no meter renders there, and
+          this caption belongs under one. */}
+      {entitlements.assistCreditsPerMonth > 0 &&
+      !entitlements.features.aiGenerative &&
+      aiAddonSold ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+        >
+          {`Generate pages, emails, campaigns and more with ${aiAddonName()}, ` +
+            `and add ${AI_ADDON_CREDITS_PER_MONTH[plan].toLocaleString()} ` +
+            'credits a month to this pool: '}
+          <Link
+            href={`${billingHref}#addons`}
+            color="primary"
+            underline="hover"
+          >
+            {`Add ${aiAddonName()}`}
+          </Link>
+          {' in Billing → Plans.'}
+        </Typography>
       ) : null}
       {/* No caption while the counter is still loading, and no separate guard
           for it: the quota is computed from `apiRequests ?? 0`, and zero is

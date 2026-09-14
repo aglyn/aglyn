@@ -21,22 +21,39 @@ import {
   type PluginApiResponse,
 } from '@aglyn/aglyn/server'
 import {
-  assistHardCapRefusalText,
-  assistRefusedByHardCap,
+  assistFreeTasteRefusalText,
+  assistOwnControlRefusalText,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
+  aiPermissionRefusal,
   checkRateLimit,
+  featureLockdownRefusal,
   firebaseAdmin,
   getOrgForUser,
   lockdownRefusal,
+  logAiAssistSection,
+  memberHasAiPermission,
   rateLimitHeaders,
   recordAssistCost,
+  recordUserAiRefusal,
   releaseAssistMessage,
   publicAssistQuota,
   reserveAssistMessage,
   type AssistReservation,
-  type AssistTokenUsage,
 } from '@aglyn/tenant-data-admin'
+// By its own entry point rather than the barrel (AGL-2903): this handler's
+// spec replaces the barrel with a closed-world factory, and nothing replaces
+// the entry point, so the spec exercises the real request shape and the real
+// error boundary rather than a stub that agrees with the handler.
+import {
+  AI_ACCEPTABLE_USE_BLOCK,
+  AiUpstreamError,
+  runAiRequest,
+  type AiResult,
+} from '@aglyn/tenant-data-admin/server/ai-runtime'
+// By its own entry point for the same reason (AGL-2925): the per-address
+// rung is real in the spec, keyed on whatever address the harness sends.
+import { checkAiClientIpRateLimit } from '@aglyn/tenant-data-admin/server/ai-abuse-guards'
 import {
   MARKETPLACE_COMPONENT_ID_ALLOWLIST,
   sanitizeMarketplaceDefinition,
@@ -77,9 +94,6 @@ export function assistModelForMode(mode: 'element' | 'blog' | 'section'): string
   return mode === 'element' ? 'claude-haiku-4-5' : 'claude-sonnet-5'
 }
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
-const ANTHROPIC_VERSION = '2023-06-01'
-
 /**
  * Per-uid burst limit, matched to `/api/assist/chat`'s 20/min so a client
  * cannot arbitrage the two assist doors against each other.
@@ -92,12 +106,31 @@ const BLOG_MAX_TOKENS = 2048
 const ELEMENT_MAX_TOKENS = 1024
 
 /**
+ * What a `refusal` stop is answered with. The model declined the brief —
+ * a policy verdict on the instruction, not a fault — so the sentence asks
+ * for a different one rather than a retry. The tokens were spent and are
+ * metered before this is sent.
+ */
+const REFUSED = {
+  error: 'The AI declined that instruction — try a different one.',
+}
+
+/**
  * AI assist (AGL-89/130/169), relocated from the console app route into the
  * marketplace plugin (AGL-418) — the section mode composes over the marketplace
  * component allowlist and every generated subtree passes the marketplace
  * install sanitizer, so the plugin owns the contract. URL `/api/ai/assist`
  * is preserved through the dispatcher. Env-gated on ANTHROPIC_API_KEY (501
  * without, same degrade pattern as Stripe); auth via Firebase ID token.
+ *
+ * The provider call is `runAiRequest`, the runtime every AI door shares
+ * (AGL-2903). This handler owns the three prompts, the ladder below and the
+ * response shapes; the runtime owns the wire, the usage arithmetic and the
+ * error boundary. Nothing about the request the provider sees changed when
+ * the call moved: the same model per mode, the same `max_tokens`, no
+ * `thinking` field (Haiku 4.5 rejects `adaptive`, and the Sonnet modes keep
+ * the model default they always had) and no cache markers — see
+ * `assistModelForMode` for why the last one is deliberate.
  *
  * ── The spend ladder (AGL-2073) ────────────────────────────────────────────
  *
@@ -111,8 +144,10 @@ const ELEMENT_MAX_TOKENS = 1024
  * The ladder now, in order, each rung able to go red on its own:
  * 405 → 501 no ANTHROPIC_API_KEY → 401 no token → 400 bad body (the request
  * must NAME the org it is metered against) → 403 not a member of that org →
- * 403 no `aiAssist` entitlement → 423 org lockdown → 429 rate limit → 429
- * quota → the model call → meter.
+ * 423 the workspace's AI pause → 403 the member's role lacks `ai.use`, or
+ * `ai.generate` for a section (AGL-2927; staff pass) → 403 no `aiAssist`
+ * entitlement → 423 org lockdown → 429 rate limit → 429 quota → the model
+ * call → meter.
  *
  * Two deliberate choices about which way each rung fails:
  *
@@ -143,8 +178,7 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return res
       .status(501)
       .json({ error: 'AI assist is not configured (ANTHROPIC_API_KEY).' })
@@ -207,6 +241,31 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'You are not a member of that organization' })
     }
     const org = resolved.org ?? {}
+
+    // Permission (AGL-2927), directly after membership. The element and
+    // blog modes are assistance and sell under `ai.use`; a generated
+    // section is a generation and sells under `ai.generate`. Decided on the
+    // caller's own axis — the org catalog for an org-wide member, the site
+    // the body named for a collaborator, who is refused when it named none.
+    // A fact about the caller, so it is answered before the plan is. Staff
+    // pass, as at every other org route. Beside it, the workspace-scoped
+    // pause on `ai-assist`: the dispatcher already applied the platform-wide
+    // switch by path, before it knew which org the body would name.
+    const staff = decoded['staff'] === true
+    const aiPaused = await featureLockdownRefusal({
+      feature: 'ai-assist',
+      staff,
+      orgId,
+    })
+    if (aiPaused) return forwardRefusal(res, aiPaused)
+    const permission = mode === 'section' ? 'ai.generate' : 'ai.use'
+    if (
+      !staff &&
+      !(await memberHasAiPermission(orgId, hostId, resolved.member, permission))
+    ) {
+      return forwardRefusal(res, aiPermissionRefusal(permission))
+    }
+
     const entitled = checkEntitlement(org, 'aiAssist')
     if (!entitled) {
       return res.status(403).json({ error: 'AI assist requires a Pro plan' })
@@ -216,7 +275,6 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     // scope plus the `ai-assist` feature kill switch, but its org scope needs
     // a `hostId` this route's callers do not send — so a suspended workspace
     // kept spending. The org doc is already in hand, so the verdict is free.
-    const staff = decoded['staff'] === true
     const locked = await lockdownRefusal({
       request: { method: req.method },
       staff,
@@ -231,6 +289,17 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     })
     if (!rate.allowed) {
       for (const [name, value] of Object.entries(rateLimitHeaders(rate))) {
+        res.setHeader(name, value)
+      }
+      return res
+        .status(429)
+        .json({ error: 'Too many AI requests — slow down a moment' })
+    }
+    // The same window keyed on the trusted-hop client address (AGL-2925):
+    // accounts rotated behind one address share one budget.
+    const ipRate = checkAiClientIpRateLimit(headers)
+    if (ipRate && !ipRate.allowed) {
+      for (const [name, value] of Object.entries(rateLimitHeaders(ipRate))) {
         res.setHeader(name, value)
       }
       return res
@@ -263,16 +332,24 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         .status(503)
         .json({ error: 'AI assist is temporarily unavailable' })
     }
+    // A refusal is the asker's as well as the workspace's (AGL-2928): their
+    // month counts it beside the org counter the reservation moved.
+    recordUserAiRefusal(firestore, orgId, decoded.uid, reservation)
     if (!reservation.allowed) {
-      // The org's own wall is a 402, not a 429 (AGL-2653): credits past the
-      // band are for sale and this workspace switched the sale off, so the
-      // sentence names the switch — the same sentence the console assistant
-      // gives, from the same helper. Every other refusal keeps the 429.
-      const hardCapped = assistRefusedByHardCap(org, reservation.refusedBy)
-      return res.status(hardCapped ? 402 : 429).json({
-        error: hardCapped
-          ? assistHardCapRefusalText(org)
-          : 'This workspace reached its AI assist limit for the month — contact support if you need a higher cap',
+      // The org's own controls are a 402, not a 429: credits past the band
+      // are for sale and this workspace either switched the sale off
+      // (AGL-2653) or capped what it would buy (AGL-2898), so the sentence
+      // names the control that refused — the same sentence the console
+      // assistant gives, from the same helper. Every other refusal keeps
+      // the 429.
+      const ownControl = assistOwnControlRefusalText(org, reservation.refusedBy)
+      return res.status(ownControl ? 402 : 429).json({
+        error:
+          ownControl ??
+          // The Free taste's own precautions (AGL-2925), in the sentences
+          // the console assistant uses.
+          assistFreeTasteRefusalText(reservation.refusedBy) ??
+          'This workspace reached its AI assist limit for the month — contact support if you need a higher cap',
         // CREDITS, never the reservation itself — see `publicAssistQuota`.
         quota: publicAssistQuota(reservation),
       })
@@ -283,33 +360,66 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     // `assistModelForMode`. Two call sites would let them drift.
     const model = assistModelForMode(mode)
     /** Meter what the provider actually charged us for, per org. */
-    const meter = (payload: unknown): Promise<unknown> =>
+    // The account the reservation drew on (AGL-2925), read once here: the
+    // closure below runs after `reservation` may have been cleared by a
+    // refund, and a refund never reaches the meter.
+    const free = reservation?.free ?? null
+    const meter = (result: AiResult): Promise<unknown> =>
       recordAssistCost(firestore, orgId, {
         route: `/api/ai/assist/${mode}`,
         hostId: hostId || null,
         model,
         tier,
-        usage: assistUsageFrom(payload),
+        usage: result.usage,
         docsPaths: [],
-        stopReason: stopReasonFrom(payload),
+        stopReason: result.stopReason,
+        free,
       }).catch((error) => console.error('assist cost metering failed', error))
+
+    /**
+     * One provider call, with the refund decided at the boundary: a refused
+     * request (a non-2xx answer) spent nothing, so the reservation goes back
+     * — against the keys it RECORDED, never against "now" — and the caller
+     * gets the runtime's fixed sentence, never the provider's (AGL-2815).
+     * A result, even a refusal, means the tokens ARE spent: every exit after
+     * it meters and none refunds. Anything else thrown never reached the
+     * provider and is left to the outer catch, which refunds too.
+     */
+    const ask = async (
+      system: string,
+      content: string,
+      maxTokens: number,
+    ): Promise<AiResult | null> => {
+      try {
+        const result = await runAiRequest({
+          model,
+          maxTokens,
+          stream: false,
+          // The acceptable-use rules ahead of every mode's own prompt
+          // (AGL-2925): one block, shared with the console assistant, and
+          // no per-org byte in it.
+          system: [{ text: `${AI_ACCEPTABLE_USE_BLOCK}\n\n${system}` }],
+          messages: [{ role: 'user', content }],
+        })
+        providerAnswered = true
+        await meter(result)
+        return result
+      } catch (error) {
+        if (!(error instanceof AiUpstreamError)) throw error
+        providerAnswered = true
+        await releaseReservation(firestore, orgId, reservation as AssistReservation)
+        reservation = null
+        res.status(502).json({ error: error.message })
+        return null
+      }
+    }
 
     // Generate section (AGL-169): a constrained-JSON node subtree over the
     // marketplace component allowlist; the response passes the same
     // sanitizer as marketplace installs before it ever reaches a canvas.
     if (mode === 'section') {
-      const response = await fetch(ANTHROPIC_URL, {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': ANTHROPIC_VERSION,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: SECTION_MAX_TOKENS,
-          system:
-            'You design one website section inside a site builder. Reply ' +
+      const result = await ask(
+        'You design one website section inside a site builder. Reply ' +
             'with ONLY a JSON object, no prose or code fences: ' +
             '{"rootId":"n1","nodes":{"n1":{"$id":"n1","componentId":"muiStack","parentId":null,"props":{},"nodes":["n2"]},...}}. ' +
             'Every node needs $id, componentId, parentId (null for the ' +
@@ -320,32 +430,14 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
             'variant:"h1".."h6"|"body1"|"subtitle1"}; muiButton: ' +
             '{children, variant:"contained"|"outlined", color}; image: ' +
             '{src, alt}; muiContainer: {maxWidth:"sm"|"md"|"lg"}. Keep it ' +
-            'small: 4-12 nodes, one root container. Leave image src empty. ' +
-            'Write real copy, not lorem ipsum.',
-          messages: [
-            { role: 'user', content: `Section to design: ${instruction}` },
-          ],
-        }),
-      })
-      providerAnswered = true
-      const payload = await response.json()
-      if (!response.ok) {
-        console.error(payload)
-        // No tokens were spent, so the reservation goes back — against the
-        // keys it RECORDED, never against "now".
-        await releaseReservation(firestore, orgId, reservation)
-        reservation = null
-        return res
-          .status(502)
-          .json({ error: payload?.error?.message ?? 'AI request failed' })
-      }
-      // Past here the tokens ARE spent, whatever we make of the answer, so
-      // every exit below meters and none of them refunds.
-      await meter(payload)
-      const raw = (payload?.content ?? [])
-        .filter((block: any) => block?.type === 'text')
-        .map((block: any) => block.text)
-        .join('')
+          'small: 4-12 nodes, one root container. Leave image src empty. ' +
+          'Write real copy, not lorem ipsum.',
+        `Section to design: ${instruction}`,
+        SECTION_MAX_TOKENS,
+      )
+      if (!result) return
+      if (result.kind === 'refusal') return res.status(502).json(REFUSED)
+      const raw = result.text
         .trim()
         .replace(/^```(?:json)?\s*/i, '')
         .replace(/\s*```$/, '')
@@ -362,67 +454,44 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
       if (sanitized.ok === false) {
         return res.status(422).json({ error: sanitized.error })
       }
+      // A subtree is going back (AGL-2929): the act, its size and its site in
+      // the customer's feed — never the instruction or the copy generated.
+      await logAiAssistSection(
+        { uid: decoded.uid, email: decoded.email ?? null },
+        { orgId, hostId: hostId || null, nodeCount: Object.keys(sanitized.nodes).length },
+      )
       return res
         .status(200)
         .json({ section: { rootId: sanitized.rootId, nodes: sanitized.nodes } })
     }
 
-    const response = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: mode === 'blog' ? BLOG_MAX_TOKENS : ELEMENT_MAX_TOKENS,
-        system:
-          mode === 'blog'
-            ? 'You write blog posts inside a site builder. Reply with ONLY ' +
-              'the post body in markdown-lite: **bold**, *italic*, ## ' +
-              'headings, - lists, [links](https://url). No front matter, ' +
-              'title line, or preamble — the title renders separately.'
-            : 'You write website copy inside a site builder. Reply with ' +
-              'ONLY the final text for the element — no quotes, preamble, ' +
-              'or markdown. Keep roughly the same length and role as the ' +
-              'current text unless the instruction says otherwise.',
-        messages: [
-          {
-            role: 'user',
-            content:
-              mode === 'blog'
-                ? [
-                    title && `Title: ${title}`,
-                    excerpt && `Excerpt: ${excerpt}`,
-                    text && `Current body:\n${text}`,
-                    `Instruction: ${instruction}`,
-                  ]
-                    .filter(Boolean)
-                    .join('\n\n')
-                : text
-                  ? `Current element text:\n${text}\n\nInstruction: ${instruction}`
-                  : `Write website element text. Instruction: ${instruction}`,
-          },
-        ],
-      }),
-    })
-    providerAnswered = true
-    const payload = await response.json()
-    if (!response.ok) {
-      console.error(payload)
-      await releaseReservation(firestore, orgId, reservation)
-      reservation = null
-      return res
-        .status(502)
-        .json({ error: payload?.error?.message ?? 'AI request failed' })
-    }
-    await meter(payload)
-    const output = (payload?.content ?? [])
-      .filter((block: any) => block?.type === 'text')
-      .map((block: any) => block.text)
-      .join('')
-      .trim()
+    const result = await ask(
+      mode === 'blog'
+        ? 'You write blog posts inside a site builder. Reply with ONLY ' +
+            'the post body in markdown-lite: **bold**, *italic*, ## ' +
+            'headings, - lists, [links](https://url). No front matter, ' +
+            'title line, or preamble — the title renders separately.'
+        : 'You write website copy inside a site builder. Reply with ' +
+            'ONLY the final text for the element — no quotes, preamble, ' +
+            'or markdown. Keep roughly the same length and role as the ' +
+            'current text unless the instruction says otherwise.',
+      mode === 'blog'
+        ? [
+            title && `Title: ${title}`,
+            excerpt && `Excerpt: ${excerpt}`,
+            text && `Current body:\n${text}`,
+            `Instruction: ${instruction}`,
+          ]
+            .filter(Boolean)
+            .join('\n\n')
+        : text
+          ? `Current element text:\n${text}\n\nInstruction: ${instruction}`
+          : `Write website element text. Instruction: ${instruction}`,
+      mode === 'blog' ? BLOG_MAX_TOKENS : ELEMENT_MAX_TOKENS,
+    )
+    if (!result) return
+    if (result.kind === 'refusal') return res.status(502).json(REFUSED)
+    const output = result.text.trim()
     if (!output) return res.status(502).json({ error: 'Empty AI response' })
     return res.status(200).json({ text: output })
   } catch (error) {
@@ -451,27 +520,6 @@ async function releaseReservation(
   await releaseAssistMessage(firestore, orgId, reservation).catch((error) =>
     console.error('assist reservation release failed', error),
   )
-}
-
-/** Anthropic's `usage` block, in the meter's shape. Missing fields read 0. */
-export function assistUsageFrom(payload: unknown): AssistTokenUsage {
-  const usage = (payload as { usage?: Record<string, unknown> } | null)?.usage
-  const count = (value: unknown): number => {
-    const parsed = Number(value ?? 0)
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
-  }
-  return {
-    inputTokens: count(usage?.['input_tokens']),
-    outputTokens: count(usage?.['output_tokens']),
-    cacheReadTokens: count(usage?.['cache_read_input_tokens']),
-    cacheWriteTokens: count(usage?.['cache_creation_input_tokens']),
-  }
-}
-
-/** The model's own `stop_reason`, or null when it did not send one. */
-export function stopReasonFrom(payload: unknown): string | null {
-  const reason = (payload as { stop_reason?: unknown } | null)?.stop_reason
-  return typeof reason === 'string' && reason ? reason : null
 }
 
 /** Re-emit a lockdown `Response` through the plugin API's res object. */

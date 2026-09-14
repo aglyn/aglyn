@@ -1,5 +1,19 @@
 {
   "name": "@aglyn/aglyn-node-renderer",
-  "version": "0.0.1",
+  "version": "1.0.0-beta.122",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "react": "^19.2.8"
+  },
   "sideEffects": false
 }

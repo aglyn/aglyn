@@ -248,6 +248,8 @@ const CALLERS: Array<{
       placeholders: [{ name: 'headline' }],
       nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
       rootId: 'root',
+      // A component or layout template's declared properties (AGL-2932).
+      props: [{ name: 'headline', type: 'text', defaultValue: 'Build once' }],
       slug: '/landing',
       seo: { title: 'Landing' },
     },
@@ -269,6 +271,9 @@ const CALLERS: Array<{
       description: 'Shared navigation',
       rootId: 'root',
       nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
+      // Sent by Use template for a component whose tree binds to them
+      // (AGL-2932).
+      props: [{ name: 'dark', type: 'boolean', defaultValue: false }],
     },
   },
   {
@@ -629,6 +634,8 @@ describe('/api/hosts/versions stores an allow-list too (AGL-1377)', () => {
     displayName: 'Initial version',
     rootId: 'root',
     nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
+    // A layout or component version's declared properties (AGL-2932).
+    props: [{ name: 'headline', type: 'text' }],
   }
 
   it('stores every field the besigner seeds', async () => {

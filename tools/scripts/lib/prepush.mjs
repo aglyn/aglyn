@@ -113,6 +113,18 @@ export const CHECKS = Object.freeze([
       /^tsconfig\.base\.json$|^apps\/[^/]+\/tsconfig[^/]*\.json$|^tools\/scripts\/sync-next-tsconfigs\.mjs$/.test(path),
   },
   {
+    // The package map (AGL-2941): a source change can add a project edge,
+    // and the rest are the map's own files. `nx graph` is a few seconds.
+    name: 'check:lib-boundaries',
+    script: 'tools/scripts/check-lib-boundaries.mjs',
+    scoped: false,
+    when: (path) =>
+      (/^(?:apps|libs)\//.test(path) && JS.test(path) && !SPEC.test(path)) ||
+      /(?:^|\/)(?:project|package)\.json$|^tsconfig\.base\.json$|^eslint\.config\.mjs$|^docs\/PACKAGES\.md$|^tools\/scripts\/(?:lib-boundaries-allowlist\.json|check-lib-boundaries\.mjs|lib\/lib-boundaries\.mjs)$/.test(
+        path,
+      ),
+  },
+  {
     name: 'check:page-view-rate',
     script: 'tools/scripts/check-page-view-rate.mjs',
     scoped: false,

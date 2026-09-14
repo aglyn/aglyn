@@ -102,6 +102,9 @@ const VERSION_KEYS = new Set([
   'displayName',
   'nodes',
   'rootId',
+  // A layout or component version's declared properties, seeded by Use
+  // template and by a component's first version (AGL-2932).
+  'props',
 ])
 
 /**

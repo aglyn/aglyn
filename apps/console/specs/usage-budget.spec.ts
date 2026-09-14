@@ -39,6 +39,10 @@ import {
   publicOrgMonthlySpend,
   resolveUsageBudget,
 } from '../utils/usage-budget'
+import {
+  assistOverageCapReached,
+  resolveAssistOverageCapUsd,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 
 describe('resolveUsageBudget', () => {
   it('reads no budget from an org that has never set one', () => {
@@ -479,5 +483,72 @@ describe('assistCeilingBreach — staff hear that the assistant STOPPED', () => 
         month,
       }),
     ).toBe(true)
+  })
+})
+
+/**
+ * The AI overage ceiling (AGL-2898) and the usage budget are DIFFERENT
+ * controls, and this pins the seam between them: the budget's spend reads
+ * are unchanged by a ceiling, and the ceiling reads nothing of the budget.
+ * A budget is an alert, never a cap — the header of `usage-budget.ts` —
+ * and a ceiling that quietly reached into it, or a budget that quietly
+ * became a ceiling, would be the failure AGL-1529 rejected on arrival.
+ */
+describe('the AI overage ceiling never enters the budget (AGL-2898)', () => {
+  const withoutCeiling = { usageBudget: { amountUsd: 50, thresholdPcts: [50, 90, 100] } }
+  const withCeiling = { ...withoutCeiling, assistOverage: { capUsd: 5 } }
+
+  it('resolves the same budget with or without a ceiling on the org', () => {
+    expect(resolveUsageBudget(withCeiling)).toEqual(resolveUsageBudget(withoutCeiling))
+    expect(resolveUsageBudget(withCeiling)).toEqual({
+      budgetSet: true,
+      amountUsd: 50,
+      thresholdPcts: [50, 90, 100],
+    })
+  })
+
+  it('reads the month’s spend from the same inputs — the ceiling is not one of them', () => {
+    const inputs = {
+      month: '2026-09',
+      rollupBilledCents: 1_250,
+      rollupMonth: '2026-09',
+      assistEstCostUsd: 4.75,
+      assistBilledFrom: null,
+    }
+    const spend = orgMonthlySpend(inputs)
+    expect(spend).toEqual({
+      meteredUsd: 12.5,
+      assistUsd: 4.75,
+      assistBilled: false,
+      totalUsd: 12.5,
+      meteredFresh: true,
+    })
+    // The function's whole input surface, spelled out: no `org`, no cap.
+    expect(Object.keys(inputs).sort()).toEqual(
+      ['assistBilledFrom', 'assistEstCostUsd', 'month', 'rollupBilledCents', 'rollupMonth'],
+    )
+    expect(orgMonthlySpend.length).toBe(1)
+  })
+
+  it('alerts on the same rule with or without a ceiling, and never refuses', () => {
+    const due = (org: Record<string, unknown>) =>
+      budgetAlertDue({
+        spendUsd: 47,
+        budget: resolveUsageBudget(org),
+        guard: null,
+        month: '2026-09',
+      })
+    expect(due(withCeiling)).toBe(90)
+    expect(due(withoutCeiling)).toBe(90)
+    // A budget answers a threshold, never an `allowed`.
+    expect(Object.keys(resolveUsageBudget(withCeiling))).not.toContain('allowed')
+  })
+
+  it('and the ceiling reads nothing of the budget', () => {
+    // A $50 budget with no ceiling is no ceiling; a $5 ceiling is $5 however
+    // large the budget beside it.
+    expect(resolveAssistOverageCapUsd({ plan: 'pro', ...withoutCeiling })).toBeNull()
+    expect(assistOverageCapReached({ plan: 'pro', ...withoutCeiling }, 900)).toBe(false)
+    expect(resolveAssistOverageCapUsd({ plan: 'pro', ...withCeiling })).toBe(5)
   })
 })

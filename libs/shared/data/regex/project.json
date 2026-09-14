@@ -3,7 +3,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/data/regex/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:shared", "scope:data"],
+  "tags": ["scope:lib", "scope:shared", "scope:data", "type:data"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",

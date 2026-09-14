@@ -23,6 +23,9 @@
 // 👇
 
 export * from './definitions/components.types'
+// AI generation jobs (AGL-2904): the job, step and output model, plus the
+// kind list as a VALUE so a route can validate a body against the union.
+export * from './definitions/ai-jobs.types'
 // One postal address + one phone format, shared by the personal profile, the
 // org billing address and the Stripe customer (AGL-1133). The failure this
 // prevents is a phone number stored three ways in three collections.
@@ -33,6 +36,10 @@ export * from './definitions/contact.types'
 // sweep lives beside the other derived host-subcollection guards.
 export * from './definitions/host-content-collections'
 export * from './definitions/organization.types'
+// The component and layout property kinds (AGL-2893), VALUES because the
+// Properties dialog, the Attributes panel and the graft all read the same
+// table — one list per field kind, derived from `FieldComponentType`.
+export * from './definitions/property-kinds'
 export * from './definitions/shared'
 // `HOST_UNPERSISTED_FIELDS` is a VALUE for the same reason its org twin below
 // is: it states which `hosts/{hostId}` keys are never fields. It is exported
@@ -101,14 +108,19 @@ export type {
   HostPath,
   HostUid,
   LayoutUid,
+  LegacyNamedFieldKind,
+  NonValueFieldKind,
   ProjectNumber,
   ProjectUid,
   PublishSchedule,
   RedirectUid,
   ReusableComponentIcon,
   ReusableComponentProp,
+  ReusableComponentPropCondition,
   ReusableComponentPropOption,
+  ReusableComponentPropRule,
   ReusableComponentPropType,
+  ReusableComponentPropValue,
   ScopeToken,
   ScreenSlug,
   ScreenUid,

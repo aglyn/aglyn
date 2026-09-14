@@ -20,6 +20,7 @@ import {
   FormFieldGrid,
   validationError,
 } from '../mapper'
+import { buildFieldClear } from '../mapper/form-field-grid'
 import {
   useFieldApi,
   type UseFieldApiConfig,
@@ -61,6 +62,8 @@ export const ToggleButtonComponent = (props: ToggleButtonProps) => {
     FormHelperTextProps = {},
     inputProps,
     options,
+    help,
+    clearable,
     ...rest
   } = useFieldApi({
     ...props,
@@ -72,9 +75,17 @@ export const ToggleButtonComponent = (props: ToggleButtonProps) => {
     ((meta.touched || validateOnMount) && meta.warning) ||
     helperText ||
     description
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue:
+      input.value !== '' && input.value !== undefined && input.value !== null,
+    locked: Boolean(isDisabled || isReadOnly),
+    onClear: () => input.onChange(undefined),
+  })
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
       <FormControl
         required={isRequired}
         error={hasError}
@@ -97,7 +108,13 @@ export const ToggleButtonComponent = (props: ToggleButtonProps) => {
               {...ToggleButtonGroupProps}
               disabled={isDisabled || isReadOnly}
               value={input.value}
-              onChange={input.onChange}
+              // The group's own answer, not the clicked button's: pressing the
+              // chosen button again answers `null`, which is how an exclusive
+              // group is switched back off. The event's target still names the
+              // button, so reading it could never deselect anything.
+              onChange={(_event: unknown, value: unknown) =>
+                input.onChange(value ?? undefined)
+              }
               exclusive
               {...rest}
             >

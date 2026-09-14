@@ -88,6 +88,15 @@ export const PRICE_FIELD_MAP = Object.freeze([
   { field: 'extraCollaboratorMonthlyUsd', key: (p) => `aglyn_${p}_extra_member_yearly`, mult: 12 },
   { field: 'extraDatasetMonthlyUsd', key: (p) => `aglyn_${p}_extra_dataset`, mult: 1 },
   { field: 'extraDatasetMonthlyUsd', key: (p) => `aglyn_${p}_extra_dataset_yearly`, mult: 12 },
+  // The Aglyn AI add-on (AGL-2896/2897), minted live on 2026-09-14. Its rows
+  // are checked like every other purchasable price: a missing one is
+  // `unreadable` (a deleted or archived price is the fault it looks like),
+  // the amount, interval multiplier and active flag are compared exactly, and
+  // a live price for a plan whose code says null is drift. A row awaiting its
+  // FIRST mint may carry `unminted: true` so the gap is reported daily
+  // without turning the run red for a step only a human can take.
+  { field: 'aiAddonMonthlyUsd', key: (p) => `aglyn_${p}_ai_addon`, mult: 1 },
+  { field: 'aiAddonMonthlyUsd', key: (p) => `aglyn_${p}_ai_addon_yearly`, mult: 12 },
 ])
 
 /**
@@ -164,14 +173,17 @@ const cents = (n) => Math.round(n * 100) / 100
  * Compare code's plan prices against Stripe live mode.
  *
  * @returns array of verdicts: `{ status, key, detail }` where status is
- *   'in-sync' | 'differs' | 'unreadable'
+ *   'in-sync' | 'differs' | 'unreadable' | 'unminted' — the last is a
+ *   purchasable price the code sells that Stripe does not carry yet, on a
+ *   row `PRICE_FIELD_MAP` marks as awaiting its first mint. Reported on
+ *   every run, never fatal.
  */
 export function comparePlansToStripe(planPricing, stripe) {
   const verdicts = []
   for (const plan of ALL_PLANS) {
     const fields = planPricing[plan]
     if (!fields) continue
-    for (const { field, key, mult } of PRICE_FIELD_MAP) {
+    for (const { field, key, mult, unminted } of PRICE_FIELD_MAP) {
       const lookupKey = key(plan)
       const codeValue = fields[field]
       const live = stripe[lookupKey]
@@ -193,11 +205,13 @@ export function comparePlansToStripe(planPricing, stripe) {
       if (!live) {
         const expected = NON_PURCHASABLE_PLANS.includes(plan)
         verdicts.push({
-          status: expected ? 'in-sync' : 'unreadable',
+          status: expected ? 'in-sync' : unminted ? 'unminted' : 'unreadable',
           key: lookupKey,
           detail: expected
             ? `no Stripe price, as expected for ${plan}`
-            : `code says $${codeValue} but there is no live Stripe price`,
+            : unminted
+              ? `code says $${cents(codeValue * mult)} but no live Stripe price exists yet — mint it with setup-stripe.mjs`
+              : `code says $${codeValue} but there is no live Stripe price`,
         })
         continue
       }
@@ -300,5 +314,7 @@ export function overallExitCode(verdicts) {
   if (verdicts.some((v) => v.status === 'differs')) return 1
   if (verdicts.some((v) => v.status === 'unreadable')) return 2
   if (!verdicts.some((v) => v.status === 'in-sync')) return 2
+  // `unminted` is deliberately absent: it is a report, not a verdict on
+  // agreement, and the prices it names cannot disagree until they exist.
   return 0
 }

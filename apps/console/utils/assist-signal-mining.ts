@@ -169,6 +169,83 @@ export function costSplitRows(
     .sort((a, b) => b.estCostUsd - a.estCostUsd || a.key.localeCompare(b.key))
 }
 
+/**
+ * One workspace on the month's spend leaderboard (AGL-2930).
+ *
+ * Read off `assistUsage/{month}` rather than off the signals: the signals
+ * carry every turn ever recorded and no month, so ranking them answers
+ * "who has spent the most since the beginning", and the board's question is
+ * "who is spending the most NOW". The month document is also where the
+ * refusal counter lives, so the row can say how often the org was refused
+ * beside how much it spent — the two numbers a staff reader compares.
+ */
+export interface AssistSpendRow {
+  orgId: string
+  orgLabel?: string | null
+  plan: string
+  aiAddon: boolean
+  /** Credits drawn this month, from the measured spend. */
+  credits: number
+  estCostUsd: number
+  refusals: {
+    band: number
+    cap: number
+    messages: number
+    budget: number
+    /** The Free taste's rungs (AGL-2925); zero on every paid workspace. */
+    account: number
+    requests: number
+    refusals: number
+    platform: number
+    total: number
+  }
+}
+
+/** The Free taste's refusals as one figure: the board names the wall, not each rung. */
+export function freeTasteRefusals(refusals: AssistSpendRow['refusals']): number {
+  return refusals.account + refusals.requests + refusals.refusals + refusals.platform
+}
+
+/**
+ * The leaderboard's ordering: dearest first, then most credits, then by id
+ * so two equal rows render in one stable order rather than the order the
+ * scan happened to return them in. Returns the top `limit` and how many
+ * were ranked, so the page can say "top 25 of 140" rather than imply the
+ * cut is the whole fleet.
+ */
+export function rankAssistSpend(
+  rows: readonly AssistSpendRow[],
+  limit: number,
+): { rows: AssistSpendRow[]; ranked: number } {
+  const sorted = [...rows].sort(
+    (a, b) =>
+      b.estCostUsd - a.estCostUsd ||
+      b.credits - a.credits ||
+      a.orgId.localeCompare(b.orgId),
+  )
+  const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : sorted.length
+  return { rows: sorted.slice(0, cap), ranked: sorted.length }
+}
+
+/**
+ * Today's platform-wide free-tier AI spend against its daily ceiling
+ * (AGL-2925), as the route reads it beside the mined signals. Declared here,
+ * where the page's report type lives, so the client page needs no import
+ * from the admin library to name it.
+ */
+export interface AssistFreeSpendReadout {
+  /** The UTC day the figures describe. */
+  day: string
+  estCostUsd: number
+  requests: number
+  refusals: number
+  ceilingUsd: number
+  /** True once staff were mailed at 80% today. */
+  alerted: boolean
+  /** True while every Free workspace is refused generation for the day. */
+  paused: boolean
+}
+
 export interface AssistMiningReport {
   scanned: number
   /** True when the read hit its ceiling — see `mineAssistSignals`. */
@@ -235,6 +312,12 @@ export interface AssistMiningReport {
     ungroundedRoutes: number
     orgs: number
   }
+  /**
+   * Today's free-tier spend against the platform ceiling (AGL-2925).
+   * Optional because the miner is pure and does not produce it — the route
+   * reads it from Firestore and attaches it beside the mined report.
+   */
+  freeSpend?: AssistFreeSpendReadout
   /** Turns whose words are worth reading — see {@link ProseCandidate}. */
   proseCandidates: ProseCandidate[]
   ungrounded: {

@@ -19,6 +19,7 @@
 import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import {
   mdiDeleteOutline,
+  mdiContentCopy,
   mdiEyeOutline,
   mdiPencilOutline,
 } from '@aglyn/shared-data-mdi'
@@ -39,7 +40,9 @@ import {
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import {
+  DUPLICATE_MENU_LABEL,
   useConsoleHostRoute,
+  useDuplicateResource,
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
@@ -124,6 +127,13 @@ export function EmailScreensCard(props: {
   const createHostVersion = useHostVersionApi()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
+  // Duplicate (AGL-2936): the copy is a design of its own, sent by nothing
+  // until a campaign picks it.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}”`, { variant: 'success' }),
+  })
   const { confirm } = useConfirmationContext()
 
   const { data: screenDocs } = useFirestoreCollection<any>(
@@ -224,6 +234,16 @@ export function EmailScreensCard(props: {
       disabledReason: 'This site’s console URL has not resolved yet',
     },
     {
+      key: 'duplicate',
+      label: DUPLICATE_MENU_LABEL,
+      icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+      onClick: () =>
+        duplicate.request('emailDesign', {
+          id: screen.$id,
+          name: templateName(screen),
+        }),
+    },
+    {
       key: 'delete',
       label: 'Delete',
       icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
@@ -250,6 +270,7 @@ export function EmailScreensCard(props: {
         ),
       }}
     >
+      {duplicate.dialog}
       <Stack spacing={1.5}>
         {emailScreens.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

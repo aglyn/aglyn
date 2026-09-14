@@ -67,6 +67,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  useDuplicateResource,
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
@@ -121,6 +122,15 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
+  // Duplicate (AGL-2936): the copy keeps every step and arrives disarmed —
+  // its trigger is cleared — so nothing runs twice until somebody arms it.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}” — arm its trigger to run it`, {
+        variant: 'success',
+      }),
+  })
   const { confirm } = useConfirmationContext()
   const { org } = props
 
@@ -505,6 +515,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
       contentGutterX
       contentGutterY
     >
+      {duplicate.dialog}
       <Stack spacing={1}>
         {workflows.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
@@ -561,6 +572,17 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                 }}
               >
                 {'Edit'}
+              </Button>
+              <Button
+                size="small"
+                onClick={() =>
+                  duplicate.request('workflow', {
+                    id: workflow.$id,
+                    name: workflow.name ?? '',
+                  })
+                }
+              >
+                {'Duplicate…'}
               </Button>
               <Button
                 size="small"

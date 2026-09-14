@@ -282,6 +282,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'platform',
     why: "Not a sink: the `icons` marker is the JSON SCHEMA that DESCRIBES the web app manifest's `icons[].src` member in `/openapi.json` (AGL-2722). It is a `{ type: 'string' }` under a property key, so the only thing this file emits for it is the word `src` in a published description. The manifest's real icon URLs are built by `apps/tenant/app/api/manifest/route.ts`, which is declared above and is where that risk actually lives. No author string is read here and no URL is produced here.",
   },
+  'libs/aglyn/src/lib/app-utils/ai-palette.generated.ts': {
+    markers: 1,
+    guard: 'platform',
+    why: "Not a sink: the `twitter` marker is a property key in the Social Links element's props JSON SCHEMA (`{ type: 'string', maxLength: 200 }`), in the element palette `tools/scripts/generate-ai-palette.mts` generates from the registered plugin bundles for AI generation (AGL-2905). The file is schemas and descriptions only; it reads no author string and produces no URL. The social links an author fills in render through the element itself.",
+  },
   'libs/aglyn/src/lib/app-utils/author-css.ts': {
     markers: 2,
     guard: 'scheme-guard',

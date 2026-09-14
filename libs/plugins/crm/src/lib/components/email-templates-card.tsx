@@ -26,14 +26,24 @@ import {
   createResourceUid,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
-import { mdiDeleteOutline, mdiPencilOutline } from '@aglyn/shared-data-mdi'
+import {
+  mdiContentCopy,
+  mdiDeleteOutline,
+  mdiPencilOutline,
+} from '@aglyn/shared-data-mdi'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  DUPLICATE_MENU_LABEL,
+  useDuplicateResource,
+  useFirestore,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
+import { useCrmApi } from './use-crm-api'
 import {
   Button,
   Chip,
@@ -94,6 +104,27 @@ export function EmailTemplatesCard(props: EmailTemplatesCardProps) {
     scope,
     visibleTo: templateScope.visibleTo,
     uid,
+  })
+  // Duplicate (AGL-2936): through the plugin's own door, which files the
+  // copy under this person and keeps the original's scope.
+  const callCrm = useCrmApi(hostId ?? null)
+  const duplicate = useDuplicateResource({
+    hostId: hostId ?? '',
+    perform: async ({ sourceId, name, attemptKey }) => {
+      const { response, payload } = await callCrm('email-template-duplicate', {
+        templateId: sourceId,
+        name,
+        attemptKey,
+      })
+      if (!response.ok) throw new Error(payload?.error ?? 'Duplicate failed')
+      return {
+        id: String(payload.templateId),
+        versionId: null,
+        name: String(payload.name ?? name),
+      }
+    },
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}”`, { variant: 'success', persist: false }),
   })
 
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -202,6 +233,13 @@ export function EmailTemplatesCard(props: EmailTemplatesCardProps) {
       onClick: () => openEdit(template),
     },
     {
+      key: 'duplicate',
+      label: DUPLICATE_MENU_LABEL,
+      icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+      onClick: () =>
+        duplicate.request('emailTemplate', { id: template.$id, name: template.name }),
+    },
+    {
       key: 'delete',
       label: 'Delete',
       icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
@@ -228,6 +266,7 @@ export function EmailTemplatesCard(props: EmailTemplatesCardProps) {
         ),
       }}
     >
+      {duplicate.dialog}
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {'The letters your team sends from a record. A template fills in the ' +

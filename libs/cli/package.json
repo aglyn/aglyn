@@ -1,7 +1,7 @@
 {
   "name": "@aglyn/cli",
   "version": "0.1.2",
-  "description": "Read and script any site built on Aglyn \u2014 pages as Markdown, llms.txt, OpenAPI, and the REST API.",
+  "description": "Read and script any site built on Aglyn — pages as Markdown, llms.txt, OpenAPI, and the REST API.",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -22,14 +22,16 @@
   "homepage": "https://aglyn.com",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
-  "files": [
-    "src",
-    "README.md"
-  ]
+  "sideEffects": false
 }

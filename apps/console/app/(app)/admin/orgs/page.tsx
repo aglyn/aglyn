@@ -72,6 +72,10 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
+import {
+  aiSpendCell,
+  aiSpendSortValue,
+} from '../../../../utils/staff-org-ai-spend'
 
 /**
  * Staff organization management (AGL-238, grown from the AGL-42 tenant
@@ -397,6 +401,25 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
             </Stack>
           )
         },
+      },
+      {
+        // This month's live AI spend (AGL-2930), served per row by the
+        // route. Sorted on the NUMBER — `aiSpendSortValue` — so `$10` does
+        // not land before `$9`; an unmeasured org sorts last either way.
+        field: 'aiSpendUsd',
+        headerName: 'AI spend (month)',
+        flex: 0.8,
+        minWidth: 140,
+        type: 'number',
+        // Live, not stored on the org — nothing for the route's filter to
+        // match, so the panel must not offer it.
+        filterable: false,
+        valueGetter: (_value, row: any) => aiSpendSortValue(row),
+        renderCell: ({ row }: any) => (
+          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+            {aiSpendCell(row)}
+          </Typography>
+        ),
       },
       {
         field: 'createdAt',

@@ -42,6 +42,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: null,
     extraCollaboratorMonthlyUsd: null,
     extraDatasetMonthlyUsd: null,
+    aiAddonMonthlyUsd: null,
   },
   pro: {
     basePriceMonthlyUsd: 56,
@@ -50,6 +51,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 4,
     extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
+    aiAddonMonthlyUsd: 19,
   },
 }
 `
@@ -137,6 +139,54 @@ test('comparePlansToStripe', async (t) => {
     const v = comparePlansToStripe(code, indexStripePrices(stripePayload()))
     assert.ok(v.some((x) => x.key === 'aglyn_free_v2' && x.status === 'in-sync'))
   })
+
+  // The Aglyn AI add-on (AGL-2897) prices were minted live on 2026-09-14, so
+  // a missing one is no longer a first-mint report: it is a deleted or
+  // archived price, and the run turns red for it like any other.
+  await t.test('a MISSING add-on price is UNREADABLE now that the prices are minted', () => {
+    const v = comparePlansToStripe(code, indexStripePrices(stripePayload()))
+    const monthly = v.find((x) => x.key === 'aglyn_pro_ai_addon')
+    const yearly = v.find((x) => x.key === 'aglyn_pro_ai_addon_yearly')
+    assert.equal(monthly.status, 'unreadable')
+    assert.equal(yearly.status, 'unreadable')
+    assert.equal(v.some((x) => x.status === 'unminted'), false)
+    assert.equal(overallExitCode(v), 2)
+  })
+
+  await t.test('a MINTED add-on price is compared exactly, yearly = monthly x 12', () => {
+    const payload = stripePayload({
+      extra: [
+        { lookup_key: 'aglyn_pro_ai_addon', unit_amount: 1900, active: true, recurring: { interval: 'month' } },
+        { lookup_key: 'aglyn_pro_ai_addon_yearly', unit_amount: 22800, active: true, recurring: { interval: 'year' } },
+      ],
+    })
+    const v = comparePlansToStripe(code, indexStripePrices(payload))
+    assert.equal(v.find((x) => x.key === 'aglyn_pro_ai_addon').status, 'in-sync')
+    assert.equal(v.find((x) => x.key === 'aglyn_pro_ai_addon_yearly').status, 'in-sync')
+  })
+
+  await t.test('CATCHES a minted add-on price at the wrong amount', () => {
+    const payload = stripePayload({
+      extra: [
+        { lookup_key: 'aglyn_pro_ai_addon', unit_amount: 2100, active: true, recurring: { interval: 'month' } },
+      ],
+    })
+    const v = comparePlansToStripe(code, indexStripePrices(payload))
+    const hit = v.find((x) => x.key === 'aglyn_pro_ai_addon')
+    assert.equal(hit.status, 'differs')
+    assert.match(hit.detail, /code \$19 vs Stripe \$21/)
+    assert.equal(overallExitCode(v), 1)
+  })
+
+  await t.test('CATCHES a live add-on price for a plan the code says does not sell it', () => {
+    const payload = stripePayload({
+      extra: [
+        { lookup_key: 'aglyn_free_ai_addon', unit_amount: 900, active: true, recurring: { interval: 'month' } },
+      ],
+    })
+    const v = comparePlansToStripe(code, indexStripePrices(payload))
+    assert.equal(v.find((x) => x.key === 'aglyn_free_ai_addon').status, 'differs')
+  })
 })
 
 test('compareFeeLadder catches a moved percentage', () => {
@@ -195,5 +245,10 @@ test('overallExitCode', async (t) => {
   })
   await t.test('is 0 only when something compared and nothing differs', () => {
     assert.equal(overallExitCode([{ status: 'in-sync' }]), 0)
+  })
+  await t.test('ignores unminted rows — a report, not a disagreement', () => {
+    assert.equal(overallExitCode([{ status: 'in-sync' }, { status: 'unminted' }]), 0)
+    // …but nothing compared is still nothing compared.
+    assert.equal(overallExitCode([{ status: 'unminted' }]), 2)
   })
 })

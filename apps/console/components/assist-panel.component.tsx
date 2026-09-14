@@ -62,8 +62,10 @@ import {
 } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { AssistJobsDrawer } from './assist-jobs-drawer.component'
 import { DocsHelpTip } from './docs-help-tip.component'
 import { HostIdContext } from './host-id-provider'
+import useAiPermissions from '../hooks/use-ai-permissions'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgScope, { useOrgSlug } from '../hooks/use-org-scope'
@@ -447,6 +449,14 @@ export function AssistPanelComponent() {
   /** Path slug for building `/[orgSlug]/…` links (AGL-621). */
   const billingSlug = useOrgSlug()
   const hostId = useContext(HostIdContext)
+  /**
+   * The reader's `ai.use` verdict (AGL-2927), on their own membership axis:
+   * the org catalog for an org-wide member, the site in view for a
+   * collaborator. Held closed until it is known, and the server refuses the
+   * same request with a 403 naming the permission, so the input's disabled
+   * state is a courtesy rather than the boundary.
+   */
+  const ai = useAiPermissions(hostId)
   const pathname = usePathname()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -477,7 +487,7 @@ export function AssistPanelComponent() {
 
   const send = useCallback(async () => {
     const question = input.trim()
-    if (!question || busy || !scopedOrgId) return
+    if (!question || busy || !scopedOrgId || !ai.use) return
     setBusy(true)
     setInput('')
     const history = messages
@@ -613,6 +623,7 @@ export function AssistPanelComponent() {
       setBusy(false)
     }
   }, [
+    ai.use,
     busy,
     entitled,
     hostId,
@@ -769,6 +780,15 @@ export function AssistPanelComponent() {
           </Stack>
 
           <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
+            {/* The generation jobs (AGL-2904), scoped to the same org the
+                thread is: a job listed here is one this page may act as. */}
+            <AssistJobsDrawer
+              orgId={scopedOrgId}
+              org={org}
+              orgReady={orgReady}
+              orgSlug={billingSlug}
+              user={user}
+            />
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 {`Ask anything about using ${branding.productName} — building `}
@@ -907,6 +927,12 @@ export function AssistPanelComponent() {
             spacing={1}
             sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}
           >
+            {ai.loaded && !ai.use ? (
+              <Typography variant="caption" color="text.secondary">
+                {'Your role does not include the assistant — ask an ' +
+                  'organization admin to grant "Use AI assistance".'}
+              </Typography>
+            ) : null}
             {quota && quota.period === 'day' && (
               <Typography variant="caption" color="text.secondary">
                 {quota.remaining} of {quota.limit} free messages left today
@@ -942,7 +968,7 @@ export function AssistPanelComponent() {
                 size="small"
                 placeholder="How do I…"
                 value={input}
-                disabled={busy}
+                disabled={busy || !ai.loaded || !ai.use}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
@@ -952,13 +978,21 @@ export function AssistPanelComponent() {
                 }}
               />
               <Tooltip
-                title={busy ? 'Waiting for an answer…' : 'Send message'}
+                title={
+                  busy
+                    ? 'Waiting for an answer…'
+                    : !ai.loaded
+                      ? 'Checking your permissions…'
+                      : !ai.use
+                        ? 'Your role does not include the assistant'
+                        : 'Send message'
+                }
               >
                 <span>
                   <IconButton
                     color="primary"
                     aria-label="Send message"
-                    disabled={busy || !input.trim()}
+                    disabled={busy || !input.trim() || !ai.loaded || !ai.use}
                     onClick={() => void send()}
                   >
                     {busy ? (

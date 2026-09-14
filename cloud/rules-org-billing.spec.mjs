@@ -77,6 +77,20 @@ await env.withSecurityRulesDisabled(async (context) => {
     seatAddons: { managers: 2 },
   })
   await setDoc(doc(db, 'stripeCustomers', CUSTOMER_ID), { orgId: ORG })
+  // An AI generation job (AGL-2904): the brief verbatim, the step ledger and
+  // the lease. Readable by any member so the workspace can watch its own
+  // jobs; writable by nobody, because the document is the state machine.
+  await setDoc(doc(db, 'orgs', ORG, 'aiJobs', 'job-1'), {
+    orgId: ORG,
+    kind: 'text',
+    status: 'queued',
+    brief: 'A tagline.',
+    steps: [],
+    outputs: [],
+    creditsReserved: 50,
+    creditsSpent: 0,
+    lease: null,
+  })
 
   await setDoc(doc(db, 'orgs', ORG, 'members', OWNER), {
     role: 'owner',
@@ -202,6 +216,26 @@ await check('an OUTSIDER cannot read the stripeCustomers index', () =>
   assertFails(getDoc(doc(as(OUTSIDER), 'stripeCustomers', CUSTOMER_ID))),
 )
 
+// ── AI jobs (AGL-2904): members read, nobody writes ─────────────────────────
+const jobDoc = (db) => doc(db, 'orgs', ORG, 'aiJobs', 'job-1')
+await check('an OWNER reads an AI job', () =>
+  assertSucceeds(getDoc(jobDoc(as(OWNER)))),
+)
+await check('a scoped COLLABORATOR reads an AI job — it is a membership read', () =>
+  assertSucceeds(getDoc(jobDoc(as(COLLABORATOR)))),
+)
+await check('an OUTSIDER cannot read an AI job', () =>
+  assertFails(getDoc(jobDoc(as(OUTSIDER)))),
+)
+await check('an OWNER cannot WRITE an AI job — the machine is server-owned', () =>
+  assertFails(setDoc(jobDoc(as(OWNER)), { status: 'done', creditsSpent: 0 })),
+)
+await check('an OWNER cannot create an AI job by hand', () =>
+  assertFails(
+    setDoc(doc(as(OWNER), 'orgs', ORG, 'aiJobs', 'job-2'), { status: 'queued' }),
+  ),
+)
+
 // Remove ONLY what this spec seeded. Deliberately not `clearFirestore()` — the
 // emulator is often shared with a running dev server, and wiping it would take
 // that session's data with it.
@@ -209,6 +243,7 @@ await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
   for (const ref of [
     doc(db, 'orgs', ORG, 'billing', 'stripe'),
+    doc(db, 'orgs', ORG, 'aiJobs', 'job-1'),
     doc(db, 'orgs', ORG, 'members', OWNER),
     doc(db, 'orgs', ORG, 'members', ADMIN),
     doc(db, 'orgs', ORG, 'members', REVOKED_ADMIN),

@@ -38,6 +38,14 @@ This is deliberate: browsing and installing should never be able to change a sit
 real people are looking at. If the template was designed around a particular theme, that
 theme travels with it rather than being applied to your site.
 
+A marketplace **component** or **layout** brings the properties it declares — each one's
+kind, label, help text, answers, settings and condition — so its `{{prop.*}}` tokens still
+have properties to fill them, and updating to a newer version takes the publisher's new
+properties with it. A property's default is checked before it reaches your site the same
+way the published design is: a link, an image address, or formatted text that could run
+script is removed, and the property arrives with no default instead. The property itself
+always comes through, so its field still shows wherever you use the component or layout.
+
 ## Saving something as a template
 
 Look for **Save as template**:
@@ -61,11 +69,13 @@ library, so you can use it as many times as you like.
   publishes it. If the address is already taken, Aglyn adds a number rather than
   overwriting the page that's there.
 - **Component** and **layout** templates just create the component or layout; there is
-  no address to pick.
+  no address to pick. The properties the component or layout declared come with it, so
+  every `{{prop.*}}` token in it still has a property to fill it.
 
 If a template defines placeholders, you'll be asked to fill them in first — the values
 are substituted into the content as it's created. A template might use `{{who}}` in its
-copy and ask you for "Who".
+copy and ask you for "Who". A component or layout property's `{{prop.*}}` token is never a
+placeholder: it stays in the content, bound to its property.
 
 Nothing you create is linked back to the template afterwards. Editing a page will never
 change the template, and updating a template will never change pages you already made.
@@ -109,6 +119,15 @@ screens, layouts and components it was built from.
 Marketplace **plugins and add-ons** work differently: those install once for the
 whole organization and apply to every site, and a site can override the
 organization's choice for itself.
+
+## Duplicating
+
+**Duplicate…** in a template's row menu makes a second template with the same
+element tree, placeholders, properties and SEO fields, named `Copy of
+<template>` unless you type another name. A copy of a marketplace or starter
+template is your own — it is listed as *Saved here* and counts against your
+template allowance like one you saved yourself. Starter bundles are used, not
+duplicated: use the bundle to get its pages.
 
 ## Deleting
 

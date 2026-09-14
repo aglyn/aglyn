@@ -409,6 +409,8 @@ const SEEDS: Array<{
       rootId: 'root',
       screenId: 'screen-1',
       hostId: 'host-1',
+      // This screen's values for its layout's properties (AGL-2893).
+      layoutPropValues: { 'layout-1': { showBanner: true, bannerText: 'Hi' } },
     },
   },
   {
@@ -493,6 +495,11 @@ const SEEDS: Array<{
       componentId: 'component-1',
       pluginId: 'mui',
       bundleId: 'mui',
+      // The layout's declared properties (AGL-2893).
+      props: [
+        { name: 'showBanner', type: 'boolean', defaultValue: false },
+        { name: 'bannerText', type: 'text', defaultValue: 'We are hiring' },
+      ],
     },
   },
   {

@@ -75,6 +75,7 @@ import { overLimitSummary as computeOverLimitSummary } from '../../../../../util
 import { stripeOtherModeInvoiceNotice } from '../../../../../utils/stripe-mode-notice'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
+  TOGGLE_ADDON_KINDS,
 } from '../../../../../components/billing/billing-addons-card.component'
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
@@ -96,7 +97,10 @@ import BillingPlanQuoteComponent from '../../../../../components/billing/billing
 import BillingUpgradeDialogComponent from '../../../../../components/billing/billing-upgrade.dialog'
 import { useBillingProfile } from '../../../../../components/billing/use-billing-profile'
 import { getBrowserStripe } from '../../../../../utils/browser-stripe'
-import { prorationQuote } from '../../../../../utils/proration-quote'
+import {
+  carriedAiAddonSentence,
+  prorationQuote,
+} from '../../../../../utils/proration-quote'
 import { purchaseConfirmQuote } from '../../../../../utils/purchase-confirm-quote'
 import { subscriptionPeriodNotice } from '../../../../../utils/subscription-period-notice'
 import {
@@ -108,6 +112,9 @@ import {
 import { platformAdvertisingAllowed } from '@aglyn/aglyn/app-utils/platform-visitor-consent'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../../../../../components/lockdown-notice.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../components/plugin-widget-slot.component'
 import { useReleaseFlag } from '../../../../../hooks/use-release-flags'
 import { docsHelp } from '../../../../../constants/docs-links'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -322,6 +329,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // Workspace-scoped (AGL-236): meters cover the selected org's sites.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
   const plan = (org?.plan ?? 'free') as OrgPlan
+  // The plugin cards among the plan and add-on cards (AGL-2940); no item
+  // at all when nothing survives the slot's gates.
+  const { widgets: overviewWidgets } = useSlotWidgets(['orgBillingOverview'])
   // Enterprise is a real plan (AGL-1118); orgs provisioned before that still
   // read as Enterprise off a base plan + custom price / comped marker
   // (AGL-1110). Either way it bills the negotiated amount, not a list price.
@@ -699,6 +709,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             plan: targetPlan,
             interval,
             promotionCode,
+            // The Aglyn AI add-on the deep link asked for (AGL-2897), quoted
+            // on the same invoice so the total shown is the total charged.
+            ...(planIntent?.ai ? { aiAddon: true } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -757,7 +770,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         return null
       }
     },
-    [user, orgId, interval, enqueueSnackbar],
+    [user, orgId, interval, planIntent, enqueueSnackbar],
   )
 
   /**
@@ -879,6 +892,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // priced quote the customer just confirmed, so the purchase and
             // the confirmed figure describe the same invoice.
             ...(pricedCode ? { promotionCode: pricedCode } : {}),
+            // The same add-on the quote above priced (AGL-2897).
+            ...(planIntent?.ai ? { aiAddon: true } : {}),
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -1049,6 +1064,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       user,
       orgId,
       interval,
+      planIntent,
       appliedPromotionCode,
       priceSubscribe,
       confirm,
@@ -1120,6 +1136,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   `to ${targetPlan}. You can keep your current plan any ` +
                   `time before then.`
                 : prorationQuote(preview, effective)) +
+              // The add-on the plan carries with it, named (AGL-2899): the
+              // proration already prices its move to the target's rate, and
+              // the figure alone cannot say a line changed.
+              carriedAiAddonSentence(org, targetPlan, preview.droppedAddons) +
               // A pending cancel and a pending plan change cannot both stand
               // (AGL-2151). The server clears the cancellation as part of this
               // operation — a customer picking a smaller plan is trying to
@@ -1467,7 +1487,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       {`Plan add-ons: ${Object.entries(org.seatAddons)
                         .filter(([, count]) => Number(count) > 0)
                         .map(([kind, count]) =>
-                          kind === 'eventCalendar'
+                          TOGGLE_ADDON_KINDS.has(kind)
                             ? ADDON_LABELS[kind]
                             : `${count} ${ADDON_LABELS[kind] ?? kind}`)
                         .join(', ')}`}
@@ -1748,6 +1768,22 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                 />
               ),
             },
+            ...(overviewWidgets.length
+              ? [
+                  {
+                    size: { xs: 12 },
+                    children: (
+                      <PluginWidgetSlot
+                        slot="orgBillingOverview"
+                        orgId={orgId}
+                        org={org}
+                        plan={plan}
+                        canManage={can('billing.manage')}
+                      />
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
 

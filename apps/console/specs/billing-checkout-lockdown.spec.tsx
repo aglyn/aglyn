@@ -165,6 +165,9 @@ jest.mock('../hooks/use-org-hosts', () => ({
 }))
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false }),
+  // The billing zones (AGL-2940) reach the plugin gate, which reads the
+  // whole flag set; an empty, ready set keeps every plugin widget out.
+  useReleaseFlags: () => ({ ready: true, isStaff: false, flags: {} }),
 }))
 jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,

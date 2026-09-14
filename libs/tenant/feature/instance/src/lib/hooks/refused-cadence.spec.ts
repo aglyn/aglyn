@@ -16,30 +16,26 @@
  */
 
 /**
- * The refused cadence splits on session-vs-ref evidence (AGL-1440).
+ * How often a refused listen is reopened once its retry budget is spent.
  *
- * AGL-1440 measured 366K rules denies in 30 days for a platform with two
- * human users. The arithmetic behind it: a listener the rules will NEVER
- * serve — a sentinel id, a scoped collaborator's off-limits collection —
- * reopened every 2s by the AGL-1066 refusal loop is 1,800 denials an hour,
- * 43,200 a day, for as long as the tab stays open. The 2s cadence exists to
- * heal a SESSION fault (AGL-664 re-auth, late token attach), and for a
- * session fault it is right; for a rules denial it re-asks a settled
- * question at 0.5 Hz forever.
+ * Each open of a refused listen is one denial in the Firebase console's
+ * graph, and refused listens bill reads (AGL-2944), so these specs measure
+ * the cadence in listener opens per simulated hour.
  *
- * The discriminator is the one `session-health` already trusts: a genuinely
- * dead session has no server answer to offer. If any listener has been
- * answered by the server since this one's refusal streak began, the session
- * reads and this refusal is about the ref — `refusedRetryDelayMs` then backs
- * off to 60s. These specs measure the cadence in listener opens per
- * simulated hour, because each open of a rules-denied listen is exactly one
- * denial in the Firebase console's graph — the issue's unit.
+ * The policy, asserted below for all three listener hooks:
  *
- * What must NOT change, and is asserted below: a session-wide fault (no
- * server answer anywhere) keeps the 2s heal cadence exactly — that cadence
- * is how a recovery nobody announced comes back, and its ceiling is the 38
- * AGL-1358 write guards. And the heal broadcast reopens instantly at either
- * cadence.
+ *  - The delay starts at a floor that depends on what the refusal is evidence
+ *    of (AGL-1440): 2s while no listener has had a server answer since the
+ *    streak began (the session may be dead, and a young session fault heals
+ *    in seconds), 60s once one has (the session reads; this ref is refused).
+ *  - It then grows with the streak's age — a tenth of it — to a five-minute
+ *    ceiling (AGL-2945). The listen is never abandoned. A fixed 2s cadence
+ *    cost 1,800 opens an hour per listener for as long as a tab stayed open
+ *    on a dead session; that is what did not scale with users.
+ *  - A person arriving reopens at once: the AGL-664 heal broadcast, the tab
+ *    becoming visible, the window regaining focus. Arrivals cannot run the
+ *    loop faster than one reopen per 2s after a refusal.
+ *  - A hidden tab reopens nothing on a timer (AGL-2944).
  */
 
 import { act, renderHook } from '@testing-library/react'
@@ -47,6 +43,7 @@ import { useFirestoreCollection } from './use-firestore-collection'
 import { useFirestoreDoc } from './use-firestore-doc'
 import { useDocData } from './helpers/use-doc'
 import {
+  REFUSED_RETRY_CEILING_MS,
   reportFirestoreSessionHeal,
   reportFirestoreServerRead,
   resetFirestoreServerReadEvidence,
@@ -80,10 +77,28 @@ jest.mock('firebase/firestore', () => ({
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
 const HOUR_MS = 60 * 60_000
-const TEN_MINUTES_MS = 10 * 60_000
+/** Long enough to spend the fast budget and leave a 2s reopen pending. */
+const FAST_BUDGET_MS = MAX_RETRIES * RETRY_DELAY_MS + SESSION_REFUSED_RETRY_DELAY_MS * 2
 
 const denied = { code: 'permission-denied' }
 const buildQuery = () => ({}) as never
+
+/**
+ * jsdom's tab is always `visible`. The getter makes it switchable, and every
+ * test starts visible, so the cadence below is the one a page someone could
+ * be looking at runs.
+ */
+let mockVisibility: DocumentVisibilityState = 'visible'
+Object.defineProperty(document, 'visibilityState', {
+  configurable: true,
+  get: () => mockVisibility,
+})
+const setVisibility = (next: DocumentVisibilityState) => {
+  mockVisibility = next
+  document.dispatchEvent(new Event('visibilitychange'))
+}
+const focusWindow = () => window.dispatchEvent(new Event('focus'))
+
 /**
  * Stable identity, deliberately at module scope: `useDocData`'s effect deps
  * are `[ref.firestore, ref.path]`, so an inline literal would re-run the
@@ -139,6 +154,15 @@ const waitForNextOpen = (maxMs: number): number => {
   return mockHandlers.length > count ? waited : -1
 }
 
+/** Mark the session as reading: another listener's server answer lands. */
+const serverAnswersAnotherListener = () => {
+  act(() => {
+    denyPending()
+    jest.advanceTimersByTime(1)
+    reportFirestoreServerRead()
+  })
+}
+
 describe.each([
   [
     'useFirestoreCollection',
@@ -152,10 +176,11 @@ describe.each([
     () => renderHook(() => useFirestoreDoc(buildQuery, [], { idField: '$id' })),
   ],
   ['useDocData', () => renderHook(() => useDocData(docRef))],
-])('refused cadence via %s (AGL-1440)', (_name, mount) => {
+])('refused cadence via %s (AGL-1440, AGL-2945)', (_name, mount) => {
   beforeEach(() => {
     mockHandlers = []
     answeredCount = 0
+    mockVisibility = 'visible'
     jest.useFakeTimers()
     resetFirestoreServerReadEvidence()
   })
@@ -166,79 +191,79 @@ describe.each([
   })
 
   /**
-   * THE measurement. A rules-denied listener in a session that demonstrably
-   * reads — the AGL-1440 shape: console chrome served normally, one bad ref.
-   *
-   * Before the split this measured ~1,800 opens an hour (6 fast retries,
-   * then one every 2s, forever). Now: 6 fast retries, then one per 60s —
-   * ~65/hour, a 27x reduction — and the loop is still never abandoned.
+   * A young session fault is the late-token / App Check hiccup shape, which
+   * heals in seconds — so the first seconds of a streak keep reopening every
+   * 2s, and a recovery nobody announced is picked up almost at once.
    */
-  it('a rules denial in a healthy session costs ~65 denials/hour, not ~1,800', () => {
+  it('a young session-wide fault reopens every 2s', () => {
     mount()
-    act(() => {
-      // The listen's first refusal starts the streak...
-      denyPending()
-      jest.advanceTimersByTime(1)
-      // ...and another listener's server answer lands after it: the session
-      // reads, so this refusal is about the ref.
-      reportFirestoreServerRead()
-    })
-
-    const opens = measureOpens(HOUR_MS)
-
-    // Initial open + 5 fast retries + one slow open per 60s window. The old
-    // cadence measures ~1,800 on this exact loop; the bounds are generous so
-    // a step off-by-one cannot flake, while staying 20x under the old number.
-    expect(opens).toBeGreaterThan(HOUR_MS / RULES_REFUSED_RETRY_DELAY_MS - 3)
-    expect(opens).toBeLessThan(90)
+    // 6 opens in the fast budget, then one every 2s until the streak is 20s old.
+    const opens = measureOpens(20_000)
+    expect(opens).toBeGreaterThanOrEqual(12)
+    expect(opens).toBeLessThanOrEqual(17)
   })
 
   /**
-   * The invariant that must survive: a session-wide fault — NO server answer
-   * anywhere — keeps the 2s heal cadence exactly. This is what brings a page
-   * back after a recovery nobody announced, and the AGL-1358 write guards
-   * put a ceiling on it. Slowing THIS would be the real regression.
+   * THE AGL-2945 measurement. A session-wide fault in a tab left open used to
+   * cost ~1,800 opens an hour per listener, forever. It now backs off with
+   * its age: ~70 in the first hour, then one every five minutes — and it
+   * keeps asking, so the page still comes back on its own.
    */
-  it('a session-wide fault keeps the 2s heal cadence', () => {
+  it('a session-wide fault backs off with its age to one open per 5 minutes, never stopping', () => {
     mount()
-    const opens = measureOpens(TEN_MINUTES_MS)
+    const firstHour = measureOpens(HOUR_MS)
+    expect(firstHour).toBeGreaterThan(55)
+    expect(firstHour).toBeLessThan(85)
 
-    const expected =
-      1 + MAX_RETRIES + (TEN_MINUTES_MS - MAX_RETRIES * RETRY_DELAY_MS) /
-        SESSION_REFUSED_RETRY_DELAY_MS
-    expect(opens).toBeGreaterThan(expected - 5)
-    expect(opens).toBeLessThan(expected + 5)
+    const secondHour = measureOpens(HOUR_MS) - firstHour
+    expect(secondHour).toBeGreaterThanOrEqual(10)
+    expect(secondHour).toBeLessThanOrEqual(14)
+
+    const waited = waitForNextOpen(REFUSED_RETRY_CEILING_MS + 1000)
+    expect(waited).toBeGreaterThan(0)
+    expect(waited).toBeLessThanOrEqual(REFUSED_RETRY_CEILING_MS + 100)
+  })
+
+  /**
+   * A rules-denied listener in a session that demonstrably reads — the
+   * AGL-1440 shape: console chrome served normally, one bad ref. It starts at
+   * 60s rather than 2s, then backs off with its age the same way.
+   */
+  it('a rules denial in a healthy session costs ~35 opens in its first hour, then 12', () => {
+    mount()
+    serverAnswersAnotherListener()
+
+    const firstHour = measureOpens(HOUR_MS)
+    expect(firstHour).toBeGreaterThan(27)
+    expect(firstHour).toBeLessThan(43)
+
+    const secondHour = measureOpens(HOUR_MS) - firstHour
+    expect(secondHour).toBeGreaterThanOrEqual(10)
+    expect(secondHour).toBeLessThanOrEqual(14)
   })
 
   /**
    * Stale evidence must not count. A server answer from BEFORE this streak
    * began says nothing about why THIS listen is refused now — the session
-   * may have died in between, and the safe direction is the heal cadence.
+   * may have died in between, and the safe direction is the session floor.
    */
-  it('evidence from before the streak began does not slow the heal', () => {
+  it('evidence from before the streak began keeps the 2s floor', () => {
     act(() => {
       reportFirestoreServerRead()
       jest.advanceTimersByTime(1)
     })
     mount()
-    const opens = measureOpens(TEN_MINUTES_MS)
-    expect(opens).toBeGreaterThan(
-      TEN_MINUTES_MS / SESSION_REFUSED_RETRY_DELAY_MS - 5,
-    )
+    expect(measureOpens(20_000)).toBeGreaterThanOrEqual(12)
   })
 
   /**
-   * The heal broadcast must stay instant at the slow cadence. Backing off a
-   * rules denial is safe precisely because a resolved AGL-664 re-auth does
-   * not wait for the next tick of anything.
+   * The heal broadcast must stay instant at any cadence. Backing off is safe
+   * precisely because a resolved AGL-664 re-auth does not wait for the next
+   * tick of anything.
    */
   it('a heal broadcast reopens immediately even at the slow cadence', () => {
     mount()
-    act(() => {
-      denyPending()
-      jest.advanceTimersByTime(1)
-      reportFirestoreServerRead()
-    })
+    serverAnswersAnotherListener()
     // Spend the fast budget so the slow cadence is in force...
     measureOpens(MAX_RETRIES * RETRY_DELAY_MS * 2)
     // ...then stand at a KNOWN phase: refuse the next slow open, which
@@ -257,18 +282,15 @@ describe.each([
   })
 
   /**
-   * Evidence arriving MID-streak moves the next scheduled reopen to the slow
-   * cadence — the policy is consulted per retry, not frozen at the first
-   * refusal. This is the AGL-1143 SSO shape: everything denied at first,
-   * then the session heals for most listens, and the refs that stay denied
-   * must stop paying 2s.
+   * Evidence arriving MID-streak raises the floor from the next retry — the
+   * policy is consulted per retry, not frozen at the first refusal. This is
+   * the AGL-1143 SSO shape: everything denied at first, then the session
+   * heals for most listens, and the refs that stay denied must stop paying 2s.
    */
   it('evidence arriving mid-streak slows the loop from the next retry', () => {
     mount()
-    // Budget spent with no evidence: the 2s session cadence is in force.
-    measureOpens(
-      MAX_RETRIES * RETRY_DELAY_MS + SESSION_REFUSED_RETRY_DELAY_MS * 2,
-    )
+    // Budget spent with no evidence: the 2s session floor is in force.
+    measureOpens(FAST_BUDGET_MS)
 
     act(() => reportFirestoreServerRead())
     // The pending 2s timer predates the evidence; let it fire and refuse it
@@ -279,12 +301,130 @@ describe.each([
     ).toBeGreaterThan(0)
     act(() => denyPending())
 
-    // The next reopen arrives on the slow cadence: after far more than a
-    // session window, within one slow window. Slowed, not stopped.
+    // The next reopen arrives on the rules floor: after far more than a
+    // session window, within one 60s window. Slowed, not stopped.
     const waited = waitForNextOpen(
       RULES_REFUSED_RETRY_DELAY_MS + SESSION_REFUSED_RETRY_DELAY_MS,
     )
     expect(waited).toBeGreaterThan(RULES_REFUSED_RETRY_DELAY_MS - 500)
     expect(waited).toBeLessThanOrEqual(RULES_REFUSED_RETRY_DELAY_MS + 500)
+  })
+
+  /**
+   * Put a session-wide fault well into its backoff, then stand at a known
+   * phase: the latest open has just been refused and a long reopen is
+   * pending. Returns the open count at that moment.
+   */
+  const backOffForHalfAnHour = (): number => {
+    measureOpens(HOUR_MS / 2)
+    expect(waitForNextOpen(REFUSED_RETRY_CEILING_MS + 1000)).toBeGreaterThan(0)
+    act(() => denyPending())
+    return mockHandlers.length
+  }
+
+  /**
+   * A person coming back to the window is the recovery the old 2s timer was
+   * standing in for. Focus reopens a backed-off listen at once, instead of
+   * leaving them in front of a refused page for minutes.
+   */
+  it('the window regaining focus reopens a backed-off listen at once', () => {
+    mount()
+    const opened = backOffForHalfAnHour()
+
+    act(() => jest.advanceTimersByTime(SESSION_REFUSED_RETRY_DELAY_MS + 100))
+    expect(mockHandlers).toHaveLength(opened)
+
+    act(() => focusWindow())
+    expect(mockHandlers).toHaveLength(opened + 1)
+  })
+
+  /**
+   * Arrivals are held to one reopen, no sooner than 2s after the refusal
+   * that scheduled it — so a window flickering between focus and blur can
+   * never run the loop faster than the fixed cadence this replaced.
+   */
+  it('focus churn earns one reopen, no sooner than 2s after the refusal', () => {
+    mount()
+    const opened = backOffForHalfAnHour()
+
+    act(() => {
+      for (let i = 0; i < 10; i += 1) {
+        focusWindow()
+        jest.advanceTimersByTime(150)
+      }
+    })
+    expect(mockHandlers).toHaveLength(opened)
+
+    act(() => jest.advanceTimersByTime(SESSION_REFUSED_RETRY_DELAY_MS))
+    expect(mockHandlers).toHaveLength(opened + 1)
+
+    act(() => {
+      focusWindow()
+      focusWindow()
+    })
+    expect(mockHandlers).toHaveLength(opened + 1)
+  })
+
+  /**
+   * Hide a tab whose session-wide fault has a 2s reopen pending. Returns the
+   * open count at that point: every open after it is one the hidden tab paid.
+   */
+  const hideRefusedTab = (): number => {
+    measureOpens(FAST_BUDGET_MS)
+    act(() => setVisibility('hidden'))
+    return mockHandlers.length
+  }
+
+  /**
+   * THE AGL-2944 measurement. A dead session in a tab nobody is looking at
+   * used to reopen every listener every 2s for as long as the tab stayed
+   * open. Hidden — including a reopen that was already pending when it hid —
+   * it reopens nothing; the moment it is visible it reopens at once. If the
+   * session is still refused, the hour it spent hidden counts toward the
+   * backoff: the next reopen waits the five-minute ceiling.
+   */
+  it('a hidden tab reopens nothing until it is visible, then reopens at once', () => {
+    mount()
+    const opened = hideRefusedTab()
+
+    measureOpens(HOUR_MS)
+    expect(mockHandlers).toHaveLength(opened)
+
+    act(() => setVisibility('visible'))
+    expect(mockHandlers).toHaveLength(opened + 1)
+
+    act(() => denyPending())
+    const waited = waitForNextOpen(REFUSED_RETRY_CEILING_MS + 1000)
+    expect(waited).toBeGreaterThan(REFUSED_RETRY_CEILING_MS - 1000)
+    expect(waited).toBeLessThanOrEqual(REFUSED_RETRY_CEILING_MS + 100)
+  })
+
+  /**
+   * A resolved re-auth does not wait for anyone to look: the heal broadcast
+   * reopens a hidden tab immediately, and the visibility wait it replaced is
+   * gone — becoming visible afterwards does not open a second listen.
+   */
+  it('the heal broadcast reopens a hidden tab at once, and only once', () => {
+    mount()
+    const opened = hideRefusedTab()
+
+    act(() => reportFirestoreSessionHeal())
+    expect(mockHandlers).toHaveLength(opened + 1)
+
+    act(() => setVisibility('visible'))
+    expect(mockHandlers).toHaveLength(opened + 1)
+  })
+
+  /** An unmounted hook leaves no wake behind to reopen it. */
+  it('an unmounted hook does not reopen when its tab becomes visible or focused', () => {
+    const { unmount } = mount()
+    const opened = hideRefusedTab()
+
+    unmount()
+    act(() => {
+      setVisibility('visible')
+      focusWindow()
+    })
+    expect(mockHandlers).toHaveLength(opened)
   })
 })

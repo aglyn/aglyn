@@ -60,8 +60,28 @@ export interface AiAssistProviderProps {
    * whichever org the server happened to resolve.
    */
   orgId?: string
+  /**
+   * The site the canvas belongs to (AGL-2927), sent with every assist call
+   * so the door can decide a site collaborator's permission on THAT site.
+   * Null off a host route, where there is no canvas to assist on.
+   */
+  hostId?: string | null
+  /**
+   * The reader's AI verdict, resolved by the shell (AGL-2927). The gates
+   * below HOLD until `loaded` — a door opened on a pending answer would
+   * spend the workspace's credits on a permission nobody has confirmed —
+   * and a refused key removes its callback from the context, so the
+   * designer draws no control for it. Omitted, the answer is pending.
+   */
+  aiPermissions?: { loaded: boolean; use: boolean; generate: boolean }
   children?: JSX.Children
 }
+
+const PERMISSIONS_PENDING = 'Checking your permissions — try again in a moment'
+const AI_USE_REFUSED =
+  'Your role does not include AI assistance — ask an organization admin'
+const AI_GENERATE_REFUSED =
+  'Your role does not include AI generation — ask an organization admin'
 
 /**
  * Console-side AI copy assist (AGL-89): provides the designer's "Rewrite
@@ -74,6 +94,8 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
   const org = props.org
   const orgReady = props.orgReady
   const orgId = props.orgId
+  const hostId = props.hostId ?? null
+  const aiPermissions = props.aiPermissions
   const { children } = props
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
@@ -110,6 +132,22 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
 
   const handleRewrite = useCallback(
     (target: Aglyn.NodeSchema<any>) => {
+      // The permission first (AGL-2927): it is a fact about the reader, and
+      // pending asserts nothing here either. The refusal is unreachable
+      // through the designer — a refused key publishes no callback — and
+      // stands for any other caller of the context.
+      if (!aiPermissions?.loaded) {
+        return void enqueueSnackbar(PERMISSIONS_PENDING, {
+          variant: 'info',
+          persist: false,
+        })
+      }
+      if (!aiPermissions.use) {
+        return void enqueueSnackbar(AI_USE_REFUSED, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       // AGL-1380: pending asserts nothing. See `orgReady` on the props.
       if (!orgReady) {
         return void enqueueSnackbar(
@@ -127,7 +165,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
       setTargetProp('children')
       setNode(target)
     },
-    [org, orgReady, enqueueSnackbar],
+    [org, orgReady, aiPermissions, enqueueSnackbar],
   )
 
   // Keep the target valid for the selected element.
@@ -151,6 +189,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
+          hostId,
           text,
           instruction: instruction.trim(),
         }),
@@ -200,9 +239,23 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     } finally {
       setBusy(false)
     }
-  }, [node, instruction, busy, user, effectiveTarget, orgId, enqueueSnackbar])
+  }, [node, instruction, busy, user, effectiveTarget, orgId, hostId, enqueueSnackbar])
 
   const handleGenerateSection = useCallback(() => {
+    // The permission first (AGL-2927) — a section is a generation, so this
+    // door sells under `ai.generate`; see `handleRewrite`.
+    if (!aiPermissions?.loaded) {
+      return void enqueueSnackbar(PERMISSIONS_PENDING, {
+        variant: 'info',
+        persist: false,
+      })
+    }
+    if (!aiPermissions.generate) {
+      return void enqueueSnackbar(AI_GENERATE_REFUSED, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     // AGL-1380: same gate as `handleRewrite`.
     if (!orgReady) {
       return void enqueueSnackbar('Checking your plan — try again in a moment', {
@@ -218,7 +271,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     }
     setSectionPrompt('')
     setSectionOpen(true)
-  }, [org, orgReady, enqueueSnackbar])
+  }, [org, orgReady, aiPermissions, enqueueSnackbar])
 
   const handleSectionConfirm = useCallback(async () => {
     if (!sectionPrompt.trim() || busy) return
@@ -229,6 +282,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
+          hostId,
           mode: 'section',
           instruction: sectionPrompt.trim(),
         }),
@@ -292,14 +346,23 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     } finally {
       setBusy(false)
     }
-  }, [sectionPrompt, busy, user, orgId, enqueueSnackbar])
+  }, [sectionPrompt, busy, user, orgId, hostId, enqueueSnackbar])
 
+  // A REFUSED key publishes no callback (AGL-2927): the designer renders
+  // its AI controls only when the callback exists, so the refusal removes
+  // the button rather than dimming it. A PENDING answer keeps both
+  // callbacks, and each holds with a notice when pressed — a control that
+  // vanishes and reappears while the read lands is worse than one that is
+  // briefly inert (the `useHostRole` argument, applied here).
+  const refusedUse = aiPermissions?.loaded === true && !aiPermissions.use
+  const refusedGenerate =
+    aiPermissions?.loaded === true && !aiPermissions.generate
   const contextValue = useMemo(
     () => ({
-      onRewrite: handleRewrite,
-      onGenerateSection: handleGenerateSection,
+      ...(refusedUse ? {} : { onRewrite: handleRewrite }),
+      ...(refusedGenerate ? {} : { onGenerateSection: handleGenerateSection }),
     }),
-    [handleRewrite, handleGenerateSection],
+    [handleRewrite, handleGenerateSection, refusedUse, refusedGenerate],
   )
 
   return (

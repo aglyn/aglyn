@@ -751,6 +751,34 @@
             }
           },
           {
+            "label": "Aglyn AI: generate pages, emails, campaigns, products and more",
+            "duplicateOf": null,
+            "values": {
+              "free": "300 credits",
+              "starter": "add-on",
+              "pro": "add-on",
+              "business": "add-on",
+              "scale": "add-on",
+              "advanced": "add-on",
+              "agency": "add-on",
+              "enterprise": "✓"
+            }
+          },
+          {
+            "label": "AI credits / mo",
+            "duplicateOf": null,
+            "values": {
+              "free": "300 / mo",
+              "starter": "—",
+              "pro": "2.75k / mo",
+              "business": "7.5k / mo",
+              "scale": "10k / mo",
+              "advanced": "13k / mo",
+              "agency": "58k / mo",
+              "enterprise": "Talk to us"
+            }
+          },
+          {
             "label": "Per-screen analytics",
             "duplicateOf": null,
             "values": {
@@ -1072,20 +1100,20 @@
           "starter": "—",
           "pro": "$2.25",
           "business": "$2",
-          "scale": "$1.9",
+          "scale": "$1.90",
           "advanced": "$1.85",
-          "agency": "$1.8",
+          "agency": "$1.80",
           "enterprise": "Custom"
         }
       },
       {
-        "label": "AI assist, per 1,000 credits over the included band",
+        "label": "AI credits, per 1,000 over the included band",
         "rate": "extraAssistCreditsUsdPer1k",
         "values": {
           "starter": "—",
           "pro": "$3",
           "business": "$2.75",
-          "scale": "$2.5",
+          "scale": "$2.50",
           "advanced": "$2.25",
           "agency": "$2",
           "enterprise": "Custom"
@@ -1239,6 +1267,33 @@
           "agency": 20,
           "enterprise": 40
         }
+      },
+      {
+        "label": "Aglyn AI",
+        "priceUsdByPlan": {
+          "free": null,
+          "starter": 9,
+          "pro": 19,
+          "business": 39,
+          "scale": 69,
+          "advanced": 99,
+          "agency": 299,
+          "enterprise": null
+        },
+        "scope": "organization",
+        "maxQuantity": 1,
+        "creditsByPlan": {
+          "free": 0,
+          "starter": 4000,
+          "pro": 9000,
+          "business": 19000,
+          "scale": 34000,
+          "advanced": 49000,
+          "agency": 149000,
+          "enterprise": 298000
+        },
+        "priceLabel": "From $9 / mo",
+        "blurb": "Starter $9 · Pro $19 · Business $39 · Scale $69 · Advanced $99 · Agency $299 a month, per workspace. Adds AI credits to your plan’s included band — 4,000 on Starter, 9,000 on Pro, 19,000 on Business, 34,000 on Scale, 49,000 on Advanced, 149,000 on Agency. Enterprise by agreement."
       }
     ]
   }

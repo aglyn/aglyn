@@ -706,6 +706,45 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // AI generation jobs (AGL-2904): one document per brief carried
+      // through the model by the console route and the platform job beat.
+      // Member-readable so a workspace can watch its own jobs and open the
+      // drafts they name; server-written only, because the document IS the
+      // state machine — its lease, its step ledger and its credit figures
+      // are what stop a step being run and metered twice, and a client that
+      // could write them could re-run a step for free or clear its spend.
+      match /aiJobs/{jobId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if false;
+      }
+
+      /**
+       * Per-user AI usage (AGL-2928): one document per person per month,
+       * keyed by their uid, carrying credits, request and refusal counts
+       * and a split by kind and by site. Integers about a PERSON, so the
+       * read is narrower than the org rollup's: the person reads their own
+       * months, and an org-wide member reads everyone's only with
+       * `billing.view` (the Usage page's gate) or `org.auditLog` (the team
+       * page's). A manager is read through `memberResolves`, whose absent
+       * map falls through to the role; anyone else needs the permission
+       * STAMPED on them by a custom role, which is `memberStamps`. A scoped
+       * collaborator sees nobody's month but their own — who else spends in
+       * the workspace is not a fact about the one site they were invited to.
+       *
+       * Server-written only: the document is a meter, and a client that
+       * could write it could clear its own spend from the roster.
+       */
+      match /aiUsageByUser/{subjectUid}/months/{month} {
+        allow read: if isStaff() ||
+          (isOrgMember() && subjectUid == request.auth.uid) ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('org.auditLog'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('org.auditLog')));
+        allow write: if false;
+      }
+
       // Monthly usage rollups (AGL-41) + the live API-request meter
       // (AGL-635): readable by the org so the Billing page usage meters show
       // real numbers — and org-wide only (AGL-1026), because how much the
@@ -1827,6 +1866,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // One document per UTC day of FREE-TIER AI provider spend (AGL-2925):
+    // `{ day, estCostUsd, requests, refusals, alertedAt?, pausedAt? }`,
+    // incremented by the assist meter and read inside every Free
+    // workspace's reservation to refuse generation once the day's sum meets
+    // `AI_FREE_DAILY_PLATFORM_CEILING_USD`. Deny ALL client access, staff
+    // included: a client that could write it could un-pause the day or
+    // pause it for everyone, and the figure is our provider bill. The staff
+    // readout goes through `/api/admin/assist-signals` on the Admin SDK.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record.
+    match /platformAiFreeSpend/{day} {
+      allow read, write: if false;
+    }
+
     // Stripe customer -> org reverse index (AGL-1028), written by the webhook
     // beside `orgs/{orgId}/billing/stripe`. It exists because moving
     // `stripeCustomerId` into a subcollection broke the webhook's
@@ -2237,7 +2290,8 @@ service cloud.firestore {
       allow update: if isStaff() ||
         (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain',
+            .hasAny(['memberRoles', 'memberPermissions', 'orgId', 'admins',
+                     'hosts', 'subdomain',
                      'cname', 'cnameAttachmentPending',
                      'cnameDetachmentPending', 'themeInstalledFrom',
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
@@ -3688,6 +3742,19 @@ service cloud.firestore {
         allow read: if isStaff() ||
           (isSignedIn() && request.auth.uid == userId);
         allow write: if false;
+      }
+
+      // The account's month of FREE AI spend (AGL-2925): `{ month,
+      // estCostUsd, requests, days: { [day]: { requests, refusals } } }`,
+      // the allowance one person shares across every free workspace they
+      // own. Closed to its OWNER as well as to everyone else, and the owner
+      // is the point: `users/{userId}` itself is owner-writable with no
+      // field validation, so anything the meter kept on that document could
+      // be reset by the person it meters. Here it is the meter's alone —
+      // written and read inside `reserveAssistMessage`'s transaction on the
+      // Admin SDK, and shown to the owner only through the billing routes.
+      match /aiUsage/{month} {
+        allow read, write: if false;
       }
     }
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { listLockdownFeatureKeys } from '@aglyn/aglyn'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -39,37 +40,26 @@ const read = (repoPath: string) =>
   readFileSync(resolve(REPO_ROOT, repoPath), 'utf8')
 
 /**
- * THE ENUM IS THE SOURCE OF TRUTH, AND THIS SPEC NOW DERIVES FROM IT
- * (AGL-2495).
+ * THE CATALOG IS THE SOURCE OF TRUTH, AND THIS SPEC DERIVES FROM IT
+ * (AGL-2495, AGL-2940).
  *
  * The gap the AGL-1621 drill named. Before this, `CHOKEPOINTS` was a
- * hand-maintained inventory and nothing tied it to `LOCKDOWN_FEATURE_KEYS`:
+ * hand-maintained inventory and nothing tied it to the feature catalog:
  * adding a key and shipping it unwired turned NOTHING red — while the last
- * entry below asserts the staff page renders its checklist FROM the enum, so
- * the new key appeared immediately as a staff toggle that enforced nothing
- * anywhere. An operator could pull a lever during an incident and watch it do
- * nothing. This file could only ever detect an OLD gate being removed, never
- * a NEW one being omitted — the opposite posture from its 423 sibling, which
- * discovers by walking.
+ * entry below asserts the staff page renders its checklist FROM the catalog,
+ * so the new key appeared immediately as a staff toggle that enforced
+ * nothing anywhere. An operator could pull a lever during an incident and
+ * watch it do nothing. This file could only ever detect an OLD gate being
+ * removed, never a NEW one being omitted — the opposite posture from its
+ * 423 sibling, which discovers by walking.
  *
- * Parsed from the source rather than imported, deliberately: this is a
- * source-reading guard, the import would drag the server barrel into the
- * console jest project, and reading the file is what makes the parse itself
- * assertable (see the anti-vacuity test).
+ * Read from the catalog rather than parsed out of the source: since
+ * AGL-2940 the levers are the four core ones plus every plugin's
+ * declaration, and no regex over one file can see the declarations. The
+ * `@aglyn/aglyn` client barrel carries the catalog and the first-party
+ * declarations, and it is the barrel every console page already imports.
  */
-const LOCKDOWN_TS = 'libs/aglyn/src/lib/app-utils/lockdown.ts'
-
-export function parseFeatureKeys(source: string): string[] {
-  const block = source.match(
-    /const LOCKDOWN_FEATURE_KEY_SET: Record<LockdownFeatureKey, true> = \{([\s\S]*?)\n\}/,
-  )
-  if (!block) return []
-  return [...block[1].matchAll(/^\s*'?([\w-]+)'?\s*:\s*true\s*,?\s*$/gm)].map(
-    (match) => match[1],
-  )
-}
-
-const FEATURE_KEYS = parseFeatureKeys(read(LOCKDOWN_TS))
+const FEATURE_KEYS = listLockdownFeatureKeys()
 
 interface Chokepoint {
   feature: string
@@ -135,17 +125,36 @@ const CHOKEPOINTS: Chokepoint[] = [
       'surface (subscription/invoices) stays exempt and untouched',
   },
   {
-    feature: 'marketplace-installs + ai-assist + checkout (plugin surface)',
-    covers: ['marketplace-installs', 'ai-assist', 'checkout'],
+    feature: 'marketplace-installs + ai-assist + ai-generate + checkout (plugin surface)',
+    covers: ['marketplace-installs', 'ai-assist', 'ai-generate', 'checkout'],
     file: 'apps/console/app/api/[...pluginApi]/route.ts',
     wiring: [
       'lockdownFeaturesForPluginApiPath(path)',
       'featureLockdownRefusal({ feature, staff })',
     ],
     why:
-      'the dispatcher owns ai/assist, marketplace/install* and ' +
-      'marketplace/checkout; the pure path→feature map is unit-tested in ' +
-      'libs/aglyn lockdown.spec.ts',
+      'the dispatcher owns ai/assist, ai/generate*, marketplace/install* ' +
+      'and marketplace/checkout; the pure path→feature map is unit-tested ' +
+      'in libs/aglyn lockdown.spec.ts',
+  },
+  {
+    feature: 'ai-generate',
+    file: 'libs/tenant/data/admin/src/lib/server/ai-gate.ts',
+    wiring: ['featureLockdownRefusal({', 'feature: config.lockdownFeature,'],
+    why:
+      'the gate ladder every generative door composes (AGL-2903) carries ' +
+      'the feature switch as a rung, so a door built on it is gated whether ' +
+      'or not it is served through the plugin dispatcher',
+  },
+  {
+    feature: 'ai-generate',
+    file: 'apps/tenant/utils/ai-jobs-beat.ts',
+    wiring: [`featureLockdownRefusal({ feature: 'ai-generate' })`],
+    why:
+      'the AI jobs beat (AGL-2904) is the one generative caller with no ' +
+      'request to refuse, so it asks the feature verdict itself before it ' +
+      'claims a step — a lock that stopped the doors and not the beat would ' +
+      'keep spending on every job already queued',
   },
   {
     feature: '(writer)',
@@ -158,8 +167,8 @@ const CHOKEPOINTS: Chokepoint[] = [
     feature: '(staff surface)',
     covers: [],
     file: 'apps/console/app/(app)/admin/lockdown/page.tsx',
-    wiring: ['LOCKDOWN_FEATURE_KEYS'],
-    why: 'the checklist renders FROM the enum — a new key arrives on the page by existing',
+    wiring: ['listLockdownFeatureKeys()'],
+    why: 'the checklist renders FROM the catalog — a new key arrives on the page by existing',
   },
 ]
 
@@ -169,20 +178,18 @@ const COVERED = new Set(
 )
 
 describe('AGL-2495 · the inventory is derived from the enum, not hand-kept', () => {
-  it('parses the launch set out of the enum — and the parse is proven', () => {
+  it('reads the launch set from the catalog — and the read is proven', () => {
     // ANTI-VACUITY, and the load-bearing one: every assertion below is
-    // quantified over FEATURE_KEYS, so a parse that silently returned []
-    // would report perfect coverage of nothing. Named keys, not just a
-    // count, and a negative case so a regex that matched EVERYTHING is
-    // caught too.
+    // quantified over FEATURE_KEYS, so a catalog that answered [] would
+    // report perfect coverage of nothing. Named keys, not just a count.
     expect(FEATURE_KEYS).toEqual([
       'signups',
       'uploads',
       'checkout',
       'marketplace-installs',
       'ai-assist',
+      'ai-generate',
     ])
-    expect(parseFeatureKeys('export const nothing = 1')).toEqual([])
   })
 
   it('fails when a NEW feature key ships without a chokepoint', () => {
@@ -193,7 +200,7 @@ describe('AGL-2495 · the inventory is derived from the enum, not hand-kept', ()
     // that makes adding the key and adding the gate the same commit.
     const unenforced = FEATURE_KEYS.filter((key) => !COVERED.has(key)).map(
       (key) =>
-        `${key} — added to LOCKDOWN_FEATURE_KEYS with no CHOKEPOINTS entry. ` +
+        `${key} — declared in the lockdown catalog with no CHOKEPOINTS entry. ` +
         'It is already a toggle on the staff lockdown page and it enforces ' +
         'nothing. Wire the gate at its server chokepoint and add it below ' +
         '(use `covers` if one dispatcher owns several).',

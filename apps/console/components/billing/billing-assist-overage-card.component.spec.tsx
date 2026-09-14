@@ -71,6 +71,17 @@ const SELLING = {
 
 const STOPPED = { ...SELLING, hardCap: true }
 
+const CAP_LABEL = 'Stop AI when this month’s overage reaches'
+
+/** Pro, switch off, with a $25 ceiling on this month's overage (AGL-2898). */
+const CAPPED = {
+  ...SELLING,
+  capUsd: 25,
+  capLabel: CAP_LABEL,
+  minCapUsd: 1,
+  maxCapUsd: 100_000,
+}
+
 /** Enterprise: a band, no rate, nothing to switch. */
 const CONTRACTUAL = {
   hardCap: false,
@@ -272,5 +283,123 @@ describe('BillingAssistOverageCard (AGL-2653)', () => {
       await screen.findByText('We couldn’t load your AI assist settings. Nothing has changed.'),
     ).toBeTruthy()
     expect(screen.queryByRole('switch', { name: LABEL })).toBeNull()
+  })
+})
+
+/**
+ * The dollar ceiling beside the switch (AGL-2898).
+ *
+ * Offered only while the switch is off on a plan that sells past its band —
+ * past a wall there is no overage to bound — and always reachable to REMOVE
+ * once set, so an org that later threw the switch is not left carrying a
+ * figure it cannot clear. The route owns the range check; the card posts
+ * the number, or `null` to clear.
+ */
+describe('BillingAssistOverageCard ceiling (AGL-2898)', () => {
+  it('offers the ceiling beneath the switch while overage is sold and the switch is off', async () => {
+    global.fetch = jest.fn(async () => jsonResponse(SELLING)) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+    await screen.findByRole('switch', { name: LABEL })
+    // The label comes from the same constant the refusal quotes, so a
+    // payload that omits it still names the control the 402 will name.
+    expect(screen.getByLabelText(CAP_LABEL)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /set a monthly ceiling/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /remove ceiling/i })).toBeNull()
+  })
+
+  it('posts the typed figure as a NUMBER, and says what will happen', async () => {
+    // FORCED RED by posting `capUsd: capInput` (the string): the route
+    // refuses a string with a 400, and the assertion below sees "25".
+    global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.action === 'setCap') return jsonResponse({ ok: true, capUsd: 25 })
+      return jsonResponse(SELLING)
+    }) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+    const field = await screen.findByLabelText(CAP_LABEL)
+    fireEvent.change(field, { target: { value: '25' } })
+    fireEvent.click(screen.getByRole('button', { name: /set a monthly ceiling/i }))
+    await waitFor(() =>
+      expect(postedBodies()).toContainEqual({ orgId: 'org-1', action: 'setCap', capUsd: 25 }),
+    )
+    expect(mockConfirm).not.toHaveBeenCalled()
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      expect.stringMatching(/stop once this month’s overage reaches \$25\.00/),
+      expect.objectContaining({ variant: 'success' }),
+    )
+  })
+
+  it('renders a set ceiling, and Remove posts null', async () => {
+    global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.action === 'setCap') return jsonResponse({ ok: true, capUsd: null })
+      return jsonResponse(CAPPED)
+    }) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+    await screen.findByText('Stops at $25.00 of overage')
+    expect(((await screen.findByLabelText(CAP_LABEL)) as HTMLInputElement).value).toBe('25')
+    fireEvent.click(screen.getByRole('button', { name: /remove ceiling/i }))
+    await waitFor(() =>
+      expect(postedBodies()).toContainEqual({ orgId: 'org-1', action: 'setCap', capUsd: null }),
+    )
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+      expect.stringMatching(/ceiling removed/i),
+      expect.objectContaining({ variant: 'success' }),
+    )
+  })
+
+  it('hides the ceiling once the switch is on — past a wall there is no overage to bound', async () => {
+    global.fetch = jest.fn(async () => jsonResponse(STOPPED)) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+    await screen.findByRole('switch', { name: LABEL })
+    expect(screen.queryByLabelText(CAP_LABEL)).toBeNull()
+    expect(screen.queryByRole('button', { name: /ceiling/i })).toBeNull()
+  })
+
+  it('keeps Remove reachable when the switch is on and a ceiling is still set', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse({ ...CAPPED, hardCap: true }),
+    ) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+    await screen.findByText(/no overage for it to bound/)
+    expect(screen.queryByLabelText(CAP_LABEL)).toBeNull()
+    expect(screen.getByRole('button', { name: /remove ceiling/i })).toBeTruthy()
+  })
+
+  it('offers no ceiling where the plan sells no overage', async () => {
+    for (const payload of [CONTRACTUAL, BANDLESS]) {
+      global.fetch = jest.fn(async () => jsonResponse(payload)) as unknown as typeof fetch
+      const { unmount } = render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+      await screen.findByText(/nothing to (switch|configure)/)
+      expect(screen.queryByLabelText(CAP_LABEL)).toBeNull()
+      unmount()
+    }
+  })
+
+  it('Free has neither control, and the copy says why (AGL-2899)', async () => {
+    global.fetch = jest.fn(async () => jsonResponse(BANDLESS)) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+    expect(await screen.findByText(/never charged for any/)).toBeTruthy()
+    expect(screen.getByText(/no overage to put a dollar ceiling on/)).toBeTruthy()
+    expect(screen.getByText(/add Aglyn AI on a paid plan/)).toBeTruthy()
+    expect(screen.queryByLabelText(CAP_LABEL)).toBeNull()
+    expect(screen.queryByRole('switch', { name: LABEL })).toBeNull()
+  })
+
+  it('view-only without billing.manage: the field and buttons are disabled', async () => {
+    global.fetch = jest.fn(async () => jsonResponse(CAPPED)) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage={false} />)
+    expect(((await screen.findByLabelText(CAP_LABEL)) as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /save ceiling/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /remove ceiling/i }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('a stored junk ceiling reads as none — no "$NaN" on the chip', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse({ ...SELLING, capUsd: 'lots' }),
+    ) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+    await screen.findByText('No stop — extra credits bill')
+    expect(screen.queryByText(/NaN/)).toBeNull()
   })
 })

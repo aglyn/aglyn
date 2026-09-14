@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { dirname, join, relative, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import globals from 'globals'
 import nextPlugin from '@next/eslint-plugin-next'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
@@ -17,6 +20,7 @@ import noPlanGatedEntitlement from './tools/lint-rules/no-plan-gated-entitlement
 import noRemoteImageService from './tools/lint-rules/no-remote-image-service.mjs'
 import noSxAfterSpread from './tools/lint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/lint-rules/no-unguarded-loading-hook.mjs'
+import { DEP_CONSTRAINTS, lintOverridesFor, readPackageMap } from './tools/scripts/lib/lib-boundaries.mjs'
 
 /**
  * The React version, stated rather than detected (AGL-2479).
@@ -107,6 +111,50 @@ const jsRuleOverrides = {
   'react-hooks/exhaustive-deps': 'warn',
 }
 
+/**
+ * The package map as the boundary rule's options (AGL-2941). The constraints
+ * live in `tools/scripts/lib/lib-boundaries.mjs` so that `check:lib-boundaries`
+ * evaluates the SAME list over the project graph; the allowlist beside it is
+ * the debt those constraints refuse today. The list only shrinks: a new
+ * cross-package edge is a red at both tiers, not a row.
+ */
+const repoRoot = dirname(fileURLToPath(import.meta.url))
+const boundaryAllowlist = JSON.parse(
+  readFileSync(join(repoRoot, 'tools/scripts/lib-boundaries-allowlist.json'), 'utf8'),
+).edges
+const packageMap = readPackageMap(repoRoot)
+
+/**
+ * The allowlist's lint-side half, for the project whose `eslint.config.mjs`
+ * calls this with its own `import.meta.url`. ESLint resolves `files`
+ * patterns against the directory of the config it loaded, and every project
+ * has its own config spreading this one, so a block written HERE with a
+ * root-relative path never matches; the project's config spreads
+ * `...boundaryOverridesFor(import.meta.url)` instead and the block matches
+ * every file under it. `check:lib-boundaries` refuses an allowlisted project
+ * whose config lacks the call. A project with no row gets nothing.
+ */
+export function boundaryOverridesFor(configUrl) {
+  return lintOverridesFor({
+    allowlist: boundaryAllowlist,
+    packageMap,
+    projectRoot: relative(repoRoot, dirname(fileURLToPath(configUrl))).split(sep).join('/'),
+    ruleName: '@nx/enforce-module-boundaries',
+    baseOptions: moduleBoundaryOptions,
+  })
+}
+
+const moduleBoundaryOptions = {
+  allow: [],
+  enforceBuildableLibDependency: true,
+  // @aglyn/plugins-*: the generated loader manifests (AGL-417) import
+  // plugins dynamically while the remaining static imports await extraction
+  // (AGL-418/419) — and plugin-internal console pages lazy() their own
+  // components. Exempt the consistency check.
+  checkDynamicDependenciesExceptions: ['@aglyn/besigner-ui', '@aglyn/plugins-*'],
+  depConstraints: [...DEP_CONSTRAINTS],
+}
+
 export default [
   ...nx.configs['flat/base'],
   {
@@ -185,109 +233,15 @@ export default [
       'mobx/missing-make-observable': 'off',
       'mobx/missing-observer': 'off',
       'node/no-extraneous-import': 'off',
-      '@nx/enforce-module-boundaries': [
-        'error',
-        {
-          allow: [],
-          enforceBuildableLibDependency: true,
-          // @aglyn/plugins-*: the generated loader manifests (AGL-417)
-          // import plugins dynamically while the remaining static imports
-          // await extraction (AGL-418/419) — and plugin-internal console
-          // pages lazy() their own components. Exempt the consistency check;
-          // the scope:app boundary rule lands with the Phase-4 close-out.
-          checkDynamicDependenciesExceptions: [
-            '@aglyn/besigner-ui',
-            '@aglyn/plugins-*',
-          ],
-          depConstraints: [
-            {
-              // Apps never import feature plugins statically (AGL-417/419):
-              // plugins reach the apps ONLY through the generated loader
-              // manifests (plugins.*.generated.ts, file-scoped disable) and
-              // the core plugin-manager registries (widgets, providers,
-              // site runtimes, page hooks, API dispatch). Plugin→plugin
-              // stays legal via the aglyn:addons source rule below.
-              sourceTag: 'scope:app',
-              notDependOnLibsWithTags: ['aglyn:addons'],
-            },
-            {
-              sourceTag: 'scope:lib',
-              onlyDependOnLibsWithTags: ['scope:lib'],
-            },
-            {
-              sourceTag: 'scope:data',
-              onlyDependOnLibsWithTags: ['scope:data', 'scope:util'],
-            },
-            {
-              sourceTag: 'scope:feature',
-              onlyDependOnLibsWithTags: [
-                'scope:data',
-                'scope:feature',
-                'scope:ui',
-                'scope:util',
-              ],
-            },
-            {
-              sourceTag: 'scope:ui',
-              onlyDependOnLibsWithTags: [
-                'scope:data',
-                'scope:ui',
-                'scope:util',
-              ],
-            },
-            {
-              sourceTag: 'scope:util',
-              onlyDependOnLibsWithTags: ['scope:util', 'scope:data'],
-            },
-            {
-              // Feature plugins (AGL-409). They carry ONLY `aglyn:addons`
-              // (not the generic `scope:lib`/`scope:aglyn`), so as a
-              // dependency TARGET no core scope's allowlist reaches them —
-              // core libs cannot import a plugin, keeping the app runnable
-              // with any plugin absent. As a SOURCE they may still import
-              // any lib (every lib is `scope:lib`) and each other.
-              sourceTag: 'aglyn:addons',
-              onlyDependOnLibsWithTags: [
-                'aglyn:addons',
-                'aglyn:framework',
-                'aglyn:renderer',
-                'scope:aglyn',
-                'scope:shared',
-                'scope:ui',
-                'scope:util',
-                'scope:data',
-                'scope:feature',
-                'scope:lib',
-              ],
-            },
-            {
-              sourceTag: 'scope:aglyn',
-              onlyDependOnLibsWithTags: ['scope:aglyn', 'scope:shared'],
-            },
-            {
-              sourceTag: 'scope:shared',
-              onlyDependOnLibsWithTags: ['scope:shared'],
-            },
-            {
-              sourceTag: 'aglyn:framework',
-              onlyDependOnLibsWithTags: ['aglyn:framework', 'scope:shared'],
-            },
-            {
-              sourceTag: 'aglyn:renderer',
-              onlyDependOnLibsWithTags: ['aglyn:framework', 'scope:shared'],
-            },
-            {
-              sourceTag: '*',
-              onlyDependOnLibsWithTags: ['*'],
-            },
-          ],
-        },
-      ],
+      '@nx/enforce-module-boundaries': ['error', moduleBoundaryOptions],
     },
   },
-  ...scopeTo(nx.configs['flat/typescript'], ['**/*.ts']),
+  // `.mts` alongside `.ts` (AGL-2926): the two `.mts` tools scripts were
+  // matched by NO block — the `.mjs` hole AGL-1815 closed, one extension
+  // over — so `eslint tools` evaluated nothing for them and exited 0.
+  ...scopeTo(nx.configs['flat/typescript'], ['**/*.ts', '**/*.mts']),
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.mts'],
     rules: {
       ...nextPlugin.configs['core-web-vitals'].rules,
       ...tsRuleOverrides,

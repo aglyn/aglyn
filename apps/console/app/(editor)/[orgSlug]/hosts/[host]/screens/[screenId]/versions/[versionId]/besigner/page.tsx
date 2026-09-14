@@ -26,11 +26,12 @@ import {
   buildScreenRouteEntries,
   canvas,
   CANVAS_ROOT_ELEMENT_ID,
-  composeLayoutChainAndScreenNodes,
+  composeLayoutChainWithProps,
   composeScreenRoutePath,
   decodeStoredNodes,
   findScreenIdByRoutePath,
   HostViewType,
+  layoutPropValuesFor,
   MAX_LAYOUT_CHAIN_DEPTH,
   normalizeScreenSlug,
   ownScreenSlugFromRoutePath,
@@ -45,6 +46,7 @@ import {
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  BesignerInspectorExtrasContext,
   besignerDocsUrl,
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
@@ -119,11 +121,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
 import BesignerFunctionsButton from '../../../../../../../../../../components/besigner-functions-button.component'
+import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
 import usePluginDrawerRegistration from '../../../../../../../../../../hooks/use-plugin-drawer-registration'
 import BesignerMediaPickerProvider from '../../../../../../../../../../components/besigner-media-picker-provider.component'
 import ScreenSocialImageField from '../../../../../../../../../../components/screen-social-image-field.component'
+import ScreenLayoutProperties, {
+  useLayoutChainProperties,
+} from '../../../../../../../../../../components/screen-layout-properties.component'
 import BesignerAppBarComponent from '../../../../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../../../../components/besigner-document-switcher.component'
 import BesignerVersionsComponent, {
@@ -152,6 +158,7 @@ import {
 } from '../../../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
+import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import {
   buildScreenSeoUpdate,
   type ScreenSocialImageDraft,
@@ -253,6 +260,12 @@ function BesignerPage(props) {
   // File ▸ New version drives the versions panel's own create flow (AGL-1218)
   // rather than re-implementing the entitlement gate and the save-first rule.
   const versionsActions = useRef<BesignerVersionsActions>(null)
+  // One element for the Attributes panel's plugin section (AGL-2940), so the
+  // context's consumers re-render with the site rather than with this page.
+  const inspectorExtras = useMemo(
+    () => <PluginWidgetSlot slot="besignerInspector" hostId={hostId} />,
+    [hostId],
+  )
   // Installed plugins appear as named drawer entries (AGL-190).
   usePluginDrawerRegistration(hostId)
   const detailUrl = buildRoute(Route.SCREEN_DETAILS, {
@@ -263,6 +276,13 @@ function BesignerPage(props) {
   })
   const { data: user } = useUser()
   const { doc: hostResult } = useHost({ hostId: hostId as string })
+  // The live routing map, and this screen's address in it. Read up here,
+  // above the Screen Properties handlers that name them: a `useCallback`
+  // dependency array is evaluated during render, so a `const` declared
+  // further down is read in its temporal dead zone and throws on the way in.
+  const routingMap = hostResult?.data?.screens as
+    Record<string, string> | undefined
+  const publishedPath = routingMap?.[screenId]
   const { doc: screenResult, setDoc: updateScreenDoc } = useScreen({
     hostId,
     screenId,
@@ -320,11 +340,27 @@ function BesignerPage(props) {
   // later, and the canvas is rebuilt wholesale per node map anyway.
   const { definitions: componentDefinitions, docs: componentDocs } =
     useHostComponentDefinitions(hostId)
+  // The layout's properties, with this version's values for them (AGL-2893)
+  // — the chrome draws what this screen will publish with.
+  const layoutChromeProps = useMemo(
+    () => ({
+      props: (
+        layoutVersionResult?.data as Aglyn.AglynLayoutVersion | undefined
+      )?.props,
+      values: layoutPropValuesFor(
+        (result?.data as Aglyn.AglynScreenVersion | undefined)
+          ?.layoutPropValues,
+        layoutId,
+      ),
+    }),
+    [layoutVersionResult?.data, result?.data, layoutId],
+  )
   const chromeCanvas = useLayoutChromeCanvas(
     layoutId && componentDefinitions
       ? layoutVersionResult?.data?.nodes
       : undefined,
     componentDefinitions,
+    layoutChromeProps,
   )
   const screenVersionRef = useScreenVersionRef({
     hostId: hostId as string,
@@ -576,6 +612,19 @@ function BesignerPage(props) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // The layouts this screen renders inside that declare properties
+  // (AGL-2893), for Screen Properties; the outer ones are read only while
+  // the dialog is open.
+  const layoutPropertyLinks = useLayoutChainProperties({
+    firestore,
+    hostId: hostId as string,
+    layoutId,
+    layout: layoutResult?.data,
+    layoutVersion: layoutVersionResult?.data as
+      | Aglyn.AglynLayoutVersion
+      | undefined,
+    enabled: screenDialog,
+  })
   const chromeContextValue = useMemo(() => ({ chromeCanvas }), [chromeCanvas])
 
   const handleProtectionSave = useCallback(async () => {
@@ -601,6 +650,19 @@ function BesignerPage(props) {
           { variant: 'success', persist: false },
         )
         setProtectPassword(null)
+        // The tenant decides whether to withhold a page's content when it
+        // RENDERS the page, from its cached copy of this document, and the
+        // unlock route checks a password against that same copy. Undropped,
+        // a page protected just now goes on serving its content publicly —
+        // and a changed password goes on accepting the old one — until the
+        // caches lapse.
+        announceLiveScreenChange({
+          user,
+          hostId,
+          screenId,
+          livePath: publishedPath,
+          notify: enqueueSnackbar,
+        })
       })
       .catch((e) => {
         enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -608,7 +670,15 @@ function BesignerPage(props) {
           allowDuplicate: true,
         })
       })
-  }, [protectPassword, updateScreenDoc, enqueueSnackbar])
+  }, [
+    protectPassword,
+    updateScreenDoc,
+    enqueueSnackbar,
+    user,
+    hostId,
+    screenId,
+    publishedPath,
+  ])
 
   const handleSeoSave = useCallback(async () => {
     /**
@@ -656,6 +726,17 @@ function BesignerPage(props) {
             setSeoTitle(null)
             setSeoDescription(null)
             setSeoImage(null)
+            // The live page's head is rendered from the screen document, and
+            // both the page and the document are cached on the tenant — so
+            // on a published screen the old title and description stay in
+            // the served HTML until this drops them.
+            announceLiveScreenChange({
+              user,
+              hostId,
+              screenId,
+              livePath: publishedPath,
+              notify: enqueueSnackbar,
+            })
           })
           .catch((e) => {
             enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -677,6 +758,10 @@ function BesignerPage(props) {
     seoDescription,
     seoImage,
     enqueueSnackbar,
+    user,
+    hostId,
+    screenId,
+    publishedPath,
   ])
 
   const handleLayoutChange = useCallback(
@@ -707,6 +792,17 @@ function BesignerPage(props) {
               persist: false,
             },
           )
+          // The tenant composes the live page's chrome from the binding on
+          // the version it serves. On that version this reframes the live
+          // page; on any other it changes nothing a visitor can see, so
+          // there is nothing to drop.
+          announceLiveScreenChange({
+            user,
+            hostId,
+            screenId,
+            livePath: editingLiveVersion ? publishedPath : undefined,
+            notify: enqueueSnackbar,
+          })
         })
         .catch((e) => {
           enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
@@ -715,7 +811,60 @@ function BesignerPage(props) {
           })
         })
     },
-    [updateVersionDoc, enqueueSnackbar],
+    [
+      updateVersionDoc,
+      enqueueSnackbar,
+      editingLiveVersion,
+      user,
+      hostId,
+      screenId,
+      publishedPath,
+    ],
+  )
+
+  /**
+   * This version's values for one layout's properties (AGL-2893), written
+   * beside the layout binding, keyed by layout so a value never reaches a
+   * property of the same name on a layout bound later. An empty set removes
+   * the key: every property of that layout goes back to its default.
+   */
+  const handleLayoutValuesSave = useCallback(
+    async (targetLayoutId: string, values: Record<string, unknown>) => {
+      const path = `layoutPropValues.${targetLayoutId}`
+      try {
+        await updateVersionDoc({
+          [path]: Object.keys(values).length ? values : deleteField(),
+        } as any)
+        if (versionId && versionId === screenResult?.data?.versionId) {
+          // The live version: the published page renders the new values from
+          // the next request, so drop what is cached.
+          void revalidateLivePages({ user, hostId, screenId }).then((outcome) => {
+            const shortfall = describeRevalidateShortfall(outcome)
+            if (shortfall) {
+              enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+            }
+          })
+        }
+        enqueueSnackbar('Layout values saved to this version', {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (error) {
+        enqueueSnackbar(`Error: ${JSON.stringify(error)}`, {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+    },
+    [
+      updateVersionDoc,
+      versionId,
+      screenResult?.data?.versionId,
+      user,
+      hostId,
+      screenId,
+      enqueueSnackbar,
+    ],
   )
 
   // Publishing: the tenant site only serves paths present in the host's
@@ -741,15 +890,12 @@ function BesignerPage(props) {
     }
     return map
   }, [screenDocs])
-  const routingMap = hostResult?.data?.screens as
-    Record<string, string> | undefined
 
   const isCollectionTemplate = templateScreenIds.has(screenId)
   const templateRoutes = collectionTemplateRoutesSummary(
     routesByScreenId.get(screenId),
   )
 
-  const publishedPath = routingMap?.[screenId]
   const parentId = screenResult?.data?.parentId
   const [slugInput, setSlugInput] = useState<string | null>(null)
   // The field holds ONE segment, so a screen with no stored slug falls back to
@@ -1480,9 +1626,16 @@ function BesignerPage(props) {
      * subscribed layout supplies the first link, so the common case (no
      * nesting) makes no extra read at all.
      */
-    const chain: Array<Record<string, any> | undefined> = []
+    const chain: Aglyn.LayoutChainEntry[] = []
     if (layoutId) {
-      chain.push(layoutVersionResult?.data?.nodes as any)
+      chain.push({
+        layoutId: String(layoutId),
+        nodes: layoutVersionResult?.data?.nodes as any,
+        // The layout's properties (AGL-2893), applied with this version's
+        // values below, exactly as the published page applies them.
+        props: (layoutVersionResult?.data as Aglyn.AglynLayoutVersion | undefined)
+          ?.props,
+      })
       const seen = new Set<string>([String(layoutId)])
       let parentId = layoutResult?.data?.layoutId
       while (
@@ -1519,7 +1672,11 @@ function BesignerPage(props) {
           // raw `getDoc` walks the GRANDPARENT chain with no converter, so
           // every ancestor came back as a `Bytes` and composed to nothing —
           // preview silently lost the outer chrome.
-          chain.push(decodeStoredNodes(versionSnapshot.get('nodes')))
+          chain.push({
+            layoutId: String(parentId),
+            nodes: decodeStoredNodes(versionSnapshot.get('nodes')),
+            props: versionSnapshot.get('props'),
+          })
           parentId = layoutSnapshot.get('layoutId')
         } catch (error) {
           // A preview is worth showing without the outer chrome; it is not
@@ -1529,9 +1686,10 @@ function BesignerPage(props) {
         }
       }
     }
-    const composed = composeLayoutChainAndScreenNodes(
+    const composed = composeLayoutChainWithProps(
       chain as any,
       canvas.toJSON().nodes as any,
+      (result?.data as Aglyn.AglynScreenVersion | undefined)?.layoutPropValues,
     )
     writePreviewState(ids, composed as any, hostTheme)
     window.open(
@@ -1544,7 +1702,8 @@ function BesignerPage(props) {
     versionId,
     layoutId,
     layoutResult?.data?.layoutId,
-    layoutVersionResult?.data?.nodes,
+    layoutVersionResult?.data,
+    result?.data,
     firestore,
     hostTheme,
     orgSlug,
@@ -1607,6 +1766,11 @@ function BesignerPage(props) {
                 disabled={screenKind === 'email'}
               >
                 <BesignerMediaPickerProvider hostId={hostId}>
+                {/* The Attributes panel's plugin section (AGL-2940): the
+                    designer draws whatever this context carries under the
+                    selected element's fields, and this is the one place
+                    that knows what a plugin widget is. */}
+                <BesignerInspectorExtrasContext.Provider value={inspectorExtras}>
                   {hostFontsHref ? (
                     <>
                       <link
@@ -2077,6 +2241,19 @@ function BesignerPage(props) {
                           </MenuItem>
                         ))}
                       </TextField>
+                      {/* The layout's properties, set for this version
+                          (AGL-2893) with the controls the Attributes panel
+                          uses. Keyed by the binding, so switching layouts
+                          starts from that layout's stored values. */}
+                      <ScreenLayoutProperties
+                        key={layoutId ?? '-no-layout-'}
+                        links={layoutPropertyLinks}
+                        stored={
+                          (result?.data as Aglyn.AglynScreenVersion | undefined)
+                            ?.layoutPropValues
+                        }
+                        onSave={handleLayoutValuesSave}
+                      />
                       <Typography variant="subtitle2">
                         {'SEO'}
                         {/* AGL-2167 — these three fields are per-screen overrides of
@@ -2184,6 +2361,7 @@ function BesignerPage(props) {
                       defaultValue={canvas.nestedNodes as any}
                     />
                   )}
+                </BesignerInspectorExtrasContext.Provider>
                 </BesignerMediaPickerProvider>
               </InteractionsProvider>
             </BindingPickerProvider>

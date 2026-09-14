@@ -28,7 +28,9 @@ import {
   bandwidthCapShouldEngage,
   type OrgBandwidthCap,
   checkDatasetQuota,
+  PLAN_PRICING,
   planMetersInfraOverage,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn/server'
@@ -40,6 +42,14 @@ import {
   usageAlertApproachPct,
   usageAlertThreshold,
 } from '../../../../utils/storage-overage'
+import {
+  ASSIST_HARD_CAP_CONTROL_LABEL,
+  ASSIST_HARD_CAP_CONTROL_LOCATION,
+  assistBandRefuses,
+  assistCreditsFromUsd,
+  resolveAssistCreditBudget,
+  resolveAssistHardCap,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   measureScreenCaps,
   screenCapReading,
@@ -60,6 +70,10 @@ import {
   shouldAutoLockOrgForBilling,
 } from '../../../../utils/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
+import {
+  aiAddonName,
+  hasAiAddon,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   assistCeilingBreach,
   assistCogsAlertThresholdUsd,
@@ -598,6 +612,45 @@ async function handler(request: Request): Promise<Response> {
       // thresholds themselves are identical either way.
       const metersInfra = planMetersInfraOverage(orgData as never)
 
+      // BY DOCUMENT ID, not the `rollup` read above (AGL-2219).
+      //
+      // `rollup` is the latest usage document by `computedAt`, which is the
+      // right thing for `dataStorageMb` and `maxBillableScreens` — those
+      // deliberately accept a stale figure rather than pay to re-measure. It
+      // is the wrong thing for money. Two sweeps now write into this
+      // collection (the closed month at 02:00, the month in progress at
+      // 07:00), so "latest by `computedAt`" answers "whichever cron ran most
+      // recently", and a budget that fires or stays silent depending on the
+      // ORDER of two schedules is not a control, it is a coincidence. An id
+      // is a property.
+      //
+      // Read HERE, ahead of the quota loop, because the AI credits band below
+      // (AGL-2898) measures the same `assistUsage/{month}` document the budget
+      // reads further down; one read serves both.
+      const [thisMonthRollup, assistUsageDoc] = await Promise.all([
+        org.ref.collection('usage').doc(month).get(),
+        org.ref.collection('assistUsage').doc(month).get(),
+      ])
+
+      // The AI credits band (AGL-2898). Measured in CREDITS — the unit the
+      // customer was sold and the meter shows — from the month's `estCostUsd`
+      // through the one conversion, so this alert and the Billing meter
+      // cannot disagree about how far into the band the org is. A plan with
+      // no band resolves `null` and is skipped by the `limit > 0` guard, the
+      // same way Free's zero-quota dimensions are.
+      const assistBandCredits = resolveAssistCreditBudget(orgData as never)
+      const assistUsedCredits = assistCreditsFromUsd(
+        Number(assistUsageDoc.get('estCostUsd') ?? 0),
+      )
+      // Whether crossing the band produces an invoice line or a stop. The
+      // same predicate the reservation refuses on, so the words and the
+      // behavior cannot drift: a band that refuses — the org's own switch,
+      // or a plan with no rate — is a wall, and everything else is sold past.
+      const assistBandIsWall = assistBandRefuses(orgData as never)
+      const assistRateUsdPer1k =
+        PLAN_PRICING[resolveEffectivePlan(orgData as never)]
+          .extraAssistCreditsUsdPer1k
+
       const checks: Array<{
         key: string
         label: string
@@ -619,6 +672,15 @@ async function handler(request: Request): Promise<Response> {
          * with support about which one meant it.
          */
         detail?: string
+        /**
+         * Replaces the generic 100% words for a meter whose consequence the
+         * generic copy cannot state (AGL-2898). The AI credits band has two
+         * outcomes the storage sentence does not cover — metered at a rate
+         * unless a stop is set, or stopped until next month with no charge
+         * ever — and telling a Free org to "set a monthly cap" on a charge it
+         * can never incur would be the surprise bill in reverse.
+         */
+        reachedCopy?: { title: string; body: string }
       }> = [
         {
           // AGL-484: a downgrade can leave an org over its site/storage
@@ -747,6 +809,47 @@ async function handler(request: Request): Promise<Response> {
           limit: entitlements.bandwidthGb,
           billsOverage: metersInfra,
         },
+        {
+          // The AI credits band (AGL-2898). Approaching it is the generic
+          // warning; reaching it says what happens next, which differs by
+          // plan and by the org's own controls.
+          key: 'assistCredits',
+          label: 'AI assist credits',
+          used: assistUsedCredits,
+          limit: assistBandCredits ?? 0,
+          billsOverage: !assistBandIsWall,
+          reachedCopy: assistBandIsWall
+            ? {
+                title: "You've used your included AI assist credits",
+                body:
+                  `${assistUsedCredits.toLocaleString('en-US')} of ` +
+                  `${(assistBandCredits ?? 0).toLocaleString('en-US')} ` +
+                  'credits used. AI assist stops here until next month — ' +
+                  'nothing past the band is ever billed. Upgrade in Billing ' +
+                  'to add credits' +
+                  (resolveAssistHardCap(orgData as never) &&
+                  assistRateUsdPer1k !== null
+                    ? `, or turn off "${ASSIST_HARD_CAP_CONTROL_LABEL}" ` +
+                      `under ${ASSIST_HARD_CAP_CONTROL_LOCATION} to keep ` +
+                      `going at your plan’s rate.`
+                    : '.'),
+              }
+            : {
+                title:
+                  "You've used your included AI assist credits — extra " +
+                  'credits are now billed',
+                body:
+                  `${assistUsedCredits.toLocaleString('en-US')} of ` +
+                  `${(assistBandCredits ?? 0).toLocaleString('en-US')} ` +
+                  'credits used. The assistant keeps answering, and the ' +
+                  'extra credits are metered on your monthly invoice at ' +
+                  `$${(assistRateUsdPer1k ?? 0).toFixed(2)} per 1,000 — ` +
+                  `unless you set a stop under ` +
+                  `${ASSIST_HARD_CAP_CONTROL_LOCATION}: stop at the ` +
+                  'included band, or stop once this month’s overage ' +
+                  'reaches a figure you choose.',
+              },
+        },
         // No `siteSize` check (AGL-1370). It was added in AGL-1107 and could
         // never fire: `measure-node-map.ts` refuses any node map over 900 KB
         // (AGL-678) and the rollup sweep is bounded per host, so the measured
@@ -812,20 +915,23 @@ async function handler(request: Request): Promise<Response> {
         // written twice: an email that says something the console does not is
         // how a customer ends up arguing with support about which one meant
         // it.
+        const reached = threshold >= 100 ? check.reachedCopy : undefined
         const alertTitle =
-          threshold >= 100
+          reached?.title ??
+          (threshold >= 100
             ? check.billsOverage
               ? `You're past your included ${check.label} — extra usage is now billed`
               : `You've reached your ${check.label} limit`
-            : `You're above ${approachPct}% of your ${check.label} quota`
+            : `You're above ${approachPct}% of your ${check.label} quota`)
         const alertBody =
-          (check.billsOverage
-            ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
-              `${check.limit}, extra ${check.label} is billed on your ` +
-              'monthly invoice — upgrade in Billing for a bigger allowance, ' +
-              'or set a monthly cap there if you would rather it stopped.'
-            : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
-              'in Billing to raise the limit.') +
+          (reached?.body ??
+            (check.billsOverage
+              ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
+                `${check.limit}, extra ${check.label} is billed on your ` +
+                'monthly invoice — upgrade in Billing for a bigger allowance, ' +
+                'or set a monthly cap there if you would rather it stopped.'
+              : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
+                'in Billing to raise the limit.')) +
           (check.detail ? ` ${check.detail}` : '')
         await notifyOrgAdmins(org.id, {
           type: 'billing.usage',
@@ -882,25 +988,11 @@ async function handler(request: Request): Promise<Response> {
        * failure mode AGL-1529 rejected on arrival was a spend ceiling that
        * takes a site down to save $2.
        *=========================================*/
-      // BY DOCUMENT ID, not the `rollup` read above (AGL-2219).
-      //
-      // `rollup` is the latest usage document by `computedAt`, which is the
-      // right thing for `dataStorageMb` and `maxBillableScreens` — those
-      // deliberately accept a stale figure rather than pay to re-measure. It
-      // is the wrong thing for money. Two sweeps now write into this
-      // collection (the closed month at 02:00, the month in progress at
-      // 07:00), so "latest by `computedAt`" answers "whichever cron ran most
-      // recently", and a budget that fires or stays silent depending on the
-      // ORDER of two schedules is not a control, it is a coincidence. An id
-      // is a property.
-      //
-      // `orgMonthlySpend` still compares `month` against itself, so this is
-      // belt and braces on purpose: a document fetched by id cannot carry a
-      // different month, and if one ever does the mismatch must win.
-      const [thisMonthRollup, assistUsageDoc] = await Promise.all([
-        org.ref.collection('usage').doc(month).get(),
-        org.ref.collection('assistUsage').doc(month).get(),
-      ])
+      // `thisMonthRollup` was read by document id above the quota loop —
+      // see the note there. `orgMonthlySpend` still compares `month` against
+      // itself, so this is belt and braces on purpose: a document fetched by
+      // id cannot carry a different month, and if one ever does the mismatch
+      // must win.
       const spend = orgMonthlySpend({
         month,
         rollupBilledCents: thisMonthRollup.get('billedCents'),
@@ -1013,13 +1105,26 @@ async function handler(request: Request): Promise<Response> {
         // bell can never say different things about the same number.
         const marginTitle =
           `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`
+        // The add-on state and the band, in the mail (AGL-2930): the same
+        // dollar figure is a finding on an org paying for the add-on and
+        // an incident on one that is not, and the reader should not have
+        // to open the console to know which.
+        const marginAddonClause = hasAiAddon(orgData as never)
+          ? `The ${aiAddonName()} add-on is on`
+          : `The ${aiAddonName()} add-on is off`
+        const marginBandCredits = resolveAssistCreditBudget(orgData as never)
+        const marginBandClause =
+          marginBandCredits === null
+            ? 'no AI credit band'
+            : `an AI credit band of ${marginBandCredits.toLocaleString()}`
         const marginBody =
           `${org.get('slug') ?? org.id} has run about ` +
           `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
           `tokens in ` +
           `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
           'threshold. Assist is a plan entitlement with no per-token ' +
-          'price, so this is margin, not revenue.'
+          'price, so this is margin, not revenue. ' +
+          `${marginAddonClause}, with ${marginBandClause}.`
         await notifyStaff({
           type: 'billing.usage',
           title: marginTitle,

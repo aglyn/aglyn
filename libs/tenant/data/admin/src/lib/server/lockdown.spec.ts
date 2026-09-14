@@ -54,6 +54,7 @@ jest.mock('./firebase-admin', () => ({
 import {
   featureLockdownRefusal,
   getFeatureLockdown,
+  getOrgFeatureLockdown,
   getLockdownVerdict,
   getDomainLockdown,
   getPlatformLockdown,
@@ -495,6 +496,7 @@ describe('FEATURE scope (AGL-1510) — one capability off, everything else servi
       'checkout',
       'marketplace-installs',
       'ai-assist',
+      'ai-generate',
     ] as const) {
       await expect(
         featureLockdownRefusal({ feature, nowMs: NOW }),
@@ -531,6 +533,7 @@ describe('FEATURE scope (AGL-1510) — one capability off, everything else servi
       'uploads',
       'marketplace-installs',
       'ai-assist',
+      'ai-generate',
     ] as const) {
       lockFeature(feature)
       invalidateFeatureLockdownCache()
@@ -582,6 +585,74 @@ describe('FEATURE scope (AGL-1510) — one capability off, everything else servi
     await expect(
       featureLockdownRefusal({ feature: 'uploads', nowMs: NOW }),
     ).resolves.toBeNull()
+  })
+
+  it('a WORKSPACE-scoped feature lock refuses that org only, under the same staff bypass (AGL-2927)', async () => {
+    store.set('lockdowns/feature--ai-assist--org--org-paused', {
+      scope: 'feature',
+      feature: 'ai-assist',
+      orgId: 'org-paused',
+      reason: 'billing',
+      atMs: NOW,
+    })
+    const refusal = await featureLockdownRefusal({
+      feature: 'ai-assist',
+      orgId: 'org-paused',
+      nowMs: NOW,
+    })
+    expect(refusal?.status).toBe(423)
+    expect(await (refusal as Response).json()).toMatchObject({
+      error: 'locked',
+      scope: 'feature',
+      feature: 'ai-assist',
+      reason: 'billing',
+    })
+    // Another workspace, the other AI key, and a door that names no org at
+    // all: none of them sees a pause placed on one customer.
+    await expect(
+      featureLockdownRefusal({ feature: 'ai-assist', orgId: 'org-other', nowMs: NOW }),
+    ).resolves.toBeNull()
+    await expect(
+      featureLockdownRefusal({ feature: 'ai-generate', orgId: 'org-paused', nowMs: NOW }),
+    ).resolves.toBeNull()
+    await expect(
+      featureLockdownRefusal({ feature: 'ai-assist', nowMs: NOW }),
+    ).resolves.toBeNull()
+    // The per-feature staff bypass: a staff call made to verify the pause
+    // is ours to spend.
+    await expect(
+      featureLockdownRefusal({
+        feature: 'ai-assist',
+        orgId: 'org-paused',
+        staff: true,
+        nowMs: NOW,
+      }),
+    ).resolves.toBeNull()
+    // And the platform-wide document still implies every workspace.
+    lockFeature('ai-assist')
+    invalidateFeatureLockdownCache()
+    expect(
+      (await featureLockdownRefusal({ feature: 'ai-assist', orgId: 'org-other', nowMs: NOW }))
+        ?.status,
+    ).toBe(423)
+  })
+
+  it('the workspace-scoped read shares the cache and its invalidation', async () => {
+    store.set('lockdowns/feature--ai-generate--org--org-1', {
+      scope: 'feature',
+      feature: 'ai-generate',
+      orgId: 'org-1',
+      reason: 'manual',
+      atMs: NOW,
+    })
+    await getOrgFeatureLockdown('ai-generate', 'org-1')
+    const after = reads
+    await getOrgFeatureLockdown('ai-generate', 'org-1')
+    expect(reads).toBe(after)
+    store.delete('lockdowns/feature--ai-generate--org--org-1')
+    invalidateFeatureLockdownCache()
+    await expect(getOrgFeatureLockdown('ai-generate', 'org-1')).resolves.toBeNull()
+    expect(reads).toBe(after + 1)
   })
 
   it('caches within the TTL and re-reads after invalidation', async () => {

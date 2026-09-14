@@ -119,6 +119,7 @@ import {
   publishScreenRoute,
   unpublishScreenRoute,
 } from '../../../../../../../../../../constants/screen-publishing'
+import { announceLiveScreenChange } from '../../../../../../../../../../constants/screen-live-announce'
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../../../constants/docs-links'
@@ -391,6 +392,17 @@ function ScreenDetails() {
       ? screen.publishSchedule
       : undefined
 
+  /**
+   * The signed-in user, for the id token the where-used scan and the live-page
+   * cache drops need.
+   *
+   * Declared HERE, above the first callback that names it: a `useCallback`
+   * dependency array is evaluated during render, so a `const` further down
+   * the component is read in its temporal dead zone and throws on the way in
+   * — the same trap AGL-2501 hit with `screenQuota` on the screens list.
+   */
+  const { data: user } = useUser()
+
   // --- Edit details dialog ---------------------------------------------
   const [editor, setEditor] = useState<{
     displayName: string
@@ -434,6 +446,16 @@ function ScreenDetails() {
               name: editor.displayName.trim(),
             })
             setEditor(null)
+            // Not internal-only: the live page's `<title>` falls back to the
+            // name, and its meta description to the description, whenever
+            // the screen's SEO leaves them blank.
+            announceLiveScreenChange({
+              user,
+              hostId,
+              screenId,
+              livePath: publishedPath,
+              notify: enqueueSnackbar,
+            })
           })
           .catch(() =>
             enqueueSnackbar('An error has occurred', { variant: 'error' }),
@@ -455,17 +477,10 @@ function ScreenDetails() {
     screenId,
     status,
     screenFromCache,
+    user,
+    hostId,
+    publishedPath,
   ])
-
-  /**
-   * The signed-in user, for the id token the where-used scan needs.
-   *
-   * Declared HERE, above the first callback that names it: a `useCallback`
-   * dependency array is evaluated during render, so a `const` further down
-   * the component is read in its temporal dead zone and throws on the way in
-   * — the same trap AGL-2501 hit with `screenQuota` on the screens list.
-   */
-  const { data: user } = useUser()
 
   // --- Delete -----------------------------------------------------------
   const handleDelete = useCallback(async () => {
@@ -818,12 +833,34 @@ function ScreenDetails() {
             id: screenId,
             name: displayName,
           })
+          // Access is decided when the tenant RENDERS the page, from its
+          // cached copy of this document: members-only withholds the content,
+          // anything but public adds `noindex`, and leaving password mode
+          // removes the hash above. The cached page carries the old answer to
+          // all three until it is dropped.
+          announceLiveScreenChange({
+            user,
+            hostId,
+            screenId,
+            livePath: publishedPath,
+            notify: enqueueSnackbar,
+          })
         })
         .catch(() =>
           enqueueSnackbar('An error has occurred', { variant: 'error' }),
         )
     },
-    [screen, screenRef, enqueueSnackbar, displayName, logActivity, screenId],
+    [
+      screen,
+      screenRef,
+      enqueueSnackbar,
+      displayName,
+      logActivity,
+      screenId,
+      user,
+      hostId,
+      publishedPath,
+    ],
   )
   /*==========================================
    * WHICH CAMPAIGNS THIS SCREEN IS PART OF.
@@ -920,11 +957,22 @@ function ScreenDetails() {
           { variant: 'success', persist: false },
         )
         setPassword('')
+        // The tenant withholds a protected page's content when it RENDERS
+        // the page, from a cached copy of this document, and checks passwords
+        // against that same copy — so until this drops them, a page protected
+        // just now keeps serving publicly and an old password keeps working.
+        announceLiveScreenChange({
+          user,
+          hostId,
+          screenId,
+          livePath: publishedPath,
+          notify: enqueueSnackbar,
+        })
       })
       .catch(() =>
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
-  }, [password, screenRef, enqueueSnackbar])
+  }, [password, screenRef, enqueueSnackbar, user, hostId, screenId, publishedPath])
 
   // --- SEO (AGL-117): screen fields override host defaults on the org --
   const [seoDraft, setSeoDraft] = useState<{
@@ -1013,6 +1061,16 @@ function ScreenDetails() {
             })
             setSeoDraft(null)
             setSeoImage(null)
+            // The live page's head is rendered from this document, and the
+            // tenant caches both — so the old title and description stay in
+            // the served HTML until this drops them.
+            announceLiveScreenChange({
+              user,
+              hostId,
+              screenId,
+              livePath: publishedPath,
+              notify: enqueueSnackbar,
+            })
           })
           .catch(() =>
             enqueueSnackbar('An error has occurred', { variant: 'error' }),
@@ -1038,6 +1096,9 @@ function ScreenDetails() {
     screenId,
     status,
     screenFromCache,
+    user,
+    hostId,
+    publishedPath,
   ])
 
   const details = [

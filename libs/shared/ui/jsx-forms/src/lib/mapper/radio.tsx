@@ -34,7 +34,11 @@ import {
 import { styled } from '@mui/material/styles'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
-import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
+import FormFieldGrid, {
+  buildFieldClear,
+  type FormFieldGridProps,
+} from './form-field-grid'
+import { useStoredFieldHasValue } from './stored-field-value'
 import type { BaseFieldProps, OptionValue, SelectOption } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
@@ -109,6 +113,8 @@ function RadioOption<T = OptionValue>({
 
 export interface RadioProps<T = OptionValue> extends BaseFieldProps {
   options?: SelectOption<T>[]
+  /** Offer the reset-to-unset affordance (AGL-2486). */
+  clearable?: boolean
   FormFieldGridProps?: FormFieldGridProps
   FormControlProps?: FormControlProps
   FormLabelProps?: FormLabelProps
@@ -129,13 +135,14 @@ export function Radio<T = OptionValue>({ name, ...props }: RadioProps<T>) {
     meta,
     validateOnMount,
     help,
+    clearable,
+    input,
     FormFieldGridProps = {},
     FormControlProps = {},
     FormLabelProps = {},
     FormHelperTextProps = {},
     FormControlLabelProps = {},
     RadioProps = {},
-    ...rest
   } = useFieldApi({
     ...props,
     name,
@@ -148,9 +155,24 @@ export function Radio<T = OptionValue>({ name, ...props }: RadioProps<T>) {
     ((meta.touched || validateOnMount) && meta.warning) ||
     helperText ||
     description
+  const hasValue = useStoredFieldHasValue(name)
+  // Each option is its own radio input, so the group has no control that can
+  // be driven back to "nothing chosen" — the clear button is that way back.
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue,
+    locked: Boolean(isDisabled || isReadOnly),
+    onClear: () => input.onChange(undefined),
+  })
 
   return (
-    <StyledFormFieldGrid className={classes.grid} help={help} {...FormFieldGridProps}>
+    <StyledFormFieldGrid
+      className={classes.grid}
+      help={help}
+      clear={clear}
+      {...FormFieldGridProps}
+    >
       <FormControl
         required={isRequired}
         error={!!invalid}
@@ -169,7 +191,6 @@ export function Radio<T = OptionValue>({ name, ...props }: RadioProps<T>) {
             isReadOnly={isReadOnly}
             FormControlLabelProps={FormControlLabelProps}
             RadioProps={RadioProps}
-            {...rest}
           />
         ))}
         {text && (

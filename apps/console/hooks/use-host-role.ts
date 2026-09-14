@@ -19,7 +19,10 @@
 import {
   hostRoleCanPublish,
   hostRoleFor,
+  isOrgWideMember,
+  resolveCollaboratorAiPermissions,
   type AglynOrgMember,
+  type AiPermission,
   type HostAccessRole,
 } from '@aglyn/aglyn'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -36,6 +39,20 @@ export interface HostRoleState {
   canPublish: boolean
   /** False until the member doc has been read; see the note on gating. */
   loaded: boolean
+  /**
+   * Whether the member's reach spans the org (AGL-2927), so a reader can
+   * tell an org-wide member — decided by the org catalog — from a site
+   * collaborator, decided per site. False until read, and false on a
+   * failed read, matching `canPublish`.
+   */
+  orgWide: boolean
+  /**
+   * A COLLABORATOR's AI verdict on this site (AGL-2927): the host role's
+   * default refined by the per-site toggle. Null until read, on a failed
+   * read, and for an org-wide member — whose verdict is the org's, read
+   * by `useOrgPermissions`, and must not be answered from a host role.
+   */
+  aiPermissions: Record<AiPermission, boolean> | null
 }
 
 /**
@@ -81,6 +98,8 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
     hostRole: null,
     canPublish: false,
     loaded: false,
+    orgWide: false,
+    aiPermissions: null,
   })
 
   useEffect(() => {
@@ -100,16 +119,28 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
         if (!active) return
         const member = (snapshot.data() ?? {}) as Partial<AglynOrgMember>
         const hostRole = hostRoleFor(member, hostId as never)
+        const orgWide = isOrgWideMember(member)
         setState({
           hostRole,
           canPublish: hostRoleCanPublish(hostRole),
           loaded: true,
+          orgWide,
+          aiPermissions: orgWide
+            ? null
+            : resolveCollaboratorAiPermissions(member, hostId as never),
         })
       } catch {
         // Fail closed on the display gate: `loaded` stays true so the caller
         // stops showing a spinner, and `canPublish` stays false so nothing
         // invites a click the rules will refuse.
-        if (active) setState({ hostRole: null, canPublish: false, loaded: true })
+        if (active)
+          setState({
+            hostRole: null,
+            canPublish: false,
+            loaded: true,
+            orgWide: false,
+            aiPermissions: null,
+          })
       }
     })()
     return () => {

@@ -59,6 +59,7 @@ import { act, renderHook } from '@testing-library/react'
 import { useFirestoreCollection } from './use-firestore-collection'
 import {
   DENIAL_STREAK_TO_REPORT,
+  REFUSED_RETRY_CEILING_MS,
   resetFirestoreServerReadEvidence,
   setFirestoreSessionReporters,
 } from './firestore-denial-reporter'
@@ -87,7 +88,10 @@ jest.mock('firebase/firestore', () => ({
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
-/** The slow cadence a refusal that outlives the budget falls back to. */
+/**
+ * The slow cadence a young refusal streak falls back to once it outlives the
+ * budget. It grows as the streak ages (AGL-2945); the tests here stay young.
+ */
 const REFUSED_RETRY_DELAY_MS = 2_000
 
 /** What IndexedDB still holds for this query — unconfirmed by definition. */
@@ -136,7 +140,16 @@ describe('useFirestoreCollection under persistentLocalCache (AGL-1066)', () => {
         handler.onNext(cached)
         // ...and only then does the server refuse the listen.
         handler.onError(denied)
-        jest.advanceTimersByTime(REFUSED_RETRY_DELAY_MS)
+        // Wait out whatever cadence that refusal scheduled — it grows with
+        // the streak's age (AGL-2945) — for the next reopen.
+        const opened = mockHandlers.length
+        for (
+          let waited = 0;
+          mockHandlers.length === opened && waited <= REFUSED_RETRY_CEILING_MS;
+          waited += 100
+        ) {
+          jest.advanceTimersByTime(100)
+        }
       }
     })
 

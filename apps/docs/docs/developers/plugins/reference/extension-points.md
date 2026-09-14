@@ -13,7 +13,7 @@ The surface matrix: what a plugin can extend, from which entry
 | --- | --- | --- | --- |
 | Canvas components (`defineUiFeatureBundle`) | barrel (`site`) | Besigner + published sites | Editor gates / SSR-suspended page load |
 | Console nav + pages (`ConsoleExtension.navItems`) | barrel (`console`) | Console host area | After the org resolves, before the shell paints |
-| Widgets (`ConsoleExtension.widgets`) | barrel (`console`) | Named console zones (dashboard, org, settings, admin, besigner) | With their host page |
+| Widgets (`ConsoleExtension.widgets`) | barrel (`console`) | Named console zones (dashboard, org, billing, team, staff, besigner, the assistant dock) — a widget with a `column` is a column of a shell-owned table | With their host page |
 | Providers (`ConsoleExtension.providers`) | barrel (`console`) | Around every console page | Once the registry is populated |
 | Site runtimes (`registerSiteRuntime`) | barrel (`site`) | Every published page | Client render, reading enricher props |
 | Redirect resolvers / page resolvers / enrichers | `/server` | Tenant page pipeline | Per request, in that order; enricher errors isolated |
@@ -22,14 +22,22 @@ The surface matrix: what a plugin can extend, from which entry
 | Config schemas (`registerPluginConfigSchema`) | both | Settings UI + typed reads | Declared at module scope |
 | Custom field types (`registerCustomFieldType`) | both | Dataset schema/record editors + validation | Declared at module scope |
 | Permissions (`registerPluginPermissions`) | both | Every resolved role set | Declared at module scope |
+| Service contracts (`definePluginServiceContract` / `registerPluginService`) | both | Another plugin's seam — an AI provider, a tool, a generator kind | Resolved lazily by the plugin that declared the contract |
+| Activity actions (`registerPluginActivityActions`) | both | The org feed's chips, the actor table's filter, the staff audit facet, the action label every renderer shows | Declared at module scope |
+| Billing and access keys (`registerPluginEntitlements`) | both | `resolveOrgEntitlements` (a seat add-on's quota and features), the plan tables' feature defaults, the staff lockdown checklist, the visitor notice, the dispatcher's path→lever map, the permission registry | Declared at module scope |
 | Scheduled jobs (`registerPluginJob`) | `/server` | The platform job beat | When due, via `/api/plugins/run-jobs` |
 | Install preset mappers | barrel | Besigner drawer presets | On install-doc render |
 | Realm bundles (`register(host)` / `registerApi()`) | remote artifact | Everything above via the host ABI | After the trust chain verifies |
 
-**Which app area does each reach?** Console = nav/pages/widgets/providers;
-org = `orgData`/`orgSettings`/`orgAddons` zones + org-scoped config and
-permissions; hosts = host-area pages/widgets + host-scoped installs;
-besigner = canvas components + `besignerFunctions` zone + drawer presets;
-published sites = canvas components, runtimes, page hooks, APIs; admin
-(staff) = `adminOrgDetail` zone. Core itself is extended only through
-these registries — plugins never edit core code.
+**Which app area does each reach?** Console = nav/pages/widgets/providers
+and the `assistPanel` dock; org = `orgData`/`orgSettings`/`orgAddons`/
+`orgBillingUsage`/`orgBillingOverview`/`orgMember`/`orgMembersListColumn`
+zones + org-scoped config, permissions and entitlement keys; hosts =
+host-area pages/widgets + `hostMembers` + host-scoped installs; besigner =
+canvas components + `besignerFunctions`/`besignerInspector` zones + drawer
+presets; published sites = canvas components, runtimes, page hooks, APIs;
+admin (staff) = `adminOrgDetail`/`staffOrg`/`staffUser` zones and the
+lockdown levers a plugin declares. Core itself is extended only through
+these registries — plugins never edit core code, and a capability core
+lacks is added as a generic seam every plugin can use, never as a hook for
+one.

@@ -105,6 +105,10 @@ import { CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler } from './server/in
 import { crmCompanyDeleteHandler } from './server/company-delete'
 import { CONTACT_PHONE_REFUSAL, normalizeTags, typed } from './server/contact-profile'
 import { crmContactUpdateHandler } from './server/contact-update'
+import {
+  CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
+  crmEmailTemplateDuplicateHandler,
+} from './server/email-template-duplicate'
 import { crmSuiteRefusal } from './server/suite-gate'
 import {
   CRM_RECIPE_INSTALL_ROUTE,
@@ -616,4 +620,8 @@ export function registerCrmConsoleApi(): void {
   // and rotated here, behind the CRM's own gate, and the org document that
   // carries it is closed to every client.
   registerPluginApiRoute(CRM_INBOUND_ADDRESS_ROUTE, crmInboundAddressHandler)
+  registerPluginApiRoute(
+    CRM_EMAIL_TEMPLATE_DUPLICATE_ROUTE,
+    crmEmailTemplateDuplicateHandler,
+  )
 }

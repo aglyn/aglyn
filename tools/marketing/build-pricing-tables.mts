@@ -44,6 +44,8 @@ import {
   PLAN_PRICING,
   PLAN_LABELS,
   UNLIMITED,
+  AI_ADDON_CREDITS_PER_MONTH,
+  aiAddonName,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   POS_REGISTER_ADDON_MONTHLY_USD,
   POS_REGISTERS_ADDON_MAX,
@@ -61,6 +63,22 @@ const OUT = join(HERE, 'pricing-copy')
 type Plan = keyof typeof PLAN_ENTITLEMENTS
 const PLANS = Object.keys(PLAN_ENTITLEMENTS) as Plan[]
 const PAID: Plan[] = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency']
+
+/**
+ * The generative add-on's name as the page prints it (AGL-2896). Read the
+ * way every rendered surface reads it, through `aiAddonName()`, so the compare
+ * row and the add-on card carry the name the console sells it under.
+ */
+const AI_ADDON = aiAddonName()
+
+/**
+ * The plans that sell the add-on: every plan `PLAN_PRICING` prices it on.
+ * Free sells none and Enterprise carries generative building in the
+ * agreement, so both price it `null` and neither is in this list.
+ */
+const AI_ADDON_PLANS = (Object.keys(PLAN_PRICING) as Plan[]).filter(
+  (p) => PLAN_PRICING[p].aiAddonMonthlyUsd !== null,
+)
 
 // ---------------------------------------------------------------- format
 
@@ -333,6 +351,33 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       },
       { label: 'CDN & responsive images', value: (p) => bool(F(p).mediaCdn) },
       { label: 'AI assist', value: (p) => bool(F(p).aiAssist) },
+      /*
+       * The generative door, per plan (AGL-2900). A plan that prices the
+       * add-on prints "add-on": the door opens when it is bought, whatever
+       * the plan's own `aiGenerative` says. Free prices none and generates
+       * against its taste, so its cell is the size of that band — the
+       * figure a visitor is deciding on. Enterprise carries generative
+       * building in the agreement and ticks; a plan with neither dashes.
+       */
+      {
+        label: `${AI_ADDON}: generate pages, emails, campaigns, products and more`,
+        value: (p) => {
+          if (PLAN_PRICING[p].aiAddonMonthlyUsd !== null) return 'add-on'
+          if (!F(p).aiGenerative) return NO
+          return p === 'enterprise' ? YES : `${num(E(p).assistCreditsPerMonth)} credits`
+        },
+      },
+      /*
+       * The included AI credits band, per plan (AGL-2925). Free's cell is
+       * the taste — 300 a month behind a hard wall — and it is the reason
+       * the row exists: "AI assist ✓" above says nothing about a plan whose
+       * `aiAssist` is off but which still generates against a band. Starter
+       * prints the dash `perMonth` gives a band of zero; Enterprise talks.
+       */
+      {
+        label: 'AI credits / mo',
+        value: talk((p) => perMonth(E(p).assistCreditsPerMonth)),
+      },
       { label: 'Per-screen analytics', value: (p) => bool(F(p).screenAnalytics) },
       { label: 'Sell on the marketplace', value: (p) => bool(F(p).marketplaceSelling) },
     ],
@@ -359,13 +404,15 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
 
 /*
  * A rate as the page and every breakpoint print it: bare, with the unit in the
- * row's label ("per month", "per GB-month", "per 1,000"). Cells are compared
+ * row's label ("per month", "per GB-month", "per 1,000"), and a fractional
+ * figure always to the cent — "$2.50" beside "$0.50", never "$2.5" — because
+ * the page sets every rate in one ledger column. Cells are compared
  * as whole strings and rows are found by label, so a row that changed unit
  * arrives as a missing row plus an extra one rather than as a cell whose
  * digits happen to match, which on a per-1,000 rate would be a 1000x error.
  */
 const money = (v: number | null): string =>
-  v == null ? NO : v < 1 ? `$${v.toFixed(2)}` : `$${v}`
+  v == null ? NO : Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`
 
 /**
  * A `PLAN_PRICING` field that states an add-on or overage rate.
@@ -424,14 +471,17 @@ const USAGE_ROWS: UsageRow[] = [
     rate: 'extraContactsUsdPer1k',
   },
   /*
-   * EMAIL SENDS AND ASSIST — billed everywhere, published nowhere until now.
+   * EMAIL SENDS AND AI CREDITS — billed everywhere, published nowhere until
+   * these rows.
    *
    * Both rates were already charged. `priceEmailSendOverage` reads
    * `extraEmailSendsUsdPer1k` and `report-usage` puts the result on the
    * invoice; `priceAssistCreditOverage` reads `extraAssistCreditsUsdPer1k` the
    * same way. Neither had a row on this table, so `/pricing` stated an email
    * ALLOWANCE ("Campaign emails / mo") and an assist CAPABILITY ("AI assist ✓")
-   * while stating the price of exceeding either nowhere at all.
+   * while stating the price of exceeding either nowhere at all. The page
+   * carries the AI credits row since AGL-2900; the email row is still
+   * declared absent below.
    *
    * The rates are published exactly as the code carries them. No price moves
    * here, which matters under the launch freeze: a charged figure that has
@@ -453,15 +503,21 @@ const USAGE_ROWS: UsageRow[] = [
      * Credits, not messages, and the label has to say so: a credit is a fixed
      * quantity of provider spend, so one question and one generated screen
      * draw wildly different amounts. "Per 1,000 assists" would price them the
-     * same and be wrong by two orders of magnitude.
+     * same and be wrong by two orders of magnitude. "AI credits" rather than
+     * "AI assist" because the compare grid's band row and the add-on card
+     * both name the unit that way, and the three read together.
      *
      * Starter's dash is CORRECT rather than a gap, and for the opposite
      * reason to the email row above. Assist is refused at the band on every
      * tier, so a plan with no rate simply stops; email cannot be refused —
      * transactional mail goes out at every tier — so a null there would be
-     * unbounded absorbed spend. Same-looking cell, different fact.
+     * unbounded absorbed spend. Same-looking cell, different fact. With the
+     * add-on Starter gains a band and joins the ladder at Pro's rate
+     * (`AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K`); that rate is not on
+     * `PLAN_PRICING.starter`, so the row does not print it, and the add-on
+     * card's sentence is where the page says so.
      */
-    label: 'AI assist, per 1,000 credits over the included band',
+    label: 'AI credits, per 1,000 over the included band',
     rate: 'extraAssistCreditsUsdPer1k',
   },
 ]
@@ -907,6 +963,40 @@ const addons = {
       included: Object.fromEntries(
         PLANS.map((p) => [p, PLAN_ENTITLEMENTS[p].posRegisters]),
       ),
+    },
+    {
+      label: AI_ADDON,
+      // Priced PER PLAN, unlike the two flat cards above: the line is an
+      // uplift on the tier, so there is no single `priceUsd` to print. `null`
+      // is a plan that does not sell it (Free; Enterprise carries generative
+      // building in the agreement).
+      priceUsdByPlan: Object.fromEntries(
+        PLANS.map((p) => [p, PLAN_PRICING[p].aiAddonMonthlyUsd]),
+      ) as Record<Plan, number | null>,
+      scope: 'organization',
+      maxQuantity: 1,
+      creditsByPlan: AI_ADDON_CREDITS_PER_MONTH,
+      /*
+       * What the card prints. One headline the way the flat cards print
+       * theirs — the cheapest plan's uplift, as "From $9 / mo" — and the
+       * ladder in the sentence beneath it: every selling plan's price, then
+       * the credits the add-on adds to each plan's band, each beside its
+       * plan's name so the add-on card reconciler can read them back one
+       * token at a time. The sentence is the transcription source for the
+       * page; a figure in it is a figure the page states.
+       */
+      priceLabel: `From $${Math.min(
+        ...AI_ADDON_PLANS.map((p) => PLAN_PRICING[p].aiAddonMonthlyUsd as number),
+      )} / mo`,
+      blurb:
+        AI_ADDON_PLANS.map(
+          (p) => `${PLAN_LABELS[p]} $${PLAN_PRICING[p].aiAddonMonthlyUsd}`,
+        ).join(' · ') +
+        ' a month, per workspace. Adds AI credits to your plan’s included band — ' +
+        AI_ADDON_PLANS.map(
+          (p) => `${num(AI_ADDON_CREDITS_PER_MONTH[p])} on ${PLAN_LABELS[p]}`,
+        ).join(', ') +
+        '. Enterprise by agreement.',
     },
   ],
 }
@@ -1616,28 +1706,27 @@ tierStrip.finish()
 const USAGE_STALE: Record<string, Divergence> = {}
 
 /**
- * The two rates the product BILLS and the page has never stated.
+ * The rate the product BILLS and the page has never stated.
  *
  * Not a design opinion and not a stale cell — there is no cell. Every
- * breakpoint's add-on table runs Extra site → CRM records and stops, so both rows
- * below are compared against nothing until the page carries them. Declared so
- * the gap is a recorded fact with an owner rather than a red the next person
- * silences, and so it fails the moment the page catches up, at which point the
- * cells become comparable and this stops being the right way to describe them.
+ * breakpoint's add-on table stops short of the row below, so it is compared
+ * against nothing until the page carries it. Declared so the gap is a
+ * recorded fact with an owner rather than a red the next person silences,
+ * and so it fails the moment the page catches up, at which point the cells
+ * become comparable and this stops being the right way to describe them.
+ * The AI credits rate was declared here the same way until AGL-2900 put it
+ * on every breakpoint; it is compared for real now.
  *
- * What guards the rates MEANWHILE is `--check` diffing the committed
- * `tables.json` against this generator: the figures now exist in a generated
- * artifact, so moving `extraEmailSendsUsdPer1k` or
- * `extraAssistCreditsUsdPer1k` without regenerating fails CI. That is strictly
- * more than they had, which was nothing — but it is NOT a comparison against
- * the page, and the distinction is the whole reason this map states its
- * reasons instead of listing two labels.
+ * What guards the rate MEANWHILE is `--check` diffing the committed
+ * `tables.json` against this generator: the figure exists in a generated
+ * artifact, so moving `extraEmailSendsUsdPer1k` without regenerating fails
+ * CI. That is strictly more than it had, which was nothing — but it is NOT a
+ * comparison against the page, and the distinction is the whole reason this
+ * map states its reason instead of listing a label.
  */
 const USAGE_EXPECTED_ABSENT: Record<string, string> = {
   'Email sends, per 1,000 over the included band':
     'the page states an email ALLOWANCE ("Campaign emails / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
-  'AI assist, per 1,000 credits over the included band':
-    'the page states an assist CAPABILITY ("AI assist ✓" in the compare grid) and no overage rate, while `priceAssistCreditOverage` bills `extraAssistCreditsUsdPer1k` from Pro up. Resolves when `/pricing` carries the row',
 }
 
 const addOnRates = reconciler(
@@ -1864,11 +1953,20 @@ feeLadder.finish()
 /*==========================================
  * THE OPTIONAL ADD-ON CARDS.
  *
- * Two prices, and the frame writes each of them two ways: bare on the wide
- * breakpoints, with the scope appended on mobile. Both renderings are
- * assembled from the same two code values, so either is matched EXACTLY and
- * neither can carry a stale figure — where a "starts with the price" rule
- * would pass `$89 / mo · per organization` on a per-site add-on.
+ * Three cards. The two flat ones carry a single price, and the frame writes
+ * it two ways: bare on the wide breakpoints, with the scope appended on
+ * mobile. Both renderings are assembled from the same code value, so either
+ * is matched EXACTLY and neither can carry a stale figure — where a "starts
+ * with the price" rule would pass `$89 / mo · per organization` on a per-site
+ * add-on.
+ *
+ * The AI card is priced per plan (AGL-2900), so its headline is the cheapest
+ * plan's uplift and the ladder lives in the sentence beneath it. The wide
+ * breakpoints draw that sentence as the one-cell record after the heading and
+ * every figure in it is read back beside its plan's name; mobile draws the
+ * heading only, so there the headline is all there is to compare. A card
+ * whose sentence a wide breakpoint has dropped is reported, because the
+ * sentence is where six prices and six bands are published.
  *
  * NOT reconciled: `maxQuantity`, `scope` and the per-plan `included` counts.
  * The frame states none of them. `POS_REGISTERS_ADDON_MAX` in particular is
@@ -1877,39 +1975,77 @@ feeLadder.finish()
  *=========================================*/
 const ADDONS_STALE: Record<string, Divergence> = {}
 
-const addonCards = reconciler('add-on cards', ADDONS_STALE)
+/**
+ * Cards we publish that the page carries nowhere. Empty since AGL-2900 put
+ * the AI card on every breakpoint; the AI card was declared here from the
+ * day AGL-2896 priced it until then, which is the shape a new card takes
+ * between the code selling it and the page stating it.
+ */
+const ADDONS_EXPECTED_ABSENT: Record<string, string> = {}
+
+const addonCards = reconciler('add-on cards', ADDONS_STALE, ADDONS_EXPECTED_ABSENT)
 /**
  * What each card is called on the frame. Every breakpoint carries the page's
- * name for both cards, so each has exactly one.
+ * name for each published card, so each has exactly one.
  */
 const ADDON_FRAME_LABELS: Record<string, string[]> = {
   'Event Calendar': ['Event Calendar'],
   'Extra POS register': ['Extra POS register'],
+  [AI_ADDON]: [AI_ADDON],
 }
 
+/** A per-plan token read out of the AI card's sentence, or what is missing. */
+const stated = (body: string, pattern: RegExp): string =>
+  pattern.exec(body)?.[1] ?? '(not stated)'
+
 for (const v of frames) {
-  const cards =
-    records(v, 'Usage pricing', 'cards') ??
-    records(v, 'Usage pricing', 'Optional add-ons')
+  const wide = records(v, 'Usage pricing', 'cards')
+  const cards = wide ?? records(v, 'Usage pricing', 'Optional add-ons')
   if (!cards) {
     addonCards.absent('no add-on cards in either shape', v.name)
     continue
   }
   for (const row of addons.rows) {
     const names = ADDON_FRAME_LABELS[row.label] ?? [row.label]
-    const rec = cards.find((r) => names.includes(r.cells[0]) && r.cells.length > 1)
+    const at = cards.findIndex((r) => names.includes(r.cells[0]) && r.cells.length > 1)
+    const rec = cards[at]
     if (!rec) {
-      addonCards.absent(`the ${row.label} card`, v.name)
+      addonCards.absentRow(row.label, v.name)
       continue
     }
-    const bare = `$${row.priceUsd} / mo`
-    const scoped = `${bare} · per ${row.scope}`
+    const headline = 'priceUsd' in row ? `$${row.priceUsd} / mo` : row.priceLabel
+    const scoped = `${headline} · per ${row.scope}`
     addonCards.cell(
       `${row.label} · price`,
-      rec.cells[1] === scoped ? scoped : bare,
+      rec.cells[1] === scoped ? scoped : headline,
       rec.cells[1],
       v.name,
     )
+    if ('priceUsd' in row || !wide) continue
+    // The sentence is the record after the heading, and only a one-cell
+    // record is a sentence: a two-cell record there is the next card's
+    // heading, which means this card's sentence is gone.
+    const next = cards[at + 1]
+    const body = next && next.cells.length === 1 ? next.cells[0] : null
+    if (body === null) {
+      addonCards.absent(`the ${row.label} card's sentence`, v.name)
+      continue
+    }
+    for (const p of AI_ADDON_PLANS) {
+      const label = PLAN_LABELS[p]
+      addonCards.cell(
+        `${row.label} · ${label}`,
+        `$${row.priceUsdByPlan[p]}`,
+        stated(body, new RegExp(`${label} (\\$[\\d.]+)`)),
+        v.name,
+      )
+      addonCards.cell(
+        `${row.label} · ${label} credits`,
+        num(row.creditsByPlan[p]),
+        stated(body, new RegExp(`([\\d,]+) on ${label}\\b`)),
+        v.name,
+      )
+    }
   }
 }
 
@@ -1929,14 +2065,14 @@ addonCards.finish()
  *     against a surface that does not exist is the one thing this file must
  *     not pretend to do; it is reconciled the day the disclosure ships.
  *
- *   The EMAIL-SEND and ASSIST overage rates, declared in
- *     `USAGE_EXPECTED_ABSENT`. Both are emitted into the add-on capacity
- *     table and both are billed today, and no breakpoint states either, so
- *     there is no cell to compare against — the same "no surface exists"
- *     shape as the marketplace take rate above, differing only in that these
- *     two now HAVE a generated figure for the besigner edit to transcribe.
- *     `--check` guards them against code drift meanwhile; it does not
- *     compare them against the page, and will not until the rows ship.
+ *   The EMAIL-SEND overage rate, declared in `USAGE_EXPECTED_ABSENT`. It is
+ *     emitted into the add-on capacity table and billed today, and no
+ *     breakpoint states it, so there is no cell to compare against — the
+ *     same "no surface exists" shape as the marketplace take rate above,
+ *     differing only in that it HAS a generated figure for the besigner edit
+ *     to transcribe. `--check` guards it against code drift meanwhile; it
+ *     does not compare it against the page, and will not until the row
+ *     ships. The AI credits rate left this list with AGL-2900.
  *
  *   `addons.rows[].maxQuantity`, `.scope`, `.included` — the cards publish a
  *     price and a sentence. `POS_REGISTERS_ADDON_MAX` in particular is a

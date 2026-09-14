@@ -92,6 +92,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     fromCache: false,
   }),
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
+  // The email templates card offers Duplicate; nothing here opens it.
+  useDuplicateResource: () => ({ request: jest.fn(), dialog: null }),
 }))
 
 const enqueueSnackbar = jest.fn()

@@ -132,6 +132,23 @@ export interface OrgFeatureFlags {
   marketplaceSelling?: boolean
   /** AI copy assist in the besigner (AGL-89). */
   aiAssist?: boolean
+  /**
+   * Generative building and automation (AGL-2896): pages, components,
+   * layouts, templates, SEO, email, campaigns, A/B variants, analytics
+   * insights, products, CRM records, onboarding and workflows produced by
+   * the assistant rather than assembled by hand.
+   *
+   * Distinct from `aiAssist`, which is the chat guide, copy assist and
+   * generate-section rung every tier from Pro up carries. This is the
+   * expensive rung: a generated surface carries the node tree, the catalog
+   * and the theme in and iterates, so it draws credits by the hundreds where
+   * a question draws tens. No self-serve tier includes it; the Aglyn AI
+   * add-on (`OrgSeatAddons.aiAddon`) switches it on and adds the credit band
+   * that funds it, and `resolveOrgEntitlements` flips this flag together
+   * with `aiAssist` when the add-on is present. Enterprise carries it in the
+   * agreement.
+   */
+  aiGenerative?: boolean
   /** No-code workflow builder (AGL-101). */
   workflows?: boolean
   /** Datasets + repeatable components (AGL-102/103). */
@@ -558,7 +575,10 @@ export interface OrgEntitlements {
    * it held before assist was sold at all. `tier-margin-floor.spec.ts` is the
    * model, and it pins both the rule and the resulting figures.
    *
-   * 0 on Free and Starter, which carry no `aiAssist` and no band.
+   * 0 on Free and Starter, which carry no `aiAssist` and no band. The Aglyn
+   * AI add-on (AGL-2896) adds `AI_ADDON_CREDITS_PER_MONTH[plan]` to this
+   * band in `resolveOrgEntitlements` — one pool, widened, rather than a
+   * second meter — so Starter with the add-on carries a band after all.
    */
   assistCreditsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
@@ -647,6 +667,16 @@ export interface OrgSeatAddons {
   posRegisters?: number
   /** Event Calendar org-wide toggle, 0/1 (AGL-145/524). */
   eventCalendar?: number
+  /**
+   * Aglyn AI org-wide toggle, 0/1 (AGL-2896). One purchase covers every
+   * host in the org, the way Event Calendar does: `resolveOrgEntitlements`
+   * reads any quantity >= 1 as one, adds the plan's
+   * `AI_ADDON_CREDITS_PER_MONTH` band to `assistCreditsPerMonth`, and
+   * switches `features.aiGenerative` and `features.aiAssist` on. Priced per
+   * plan at `PlanPricing.aiAddonMonthlyUsd`; `null` there means the plan
+   * does not sell it.
+   */
+  aiAddon?: number
 }
 
 /**
@@ -784,6 +814,23 @@ export interface OrgStorageOverage {
  * On a plan whose `extraAssistCreditsUsdPer1k` is `null` the switch changes
  * nothing: there is no rate to sell past the band at, so the band stays the
  * wall it always was, on or off.
+ *
+ * ## The dollar ceiling beside the switch (AGL-2898)
+ *
+ * `capUsd` is the second control, and it answers a different question. The
+ * switch asks "sell past the band at all?"; the ceiling asks "and if so, how
+ * much?" — a monthly figure in USD of OVERAGE, priced at the plan's rate, past
+ * which the assistant refuses for the rest of the month. It is the
+ * `storageOverage.capUsd` of this meter: optional, absent by default, and the
+ * customer's own number rather than a band the plan sold them. Read through
+ * `resolveAssistOverageCapUsd`, and enforced by `assistOverageCapReached`
+ * inside the same reservation transaction as the band.
+ *
+ * The two are independent. With the switch on the ceiling is never reached,
+ * because nothing past the band is ever sold; with the switch off and no
+ * ceiling the overage is open-ended, bounded only by the plan's message cap.
+ * On a plan with no rate the ceiling, like the switch, changes nothing:
+ * overage on such a plan prices to zero and zero never reaches a ceiling.
  */
 export interface OrgAssistOverage {
   /** True stops assist at the included band; absent or false sells past it. */
@@ -792,6 +839,16 @@ export interface OrgAssistOverage {
   hardCapSetAt?: ITimestamp | null
   /** The uid that wrote it. */
   hardCapSetBy?: string | null
+  /**
+   * The month's ceiling on AI overage, in USD at the plan's rate. `null` or
+   * absent is no ceiling; anything that is not a finite positive number reads
+   * as none too, so a corrupt value cannot become a wall of `NaN`.
+   */
+  capUsd?: number | null
+  /** When the ceiling was last written or cleared, for the audit trail. */
+  capSetAt?: ITimestamp | null
+  /** The uid that wrote it. */
+  capSetBy?: string | null
 }
 
 /**

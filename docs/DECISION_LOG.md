@@ -92,6 +92,91 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-14 — The Free AI taste: 300 credits a month behind a hard wall, per account, shipped with its abuse precautions
+
+- **Decided by:** the account owner on 2026-09-14 (AGL-2895), as the one addition to the add-on decision below: Free gets a taste of AI generation only together with the precautions that stop it multiplying, which is AGL-2925.
+- **Scope:** packaging
+- **Evidence:** `FREE_AI_TASTE_CREDITS_PER_MONTH`, `PLAN_ENTITLEMENTS.free.assistCreditsPerMonth` and `PLAN_ENTITLEMENTS.free.features.aiGenerative` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `PLAN_PRICING.free.extraAssistCreditsUsdPer1k` unchanged at `null`, so `assistBandRefuses` makes the band a wall; the account, daily-request, refusal and platform rungs in `libs/tenant/data/admin/src/lib/server/assist-free-taste.ts`, decided inside `reserveAssistMessage`'s transaction; the per-address window and the account-age rung in `ai-abuse-guards.ts`; `apps/console/specs/tier-margin-floor.spec.ts` (the taste costs ≤ $0.30 a month per Free workspace), `plan-entitlements.spec.ts`, `assist-credits.spec.ts`, `assist-usage.spec.ts`, `ai-gate.spec.ts`; the chain in `docs/RATE_LIMITING.md`; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2925, AGL-2895, AGL-2265.
+
+**No locked price moves.** Free's `assistCreditsPerMonth` goes from 0 to 300
+and `features.aiGenerative` from off to on; nothing else on the Free row and
+nothing on any paid row changes. The band is a WALL: no rate, no overage, no
+switch, no invoice, ever.
+
+**Why 300, and why per account.** The taste exists so the AI landing pages can
+say "generate your first page free". Three hundred credits is one or two
+generated sections, and costs at most $0.30 of provider spend a month per Free
+workspace. It is the one AI band with no invoice behind it, so it is metered a
+second time, per **account** — the workspace owner's, read off `ownerUid` ∪
+`createdByUid` exactly as the free-workspace ceiling (AGL-2265) counts — so the
+three free workspaces one person may hold share one allowance rather than
+tripling it. A member invited to someone else's free workspace draws on that
+workspace's band and its owner's allowance, never their own account.
+
+**The precautions that ship with it**, each one a rung that can go red on its
+own: a verified email and a minimum account age (`AI_FREE_MIN_ACCOUNT_AGE_HOURS`,
+default 24, read off the Auth record's creation time and never the token); a
+per-address window of 60 / min on every AI door beside the per-uid 20 / min; a
+per-account daily cap of `AI_FREE_DAILY_REQUESTS` (default 30); a pause for the
+day after three `refusal` stops, with a refusal drawing no credits; a
+platform-wide ceiling on one UTC day of free-tier spend
+(`AI_FREE_DAILY_PLATFORM_CEILING_USD`, default $25 — staff mailed at 80%, free
+generation refused at 100%, paid workspaces untouched); an acceptable-use block
+in every generation prompt; and the `ai-generate` lockdown key as the manual
+stop. The chain in front of all of it — edge challenge, signups lock, workspace
+creation limits — is written down in `docs/RATE_LIMITING.md`.
+
+**What does not move.** `aiAssist` stays off on Free: the guided rung of the
+console assistant stays Pro and up, and Free keeps the docs-grounded chat it
+had. The `/pricing` compare grid does not carry the credits row yet; the tables
+generator emits it and declares it expected-absent until AGL-2900 publishes it.
+
+---
+
+## 2026-09-14 — The Aglyn AI add-on: a flat per-workspace line that unlocks generative building and widens the assist band
+
+- **Decided by:** the account owner on 2026-09-14 (AGL-2895), confirming the recommendation the engineering session recorded the same day — one paid add-on, flat per workspace, one credit pool, the figures below — with one addition: the Free taste ships only together with abuse precautions (AGL-2925). The twelve live Stripe prices were minted on 2026-09-14 (AGL-2897); the pricing page card follows under AGL-2900.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING[*].aiAddonMonthlyUsd`, `AI_ADDON_CREDITS_PER_MONTH`, `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K` and `features.aiGenerative` on every `PLAN_ENTITLEMENTS` row in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `seatAddons.aiAddon` folded by `resolveOrgEntitlements` and billed by `orgListPriceMonthlyUsd`; `resolveAssistOverageRateUsdPer1k` in `libs/aglyn/src/lib/app-utils/assist-credits.ts`, read by the gate, the invoice and the refusal sentence; the `aiAddon` kind in `apps/console/utils/server/billing-addons.ts` (`STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]`); `apps/console/specs/tier-margin-floor.spec.ts` (every tier non-negative with the add-on band at 100% and its revenue counted; each band ≤ 50% of its price), `plan-entitlements.spec.ts`, `assist-credits.spec.ts`, `billing-addon-plan-coverage.spec.ts`; benchmarks — Zylo's 2025 SaaS pricing survey (an AI tier or add-on carries a 20–37% uplift on the base plan), aissist.io's AI add-on pricing benchmark, and the credit-priced AI add-ons of Framer, Webflow and HubSpot; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2896, AGL-2895, AGL-2897, AGL-2900.
+
+**No locked price moves; a new add-on line, its figures confirmed by the owner
+on AGL-2895.** Every base price, every band and every
+overage rate in `PLAN_PRICING` and `PLAN_ENTITLEMENTS` is where the 2026-08-18
+lock and its later entries put it. What is added is one line and one flag.
+
+| | Starter | Pro | Business | Scale | Advanced | Agency |
+|---|---|---|---|---|---|---|
+| Aglyn AI, per workspace per month | $9 | $19 | $39 | $69 | $99 | $299 |
+| share of the base price | 36% | 34% | 28% | 28% | 25% | 23% |
+| credits added to the assist band | 4,000 | 9,000 | 19,000 | 34,000 | 49,000 | 149,000 |
+| band cost at 100%, as a share of the add-on | 44% | 47% | 49% | 49% | 49% | 50% |
+
+Free sells no add-on (`null`, band 0). Enterprise sells none either: it carries
+`aiGenerative` in the agreement and its fallback band is 298,000 credits,
+Agency × 2, the 2026-09-07 rule for every Enterprise fallback. Annual is ×12
+with no discount, as every add-on is.
+
+**What it buys.** `features.aiGenerative` — generative building and automation,
+which no self-serve tier includes — and the band above added to the plan's
+`assistCreditsPerMonth`. One pool and one meter: the add-on widens the band the
+assist meter already draws on, so the overage ladder, the hard-cap switch and
+the usage panel see one number. It also switches `aiAssist` on, so on Starter
+the add-on is the whole assistant. Starter with the add-on sells past its band
+at $3.00 per 1,000 credits, Pro's rate, read through
+`resolveAssistOverageRateUsdPer1k` rather than written onto the plan row; every
+other tier keeps the rate it had.
+
+**What does not move.** Free's `assistCreditsPerMonth` stays 0 until AGL-2925
+lands: the confirmed Free taste is 300 credits a month behind a hard wall, per
+account rather than per workspace, and it ships together with its abuse
+precautions. The assist overage ladder is unchanged. `check-pricing-drift`'s
+`LOCKED` pin has no place for an add-on ladder and is untouched; the Stripe
+prices exist live since 2026-09-14 (AGL-2897) and the `/pricing` card lands
+under AGL-2900, so the add-on capacity table declares the card expected-absent
+until then.
+
+---
+
 ## 2026-09-13 — `LEGAL_DOCUMENT_VERSION` moves to `v2`, reusing the pre-collapse label
 
 - **Decided by:** the account owner. On 2026-09-11: Privacy Policy §3 names video hosting (Wistia, on the platform's own marketing site), and that change costs the clickwrap a version instead of folding into `v1`. On 2026-09-13: the Terms §4.1 plan-list correction rides the same version, so people re-accept once, and the label is `v2` rather than `v7`, chosen with the consequence below in view. Supersedes the 2026-08-24 entry below (`v1` until launch) now that acceptances are on record.

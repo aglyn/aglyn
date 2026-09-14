@@ -382,6 +382,19 @@ export interface AnalyticsEventParams {
   assistant_proposal_shown: { action: string }
   /** Custom: no GA4 equivalent. The user confirmed and was navigated. */
   assistant_proposal_confirmed: { action: string }
+  /**
+   * Custom: no GA4 equivalent. An AI generation job reached `done`
+   * (AGL-2904), observed from the console's jobs drawer. `kind` is the
+   * closed `AiJobKind` set and `credits` the job's spend at the plan's
+   * credit rate — no brief, no output: params carry no user content.
+   */
+  ai_job_completed: { kind: string; credits: number }
+  /**
+   * Custom: no GA4 equivalent. An AI generation job reached `failed`
+   * (AGL-2904). `kind` only; the failure text is a fixed customer-safe
+   * sentence and says nothing a rate could use.
+   */
+  ai_job_failed: { kind: string }
 
   // --- Retention (AGL-1859/AGL-1863: the leave path, measurable) -----------
   /**
@@ -925,6 +938,8 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   assistant_feedback: true,
   assistant_proposal_shown: true,
   assistant_proposal_confirmed: true,
+  ai_job_completed: true,
+  ai_job_failed: true,
   churn_survey_submitted: true,
   downsell_accepted: true,
   winback_discount_accepted: true,

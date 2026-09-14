@@ -829,7 +829,7 @@ async function recordSignupsLockEvent(
  *
  * NO STAFF BYPASS, which is not an omission: an account being created has no
  * claim yet, so a bypass here could only ever fire on a misattributed one.
- * `LOCKDOWN_FEATURE_STAFF_BYPASS.signups` has said `false` since AGL-1510
+ * `lockdownFeatureStaffBypass('signups')` has said `false` since AGL-1510
  * for exactly this reason.
  *
  * Cost while the lever is off: one Firestore `get` per account created, plus

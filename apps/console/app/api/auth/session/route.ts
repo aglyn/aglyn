@@ -407,7 +407,7 @@ async function handler(request: Request): Promise<Response> {
         // bites accounts CREATED SINCE THE LOCK BEGAN: the bot wave's
         // accounts are refused a session, every existing user signs in
         // untouched. NO staff bypass at the feature stage, deliberately and
-        // consistently with LOCKDOWN_FEATURE_STAFF_BYPASS.signups=false: the
+        // consistently with lockdownFeatureStaffBypass('signups')=false: the
         // predicate is about the ACCOUNT's age, not the caller's claims, and
         // staff sign-ins pass because their accounts predate the lock — not
         // because a claim exempts them. The platform-scope bypass above is

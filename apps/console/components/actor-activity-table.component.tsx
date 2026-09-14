@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { activityTargetLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
+import {
+  activityActionLabel,
+  activityTargetLabel,
+} from '@aglyn/aglyn/app-utils/activity-presenter'
+import { listPluginActivityFilters } from '@aglyn/aglyn'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import {
   gridFilterRequest,
@@ -98,6 +102,23 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
    * from before the reader changed it.
    */
   const filterRef = useRef<ListFilterRequest | null>(null)
+  /*
+   * One chip per plugin-declared action group (AGL-2929, AGL-2940): a
+   * plugin's rows are stored as catalog codes, and the route already
+   * answers `action isAnyOf …`, so a chip is that one request with the
+   * group's codes as its value. It replaces the grid's clause while it is
+   * on and hands it back when it is off, so a reader who had narrowed by
+   * date does not lose the narrowing by asking for one group.
+   */
+  const [groupOnly, setGroupOnly] = useState<string | null>(null)
+  const gridFilterRef = useRef<ListFilterRequest | null>(null)
+  const groupFilters = listPluginActivityFilters()
+  const groupFilter = (groupId: string): ListFilterRequest | null => {
+    const match = groupFilters.find((entry) => entry.group.id === groupId)
+    return match
+      ? { field: 'action', op: 'isAnyOf', value: match.actions.join(',') }
+      : null
+  }
 
   const loadPage = useCallback(
     async (targetPage: number, cursor: string | null) => {
@@ -161,7 +182,11 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         flex: 1.2,
         minWidth: 180,
         ...listFilterColumn(ACTIVITY_LIST_FILTER_FIELDS, 'action'),
+        // The STORED action stays the cell's value — it is what the route's
+        // equality filter compares — and the label is only what is drawn,
+        // so an AI code reads as a sentence without breaking the filter.
         valueGetter: (_value, row: ActorActivityEntry) => row.action ?? '—',
+        renderCell: ({ row }: any) => activityActionLabel(row.action) || '—',
       },
       {
         field: 'target',
@@ -215,6 +240,26 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
       header={header}
       help={help}
       description={description}
+      toolbar={groupFilters.map(({ group }) => (
+        <Chip
+          key={group.id}
+          size="small"
+          label={group.label}
+          clickable
+          color={groupOnly === group.id ? 'primary' : 'default'}
+          variant={groupOnly === group.id ? 'filled' : 'outlined'}
+          aria-pressed={groupOnly === group.id}
+          onClick={() => {
+            const next = groupOnly === group.id ? null : group.id
+            setGroupOnly(next)
+            filterRef.current = next
+              ? groupFilter(next)
+              : gridFilterRef.current
+            setCursors([null])
+            void loadPage(0, null)
+          }}
+        />
+      ))}
       columns={activityColumns}
       rows={rows}
       getRowId={(row: any) => `${row.scopeId}:${row.$id}`}
@@ -228,7 +273,11 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
        * the grid in server-filter mode.
        */
       onFilterModelChange={(model) => {
-        filterRef.current = gridFilterRequest(model)
+        gridFilterRef.current = gridFilterRequest(model)
+        // A clause from the panel is the reader choosing; it takes over
+        // from the chip rather than being silently ignored under it.
+        setGroupOnly(null)
+        filterRef.current = gridFilterRef.current
         setCursors([null])
         void loadPage(0, null)
       }}

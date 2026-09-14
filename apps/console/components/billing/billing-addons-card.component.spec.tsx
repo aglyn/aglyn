@@ -182,3 +182,127 @@ describe('BillingAddonsCard billing claims (AGL-1380)', () => {
     expect(screen.queryByText(/We couldn.t load your plan add-ons/)).toBeNull()
   })
 })
+
+/**
+ * The Aglyn AI row (AGL-2899). Three plans, three different rows: Free is
+ * pointed at the plan grid, a paid tier gets the switch with its price and
+ * its band, Enterprise is told it already has the thing. The catalog marks
+ * Free and Enterprise `upgradeRequired` alike, so the row cannot be read off
+ * the catalog — which is what the first and third cases pin.
+ */
+describe('the Aglyn AI row (AGL-2899)', () => {
+  /** Every body the card posted, in order. */
+  const postedBodies = () =>
+    (global.fetch as jest.Mock).mock.calls.map(([, init]) =>
+      JSON.parse(String((init as RequestInit).body)),
+    )
+
+  const stateFor = (
+    plan: string,
+    aiAddon: { unitUsd: number | null; quantity?: number },
+  ) => ({
+    hasSubscription: true,
+    plan,
+    interval: 'month',
+    quantities: { aiAddon: aiAddon.quantity ?? 0 },
+    catalog: {
+      aiAddon: {
+        unitUsd: aiAddon.unitUsd,
+        max: 1,
+        configured: aiAddon.unitUsd != null,
+        upgradeRequired: aiAddon.unitUsd == null,
+      },
+    },
+  })
+
+  it('on a paid plan: a switch, the price, what it unlocks and the band it adds', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('pro', { unitUsd: 19 })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+
+    expect(await screen.findByText('Aglyn AI — $19/mo')).toBeTruthy()
+    // The band is the figure the resolver folds into the meter, not a
+    // hand-typed one: 9,000 is `AI_ADDON_CREDITS_PER_MONTH.pro`.
+    expect(
+      screen.getByText(
+        /Generate pages, components, emails, campaigns, products and more, then edit anything\. Adds 9,000 AI credits a month/,
+      ),
+    ).toBeTruthy()
+    const toggles = screen.getAllByRole('switch') as HTMLInputElement[]
+    // One switch row in the catalog (Event Calendar has no entry, so it is
+    // "Not configured" and renders no switch): the AI switch, off.
+    expect(toggles).toHaveLength(1)
+    expect(toggles[0].checked).toBe(false)
+    expect(toggles[0].disabled).toBe(false)
+    expect(screen.queryByText('Upgrade your plan to add Aglyn AI')).toBeNull()
+    expect(screen.queryByText('Included in your plan')).toBeNull()
+  })
+
+  it('flipping the switch previews `aiAddon` at quantity 1, exactly as the other kinds', async () => {
+    // FORCED RED by posting `quantity: true`: the route reads the number.
+    global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.action === 'preview') {
+        return jsonResponse({ prorationCents: 1_900, chargedNowCents: 1_900, currency: 'usd' })
+      }
+      if (body.action === 'set') {
+        return jsonResponse({ quantities: { aiAddon: 1 } })
+      }
+      return jsonResponse(stateFor('pro', { unitUsd: 19 }))
+    }) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+    fireEvent.click(await screen.findByRole('switch'))
+
+    await waitFor(() =>
+      expect(postedBodies()).toContainEqual({
+        orgId: 'org-1',
+        action: 'preview',
+        kind: 'aiAddon',
+        quantity: 1,
+      }),
+    )
+    // The confirm resolved (mocked), so the set followed with the same shape.
+    await waitFor(() =>
+      expect(postedBodies()).toContainEqual({
+        orgId: 'org-1',
+        action: 'set',
+        kind: 'aiAddon',
+        quantity: 1,
+      }),
+    )
+  })
+
+  it('on Free: the row, an upgrade link to the plan grid, and NO switch', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('free', { unitUsd: null })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+
+    expect(await screen.findByText('Aglyn AI')).toBeTruthy()
+    const link = screen.getByRole('link', { name: 'Upgrade your plan to add Aglyn AI' })
+    expect(link.getAttribute('href')).toBe('#plans')
+    expect(screen.queryAllByRole('switch')).toHaveLength(0)
+    // Free sells no band, so the sentence names what it unlocks and no figure.
+    expect(screen.queryByText(/Adds .* AI credits a month/)).toBeNull()
+    // …and NOT the generic upgrade caption, which cannot say where to go.
+    expect(screen.queryByText('Upgrade your plan to add these')).toBeNull()
+  })
+
+  it('on Enterprise: "included", and NO switch', async () => {
+    // Same catalog shape as Free — `unitUsd: null`, `upgradeRequired` — and
+    // the opposite sentence, because the plan carries `aiGenerative`.
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('enterprise', { unitUsd: null })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+
+    expect(await screen.findByText('Included in your plan')).toBeTruthy()
+    expect(screen.queryAllByRole('switch')).toHaveLength(0)
+    expect(screen.queryByText('Upgrade your plan to add Aglyn AI')).toBeNull()
+  })
+})

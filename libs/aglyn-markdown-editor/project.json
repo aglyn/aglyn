@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/aglyn-markdown-editor/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:ui"],
+  "tags": ["scope:lib", "scope:aglyn", "scope:ui", "scope:core", "type:ui"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",

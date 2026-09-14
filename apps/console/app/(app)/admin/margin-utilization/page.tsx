@@ -484,6 +484,14 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                         )} net revenue`}
                         variant="outlined"
                       />
+                      {/* The AI add-on's share of the revenue side
+                          (AGL-2930) — inside the figure beside it, named so
+                          the assist band's cost reads against what it
+                          brings in. */}
+                      <Chip
+                        label={`${usd(fleet.totalAiAddonRevenueUsd)} of it the AI add-on`}
+                        variant="outlined"
+                      />
                     </Stack>
                     {fleet.medianMarginPct === null ? (
                       <Alert severity="info">
@@ -524,6 +532,7 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                             <TableCell>Plan</TableCell>
                             <TableCell>Month</TableCell>
                             <TableCell align="right">Net revenue</TableCell>
+                            <TableCell align="right">AI add-on</TableCell>
                             <TableCell align="right">COGS</TableCell>
                             <TableCell align="right">Margin</TableCell>
                             {bands.map((band) => (
@@ -561,6 +570,15 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                               </TableCell>
                               <TableCell align="right">
                                 {usd(row.netRevenueUsd)}
+                              </TableCell>
+                              {/* Part of the net revenue beside it, not an
+                                  addition to it (AGL-2930). A dash for an
+                                  org without the add-on: "$0.00" would read
+                                  as an add-on that earns nothing. */}
+                              <TableCell align="right">
+                                {row.aiAddonRevenueUsd > 0
+                                  ? usd(row.aiAddonRevenueUsd)
+                                  : '—'}
                               </TableCell>
                               <TableCell align="right">
                                 {usd(row.cogs.cogsUsd)}

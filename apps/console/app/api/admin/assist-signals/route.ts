@@ -15,16 +15,31 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  ORG_BILLING_DOC_ID,
+  ORG_BILLING_SUBCOLLECTION,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
+import {
+  assistUsageDay,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  readPlatformFreeSpend,
 } from '@aglyn/tenant-data-admin'
+import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  hasAiAddon,
+  resolveEffectivePlan,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { assistRefusalCounts } from '@aglyn/tenant-data-admin/server/assist-refusals'
+import { assistUsageMonth } from '@aglyn/tenant-data-admin/server/assist-usage'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   assistSignalRow,
   mineAssistSignals,
+  rankAssistSpend,
+  type AssistSpendRow,
 } from '../../../../utils/assist-signal-mining'
 
 /**
@@ -73,6 +88,109 @@ const SCAN_CEILING = 20000
  * of them are still a page somebody reads.
  */
 const ANSWER_PREVIEW_CHARS = 600
+
+/**
+ * Month documents read in one pass for the spend leaderboard (AGL-2930).
+ *
+ * `assistUsage` holds one document per org per month, so this is orgs times
+ * months — a fraction of the signal count, and the same PLUS-ONE truncation
+ * probe the signals read uses. Read as a collection group with NO `where`
+ * and NO `orderBy`, for the reason the module note gives: a filter on
+ * `month` would need a COLLECTION_GROUP-scoped index deployed by hand, and
+ * filtering the month in memory costs nothing at this size.
+ */
+const SPEND_SCAN_CEILING = 20000
+
+export interface AssistSpendLeaderboard {
+  month: string
+  rows: AssistSpendRow[]
+  /** How many workspaces had a document for the month — the ranked count. */
+  ranked: number
+  /** True when the scan hit its ceiling, so the ranking is over a sample. */
+  truncated: boolean
+  /**
+   * True when the month documents could not be read at all. Reported rather
+   * than rendered as an empty table: "no workspace spent anything" and "the
+   * read failed" are opposite findings, and the rest of the board — read
+   * from a different collection — is still good.
+   */
+  failed: boolean
+}
+
+/**
+ * The month's per-org spend, refusals and plan, dearest first.
+ *
+ * Plan and add-on come from the org and billing documents of the ranked
+ * rows only — bounded by `limit`, never by the fleet — merged org-doc-first
+ * exactly as every other staff reader merges them.
+ */
+async function readAssistSpendLeaderboard(
+  firestore: FirebaseFirestore.Firestore,
+  limit: number,
+  month: string,
+): Promise<AssistSpendLeaderboard> {
+  try {
+    return await rankAssistSpendForMonth(firestore, limit, month)
+  } catch (error) {
+    console.error('[admin/assist-signals] spend leaderboard read failed', error)
+    return { month, rows: [], ranked: 0, truncated: false, failed: true }
+  }
+}
+
+async function rankAssistSpendForMonth(
+  firestore: FirebaseFirestore.Firestore,
+  limit: number,
+  month: string,
+): Promise<AssistSpendLeaderboard> {
+  const snapshot = await firestore
+    .collectionGroup('assistUsage')
+    .limit(SPEND_SCAN_CEILING + 1)
+    .get()
+  const truncated = snapshot.size > SPEND_SCAN_CEILING
+  const docs = truncated ? snapshot.docs.slice(0, SPEND_SCAN_CEILING) : snapshot.docs
+  const unranked: AssistSpendRow[] = []
+  for (const doc of docs) {
+    // The id IS the month; the field is the same value and is what an
+    // older document may lack.
+    if (doc.id !== month && doc.get('month') !== month) continue
+    const orgId = doc.ref.parent.parent?.id
+    if (!orgId) continue
+    const cost = Number(doc.get('estCostUsd') ?? 0)
+    const estCostUsd = Number.isFinite(cost) && cost > 0 ? cost : 0
+    unranked.push({
+      orgId,
+      plan: 'free',
+      aiAddon: false,
+      credits: assistCreditsFromUsd(estCostUsd),
+      estCostUsd,
+      refusals: assistRefusalCounts(doc.get('refusals')),
+    })
+  }
+  const { rows, ranked } = rankAssistSpend(unranked, limit)
+  if (rows.length) {
+    const orgRefs = rows.map((row) => firestore.collection('orgs').doc(row.orgId))
+    const [orgSnaps, billingSnaps] = await Promise.all([
+      firestore.getAll(...orgRefs),
+      firestore.getAll(
+        ...orgRefs.map((ref) =>
+          ref.collection(ORG_BILLING_SUBCOLLECTION).doc(ORG_BILLING_DOC_ID),
+        ),
+      ),
+    ])
+    rows.forEach((row, index) => {
+      const orgData = orgSnaps[index]?.exists ? (orgSnaps[index].data() ?? {}) : {}
+      const org = {
+        ...orgData,
+        ...(billingSnaps[index]?.exists ? billingSnaps[index].data() : {}),
+      }
+      row.plan = resolveEffectivePlan(org as never)
+      row.aiAddon = hasAiAddon(org as never)
+      const label = (orgData['name'] ?? orgData['slug'] ?? '') as string
+      row.orgLabel = label || null
+    })
+  }
+  return { month, rows, ranked, truncated, failed: false }
+}
 
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -124,6 +242,15 @@ async function handler(request: Request): Promise<Response> {
     )
 
     const report = mineAssistSignals(rows, { truncated, limit })
+
+    // This month's spend, per workspace (AGL-2930) — the board's only
+    // month-scoped panel, read off the month documents rather than mined
+    // from the all-time signals above.
+    const spend = await readAssistSpendLeaderboard(
+      firebaseAdmin.app().firestore(),
+      limit,
+      assistUsageMonth(),
+    )
 
     /*==========================================
      * THE VERBATIM HALF (AGL-2314).
@@ -233,14 +360,28 @@ async function handler(request: Request): Promise<Response> {
     const orgLabel = (orgId: string): string =>
       orgLabelById.get(orgId) ?? orgId
 
+    // Today's free-tier spend against the platform ceiling (AGL-2925): one
+    // document read, and the only place staff can see the taste switching
+    // itself off before the email arrives. Best-effort — a readout that
+    // cannot be read must not take the rest of the board down with it.
+    const freeSpend = await readPlatformFreeSpend(
+      firestore,
+      assistUsageDay(),
+    ).catch((error) => {
+      console.error('[admin/assist-signals] free spend readout failed', error)
+      return undefined
+    })
+
     return Response.json(
       {
         ...report,
+        freeSpend,
         orgs: report.orgs.map((row) => ({
           ...row,
           orgLabel: orgLabel(row.orgId),
         })),
         prose: prose.map((row) => ({ ...row, orgLabel: orgLabel(row.orgId) })),
+        spend,
         ceiling: SCAN_CEILING,
       },
       { status: 200 },

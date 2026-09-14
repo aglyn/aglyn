@@ -141,6 +141,19 @@ describe('AGL-1535 · the org jump honours the intent that survived verification
     ).toBe(true)
   })
 
+  it('replays the Aglyn AI add-on with the plan (AGL-2897)', async () => {
+    mockStoredUserDoc = {
+      onboardingPlanIntent: {
+        query: 'plan=pro&interval=month&ai=1',
+        createdAtMs: Date.now(),
+      },
+    }
+    await jump()
+    // The billing page posts `aiAddon: true` to checkout off this flag; a
+    // replay that dropped it would quote and sell the plan alone.
+    expect(mockReplace).toHaveBeenCalledWith('/acme/billing?plan=pro&interval=month&ai=1')
+  })
+
   it('jumps to the sites when nothing was remembered', async () => {
     await jump()
     expect(mockReplace).toHaveBeenCalledWith('/acme/hosts')

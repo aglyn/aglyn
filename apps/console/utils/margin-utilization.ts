@@ -22,9 +22,11 @@
 import type { AglynOrgBilling, OrgPlan } from '@aglyn/aglyn/foundation'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
+  hasAiAddon,
   INFRA_COGS_PER_SITE_USD,
   MARGIN_SCOPE_NOTE,
   netMarginRating,
+  PLAN_PRICING,
   orgListPriceMonthlyUsd,
   orgMonthlyCogsUsd,
   orgMonthlyRevenueUsd,
@@ -187,6 +189,16 @@ export interface OrgMarginRow {
   /** MRR net of Stripe's processing fee — the base the margin is taken on. */
   netRevenueUsd: number
   /**
+   * The AI add-on's share of `listPriceUsd` (AGL-2930) — already INSIDE
+   * `listPriceUsd`, `mrrUsd` and `netRevenueUsd`, because
+   * `orgListPriceMonthlyUsd` folds every purchased add-on. Named here so the
+   * surface can show that the assist band's cost has revenue against it
+   * rather than reading as pure margin drag; adding it again would count it
+   * twice. 0 on a custom-priced deal, whose quote already folds the add-on
+   * into one negotiated figure.
+   */
+  aiAddonRevenueUsd: number
+  /**
    * `(net revenue − COGS) / net revenue`, the same arithmetic
    * `checkDiscountMargin` rates a discount on. See `MARGIN_SCOPE_NOTE`: it is
    * a contribution margin, not a profit.
@@ -334,6 +346,18 @@ export function orgMarginRow(input: OrgMarginInput): OrgMarginRow {
   const listPriceUsd = orgListPriceMonthlyUsd(org)
   const mrrUsd = orgMonthlyRevenueUsd(org)
   const netRevenueUsd = orgNetMonthlyRevenueUsd(org)
+  // Only when the org bills something at all — `listPriceUsd` is 0 for a
+  // comped or lapsed org whatever its `seatAddons` say, and the add-on's
+  // share of nothing is nothing. `hasAiAddon` already drops a dead
+  // subscription's add-on; the list-price check catches the comped one.
+  const plan = resolveEffectivePlan(org)
+  const customPriced =
+    typeof org?.subscription?.customMonthlyUsd === 'number' &&
+    org.subscription.customMonthlyUsd > 0
+  const aiAddonRevenueUsd =
+    listPriceUsd > 0 && !customPriced && hasAiAddon(org)
+      ? finite(PLAN_PRICING[plan]?.aiAddonMonthlyUsd)
+      : 0
   // A margin needs revenue to be a fraction OF. Free and comped orgs have
   // none, and inventing one for them fills the top of a worst-first list with
   // customers who were never billed.
@@ -345,13 +369,14 @@ export function orgMarginRow(input: OrgMarginInput): OrgMarginRow {
   return {
     orgId: input.orgId,
     name: input.name ?? null,
-    plan: resolveEffectivePlan(org),
+    plan,
     month: input.month ?? null,
     bands,
     cogs,
     listPriceUsd,
     mrrUsd,
     netRevenueUsd,
+    aiAddonRevenueUsd,
     marginPct,
     rating: marginPct === null ? null : netMarginRating(marginPct),
   }
@@ -409,6 +434,8 @@ export interface FleetUtilization {
   /** Total measured COGS and net revenue across the fold, in USD. */
   totalCogsUsd: number
   totalNetRevenueUsd: number
+  /** Of `totalNetRevenueUsd`'s gross, how much the AI add-on brought in. */
+  totalAiAddonRevenueUsd: number
 }
 
 /**
@@ -478,6 +505,10 @@ export function fleetUtilization(rows: readonly OrgMarginRow[]): FleetUtilizatio
     totalCogsUsd: Math.round(rows.reduce((sum, row) => sum + row.cogs.cogsUsd, 0) * 100) / 100,
     totalNetRevenueUsd:
       Math.round(rows.reduce((sum, row) => sum + row.netRevenueUsd, 0) * 100) / 100,
+    totalAiAddonRevenueUsd:
+      Math.round(
+        rows.reduce((sum, row) => sum + (row.aiAddonRevenueUsd ?? 0), 0) * 100,
+      ) / 100,
   }
 }
 

@@ -116,54 +116,157 @@ export function resetFirestoreServerReadEvidence(): void {
 }
 
 /**
- * Cadence for a refusal streak that has outlived the retry budget (AGL-1066),
- * split by what the refusal is evidence OF (AGL-1440).
+ * Cadence for a refusal streak that has outlived the retry budget (AGL-1066).
  *
  * A `permission-denied` has two very different causes and the client cannot
  * tell them apart from the error alone:
  *
  *  - a SESSION fault — stale token, App Check hiccup, an AGL-1143 SSO
  *    session that refuses everything. Every listener in the tab is refused,
- *    the heal is an AGL-664 in-place re-auth or a token that attaches late,
- *    and reopening every 2s is what brings the page back for a recovery
- *    nobody announced. The ceiling on this cadence is the 38 AGL-1358 write
- *    guards: it is also how long a save stays refused AFTER the heal.
+ *    and the heal is an AGL-664 in-place re-auth or a token that attaches
+ *    late. A young fault usually heals within seconds, so it starts at 2s.
  *
  *  - a RULES denial — the ref itself is one this user may never read (a
- *    sentinel id, a scoped collaborator's off-limits collection). No amount
- *    of retrying will ever succeed, and one such listener left open cost
- *    ~43K refusals a day (AGL-1440: 366K denies in 30 days for two users,
- *    nearly all of them this loop re-asking a settled question).
+ *    sentinel id, a scoped collaborator's off-limits collection). Only a
+ *    rules change (a membership granted mid-session) can end it, so it
+ *    starts at 60s (AGL-1440).
  *
  * The discriminator is the one this module already trusts for the
  * session-health verdict: A GENUINELY DEAD SESSION HAS NO SERVER ANSWER TO
  * OFFER. If any listener has been answered by the server since this
  * listener's streak began, the session can read and this refusal is about
- * the ref — so it backs off to a slow cadence. Absent that proof it keeps
- * the 2s heal cadence, which is the conservative direction: the worst
- * mistake is a rules-denied listener retrying fast, never a session fault
- * retrying slow.
+ * the ref.
  *
- * The slow cadence deliberately does not abandon the listen: rules change
- * (a membership granted mid-session), and the AGL-664 heal broadcast still
- * reopens instantly regardless of cadence. And it cannot delay a save — a
- * ref the rules refuse to serve is one they refuse to write, so there is no
- * AGL-1358 guard waiting on it.
+ * Either way the delay then grows with the streak's age — a tenth of it, up
+ * to five minutes (AGL-2945). A refusal that has lasted ten minutes is
+ * unlikely to end in the next two seconds, and refused listens are not free:
+ * they bill reads (AGL-2944), so a fixed cadence made every console left open
+ * on a dead session a standing cost of 1,800 refusals an hour per listener.
+ * Per listener a session fault now costs ~70 in its first hour and 12 an hour
+ * after; a rules denial ~35, then 12. The listen is never abandoned.
+ *
+ * What the fast fixed cadence used to protect is kept as WAKES rather than as
+ * a timer — see {@link scheduleRefusedReopen}. The AGL-664 heal broadcast, the
+ * tab becoming visible and the window regaining focus all reopen at once, so
+ * the slow road only governs a page nobody is touching. The AGL-1358 write
+ * guards wait on a save someone clicks, which puts someone at the page.
  */
 export const SESSION_REFUSED_RETRY_DELAY_MS = 2_000
 export const RULES_REFUSED_RETRY_DELAY_MS = 60_000
+/** The longest a refused listen ever waits for its next reopen. */
+export const REFUSED_RETRY_CEILING_MS = 5 * 60_000
+/** The delay is the streak's age divided by this, between floor and ceiling. */
+const REFUSED_RETRY_AGE_DIVISOR = 10
 
 /**
  * The delay before a spent refusal streak reopens its listen.
  *
  * `streakStartedAt` is when the streak's FIRST refusal landed. Evaluated per
  * retry, not once: evidence that arrives mid-streak (another listener's
- * first server answer) moves the next reopen to the slow cadence.
+ * first server answer) raises the floor from the next reopen on, and the age
+ * term keeps growing for as long as the streak lasts.
  */
 export function refusedRetryDelayMs(streakStartedAt: number): number {
-  return lastServerReadAt > streakStartedAt
-    ? RULES_REFUSED_RETRY_DELAY_MS
-    : SESSION_REFUSED_RETRY_DELAY_MS
+  const floor =
+    lastServerReadAt > streakStartedAt
+      ? RULES_REFUSED_RETRY_DELAY_MS
+      : SESSION_REFUSED_RETRY_DELAY_MS
+  // A backwards clock reads as a young streak, never as a negative age.
+  const age = Math.max(0, Date.now() - streakStartedAt)
+  return Math.min(
+    REFUSED_RETRY_CEILING_MS,
+    Math.max(floor, age / REFUSED_RETRY_AGE_DIVISOR),
+  )
+}
+
+/** No `document` (SSR, a worker) counts as visible: nothing to wait for. */
+function tabIsHidden(): boolean {
+  return (
+    typeof document !== 'undefined' && document.visibilityState === 'hidden'
+  )
+}
+
+/**
+ * Schedule the reopen of a spent refusal streak, and return its cancel.
+ *
+ * In a visible tab the reopen waits {@link refusedRetryDelayMs}. A HIDDEN tab
+ * sets no timer at all: nobody is there to heal for, and an unattended tab on
+ * a dead session was the Aug 20 – Sep 4 storm — 400K–1.7M rules denials a day
+ * in ~8-hour blocks, ~$2 of reads the `read_ops_count` metric never showed
+ * (AGL-2944). A tab that goes hidden while a reopen is pending drops its
+ * timer and waits the same way.
+ *
+ * A person arriving reopens at once, whatever the cadence: the tab becoming
+ * visible or the window regaining focus. (The heal broadcast is the third
+ * instant road; the hooks subscribe to it themselves.) Arrivals are held to
+ * one reopen no sooner than {@link SESSION_REFUSED_RETRY_DELAY_MS} after the
+ * refusal that scheduled this, so focus churn can never run the loop faster
+ * than the fixed cadence it replaced.
+ */
+export function scheduleRefusedReopen(
+  reopen: () => void,
+  streakStartedAt: number,
+): () => void {
+  const scheduledAt = Date.now()
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let dueAt = Number.POSITIVE_INFINITY
+  let settled = false
+
+  const disarm = () => {
+    if (timer !== null) clearTimeout(timer)
+    timer = null
+    dueAt = Number.POSITIVE_INFINITY
+  }
+
+  const fire = () => {
+    if (settled) return
+    cancel()
+    reopen()
+  }
+
+  /** Reopen no later than `atMs`; an earlier due time already set wins. */
+  const arm = (atMs: number) => {
+    if (settled || atMs >= dueAt) return
+    if (atMs <= Date.now()) {
+      fire()
+      return
+    }
+    if (timer !== null) clearTimeout(timer)
+    dueAt = atMs
+    timer = setTimeout(fire, atMs - Date.now())
+  }
+
+  const onArrival = () => {
+    if (tabIsHidden()) return
+    arm(scheduledAt + SESSION_REFUSED_RETRY_DELAY_MS)
+  }
+
+  // `visibilitychange` fires on the way INTO hidden as well as out of it.
+  const onVisibilityChange = () => {
+    if (tabIsHidden()) disarm()
+    else onArrival()
+  }
+
+  const cancel = () => {
+    settled = true
+    disarm()
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', onArrival)
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibilityChange)
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', onArrival)
+  }
+  if (!tabIsHidden()) arm(scheduledAt + refusedRetryDelayMs(streakStartedAt))
+
+  return cancel
 }
 
 /**

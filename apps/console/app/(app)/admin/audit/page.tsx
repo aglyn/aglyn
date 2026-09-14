@@ -17,6 +17,10 @@
 'use client'
 
 import { orgOverrideReasonSummary } from '@aglyn/aglyn'
+import {
+  pluginStaffAuditActionGroup as staffAuditActionGroup,
+  pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -396,11 +400,41 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     [entryDocs],
   )
   const [scope, setScope] = useState('')
-  /** The page, narrowed by the two page-scoped facets. */
+  /*==========================================
+   * THE ACTION FACET (AGL-2929), grouped.
+   *
+   * Roughly seventy distinct action strings write to this collection, so a
+   * facet over the raw values would be a seventy-entry menu. It offers the
+   * actions' NAMESPACES instead — `billing`, `org`, `plugins` — and files
+   * every AI row under one `AI` group, whatever its literal prefix: the
+   * customer's overage controls write `billing.assistOverage.*`, the
+   * free-spend pause writes `platform.aiFreeSpend.*`, and the catalog's own
+   * `ai.*` codes join them. "What did we do about AI this week" is one
+   * question, and the grouping is the shared catalog's, so the feed's chip
+   * and this menu cannot disagree about what counts.
+   *
+   * Derived from the page in view, like the scope facet and for the same
+   * reason: a fixed vocabulary offers groups that match nothing.
+   *=========================================*/
+  const actionGroups = useMemo(
+    () =>
+      [
+        ...new Set(
+          (entryDocs ?? [])
+            .map((entry: any) => staffAuditActionGroup(entry.action))
+            .filter(Boolean),
+        ),
+      ].sort(),
+    [entryDocs],
+  )
+  const [actionGroup, setActionGroup] = useState('')
+  /** The page, narrowed by the three page-scoped facets. */
   const entries = useMemo(() => {
     const term = filter.trim().toLowerCase()
     const all = (entryDocs ?? []).filter(
-      (entry: any) => !scope || entry.scope === scope,
+      (entry: any) =>
+        (!scope || entry.scope === scope) &&
+        (!actionGroup || staffAuditActionGroup(entry.action) === actionGroup),
     )
     if (!term) return all
     // The reason and its note are searchable too (AGL-1652) — "why did we
@@ -426,7 +460,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         .toLowerCase()
         .includes(term),
     )
-  }, [entryDocs, filter, scope])
+  }, [entryDocs, filter, scope, actionGroup])
 
   const [expanded, setExpanded] = useState<string | null>(null)
 
@@ -599,6 +633,23 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                   An always-present select whose only option is "All scopes"
                   advertises a facet that answers nothing.
                 */}
+                {actionGroups.length > 1 ? (
+                  <TextField
+                    select
+                    size="small"
+                    label="Action"
+                    value={actionGroup}
+                    onChange={(event) => setActionGroup(event.target.value)}
+                    sx={{ width: 170 }}
+                  >
+                    <MenuItem value="">{'All actions'}</MenuItem>
+                    {actionGroups.map((option: string) => (
+                      <MenuItem key={option} value={option}>
+                        {staffAuditActionGroupLabel(option)}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : null}
                 {scopes.length > 0 ? (
                   <TextField
                     select

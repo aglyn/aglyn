@@ -211,6 +211,14 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'rootId',
     'screenId',
     'layoutId',
+    // A screen version's values for its layouts' properties, beside the
+    // binding above (AGL-2893) — dropping them restores every page with its
+    // layout's defaults instead of what the page set.
+    'layoutPropValues',
+    // A layout version's declared properties (AGL-2893). The tenant reads them
+    // off the published version, so without them every `{{prop.*}}` in the
+    // restored layout renders raw.
+    'props',
     'hostId',
     'componentId',
     'pluginId',

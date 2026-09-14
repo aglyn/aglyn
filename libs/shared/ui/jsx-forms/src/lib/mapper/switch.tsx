@@ -35,13 +35,29 @@ import {
 } from '@mui/material'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
-import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
+import { useStoredFieldHasValue } from './stored-field-value'
+import FormFieldGrid, {
+  buildFieldClear,
+  type FormFieldGridProps,
+} from './form-field-grid'
 import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
 export interface SwitchProps extends BaseFieldProps {
   onText?: string
   offText?: string
+  /**
+   * Offer the reset-to-unset affordance (AGL-2486). A switch can only be on or
+   * off, so without it a field whose unset state means something — a page
+   * handing the choice back to its component's default — has no way back.
+   */
+  clearable?: boolean
+  /**
+   * The position shown while nothing is stored — the default a page falls
+   * back to. Without it an unset switch reads as off, which is wrong wherever
+   * the value that applies is on.
+   */
+  unsetChecked?: boolean
   FormFieldGridProps?: FormFieldGridProps
   FormControlProps?: FormControlProps
   FormGroupProps?: FormGroupProps
@@ -65,6 +81,8 @@ export const Switch = (props: SwitchProps) => {
     onText,
     offText,
     help,
+    clearable,
+    unsetChecked,
     FormFieldGridProps = {},
     FormControlProps = {},
     FormGroupProps = {},
@@ -84,9 +102,17 @@ export const Switch = (props: SwitchProps) => {
     ((meta.touched || validateOnMount) && meta.warning) ||
     helperText ||
     description
+  const hasValue = useStoredFieldHasValue(input.name)
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue,
+    locked: Boolean(isDisabled || isReadOnly),
+    onClear: () => input.onChange(undefined),
+  })
 
   return (
-    <FormFieldGrid help={help} {...FormFieldGridProps}>
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
       <FormControl
         required={isRequired}
         error={!!invalid}
@@ -99,6 +125,7 @@ export const Switch = (props: SwitchProps) => {
               <MuiSwitch
                 {...rest}
                 {...input}
+                checked={hasValue ? input.checked : Boolean(unsetChecked)}
                 disabled={isDisabled || isReadOnly}
                 onChange={({ target: { checked } }) => input.onChange(checked)}
                 {...SwitchProps}
@@ -106,7 +133,9 @@ export const Switch = (props: SwitchProps) => {
             }
             label={
               <FormLabel {...FormLabelProps}>
-                {input.checked ? onText || label : offText || label}
+                {(hasValue ? input.checked : unsetChecked)
+                  ? onText || label
+                  : offText || label}
               </FormLabel>
             }
             {...FormControlLabelProps}

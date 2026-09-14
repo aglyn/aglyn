@@ -101,6 +101,12 @@ async function handler(request: Request): Promise<Response> {
       // the projection drops makes the browser's cost SMALLER than the
       // server's, and smaller approves a discount.
       assistCostUsd: Number(doc.get('assistCostUsd') ?? 0),
+      // The credit view of that spend and the overage that entered
+      // `billedCents` (AGL-2930). NULL, not zero, on a rollup written before
+      // `report-usage` recorded credits: "drew nothing" and "was not measured
+      // in credits" are the AGL-2321 distinction one meter along.
+      assistCredits: nullableNumber(doc.get('assistCredits')),
+      assistOverageUsd: nullableNumber(doc.get('assistOverageUsd')),
       // THE RECORDED-NOT-PRICED HALF (AGL-2321). `report-usage` writes these
       // and argues, correctly, that inventing a per-email or per-run rate
       // would put a made-up number into `billedCents` on the same day the

@@ -3,7 +3,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/tenant/data/admin/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:tenancy"],
+  "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:tenancy", "scope:tenant", "type:data"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",

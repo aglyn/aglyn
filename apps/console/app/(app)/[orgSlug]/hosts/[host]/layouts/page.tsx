@@ -30,6 +30,7 @@ import {
 } from '@aglyn/shared-data-enums'
 import {
   mdiBookmarkOutline,
+  mdiContentCopy,
   mdiPageLayoutBody,
   mdiStorefrontOutline,
   mdiEyeOutline,
@@ -65,6 +66,8 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
 import {
+  DUPLICATE_MENU_LABEL,
+  useDuplicateResource,
   useFirestore,
   useHostResourceApi,
   useHostVersionApi,
@@ -156,8 +159,9 @@ function Layouts(props) {
         const nodes = decodeStoredNodes(snapshot.get('nodes'))
         // The LayoutSlot node rides along inside `nodes` — it marks where a
         // bound screen grafts in, so a layout template without it would be
-        // chrome with nowhere to put the page.
-        return nodes ? { nodes } : null
+        // chrome with nowhere to put the page. The version's properties ride
+        // with it too (AGL-2932): the tree binds to them.
+        return nodes ? { nodes, props: snapshot.get('props') } : null
       },
     }),
     [firestore, hostId],
@@ -220,6 +224,16 @@ function Layouts(props) {
   const layoutsUsed = liveLayoutCount ?? layouts.length
   const layoutQuota = checkOrgQuota(org, 'sharedLayoutsPerHost', layoutsUsed)
   const { enqueueSnackbar } = useSnackbar()
+  // Duplicate (AGL-2936): the copy has its first version but no screen
+  // binds to it, so the site renders exactly what it did before.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}”`, {
+        variant: 'success',
+        persist: false,
+      }),
+  })
 
   const [error, setError] = useState(null)
 
@@ -494,6 +508,16 @@ function Layouts(props) {
               }),
             },
             {
+              key: 'duplicate',
+              label: DUPLICATE_MENU_LABEL,
+              icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+              onClick: () =>
+                duplicate.request('layout', {
+                  id: layoutId,
+                  name: row.displayName ?? '',
+                }),
+            },
+            {
               key: 'save-template',
               label: 'Save as template',
               icon: <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />,
@@ -535,6 +559,7 @@ function Layouts(props) {
 
   return (
     <>
+      {duplicate.dialog}
       <DashboardLayout
         breadcrumbItems={[
           {

@@ -1,0 +1,143 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { AiJob, AiJobOutput } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+import { runAiRequest, type AiSystemBlock } from './ai-runtime'
+import type { AssistTokenUsage } from './assist-usage'
+
+/**
+ * The `text` step (AGL-2904): a brief in, a short piece of copy out.
+ *
+ * The one step kind this issue ships for real, so the state machine — the
+ * lease, the reservation, the record, the beat — is exercised end to end by
+ * something that spends tokens, rather than by a stub that could pass with
+ * the meter unplugged. Every other kind refuses until its own issue lands.
+ *
+ * Sonnet 5 with adaptive thinking: a brief is open-ended in a way the copy
+ * assistant's element mode is not, and the cost is one call per job. The
+ * static system block is cached; the brief rides in the user turn, so no
+ * per-org byte sits inside the cached prefix (AGL-2352, enforced by the
+ * runtime before the request leaves).
+ */
+
+export const AI_JOB_TEXT_MODEL = 'claude-sonnet-5'
+
+/** Enough for a few paragraphs; a brief asking for more gets a draft to extend. */
+export const AI_JOB_TEXT_MAX_TOKENS = 1024
+
+/** How much of a brief is sent. Past this a brief is a document, not a brief. */
+export const AI_JOB_BRIEF_MAX_CHARS = 4_000
+
+/**
+ * What a step hands back to the machine. The machine meters `usage` at
+ * `model`'s rates, records the step and appends the outputs; a step never
+ * touches the job document or the meter itself.
+ */
+export interface AiJobStepOutcome {
+  outputs: AiJobOutput[]
+  usage: AssistTokenUsage
+  estCostUsd: number
+  model: string
+  stopReason: string | null
+  /** The model declined the brief (`stop_reason: 'refusal'`). Tokens were spent. */
+  refused?: boolean
+}
+
+export interface AiJobStepContext {
+  job: AiJob
+  stepIndex: number
+  now: Date
+  /** Aborts the provider call when the runner's budget ends. */
+  signal?: AbortSignal
+}
+
+export type AiJobStepRunner = (
+  context: AiJobStepContext,
+) => Promise<AiJobStepOutcome>
+
+/**
+ * The static block, byte-identical on every request so it caches. The
+ * customer's brief and the org's inputs never enter it.
+ */
+export const AI_JOB_TEXT_SYSTEM: AiSystemBlock[] = [
+  {
+    text:
+      'You write short, publishable copy for a website builder. You are ' +
+      'given a brief from the person who owns the site. Answer with the ' +
+      'copy only: no preamble, no headings unless the brief asks for them, ' +
+      'no closing remarks, no markdown fences. Keep to the length the brief ' +
+      'implies; when it implies none, write under 150 words. Write in the ' +
+      'language of the brief. Never invent facts, prices, names or claims ' +
+      'the brief did not give you; where a detail is missing, leave a ' +
+      'clearly marked placeholder in square brackets.',
+    cacheBreakpoint: true,
+  },
+]
+
+/** The brief as the user turn, with the kind-specific inputs stated plainly. */
+export function aiJobTextPrompt(job: Pick<AiJob, 'brief' | 'inputs'>): string {
+  const brief = job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)
+  const tone = typeof job.inputs?.['tone'] === 'string' ? job.inputs['tone'] : ''
+  const audience =
+    typeof job.inputs?.['audience'] === 'string' ? job.inputs['audience'] : ''
+  const lines = [`Brief: ${brief}`]
+  if (tone) lines.push(`Tone: ${tone}`)
+  if (audience) lines.push(`Audience: ${audience}`)
+  return lines.join('\n')
+}
+
+export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal }) => {
+  const result = await runAiRequest({
+    model: AI_JOB_TEXT_MODEL,
+    system: AI_JOB_TEXT_SYSTEM,
+    messages: [{ role: 'user', content: aiJobTextPrompt(job) }],
+    maxTokens: AI_JOB_TEXT_MAX_TOKENS,
+    thinking: 'adaptive',
+    stream: false,
+    ...(signal ? { signal } : {}),
+  })
+  if (result.kind === 'refusal') {
+    return {
+      outputs: [],
+      usage: result.usage,
+      estCostUsd: result.estCostUsd,
+      model: AI_JOB_TEXT_MODEL,
+      stopReason: result.stopReason,
+      refused: true,
+    }
+  }
+  const text = result.text.trim()
+  return {
+    outputs: text
+      ? [
+          {
+            resource: 'text',
+            // A text output has no document of its own; the id names the
+            // step within the job so a later step can address it.
+            id: 'draft',
+            hostId: job.hostId ?? null,
+            label: 'Draft copy',
+            text,
+          },
+        ]
+      : [],
+    usage: result.usage,
+    estCostUsd: result.estCostUsd,
+    model: AI_JOB_TEXT_MODEL,
+    stopReason: result.stopReason,
+  }
+}

@@ -113,6 +113,24 @@ Nothing here guarantees that a price or feature set will remain the same.
   up as an overage on the usage rollup rather than as mail your customers never receive.
 - Usage is rolled up with a **cost-plus estimate** for metered features.
 
+### Who is generating what {#who-is-generating-what}
+
+Beneath the meters on **Billing → Usage**, a table lists each member's AI credits for
+a month — their **share of the workspace's spend**, requests, and how often the
+assistant refused them — dearest first, with the kinds of request they mostly made.
+The month picker walks the last thirteen months; **Export CSV** hands the same month
+to a spreadsheet, and the console refuses to save a file that arrived short.
+
+Open a member from the table for their page, which splits the figure **by site and by
+kind** for this month and last — so an agency or a multi-brand workspace can see which
+client site's people are generating what. The organization **Team** page carries the
+same month's credits as a sortable column, and each site's **Users** card shows what
+its collaborators drew on that site alone.
+
+The table requires the **View billing** permission. It names who drew from the pool and
+how much; it makes no judgment about it, and it never shows a dollar figure — the
+share is of the workspace's own credits.
+
 ## Storage overage
 
 Each site includes a fixed amount of storage. On a paid plan, going past it is **not** a
@@ -154,8 +172,10 @@ of your allowance mean nobody first learns about overage from an invoice. The op
 ## AI assist overage {#assist-overage}
 
 Paid plans include a monthly band of **AI assist credits** — the **Aglyn Assist credits**
-meter on the billing page shows how much of it this month's assistant use has drawn. On a
-plan that sells credits past the band, reaching it is not a wall:
+meter on the billing page shows how much of it this month's assistant use has drawn. The
+[Aglyn AI add-on](add-ons.md#aglyn-ai) widens that band and opens generative building;
+it is one pool, so everything below applies to the widened band as a whole. On a plan
+that sells credits past the band, reaching it is not a wall:
 
 - **The assistant keeps answering.** Nothing stops because you reached your included
   credits.
@@ -173,11 +193,56 @@ lives — and you are never billed for AI assist. Turn it off at any time to kee
 your plan's rate; either change takes effect on the next message. Changing it needs the
 **Manage billing** permission.
 
+### If you would rather it kept going, up to a figure you choose {#ai-overage-ceiling}
+
+With the switch off, the same card offers a **monthly ceiling** on the extra credits you
+will pay for: **Stop AI when this month's overage reaches** a dollar figure you type.
+Once the month's overage — the extra credits priced at your plan's rate, exactly as the
+invoice would price them — reaches that figure, the assistant stops for the rest of the
+month, and the refusal names the ceiling and where to raise or remove it. It resets with
+the month.
+
+The ceiling and the switch are separate controls. The switch decides whether anything
+past the band is sold at all; the ceiling bounds how much. With the switch on the
+ceiling is never reached, because nothing past the band is sold. Setting, changing or
+removing the ceiling needs the **Manage billing** permission, and a ceiling is never
+applied unless you set one.
+
 :::info Plans that sell no overage
-Free and Starter include no AI assist credits, so there is nothing to stop at. Enterprise
-credits are set by agreement and are never billed past the band, so the assistant stops
-there on its own and the switch is not offered.
+Starter includes no AI assist credits by default, so there is nothing to stop at — with
+the [Aglyn AI add-on](add-ons.md#aglyn-ai) it has the add-on's band, sells credits past
+it at Pro's rate, and gets the switch and the ceiling like Pro. A workspace on a plan
+that sells no credits past its band — Enterprise, whose credits are set by agreement, or
+a Free workspace — stops at the band on its own: the assistant refuses there until next
+month or an upgrade, and **nothing is ever billed** for AI assist. Neither the switch
+nor the ceiling is offered, because neither would change anything.
 :::
+
+### Free workspaces {#free-ai-credits}
+
+Every Free workspace includes **300 AI credits a month** — enough to generate a first
+page or a few sections and see what the assistant does. The band is a hard stop: when it
+is used, AI generation pauses until next month or an upgrade, and **nothing is ever
+billed**. There is no overage on Free, so there is no switch or ceiling to set.
+
+The 300 credits are yours as a person, not per workspace: if you own more than one Free
+workspace, they share the allowance, and the meter on each workspace's billing page shows
+that workspace's share of it. Members you invite to a Free workspace draw on that
+workspace's credits, not on their own account. A few other limits apply only to Free
+workspaces and only to AI generation — a short wait after an account is created before it
+can generate, a daily cap on free requests, and a platform-wide daily limit on free
+generation that, when reached, pauses it for every Free workspace until the next day (UTC).
+Each one tells you what to do when it applies; none of them can produce a charge.
+
+### Alerts on the way there {#ai-credit-alerts}
+
+Workspace owners and admins are notified — in the console and by email — when the month's
+AI assist use passes **80%** of the included credits, and again at **100%**, once per
+threshold per month. The 100% notice says what happens next for your plan: on a plan
+that sells credits past the band, that the assistant keeps answering and the extra credits
+are metered at your plan's rate unless you set a stop; on a plan that sells none, that the
+assistant stops until next month or an upgrade. The same warning appears as a banner in
+the console, with a link to **Billing → Usage**.
 
 ## Usage budget
 
@@ -188,8 +253,8 @@ hear about — the same shape as a Google Cloud billing budget. Set it in
 - **It warns, it never limits.** Passing a budget sends a notification and an email.
   Nothing stops, no upload is refused, and your bill is unaffected. If you want usage to
   actually stop, that is the [storage cap](#storage-overage) or the
-  [AI assist stop](#assist-overage) above — different controls, deliberately kept
-  separate.
+  [AI assist stop and ceiling](#assist-overage) above — different controls, deliberately
+  kept separate.
 - **You choose the alert points.** The default is **50%, 90% and 100%**; you can set your
   own, including percentages above 100 so a runaway month keeps speaking. Up to six.
 - **One alert per percentage per month.** Crossing 50% tells you once, not once an hour.

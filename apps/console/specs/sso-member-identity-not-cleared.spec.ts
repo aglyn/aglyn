@@ -49,6 +49,9 @@ const mockResolveOrgMembership = jest.fn()
 const mockFindUserByUidAcrossPools = jest.fn()
 const mockUpsertOrgMember = jest.fn()
 const mockMemberExists = jest.fn()
+/** The org-axis AI verdict, read on either side of the write (AGL-2929). */
+const mockResolveMemberAiPermissionsOnOrg = jest.fn()
+const mockLogAiPermissionChanged = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -86,11 +89,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgDoc: async () => null,
   lockdownRefusal: async () => null,
   listOrgMembers: jest.fn(async () => []),
+  logAiPermissionChanged: (...a: unknown[]) => mockLogAiPermissionChanged(...a),
   logOrgActivity: jest.fn(),
   memberHasOrgPermission: jest.fn(async () => true),
   meterOrgEmail: jest.fn(),
   notifyUsers: jest.fn(),
   removeOrgMember: jest.fn(),
+  resolveMemberAiPermissionsOnOrg: (...a: unknown[]) =>
+    mockResolveMemberAiPermissionsOnOrg(...a),
   resolveOrgMembership: (...a: unknown[]) => mockResolveOrgMembership(...a),
   upsertOrgMember: (...a: unknown[]) => mockUpsertOrgMember(...a),
 }))
@@ -165,6 +171,10 @@ describe('POST /api/orgs/members upsert — SSO roster identity (AGL-1961)', () 
     // the only thing left to observe.
     mockMemberExists.mockReturnValue(true)
     mockFindUserByUidAcrossPools.mockResolvedValue({ record: SSO_AUTH_RECORD })
+    mockResolveMemberAiPermissionsOnOrg.mockResolvedValue({
+      'ai.use': true,
+      'ai.generate': true,
+    })
   })
 
   it('does not clear a name and photo the auth record simply lacks', async () => {
@@ -235,5 +245,65 @@ describe('POST /api/orgs/members upsert — SSO roster identity (AGL-1961)', () 
     expect(
       applyUpsert(SSO_ROSTER_ROW, { role: 'viewer', photoURL: null }),
     ).toMatchObject({ photoURL: null, displayName: 'Zach Gover' })
+  })
+})
+
+/**
+ * The same upsert is the per-member path for the AI keys (AGL-2929): a role
+ * or a custom-role assignment can move `ai.use` / `ai.generate` for one
+ * person, and the org feed records each key that moved, for that member.
+ */
+describe('POST /api/orgs/members upsert — an AI key that moved is an activity row (AGL-2929)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockVerifyIdToken.mockResolvedValue({ uid: 'actor', email_verified: true })
+    mockResolveOrgMembership.mockResolvedValue({ role: 'admin', member: {} })
+    mockUpsertOrgMember.mockResolvedValue(undefined)
+    mockMemberExists.mockReturnValue(true)
+    mockFindUserByUidAcrossPools.mockResolvedValue({ record: SSO_AUTH_RECORD })
+    mockResolveMemberAiPermissionsOnOrg.mockResolvedValue({
+      'ai.use': true,
+      'ai.generate': true,
+    })
+  })
+
+  it('compares the verdict read before and after the write, one row per key that moved', async () => {
+    mockResolveMemberAiPermissionsOnOrg
+      .mockResolvedValueOnce({ 'ai.use': true, 'ai.generate': true })
+      .mockResolvedValueOnce({ 'ai.use': true, 'ai.generate': false })
+    const response = await post({
+      action: 'upsert',
+      uid: SSO_AUTH_RECORD.uid,
+      role: 'editor',
+      roleId: 'role-no-generation',
+    })
+    expect(response.status).toBe(200)
+    // Resolved AFTER the write, never predicted from the body.
+    expect(mockResolveMemberAiPermissionsOnOrg).toHaveBeenCalledTimes(2)
+    expect(mockUpsertOrgMember.mock.invocationCallOrder[0]).toBeLessThan(
+      mockResolveMemberAiPermissionsOnOrg.mock.invocationCallOrder[1],
+    )
+    expect(mockLogAiPermissionChanged).toHaveBeenCalledTimes(1)
+    expect(mockLogAiPermissionChanged).toHaveBeenCalledWith(
+      'jWmGooWE3L',
+      { uid: 'actor', email: undefined },
+      {
+        subject: { type: 'member', id: SSO_AUTH_RECORD.uid, name: 'staff@aglyn.com' },
+        permission: 'ai.generate',
+        granted: false,
+      },
+    )
+  })
+
+  it('nothing when the verdict did not move, and no reads at all for a member added just now', async () => {
+    await post({ action: 'upsert', uid: SSO_AUTH_RECORD.uid, role: 'editor' })
+    expect(mockResolveMemberAiPermissionsOnOrg).toHaveBeenCalledTimes(2)
+    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
+
+    // A person added just now had no verdict to move; the add is its own row.
+    mockMemberExists.mockReturnValue(false)
+    await post({ action: 'upsert', uid: SSO_AUTH_RECORD.uid, role: 'editor' })
+    expect(mockResolveMemberAiPermissionsOnOrg).toHaveBeenCalledTimes(2)
+    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
   })
 })

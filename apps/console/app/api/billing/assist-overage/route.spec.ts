@@ -41,6 +41,20 @@ let mockStaff = false
 let mockPermissions = new Set<string>(['billing.manage'])
 /** Every `adminAudit` row the route added. */
 let mockAudit: Record<string, unknown>[] = []
+/** Every org activity row the route's AI writer handed `logOrgActivity` (AGL-2929). */
+let mockActivity: unknown[][] = []
+
+/**
+ * The REAL writer over a recording `logOrgActivity`, so the row asserted is
+ * the one the helper composes rather than the arguments a stub was handed.
+ */
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  logOrgActivity: async (...args: unknown[]) => {
+    mockActivity.push(args)
+  },
+  logHostActivity: async () => undefined,
+}))
 
 jest.mock('@aglyn/aglyn/server', () => {
   const entitlements = jest.requireActual(
@@ -63,6 +77,9 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/ai-activity',
+  ),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -167,6 +184,7 @@ beforeEach(() => {
   mockStaff = false
   mockPermissions = new Set(['billing.manage'])
   mockAudit = []
+  mockActivity = []
 })
 
 describe('who may throw the switch', () => {
@@ -241,10 +259,14 @@ describe('get — what the card reads', () => {
     const payload = await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()
     expect(payload).toEqual({
       hardCap: false,
+      capUsd: null,
       bandCredits: 2_750,
       overageRateUsdPer1k: 3,
       sellsOverage: true,
       label: 'Stop AI assist at the included band',
+      capLabel: 'Stop AI when this month’s overage reaches',
+      minCapUsd: 1,
+      maxCapUsd: 100_000,
     })
   })
 
@@ -260,10 +282,15 @@ describe('get — what the card reads', () => {
   })
 
   it('says a plan with no band, or no rate, sells no overage — so the card offers no switch', async () => {
-    mockDocs.set('orgs/org-1', org('free'))
+    // Starter: no band. Free: the 300-credit taste, and no rate (AGL-2925).
+    mockDocs.set('orgs/org-1', org('starter'))
     expect(
       await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
     ).toMatchObject({ bandCredits: null, overageRateUsdPer1k: null, sellsOverage: false })
+    mockDocs.set('orgs/org-1', org('free'))
+    expect(
+      await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
+    ).toMatchObject({ bandCredits: 300, overageRateUsdPer1k: null, sellsOverage: false })
     mockDocs.set('orgs/org-1', org('enterprise'))
     expect(
       await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
@@ -345,16 +372,22 @@ describe('setHardCap — the write', () => {
     expect(walled).toMatchObject({ code: 'not_sold' })
     expect(mockDocs.get('orgs/org-1')).toEqual(org('enterprise'))
 
+    mockDocs.set('orgs/org-1', org('starter'))
+    const starter = await POST(
+      post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }),
+    )
+    expect(starter.status).toBe(409)
+    const bandless = await starter.json()
+    // Two different sentences for two different facts: no band at all, or a
+    // band already walled. Free is the second since the taste (AGL-2925).
+    expect(String(bandless.error)).toMatch(/no AI assist credits/i)
+    expect(String(walled.error)).toMatch(/already stops AI assist/i)
     mockDocs.set('orgs/org-1', org('free'))
     const free = await POST(
       post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }),
     )
     expect(free.status).toBe(409)
-    const bandless = await free.json()
-    // Two different sentences for two different facts: no band at all, or a
-    // band already walled.
-    expect(String(bandless.error)).toMatch(/no AI assist credits/i)
-    expect(String(walled.error)).toMatch(/already stops AI assist/i)
+    expect(String((await free.json()).error)).toMatch(/already stops AI assist/i)
     expect(mockAudit).toEqual([])
   })
 
@@ -365,5 +398,183 @@ describe('setHardCap — the write', () => {
       before: { hardCap: true },
       after: { hardCap: false },
     })
+  })
+})
+
+describe('the customer sees who threw the switch (AGL-2929)', () => {
+  it('ON writes ai.overage.hardCap to the org feed, attributed to the caller', async () => {
+    mockDocs.set('orgs/org-1', org('pro'))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }))
+    expect(mockActivity).toEqual([
+      [
+        'org-1',
+        { uid: 'user-1', email: 'admin@example.com' },
+        'ai.overage.hardCap',
+        { type: 'org', name: 'On' },
+      ],
+    ])
+  })
+
+  it('OFF from ON writes Off; the same value again writes nothing', async () => {
+    mockDocs.set('orgs/org-1', org('pro', { hardCap: true }))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: false }))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: false }))
+    // The `adminAudit` row lands on both writes; the feed row only on the
+    // one that moved the switch.
+    expect(mockAudit).toHaveLength(2)
+    expect(mockActivity).toEqual([
+      ['org-1', expect.anything(), 'ai.overage.hardCap', { type: 'org', name: 'Off' }],
+    ])
+  })
+
+  it('a ceiling set, then cleared, writes ai.overage.cap twice with the figure and Cleared', async () => {
+    mockDocs.set('orgs/org-1', org('pro'))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 1250 }))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 1250 }))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: null }))
+    expect(mockActivity.map((row) => [row[2], row[3]])).toEqual([
+      ['ai.overage.cap', { type: 'org', name: '$1,250' }],
+      ['ai.overage.cap', { type: 'org', name: 'Cleared' }],
+    ])
+    expect(mockActivity[0][1]).toEqual({ uid: 'user-1', email: 'admin@example.com' })
+  })
+
+  it('a refused write leaves the feed alone', async () => {
+    mockDocs.set('orgs/org-1', org('enterprise'))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    mockPermissions = new Set(['billing.view'])
+    mockDocs.set('orgs/org-1', org('pro'))
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }))
+    expect(mockActivity).toEqual([])
+  })
+})
+
+describe('setCap — the ceiling on overage (AGL-2898)', () => {
+  it('stores a finite figure with who and when, and audits before → after', async () => {
+    // FORCED RED by writing `capUsd: String(raw)`: the resolver reads the
+    // field strictly, so the stored string resolved to no ceiling and the
+    // `get` below answered null.
+    mockDocs.set('orgs/org-1', org('pro'))
+    const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, capUsd: 25 })
+    expect(mockDocs.get('orgs/org-1')).toMatchObject({
+      assistOverage: { capUsd: 25, capSetAt: '__now__', capSetBy: 'user-1' },
+    })
+    expect(mockAudit).toEqual([
+      expect.objectContaining({
+        action: 'billing.assistOverage.setCap',
+        actorUid: 'user-1',
+        target: 'orgs/org-1',
+        before: { capUsd: null },
+        after: { capUsd: 25 },
+      }),
+    ])
+    const read = await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()
+    expect(read).toMatchObject({ capUsd: 25, hardCap: false })
+  })
+
+  it('leaves the switch alone, and the switch leaves the ceiling alone', async () => {
+    mockDocs.set('orgs/org-1', org('pro', { hardCap: true, hardCapSetBy: 'earlier' }))
+    await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(mockDocs.get('orgs/org-1')).toMatchObject({
+      assistOverage: { hardCap: true, hardCapSetBy: 'earlier', capUsd: 25 },
+    })
+    await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: false }))
+    expect(mockDocs.get('orgs/org-1')).toMatchObject({
+      assistOverage: { hardCap: false, capUsd: 25 },
+    })
+  })
+
+  it('null CLEARS — on any plan, from any state — and audits the clearing', async () => {
+    for (const plan of ['pro', 'agency', 'enterprise', 'free']) {
+      mockDocs.set('orgs/org-1', org(plan, { capUsd: 25 }))
+      const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: null }))
+      expect(`${plan}: ${response.status}`).toBe(`${plan}: 200`)
+      expect(mockDocs.get('orgs/org-1')).toMatchObject({
+        assistOverage: { capUsd: null, capSetBy: 'user-1' },
+      })
+    }
+    expect(mockAudit.at(-1)).toMatchObject({ before: { capUsd: 25 }, after: { capUsd: null } })
+  })
+
+  it('400 on anything but a finite number in range — nothing written, nothing audited', async () => {
+    mockDocs.set('orgs/org-1', org('pro'))
+    // No `NaN` in the list: `JSON.stringify` turns it into `null` before the
+    // route sees it, and `null` is the clearing request — a wire cannot carry
+    // NaN, so the route cannot be asked to refuse it.
+    for (const capUsd of ['25', 0, 0.5, -1, 100_001, true, undefined, {}]) {
+      const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd }))
+      expect(`${String(capUsd)}: ${response.status}`).toBe(`${String(capUsd)}: 400`)
+      await expect(response.json()).resolves.toMatchObject({ code: 'invalid_cap' })
+    }
+    // The bounds themselves are accepted.
+    for (const capUsd of [1, 100_000]) {
+      const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd }))
+      expect(`${capUsd}: ${response.status}`).toBe(`${capUsd}: 200`)
+    }
+    expect(mockAudit).toHaveLength(2)
+  })
+
+  it('409 setting one where the plan sells no overage — a ceiling on nothing reads as protection', async () => {
+    // FORCED RED by dropping the `!sellsOverage` refusal: Enterprise stored
+    // `capUsd: 25` and answered 200.
+    for (const plan of ['enterprise', 'free']) {
+      mockDocs.set('orgs/org-1', org(plan))
+      const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+      expect(`${plan}: ${response.status}`).toBe(`${plan}: 409`)
+      await expect(response.json()).resolves.toMatchObject({ code: 'not_sold' })
+      expect(mockDocs.get('orgs/org-1')).toEqual(org(plan))
+    }
+    expect(mockAudit).toEqual([])
+  })
+
+  it('403 without billing.manage — the same gate as the switch', async () => {
+    mockPermissions = new Set(['billing.view'])
+    mockDocs.set('orgs/org-1', org('pro'))
+    const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(response.status).toBe(403)
+    expect(mockDocs.get('orgs/org-1')).toEqual(org('pro'))
+  })
+
+  it('get reads a stored ceiling strictly: a string or junk is NO ceiling', async () => {
+    for (const capUsd of ['25', 0, -1, 'lots']) {
+      mockDocs.set('orgs/org-1', org('pro', { capUsd }))
+      const read = await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()
+      expect(read.capUsd).toBeNull()
+    }
+  })
+})
+
+describe('Free is a WALL, even when given a band (AGL-2898)', () => {
+  /** A Free org handed 300 credits through the entitlements override. */
+  const freeWithBand = () => ({
+    plan: 'free',
+    entitlements: { assistCreditsPerMonth: 300 },
+  })
+
+  it('get: a band, no rate, sells no overage — the card has nothing to stop', async () => {
+    mockDocs.set('orgs/org-1', freeWithBand())
+    const read = await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()
+    expect(read).toMatchObject({
+      hardCap: false,
+      capUsd: null,
+      bandCredits: 300,
+      overageRateUsdPer1k: null,
+      sellsOverage: false,
+    })
+  })
+
+  it('refuses both controls with 409, because neither would change anything', async () => {
+    mockDocs.set('orgs/org-1', freeWithBand())
+    const stop = await POST(post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }))
+    expect(stop.status).toBe(409)
+    await expect(stop.json()).resolves.toMatchObject({ code: 'not_sold' })
+    const ceiling = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(ceiling.status).toBe(409)
+    await expect(ceiling.json()).resolves.toMatchObject({ code: 'not_sold' })
+    expect(mockDocs.get('orgs/org-1')).toEqual(freeWithBand())
+    expect(mockAudit).toEqual([])
   })
 })

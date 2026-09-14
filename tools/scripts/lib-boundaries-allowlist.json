@@ -1,0 +1,35 @@
+{
+  "note": "Static project edges that break the package map in docs/PACKAGES.md, carried until each is worked off. Read by check-lib-boundaries.mjs (which is red for an edge missing here AND for a row the graph no longer has) and by eslint.config.mjs (which turns each row into an `allow` override scoped to the source project). This list may shrink and must never grow: a new cross-package edge is refused, not recorded. The fix for each edge is in docs/PACKAGES.md under 'Violations'.",
+  "edges": [
+    {
+      "from": "shared-util-email",
+      "to": "aglyn",
+      "why": "One spec reads the shipped price table so its ceiling assertions check real numbers; the import carries its own disable and no production file may repeat it.",
+      "enforcedInline": true
+    },
+    { "from": "plugins-bookings", "to": "plugins-commerce", "why": "The booking model reuses the commerce model types." },
+    { "from": "plugins-commerce", "to": "plugins-data", "why": "Storefront import/export reuses the dataset io helpers." },
+    { "from": "plugins-crm", "to": "plugins-bookings", "why": "A contact record shows its bookings through the bookings model." },
+    { "from": "plugins-crm", "to": "plugins-email", "why": "The contact record composes email through the email plugin's hooks." },
+    { "from": "plugins-crm", "to": "plugins-marketing", "why": "Conversion attribution and the campaign-send server path are imported from marketing." },
+    { "from": "plugins-email", "to": "plugins-mui", "why": "The email bundle reuses the MUI plugin's bundle-common constants." },
+    { "from": "plugins-forms", "to": "plugins-bookings", "why": "The form placement menu reads the bookings plugin entry." },
+    { "from": "plugins-forms", "to": "plugins-crm", "why": "Form submissions route to CRM through the CRM route table and contact field definitions." },
+    { "from": "plugins-forms", "to": "plugins-events-calendar", "why": "The form placement menu reads the events plugin entry." },
+    { "from": "plugins-forms", "to": "plugins-inbox", "why": "The forms hub embeds the inbox submissions card." },
+    { "from": "plugins-forms", "to": "plugins-mui", "why": "Form controls are the MUI plugin's components." },
+    { "from": "plugins-inbox", "to": "plugins-crm", "why": "Inbox rows link to CRM through its route table." },
+    { "from": "plugins-inbox", "to": "plugins-marketing", "why": "Inbox embeds marketing's conversion attribution and campaigns card." },
+    { "from": "plugins-marketing", "to": "plugins-commerce", "why": "Revenue attribution reads the commerce model." },
+    { "from": "plugins-marketing", "to": "plugins-email", "why": "Campaign composition reuses the email plugin's send and topic hooks." },
+    { "from": "plugins-marketplace", "to": "besigner-feature-designer", "why": "Marketplace listings preview through designer contexts." },
+    { "from": "plugins-marketplace", "to": "plugins-bookings", "why": "The marketplace lists other plugins by importing their entries." },
+    { "from": "plugins-marketplace", "to": "plugins-commerce", "why": "The marketplace lists other plugins by importing their entries." },
+    { "from": "plugins-marketplace", "to": "plugins-email", "why": "The marketplace lists other plugins by importing their entries." },
+    { "from": "plugins-marketplace", "to": "plugins-events-calendar", "why": "The marketplace lists other plugins by importing their entries." },
+    { "from": "plugins-marketplace", "to": "plugins-forms", "why": "The marketplace lists other plugins by importing their entries." },
+    { "from": "plugins-marketplace", "to": "plugins-mui", "why": "The marketplace lists other plugins by importing their entries." },
+    { "from": "plugins-mui", "to": "besigner-feature-designer", "why": "MUI elements render nested children through the designer's node leaf and contexts." },
+    { "from": "plugins-workflows", "to": "plugins-logic", "why": "Workflow steps evaluate conditions with the logic plugin." }
+  ]
+}

@@ -57,6 +57,10 @@ interface SeededOrg {
   usageAlerts?: Record<string, { month?: string; threshold?: number }>
   /** `orgs/{id}/members` — role + denormalized email. */
   members?: Array<{ id: string; role: string; email?: string }>
+  /** The org's own assist controls (AGL-2653 / AGL-2898). */
+  assistOverage?: { hardCap?: boolean; capUsd?: number | null }
+  /** Per-org entitlement overrides, as staff write them. */
+  entitlements?: Record<string, number>
 }
 
 let mockOrgs: SeededOrg[]
@@ -185,6 +189,8 @@ function fakeOrgDoc(org: SeededOrg) {
     slug: org.id,
     ...(org.usageBudget ? { usageBudget: org.usageBudget } : {}),
     ...(org.usageAlerts ? { usageAlerts: org.usageAlerts } : {}),
+    ...(org.assistOverage ? { assistOverage: org.assistOverage } : {}),
+    ...(org.entitlements ? { entitlements: org.entitlements } : {}),
   }
   return {
     id: org.id,
@@ -722,6 +728,10 @@ describe('the Assist margin alert reaches staff by EMAIL too (AGL-2234)', () => 
       seededOrg({
         assistEstCostUsd: 30,
         monthRollup: { month: MONTH, billedCents: 0 },
+        // $30 is 30,000 credits against Pro's 2,750, so the CUSTOMER'S own
+        // AI credits alert (AGL-2898) would fire too. Seeded as already
+        // announced this month, so these tests count the margin alert alone.
+        usageAlerts: { assistCredits: { month: MONTH, threshold: 100 } },
       }),
     ]
   }
@@ -890,11 +900,21 @@ describe('the Assist margin guard is staff-facing (AGL-1528)', () => {
     // the platform puts a dollar figure on Assist, whose only ceiling is a
     // 1,000-MESSAGE count.
     process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD = '25'
-    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 30 })]
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: 30,
+        // The customer's own AI credits alert (AGL-2898) is a separate
+        // announcement with its own guard; seeded as spoken so this counts
+        // the margin alert alone.
+        usageAlerts: { assistCredits: { month: MONTH, threshold: 100 } },
+      }),
+    ]
     await run()
     expect(mockStaffNotifications).toHaveLength(1)
     expect(mockStaffNotifications[0].title).toContain('$30.00')
-    // The CUSTOMER hears nothing: they are not being charged for it.
+    // The CUSTOMER hears nothing ABOUT OUR MARGIN: they are not being
+    // charged for it.
     expect(budgetAlerts()).toHaveLength(0)
     expect(mockEmails).toHaveLength(0)
   })
@@ -1046,5 +1066,168 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     } finally {
       delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
     }
+  })
+})
+
+/**
+ * The AI credits band alerts the CUSTOMER (AGL-2898).
+ *
+ * Everything above about Assist is staff-facing — our margin, our ceiling.
+ * This is the customer's own meter: the credits their plan sold them,
+ * measured through the one conversion the Billing meter uses, with the 80%
+ * and 100% thresholds every other quota has. What the 100% notice says
+ * depends on what the band IS for that org — a line credits are sold past,
+ * or a wall — and it is read from the same predicate the reservation
+ * refuses on, so the sentence and the behavior cannot drift.
+ */
+describe('the AI credits band alerts the customer (AGL-2898)', () => {
+  /** Pro: 2,750 credits a month. Spend is `estCostUsd`; 1,000 credits = $1. */
+  const credits = (n: number) => n / 1000
+  const assistAlerts = () =>
+    mockNotifications.filter((entry) => entry.title.includes('AI assist credits'))
+  const assistGuard = () => mockGuardWrites.at(-1)?.['assistCredits']
+
+  it('warns at 80% of the band, in credits, by bell AND mail', async () => {
+    // FORCED RED by leaving `assistCredits` out of the checks: no alert.
+    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: credits(2_338) })]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    expect(assistAlerts()[0].title).toContain("above 80% of your AI assist credits")
+    expect(assistGuard()).toEqual({ month: MONTH, threshold: 80 })
+    const mail = mockEmails.filter((entry) => entry.context === 'usage-alert')
+    expect(mail).toHaveLength(1)
+    expect(mail[0].subject).toBe(assistAlerts()[0].title)
+    expect(recipientsOf(mail[0])).toEqual(['owner@acme.test'])
+  })
+
+  it('stays silent under 80%', async () => {
+    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: credits(2_000) })]
+    await run()
+    expect(assistAlerts()).toHaveLength(0)
+    expect(assistGuard()).toBeUndefined()
+  })
+
+  it('at the band on a plan that SELLS past it: extra credits are metered unless a stop is set', async () => {
+    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: credits(3_000) })]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    const [alert] = assistAlerts()
+    expect(alert.title).toContain('extra credits are now billed')
+    expect(alert.body).toContain('3,000 of 2,750 credits used')
+    expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
+    expect(alert.body).toContain('unless you set a stop under Billing → Usage')
+    expect(alert.body).not.toContain('stops here until next month')
+    expect(assistGuard()).toEqual({ month: MONTH, threshold: 100 })
+    // The same words by mail.
+    const mail = mockEmails.filter((entry) => entry.context === 'usage-alert')
+    expect(mail[0].text).toContain(alert.body)
+  })
+
+  it('at the band with the org’s own switch on: AI stops, and the switch is named', async () => {
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: credits(3_000),
+        assistOverage: { hardCap: true },
+      }),
+    ]
+    await run()
+    const [alert] = assistAlerts()
+    expect(alert.title).toBe("You've used your included AI assist credits")
+    expect(alert.body).toContain('stops here until next month')
+    expect(alert.body).toContain('nothing past the band is ever billed')
+    expect(alert.body).toContain('"Stop AI assist at the included band"')
+    expect(alert.body).not.toContain('metered')
+  })
+
+  it('at the band on a plan with NO rate: AI stops until next month or an upgrade, no charge ever', async () => {
+    // A Free org handed 300 credits through the entitlements override, and
+    // Enterprise, whose band is contractual. Neither is offered a control,
+    // so neither is told about one.
+    for (const org of [
+      seededOrg({
+        plan: 'free',
+        rollup: null,
+        entitlements: { assistCreditsPerMonth: 300 },
+        assistEstCostUsd: credits(350),
+      }),
+      seededOrg({
+        plan: 'enterprise',
+        rollup: null,
+        entitlements: { assistCreditsPerMonth: 1_000 },
+        assistEstCostUsd: credits(1_200),
+      }),
+    ]) {
+      mockOrgs = [org]
+      await run()
+      expect(assistAlerts()).toHaveLength(1)
+      const [alert] = assistAlerts()
+      expect(`${org.plan}: ${alert.title}`).toBe(
+        `${org.plan}: You've used your included AI assist credits`,
+      )
+      expect(alert.body).toContain('stops here until next month')
+      expect(alert.body).toContain('Upgrade in Billing to add credits.')
+      expect(alert.body).not.toContain('metered')
+      expect(alert.body).not.toContain('Stop AI assist at the included band')
+      expect(assistGuard()).toEqual({ month: MONTH, threshold: 100 })
+    }
+  })
+
+  it('has NO band to alert on for a plan that sells none', async () => {
+    // Starter with no override: `resolveAssistCreditBudget` is null, the
+    // limit is 0 and the check is skipped like every other zero-quota
+    // dimension. (Free carries the taste since AGL-2925 and alerts on it,
+    // with the wall copy the Free-band case above exercises.)
+    mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: credits(900) })]
+    await run()
+    expect(assistAlerts()).toHaveLength(0)
+    expect(assistGuard()).toBeUndefined()
+  })
+
+  it('is deduped per threshold per month by its own guard key', async () => {
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: credits(3_000),
+        usageAlerts: { assistCredits: { month: MONTH, threshold: 100 } },
+      }),
+    ]
+    await run()
+    expect(assistAlerts()).toHaveLength(0)
+    // A guard from LAST month does not silence this month's crossing.
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: credits(3_000),
+        usageAlerts: { assistCredits: { month: LAST_MONTH, threshold: 100 } },
+      }),
+    ]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    // And 80% already spoken still lets 100% through.
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: credits(3_000),
+        usageAlerts: { assistCredits: { month: MONTH, threshold: 80 } },
+      }),
+    ]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    expect(assistGuard()).toEqual({ month: MONTH, threshold: 100 })
+  })
+
+  it('does not touch the staff-facing guards, and they do not touch it', async () => {
+    // $30 crosses the $25 margin threshold AND the band; both announce,
+    // to different audiences, under different keys.
+    process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD = '25'
+    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 30 })]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(mockGuardWrites.at(-1)).toMatchObject({
+      assistCredits: { month: MONTH, threshold: 100 },
+      assistCogs: { month: MONTH, threshold: 1 },
+    })
   })
 })

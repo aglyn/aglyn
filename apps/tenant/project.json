@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/tenant",
   "projectType": "application",
-  "tags": ["scope:app", "scope:public"],
+  "tags": ["scope:app", "scope:public", "scope:tenant"],
   "targets": {
     "build": {
       "executor": "@nx/next:build",

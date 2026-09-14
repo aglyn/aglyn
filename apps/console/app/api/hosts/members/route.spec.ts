@@ -52,6 +52,12 @@ const mockVerifyIdToken = jest.fn()
 const mockLogHostActivity = jest.fn(async (..._args: unknown[]) => undefined)
 const mockGrantHostAccess = jest.fn(async (..._args: unknown[]) => undefined)
 const mockRevokeHostAccess = jest.fn(async (..._args: unknown[]) => undefined)
+const mockSetHostAiPermissions = jest.fn(async (..._args: unknown[]) => ({
+  before: { 'ai.use': true, 'ai.generate': true },
+  after: { 'ai.use': true, 'ai.generate': false },
+}))
+/** The org feed's coded row per AI key a toggle moved (AGL-2929). */
+const mockLogAiPermissionChanged = jest.fn(async (..._args: unknown[]) => undefined)
 const mockFindUserByEmail = jest.fn()
 const mockCollaboratorSeatRefusal = jest.fn(
   async (..._args: unknown[]): Promise<Response | null> => null,
@@ -84,6 +90,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   findUserByEmailAcrossPools: (...args: unknown[]) => mockFindUserByEmail(...args),
   grantHostAccess: (...args: unknown[]) => mockGrantHostAccess(...args),
   revokeHostAccess: (...args: unknown[]) => mockRevokeHostAccess(...args),
+  setHostAiPermissions: (...args: unknown[]) => mockSetHostAiPermissions(...args),
   collaboratorSeatRefusal: (...args: unknown[]) =>
     mockCollaboratorSeatRefusal(...args),
   collaboratorSeatRefusalResponse: (error: unknown) =>
@@ -95,10 +102,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // route throws into its own catch, and every case here reads as a 500 that
   // looks exactly like the member operation itself regressing.
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
+  logAiPermissionChanged: (...args: unknown[]) => mockLogAiPermissionChanged(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  AI_PERMISSION_KEYS: ['ai.use', 'ai.generate'],
+  aiPermissionChanges: jest.requireActual('@aglyn/aglyn/app-utils/ai-permissions')
+    .aiPermissionChanges,
   createResourceUid: () => 'generated-id',
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
@@ -201,7 +212,11 @@ beforeEach(() => {
     email: 'admin@example.test',
     email_verified: true,
   })
-  mockHostData.mockReturnValue({ memberRoles: { 'u-1': 'admin' }, orgId: 'org-1' })
+  mockHostData.mockReturnValue({
+    memberRoles: { 'u-1': 'admin' },
+    orgId: 'org-1',
+    displayName: 'Acme',
+  })
   mockFindUserByEmail.mockResolvedValue({ record: { uid: 'uid-9', displayName: 'Nine' } })
   mockCollaboratorSeatRefusal.mockResolvedValue(null)
   // Re-armed every case, not merely cleared. `clearAllMocks` forgets the
@@ -340,6 +355,102 @@ describe('every membership change reaches the log, from the server (AGL-118)', (
       id: 'uid-9',
       name: 'nine@example.test',
     })
+  })
+
+  it('records an AI-access change, naming the state it became (AGL-2927)', async () => {
+    docs.set('hosts/host-1/members/uid-9', {
+      email: 'nine@example.test',
+      role: 'author',
+      uid: 'uid-9',
+    })
+    const response = await call(PATCH, 'PATCH', {
+      hostId: 'host-1',
+      memberId: 'uid-9',
+      aiPermissions: { 'ai.generate': false },
+    })
+    expect(response.status).toBe(200)
+    // The MEMBER document is what the doors read; the roster row is the
+    // card's copy of the same verdict.
+    expect(mockSetHostAiPermissions).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      uid: 'uid-9',
+      hostId: 'host-1',
+      permissions: { 'ai.generate': false },
+    })
+    expect(docs.get('hosts/host-1/members/uid-9')?.['aiPermissions']).toEqual({
+      'ai.use': true,
+      'ai.generate': false,
+    })
+    expect(mockGrantHostAccess).not.toHaveBeenCalled()
+    expect(mockLogHostActivity).toHaveBeenCalledTimes(1)
+    expect(entry().action).toBe('Changed member AI access to assist on, generate off')
+    expect(entry().target).toEqual({
+      type: 'member',
+      id: 'uid-9',
+      name: 'nine@example.test',
+    })
+    // The org feed's coded row (AGL-2929): one per key that moved — the
+    // toggle flipped generate only — on the site, naming the collaborator.
+    expect(mockLogAiPermissionChanged).toHaveBeenCalledTimes(1)
+    expect(mockLogAiPermissionChanged).toHaveBeenCalledWith(
+      'org-1',
+      { uid: 'u-1', email: 'admin@example.test' },
+      {
+        subject: { type: 'host', id: 'host-1', name: 'Acme · nine@example.test' },
+        permission: 'ai.generate',
+        granted: false,
+      },
+    )
+  })
+
+  it('writes no permission row when the toggle was already at that value (AGL-2929)', async () => {
+    docs.set('hosts/host-1/members/uid-9', {
+      email: 'nine@example.test',
+      role: 'author',
+      uid: 'uid-9',
+    })
+    mockSetHostAiPermissions.mockResolvedValueOnce({
+      before: { 'ai.use': true, 'ai.generate': false },
+      after: { 'ai.use': true, 'ai.generate': false },
+    })
+    const response = await call(PATCH, 'PATCH', {
+      hostId: 'host-1',
+      memberId: 'uid-9',
+      aiPermissions: { 'ai.generate': false },
+    })
+    expect(response.status).toBe(200)
+    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
+  })
+
+  it('refuses a malformed AI map, and an invited row that has no document to carry one', async () => {
+    docs.set('hosts/host-1/members/uid-9', {
+      email: 'nine@example.test',
+      role: 'author',
+      uid: 'uid-9',
+    })
+    for (const aiPermissions of [{ 'ai.fly': true }, { 'ai.use': 'yes' }, {}, 'on']) {
+      expect(
+        (
+          await call(PATCH, 'PATCH', { hostId: 'host-1', memberId: 'uid-9', aiPermissions })
+        ).status,
+      ).toBe(400)
+    }
+    docs.set('hosts/host-1/members/pending', {
+      email: 'later@example.test',
+      role: 'editor',
+      status: 'invited',
+    })
+    expect(
+      (
+        await call(PATCH, 'PATCH', {
+          hostId: 'host-1',
+          memberId: 'pending',
+          aiPermissions: { 'ai.use': false },
+        })
+      ).status,
+    ).toBe(409)
+    expect(mockSetHostAiPermissions).not.toHaveBeenCalled()
+    expect(mockLogHostActivity).not.toHaveBeenCalled()
   })
 
   it('writes NOTHING when the role change names an unknown member', async () => {

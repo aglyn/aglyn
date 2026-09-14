@@ -19,6 +19,7 @@ import {
   claimAttempt,
   isCustomPricedPlan,
   isOrgSubscriptionLive,
+  PLATFORM_BRAND_NAME,
   pluginRequestFromWeb,
   type AttemptClaim,
   type OrgPlan,
@@ -37,7 +38,11 @@ import {
   INTERNAL_TRAFFIC_VALUE,
 } from '../../../../utils/internal-traffic'
 import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
-import { meteredPriceId } from '../../../../utils/server/billing-addons'
+import {
+  addonPriceId,
+  addonUnitUsd,
+  meteredPriceId,
+} from '../../../../utils/server/billing-addons'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay
@@ -259,6 +264,31 @@ async function handler(request: Request): Promise<Response> {
         'Billing is not configured (missing STRIPE_SECRET_KEY / price ids).',
     }, { status: 501 })
   }
+  // The Aglyn AI add-on, bought WITH the plan (AGL-2897). The signup deep
+  // link (`?plan=pro&ai=1`) carries it to the Billing page, which posts it
+  // here; it becomes a second recurring item on the same subscription, so the
+  // webhook mirrors it onto `seatAddons.aiAddon` exactly as a later purchase
+  // through `/api/billing/addons` would. Refused rather than dropped when it
+  // cannot be priced: a checkout that quietly sold the plan without the
+  // add-on the visitor clicked would bill less and deliver less than shown.
+  const aiAddonWanted = body?.aiAddon === true
+  if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan) === null) {
+    return Response.json(
+      { error: `This plan does not include the ${PLATFORM_BRAND_NAME} AI add-on.` },
+      { status: 400 },
+    )
+  }
+  const aiAddonPriceId = aiAddonWanted
+    ? addonPriceId('aiAddon', plan as OrgPlan, interval)
+    : null
+  if (aiAddonWanted && !aiAddonPriceId) {
+    return Response.json({
+      error:
+        'Billing is not configured: STRIPE_PRICE_' +
+        `${plan.toUpperCase()}_AI_ADDON${interval === 'year' ? '_YEARLY' : ''} ` +
+        `is unset, so the ${PLATFORM_BRAND_NAME} AI add-on cannot be sold on this plan yet.`,
+    }, { status: 501 })
+  }
 
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -285,7 +315,7 @@ async function handler(request: Request): Promise<Response> {
     // The 423 body is explicit that this is NOT a payment failure. The
     // verified `staff` claim is passed for the platform-scope un-panic
     // bypass only — at the feature stage there is deliberately NO staff
-    // bypass (LOCKDOWN_FEATURE_STAFF_BYPASS.checkout = false): a
+    // bypass (`lockdownFeatureStaffBypass('checkout')` = false): a
     // staff-created session is still a real charge against a real card,
     // and no incident-response step needs money to move.
     const locked = await featureLockdownRefusal({
@@ -424,6 +454,13 @@ async function handler(request: Request): Promise<Response> {
       const meteredPreview = meteredPriceId(interval)
       if (meteredPreview) {
         preview.set('subscription_details[items][1][price]', meteredPreview)
+      }
+      if (aiAddonPriceId) {
+        // Quoted on the same invoice as the plan, so the total on the card
+        // is the total the card is charged. Quantity 1 is the whole add-on.
+        const at = meteredPreview ? 2 : 1
+        preview.set(`subscription_details[items][${at}][price]`, aiAddonPriceId)
+        preview.set(`subscription_details[items][${at}][quantity]`, '1')
       }
       const promo = await resolvePromotionCode(
         secretKey,
@@ -607,6 +644,16 @@ async function handler(request: Request): Promise<Response> {
         } is unset while the other interval's metered price IS set, so ${interval}ly subscriptions accrue usage that reaches no invoice`,
       })
     }
+    // The Aglyn AI add-on item (AGL-2897), after the metered item so the plan
+    // and metered positions the price-fault reader names stay where they are.
+    // Interval-matched through `addonPriceId`, for the reason the metered
+    // item is: one `recurring.interval` per subscription.
+    let aiAddonItemIndex: number | null = null
+    if (aiAddonPriceId) {
+      aiAddonItemIndex = meteredNative ? 2 : 1
+      subParams.set(`items[${aiAddonItemIndex}][price]`, aiAddonPriceId)
+      subParams.set(`items[${aiAddonItemIndex}][quantity]`, '1')
+    }
     // The attribution metadata the session put on `subscription_data`, now set
     // directly on the subscription — same destination, one hop fewer. Both are
     // client-supplied and neither is accepted on trust.
@@ -641,7 +688,12 @@ async function handler(request: Request): Promise<Response> {
       // let the same button work once the config or the network does.
       await claim.release()
       claim = null
-      const missing = configuredPriceFault(subscription?.error, plan, interval)
+      const missing = configuredPriceFault(
+        subscription?.error,
+        plan,
+        interval,
+        aiAddonItemIndex,
+      )
       if (missing) return Response.json({ error: missing }, { status: 501 })
       return Response.json(
         { error: 'Could not start the subscription. Nothing has been charged.' },

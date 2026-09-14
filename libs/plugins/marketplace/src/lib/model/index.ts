@@ -78,3 +78,7 @@ export {
   type EmailStarterViolation,
   type EmailStarterViolationCode,
 } from '@aglyn/aglyn/app-utils/email-starter-policy'
+
+// The AI node-tree validator (AGL-2905): the only path a model-emitted
+// tree takes into storage, composed over the sanitizer above.
+export * from './ai-node-tree'

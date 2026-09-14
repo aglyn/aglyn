@@ -100,6 +100,12 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
     'permissions.publishToMarketplace',
   ],
   'plugins.install': ["'plugins.install'", 'permissions.installPlugins'],
+  // The AI keys (AGL-2927) bite at the doors: `/api/assist/chat` and the
+  // marketplace's `/api/ai/assist` handler call `memberHasAiPermission` with
+  // the literal, and `aiGateLadder` refuses under whichever key a door
+  // passes as `permission`.
+  'ai.use': ["'ai.use'"],
+  'ai.generate': ["'ai.generate'"],
 }
 
 function serverFilesContaining(needle: string): string[] {
@@ -141,7 +147,7 @@ describe('every advertised org permission is enforced server-side (AGL-2444)', (
     expect([...ORG_PERMISSION_KEYS].sort()).toEqual(
       Object.keys(ENFORCED_AS).sort(),
     )
-    expect(ORG_PERMISSION_KEYS.length).toBe(10)
+    expect(ORG_PERMISSION_KEYS.length).toBe(12)
   })
 
   it('the search really searches — a key nobody uses finds nothing', () => {

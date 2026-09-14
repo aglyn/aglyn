@@ -58,6 +58,7 @@ import PasswordAdminControls from '../../../../../components/password-admin-cont
 import StaffUserDeviceSessionsCard, {
   type StaffDeviceRow,
 } from '../../../../../components/staff-user-device-sessions-card.component'
+import StaffUserAiUsageCard from '../../../../../components/staff-user-ai-usage-card.component'
 import StaffUserEraseCard from '../../../../../components/staff-user-erase-card.component'
 import StaffUserEmailHistoryCard, {
   type StaffEmailDeliveryRow,
@@ -72,6 +73,9 @@ import {
 import ActivityTable from '../../../../../components/activity-table.component'
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../components/plugin-widget-slot.component'
 import { legalAcceptanceDocumentHref } from '../../../../../utils/legal-document-link'
 import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
 
@@ -522,6 +526,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   // `useImpersonationReason` (AGL-2125): the route requires a reason and
   // records it on the audit row, so this page must not be able to reach the
   // endpoint around the dialog that collects one.
+  const { widgets: staffUserWidgets } = useSlotWidgets(['staffUser'])
   const impersonation = useImpersonationReason({ auth, user })
 
   return (
@@ -901,6 +906,13 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             )}
                           </CardDisplay>
                         ),
+                      },
+                      {
+                        // What this account drew from every workspace's AI
+                        // pool, month by month (AGL-2928) — beside the
+                        // memberships it drew it under.
+                        key: 'ai-usage',
+                        children: <StaffUserAiUsageCard uid={uid} />,
                       },
                       {
                         key: 'password',
@@ -1289,6 +1301,15 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   />
                 ),
               },
+              // Plugin cards below the account's activity (AGL-2940).
+              ...(staffUserWidgets.length
+                ? [
+                    {
+                      size: { xs: 12 },
+                      children: <PluginWidgetSlot slot="staffUser" uid={uid} />,
+                    },
+                  ]
+                : []),
             ]}
           />
         )}

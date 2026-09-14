@@ -135,6 +135,10 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
       // projection has to carry the VALUE, and a row seeded at 0 would pass
       // against a projection that hardcoded one.
       assistCostUsd: 18.75,
+      // The credit view of that spend and the billed overage (AGL-2930) —
+      // distinct from each other and from the dollar figure above.
+      assistCredits: 18_750,
+      assistOverageUsd: 6.25,
       // The recorded-not-priced half (AGL-2321). Every value distinct from
       // every other, and none of them 0, 1 or `true` twice in a row — a
       // projection that transposed two fields, or hardcoded one, has to be
@@ -187,6 +191,9 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         // dollars rather than fractions of a cent, so a dropped projection
         // here is the difference between a discount refused and approved.
         assistCostUsd: 18.75,
+        // AGL-2930 — the two AI columns on the staff usage table.
+        assistCredits: 18_750,
+        assistOverageUsd: 6.25,
         // AGL-2321 — the history a rate gets derived from. Asserted as a
         // whole object rather than field by field, so a projection that ADDS
         // a field without a reader, or silently drops one, both fail here.
@@ -238,6 +245,11 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
       ],
     })
     const payload = await (await get({ token: 'tok' })).json()
+    // The credit columns (AGL-2930) carry null through for the same reason:
+    // a rollup written before the credit meter drew nothing it can be
+    // measured by, and `0` would state that the org used no AI.
+    expect(payload.months[0].assistCredits).toBeNull()
+    expect(payload.months[0].assistOverageUsd).toBeNull()
     expect(payload.months[0].recorded).toEqual({
       emailSends: 0,
       emailSendsOverage: 0,

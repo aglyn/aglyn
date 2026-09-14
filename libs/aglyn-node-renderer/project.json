@@ -6,7 +6,10 @@
   "tags": [
     "scope:lib",
     "scope:feature",
-    "scope:aglyn"
+    "scope:aglyn",
+    "scope:renderer",
+    "aglyn:renderer",
+    "type:feature"
   ],
   "targets": {
     "build": {

@@ -17,7 +17,10 @@
 'use client'
 
 import {
+  AI_ADDON_CREDITS_PER_MONTH,
+  aiAddonName,
   checkDiscountMargin,
+  hasAiAddon,
   MARGIN_SCOPE_NOTE,
   netMarginRating,
   ORG_BILLING_DOC_ID,
@@ -29,6 +32,7 @@ import {
   orgSiteCount,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -71,7 +75,9 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../components/plugin-widget-slot.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
@@ -79,6 +85,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
+import StaffOrgAiCard from '../../../../../components/staff-org-ai-card.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
@@ -206,6 +213,35 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   }, [isStaff, orgId, user, orgNonce])
   // Billing is merged server-side now, so there is one source and one shape.
   const orgBilling = null
+  /**
+   * Whether staff have paused this workspace's AI (AGL-2927): the
+   * `ai-assist` feature lock scoped to the org, read through the lockdown
+   * probe rather than the collection so the answer is the route's own.
+   * `null` until read (and on a failed read), so the pause control is not
+   * offered on a state nobody has confirmed; re-read with the org.
+   */
+  const [aiPaused, setAiPaused] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!isStaff || !orgId) return undefined
+    let active = true
+    setAiPaused(null)
+    void (async () => {
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/admin/lockdown?scope=feature&targetId=ai-assist&orgId=${encodeURIComponent(orgId)}`,
+        )
+        if (!active || !response.ok) return
+        const payload = await response.json()
+        if (active) setAiPaused(payload?.state?.locked === true)
+      } catch {
+        // Unread stays unread: the control is withheld, never mislabeled.
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [isStaff, orgId, user, orgNonce])
 
   const org = useMemo(
     () => (orgDoc ? { ...orgDoc, ...(orgBilling ?? {}) } : orgDoc),
@@ -727,6 +763,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // dialog and the sign-in all live in `useImpersonationReason` (AGL-2125) —
   // the route requires a reason and this page must not be able to reach it
   // around the dialog that collects one.
+  const { widgets: staffOrgWidgets } = useSlotWidgets(['staffOrg'])
   const impersonation = useImpersonationReason({ auth, user })
 
   // Per-org discount (AGL-1105): staff attaches a Stripe coupon to this org's
@@ -1002,6 +1039,25 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const planDefaults = org?.plan
     ? PLAN_ENTITLEMENTS[org.plan as keyof typeof PLAN_ENTITLEMENTS]
     : null
+  /*
+   * The AI credit pool as the meter resolves it (AGL-2899): the plan's band
+   * plus the AI add-on's, folded by `resolveOrgEntitlements`. Read off
+   * the EFFECTIVE plan through `hasAiAddon`, so a dead subscription's add-on
+   * reads as off here exactly as it does on the customer's own meter.
+   */
+  const aiAddon = hasAiAddon(org)
+  const assistPool = resolved
+    ? {
+        aiAddon,
+        addonCredits: aiAddon
+          ? AI_ADDON_CREDITS_PER_MONTH[resolveEffectivePlan(org)]
+          : 0,
+        creditsPerMonth:
+          resolved.assistCreditsPerMonth > 0
+            ? resolved.assistCreditsPerMonth
+            : null,
+      }
+    : undefined
   const formatLimit = (value: number) =>
     value === UNLIMITED ? '∞' : value.toLocaleString()
 
@@ -1072,9 +1128,13 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     variant="outlined"
                   />
                 ) : null}
+                {aiPaused ? (
+                  <Chip label="AI paused" size="small" color="warning" />
+                ) : null}
                 <StaffOrgActions
                   org={org}
                   onChanged={() => setOrgNonce((nonce) => nonce + 1)}
+                  aiPaused={aiPaused ?? undefined}
                 />
               </Stack>
             </CardDisplay>
@@ -1448,6 +1508,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                           sx={{ ml: 1 }}
                                         />
                                       ) : null}
+                                      {/* The one key an add-on widens
+                                          (AGL-2899): without the chip the
+                                          effective band differs from the
+                                          plan default with no override to
+                                          explain it. */}
+                                      {key === 'assistCreditsPerMonth' &&
+                                      aiAddon ? (
+                                        <Chip
+                                          label={`${aiAddonName()} add-on`}
+                                          size="small"
+                                          variant="outlined"
+                                          color="primary"
+                                          sx={{ ml: 1 }}
+                                        />
+                                      ) : null}
                                     </TableCell>
                                     <TableCell align="right">
                                       {usageByKey[key] != null
@@ -1471,6 +1546,24 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     </CardDisplay>
                   ),
                 },
+                {
+                  // The org's AI usage in full (AGL-2930): the add-on, the
+                  // pool and its parts, overage, refusals, jobs, top users
+                  // and margin. The card fetches its own read.
+                  children: <StaffOrgAiCard orgId={orgId} />,
+                },
+                // Plugin cards among the staff cards (AGL-2940), where a
+                // plugin's own staff view of the org sits beside the
+                // platform's. No column at all when nothing registered.
+                ...(staffOrgWidgets.length
+                  ? [
+                      {
+                        children: (
+                          <PluginWidgetSlot slot="staffOrg" orgId={orgId} />
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   children: (
                     // Metered usage (AGL-939): consumption alongside the
@@ -1496,7 +1589,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             'read, not zero usage.'}
                         </Alert>
                       ) : (
-                        <StaffOrgUsageTable months={usageMonths} />
+                        <StaffOrgUsageTable
+                          months={usageMonths}
+                          assistPool={assistPool}
+                        />
                       )}
                     </CardDisplay>
                   ),

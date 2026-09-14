@@ -329,6 +329,16 @@ export async function composeNodesWithChrome(options: {
     | null
     | Promise<string | null | undefined>
   /**
+   * The screen's values for the properties of the layouts it renders inside
+   * (AGL-2893), keyed by layout id — or a PROMISE of them, for the reason
+   * `layoutId` accepts one: they live on the version document beside the
+   * binding. Absent, every layout renders its properties' defaults.
+   */
+  layoutPropValues?:
+    | Aglyn.AglynScreenVersion['layoutPropValues']
+    | null
+    | Promise<Aglyn.AglynScreenVersion['layoutPropValues'] | null | undefined>
+  /**
    * The screen's own nodes, or a PROMISE of them (AGL-1428).
    *
    * Accepting the unresolved form is what lets `composeScreenNodes` hand the
@@ -375,7 +385,7 @@ export async function composeNodesWithChrome(options: {
    * document directly, and a render must degrade rather than hang.
    */
   const walkLayoutChain = async () => {
-    const chain: Array<Record<string, any> | undefined> = []
+    const chain: Aglyn.LayoutChainEntry[] = []
     const seen = new Set<string>()
     const boundLayoutId = await layoutId
     let currentLayoutId = boundLayoutId ? String(boundLayoutId) : undefined
@@ -389,7 +399,15 @@ export async function composeNodesWithChrome(options: {
         hostId,
         layoutId: currentLayoutId,
       })
-      chain.push(layoutRes?.version?.nodes as any)
+      // The version's declared properties travel with its nodes (AGL-2893):
+      // they are applied to this layout alone, with the screen's values for
+      // this layout, before the screen is grafted into its slot.
+      chain.push({
+        layoutId: currentLayoutId,
+        nodes: layoutRes?.version?.nodes as any,
+        props: (layoutRes?.version as Aglyn.AglynLayoutVersion | undefined)
+          ?.props,
+      })
       const parentId = (layoutRes?.layout as any)?.layoutId
       currentLayoutId = parentId ? String(parentId) : undefined
     }
@@ -481,13 +499,17 @@ export async function composeNodesWithChrome(options: {
     screenNodes,
     options.collection,
   )
-  const [layoutNodesChain, componentsRes, bulk] = await chromeBundle
+  const [layoutChain, componentsRes, bulk] = await chromeBundle
   const [rawVariables, functions, workflows, pluginInstalls] = bulk
   const screenDatasets = await screenDatasetsPromise
+  // Settled by now: it is read off the same version document the layout
+  // binding the walk above waited on came from.
+  const layoutPropValues = await options.layoutPropValues
 
-  const composedNodes = Aglyn.composeLayoutChainAndScreenNodes(
-    layoutNodesChain as any,
+  const composedNodes = Aglyn.composeLayoutChainWithProps(
+    layoutChain as any,
     screenNodes as any,
+    layoutPropValues,
   )
   const graftedComponents = Aglyn.composeReusableComponentNodes(
     composedNodes as any,
@@ -742,6 +764,13 @@ export async function composeScreenNodes(options: {
               | null)
           : (screen.layoutId as string | undefined),
       () => screen.layoutId as string | undefined,
+    ),
+    // The screen's values for its layouts' properties (AGL-2893), beside the
+    // binding on the same document; a failed read renders the defaults.
+    layoutPropValues: versionPromise.then(
+      (res) =>
+        (res.version as Aglyn.AglynScreenVersion | undefined)?.layoutPropValues,
+      () => undefined,
     ),
     screenNodes: versionPromise.then(
       (res) => (res.version?.nodes ?? {}) as any,

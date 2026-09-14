@@ -37,6 +37,7 @@ export type CrmApiRoute =
   | 'recipe-install'
   | 'recipe-status'
   | 'inbound-address'
+  | 'email-template-duplicate'
 
 /** What one call to the CRM API answered with. */
 export interface CrmApiResult {

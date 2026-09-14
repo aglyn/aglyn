@@ -104,6 +104,10 @@ const KEY_READERS = new Map<string, string>([
     'libs/plugins/marketplace/src/lib/server/ai-assist.ts',
     'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — the key plus a Pro entitlement is the whole gate.',
   ],
+  [
+    'libs/tenant/data/admin/src/lib/server/ai-runtime.ts',
+    'The shared Anthropic runtime (AGL-2903): the ONE module that puts the key on a request. It sends whatever prompt a door hands it, so what reaches Anthropic is decided by the doors above — both of which still read the key themselves to answer 501 before they call it. A third door on the runtime is a third entry here.',
+  ],
 ])
 
 /**
@@ -147,6 +151,10 @@ const MENTIONS_ONLY = new Map<string, string>([
   [
     'libs/plugins/marketplace/src/lib/server/ai-assist.spec.ts',
     'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow.',
+  ],
+  [
+    'libs/tenant/data/admin/src/lib/server/ai-runtime.spec.ts',
+    'Sets a fake key (`sk-test`) to drive the shared runtime against a mocked fetch (AGL-2903), and asserts it refuses to run without one. A test double, not a flow.',
   ],
   [
     'apps/console/.env.development.local.example',
@@ -396,25 +404,31 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
       stopReason: 'end_turn',
     })
 
-    // All FOUR: the exchange, its signal, the daily counter, the monthly
-    // rollup. `assistSignals` is the half AGL-1972 split out so the prose
-    // could be given a TTL without destroying the data loop — and splitting
-    // it created a new collection, which is precisely the moment a cascade
-    // silently stops covering everything. The length is asserted so a fifth
-    // collection added later cannot slip past this list unnoticed.
+    // All FIVE: the exchange, its signal, the daily counter, the monthly
+    // rollup, and the asker's own month (AGL-2928). `assistSignals` is the
+    // half AGL-1972 split out so the prose could be given a TTL without
+    // destroying the data loop — and splitting it created a new collection,
+    // which is precisely the moment a cascade silently stops covering
+    // everything. The length is asserted so a sixth collection added later
+    // cannot slip past this list unnoticed.
     // Deduped: the monthly rollup is touched by BOTH halves now — the
     // reservation counts the message, the batch folds in the tokens.
     const distinct = [...new Set(written)]
-    expect(distinct).toHaveLength(4)
+    expect(distinct).toHaveLength(5)
     for (const path of distinct) {
       expect([path, path.startsWith('orgs/org-1/')]).toEqual([path, true])
     }
     expect(distinct.map((path) => path.split('/')[2]).sort()).toEqual([
+      'aiUsageByUser',
       'assistExchanges',
       'assistSignals',
       'assistUsage',
       'counters',
     ])
+    // The per-user month is keyed by the ASKER, under the org: the org's
+    // cascade takes it, and `eraseUser` sweeps it by uid (AGL-2928).
+    expect(distinct).toContain('orgs/org-1/aiUsageByUser/user-1/months/' +
+      new Date().toISOString().slice(0, 7))
   })
 
   it('still finishes eraseOrg with a recursive delete of the org doc', () => {

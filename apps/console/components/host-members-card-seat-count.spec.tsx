@@ -104,8 +104,15 @@ jest.mock('firebase/firestore', () => ({
   }),
 }))
 
+/**
+ * ONE Firestore double, held. The count effect keys on the instance the
+ * way the real hook's stable instance lets it; a fresh `{}` per call would
+ * re-send the aggregate on every render the card's other reads cause.
+ */
+const mockFirestore = {}
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
+  useFirestore: () => mockFirestore,
   useUser: () => ({ data: { uid: 'admin-1', getIdToken: async () => 'tok' } }),
   /*
    * Modelled rather than stubbed. The card's whole defect was a PAGE of rows
@@ -149,7 +156,25 @@ jest.mock('../hooks/use-current-org', () => ({
     ready: true,
   }),
 }))
-jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
+jest.mock('../hooks/use-org-scope', () => {
+  // The collaborator columns zone (AGL-2940) reaches the org scope through
+  // the plugin gate; one held object, never rebuilt per call (AGL-2105).
+  const scope = {
+    orgs: [],
+    currentOrg: null,
+    selectOrg: () => undefined,
+    orgSlug: 'acme',
+    pathOrgSlug: 'acme',
+    loading: false,
+    confirmed: true,
+    slugExists: true,
+    error: false,
+    retry: () => undefined,
+    hasMoreOrgs: false,
+    loadMoreOrgs: () => undefined,
+  }
+  return { __esModule: true, useOrgSlug: () => 'acme', useOrgScope: () => scope, default: () => scope }
+})
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,
   default: () => ({ permissions: { manageMembers: true } }),

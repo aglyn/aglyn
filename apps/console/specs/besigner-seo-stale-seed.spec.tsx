@@ -151,7 +151,8 @@ jest.mock('@aglyn/aglyn', () => ({
   HostViewType: { SCREEN: 'screen' },
   ScreenLinkContext: { Provider: ({ children }: { children: ReactNode }) => <div>{children}</div> },
   buildScreenRouteEntries: () => ({}),
-  composeLayoutChainAndScreenNodes: () => ({}),
+  composeLayoutChainWithProps: () => ({}),
+  layoutPropValuesFor: () => undefined,
   composeScreenRoutePath: () => '/careers',
   decodeStoredNodes: () => ({}),
   findScreenIdByRoutePath: () => undefined,
@@ -211,6 +212,10 @@ jest.mock('@aglyn/besigner', () => ({
 }))
 jest.mock('@aglyn/besigner-ui', () => ({
   BesignerConflictAlertComponent: () => null,
+  // The inspector's plugin widget extras; nothing here opens the inspector.
+  BesignerInspectorExtrasContext: {
+    Provider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  },
   BesignerDraftAlertComponent: () => null,
   // The page derives it from presence to decide whether the crash-recovery
   // prompt may be offered at all (AGL-2486); this spec is about what Save
@@ -321,6 +326,9 @@ jest.mock('../components/layouts/main.layout', () => passthrough)
 jest.mock('../components/besigner-app-bar.component', () => nullComponent)
 jest.mock('../components/besigner-document-switcher.component', () => nullComponent)
 jest.mock('../components/besigner-functions-button.component', () => nullComponent)
+// The plugin widget zones read the slot registry at import time; no plugin
+// renders here.
+jest.mock('../components/plugin-widget-slot.component', () => nullComponent)
 jest.mock('../components/besigner-versions.component', () => nullComponent)
 jest.mock('../components/collaborator-overlays.component', () => nullComponent)
 jest.mock('../components/presence-avatars.component', () => nullComponent)
@@ -373,6 +381,13 @@ jest.mock('../components/screen-social-image-field.component', () => ({
       </button>
     </div>
   ),
+}))
+// The layout property values in Screen Properties (AGL-2893) are their own
+// component with their own spec; nothing here is about them.
+jest.mock('../components/screen-layout-properties.component', () => ({
+  __esModule: true,
+  default: () => null,
+  useLayoutChainProperties: () => [],
 }))
 jest.mock('../hooks/use-plugin-drawer-registration', () => ({
   __esModule: true,

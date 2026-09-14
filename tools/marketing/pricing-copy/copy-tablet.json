@@ -1182,6 +1182,36 @@
               ]
             },
             {
+              "figmaNodeId": null,
+              "name": "row",
+              "cells": [
+                "Aglyn AI: generate pages, emails, campaigns, products and more",
+                "300 credits",
+                "add-on",
+                "add-on",
+                "add-on",
+                "add-on",
+                "add-on",
+                "add-on",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": "row",
+              "cells": [
+                "AI credits / mo",
+                "300 / mo",
+                "—",
+                "2.75k / mo",
+                "7.5k / mo",
+                "10k / mo",
+                "13k / mo",
+                "58k / mo",
+                "Talk to us"
+              ]
+            },
+            {
               "figmaNodeId": "572:3986",
               "name": "row",
               "cells": [
@@ -1422,6 +1452,20 @@
                 "$0.40",
                 "Custom"
               ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": "row",
+              "cells": [
+                "AI credits, per 1,000 over the included band",
+                "—",
+                "$3",
+                "$2.75",
+                "$2.50",
+                "$2.25",
+                "$2",
+                "Custom"
+              ]
             }
           ]
         },
@@ -1458,6 +1502,21 @@
               "name": null,
               "cells": [
                 "Plans already include registers — 1 on Pro, 2 on Business, 3 on Scale, 5 on Advanced, 20 on Agency. This adds one beyond that."
+              ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": "h",
+              "cells": [
+                "Aglyn AI",
+                "From $9 / mo"
+              ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": null,
+              "cells": [
+                "Starter $9 · Pro $19 · Business $39 · Scale $69 · Advanced $99 · Agency $299 a month, per workspace. Adds AI credits to your plan’s included band — 4,000 on Starter, 9,000 on Pro, 19,000 on Business, 34,000 on Scale, 49,000 on Advanced, 149,000 on Agency. Enterprise by agreement."
               ]
             }
           ]
@@ -1571,7 +1630,15 @@
               "name": "qa",
               "cells": [
                 "What happens if I exceed a plan limit?",
-                "On paid plans you’re not cut off. Add extra sites, seats, and datasets at the rates in the usage table — they’re added to your subscription and itemized on your invoice. Free-plan limits are hard caps."
+                "On paid plans you’re not cut off. Add extra sites, seats, and datasets at the rates in the usage table — they’re added to your subscription and itemized on your invoice — and AI credits past your included band are billed per 1,000 at your plan’s rate, unless you set a stop or a monthly ceiling in Billing. Free-plan limits are hard caps: when Free’s AI credits are used, generation stops until next month."
+              ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": "qa",
+              "cells": [
+                "What does Aglyn AI cost?",
+                "Aglyn AI is a per-workspace add-on on any paid plan — $9 a month on Starter, $19 on Pro, $39 on Business, $69 on Scale, $99 on Advanced, $299 on Agency; Enterprise by agreement. It adds AI credits to your plan’s included band every month, from 4,000 on Starter to 149,000 on Agency, and credits past the band are billed per 1,000 at the rate in the usage table. If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — nothing is billed."
               ]
             },
             {

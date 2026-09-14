@@ -38,6 +38,46 @@ A layout can never sit inside itself, or inside a layout already nested within i
 would be a loop with no outermost frame to render. The picker only offers layouts that
 are legal choices, so you cannot select one by mistake.
 
+## Layout properties
+
+A layout can take **properties**, the way a
+[reusable component](../besigner/reusable-components.md#properties) does, so one frame can
+differ from screen to screen — a banner one screen shows and another hides, a call to action
+worded per page — without a second layout.
+
+1. Open the layout in the Besigner and choose **File ▸ Properties…**
+2. **Add property**. Every property type a reusable component offers is here, with its
+   default, help, settings and condition set with the same controls.
+3. Inside the layout, put the property's token — `{{prop.bannerText}}` — in any text or
+   string attribute, or bind a field to it with the field's `{}` button: a switch to a
+   Yes / no, an icon picker to an Icon. **Hide when** and **Hide unless** take a property
+   too, so a screen can remove part of the layout's chrome.
+
+Each screen sets the values in **Screen Properties**, under **Shared layout**, below the
+**Layout** picker: one field per property, drawn with the control its type names. Leave a
+field empty and the layout's default renders. **Save layout values** stores them on the
+screen version being edited, beside its layout binding, so publishing that version publishes
+its values with it.
+
+Values are kept per layout. Binding a screen to a different layout starts from that
+layout's defaults, and a screen inside nested layouts sets each layout's properties
+separately.
+
+Properties saved on the layout's published version reach live screens straight away — that
+version is what they render. On any other version they go live when you publish it.
+
+Pages the site builds without a screen of their own — search results, author pages, and a
+collection with no template screen — render inside the site's built-in page layout with its
+properties' defaults.
+
+## Duplicate
+
+**Duplicate…** in a layout's row menu (and under **More** on its detail page)
+makes a second layout with the same element tree and properties as the latest
+saved version, named `Copy of <layout>` unless you type another name. No
+screen uses the copy until you assign it, so nothing on the live site changes.
+The copy counts against your shared-layout allowance like a new layout.
+
 ## Used by
 
 A layout's detail page has a **Used by** card listing everything that renders inside it,
@@ -59,6 +99,7 @@ interchangeable:
 | What it is | A frame with a slot | A subtree you insert as an instance |
 | How a screen uses it | Binds to it; the layout wraps the screen | Inserts one or more instances anywhere in its own tree |
 | How many per screen | One chain, outermost first | As many instances as you like |
+| Where properties are set | Screen Properties, per screen | The Attributes panel, per instance |
 | Good for | Header, nav, footer, site chrome | A card, a call-to-action, a pricing block |
 
 If the thing wraps your content, it is a layout. If the thing *is* content you want to

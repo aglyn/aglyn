@@ -29,6 +29,11 @@ import {
   PLATFORM_BRAND_NAME,
   PLATFORM_BRANDING_PROFILE,
 } from './platform-brand'
+import {
+  listPluginFeatures,
+  listPluginSeatAddons,
+  pluginSeatAddon,
+} from '../plugin-manager/plugin-entitlements'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
 export const UNLIMITED = Number.POSITIVE_INFINITY
@@ -259,6 +264,44 @@ export type ResolvedOrgEntitlements = Required<
  */
 export const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = 116_000
 
+/**
+ * The Free AI taste (AGL-2925): the assist credits a Free workspace draws
+ * on each month, behind a hard wall.
+ *
+ * ## Why it exists
+ *
+ * So the AI landing pages can say "generate your first page free" and mean
+ * it. Three hundred credits is one or two generated sections or a handful
+ * of copy rewrites — enough to see what the assistant does, not enough to
+ * build a site on. The band is a WALL: `PLAN_PRICING.free
+ * .extraAssistCreditsUsdPer1k` stays `null`, so `assistBandRefuses` answers
+ * true and the reservation refuses at 100% with no overage, no switch and no
+ * invoice. Nothing about a Free workspace can produce a charge.
+ *
+ * ## What it costs, and why that is the number
+ *
+ * A credit is `ASSIST_CREDIT_COST_USD` of provider spend, so the band costs
+ * at most **$0.30 per Free workspace per month** — asserted by
+ * `apps/console/specs/tier-margin-floor.spec.ts`. It is the one AI band with
+ * no invoice behind it, which is why the same issue closes every multiplier
+ * a script could use before the flag flips:
+ *
+ *  - it is metered per ACCOUNT as well as per workspace, so the three free
+ *    workspaces an account may hold (AGL-2265) share one 300-credit
+ *    allowance rather than tripling it (`reserveAssistMessage`);
+ *  - a fresh account waits `AI_FREE_MIN_ACCOUNT_AGE_HOURS` before it can
+ *    spend, and every free request is bounded per IP, per uid and per
+ *    account per day;
+ *  - a platform-wide daily ceiling on free spend pauses the taste for
+ *    everyone until the UTC day rolls, paid workspaces untouched.
+ *
+ * The account allowance reads THIS constant rather than the workspace's
+ * resolved band, because a staff override that widens one workspace's band
+ * is a decision about that workspace, not about how much one person may
+ * draw across all of theirs.
+ */
+export const FREE_AI_TASTE_CREDITS_PER_MONTH = 300
+
 export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   free: {
     hostLimit: 1,
@@ -300,7 +343,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     crmEmailsPerDay: 0,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
-    assistCreditsPerMonth: 0,
+    // The Free AI taste (AGL-2925): a real band, and a wall. See the
+    // constant for what it buys, what it costs and the precautions that
+    // keep one person from drawing it three times over.
+    assistCreditsPerMonth: FREE_AI_TASTE_CREDITS_PER_MONTH,
     apiRequestsPerMonth: 0,
     datasetsPerOrg: 0,
     maxDatasetsPerOrg: 0,
@@ -334,7 +380,16 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: false,
       scheduledPublishing: false,
       marketplaceSelling: false,
+      // The two AI flags point opposite ways on Free, on purpose (AGL-2925).
+      // `aiAssist` is the guided rung of the console assistant — page-aware
+      // level-2 answers and the copy assistant — and stays Pro and up; Free
+      // keeps the docs-grounded level-1 chat it always had. `aiGenerative`
+      // is the generative door the taste is FOR: a Free workspace may
+      // generate against its 300-credit band, behind the wall and every
+      // precaution the constant lists, so the landing page's "generate your
+      // first page free" is a thing the product does.
       aiAssist: false,
+      aiGenerative: true,
       workflows: false,
       dataStore: false,
       videoMedia: false,
@@ -470,6 +525,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       scheduledPublishing: false,
       marketplaceSelling: false,
       aiAssist: false,
+      aiGenerative: false,
       workflows: true,
       dataStore: true,
       videoMedia: false,
@@ -589,6 +645,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       scheduledPublishing: false,
       marketplaceSelling: true,
       aiAssist: true,
+      aiGenerative: false,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -666,6 +723,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       scheduledPublishing: true,
       marketplaceSelling: true,
       aiAssist: true,
+      aiGenerative: false,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -745,6 +803,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       scheduledPublishing: true,
       marketplaceSelling: true,
       aiAssist: true,
+      aiGenerative: false,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -823,6 +882,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       scheduledPublishing: true,
       marketplaceSelling: true,
       aiAssist: true,
+      aiGenerative: false,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -915,6 +975,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       scheduledPublishing: true,
       marketplaceSelling: true,
       aiAssist: true,
+      aiGenerative: false,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -1036,6 +1097,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       scheduledPublishing: true,
       marketplaceSelling: true,
       aiAssist: true,
+      aiGenerative: true,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -1131,6 +1193,78 @@ export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
  * `resolveOrgEntitlements` already applies over the plan default.
  */
 export const POS_REGISTER_ADDON_MONTHLY_USD = 89
+
+/**
+ * The Aglyn AI add-on's credit band (AGL-2896): the credits a month the
+ * add-on ADDS to the plan's `assistCreditsPerMonth` when
+ * `seatAddons.aiAddon` is set. One pool and one meter — the add-on widens
+ * the band the assist meter already draws on rather than opening a second
+ * one, so `resolveAssistCreditBudget`, the overage price and the hard-cap
+ * switch all see one number.
+ *
+ * ## Sized against the add-on's own price
+ *
+ * A credit is `ASSIST_CREDIT_COST_USD` of provider spend, so each band is a
+ * cost figure: 1,000 credits are $1.00. Every band here costs at most 50% of
+ * `PlanPricing.aiAddonMonthlyUsd` at full consumption — Starter $4 of $9,
+ * Pro $9 of $19, Business $19 of $39, Scale $34 of $69, Advanced $49 of
+ * $99, Agency $149 of $299 — which is the same line-margin floor
+ * (`ASSIST_CREDIT_MIN_MARGIN_PCT`) every retail assist rate clears.
+ * `tier-margin-floor.spec.ts` holds the whole tier non-negative with the
+ * add-on band at 100% and the add-on's revenue counted, and pins each band's
+ * share of its price.
+ *
+ * ## Free and Enterprise
+ *
+ * Free is 0: the plan sells no add-on (`aiAddonMonthlyUsd` is null), so a
+ * quantity written onto a Free org adds nothing. Enterprise is finite at
+ * twice Agency's, the rule every Enterprise fallback follows since the
+ * 2026-09-07 decision (AGL-2654) — never `UNLIMITED`, for the reason
+ * `ENTERPRISE_ASSIST_CREDITS_PER_MONTH` gives: an unbounded band reads back
+ * as zero off the wire. Enterprise carries `aiGenerative` in the agreement
+ * and its price is null too, so this figure is what a contract that names
+ * the add-on starts from before its own number is written.
+ */
+export const AI_ADDON_CREDITS_PER_MONTH: Record<OrgPlan, number> = {
+  free: 0,
+  starter: 4_000,
+  pro: 9_000,
+  business: 19_000,
+  scale: 34_000,
+  advanced: 49_000,
+  agency: 149_000,
+  enterprise: 298_000,
+}
+
+/**
+ * The generative add-on's name as a person sees it (AGL-2896): the brand,
+ * then "AI". Read from the platform brand by default and from the org's
+ * resolved `productName` where the surface has one, for the reason every
+ * rendered product name is: a self-host operator renames the product by
+ * configuration, and a white-label org must not see ours.
+ */
+export const aiAddonName = (brand: string = PLATFORM_BRAND_NAME): string =>
+  `${brand} AI`
+
+/**
+ * The per-1,000 rate Starter sells assist credits at past its band when it
+ * carries the Aglyn AI add-on (AGL-2896).
+ *
+ * Starter has no band of its own — `assistCreditsPerMonth` is 0 and
+ * `extraAssistCreditsUsdPer1k` is null, because with nothing sold there is
+ * nothing to be over. The add-on gives it a band, and a finite band with no
+ * rate beside it is usage past a bound that is silently free, the shape
+ * `plan-entitlements.spec.ts` forbids on every other plan. Pro's $3.00 is
+ * the top of the ladder and the rate Starter's band joins at; it does not
+ * step above it, because the ladder descends with the tier and Starter is
+ * the tier below Pro rather than a new rung.
+ *
+ * Read ONLY through `resolveAssistOverageRateUsdPer1k` in
+ * `assist-credits.ts`, which every reader of the rate goes through. It is
+ * not written onto `PLAN_PRICING.starter`, where it would advertise a rate
+ * on a band the plan does not sell without the add-on.
+ */
+export const AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K = 3
 
 /**
  * Purchase ceilings for the two add-on kinds that have NO per-plan hard max
@@ -1260,10 +1394,20 @@ export interface PlanPricing {
    *
    * ## Where it is null, and why that is not "free overage"
    *
-   * Null on Free and Starter because neither carries `aiAssist` and both
-   * band at 0 credits: there is no generative building to overspend, so
-   * there is no overage to price. Null on Enterprise, where every rate is
-   * the "not for sale" sentinel and the terms are contractual.
+   * Null on Starter because it carries no `aiAssist` and bands at 0
+   * credits: there is no generative building to overspend, so there is no
+   * overage to price. Null on Free because its band is a WALL by decision
+   * (AGL-2925): the 300-credit taste refuses at 100% with nothing sold past
+   * it, and a rate here would be a charge on a plan that must never produce
+   * one. Null on Enterprise, where every rate is the "not for sale"
+   * sentinel and the terms are contractual.
+   *
+   * Starter with the Aglyn AI add-on is the exception, and it is NOT written
+   * here: that org has a band, so it sells past it at
+   * `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K`, which
+   * `resolveAssistOverageRateUsdPer1k` in `assist-credits.ts` answers for
+   * every reader of this field. A rate on this row would advertise a fee on
+   * a band the plan does not carry without the add-on.
    *
    * ## What the rate decides at the gate (AGL-2653)
    *
@@ -1276,6 +1420,39 @@ export interface PlanPricing {
    * no unrefusable assist traffic to absorb.
    */
   extraAssistCreditsUsdPer1k: number | null
+  /**
+   * The Aglyn AI add-on, flat per organization per month (AGL-2896); null
+   * when the plan does not sell it.
+   *
+   * ## What it buys
+   *
+   * `features.aiGenerative` — generative building and automation, the rung
+   * no self-serve tier includes — plus `AI_ADDON_CREDITS_PER_MONTH[plan]`
+   * added to the plan's assist band. It also switches `aiAssist` on, so on
+   * Starter the add-on is the whole assistant: the band, the copy assist and
+   * the generative rung arrive together.
+   *
+   * ## Where the ladder sits
+   *
+   * Priced as an uplift on the plan rather than on its own cost: the field
+   * charges roughly 30% of the base price for an AI tier (Zylo's 2025
+   * survey puts the AI uplift at 20–37% across SaaS; aissist.io's benchmark
+   * and the Framer, Webflow and HubSpot credit add-ons sit in the same
+   * band), and the share DESCENDS with the tier — 36% of Starter's $25, 34%
+   * of Pro's, 28% of Business's, 28% of Scale's, 25% of Advanced's, 23% of
+   * Agency's — because the larger the plan the more of its price is already
+   * carrying the bands the assistant builds against.
+   *
+   * Annual is x12 of this with no discount, as every other add-on is
+   * (`orgListPriceMonthlyUsd`). The band it funds costs at most 50% of it in
+   * provider spend, the `ASSIST_CREDIT_MIN_MARGIN_PCT` floor every retail
+   * assist figure holds.
+   *
+   * Null on Free, which sells no add-on of any kind, and on Enterprise,
+   * where every figure is the "not for sale" sentinel and generative
+   * building is in the agreement.
+   */
+  aiAddonMonthlyUsd: number | null
   /**
    * Metered overage per 1,000 CRM records beyond `contactsPerHost` (AGL-890,
    * widened to contacts + companies + deals in AGL-2611): audience bands,
@@ -1373,6 +1550,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
     extraAssistCreditsUsdPer1k: null,
+    aiAddonMonthlyUsd: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
@@ -1387,6 +1565,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
     extraAssistCreditsUsdPer1k: null,
+    aiAddonMonthlyUsd: 9,
     extraContactsUsdPer1k: 1,
     // No email band to be "over" — see `emailSendsPerMonth` on the Starter
     // entitlements. `emailSendsOverage` returns 0 for any non-positive band,
@@ -1405,6 +1584,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
     extraAssistCreditsUsdPer1k: 3,
+    aiAddonMonthlyUsd: 19,
     extraContactsUsdPer1k: 0.75,
     extraEmailSendsUsdPer1k: 2.25,
     meteredInfraPassThrough: true,
@@ -1419,6 +1599,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.5,
     extraAssistCreditsUsdPer1k: 2.75,
+    aiAddonMonthlyUsd: 39,
     extraContactsUsdPer1k: 0.5,
     extraEmailSendsUsdPer1k: 2,
     meteredInfraPassThrough: true,
@@ -1433,6 +1614,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.35,
     extraAssistCreditsUsdPer1k: 2.5,
+    aiAddonMonthlyUsd: 69,
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.9,
     meteredInfraPassThrough: true,
@@ -1447,6 +1629,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.2,
     extraAssistCreditsUsdPer1k: 2.25,
+    aiAddonMonthlyUsd: 99,
     // FLOORED at the 50% retail margin, not stepped down again. The ladder
     // above it descends $1.00 → $0.75 → $0.50 → $0.40, and one more step
     // would have reached $0.25 against a `perContactMonth` cost of $0.20 per
@@ -1479,6 +1662,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.15,
     extraAssistCreditsUsdPer1k: 2,
+    aiAddonMonthlyUsd: 299,
     // $0.40, because the band it meters is now FINITE.
     //
     // This row has been wrong in both directions. It shipped $0.20 against an
@@ -1521,6 +1705,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
     extraAssistCreditsUsdPer1k: null,
+    aiAddonMonthlyUsd: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
@@ -1650,8 +1835,22 @@ export function orgListPriceMonthlyUsd(
     seats(addons.datasets, pricing.extraDatasetMonthlyUsd) +
     seats(addons.hosts, pricing.extraHostMonthlyUsd) +
     seats(addons.posRegisters, POS_REGISTER_ADDON_MONTHLY_USD) +
-    seats(addons.eventCalendar, EVENT_CALENDAR_ADDON_MONTHLY_USD)
+    seats(addons.eventCalendar, EVENT_CALENDAR_ADDON_MONTHLY_USD) +
+    // A toggle, not a quantity: one purchase covers the org, so a stored
+    // quantity above one bills once.
+    seats(aiAddonUnits(addons), pricing.aiAddonMonthlyUsd)
   )
+}
+
+/**
+ * How many Aglyn AI add-ons a purchase map counts as: 0 or 1 (AGL-2896).
+ * The add-on is org-wide like Event Calendar, so a quantity above one — a
+ * hand edit, a doubled webhook item — is one purchase, and a non-number,
+ * `NaN` or a negative is none.
+ */
+export function aiAddonUnits(addons: OrgSeatAddons | null | undefined): 0 | 1 {
+  const quantity = Number(addons?.aiAddon ?? 0)
+  return Number.isFinite(quantity) && quantity >= 1 ? 1 : 0
 }
 
 /**
@@ -2511,6 +2710,19 @@ function resolvePurchasedAddons(
 }
 
 /**
+ * Whether the org's Aglyn AI add-on currently applies (AGL-2896): bought,
+ * and on a subscription that is still paying for it. The ONE reading of
+ * `seatAddons.aiAddon` — the entitlement fold and the assist overage rate
+ * both ask this, so a dead subscription drops the band and the rate
+ * together rather than leaving a rate on a band that has gone.
+ */
+export function hasAiAddon(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return aiAddonUnits(resolvePurchasedAddons(org)) === 1
+}
+
+/**
  * Numeric entitlement keys that were REMOVED from `PLAN_ENTITLEMENTS` and
  * must never be resolved again from a stored override (AGL-2133).
  *
@@ -2541,9 +2753,13 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
  * Effective entitlements for an org: plan defaults with the org doc's
  * per-key overrides applied (features merge key-by-key too), then
  * purchased add-ons stacked on top (AGL-524): `seatAddons.hosts` raises
- * `hostLimit` and `seatAddons.eventCalendar` switches the `eventCalendar`
- * feature on. (Seat/dataset add-ons instead fold in at `checkSeatQuota` /
- * `checkDatasetQuota`, where the per-plan hard max clamps them.)
+ * `hostLimit`, `seatAddons.eventCalendar` switches the `eventCalendar`
+ * feature on, and every seat add-on a plugin declared through
+ * `registerPluginEntitlements` (AGL-2940) widens the quota it names by its
+ * per-plan figure per unit and switches its features on — the Aglyn AI
+ * add-on (AGL-2896) is the first such declaration. (Seat/dataset add-ons
+ * instead fold in at `checkSeatQuota` / `checkDatasetQuota`, where the
+ * per-plan hard max clamps them.)
  * Missing or unknown plans resolve as `free`.
  *
  * EVERY NUMERIC KEY of `OrgEntitlements` is an override axis, not a chosen
@@ -2583,7 +2799,10 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
 export function resolveOrgEntitlements(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): ResolvedOrgEntitlements {
-  const defaults = PLAN_ENTITLEMENTS[resolvePlan(org)]
+  const defaults = withPluginFeatureDefaults(
+    PLAN_ENTITLEMENTS[resolvePlan(org)],
+    resolvePlan(org),
+  )
   const overrides = org?.entitlements
   let resolved = defaults
   if (overrides) {
@@ -2626,14 +2845,104 @@ export function resolveOrgEntitlements(
   const purchased = resolvePurchasedAddons(org)
   const extraHosts = Math.max(0, purchased.hosts ?? 0)
   const eventCalendar = (purchased.eventCalendar ?? 0) >= 1
-  if (!extraHosts && !eventCalendar) return resolved
+  // A declared add-on's quota is added AFTER the per-org override, so a
+  // contracted figure and a purchased add-on stack the way a raised
+  // `hostLimit` and purchased sites do. The per-unit figure is the PLAN's,
+  // read off the effective plan rather than the stored one, so a dead
+  // subscription that resolved to free adds free's figure.
+  const folded = foldPluginSeatAddons(resolved, purchased, resolvePlan(org))
+  if (!extraHosts && !eventCalendar && folded === resolved) return resolved
   return {
-    ...resolved,
-    hostLimit: resolved.hostLimit + extraHosts,
-    features: eventCalendar
-      ? { ...resolved.features, eventCalendar: true }
-      : resolved.features,
+    ...folded,
+    hostLimit: folded.hostLimit + extraHosts,
+    features: {
+      ...folded.features,
+      ...(eventCalendar ? { eventCalendar: true } : {}),
+    },
   }
+}
+
+/**
+ * How many units of a plugin-declared seat add-on a purchase map counts as
+ * (AGL-2940): the stored quantity, capped at the declaration's `maxUnits`
+ * — 1 for an org-wide add-on, where a doubled webhook item or a hand edit
+ * above one is still one purchase. A non-number, `NaN`, a negative, or a
+ * key nothing declared is none.
+ */
+export function pluginSeatAddonUnits(
+  addons: OrgSeatAddons | null | undefined,
+  key: string,
+): number {
+  const declared = pluginSeatAddon(key)
+  if (!declared) return 0
+  const quantity = Number((addons as Record<string, unknown> | null)?.[key] ?? 0)
+  if (!Number.isFinite(quantity) || quantity < 1) return 0
+  const units = Math.floor(quantity)
+  return declared.maxUnits != null ? Math.min(units, declared.maxUnits) : units
+}
+
+/**
+ * Whether a plugin-declared seat add-on currently applies to the org: bought,
+ * and on a subscription that is still paying for it — the one reading every
+ * surface that shows or charges for the add-on goes through, so a dead
+ * subscription drops the quota and the feature together.
+ */
+export function hasPluginSeatAddon(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  key: string,
+): boolean {
+  return pluginSeatAddonUnits(resolvePurchasedAddons(org), key) > 0
+}
+
+/**
+ * Every declared seat add-on the org holds, folded in catalog order: the
+ * quota each names gains its per-plan figure per unit, and its features
+ * switch on. Returns the input object untouched when nothing applies, so a
+ * caller can tell "nothing folded" from "folded to the same numbers".
+ */
+function foldPluginSeatAddons(
+  resolved: ResolvedOrgEntitlements,
+  purchased: OrgSeatAddons,
+  plan: OrgPlan,
+): ResolvedOrgEntitlements {
+  let out = resolved
+  for (const addon of listPluginSeatAddons()) {
+    const units = pluginSeatAddonUnits(purchased, addon.key)
+    if (!units) continue
+    const next: ResolvedOrgEntitlements = { ...out, features: { ...out.features } }
+    if (addon.quota) {
+      const perUnit = addon.quota.perUnitByPlan[plan] ?? 0
+      const bag = next as unknown as Record<string, unknown>
+      const current = Number(bag[addon.quota.key] ?? 0)
+      bag[addon.quota.key] = (Number.isFinite(current) ? current : 0) + perUnit * units
+    }
+    const features = next.features as unknown as Record<string, boolean>
+    for (const feature of addon.features ?? []) features[feature] = true
+    out = next
+  }
+  return out
+}
+
+/**
+ * The plan row with every plugin-declared feature's default filled in
+ * (AGL-2940). A feature the plan tables already carry keeps the table's
+ * answer; a feature only a declaration knows reads its `defaultByPlan`, or
+ * `false`. Returns the row itself when no declaration adds anything.
+ */
+function withPluginFeatureDefaults(
+  row: ResolvedOrgEntitlements,
+  plan: OrgPlan,
+): ResolvedOrgEntitlements {
+  const features = row.features as unknown as Record<string, boolean | undefined>
+  let out: Record<string, boolean | undefined> | undefined
+  for (const declared of listPluginFeatures()) {
+    if (features[declared.key] !== undefined) continue
+    out = out ?? { ...features }
+    out[declared.key] = declared.defaultByPlan?.[plan] ?? false
+  }
+  return out
+    ? { ...row, features: out as unknown as ResolvedOrgEntitlements['features'] }
+    : row
 }
 
 /**
@@ -3471,12 +3780,20 @@ export function planLabelGrantingFeature(
   return plan ? PLAN_LABELS[plan] : undefined
 }
 
-/** True when the org's plan (or overrides) enables the boolean feature. */
+/**
+ * True when the org's plan (or overrides) enables the boolean feature. A
+ * key outside `OrgFeatureFlags` is one a plugin declared (AGL-2940) and is
+ * answered the same way.
+ */
 export function checkEntitlement(
   org: Partial<AglynOrgBilling> | null | undefined,
-  feature: keyof OrgFeatureFlags,
+  feature: keyof OrgFeatureFlags | (string & {}),
 ): boolean {
-  return Boolean(resolveOrgEntitlements(org).features[feature])
+  const features = resolveOrgEntitlements(org).features as unknown as Record<
+    string,
+    boolean | undefined
+  >
+  return Boolean(features[feature])
 }
 
 /**

@@ -40,6 +40,9 @@ export {}
 let mockDocs = new Map<string, Record<string, unknown>>()
 let mockAutoId = 0
 let mockFlagOn = true
+/** The permission verdict (AGL-2927), recorded with the arguments it was asked. */
+let mockAiPermitted = true
+const mockAiPermissionAsks: unknown[][] = []
 let mockFeatureLockdown: Response | null = null
 let mockLockdownResponse: Response | null = null
 let mockRateAllowed = true
@@ -178,6 +181,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../../libs/tenant/data/admin/src/lib/server/assist-usage',
   ),
+  // The per-person refusal counter the meter's door calls (AGL-2928).
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/ai-usage-by-user',
+  ),
   // The REAL cache, spliced by path (AGL-2486). Stubbing it would prove only
   // that the route calls something; the point of the tests below is that a
   // repeated question is served from Firestore and never reaches Anthropic,
@@ -189,6 +196,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
+        // The account-age rung (AGL-2925) reads the Auth record's creation
+        // time for a Free workspace; every account here is a month old.
+        getUser: async () => ({
+          metadata: { creationTime: 'Thu, 13 Aug 2026 00:00:00 GMT' },
+        }),
       }),
       firestore: () => mockMakeFirestore(),
     }),
@@ -199,6 +211,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       },
     },
   },
+  // The account-age rung reads the record from the token's pool; the project
+  // pool here, the same month-old account.
+  authForPool: () => ({
+    getUser: async () => ({
+      metadata: { creationTime: 'Thu, 13 Aug 2026 00:00:00 GMT' },
+    }),
+  }),
   checkRateLimit: () => ({
     allowed: mockRateAllowed,
     limit: 20,
@@ -217,6 +236,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isServerReleaseFlagOnForOrg: async () => mockFlagOn,
   lockdownRefusal: async () => mockLockdownResponse,
   featureLockdownRefusal: async () => mockFeatureLockdown,
+  memberHasAiPermission: async (...args: unknown[]) => {
+    mockAiPermissionAsks.push(args)
+    return mockAiPermitted
+  },
+  aiPermissionRefusal: (permission: string) =>
+    Response.json(
+      {
+        error: `Your role does not include ${permission}`,
+        reason: 'permission',
+        permission,
+      },
+      { status: 403 },
+    ),
 }))
 
 const { POST } = require('./route') as {
@@ -373,6 +405,8 @@ beforeEach(() => {
   mockDocs = new Map()
   mockAutoId = 0
   mockFlagOn = true
+  mockAiPermitted = true
+  mockAiPermissionAsks.length = 0
   mockFeatureLockdown = null
   mockLockdownResponse = null
   mockRateAllowed = true
@@ -438,6 +472,38 @@ describe('the gate ladder — every guard forced red once', () => {
     seedOrgs()
     const response = await POST(post(QUESTION_BODY('org-else')))
     expect(response.status).toBe(403)
+  })
+
+  it('403 when the role lacks `ai.use` — on the free rung too, before the flag (AGL-2927)', async () => {
+    seedOrgs()
+    mockAiPermitted = false
+    mockFlagOn = false
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({
+      reason: 'permission',
+      permission: 'ai.use',
+    })
+    // Asked about the NAMED org, on the site the page named, for the
+    // caller's own membership.
+    expect(mockAiPermissionAsks).toEqual([
+      [FREE_ORG, 'host-1', { $id: 'user-1' }, 'ai.use'],
+    ])
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('staff pass the permission rung, as they do every other org gate', async () => {
+    seedOrgs()
+    mockAiPermitted = false
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'staff-1',
+      email_verified: true,
+      staff: true,
+    })
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(200)
+    expect(mockAiPermissionAsks).toEqual([])
   })
 
   it('404 when the release flag is off — the feature does not exist', async () => {
@@ -532,13 +598,15 @@ describe('the gate ladder — every guard forced red once', () => {
   })
 
   it('a workspace with NO band gets the OPERATOR backstop, in its words', async () => {
-    // Free sells no assist band, so what refuses it is the operator ceiling
-    // and not a quantity anyone bought. Telling that workspace it "used its
-    // credits" would name a band it never had, and the payload carries no
-    // credit standing for it at all.
+    // Starter sells no assist band, so what refuses it is the operator
+    // ceiling and not a quantity anyone bought. Telling that workspace it
+    // "used its credits" would name a band it never had, and the payload
+    // carries no credit standing for it at all. (Free was the example until
+    // the taste gave it a band — AGL-2925; see the case below.)
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
     try {
       seedOrgs()
+      mockDocs.set(`orgs/${FREE_ORG}`, { name: 'Starters', plan: 'starter' })
       mockDocs.set(`orgs/${FREE_ORG}/assistUsage/${MONTH}`, {
         messages: 5,
         estCostUsd: 41.5,
@@ -552,6 +620,23 @@ describe('the gate ladder — every guard forced red once', () => {
     } finally {
       delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
     }
+  })
+
+  it('a FREE workspace is refused at the taste’s band, in credits, with no control named (AGL-2925)', async () => {
+    seedOrgs()
+    mockDocs.set(`orgs/${FREE_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 0.3,
+    })
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(429)
+    const payload = await response.json()
+    expect(String(payload.error)).toMatch(/used its assistant credits/i)
+    expect(payload.quota).toMatchObject({
+      refusedBy: 'band',
+      credits: { used: 300, limit: 300, remaining: 0 },
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   /** The Pro org with its own hard cap switched on (AGL-2653). */
@@ -640,6 +725,64 @@ describe('the gate ladder — every guard forced red once', () => {
     expect(mockDocs.get(`orgs/${PRO_ORG}/assistUsage/${MONTH}`)).toMatchObject({
       messages: 5,
     })
+  })
+
+  it('THE ORG’S OWN CEILING: overage at the figure is refused with a 402 that names it (AGL-2898)', async () => {
+    // Pro: 2,750 credits at $3.00 per 1,000. $4.75 of provider spend is
+    // 4,750 credits — 2,000 over the band, $6.00 of overage — against a $6
+    // ceiling the org set. Not the switch: the sentence names the ceiling
+    // and its figure, so the reader is sent to the right control.
+    //
+    // FORCED RED by returning 429 for every `!quota.allowed`: the status
+    // assertion failed first, then the error text.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    seedOrgs()
+    mockDocs.set(`orgs/${PRO_ORG}`, {
+      ...(mockDocs.get(`orgs/${PRO_ORG}`) ?? {}),
+      assistOverage: { capUsd: 6 },
+    })
+    mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 4.75,
+    })
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(402)
+    const payload = await response.json()
+    expect(payload).toMatchObject({ reason: 'quota', quota: { refusedBy: 'cap' } })
+    expect(String(payload.error)).toContain('"Stop AI when this month’s overage reaches"')
+    expect(String(payload.error)).toContain('$6.00')
+    expect(String(payload.error)).toContain('Billing → Usage')
+    expect(String(payload.error)).not.toContain('Stop AI assist at the included band')
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.get(`orgs/${PRO_ORG}/assistUsage/${MONTH}`)).toMatchObject({
+      messages: 5,
+    })
+    // And the body still ships no dollar figure of OURS.
+    const wire = JSON.stringify(payload)
+    for (const leak of ['costUsd', 'costLimitUsd', 'budgetUsd', '4.75']) {
+      expect(wire).not.toContain(leak)
+    }
+  })
+
+  it('THE CEILING’S PAIRED CONTROL: overage under the figure still reaches the model', async () => {
+    // $3.75 is 1,000 credits over the band — $3.00 of overage against the
+    // same $6 ceiling — so the org is buying credits and has not reached
+    // the figure it chose.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    seedOrgs()
+    armUpstream()
+    mockDocs.set(`orgs/${PRO_ORG}`, {
+      ...(mockDocs.get(`orgs/${PRO_ORG}`) ?? {}),
+      assistOverage: { capUsd: 6 },
+    })
+    mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 3.75,
+    })
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(mockFetch).toHaveBeenCalled()
   })
 
   it('THE PAIRED CONTROL: an ordinary paid month still reaches the model', async () => {

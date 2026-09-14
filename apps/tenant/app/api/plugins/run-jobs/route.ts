@@ -45,6 +45,11 @@ import '../../../../utils/publish-schedule-job'
 // silent way to stop re-checking whether a verified sending domain still
 // publishes its records.
 import '../../../../utils/sending-domain-recheck-job'
+// The third core job (AGL-2904), imported for its registration side effect
+// like the two above: without it, an AI job whose first step the console
+// route could not finish stays `queued` forever, and nothing else on the
+// platform would notice.
+import '../../../../utils/ai-jobs-beat'
 // Imported for its registration side effect too (AGL-2495): it is what tells
 // core's job gate how to resolve a host's lockdown. Core cannot import the
 // admin lib (that edge is a cycle), so if this import goes, every job on the

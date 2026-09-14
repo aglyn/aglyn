@@ -24,6 +24,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
+import { aiAddonName } from '@aglyn/aglyn'
 import { Fragment } from 'react'
 
 /** One monthly org usage rollup as `/api/admin/org-usage` serves it. */
@@ -44,6 +45,19 @@ export interface StaffOrgUsageMonth {
    * than summed into one of them.
    */
   assistCostUsd?: number
+  /**
+   * The credit view of the same spend (AGL-2930): what `report-usage` drew
+   * against the band, and the part past it that entered `billedCents`.
+   *
+   * `null` rather than 0 on a rollup written before the credit fields
+   * existed — a month that predates the meter drew nothing it can be
+   * measured by, and a `0` there would state that the org used no AI.
+   * Assist overage has no withheld twin: unlike form and contact overage it
+   * was billed from the day it was sold, so the dollar figure alone is the
+   * whole answer.
+   */
+  assistCredits?: number | null
+  assistOverageUsd?: number | null
   /**
    * What the rollup recorded and nothing priced (AGL-2321).
    *
@@ -182,28 +196,103 @@ export function recordedUsageLines(
 }
 
 /**
+ * The org's AI credit pool as the caller resolved it (AGL-2899): whether the
+ * AI add-on is on, the credits the add-on contributes, and the whole
+ * band the Assist column above is drawn against. Resolved by the caller from
+ * the org document — this table only has months — so the org detail page,
+ * which holds the document, passes it and the list's dialog, which holds an
+ * id, does not.
+ */
+export interface StaffAssistPool {
+  aiAddon: boolean
+  /** The add-on's band alone; 0 without the add-on. */
+  addonCredits: number
+  /** Plan band plus add-on band, or null where the plan sells no band. */
+  creditsPerMonth: number | null
+}
+
+/**
+ * The pool as one line: the reader of the Assist column needs to know what
+ * fraction of what band the dollars above represent, and whether an add-on
+ * is part of the band.
+ */
+export function assistPoolSentence(pool: StaffAssistPool): string {
+  const band =
+    pool.creditsPerMonth === null
+      ? 'no AI credit band'
+      : `${pool.creditsPerMonth.toLocaleString()} AI credits/mo`
+  const name = aiAddonName()
+  return pool.aiAddon
+    ? `${name} add-on on — ${band}, ${pool.addonCredits.toLocaleString()} ` +
+        'of them from the add-on.'
+    : `${name} add-on off — ${band}.`
+}
+
+/** A recorded count, or the dash that says the rollup predates it. */
+export function aiCreditsCell(value: number | null | undefined): string {
+  return value == null ? '—' : Math.round(value).toLocaleString()
+}
+
+/** A billed dollar figure, or the dash that says the rollup predates it. */
+export function aiOverageCell(value: number | null | undefined): string {
+  return value == null ? '—' : `$${Number(value).toFixed(2)}`
+}
+
+/** The columns every rollup row renders, in order — the spec pins them. */
+export const STAFF_ORG_USAGE_COLUMNS = [
+  'Month',
+  'Page views',
+  'Storage GB',
+  'Forms',
+  'Assist',
+  'AI credits used',
+  'AI overage billed ($)',
+  'Cost',
+] as const
+
+/**
  * The monthly usage rollup table (AGL-205), shared between the Organizations
  * list's Usage dialog and the org detail page's usage panel (AGL-939) so the
  * two surfaces can never drift on what a rollup row means.
  */
-const StaffOrgUsageTable = ({ months }: { months: StaffOrgUsageMonth[] }) => {
+const StaffOrgUsageTable = ({
+  months,
+  assistPool,
+}: {
+  months: StaffOrgUsageMonth[]
+  assistPool?: StaffAssistPool
+}) => {
+  const pool = assistPool ? (
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      component="div"
+      sx={{ mb: 1 }}
+    >
+      {assistPoolSentence(assistPool)}
+    </Typography>
+  ) : null
   if (months.length === 0) {
     return (
-      <Typography variant="body2" color="text.secondary">
-        {'No usage rollups recorded for this organization yet.'}
-      </Typography>
+      <>
+        {pool}
+        <Typography variant="body2" color="text.secondary">
+          {'No usage rollups recorded for this organization yet.'}
+        </Typography>
+      </>
     )
   }
   return (
+    <>
+    {pool}
     <Table size="small">
       <TableHead>
         <TableRow>
-          <TableCell>{'Month'}</TableCell>
-          <TableCell align="right">{'Page views'}</TableCell>
-          <TableCell align="right">{'Storage GB'}</TableCell>
-          <TableCell align="right">{'Forms'}</TableCell>
-          <TableCell align="right">{'Assist'}</TableCell>
-          <TableCell align="right">{'Cost'}</TableCell>
+          {STAFF_ORG_USAGE_COLUMNS.map((column, index) => (
+            <TableCell key={column} align={index === 0 ? 'left' : 'right'}>
+              {column}
+            </TableCell>
+          ))}
         </TableRow>
       </TableHead>
       <TableBody>
@@ -249,6 +338,11 @@ const StaffOrgUsageTable = ({ months }: { months: StaffOrgUsageMonth[] }) => {
               <TableCell align="right">
                 {`$${Number(row.assistCostUsd ?? 0).toFixed(4)}`}
               </TableCell>
+              {/* The credit view and the billed overage (AGL-2930) — the
+                  two figures a staff reader compares against the pool
+                  sentence above the table. */}
+              <TableCell align="right">{aiCreditsCell(row.assistCredits)}</TableCell>
+              <TableCell align="right">{aiOverageCell(row.assistOverageUsd)}</TableCell>
               <TableCell align="right">
                 {`$${row.costUsd.toFixed(2)}`}
                 {row.deltas?.costUsd != null ? (
@@ -268,7 +362,7 @@ const StaffOrgUsageTable = ({ months }: { months: StaffOrgUsageMonth[] }) => {
               </TableCell>
             </TableRow>
             <TableRow>
-              <TableCell colSpan={6} sx={{ pt: 0 }}>
+              <TableCell colSpan={STAFF_ORG_USAGE_COLUMNS.length} sx={{ pt: 0 }}>
                 {recordedUsageLines(row.recorded).length ? (
                   recordedUsageLines(row.recorded).map((line) => (
                     <Typography
@@ -301,6 +395,7 @@ const StaffOrgUsageTable = ({ months }: { months: StaffOrgUsageMonth[] }) => {
         ))}
       </TableBody>
     </Table>
+    </>
   )
 }
 StaffOrgUsageTable.displayName = 'StaffOrgUsageTable'

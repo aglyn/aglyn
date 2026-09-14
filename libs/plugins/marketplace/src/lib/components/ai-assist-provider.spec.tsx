@@ -174,11 +174,28 @@ function Doors() {
   )
 }
 
-function mountProvider() {
+/** The reader's AI verdict as the shell passes it (AGL-2927); granted by default. */
+const GRANTED = { loaded: true, use: true, generate: true }
+
+function mountProvider(
+  aiPermissions: { loaded: boolean; use: boolean; generate: boolean } = GRANTED,
+) {
   render(
-    <AiAssistProvider org={ORG} orgReady>
+    <AiAssistProvider org={ORG} orgReady hostId="host-1" aiPermissions={aiPermissions}>
       <Doors />
     </AiAssistProvider>,
+  )
+}
+
+/** Whether each door's callback is published into the designer's context. */
+function DoorPresence() {
+  const assist = useContext(AiAssistContext) as any
+  return (
+    <div>
+      {`rewrite:${assist?.onRewrite ? 'yes' : 'no'} section:${
+        assist?.onGenerateSection ? 'yes' : 'no'
+      }`}
+    </div>
   )
 }
 
@@ -278,6 +295,60 @@ describe('AGL-1557 · the AI-assist doors read the 423 body', () => {
     // The two failure modes the fallback copy exists to prevent.
     expect(said).not.toContain('undefined')
     expect(said).not.toMatch(/something went wrong/i)
+  })
+})
+
+describe('AGL-2927 · the doors hold on a pending permission and close on a refused one', () => {
+  it('names the site in both bodies, so a collaborator is decided on THAT site', async () => {
+    assistAnswers.push({ status: 200, payload: { text: 'New copy' } })
+    await driveRewrite()
+    expect(assistCalls[0]).toMatchObject({ hostId: 'host-1' })
+  })
+
+  it('a PENDING answer holds both doors with a notice and reaches no network', () => {
+    mountProvider({ loaded: false, use: false, generate: false })
+    fireEvent.click(screen.getByRole('button', { name: 'open rewrite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'open section' }))
+    expect(screen.queryByLabelText('Instruction')).toBeNull()
+    expect(screen.queryByLabelText('Section')).toBeNull()
+    expect(enqueueSnackbar).toHaveBeenCalledTimes(2)
+    expect(String(enqueueSnackbar.mock.calls[0][0])).toContain('Checking your permissions')
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('a REFUSED key publishes no callback, so the designer draws no control for it', () => {
+    render(
+      <AiAssistProvider
+        org={ORG}
+        orgReady
+        aiPermissions={{ loaded: true, use: true, generate: false }}
+      >
+        <DoorPresence />
+      </AiAssistProvider>,
+    )
+    expect(screen.getByText('rewrite:yes section:no')).toBeTruthy()
+  })
+
+  it('the CONTROL: a granted answer publishes both callbacks', () => {
+    render(
+      <AiAssistProvider org={ORG} orgReady aiPermissions={GRANTED}>
+        <DoorPresence />
+      </AiAssistProvider>,
+    )
+    expect(screen.getByText('rewrite:yes section:yes')).toBeTruthy()
+  })
+
+  it('a refused key on one door leaves the OTHER door open', async () => {
+    assistAnswers.push({ status: 200, payload: { text: 'New copy' } })
+    mountProvider({ loaded: true, use: true, generate: false })
+    fireEvent.click(screen.getByRole('button', { name: 'open rewrite' }))
+    fireEvent.change(await screen.findByLabelText('Instruction'), {
+      target: { value: 'Make it punchier' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }))
+    await waitFor(() => {
+      expect(assistCalls.length).toBe(1)
+    })
   })
 })
 

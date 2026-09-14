@@ -32,25 +32,41 @@ import {
   ASSIST_CREDIT_MIN_MARGIN_PCT,
   ASSIST_HARD_CAP_CONTROL_LABEL,
   ASSIST_HARD_CAP_CONTROL_LOCATION,
+  ASSIST_OVERAGE_CAP_CONTROL_LABEL,
   assistBandRefuses,
   assistCreditOverage,
   assistCreditRateMarginPct,
   assistCreditsFromUsd,
+  assistFreeTasteRefusalText,
   assistHardCapRefusalText,
   assistMonthOverage,
+  assistOverageCapReached,
+  assistOverageCapRefusalText,
+  assistOwnControlRefusalText,
   assistRefusedByHardCap,
+  assistRefusedByOverageCap,
   assistUsdFromCredits,
   priceAssistCreditOverage,
   publicAssistCredits,
   resolveAssistBudgetUsd,
   resolveAssistCreditBudget,
   resolveAssistHardCap,
+  resolveAssistOverageRateUsdPer1k,
+  resolveAssistOverageCapUsd,
 } from './assist-credits'
 import {
+  AI_ADDON_CREDITS_PER_MONTH,
+  FREE_AI_TASTE_CREDITS_PER_MONTH,
+  AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
   ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
+  hasAiAddon,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  resolveEffectivePlan,
 } from './plan-entitlements'
+// The AI add-on is declared through the plugin entitlement seam; the resolver
+// reads that declaration, so the spec loads it as the barrel does.
+import './ai-entitlements'
 /**
  * Measured cost of one grounded answer, and of one generated screen, at the
  * shipped Sonnet rates.
@@ -144,15 +160,21 @@ describe('the bands', () => {
     }
   })
 
-  it('rises with the tier, and Free/Starter carry none', () => {
-    expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(0)
+  it('rises with the tier; Free carries the taste as a wall and Starter carries none', () => {
+    // The Free taste (AGL-2925): a real band, small enough that a month of
+    // it costs under a third of a dollar, and a wall because the plan has
+    // no rate to sell past it at.
+    expect(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    expect(FREE_AI_TASTE_CREDITS_PER_MONTH).toBe(300)
+    expect(assistUsdFromCredits(PLAN_ENTITLEMENTS.free.assistCreditsPerMonth)).toBeLessThanOrEqual(0.3)
+    expect(assistBandRefuses({ plan: 'free' })).toBe(true)
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(0)
-    // Generative building is the most expensive thing that could be given
-    // away and the one feature no bandwidth wall bounds, so neither tier
-    // carries `aiAssist` either.
+    // Neither tier carries `aiAssist` — the guided rung stays Pro and up.
+    // Free carries `aiGenerative`, the door the taste exists for.
     expect(PLAN_ENTITLEMENTS.free.features.aiAssist).toBe(false)
+    expect(PLAN_ENTITLEMENTS.free.features.aiGenerative).toBe(true)
     expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(false)
-    let previous = 0
+    let previous = PLAN_ENTITLEMENTS.free.assistCreditsPerMonth
     for (const plan of [...PAID_TIERS, 'enterprise'] as const) {
       const band = PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth
       expect(PLAN_ENTITLEMENTS[plan].features.aiAssist).toBe(true)
@@ -229,15 +251,17 @@ describe('Enterprise resolves to a finite number, never Infinity', () => {
 })
 
 describe('ANTI-VACUITY: a zero band is "no band", never a budget of zero', () => {
-  it('resolves Free and Starter to null so their assistant still runs', () => {
+  it('resolves Starter to null so its assistant still runs, and Free to the taste', () => {
     // A stubbed entitlements module answers 0 for every quota. If 0 became a
     // budget of $0, every clamp in this feature would go green having refused
-    // every request — and the free tier's docs-grounded assistant, which is
+    // every request — and Starter's docs-grounded assistant, which is
     // bounded by a message cap and an operator backstop, would be switched
     // off by a pricing field that was never about it.
-    expect(resolveAssistCreditBudget({ plan: 'free' })).toBeNull()
     expect(resolveAssistCreditBudget({ plan: 'starter' })).toBeNull()
-    expect(resolveAssistBudgetUsd({ plan: 'free' })).toBeNull()
+    expect(resolveAssistBudgetUsd({ plan: 'starter' })).toBeNull()
+    // Free is a REAL band since AGL-2925, and resolves as one.
+    expect(resolveAssistCreditBudget({ plan: 'free' })).toBe(300)
+    expect(resolveAssistBudgetUsd({ plan: 'free' })).toBe(0.3)
     // The exact shape a stub produces, on a tier that DOES sell a band.
     expect(
       resolveAssistCreditBudget({
@@ -255,13 +279,14 @@ describe('ANTI-VACUITY: a zero band is "no band", never a budget of zero', () =>
     expect(resolveAssistCreditBudget({ plan: 'agency' })).toBe(58_000)
   })
 
-  it('a dead subscription drops to free, and so loses the band', () => {
+  it('a dead subscription drops to free, and so drops to the taste', () => {
+    // Fifty-eight thousand credits become three hundred, behind a wall.
     expect(
       resolveAssistCreditBudget({
         plan: 'agency',
         subscription: { status: 'canceled' },
       } as never),
-    ).toBeNull()
+    ).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
   })
 })
 
@@ -403,11 +428,17 @@ describe('the overage is SOLD past the band at the plan rate, unless the org ask
   })
 
   it('prices ZERO where there is no band or no rate, structurally', () => {
-    // Free and Starter: no band, so nothing to be over. Enterprise: a band,
+    // Starter: no band, so nothing to be over. Free and Enterprise: a band,
     // and no rate to sell past it at.
-    expect(assistMonthOverage({ plan: 'free' }, 40)).toMatchObject({
+    expect(assistMonthOverage({ plan: 'starter' }, 40)).toMatchObject({
       bandCredits: null,
       overageCredits: 0,
+      overageMonthlyUsd: 0,
+      overageRateUsd: null,
+    })
+    expect(assistMonthOverage({ plan: 'free' }, 40)).toMatchObject({
+      bandCredits: 300,
+      overageCredits: 40_000 - 300,
       overageMonthlyUsd: 0,
       overageRateUsd: null,
     })
@@ -497,5 +528,336 @@ describe('the overage is SOLD past the band at the plan rate, unless the org ask
       expect(ASSIST_HARD_CAP_CONTROL_LABEL).toMatch(/^[A-Z][a-z]/)
       expect(ASSIST_HARD_CAP_CONTROL_LABEL).not.toMatch(/[_{}]/)
     })
+  })
+})
+
+describe('the Aglyn AI add-on widens the ONE pool and sells past it (AGL-2896)', () => {
+  const starterWithAddon = { plan: 'starter' as const, seatAddons: { aiAddon: 1 } }
+
+  it('gives Starter a band, a budget and a rate it had none of', () => {
+    // Without the add-on Starter is the "no band" case every ANTI-VACUITY
+    // assertion above pins. With it, the same org resolves a real budget.
+    expect(resolveAssistCreditBudget({ plan: 'starter' })).toBeNull()
+    expect(resolveAssistCreditBudget(starterWithAddon)).toBe(
+      AI_ADDON_CREDITS_PER_MONTH.starter,
+    )
+    expect(resolveAssistCreditBudget(starterWithAddon)).toBe(4_000)
+    expect(resolveAssistBudgetUsd(starterWithAddon)).toBe(4)
+    // …and a rate to sell past it at, which is Pro's, not a new rung.
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'starter' })).toBeNull()
+    expect(resolveAssistOverageRateUsdPer1k(starterWithAddon)).toBe(
+      AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
+    )
+    expect(AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K).toBe(
+      PLAN_PRICING.pro.extraAssistCreditsUsdPer1k,
+    )
+    // The rate is NOT written onto the plan: the table still says Starter
+    // sells no overage, because without the add-on it does not.
+    expect(PLAN_PRICING.starter.extraAssistCreditsUsdPer1k).toBeNull()
+  })
+
+  it('ADDS to a plan that already has a band, at the plan rate it already had', () => {
+    // FORCED RED by replacing the band rather than adding to it.
+    expect(resolveAssistCreditBudget({ plan: 'pro', seatAddons: { aiAddon: 1 } })).toBe(
+      2_750 + 9_000,
+    )
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'pro', seatAddons: { aiAddon: 1 } })).toBe(3)
+    expect(resolveAssistCreditBudget({ plan: 'agency', seatAddons: { aiAddon: 1 } })).toBe(
+      58_000 + 149_000,
+    )
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'agency', seatAddons: { aiAddon: 1 } })).toBe(2)
+  })
+
+  it('leaves Free and Enterprise with no rate, add-on or not', () => {
+    // Free sells no add-on: a quantity written onto it adds free's zero, so
+    // the budget stays the taste and nothing widens it.
+    expect(resolveAssistCreditBudget({ plan: 'free', seatAddons: { aiAddon: 1 } })).toBe(
+      FREE_AI_TASTE_CREDITS_PER_MONTH,
+    )
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'free', seatAddons: { aiAddon: 1 } })).toBeNull()
+    // Enterprise: the band widens by the fallback figure, and the usage is
+    // still in the contract — no rate, so the band stays a wall.
+    expect(resolveAssistCreditBudget({ plan: 'enterprise', seatAddons: { aiAddon: 1 } })).toBe(
+      ENTERPRISE_ASSIST_CREDITS_PER_MONTH + AI_ADDON_CREDITS_PER_MONTH.enterprise,
+    )
+    expect(
+      resolveAssistOverageRateUsdPer1k({ plan: 'enterprise', seatAddons: { aiAddon: 1 } }),
+    ).toBeNull()
+    expect(assistBandRefuses({ plan: 'enterprise', seatAddons: { aiAddon: 1 } })).toBe(true)
+  })
+
+  it('every reader of the rate reads the SAME one', () => {
+    // The gate, the invoice and the refusal sentence, on the org whose rate
+    // comes from the add-on and not from the plan table.
+    expect(assistBandRefuses(starterWithAddon)).toBe(false)
+    expect(assistBandRefuses({ ...starterWithAddon, assistOverage: { hardCap: true } })).toBe(true)
+    expect(
+      assistRefusedByHardCap({ ...starterWithAddon, assistOverage: { hardCap: true } }, 'band'),
+    ).toBe(true)
+    expect(assistHardCapRefusalText(starterWithAddon)).toContain('$3.00 per 1,000 credits')
+    expect(priceAssistCreditOverage(starterWithAddon, 2_000)).toEqual({
+      overageCredits: 2_000,
+      overageMonthlyUsd: 6,
+      overageRateUsd: 3,
+    })
+    // The month's derivation, end to end: the band edge is the add-on's.
+    expect(assistMonthOverage(starterWithAddon, assistUsdFromCredits(4_000 + 2_500))).toEqual({
+      usedCredits: 6_500,
+      bandCredits: 4_000,
+      overageCredits: 2_500,
+      overageMonthlyUsd: 7.5,
+      overageRateUsd: 3,
+    })
+    // And without the add-on the same spend on Starter bills nothing and
+    // refuses at the (absent) band — the pre-add-on shape, unchanged.
+    expect(assistMonthOverage({ plan: 'starter' }, assistUsdFromCredits(6_500))).toMatchObject({
+      bandCredits: null,
+      overageMonthlyUsd: 0,
+      overageRateUsd: null,
+    })
+    expect(assistBandRefuses({ plan: 'starter' })).toBe(true)
+  })
+
+  it('is a toggle: any quantity from one up is one purchase, anything else is none', () => {
+    for (const quantity of [1, 2, 7, 1e6]) {
+      expect(hasAiAddon({ plan: 'starter', seatAddons: { aiAddon: quantity } })).toBe(true)
+      expect(
+        resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: quantity } }),
+      ).toBe(4_000)
+    }
+    for (const quantity of [0, -1, 0.5, Number.NaN, undefined] as unknown[]) {
+      expect(
+        hasAiAddon({ plan: 'starter', seatAddons: { aiAddon: quantity as number } }),
+      ).toBe(false)
+    }
+    expect(hasAiAddon({ plan: 'starter' })).toBe(false)
+    expect(hasAiAddon(null)).toBe(false)
+  })
+
+  it('goes with the subscription: a dead one drops the band and the rate together', () => {
+    // A rate on a band that has gone would be the silent free overage in
+    // reverse — a fee quoted on nothing. Both come from `hasAiAddon`.
+    const dead = {
+      plan: 'starter' as const,
+      subscription: { status: 'canceled' },
+      seatAddons: { aiAddon: 1 },
+    } as never
+    expect(hasAiAddon(dead)).toBe(false)
+    // Dead is Free, and Free is the taste: the add-on's four thousand are
+    // gone, three hundred remain, and they are a wall.
+    expect(resolveAssistCreditBudget(dead)).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    expect(resolveAssistOverageRateUsdPer1k(dead)).toBeNull()
+    expect(assistBandRefuses(dead)).toBe(true)
+  })
+
+  it('every band costs at most 50% of the add-on price in provider spend', () => {
+    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, applied to the add-on line
+    // itself: what the band costs at 100% against what the add-on charges.
+    // Free and Enterprise sell no add-on and are asserted separately.
+    for (const plan of ['starter', ...PAID_TIERS] as const) {
+      const price = PLAN_PRICING[plan].aiAddonMonthlyUsd
+      if (price === null) throw new Error(`${plan} must price the add-on`)
+      const cost = assistUsdFromCredits(AI_ADDON_CREDITS_PER_MONTH[plan])
+      expect(`${plan}: ${cost / price <= 1 - ASSIST_CREDIT_MIN_MARGIN_PCT}`).toBe(`${plan}: true`)
+      // …and it is a real band, not a token one hiding under the floor.
+      expect(cost / price).toBeGreaterThan(0.4)
+    }
+    expect(PLAN_PRICING.free.aiAddonMonthlyUsd).toBeNull()
+    expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+    expect(PLAN_PRICING.enterprise.aiAddonMonthlyUsd).toBeNull()
+    // Enterprise's band follows the Agency x 2 rule and is finite.
+    expect(AI_ADDON_CREDITS_PER_MONTH.enterprise).toBe(AI_ADDON_CREDITS_PER_MONTH.agency * 2)
+    for (const band of Object.values(AI_ADDON_CREDITS_PER_MONTH)) {
+      expect(Number.isFinite(band)).toBe(true)
+    }
+  })
+})
+
+describe('the dollar ceiling on overage (AGL-2898)', () => {
+  /** Pro: 2,750 credits at $3.00 per 1,000. 2,000 credits over is $6.00. */
+  const PRO_BAND = 2_750
+  const capped = (capUsd: unknown) => ({
+    plan: 'pro' as const,
+    assistOverage: { capUsd: capUsd as number },
+  })
+
+  it('resolves only a finite positive number; everything else is NO ceiling', () => {
+    expect(resolveAssistOverageCapUsd(capped(6))).toBe(6)
+    expect(resolveAssistOverageCapUsd(capped(0.5))).toBe(0.5)
+    // A string "6" must not become a ceiling — the route refuses it too —
+    // and neither may junk become a wall of NaN that every comparison passes.
+    for (const junk of ['6', 0, -6, Number.NaN, Number.POSITIVE_INFINITY, null, undefined, true]) {
+      expect(resolveAssistOverageCapUsd(capped(junk))).toBeNull()
+    }
+    expect(resolveAssistOverageCapUsd({ plan: 'pro' })).toBeNull()
+    expect(resolveAssistOverageCapUsd(null)).toBeNull()
+  })
+
+  it('is reached when the month’s PRICED overage meets the figure, not before', () => {
+    // FORCED RED by comparing credits to the cap instead of dollars: 2,000
+    // credits over reads as 2,000 >= 6 and the ceiling fires at the band.
+    const org = capped(6)
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND))).toBe(false)
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND + 1_000))).toBe(false)
+    // $5.97 of overage against a $6 ceiling: under.
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND + 1_990))).toBe(false)
+    // Exactly $6.00: reached. An org that asked to stop AT a figure is
+    // stopped when the figure is met.
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND + 2_000))).toBe(true)
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND + 9_000))).toBe(true)
+  })
+
+  it('is the invoice’s own arithmetic — the figure it stops at is the figure billed', () => {
+    const org = capped(6)
+    const spend = assistUsdFromCredits(PRO_BAND + 2_000)
+    expect(assistMonthOverage(org, spend).overageMonthlyUsd).toBe(6)
+    expect(assistOverageCapReached(org, spend)).toBe(true)
+  })
+
+  it('is never reached without a ceiling, however far past the band', () => {
+    expect(assistOverageCapReached({ plan: 'pro' }, assistUsdFromCredits(PRO_BAND + 90_000))).toBe(false)
+    expect(assistOverageCapReached(capped('6'), assistUsdFromCredits(PRO_BAND + 90_000))).toBe(false)
+  })
+
+  it('is never reached on a plan with no rate — the overage prices to zero, structurally', () => {
+    // Enterprise: a band, no rate. Free with a contracted band: the same.
+    // Neither has a check for it; zero simply never meets a positive figure.
+    for (const org of [
+      { plan: 'enterprise' as const, assistOverage: { capUsd: 1 } },
+      {
+        plan: 'free' as const,
+        entitlements: { assistCreditsPerMonth: 300 },
+        assistOverage: { capUsd: 1 },
+      },
+    ]) {
+      expect(assistOverageCapReached(org, 500)).toBe(false)
+      expect(assistRefusedByOverageCap(org, 'cap')).toBe(false)
+    }
+  })
+
+  it('a refusal is the ceiling’s own only when the ceiling caused it', () => {
+    const org = capped(6)
+    expect(assistRefusedByOverageCap(org, 'cap')).toBe(true)
+    for (const other of ['band', 'budget', 'messages', null] as const) {
+      expect(assistRefusedByOverageCap(org, other)).toBe(false)
+    }
+    // No ceiling set: a `cap` refusal is not this org's and must not send
+    // the user to a control that shows nothing.
+    expect(assistRefusedByOverageCap({ plan: 'pro' }, 'cap')).toBe(false)
+  })
+
+  it('the switch and the ceiling are told apart, and each names only itself', () => {
+    const stoppedAtBand = { plan: 'pro' as const, assistOverage: { hardCap: true, capUsd: 6 } }
+    expect(assistRefusedByHardCap(stoppedAtBand, 'band')).toBe(true)
+    expect(assistRefusedByOverageCap(stoppedAtBand, 'band')).toBe(false)
+    expect(assistRefusedByHardCap(stoppedAtBand, 'cap')).toBe(false)
+    expect(assistRefusedByOverageCap(stoppedAtBand, 'cap')).toBe(true)
+    expect(assistOwnControlRefusalText(stoppedAtBand, 'band')).toContain(
+      `"${ASSIST_HARD_CAP_CONTROL_LABEL}"`,
+    )
+    expect(assistOwnControlRefusalText(stoppedAtBand, 'cap')).toContain(
+      `"${ASSIST_OVERAGE_CAP_CONTROL_LABEL}"`,
+    )
+    // Nobody's control: the message cap, the operator's figure, an admission.
+    for (const other of ['messages', 'budget', null] as const) {
+      expect(assistOwnControlRefusalText(stoppedAtBand, other)).toBeNull()
+    }
+  })
+
+  it('the refusal sentence names the control, quotes the figure, and says where it lives', () => {
+    const text = assistOverageCapRefusalText(capped(6))
+    expect(text).toContain(`"${ASSIST_OVERAGE_CAP_CONTROL_LABEL}"`)
+    expect(text).toContain('$6.00')
+    expect(text).toContain(ASSIST_HARD_CAP_CONTROL_LOCATION)
+    // No dollar figure of OURS — the ceiling is the customer's own number.
+    for (const leak of ['costUsd', 'estCostUsd', '0.001', 'provider']) {
+      expect(text).not.toContain(leak)
+    }
+    expect(ASSIST_OVERAGE_CAP_CONTROL_LABEL).toMatch(/^[A-Z][a-z]/)
+    expect(ASSIST_OVERAGE_CAP_CONTROL_LABEL).not.toMatch(/[_{}]/)
+  })
+})
+
+describe('Free is a WALL, on the real plan row (AGL-2898, AGL-2925)', () => {
+  /**
+   * A Free org on the plan row as shipped: the 300-credit taste. It has a
+   * band to measure against and no rate to sell past it at, so the band is
+   * a wall: refused there, billed nothing, offered no control — and nothing
+   * here is a Free-specific check, it all follows from
+   * `extraAssistCreditsUsdPer1k` being `null`. This block was written
+   * against an entitlements override of 300 before the constant existed.
+   */
+  const freeWithBand = { plan: 'free' as const }
+
+  it('has the band, and no rate', () => {
+    expect(resolveAssistCreditBudget(freeWithBand)).toBe(300)
+    expect(resolveAssistCreditBudget(freeWithBand)).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
+    expect(PLAN_PRICING.free.extraAssistCreditsUsdPer1k).toBeNull()
+    expect(assistBandRefuses(freeWithBand)).toBe(true)
+    // A band WIDENED by staff is a wall all the same.
+    const widened = { plan: 'free' as const, entitlements: { assistCreditsPerMonth: 900 } }
+    expect(resolveAssistCreditBudget(widened)).toBe(900)
+    expect(assistBandRefuses(widened)).toBe(true)
+    expect(assistOwnControlRefusalText(widened, 'band')).toBeNull()
+  })
+
+  it('prices NOTHING past the band', () => {
+    // FORCED RED by pricing a null rate as 0 per 1,000 instead of skipping:
+    // the overage credits would still count and the dollars would be 0, so
+    // this asserts both halves of "billed nothing".
+    const month = assistMonthOverage(freeWithBand, assistUsdFromCredits(900))
+    expect(month).toMatchObject({
+      usedCredits: 900,
+      bandCredits: 300,
+      overageCredits: 600,
+      overageMonthlyUsd: 0,
+      overageRateUsd: null,
+    })
+  })
+
+  it('names NO control when refused at the band — there is nothing to switch', () => {
+    // A refusal at the band on this org is the plan's, not the org's: the
+    // switch is off, and turning it on would change nothing.
+    expect(assistRefusedByHardCap(freeWithBand, 'band')).toBe(false)
+    expect(assistRefusedByHardCap({ ...freeWithBand, assistOverage: { hardCap: true } }, 'band')).toBe(false)
+    expect(assistOwnControlRefusalText(freeWithBand, 'band')).toBeNull()
+    // And a ceiling on it is inert: zero overage never reaches one.
+    expect(assistOverageCapReached({ ...freeWithBand, assistOverage: { capUsd: 1 } }, 500)).toBe(false)
+    expect(assistOwnControlRefusalText({ ...freeWithBand, assistOverage: { capUsd: 1 } }, 'cap')).toBeNull()
+  })
+
+  it('the card’s "nothing to stop" reading: sells no overage, switch off', () => {
+    // What the assist-overage route serves the card, from the same
+    // resolvers: a band, no rate, so `sellsOverage` is false and with the
+    // switch off the card offers neither the switch nor the ceiling.
+    const bandCredits = resolveAssistCreditBudget(freeWithBand)
+    const rate = PLAN_PRICING[resolveEffectivePlan(freeWithBand)].extraAssistCreditsUsdPer1k
+    const sellsOverage = bandCredits !== null && rate !== null
+    const nothingToStop = !sellsOverage && !resolveAssistHardCap(freeWithBand)
+    expect(sellsOverage).toBe(false)
+    expect(nothingToStop).toBe(true)
+  })
+})
+
+describe('the Free taste’s own refusals have their own sentences (AGL-2925)', () => {
+  it('names a clock or an upgrade for each rung, and nothing for any other refusal', () => {
+    expect(assistFreeTasteRefusalText('account')).toMatch(/across your workspaces/)
+    expect(assistFreeTasteRefusalText('account')).toMatch(/upgrade/i)
+    expect(assistFreeTasteRefusalText('requests')).toMatch(/tomorrow/)
+    expect(assistFreeTasteRefusalText('refusals')).toMatch(/paused until tomorrow/)
+    expect(assistFreeTasteRefusalText('platform')).toMatch(/try again tomorrow/i)
+    expect(assistFreeTasteRefusalText('platform')).toMatch(/Paid workspaces are not affected/)
+    for (const other of ['messages', 'budget', 'band', 'cap', null] as const) {
+      expect(assistFreeTasteRefusalText(other)).toBeNull()
+    }
+  })
+
+  it('is customer-safe: no dollar figure, no counter, no other workspace named', () => {
+    for (const rung of ['account', 'requests', 'refusals', 'platform'] as const) {
+      const text = assistFreeTasteRefusalText(rung) as string
+      expect(text).not.toMatch(/\$/)
+      expect(text).not.toMatch(/\d/)
+      expect(text).not.toMatch(/uid|Firestore|ceiling/i)
+    }
   })
 })

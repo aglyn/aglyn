@@ -21,6 +21,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import {
   Alert,
   Button,
+  Chip,
   List,
   ListItem,
   ListItemText,
@@ -33,10 +34,13 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
+  activityActionLabel,
   activityActorLabel,
   activityHref,
   activityPrimaryText,
+  activityEntryGroupId,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { listPluginActivityFilters } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
@@ -210,6 +214,26 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   // when the entries carry one. Both are page-scoped; see the docblock.
   const [filter, setFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  /*
+   * The "AI" chip (AGL-2929): every generation, applied edit and control
+   * change is stored as a catalog code, so "what did AI do here" is one
+   * toggle rather than a search term a reader has to guess. Page-scoped
+   * like the other two, and offered only when the page holds an AI row —
+   * a chip that can never match is furniture.
+   */
+  const [groupOnly, setGroupOnly] = useState<string | null>(null)
+  // One chip per plugin-declared group the page holds a row of (AGL-2940):
+  // the registry says which groups exist, the page says which ones matter.
+  const groups = useMemo(() => {
+    const present = new Set(
+      (entries ?? [])
+        .map((entry: any) => activityEntryGroupId(entry))
+        .filter(Boolean),
+    )
+    return listPluginActivityFilters()
+      .map((filter) => filter.group)
+      .filter((group) => present.has(group.id))
+  }, [entries])
   const types = useMemo(
     () =>
       [
@@ -226,9 +250,12 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
     return [...(entries ?? [])]
       .filter(
         (entry: any) =>
+          (!groupOnly || activityEntryGroupId(entry) === groupOnly) &&
           (!typeFilter || entry.type === typeFilter) &&
           (!term ||
-            [entry.action, entry.actorEmail]
+            // The label as well as the stored code, so "generated" finds an
+            // AI row the same way the words on screen suggest it would.
+            [entry.action, activityActionLabel(entry.action), entry.actorEmail]
               .filter(Boolean)
               .join(' ')
               .toLowerCase()
@@ -243,7 +270,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       .sort(
         (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
       )
-  }, [entries, filter, typeFilter])
+  }, [entries, filter, typeFilter, groupOnly])
 
   // A pager on a single-page feed is furniture. It appears once there is
   // somewhere to go, which the org-wide fan-out can now say as well.
@@ -263,8 +290,8 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       contentBordered="all"
     >
       <Stack spacing={1.5}>
-        {(entries ?? []).length > 5 ? (
-          <Stack direction="row" spacing={1}>
+        {(entries ?? []).length > 5 || groups.length ? (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <TextField
               size="small"
               label="Filter this page"
@@ -272,6 +299,20 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
               onChange={(event) => setFilter(event.target.value)}
               sx={{ maxWidth: 240, flexGrow: 1 }}
             />
+            {groups.map((group) => (
+              <Chip
+                key={group.id}
+                size="small"
+                label={group.label}
+                clickable
+                color={groupOnly === group.id ? 'primary' : 'default'}
+                variant={groupOnly === group.id ? 'filled' : 'outlined'}
+                aria-pressed={groupOnly === group.id}
+                onClick={() =>
+                  setGroupOnly((current) => (current === group.id ? null : group.id))
+                }
+              />
+            ))}
             {types.length > 1 ? (
               <TextField
                 select

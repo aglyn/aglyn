@@ -417,6 +417,7 @@ describeEmulated('lockdown panic-button drill (emulator)', () => {
       'checkout',
       'marketplace-installs',
       'ai-assist',
+      'ai-generate',
     ] as const) {
       expect(await admin.featureLockdownRefusal({ feature: key })).toBeNull()
     }

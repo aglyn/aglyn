@@ -21,7 +21,7 @@ design: the surface is small and curated, and each entry needs semantics
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in screen docs — never rename**. |
-| `CONSOLE_WIDGET_SLOTS` | The typed injection-zone catalog. |
+| `CONSOLE_WIDGET_SLOTS` | The typed injection-zone catalog. A widget with a `column: { header, sortKey?, align? }` is a column of a shell-owned table on the zones documented as column zones. |
 
 `ConsoleExtension` fields: `pluginId`, `displayName`, `featureFlag?`
 (plan-entitlement gate the shell applies — extensions cannot bypass plans),
@@ -171,6 +171,103 @@ a failed event can be retried at all. A handler whose effects are idempotent
 **per effect** (guarded by a stamp on the row it mutates, not by the event
 claim) is one this route can safely re-run.
 :::
+
+## Service contracts — `plugin-services`
+
+The typed registry one plugin opens for others to fill. `registerBillingWebhookHandler`
+and `registerSiteRuntime` are the precedent — one registry per seam, filled at
+registration, read lazily — and this is that shape with the implementation
+TYPE carried on a token, so a seam a plugin invents needs no core module.
+
+| API | Semantics |
+| --- | --- |
+| `definePluginServiceContract<T>(id, { multiple })` | Declares a contract token. `multiple: true` is a set every implementation joins; `false` is a slot one plugin holds. Idempotent by id; redefining with a different `multiple` throws. |
+| `registerPluginService(contract, impl, { pluginId?, priority? })` | Registers an implementation. Owner = the loader's marker inside a register fn, else `pluginId` (module scope runs before the marker is set); no owner throws. An unknown contract throws. The same plugin re-registering replaces its entry; on a single contract a **different** plugin throws naming both, and the incumbent keeps serving. |
+| `resolvePluginServices(contract)` / `resolvePluginService(contract)` | Every implementation, highest `priority` first and registration order within a priority — or the first one. |
+| `hasPluginService(contract)` / `unregisterPluginServices(pluginId)` / `resetPluginServicesForTests()` | Presence, a plugin unloading, and the spec reset. |
+
+Worked example — the AI plugin declares its provider contract and a
+marketplace plugin adds a provider:
+
+```ts
+// libs/plugins/ai — the seam's owner
+export const AI_PROVIDERS = definePluginServiceContract<AiProvider>('ai.provider', {
+  multiple: true,
+})
+registerPluginService(AI_PROVIDERS, anthropicProvider, { pluginId: 'ai' })
+
+// a marketplace plugin — an adopter; it imports the token, never the plugin's internals
+registerPluginService(AI_PROVIDERS, ollamaProvider, { pluginId: 'acme-llm', priority: 5 })
+
+// back in the AI plugin, at call time
+const providers = resolvePluginServices(AI_PROVIDERS) // acme-llm first, then ai
+```
+
+## Activity actions — `plugin-activity-actions`
+
+A plugin whose activity rows are read by more than a person stores a CODE
+(`ai.job.output`) and declares what it means:
+
+```ts
+registerPluginActivityActions({
+  pluginId: 'ai',
+  group: { id: 'ai', label: 'AI', staffAuditPrefixes: ['billing.assistOverage.'] },
+  actions: [
+    { key: 'ai.job.output', label: 'AI generated', scope: ['org', 'host'] },
+    { key: 'ai.addon.purchased', label: 'Added the AI add-on', scope: 'org' },
+  ],
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginActivityActions({ pluginId, group, actions })` | Idempotent per plugin; a code another plugin declared refuses the registration. Declare at module scope from both entries. |
+| `pluginActivityActionLabel(action)` | What a reader sees for a code — `activityActionLabel` in the presenter reads it, so every feed, table and card shows the same words. |
+| `listPluginActivityFilters()` | One chip per group with the codes it keeps: the org feed and the actor table draw their chips from this, and send `action isAnyOf …`. |
+| `pluginStaffAuditActionGroup(action)` / `pluginStaffAuditActionGroupLabel(group)` | The staff audit facet's grouping: a registered group by code or by `staffAuditPrefixes`, else the action's leading namespace. |
+
+## Billing and access keys — `plugin-entitlements`
+
+A plugin that sells something, gates something or can be paused in an
+incident declares the KEYS; the numbers stay where they are checked
+(`PLAN_PRICING` for a price, reconciled by `check-pricing-drift`).
+
+```ts
+registerPluginEntitlements({
+  pluginId: 'ai',
+  seatAddons: [
+    {
+      key: 'aiAddon', // org.seatAddons key
+      label: 'AI add-on',
+      maxUnits: 1, // org-wide: bought once
+      quota: { key: 'assistCreditsPerMonth', perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH },
+      features: ['aiGenerative', 'aiAssist'],
+    },
+  ],
+  features: [{ key: 'aiGenerative', label: 'AI generation' }],
+  lockdownFeatures: [
+    {
+      key: 'ai-generate',
+      label: 'AI generation',
+      staffBypass: true,
+      notice: { title: 'AI generation is temporarily unavailable', body: '…' },
+      apiPaths: { prefixes: ['ai/generate'] },
+    },
+  ],
+  permissions: [{ key: 'manageAi', label: 'Manage AI', defaults: { admin: true, editor: false, viewer: false } }],
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginEntitlements(registration)` | Idempotent per plugin. A seat add-on or lockdown key another plugin owns refuses the registration. Permissions are forwarded to `registerPluginPermissions` with the owner filled in. |
+| `listPluginSeatAddons()` / `pluginSeatAddon(key)` | What `resolveOrgEntitlements` folds: the quota named gains `perUnitByPlan[plan] × units` and the features switch on, after the org's overrides and before nothing. `pluginSeatAddonUnits(org.seatAddons, key)` / `hasPluginSeatAddon(org, key)` in `plan-entitlements` are the readings every surface shares. |
+| `listPluginFeatures()` | A declared feature's `defaultByPlan` fills the plan tables where they are silent; a key the tables already carry keeps their answer. |
+| `listPluginLockdownFeatures()` / `pluginLockdownFeature(key)` | The staff lockdown checklist lists it, `lockdownFeatureLabel` / `lockdownFeatureStaffBypass` / the visitor notice read it, and `lockdownFeaturesForPluginApiPath` gates the declared paths (exact, or a prefix on a segment boundary) at the dispatcher — a door under a declared prefix is gated by existing. |
+
+Registration order is deterministic: `FIRST_PARTY_PLUGINS` catalog order,
+then any other id alphabetically — plugin modules load in parallel, and a
+staff checklist that followed arrival order would reorder per session.
 
 ## Enablement, flags, config, fields, permissions, jobs
 

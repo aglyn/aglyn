@@ -21,7 +21,7 @@ import type { ObservableStatus, FirestoreDocOptions } from '../firebase/firebase
 import {
   DENIAL_STREAK_TO_REPORT,
   noteFirestoreServerRead,
-  refusedRetryDelayMs,
+  scheduleRefusedReopen,
   subscribeFirestoreSessionHeal,
 } from '../firestore-denial-reporter'
 import { CONFIRMABLE_LISTEN_OPTIONS } from './listen-options'
@@ -31,8 +31,8 @@ import useModifyDocCallback, {
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
-// The refused cadence is shared policy — see `refusedRetryDelayMs` in
-// `firestore-denial-reporter.ts` (AGL-1066, AGL-1440).
+// The refused cadence is shared policy — see `scheduleRefusedReopen` in
+// `firestore-denial-reporter.ts` (AGL-1066, AGL-1440, AGL-2944, AGL-2945).
 
 /**
  * Raw `onSnapshot` listener with its own retry/backoff instead of
@@ -77,6 +77,8 @@ export function useDocData<T>(
     let cancelled = false
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
+    /** Cancels a pending reopen on the refused cadence (AGL-2944). */
+    let cancelRefusedReopen: (() => void) | null = null
     let attempt = 0
     /**
      * Refusals since the last SERVER snapshot (AGL-1066).
@@ -165,12 +167,14 @@ export function useDocData<T>(
           }
           if (attempt < MAX_RETRIES) {
             attempt += 1
-            timer = setTimeout(
-              subscribe,
-              deniedStreak > MAX_RETRIES
-                ? refusedRetryDelayMs(deniedStreakStartedAt)
-                : RETRY_DELAY_MS,
-            )
+            if (deniedStreak > MAX_RETRIES) {
+              cancelRefusedReopen = scheduleRefusedReopen(
+                subscribe,
+                deniedStreakStartedAt,
+              )
+            } else {
+              timer = setTimeout(subscribe, RETRY_DELAY_MS)
+            }
           } else {
             terminal = true
             setStatus('error')
@@ -178,11 +182,13 @@ export function useDocData<T>(
             resolveFirstValueRef.current?.()
             // A refusal streak keeps a slow road back for a recovery nobody
             // announced — see the same branch in `use-firestore-collection`.
-            // The cadence splits on session-vs-ref evidence (AGL-1440).
+            // The cadence splits on session-vs-ref evidence (AGL-1440), grows
+            // with the streak's age (AGL-2945) and waits while the tab is
+            // hidden (AGL-2944).
             if (deniedStreak > MAX_RETRIES) {
-              timer = setTimeout(
+              cancelRefusedReopen = scheduleRefusedReopen(
                 subscribe,
-                refusedRetryDelayMs(deniedStreakStartedAt),
+                deniedStreakStartedAt,
               )
             }
           }
@@ -206,6 +212,8 @@ export function useDocData<T>(
         clearTimeout(timer)
         timer = null
       }
+      cancelRefusedReopen?.()
+      cancelRefusedReopen = null
       unsubscribe?.()
       attempt = 0
       subscribe()
@@ -215,6 +223,7 @@ export function useDocData<T>(
       cancelled = true
       unsubscribeHeal()
       if (timer) clearTimeout(timer)
+      cancelRefusedReopen?.()
       unsubscribe?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -99,3 +99,55 @@ describe('useLayoutChromeCanvas — chrome renders real components (AGL-1217)', 
     expect(result.current).toBeUndefined()
   })
 })
+
+describe("useLayoutChromeCanvas — the screen's values for its layout (AGL-2893)", () => {
+  const bannerLayout = () =>
+    ({
+      [Aglyn.NODE_ROOT_ID]: {
+        $id: Aglyn.NODE_ROOT_ID,
+        componentId: 'div',
+        nodes: ['banner'],
+      },
+      banner: {
+        $id: 'banner',
+        parentId: Aglyn.NODE_ROOT_ID,
+        componentId: 'muiTypography',
+        props: {
+          children: '{{prop.bannerText}}',
+          hideUnless: '{{prop.showBanner}}',
+        },
+      },
+    }) as any
+  const props: Aglyn.ReusableComponentProp[] = [
+    { name: 'showBanner', type: 'boolean', defaultValue: true },
+    { name: 'bannerText', type: 'text', defaultValue: 'We are hiring' },
+  ]
+
+  it('draws the chrome with the defaults where the screen sets nothing', () => {
+    const { result } = renderHook(() =>
+      useLayoutChromeCanvas(bannerLayout(), undefined, { props }),
+    )
+    const nodes = result.current?.toJSON().nodes as Record<string, any>
+    expect(nodes['banner'].props.children).toBe('We are hiring')
+  })
+
+  it("draws the chrome as this screen publishes it, hiding what it hides", () => {
+    const { result } = renderHook(() =>
+      useLayoutChromeCanvas(bannerLayout(), undefined, {
+        props,
+        values: { bannerText: 'Launch week' },
+      }),
+    )
+    const shown = result.current?.toJSON().nodes as Record<string, any>
+    expect(shown['banner'].props.children).toBe('Launch week')
+
+    const { result: hidden } = renderHook(() =>
+      useLayoutChromeCanvas(bannerLayout(), undefined, {
+        props,
+        values: { showBanner: false },
+      }),
+    )
+    const nodes = hidden.current?.toJSON().nodes as Record<string, any>
+    expect(nodes['banner']).toBeUndefined()
+  })
+})

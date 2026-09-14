@@ -1,10 +1,23 @@
 {
   "name": "@aglyn/shared-data-enums",
-  "version": "0.0.1",
+  "version": "1.0.0-beta.122",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
   "dependencies": {
     "@swc/helpers": "~0.3.3"
   },
-  "devDependencies": {},
+  "peerDependencies": {
+    "firebase": "^12.18.0"
+  },
   "sideEffects": false
 }

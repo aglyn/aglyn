@@ -308,12 +308,30 @@ export interface StaffOrgActionsProps {
     /** Names the controls, since they repeat once per row. */
     label: string
   }
+  /**
+   * Whether the workspace's AI is paused by staff (AGL-2927) — the
+   * `ai-assist` + `ai-generate` feature locks scoped to this org. Read by
+   * the org detail page from the lockdown probe; undefined where the
+   * surface has not read it, in which case the pause control is not
+   * offered rather than offered with a label that may be wrong.
+   */
+  aiPaused?: boolean
 }
+
+/**
+ * The two feature keys the AI pause writes (AGL-2927), together: the
+ * assistants and the generative doors spend at different rates and have
+ * separate platform-wide switches, but a staff spend stop on one customer
+ * wants both closed, and a pause that closed only one would read as lifted
+ * to a customer still generating.
+ */
+const AI_PAUSE_FEATURES = ['ai-assist', 'ai-generate'] as const
 
 const StaffOrgActions = ({
   org,
   onChanged,
   rowActions,
+  aiPaused,
 }: StaffOrgActionsProps) => {
   // The same gates the wrappers below use, read as verdicts so a menu item
   // can carry them as `disabled` + the reason.
@@ -415,6 +433,73 @@ const StaffOrgActions = ({
       })
     }
   }, [suspender, user, enqueueSnackbar, onChanged])
+
+  // The AI pause (AGL-2927): the same lockdown route, feature scope, with
+  // the org named — so the entitlement, the plan and the add-on stay
+  // exactly as the customer bought them, and lifting the pause restores
+  // them untouched. Two requests, one per feature key; each writes its
+  // own audit row.
+  const [aiPauser, setAiPauser] = useState<{
+    id: string
+    paused: boolean
+    reason: string
+    message: string
+  } | null>(null)
+  const handleAiPauseSave = useCallback(async () => {
+    if (!aiPauser) return
+    try {
+      const pausing = !aiPauser.paused
+      for (const feature of AI_PAUSE_FEATURES) {
+        const response = await authorizedFetch(user, '/api/admin/lockdown', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scope: 'feature',
+            targetId: feature,
+            orgId: aiPauser.id,
+            action: pausing ? 'lock' : 'unlock',
+            ...(pausing
+              ? {
+                  reason: aiPauser.reason,
+                  ...(aiPauser.message.trim()
+                    ? { message: aiPauser.message.trim() }
+                    : {}),
+                }
+              : {}),
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(
+            payload?.error ?? `Lockdown failed (${response.status})`,
+          )
+        }
+      }
+      enqueueSnackbar(
+        pausing
+          ? 'AI paused for this organization — both AI doors refuse now; ' +
+              'entitlements untouched (audited)'
+          : 'AI resumed for this organization (audited)',
+        { variant: 'success', persist: false },
+      )
+      setAiPauser(null)
+      onChanged()
+    } catch (error: any) {
+      console.error(error)
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [aiPauser, user, enqueueSnackbar, onChanged])
+  const openAiPauser = () =>
+    org &&
+    setAiPauser({
+      id: org.$id,
+      paused: aiPaused === true,
+      reason: 'billing',
+      message: '',
+    })
 
   // GDPR erasure request (AGL-206): sets/clears the flag only — the hard
   // delete is a deliberate, separately-run script after a 7-day hold.
@@ -752,6 +837,18 @@ const StaffOrgActions = ({
               onClick: () => void handleToggleErasure(),
               disabled: !org,
             },
+            ...(aiPaused !== undefined
+              ? [
+                  {
+                    key: 'ai-pause',
+                    label: aiPaused ? 'Resume AI' : 'Pause AI',
+                    destructive: !aiPaused,
+                    onClick: openAiPauser,
+                    disabled: !org || suspendGate.blocked,
+                    disabledReason: suspendGate.reason,
+                  },
+                ]
+              : []),
           ]}
         />
       ) : (
@@ -786,6 +883,22 @@ const StaffOrgActions = ({
       >
         {org?.erasureRequestedAt ? 'Cancel erasure' : 'Erasure'}
       </Button>
+      {/* The AI pause (AGL-2927) rides the lockdown route, which is
+          super-only for every scope — the same gate as Suspend. Offered
+          only where the surface has read the pause state, so the label
+          says what the click will do. */}
+      {aiPaused !== undefined ? (
+        <SuperStaffOnly>
+          <Button
+            size="small"
+            disabled={!org}
+            color={aiPaused ? 'success' : 'warning'}
+            onClick={openAiPauser}
+          >
+            {aiPaused ? 'Resume AI' : 'Pause AI'}
+          </Button>
+        </SuperStaffOnly>
+      ) : null}
         </>
       )}
       <Dialog
@@ -1091,6 +1204,78 @@ const StaffOrgActions = ({
             onClick={handleSuspendSave}
           >
             {suspender?.suspended ? 'Unsuspend' : 'Suspend'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(aiPauser)}
+        onClose={() => setAiPauser(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {aiPauser?.paused
+            ? 'Resume AI for this organization?'
+            : 'Pause AI for this organization?'}
+        </DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+        >
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {aiPauser?.paused
+              ? 'Both AI doors reopen within a minute. The plan, the ' +
+                'add-on and every entitlement were never changed.'
+              : 'Every AI request from this organization — the assistant, ' +
+                'copy rewrites, generated sections and generation jobs — ' +
+                'is refused with a pause notice until resumed. Nothing ' +
+                'about the plan, the add-on or the entitlements changes, ' +
+                'so resuming restores exactly what they bought. Staff ' +
+                'calls still pass, to verify. One audit row per AI door.'}
+          </Typography>
+          {!aiPauser?.paused ? (
+            <>
+              <TextField
+                select
+                size="small"
+                label="Reason"
+                value={aiPauser?.reason ?? 'billing'}
+                onChange={(event) =>
+                  setAiPauser((previous) =>
+                    previous
+                      ? { ...previous, reason: event.target.value }
+                      : previous,
+                  )
+                }
+              >
+                {LOCKDOWN_REASON_CODES.map((code) => (
+                  <MenuItem key={code} value={code}>
+                    {code}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                size="small"
+                label="Notice (shown to members when refused)"
+                value={aiPauser?.message ?? ''}
+                onChange={(event) =>
+                  setAiPauser((previous) =>
+                    previous
+                      ? { ...previous, message: event.target.value }
+                      : previous,
+                  )
+                }
+              />
+            </>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAiPauser(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color={aiPauser?.paused ? 'success' : 'warning'}
+            onClick={handleAiPauseSave}
+          >
+            {aiPauser?.paused ? 'Resume AI' : 'Pause AI'}
           </Button>
         </DialogActions>
       </Dialog>

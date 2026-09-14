@@ -39,7 +39,17 @@ export * from './content-author-profile'
 export * from './url-slug'
 export * from './child-contract'
 export * from './child-contract-compose'
+// The one reading of `restrictChildren`/`restrictParent`, shared by the
+// besigner's drop check and the AI node-tree validator (AGL-2905). The
+// generated palette beside it (`ai-palette.generated.ts`) is deep-imported
+// by its consumers, not re-exported here: it is data sized for a server
+// route, not for every client that opens this barrel.
+export * from './lineal-order'
+export * from './ai-palette'
 export * from './console-routes'
+// The per-user AI usage rollup's shape and arithmetic (AGL-2928): the
+// month keys, the retention window, the share, kind buckets.
+export * from './ai-usage-by-user'
 export * from './console-record-links'
 // What a stored screen-link value means, with no React attached — the
 // where-used scan reads these on the server (AGL-703).
@@ -161,6 +171,8 @@ export * from './dynamic-list-rule'
 // catalog. No Node builtin, so it stays out of the `/server`-only group.
 export * from './email-topics'
 export * from './compose-layout-nodes'
+// Layout properties applied through the chain (AGL-2893).
+export * from './compose-layout-props'
 export * from './document-landmark'
 export * from './functions'
 export * from './compose-reusable-components'
@@ -174,6 +186,10 @@ export * from './stored-nodes'
 export * from './strip-undefined'
 export * from './organizations'
 export * from './org-permissions'
+// The AI verdict on either membership axis (AGL-2927). After both modules it
+// composes: the org catalog for org-wide members, the host role for site
+// collaborators.
+export * from './ai-permissions'
 export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'
@@ -197,6 +213,13 @@ export * from './upload-cors'
 export * from './docs-help'
 export * from './platform-brand'
 export * from './plan-entitlements'
+// The Aglyn AI plugin's keys, declared through the generic entitlement seam
+// (AGL-2940) and loaded with the barrel so every reader of the plan tables
+// and the lockdown catalog sees them registered.
+export * from './ai-entitlements'
+// The AI activity catalog registers through the generic activity-action seam
+// (AGL-2940) at module scope, so it rides the barrel for the same reason.
+export * from './ai-activity-actions'
 // The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
 // `plan-entitlements`, which owns the predicate it keys off.
 export * from './bandwidth-cap'

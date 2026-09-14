@@ -69,6 +69,14 @@ const currentOrg = {
 
 let mockFlagVisible = true
 
+/** The reader's AI verdict (AGL-2927); granted unless a case says otherwise. */
+const aiPermissions = { loaded: true, use: true, generate: true }
+jest.mock('../hooks/use-ai-permissions', () => ({
+  __esModule: true,
+  default: () => aiPermissions,
+  useAiPermissions: () => aiPermissions,
+}))
+
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => currentOrg,
@@ -194,6 +202,9 @@ async function ask(question: string): Promise<boolean> {
 
 beforeEach(() => {
   posts.length = 0
+  aiPermissions.loaded = true
+  aiPermissions.use = true
+  aiPermissions.generate = true
   mockFlagVisible = true
   currentOrg.org = { plan: 'pro', billingStatus: 'active' }
   currentOrg.orgId = 'org-1'
@@ -329,6 +340,35 @@ describe('the gate is a scope check, not a kill switch (AGL-1934)', () => {
 })
 
 /**
+ * The AI jobs drawer (AGL-2904) rides inside the panel, scoped to the same
+ * org the thread is. It is a mount check, not a behavior one: the drawer's
+ * own spec drives its list, stream and cancel; what this pins is that the
+ * panel puts it on the page for a workspace that carries the add-on and
+ * not for one that does not.
+ */
+describe('the AI jobs drawer is mounted in the panel (AGL-2904)', () => {
+  it('is on the page for a workspace with the AI add-on, collapsed', async () => {
+    currentOrg.org = {
+      plan: 'pro',
+      billingStatus: 'active',
+      seatAddons: { aiAddon: true },
+    }
+    render(<AssistPanelComponent />)
+    fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
+    expect(await screen.findByLabelText('Show AI jobs')).toBeTruthy()
+    // Collapsed, so opening the panel made no request the thread did not.
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('is absent on a plan without aiGenerative', async () => {
+    render(<AssistPanelComponent />)
+    fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
+    await screen.findByPlaceholderText('How do I…')
+    expect(screen.queryByLabelText('Show AI jobs')).toBeNull()
+  })
+})
+
+/**
  * What a person reads when the server can go no further (AGL-2486).
  *
  * "Aglyn Assist is not configured on this deployment" names a deployment the
@@ -341,6 +381,39 @@ describe('the gate is a scope check, not a kill switch (AGL-1934)', () => {
  * more important, not less: it is the one message left with nothing else to
  * offer.
  */
+describe('the reader’s own permission closes the input (AGL-2927)', () => {
+  it('a role without `ai.use` cannot send, and is told who to ask', async () => {
+    aiPermissions.use = false
+    render(<AssistPanelComponent />)
+    fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
+    const input = (await screen.findByPlaceholderText('How do I…')) as HTMLTextAreaElement
+    expect(input.disabled).toBe(true)
+    expect(
+      (screen.getByRole('button', { name: 'Send message' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(screen.getByText(/ask an organization admin/)).toBeTruthy()
+    expect(posts).toEqual([])
+  })
+
+  it('HOLDS while the answer is pending — no grant from a loading default', async () => {
+    aiPermissions.loaded = false
+    aiPermissions.use = false
+    render(<AssistPanelComponent />)
+    fireEvent.click(screen.getByLabelText('Open Aglyn Assist'))
+    const input = (await screen.findByPlaceholderText('How do I…')) as HTMLTextAreaElement
+    expect(input.disabled).toBe(true)
+    expect(screen.queryByText(/ask an organization admin/)).toBeNull()
+    expect(posts).toEqual([])
+  })
+
+  it('the CONTROL: a granted role sends', async () => {
+    armChatResponse()
+    render(<AssistPanelComponent />)
+    expect(await ask('How do I publish?')).toBe(true)
+    await waitFor(() => expect(posts.length).toBe(1))
+  })
+})
+
 describe('a refusal is written for the person reading it', () => {
   const armRefusal = (status: number, error: string) => {
     chatResponse = {

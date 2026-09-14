@@ -373,9 +373,39 @@ page.
 | `checkout` | **New** Stripe checkout sessions only — console plan upgrades and marketplace purchases. Existing subscriptions, invoices, and the pay-your-way-out path for billing-locked orgs are untouched, and the notice says explicitly that it is *not* a payment failure. | Stripe integration bug mid-charge |
 | `marketplace-installs` | Installing anything from the marketplace (all artifact kinds, including re-copying an updated artifact). Everything already installed keeps working; publishing, reviews, and abuse reports stay open. | A malicious listing slips review (the per-plugin kill switch takes out one listing; this is the wider valve) |
 | `ai-assist` | The AI assist endpoint. The switch works even while the feature is unconfigured — it predates the API key on purpose. | Provider incident, cost runaway |
+| `ai-generate` | The generative doors (sections, pages and automations written by a model), behind the `release_ai_generative` flag. Separate from `ai-assist` because generation spends at a different rate and an incident on one need not stop the other. | Provider incident, cost runaway on generation, **an abuse wave on the Free AI taste** — this is the first response, ahead of any per-account measure |
+
+**The Free taste and this key.** Free workspaces carry 300 AI credits a month
+with no invoice behind them, and a platform-wide daily ceiling on free-tier
+spend pauses free generation on its own when the sum of a day's free spend
+reaches `AI_FREE_DAILY_PLATFORM_CEILING_USD` (staff are mailed at 80%, the
+assist signals page shows the day so far). That pause is automatic and
+Free-only. `ai-generate` is the manual lever for anything the ceiling has not
+caught yet — a wave that is spending fast but is still under the day's ceiling,
+or generated content that is abusive rather than expensive — and it stops
+generation for every plan, paid included, so it is the wider valve: pull it
+first, then read the signals page to see which workspaces drove the spend.
 
 **Composition, not ranking:** a platform lock implies every feature; a feature
 lock implies nothing about the platform, workspace, site, or account scopes.
+
+### Pausing AI for one workspace {#ai-pause}
+
+A feature lock can also be scoped to **one workspace**: the same `lockdowns`
+carrier at `feature--{key}--org--{orgId}`, written by the same route with an
+`orgId` in the body, audited the same way, and read only by the AI doors that
+name that org. The staff org page offers it as **Pause AI** in its Staff actions,
+which writes both `ai-assist` and `ai-generate` for the org in one click, and
+**Resume AI** lifts both.
+
+Reach for it to stop a customer's AI spend **without touching what they bought**:
+the plan, the add-on and every entitlement override stay exactly as they are, so
+resuming restores them untouched — unlike forcing `aiAssist` off in the override
+dialog, which changes the entitlement record and has to be remembered and undone.
+Members of the paused workspace see the ordinary feature-pause notice on every AI
+request; every other workspace is unaffected; staff calls still pass, to verify
+the pause. The chip **AI paused** on the org page reflects the state the route
+reads back.
 
 **Confirm weight:** feature locks do *not* require the type-to-confirm phrase.
 The platform phrase exists because one request can take everything down; a
@@ -384,8 +414,9 @@ blast-radius class as an org or site lock, and incident response wants the
 narrow lever fast.
 
 **Staff bypass, per feature:** staff keep `uploads`, `marketplace-installs`,
-and `ai-assist` through a lock — responding staff need to upload a test file,
-reproduce an install, or make one AI call to verify the fix before lifting it.
+`ai-assist` and `ai-generate` through a lock — responding staff need to upload
+a test file, reproduce an install, or make one AI call or generation to verify
+the fix before lifting it.
 `checkout` grants **no** staff bypass: a staff-created checkout session is
 still a real charge, and verification belongs in Stripe test mode. `signups`
 is decided by account age, not claims — there is no bypass to grant.

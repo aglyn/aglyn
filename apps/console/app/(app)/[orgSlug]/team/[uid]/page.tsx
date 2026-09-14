@@ -45,9 +45,11 @@ import AuthenticatedLayout from '../../../../../components/layouts/authenticated
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import MemberAvatar from '../../../../../components/member-avatar.component'
+import MemberAiUsageCard from '../../../../../components/member-ai-usage-card.component'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
+import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { readOutcome } from '../../../../../utils/read-outcome'
 import { docsHelp } from '../../../../../constants/docs-links'
@@ -509,6 +511,21 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
               </Stack>
             </CardDisplay>
           ) : null}
+          {currentOrg?.$id && member ? (
+            /*
+             * What this member has drawn from the AI pool, this month and
+             * last, with the split by site (AGL-2928). The card reads through
+             * the org route, which admits the member themselves and holders
+             * of `billing.view` or `org.auditLog`, and renders nothing for
+             * anyone else.
+             */
+            <MemberAiUsageCard
+              orgId={currentOrg.$id}
+              uid={uid}
+              orgSlug={orgSlug}
+              hosts={hosts as never}
+            />
+          ) : null}
           {currentOrg?.$id ? (
             // Changes made TO this member (role/access edits), AGL-389.
             <OrgActivityCard
@@ -548,6 +565,17 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                 'Everything they have done in this organization, on its ' +
                 'sites as well as at organization level.'
               }
+            />
+          ) : null}
+          {currentOrg?.$id ? (
+            // Plugin cards about this member (AGL-2940), below the
+            // platform's own.
+            <PluginWidgetSlot
+              slot="orgMember"
+              orgId={currentOrg.$id}
+              uid={uid}
+              member={member}
+              canManage={canManage}
             />
           ) : null}
         </Stack>

@@ -28,6 +28,7 @@ import {
   marketplacePriceRefusal,
   sanitizeMarketplaceDefinition,
 } from '../model/marketplace'
+import { sanitizeMarketplaceProps } from '../model/marketplace-props'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
 
@@ -148,6 +149,14 @@ export const publishLayoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(422).json({ error: 'Layout version has no content' })
     }
 
+    // The layout properties its tree binds to (AGL-2933), from the same
+    // version. A default the sanitizer refuses is cleared and its property
+    // kept — see `sanitizeMarketplaceProps`.
+    const props = sanitizeMarketplaceProps(versionSnapshot.get('props'))
+    if (props.ok === false) {
+      return res.status(422).json({ error: props.error })
+    }
+
     // Layout versions have no explicit rootId. The besigner canvas roots them
     // at the same wrapper screens use, so prefer it outright; the parentless
     // search stays as the fallback for anything authored before that, and
@@ -219,7 +228,13 @@ export const publishLayoutHandler: PluginApiHandler = async (req, res) => {
       { merge: true },
     )
     await listingRef.collection('versions').doc(String(version)).set({
-      layout: { rootId: sanitized.rootId, nodes: sanitized.nodes },
+      // `props` is always a list, even an empty one: install and update read a
+      // version with none as one published before properties were carried.
+      layout: {
+        rootId: sanitized.rootId,
+        nodes: sanitized.nodes,
+        props: props.props,
+      },
       publishedAt: now,
     })
 

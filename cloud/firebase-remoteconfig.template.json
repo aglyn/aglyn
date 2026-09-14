@@ -125,6 +125,13 @@
       },
       "description": "New video in the media library, on every upload path (AGL-2830). OFF by default: a video is refused with 403 video_uploads_paused. Images, documents and stored videos are unaffected; grant one org through its release-flag override.",
       "valueType": "JSON"
+    },
+    "release_ai_generative": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Aglyn AI: generative building and automation behind the AI add-on (AGL-2903). OFF by default and staff preview only; every generative route answers 404 while it is off. Turning it on sends customer briefs and site content to Anthropic on the same ANTHROPIC_API_KEY and under the same subprocessor disclosure as Assist (AGL-1909).",
+      "valueType": "JSON"
     }
   },
   "version": {

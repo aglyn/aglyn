@@ -16,8 +16,8 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn'
-import { components, LinealDirectiveFlag } from '@aglyn/aglyn'
-import { _isArr, _isArrEmpty } from '@aglyn/shared-util-tools'
+import { checkLinealOrder, components, LinealDirectiveFlag } from '@aglyn/aglyn'
+import { _isArr } from '@aglyn/shared-util-tools'
 
 export enum InvalidLinealRelationFlag {
   DISALLOW = 0x01,
@@ -46,8 +46,7 @@ export enum InvalidLinealRelationFlag {
 }
 
 export type ConfirmValidLinealRelationshipResponse =
-  | [isValid: true]
-  | [isValid: false, reason: InvalidLinealRelationFlag]
+  [isValid: true] | [isValid: false, reason: InvalidLinealRelationFlag]
 
 function validateLinealOrder(
   componentId: Aglyn.ComponentId,
@@ -57,42 +56,14 @@ function validateLinealOrder(
     | typeof InvalidLinealRelationFlag.ITEM
     | typeof InvalidLinealRelationFlag.PARENT,
 ) {
-  const [directiveType, directiveDefinition] = linealOrder
-  const definition = {
-    components: _isArr(directiveDefinition)
-      ? [...directiveDefinition]
-      : directiveDefinition?.components,
-    plugins: _isArr(directiveDefinition)
-      ? undefined
-      : directiveDefinition?.plugins,
+  // The rule itself is shared with the AI node-tree validator (AGL-2905);
+  // what stays here is the bitflag vocabulary the drop indicator reads.
+  const failed = checkLinealOrder(componentId, pluginId, linealOrder)
+  if (failed === 'component') {
+    throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
   }
-
-  // Throw is disallowed
-  if (directiveType === LinealDirectiveFlag.DISALLOW) {
-    if (definition?.components?.some((cid) => cid === componentId)) {
-      throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
-    }
-    if (definition?.plugins?.some((pid) => pid === pluginId)) {
-      throw InvalidLinealRelationFlag.DISALLOW_BUNDLE | governor
-    }
-  }
-
-  // Throw if limited to range and missing
-  if (directiveType === LinealDirectiveFlag.LIMIT_TO) {
-    if (
-      _isArr(definition?.components) &&
-      (_isArrEmpty(definition?.components) ||
-        !definition?.components?.some((cid) => cid === componentId))
-    ) {
-      throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
-    }
-    if (
-      _isArr(definition?.plugins) &&
-      (_isArrEmpty(definition?.plugins) ||
-        !definition?.plugins?.some((pid) => pid === pluginId))
-    ) {
-      throw InvalidLinealRelationFlag.DISALLOW_BUNDLE | governor
-    }
+  if (failed === 'plugin') {
+    throw InvalidLinealRelationFlag.DISALLOW_BUNDLE | governor
   }
 }
 
@@ -135,7 +106,7 @@ export function describeInvalidLinealRelationship(
   const itemLabel = componentLabel(item.componentId) ?? 'This element'
   const parentLabel =
     parent.componentId && parent.componentId !== 'div'
-      ? componentLabel(parent.componentId) ?? parent.componentId
+      ? (componentLabel(parent.componentId) ?? parent.componentId)
       : 'the document'
 
   // ITEM governor: the dragged element's own restrictParent failed.

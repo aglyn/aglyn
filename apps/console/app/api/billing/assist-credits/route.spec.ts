@@ -119,13 +119,21 @@ describe('the assist credit odometer', () => {
   })
 
   it('reports NO band for a plan that sells none, rather than 0 of 0', async () => {
-    // Free carries `assistCreditsPerMonth: 0`, which means "this plan sells no
-    // assist band" — not "a band of zero". Converting the operator backstop
-    // into credits here would name a band the workspace never bought.
-    mockDocs.set('orgs/org-1', { plan: 'free' })
+    // Starter carries `assistCreditsPerMonth: 0`, which means "this plan
+    // sells no assist band" — not "a band of zero". Converting the operator
+    // backstop into credits here would name a band the workspace never
+    // bought. (Free carried 0 too until the taste, AGL-2925.)
+    mockDocs.set('orgs/org-1', { plan: 'starter' })
     mockDocs.set(`orgs/org-1/assistUsage/${MONTH}`, { estCostUsd: 4.5 })
     const payload = await (await GET(get())).json()
     expect(payload.credits).toBeNull()
+  })
+
+  it('reports the Free taste as a band of 300, drawn against (AGL-2925)', async () => {
+    mockDocs.set('orgs/org-1', { plan: 'free' })
+    mockDocs.set(`orgs/org-1/assistUsage/${MONTH}`, { estCostUsd: 0.12 })
+    const payload = await (await GET(get())).json()
+    expect(payload.credits).toEqual({ used: 120, limit: 300, remaining: 180 })
   })
 
   it('reads ZERO drawn for an org that has not used the assistant', async () => {

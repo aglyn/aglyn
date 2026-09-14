@@ -41,6 +41,7 @@ import {
 import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
+  logAiAddonChanged,
   logOrgActivity,
   sendGa4Purchase,
   sendGa4Refund,
@@ -716,13 +717,14 @@ async function handler(request: Request): Promise<Response> {
         // move down.
         const downgradeLanded =
           pendingDowngradePlan !== null && (canceled || pendingDowngradePlan === plan)
+        // Add-on quantities sync from the items (AGL-527): Stripe is the
+        // source of truth; explicit zeros make removals, dashboard edits, and
+        // full cancellations all converge.
+        const seatAddons = addonQuantitiesFromItems(canceled ? [] : items)
         if (mirrored) {
           await writeOrgBilling(String(orgId), {
             stripeCustomerId,
-            // Add-on quantities sync from the items (AGL-527): Stripe is
-            // the source of truth; explicit zeros make removals, dashboard
-            // edits, and full cancellations all converge.
-            seatAddons: addonQuantitiesFromItems(canceled ? [] : items),
+            seatAddons,
             subscription: {
               status: canceled ? 'canceled' : (object?.status ?? 'active'),
               // WHY it ended (AGL-1877). Stripe states it on the deleted
@@ -758,6 +760,23 @@ async function handler(request: Request): Promise<Response> {
               ...(downgradeLanded ? { pendingDowngrade: null } : {}),
             },
           } as never)
+          // The AI add-on leaving at a period end, or arriving by any path
+          // the add-ons route did not mirror itself, in the workspace's own
+          // feed (AGL-2929). Nobody is present at a Stripe flip, and the row
+          // says so rather than naming whoever last touched billing. The
+          // helper compares the mirrors and writes nothing on a redelivery.
+          const previousSeatAddons = orgSnapshot.get('seatAddons') as
+            | Record<string, number>
+            | undefined
+          const heldAiAddon = Number(previousSeatAddons?.aiAddon ?? 0) > 0
+          const holdsAiAddon = Number(seatAddons.aiAddon ?? 0) > 0
+          if (heldAiAddon !== holdsAiAddon) {
+            await logAiAddonChanged(
+              String(orgId),
+              { uid: null, email: null },
+              { before: previousSeatAddons as never, after: seatAddons },
+            )
+          }
         }
 
         /*==========================================

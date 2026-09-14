@@ -200,7 +200,16 @@ export const FLAG_DOC_PAGES: Partial<
  * the spec checks that the flag's LABEL really is absent from the published
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
-export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {}
+export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
+  // AGL-2903 / AGL-2904. The flag gates the AI job routes and the console's
+  // jobs drawer, which are staff preview only and describe themselves in
+  // `docs/AI_JOBS.md` rather than on a customer page: the one job kind that
+  // runs today produces draft copy, and no published page tells a customer
+  // to expect it. The first customer-facing generative page moves this key
+  // to FLAG_DOC_PAGES.
+  release_ai_generative:
+    'The generative doors are staff preview only and no customer-facing page describes them yet; the job model is documented for operators in docs/AI_JOBS.md.',
+}
 
 /**
  * Where a published-ON verdict was read, and why it holds. Every field is

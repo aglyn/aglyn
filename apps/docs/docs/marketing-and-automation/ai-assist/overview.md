@@ -26,6 +26,15 @@ from a prompt, giving you a real starting layout you can then refine.
 Prompting tips and examples are on the way.
 :::
 
+## Who can use it
+
+AI assist is a **permission** as well as a plan feature. Organization members hold
+it through the **Use AI assistance** and **Generate with AI** keys on their role
+(owners, admins and editors by default; viewers not), and site collaborators
+through the **Assist** and **Generate** boxes on the site's Users card. A member
+whose role lacks the key is refused with a message naming it — see
+[Custom roles & permissions](../../workspace-and-billing/teams-and-roles/custom-roles.md#ai-permissions).
+
 ## Limits
 
 AI assist draws on the same monthly allowance as Aglyn Assist, so a workspace

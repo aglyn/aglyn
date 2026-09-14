@@ -100,7 +100,10 @@ jest.mock('./helpers/listen-options', () => {
 jest.mock('./firestore-denial-reporter', () => ({
   DENIAL_STREAK_TO_REPORT: 3,
   denialLabelForQuery: () => 'label',
-  refusedRetryDelayMs: () => 1000,
+  scheduleRefusedReopen: (reopen: () => void) => {
+    const timer = setTimeout(reopen, 1000)
+    return () => clearTimeout(timer)
+  },
   reportFirestoreDenial: jest.fn(),
   reportFirestoreServerRead: jest.fn(),
   subscribeFirestoreSessionHeal: () => jest.fn(),

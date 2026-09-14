@@ -63,9 +63,20 @@ export const TextField = (props: TextFieldProps) => {
     help,
     clearable,
     FormFieldGridProps = {},
+    type,
     ...rest
   } = useFieldApi(props)
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
+  // A date, time or color input paints its own placeholder whether or not it
+  // holds a value, so a floating label would sit on top of `mm/dd/yyyy` — the
+  // same rule the classic text field applies (AGL-2486).
+  const alwaysFilled =
+    type === 'date' ||
+    type === 'time' ||
+    type === 'datetime-local' ||
+    type === 'month' ||
+    type === 'week' ||
+    type === 'color'
   // `!== ''` and friends spelled out: `0` is a value an author typed and
   // this repo has `strictNullChecks` off, so a falsy test would hide the
   // clear button on it (AGL-2486).
@@ -94,9 +105,11 @@ export const TextField = (props: TextFieldProps) => {
         label={label}
         placeholder={placeholder}
         required={isRequired}
+        type={type}
         slotProps={{
           input: { readOnly: isReadOnly, ...InputProps },
           htmlInput: { ...inputProps },
+          ...(alwaysFilled ? { inputLabel: { shrink: true } } : {}),
         }}
         {...rest}
       />

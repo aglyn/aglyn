@@ -52,6 +52,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Tooltip,
   Typography,
@@ -70,9 +71,16 @@ import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
+import { useOrgAiUsage } from '../hooks/use-org-ai-usage'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
+import { aiUsageMonthLabel } from '../utils/ai-usage-wire'
 import MemberAvatar from './member-avatar.component'
+import {
+  PluginListColumnCells,
+  PluginListColumnHeaders,
+  usePluginListColumns,
+} from './plugin-list-columns.component'
 
 const ASSIGNABLE_ROLES: OrgRole[] = ['admin', 'editor', 'viewer']
 /**
@@ -139,6 +147,9 @@ export function OrgMembersCard() {
   )
   const orgId = currentOrg?.$id
   const canManage = canManageOrg(currentOrg?.role)
+  // Columns a plugin contributes to this table (AGL-2940), drawn between
+  // Access and the actions.
+  const { columns: pluginColumns } = usePluginListColumns('orgMembersListColumn')
   // Manager-seat quota hint (AGL-530): the roster counts against
   // managersPerOrg; extra seats sell on the Billing add-ons card.
   // Only MANAGERS count (AGL-1113) — this list also shows site-scoped
@@ -165,12 +176,29 @@ export function OrgMembersCard() {
    */
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  /**
+   * This month's AI credits per member (AGL-2928), one read for the whole
+   * roster, joined by uid. The column is sortable; the roster is otherwise
+   * in the order the API hands it. A reader the route refuses — a manager
+   * without `billing.view` — sees a dash in every row, not a warning: the
+   * roster is theirs to manage whether or not the spend is theirs to see.
+   */
+  const aiUsage = useOrgAiUsage(orgId)
+  const [creditsOrder, setCreditsOrder] = useState<'desc' | 'asc' | null>(null)
+  const sortedMembers = useMemo(() => {
+    if (!creditsOrder || aiUsage.status !== 'ready') return members
+    const credits = (member: AglynOrgMember) =>
+      aiUsage.creditsByUid.get(member.$id as string) ?? 0
+    return [...members].sort((a, b) =>
+      creditsOrder === 'desc' ? credits(b) - credits(a) : credits(a) - credits(b),
+    )
+  }, [members, creditsOrder, aiUsage.status, aiUsage.creditsByUid])
   const pagedMembers = useMemo(
     () =>
-      members.length <= rowsPerPage
-        ? members
-        : members.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
-    [members, page, rowsPerPage],
+      sortedMembers.length <= rowsPerPage
+        ? sortedMembers
+        : sortedMembers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+    [sortedMembers, page, rowsPerPage],
   )
   /*
     Removing the last member on a page would otherwise strand the reader on an
@@ -472,6 +500,28 @@ export function OrgMembersCard() {
                 </Tooltip>
               </TableCell>
               <TableCell>{'Access'}</TableCell>
+              {/* Who is drawing on the AI pool this month (AGL-2928). The
+                  figure is the member's credits across every site; the
+                  per-site split is on their page. */}
+              <TableCell align="right" sortDirection={creditsOrder ?? false}>
+                <Tooltip
+                  title={`AI credits each member has drawn in ${aiUsageMonthLabel(aiUsage.month)}, across every site. Open a member for the split by site.`}
+                >
+                  <TableSortLabel
+                    active={creditsOrder !== null}
+                    direction={creditsOrder ?? 'desc'}
+                    disabled={aiUsage.status !== 'ready'}
+                    onClick={() =>
+                      setCreditsOrder((current) =>
+                        current === 'desc' ? 'asc' : current === 'asc' ? null : 'desc',
+                      )
+                    }
+                  >
+                    {'AI credits (month)'}
+                  </TableSortLabel>
+                </Tooltip>
+              </TableCell>
+              <PluginListColumnHeaders columns={pluginColumns} />
               <TableCell align="right" />
             </TableRow>
           </TableHead>
@@ -665,6 +715,17 @@ export function OrgMembersCard() {
                       )
                     })()}
                   </Stack>
+                </TableCell>
+                <PluginListColumnCells
+                  columns={pluginColumns}
+                  member={member}
+                  orgId={orgId}
+                  canManage={canManage}
+                />
+                <TableCell align="right">
+                  {aiUsage.status === 'ready'
+                    ? (aiUsage.creditsByUid.get(member.$id as string) ?? 0).toLocaleString()
+                    : '—'}
                 </TableCell>
                 <TableCell align="right">
                   <Button

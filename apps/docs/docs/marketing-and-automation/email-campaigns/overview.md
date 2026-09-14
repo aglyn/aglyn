@@ -473,6 +473,14 @@ Three things about the timing are worth knowing:
 The statuses a scheduled campaign moves through are **Scheduled** → sending → sent, or
 **Canceled** if you cancel it in time, or **Failed** with the reason.
 
+### Duplicate an email
+
+Any email on the Emails list — sent, scheduled or draft — has **Duplicate…**
+in its row menu. The copy is a new **draft** with the same subject, message,
+sender and design, under the name you give it. Its audience and send time are
+cleared, so a copy can never mail the original's recipients by accident: you
+choose who receives it and when, as with any new email.
+
 ## Email lists
 
 **Lists** are audiences shared across your organization's sites. Create them on the

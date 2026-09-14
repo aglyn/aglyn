@@ -1087,6 +1087,20 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
 
+      # AGL-2941 — the package map. Every lib is a future npm package, so
+      # every project carries a `scope:` tag and `tools/scripts/lib/
+      # lib-boundaries.mjs` says which scopes may import which. The lint rule
+      # holds that at every file; this holds it at the project level over
+      # `nx graph`, so an edge that reached `main` through a disabled line is
+      # still refused, and the allowlist of today's cross-package edges can
+      # only shrink. It also refuses a project with no row in
+      # docs/PACKAGES.md and a lib package.json without its name, the repo
+      # version, its entry points or a peer for a framework it imports. The
+      # self-test runs first: its fixtures are the core importing a plugin
+      # and a plugin importing a plugin, the two edges the map exists for.
+      - run: npm run test:lib-boundaries
+      - run: npm run check:lib-boundaries
+
       # AGL-118, AGL-2823. Every path that creates, destroys or transfers a
       # durable customer object writes an activity entry, or is classified
       # with the reason it does not. The listed modules live under apps/ and

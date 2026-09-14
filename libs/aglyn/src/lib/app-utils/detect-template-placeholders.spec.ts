@@ -41,6 +41,20 @@ describe('detectPlaceholders (AGL-672)', () => {
     ).toEqual([])
   })
 
+  /**
+   * A component or layout property's token binds to a property the template
+   * carries (AGL-2932). Prompting for it on use would replace the binding with
+   * whatever was typed, or with nothing.
+   */
+  it('ignores component and layout property tokens', () => {
+    expect(
+      detectPlaceholders({
+        a: { props: { children: '{{prop.headline}} for {{customer}}' } },
+        b: { props: { propValues: { tint: '{{ prop.tint }}' } } },
+      }),
+    ).toEqual(['customer'])
+  })
+
   it('keeps named tokens that sit alongside bindings', () => {
     expect(
       detectPlaceholders({

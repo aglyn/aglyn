@@ -130,8 +130,9 @@ function docsRestatingPrices() {
   if (!existsSync(root)) return []
   const locked = new Set([
     ...Object.values(LOCKED.monthly), ...Object.values(LOCKED.annualPerMonth),
-    // Add-on figures, from the same Stripe-verified set.
-    10, 8, 5, 4, 3, 2, 1, 89, 9,
+    // Add-on figures, from the same Stripe-verified set — the Aglyn AI
+    // add-on's per-plan prices (AGL-2896) included.
+    10, 8, 5, 4, 3, 2, 1, 89, 9, 19, 39, 69, 99, 299,
   ].filter((n) => n > 0).map(String))
   // Only the DISTINCTIVE ones: single digits appear in prose constantly and a
   // guard that flags "$2" in an example is a guard people switch off.
@@ -320,14 +321,20 @@ if (!docsRestatingPrices().length) note('in-sync', 'docs:prices', 'no Aglyn pric
 // ---- report --------------------------------------------------------------
 const differs = verdicts.filter((v) => v.status === 'differs')
 const unreadable = verdicts.filter((v) => v.status === 'unreadable')
+const unminted = verdicts.filter((v) => v.status === 'unminted')
 const inSync = verdicts.filter((v) => v.status === 'in-sync')
 
 for (const v of differs) console.log(`DIFFERS     ${v.key} — ${v.detail}`)
 for (const v of unreadable) console.log(`UNREADABLE  ${v.key} — ${v.detail}`)
+// Printed even under --summary: a price the code sells and Stripe lacks is
+// the one line the owner needs to see, and it is not a failure.
+for (const v of unminted) console.log(`UNMINTED    ${v.key} — ${v.detail}`)
 if (!args.summary) for (const v of inSync) console.log(`in sync     ${v.key} — ${v.detail}`)
 
 const code = overallExitCode(verdicts)
 console.log(
-  `\n${inSync.length} in-sync, ${differs.length} differs, ${unreadable.length} unreadable — exit ${code}`,
+  `\n${inSync.length} in-sync, ${differs.length} differs, ${unreadable.length} unreadable` +
+    (unminted.length ? `, ${unminted.length} unminted` : '') +
+    ` — exit ${code}`,
 )
 process.exit(code)

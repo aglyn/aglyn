@@ -18,7 +18,11 @@
 import type { HttpStatusCode } from '@aglyn/shared-data-enums'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
-import type { AglynNodeSchema, NodeId } from './components.types'
+import type {
+  AglynNodeSchema,
+  FieldComponentType,
+  NodeId,
+} from './components.types'
 // Type-only, so this stays a definitions file with no runtime edge into
 // `app-utils`: the two video shapes are DEFINED beside the code that
 // validates them (`normalizeVideoMetadata`, `parseMediaRendition`) so a
@@ -1045,20 +1049,76 @@ export interface AglynScreenVersion<N = AglynNodeSchema>
    * instead the back-pointer to the owning layout document.
    */
   layoutId?: LayoutUid | null
+  /**
+   * This version's values for the properties of the layouts it renders inside
+   * (AGL-2893), stored beside the {@link layoutId} binding: layout id →
+   * property name → value, for every layout in the chain.
+   *
+   * Keyed by layout so that binding a different layout never hands this
+   * screen's values to a property of the same name there, and so that a
+   * layout nested inside another can be given values of its own. A property
+   * the screen leaves unset renders with its default. Read on screen versions
+   * only.
+   */
+  layoutPropValues?: Record<
+    LayoutUid,
+    Record<string, ReusableComponentPropValue>
+  >
 }
 
 /** Unique id of a host-level reusable component definition. */
 export type ComponentDefUid = string
 
 /**
- * Value kind of a declared component prop (AGL-1247), which decides how the
- * Attributes panel edits it and which fields inside the component can be bound
- * to it. Every kind substitutes as text, so the graft stays a string
- * replacement over the definition's props — except that a field bound to
- * nothing but a `boolean` prop receives a real `true` or `false`, one bound to
- * a `number` a real number, one bound to a `choice` nobody made is left to the
- * element's own default, and one bound to an `icon` brings the icon's path with
- * its id (`resolveComponentPropTokens`).
+ * Attribute field kinds that hold no value of their own: they arrange other
+ * fields (a sub-form, tabs, a wizard, a repeating field array), decorate one
+ * (an input add-on), or only display or trigger something (plain text, a
+ * button). A property is one value, so none of these is a property kind —
+ * see `NON_VALUE_FIELD_KINDS` for the reason each is listed.
+ */
+export type NonValueFieldKind =
+  | FieldComponentType.BUTTON
+  | FieldComponentType.BUTTON_GROUP
+  | FieldComponentType.FIELD_ARRAY
+  | FieldComponentType.INPUT_ADDON_BUTTON_GROUP
+  | FieldComponentType.INPUT_ADDON_GROUP
+  | FieldComponentType.PLAIN_TEXT
+  | FieldComponentType.SUB_FORM
+  | FieldComponentType.TAB_ITEM
+  | FieldComponentType.TABS
+  | FieldComponentType.WIZARD
+
+/**
+ * Attribute field kinds whose property kind was named before properties
+ * covered every field kind, and keeps that stored name: a text field is
+ * `text`, a textarea `richText`, a switch `boolean`, a dropdown `choice`, an
+ * icon picker `icon` and a screen picker `href`.
+ */
+export type LegacyNamedFieldKind =
+  | FieldComponentType.TEXT_FIELD
+  | FieldComponentType.TEXTAREA
+  | FieldComponentType.SWITCH
+  | FieldComponentType.SELECT
+  | FieldComponentType.ICON_PICKER
+  | FieldComponentType.SCREEN_SELECT
+
+/**
+ * Kind of a declared component or layout property (AGL-1247, AGL-2893): which
+ * control edits it, in the Properties dialog and on every page that sets it,
+ * and which fields it can be bound to.
+ *
+ * Derived from the attribute schema's own field kinds rather than listed
+ * beside them. Every {@link FieldComponentType} that holds a value is a
+ * property kind — under its own stored value (`color-picker`,
+ * `css-dimension`, …), or under the name it already had
+ * ({@link LegacyNamedFieldKind}). `number` and `image` are the two text-field
+ * variants a coded component declares as `type: 'number'` or as a media
+ * field. So a field kind added to the attribute schema is a property kind the
+ * moment it exists, and `REUSABLE_PROP_KINDS` fails to compile until it says
+ * how the kind is edited.
+ *
+ * These values are stored in component and layout documents. Never rename
+ * one.
  */
 export type ReusableComponentPropType =
   | 'text'
@@ -1069,6 +1129,59 @@ export type ReusableComponentPropType =
   | 'boolean'
   | 'choice'
   | 'icon'
+  | `${Exclude<FieldComponentType, NonValueFieldKind | LegacyNamedFieldKind>}`
+
+/**
+ * A property's value as it is stored: a default on the declaration, or a
+ * page's own value in `propValues` / `layoutPropValues`.
+ *
+ * The shape follows the kind's control — a Yes / no stores a boolean, a
+ * slider a number, a list of answers an array, an icon pick its id and path —
+ * and text-shaped kinds store text. Defaults written before the kinds were
+ * typed are text (`'true'`, `'28'`), which every reader accepts.
+ */
+export type ReusableComponentPropValue =
+  | string
+  | number
+  | boolean
+  | ReadonlyArray<string | number>
+  | ReusableComponentIcon
+
+/**
+ * One rule of a property's `condition`: the attribute schema's condition
+ * (data-driven-forms' `ConditionDefinition`), with `when` naming another
+ * property of the same component or layout instead of an attribute.
+ *
+ * The operators are the schema's own — `is` (one value, or any of a list),
+ * `notMatch` to negate `is` or `pattern`, `isEmpty`, `isNotEmpty`, `pattern`
+ * with `flags`, and the four comparisons — and the rule is evaluated by
+ * data-driven-forms' own parser, in the Attributes panel and at render. Only
+ * the serializable part is here: a stored document cannot carry a function.
+ */
+export interface ReusableComponentPropRule {
+  /** The name of the property whose value decides. */
+  when: string
+  is?: string | number | boolean | ReadonlyArray<string | number | boolean>
+  notMatch?: boolean
+  isEmpty?: boolean
+  isNotEmpty?: boolean
+  pattern?: string
+  flags?: string
+  greaterThan?: number
+  greaterThanOrEqualTo?: number
+  lessThan?: number
+  lessThanOrEqualTo?: number
+}
+
+/**
+ * When a property shows and applies: one rule, a list that must ALL hold, or
+ * the schema's `and` / `or` / `not` over rules.
+ */
+export type ReusableComponentPropCondition =
+  | ReusableComponentPropRule
+  | { and: ReusableComponentPropCondition[] }
+  | { or: ReusableComponentPropCondition[] }
+  | { not: ReusableComponentPropCondition | ReusableComponentPropCondition[] }
 
 /**
  * One answer a `choice` prop offers (AGL-2871).
@@ -1104,18 +1217,40 @@ export interface ReusableComponentProp {
   /** Field label in the Attributes panel; falls back to `name`. */
   label?: string
   /**
+   * Help shown beside the property's field wherever a page sets it — the
+   * attribute schema's `description`.
+   */
+  description?: string
+  /**
    * Rendered wherever an instance leaves this prop unset, and shown as the
    * Attributes field's placeholder. One field serving both is deliberate:
    * a component that renders its own sensible copy until overridden is the
    * "shows the placeholder from the component" behaviour, and it means an
    * unset prop can never collapse a section to empty on a live page.
    */
-  defaultValue?: string
+  defaultValue?: ReusableComponentPropValue
   /**
-   * `choice` only: the answers a page picks from, in the order offered. A
-   * `defaultValue` names one of their values.
+   * The answers a page picks from, in the order offered, for a kind whose
+   * control lists answers (`choice`, `radio`, `toggle-button`,
+   * `dual-list-select`, and a `checkbox` that is a list). A `defaultValue`
+   * names one of their values, or several for a kind that takes several.
    */
   options?: ReusableComponentPropOption[]
+  /**
+   * The kind's own settings, named by the kind's `settings` in
+   * `REUSABLE_PROP_KINDS`: a slider's range, whether a choice takes several
+   * answers, which theme scale a theme-scale field offers. They are the
+   * attribute field's own props, so a coded component's attribute and a
+   * property of the same kind are configured with the same words.
+   */
+  settings?: Record<string, string | number | boolean>
+  /**
+   * When the property shows and applies. While it does not hold, the field is
+   * hidden wherever a page sets it, and the property renders as one with no
+   * value and no default: text bound to it is empty, a Yes / no is a no, and
+   * a field bound to it keeps its own default.
+   */
+  condition?: ReusableComponentPropCondition | ReusableComponentPropCondition[]
   /**
    * `icon` only: the SVG path of the icon `defaultValue` names, stored beside
    * the id when the default is picked, for the reason
@@ -1252,6 +1387,13 @@ export interface AglynLayoutVersion<N = AglynNodeSchema>
   extends AglynScreenVersion<N> {
   layoutId?: LayoutUid
   hostId?: HostUid
+  /**
+   * The properties this layout declares (AGL-2893), each set by the screens
+   * that render inside it. On the version rather than the layout document,
+   * beside the nodes that bind them: a layout is served by its version
+   * pointer, so a version's properties go live with its tree.
+   */
+  props?: ReusableComponentProp[]
 }
 
 export type TemplateUid = string
@@ -1322,6 +1464,12 @@ export interface AglynTemplate<N = AglynNodeSchema> extends AglynDocument {
   nodes?: Record<NodeId, N>
   /** Definition tree root — `component` kind, mirroring AglynHostComponent. */
   rootId?: NodeId
+  /**
+   * The properties a `component` or `layout` template's tree binds to
+   * (AGL-2932), carried so what is made from it declares them — without them
+   * every `{{prop.*}}` in the tree renders raw.
+   */
+  props?: ReusableComponentProp[]
   /** Suggested slug — `page` kind; de-conflicted against the host on use. */
   slug?: string
   /** Mirrors AglynScreen.seo — carried through to the created page. */

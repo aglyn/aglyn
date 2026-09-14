@@ -97,7 +97,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   LOCKDOWNS_COLLECTION: 'lockdowns',
-  LOCKDOWN_FEATURE_KEYS: ['signups', 'uploads'],
+  listLockdownFeatureKeys: () => ['signups', 'uploads'],
   LOCKDOWN_MESSAGE_MAX: 400,
   PLATFORM_LOCKDOWN_DOC_ID: 'platform',
   featureLockdownDocId: (key: string) => `feature--${key}`,

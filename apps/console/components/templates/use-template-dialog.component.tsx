@@ -81,8 +81,15 @@ export function UseTemplateDialog({
   const [busy, setBusy] = useState(false)
 
   const kind = (template?.kind ?? 'page') as 'page' | 'component' | 'layout'
+  // A `{{prop.*}}` token binds to a property, never to a placeholder
+  // (AGL-2932). Templates saved before that was known list one anyway, and
+  // filling it in here would erase the binding from what is made.
   const placeholders = useMemo(
-    () => (Array.isArray(template?.placeholders) ? template.placeholders : []),
+    () =>
+      (Array.isArray(template?.placeholders) ? template.placeholders : []).filter(
+        (entry: { name?: unknown }) =>
+          !String(entry?.name ?? '').startsWith(Aglyn.COMPONENT_PROP_TOKEN_PREFIX),
+      ),
     [template],
   )
 
@@ -115,12 +122,10 @@ export function UseTemplateDialog({
     )
     setValues(
       Object.fromEntries(
-        (Array.isArray(template.placeholders) ? template.placeholders : []).map(
-          (entry: any) => [entry.name, entry.defaultValue ?? ''],
-        ),
+        placeholders.map((entry: any) => [entry.name, entry.defaultValue ?? '']),
       ),
     )
-  }, [template])
+  }, [template, placeholders])
 
   const handleUse = useCallback(async () => {
     if (!template || !name.trim()) return
@@ -139,6 +144,10 @@ export function UseTemplateDialog({
         (decodeStoredNodes<any>(template.nodes) ?? {}) as any,
         placeholders.length ? values : null,
       )
+      const carriedProps =
+        Array.isArray(template.props) && template.props.length
+          ? template.props
+          : undefined
 
       if (kind === 'component') {
         const { id } = await createHostResource({
@@ -149,6 +158,9 @@ export function UseTemplateDialog({
             ...(template.description ? { description: template.description } : {}),
             ...(template.rootId ? { rootId: template.rootId } : {}),
             nodes,
+            // The properties the tree binds to (AGL-2932), on the component
+            // document the tenant renders from.
+            ...(carriedProps ? { props: carriedProps } : {}),
           },
         })
         enqueueSnackbar(`Created the component “${name.trim()}”`, {
@@ -186,6 +198,9 @@ export function UseTemplateDialog({
             hostId,
             displayName: 'Initial version',
             nodes,
+            // The properties the tree binds to (AGL-2932), on the version the
+            // layout is served from.
+            ...(carriedProps ? { props: carriedProps } : {}),
           },
         })
         enqueueSnackbar(`Created the layout “${name.trim()}”`, {

@@ -28,6 +28,7 @@ import {
   isPrivateListing,
   listingArtifactType,
 } from '../model/marketplace'
+import { readPublishedProps } from '../model/marketplace-props'
 import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
@@ -144,6 +145,10 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
     if (!layout?.nodes || !Object.keys(layout.nodes).length) {
       return res.status(500).json({ error: 'Layout version missing' })
     }
+    // The layout properties its tree binds to (AGL-2933), held to the
+    // sanitizer again on the way in; `undefined` for a version published
+    // before they were carried.
+    const props = readPublishedProps(layout.props)
 
     const org = (await getOrgForHost(hostId))?.org
     const templatesRef = hostRef.collection('templates')
@@ -287,6 +292,9 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
         // The provenance base recorded above keeps the decoded map: it is
         // compared by value, never opened as a document.
         nodes: Buffer.from(encodeStoredNodes(layout.nodes ?? {})!),
+        // Use template seeds the layout's first version with these
+        // (AGL-2932), so a screen using it has its layout values to set.
+        ...(props && { props }),
         source: {
           type: 'marketplace' as const,
           listingId,

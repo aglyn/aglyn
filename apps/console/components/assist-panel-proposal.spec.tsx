@@ -57,6 +57,14 @@ const currentOrg = {
   ready: true,
 }
 
+/** The reader's AI verdict (AGL-2927): granted, so the proposal path is reachable. */
+const aiPermissions = { loaded: true, use: true, generate: true }
+jest.mock('../hooks/use-ai-permissions', () => ({
+  __esModule: true,
+  default: () => aiPermissions,
+  useAiPermissions: () => aiPermissions,
+}))
+
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => currentOrg,

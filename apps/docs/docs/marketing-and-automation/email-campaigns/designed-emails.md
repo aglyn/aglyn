@@ -29,6 +29,13 @@ email document and opens it in the besigner with the email blocks:
 - **Email custom HTML** — raw table markup for advanced layouts,
   sanitized.
 
+## Duplicate a template
+
+Every template on the list has **Duplicate…** in its row menu. The copy takes
+the latest saved design whole, under the name you give it, and is sent by
+nothing until a campaign picks it — so a copy is the safe way to try a
+variation without touching the design a campaign is already using.
+
 ## Styling email blocks
 
 The styles panel works on email blocks exactly as on page elements —

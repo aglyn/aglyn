@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/console",
   "projectType": "application",
-  "tags": ["scope:app", "scope:private"],
+  "tags": ["scope:app", "scope:private", "scope:console"],
   "targets": {
     "build": {
       "executor": "@nx/next:build",

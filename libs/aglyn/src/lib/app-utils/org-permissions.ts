@@ -37,6 +37,8 @@ export type OrgPermission =
   | 'data.manage'
   | 'marketplace.publish'
   | 'plugins.install'
+  | 'ai.use'
+  | 'ai.generate'
 
 /**
  * Legacy boolean permission map derived from the granular `OrgPermission`
@@ -132,6 +134,24 @@ export const ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = [
     label: 'Install plugins',
     description: 'Install or remove marketplace plugins.',
   },
+  // The two AI keys (AGL-2927). Both are enforced at the AI doors themselves
+  // — `/api/assist/chat` and `/api/ai/assist` through `memberHasAiPermission`,
+  // and every door built on `aiGateLadder` through its `permission` option —
+  // so a role that unticks one closes the door, not only the button. For a
+  // site collaborator the same two keys are decided per site, from the host
+  // role, by `resolveAiPermissions`.
+  {
+    key: 'ai.use',
+    label: 'Use AI assistance',
+    description:
+      'Ask the assistant, rewrite copy with AI, and generate a section.',
+  },
+  {
+    key: 'ai.generate',
+    label: 'Generate with AI',
+    description:
+      'Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows.',
+  },
 ]
 
 export const ORG_PERMISSION_KEYS = ORG_PERMISSIONS.map(
@@ -149,8 +169,9 @@ const NO_PERMISSIONS = Object.fromEntries(
 /**
  * Role → default permission set. Owner/admin hold everything (owner-only
  * actions like org deletion stay role-checked, not permission-checked);
- * editors work on content but see no money or roster controls; viewers
- * read only.
+ * editors work on content — the AI doors included — but see no money or
+ * roster controls; viewers read only, and read-only includes asking the
+ * assistant nothing: a viewer spends none of the workspace's AI credits.
  */
 export const DEFAULT_ROLE_PERMISSIONS: Record<
   OrgRole,
@@ -163,6 +184,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     'data.manage': true,
     'marketplace.publish': true,
     'plugins.install': true,
+    'ai.use': true,
+    'ai.generate': true,
   },
   viewer: NO_PERMISSIONS,
 }

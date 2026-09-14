@@ -32,6 +32,7 @@ import {
 } from './account-addresses'
 import { EMAIL_IDENTITY_INDEX_COLLECTION } from './account-emails'
 import { removeOrgMember } from './organizations'
+import { eraseUserAiUsage, type EraseUserAiUsageResult } from './ai-usage-by-user'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
 import { readOrgBilling } from './org-billing'
 import {
@@ -1538,6 +1539,14 @@ export interface EraseUserResult {
      */
     supportMessagesRedacted: number | null
     /**
+     * The person's monthly AI usage documents (AGL-2928), which sit under
+     * each ORG keyed by the uid — so neither the recursive delete of the
+     * user document nor the org's own cascade reaches them on an account
+     * erasure. `sweptMonths` is `null` when the cross-org sweep could not
+     * run; the by-membership pass has still completed.
+     */
+    aiUsage: EraseUserAiUsageResult
+    /**
      * Messages removed from `emailDeliveries/{sha256(address)}/messages` —
      * the per-recipient delivery log. Zero for an account with no address on
      * file, or one we never mailed.
@@ -1717,6 +1726,18 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
     })
   }
 
+  // Their AI usage, month by month, in every workspace (AGL-2928). Under
+  // the org and keyed by the uid, so no recursive delete on this path can
+  // see it — the same shape as the delivery log below, one collection over.
+  const aiUsage = await eraseUserAiUsage(
+    firestore,
+    uid,
+    candidates.map((candidate) => candidate.orgId),
+  ).catch((error): EraseUserAiUsageResult => {
+    console.error(`eraseUser: AI usage sweep failed for ${uid}`, error)
+    return { orgs: 0, sweptMonths: null }
+  })
+
   // The avatar outlives the doc otherwise.
   let photo = false
   try {
@@ -1878,6 +1899,7 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
         photo,
         profile,
         supportMessagesRedacted,
+        aiUsage,
         emailDeliveries,
         emailIdentityIndex,
         addressSweep,
@@ -1894,6 +1916,7 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
       photo,
       profile,
       supportMessagesRedacted,
+      aiUsage,
       emailDeliveries,
       emailIdentityIndex,
       addressSweep,

@@ -190,6 +190,12 @@ let mockGetOrgForUser: (
   orgId?: string | null,
 ) => Promise<unknown>
 let mockLockdownRefusal: () => Promise<Response | null>
+/** The workspace-scoped AI pause (AGL-2927), recorded with what it was asked. */
+let mockFeatureLockdownRefusal: (options: unknown) => Promise<Response | null>
+const mockFeatureLockdownAsks: unknown[] = []
+/** The permission verdict (AGL-2927), recorded with the arguments it was asked. */
+let mockAiPermitted = true
+const mockAiPermissionAsks: unknown[][] = []
 /**
  * The Firestore the handler is handed. A variable rather than a `jest.spyOn`
  * on the barrel: reaching for the module with a bare `require()` inside a test
@@ -200,6 +206,18 @@ let mockLockdownRefusal: () => Promise<Response | null>
 let mockFirestoreFactory: () => unknown
 let mockEntitled = true
 const mockGetOrgCalls: Array<[string, string | null | undefined]> = []
+/** Every feed row the section writer handed the two loggers (AGL-2929). */
+const mockActivityRows: Array<{ log: 'org' | 'host'; args: unknown[] }> = []
+
+jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  logOrgActivity: async (...args: unknown[]) => {
+    mockActivityRows.push({ log: 'org', args })
+  },
+  logHostActivity: async (...args: unknown[]) => {
+    mockActivityRows.push({ log: 'host', args })
+  },
+}))
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
@@ -226,8 +244,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../tenant/data/admin/src/lib/server/assist-usage',
   ),
+  // The per-person refusal counter the door calls beside it (AGL-2928).
+  ...jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/ai-usage-by-user',
+  ),
   ...jest.requireActual(
     '../../../../../tenant/data/admin/src/lib/server/api-http',
+  ),
+  // The REAL section writer, over the recording loggers above.
+  ...jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/ai-activity',
   ),
   firebaseAdmin: {
     app: () => ({
@@ -242,6 +268,23 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     return mockGetOrgForUser(uid, orgId)
   },
   lockdownRefusal: () => mockLockdownRefusal(),
+  featureLockdownRefusal: (options: unknown) => {
+    mockFeatureLockdownAsks.push(options)
+    return mockFeatureLockdownRefusal(options)
+  },
+  memberHasAiPermission: async (...args: unknown[]) => {
+    mockAiPermissionAsks.push(args)
+    return mockAiPermitted
+  },
+  aiPermissionRefusal: (permission: string) =>
+    Response.json(
+      {
+        error: `Your role does not include ${permission}`,
+        reason: 'permission',
+        permission,
+      },
+      { status: 403 },
+    ),
 }))
 
 const { aiAssistHandler } = require('./ai-assist') as typeof import('./ai-assist')
@@ -331,6 +374,7 @@ beforeEach(() => {
   mockAutoId = 0
   mockTxChain = Promise.resolve()
   mockGetOrgCalls.length = 0
+  mockActivityRows.length = 0
   mockEntitled = true
   process.env.ANTHROPIC_API_KEY = 'sk-test'
   delete process.env.ASSIST_ENTITLED_MONTHLY_LIMIT
@@ -339,6 +383,10 @@ beforeEach(() => {
   mockGetOrgForUser = async (uid: string, orgId?: string | null) =>
     orgId === ORG ? { orgId: ORG, org: { plan: 'pro' }, member: { $id: uid } } : null
   mockLockdownRefusal = async () => null
+  mockFeatureLockdownRefusal = async () => null
+  mockFeatureLockdownAsks.length = 0
+  mockAiPermitted = true
+  mockAiPermissionAsks.length = 0
   mockFirestoreFactory = () => mockMakeFirestore()
   mockFetch = jest.fn(async () => anthropicOk('Rewritten copy.'))
   ;(globalThis as any).fetch = mockFetch
@@ -643,6 +691,61 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     )
     expect(signals[0][1]).toMatchObject({ route: '/api/ai/assist/section' })
   })
+
+  it('a returned section is one row in the site feed — its size, never its copy (AGL-2929)', async () => {
+    mockVerifyIdToken = async () => ({ uid: 'uid-ada', email: 'ada@example.test' })
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              rootId: 'n1',
+              nodes: {
+                n1: { $id: 'n1', componentId: 'muiStack', parentId: null, props: {}, nodes: ['n2'] },
+                n2: {
+                  $id: 'n2',
+                  componentId: 'muiTypography',
+                  parentId: 'n1',
+                  props: { children: 'Welcome to Acme' },
+                  nodes: [],
+                },
+              },
+            }),
+          },
+        ],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 700, output_tokens: 900 },
+      }),
+    }))
+    const result = await call({
+      ...BODY,
+      mode: 'section',
+      hostId: 'host-1',
+      instruction: 'A hero section for Acme',
+    })
+    expect(result.status).toBe(200)
+    expect(mockActivityRows).toEqual([
+      {
+        log: 'host',
+        args: [
+          'host-1',
+          { uid: 'uid-ada', email: 'ada@example.test' },
+          'ai.assist.section',
+          { type: 'host', id: 'host-1', name: '2 elements' },
+        ],
+      },
+    ])
+    expect(JSON.stringify(mockActivityRows)).not.toContain('Acme')
+  })
+
+  it('an element rewrite writes no feed row — the rollup carries the count', async () => {
+    const result = await call({ ...BODY, hostId: 'host-1' })
+    expect(result.status).toBe(200)
+    expect(mockActivityRows).toEqual([])
+  })
 })
 
 // ── The rest of the ladder ──────────────────────────────────────────────────
@@ -690,6 +793,43 @@ describe('the ladder refuses before it spends (AGL-2073)', () => {
     expect(mockDocs.size).toBe(0)
   })
 
+  it('403s a member whose role lacks the mode’s permission, before the plan (AGL-2927)', async () => {
+    mockAiPermitted = false
+    mockEntitled = false
+    const result = await call({ ...BODY, hostId: 'host-1' }, 'token-viewer')
+    expect(result.status).toBe(403)
+    expect(result.body).toMatchObject({ reason: 'permission', permission: 'ai.use' })
+    // The element mode is assistance; a section is a generation. Both are
+    // asked about the NAMED org and the site the body named.
+    expect(mockAiPermissionAsks).toEqual([
+      [ORG, 'host-1', { $id: 'uid-token-viewer' }, 'ai.use'],
+    ])
+    mockAiPermissionAsks.length = 0
+    const section = await call(
+      { orgId: ORG, mode: 'section', instruction: 'A hero' },
+      'token-viewer',
+    )
+    expect(section.body).toMatchObject({ permission: 'ai.generate' })
+    expect(mockAiPermissionAsks[0]).toEqual([ORG, '', { $id: 'uid-token-viewer' }, 'ai.generate'])
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.size).toBe(0)
+  })
+
+  it('423s the WORKSPACE-scoped AI pause, which the dispatcher’s path gate could not see', async () => {
+    mockFeatureLockdownRefusal = async () =>
+      Response.json({ error: 'locked', scope: 'feature', feature: 'ai-assist' }, { status: 423 })
+    const result = await call(BODY, 'token-paused')
+    expect([result.status, result.body]).toEqual([
+      423,
+      { error: 'locked', scope: 'feature', feature: 'ai-assist' },
+    ])
+    expect(mockFeatureLockdownAsks).toEqual([
+      { feature: 'ai-assist', staff: false, orgId: ORG },
+    ])
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.size).toBe(0)
+  })
+
   it('423s an org-scoped lockdown, which the dispatcher could not see', async () => {
     // The dispatcher evaluates org lockdown only when the request names a
     // hostId, and this route's callers do not — so a suspended workspace kept
@@ -703,6 +843,36 @@ describe('the ladder refuses before it spends (AGL-2073)', () => {
     ])
     expect(mockFetch).not.toHaveBeenCalled()
     expect(mockDocs.size).toBe(0)
+  })
+
+  it('402s the org’s OWN overage ceiling, naming it — the besigner door (AGL-2898)', async () => {
+    // The same helper the console assistant answers from, so the two doors
+    // cannot describe the same control in two ways. Pro: $4.75 of spend is
+    // 2,000 credits over the band, $6.00 of overage, against a $6 ceiling.
+    //
+    // FORCED RED by keeping the 429 for every refusal: the status failed.
+    mockGetOrgForUser = async (uid: string, orgId?: string | null) =>
+      orgId === ORG
+        ? {
+            orgId: ORG,
+            org: { plan: 'pro', assistOverage: { capUsd: 6 } },
+            member: { $id: uid },
+          }
+        : null
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] })
+    jest.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    mockDocs.set('orgs/org-pro/assistUsage/2026-08', { messages: 5, estCostUsd: 4.75 })
+    const result = await call(BODY, 'token-capped')
+    expect(result.status).toBe(402)
+    expect(String((result.body as any).error)).toContain(
+      '"Stop AI when this month’s overage reaches"',
+    )
+    expect(String((result.body as any).error)).toContain('$6.00')
+    expect((result.body as any).quota).toMatchObject({ refusedBy: 'cap' })
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.get('orgs/org-pro/assistUsage/2026-08')?.['messages']).toBe(5)
+    // No dollar figure of ours on the wire.
+    expect(JSON.stringify(result.body)).not.toContain('4.75')
   })
 
   it('FAILS CLOSED when the reservation cannot be taken', async () => {

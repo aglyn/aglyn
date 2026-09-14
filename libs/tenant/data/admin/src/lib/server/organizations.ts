@@ -23,6 +23,9 @@
  */
 
 import {
+  AI_PERMISSION_KEYS,
+  aiPermissionLabel,
+  type AiPermission,
   consentGroupForHost,
   type ConsentGroup,
   checkHostCollaboratorQuota,
@@ -34,8 +37,10 @@ import {
   resolveOrgPermissions,
   isOrgWideMember,
   isValidOrgSlug,
+  projectHostMemberAiPermissions,
   projectHostMemberRoles,
   projectMemberScopeTokens,
+  resolveCollaboratorAiPermissions,
   scopeTokensForHost,
   type AglynOrganization,
   type AglynOrgBilling,
@@ -840,6 +845,123 @@ export async function memberHasOrgPermission(
   return (await resolveMemberOrgPermissions(orgId, member))[permission]
 }
 
+/**
+ * May this member open an AI door on this site (AGL-2927)?
+ *
+ * The one resolver every AI door calls, so the two membership axes cannot
+ * be answered differently by two routes. An org-wide member is decided by
+ * the org catalog through `resolveMemberOrgPermissions` — custom role and
+ * overrides applied, one conditional read. A site collaborator is decided
+ * by the host role they hold on the site the request NAMES, refined by the
+ * per-site toggle on their member document; a collaborator whose request
+ * names no site is refused, because there is no host role to read a
+ * default from and omitting the site must not be a way around the toggle.
+ *
+ * `hostId` is whatever the body carried, trimmed by the caller or not — an
+ * empty string and `undefined` both mean "no site named".
+ */
+export async function memberHasAiPermission(
+  orgId: string,
+  hostId: string | null | undefined,
+  member: Partial<AglynOrgMember> | null | undefined,
+  permission: AiPermission,
+): Promise<boolean> {
+  if (!member) return false
+  if (isOrgWideMember(member)) {
+    return (await resolveMemberOrgPermissions(orgId, member))[permission]
+  }
+  const site = typeof hostId === 'string' ? hostId.trim() : ''
+  return resolveCollaboratorAiPermissions(member, site)?.[permission] ?? false
+}
+
+/**
+ * The 403 an AI door sends when `memberHasAiPermission` says no: the same
+ * customer-safe shape the doors' other refusals use — one sentence, a
+ * `reason` a client can branch on — naming the permission by its catalog
+ * label so the reader can find it on the Team page, and who to ask.
+ */
+export function aiPermissionRefusal(permission: AiPermission): Response {
+  return Response.json(
+    {
+      error: `Your role does not include "${aiPermissionLabel(permission)}" — ask an organization admin`,
+      reason: 'permission',
+      permission,
+    },
+    { status: 403 },
+  )
+}
+
+/**
+ * An org-wide member's AI verdict on the org axis, read fresh (AGL-2929):
+ * what `memberHasAiPermission` answers for them with no site named, as a
+ * whole map. `null` for a uid with no member document and for a site
+ * collaborator, whose AI is decided per site by `setHostAiPermissions` and
+ * has no org-level verdict to compare. Read on either side of a membership
+ * write, it is how the members route tells which AI keys the write moved.
+ */
+export async function resolveMemberAiPermissionsOnOrg(
+  orgId: string,
+  uid: string,
+): Promise<Record<AiPermission, boolean> | null> {
+  const snapshot = await firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection('members')
+    .doc(uid)
+    .get()
+  if (!snapshot.exists) return null
+  const member = { $id: uid, ...snapshot.data() } as AglynOrgMember
+  if (!isOrgWideMember(member)) return null
+  const granted = await resolveMemberOrgPermissions(orgId, member)
+  return { 'ai.use': granted['ai.use'], 'ai.generate': granted['ai.generate'] }
+}
+
+/** A collaborator's per-site AI verdict on either side of a toggle write. */
+export interface HostAiPermissionsWrite {
+  /** The verdict before the write; `null` when the member had no access to the site. */
+  before: Record<AiPermission, boolean> | null
+  after: Record<AiPermission, boolean>
+}
+
+/**
+ * Set a collaborator's per-site AI toggles (AGL-2927) and re-project.
+ *
+ * A merge on the nested map, so the member's other sites and every other
+ * field stay untouched; keys outside the AI catalog are dropped rather than
+ * stored, and a non-boolean is ignored rather than coerced. Re-projection is
+ * scoped to the one host whose `memberPermissions` changed.
+ *
+ * The verdict before the write comes back beside the one after it, because
+ * the caller records one activity row per key that moved (AGL-2929) and a
+ * toggle set to the value it already had is not a change.
+ */
+export async function setHostAiPermissions(options: {
+  orgId: string
+  uid: string
+  hostId: string
+  permissions: Partial<Record<string, unknown>>
+}): Promise<HostAiPermissionsWrite> {
+  const { orgId, uid, hostId } = options
+  const accepted: Partial<Record<AiPermission, boolean>> = {}
+  for (const key of AI_PERMISSION_KEYS) {
+    const value = options.permissions[key]
+    if (typeof value === 'boolean') accepted[key] = value
+  }
+  const ref = firestore().collection('orgs').doc(orgId).collection('members').doc(uid)
+  const stored = { $id: uid, ...(await ref.get()).data() } as AglynOrgMember
+  const before = resolveCollaboratorAiPermissions(stored, hostId)
+  await ref.set({ hostPermissions: { [hostId]: accepted } }, { merge: true })
+  await syncOrgAuthProjections(orgId, hostId)
+  const member = { $id: uid, ...(await ref.get()).data() } as AglynOrgMember
+  return {
+    before,
+    after: resolveCollaboratorAiPermissions(member, hostId) ?? {
+      'ai.use': false,
+      'ai.generate': false,
+    },
+  }
+}
+
 export async function listOrgMembers(
   orgId: string,
 ): Promise<AglynOrgMember[]> {
@@ -897,8 +1019,9 @@ async function loadOrgCustomRoles(
 
 /**
  * Recomputes the denormalized authorization projections after a membership
- * change: `memberRoles` on every host the org owns (or one host when given),
- * and `scopeTokens` + `resolvedPermissions` on every member doc.
+ * change: `memberRoles` and `memberPermissions` on every host the org owns
+ * (or one host when given), and `scopeTokens` + `resolvedPermissions` on
+ * every member doc.
  *
  * The rules resolve a request from these reads — the host doc for host
  * content (docs/MULTI_TENANT_FIRESTORE.md §5), the member doc for scoped
@@ -952,6 +1075,14 @@ export async function syncOrgAuthProjections(
           {
             orgId,
             memberRoles: projectHostMemberRoles(members, id),
+            // The AI verdict per member ON this site (AGL-2927), beside the
+            // role it derives from, so a reader of the host document has
+            // both answers from the one get it already does.
+            memberPermissions: projectHostMemberAiPermissions(
+              members,
+              id,
+              customRoles,
+            ),
             updatedAt: FieldValue.serverTimestamp(),
           },
         ] as [FirebaseFirestore.DocumentReference, object],
@@ -1014,8 +1145,17 @@ export interface OrgActivityTarget {
     // where there is no one site's feed to hold it. The org feed's presenter
     // links them into the org-level hub.
     | 'contact' | 'company' | 'deal' | 'lead' | 'task'
+    // AI rows (AGL-2929): a generation job, the resources it produced, and
+    // a custom role whose AI permission moved. The job's outputs are org
+    // events with a resource target because the job is org-scoped and the
+    // org feed is the one place every output of one job is listed together;
+    // the host feed gets its own copy of the host-scoped ones.
+    | 'aiJob' | 'role'
+    | 'screen' | 'layout' | 'component' | 'template' | 'workflow' | 'content'
   id?: string
   name?: string
+  /** Present on a generated screen output so the deep link can hit the exact version. */
+  versionId?: string
 }
 
 /**
@@ -1051,6 +1191,7 @@ export async function logOrgActivity(
         type: target.type,
         ...(target.id ? { id: target.id } : {}),
         ...(target.name ? { name: target.name } : {}),
+        ...(target.versionId ? { versionId: target.versionId } : {}),
       },
       createdAt: FieldValue.serverTimestamp(),
     })

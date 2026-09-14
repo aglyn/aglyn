@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
+import { aiAddonName, PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -45,8 +45,20 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useIsStaff from '../../../../hooks/use-is-staff'
-import type { AssistMiningReport } from '../../../../utils/assist-signal-mining'
-import { costSplitRows } from '../../../../utils/assist-signal-mining'
+import type {
+  AssistMiningReport,
+  AssistSpendRow,
+} from '../../../../utils/assist-signal-mining'
+import { costSplitRows, freeTasteRefusals } from '../../../../utils/assist-signal-mining'
+
+/** The month leaderboard as the route serves it beside the report. */
+interface AssistSpendLeaderboard {
+  month: string
+  rows: AssistSpendRow[]
+  ranked: number
+  truncated: boolean
+  failed: boolean
+}
 
 /**
  * The Assist docs-gap and cost board (AGL-1860, AGL-2252) — the read side of
@@ -251,6 +263,9 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
   // The route serves the prose beside the report (AGL-2314) — it is not part
   // of the pure miner's output, because the miner never touches Firestore.
   const prose = ((report as any)?.prose ?? []) as Array<Record<string, unknown>>
+  // The month's spend leaderboard (AGL-2930), likewise served beside the
+  // report: it reads the month documents, which the miner never sees.
+  const spend = ((report as any)?.spend ?? null) as AssistSpendLeaderboard | null
 
   return (
     <DashboardLayout
@@ -370,8 +385,119 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                       label={`${reason}: ${count}`}
                     />
                   ))}
+                  {/*
+                   * Today's FREE-TIER spend against the platform ceiling
+                   * (AGL-2925). The one AI band with no invoice behind it,
+                   * and the one figure that can switch every Free
+                   * workspace's generation off at once — so it sits with
+                   * the fleet money rather than on a page of its own. Red
+                   * once paused, amber once staff were mailed at 80%.
+                   */}
+                  {report.freeSpend ? (
+                    <Chip
+                      color={
+                        report.freeSpend.paused
+                          ? 'error'
+                          : report.freeSpend.alerted
+                            ? 'warning'
+                            : 'default'
+                      }
+                      label={
+                        `free tier today ${money(report.freeSpend.estCostUsd)} of ` +
+                        `${money(report.freeSpend.ceilingUsd)} ceiling · ` +
+                        `${report.freeSpend.requests.toLocaleString()} requests` +
+                        (report.freeSpend.paused ? ' · PAUSED until tomorrow' : '')
+                      }
+                    />
+                  ) : null}
                 </Stack>
               )}
+            </CardDisplay>
+
+            {/* The month's spend, per workspace (AGL-2930) — ABOVE the
+                tier and model splits, because "which org" is the question
+                staff open this board with, and the two tables below split
+                one fleet total that this ranking names the parts of. */}
+            <CardDisplay
+              header={`AI spend this month, by workspace${spend ? ` · ${spend.month}` : ''}`}
+              help={docsHelp('aiMonitoring', { anchor: '#the-spend-leaderboard' })}
+              contentGutterX
+              contentGutterY
+            >
+              {spend?.failed ? (
+                <Alert severity="warning" sx={{ mb: 1 }}>
+                  {'Could not read this month’s spend documents — a failed read, not a month in which nobody spent.'}
+                </Alert>
+              ) : spend?.truncated ? (
+                <Alert severity="warning" sx={{ mb: 1 }}>
+                  {'Ranked over a sample of the month documents — there are more. This is not the whole fleet.'}
+                </Alert>
+              ) : null}
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Workspace</TableCell>
+                    <TableCell>Plan</TableCell>
+                    <TableCell>{aiAddonName()}</TableCell>
+                    <TableCell align="right">Credits</TableCell>
+                    <TableCell align="right">Cost</TableCell>
+                    <TableCell align="right">Refusals</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {!spend?.rows?.length ? (
+                    <TableRow>
+                      <TableCell colSpan={6}>
+                        <Typography variant="body2" color="text.secondary">
+                          No workspace has spent AI credits this month.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    spend.rows.map((row) => (
+                      <TableRow key={row.orgId}>
+                        <TableCell>{row.orgLabel ?? row.orgId}</TableCell>
+                        <TableCell>{row.plan}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            variant={row.aiAddon ? 'filled' : 'outlined'}
+                            color={row.aiAddon ? 'primary' : 'default'}
+                            label={row.aiAddon ? 'on' : 'off'}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          {row.credits.toLocaleString()}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
+                          {money(row.estCostUsd)}
+                        </TableCell>
+                        {/* The total, with the reasons on hover-free display:
+                            a reader comparing spend to refusals needs both
+                            on one row, and the reasons are what turn a count
+                            into a diagnosis. */}
+                        <TableCell align="right">
+                          {row.refusals.total.toLocaleString()}
+                          {row.refusals.total > 0 ? (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: 'block' }}
+                            >
+                              {`band ${row.refusals.band} · ceiling ${row.refusals.cap} · messages ${row.refusals.messages} · backstop ${row.refusals.budget}${freeTasteRefusals(row.refusals) > 0 ? ` · free taste ${freeTasteRefusals(row.refusals)}` : ''}`}
+                            </Typography>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              <RankingFootnote
+                shown={spend?.rows?.length ?? 0}
+                total={spend?.ranked ?? 0}
+                noun={{ one: 'workspace', many: 'workspaces' }}
+              />
             </CardDisplay>
 
             <CardDisplay

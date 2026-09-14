@@ -29,17 +29,23 @@ import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useMemo } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import BillingAiTopUsersComponent from '../../../../../../components/billing/billing-ai-top-users.component'
 import BillingAssistOverageCardComponent from '../../../../../../components/billing/billing-assist-overage-card.component'
 import BillingMeteredEstimateComponent from '../../../../../../components/billing/billing-metered-estimate.component'
 import BillingStorageOverageCardComponent from '../../../../../../components/billing/billing-storage-overage-card.component'
 import BillingUsageBudgetCardComponent from '../../../../../../components/billing/billing-usage-budget-card.component'
 import BillingUsageHistoryComponent from '../../../../../../components/billing/billing-usage-history.component'
 import BillingUsageComponent from '../../../../../../components/billing/billing-usage.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../../components/plugin-widget-slot.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
+import { buildRoute, Route } from '../../../../../../constants/route-links'
 import useConfirmedDoc from '../../../../../../hooks/use-confirmed-doc'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../../../hooks/use-org-hosts'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
+import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 
 /**
  * What this workspace is consuming, and the three controls over what that
@@ -61,6 +67,14 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { org: orgDoc, orgId, ready: orgReady } = useCurrentOrg()
   const { can } = useOrgPermissions()
+  // The overview's path, for the one meter caption that points at the
+  // add-ons card rather than at an upgrade (AGL-2899): hash links from this
+  // section resolve against THIS page, where neither `#plans` nor `#addons`
+  // exists.
+  const orgSlug = useOrgSlug()
+  const billingHref = orgSlug
+    ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
+    : ''
   // Org-scoped (AGL-236): the meters must count this workspace's hosts, not
   // every host the viewer can reach.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
@@ -77,6 +91,10 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
     () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
+  // The plugin band below the meters (AGL-2940). Consulted here as well as
+  // inside the slot so a band with nothing to draw is no band: no grid
+  // item, no gap under the cards.
+  const { widgets: usageWidgets } = useSlotWidgets(['orgBillingUsage'])
 
   /*
    * Hold until the org is known. The plan defaults to `free` while the read
@@ -117,7 +135,11 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
-              <BillingUsageComponent org={org} hosts={hosts ?? []} />
+              <BillingUsageComponent
+                org={org}
+                hosts={hosts ?? []}
+                billingHref={billingHref}
+              />
             </CardDisplay>
           ),
         },
@@ -137,6 +159,36 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
             >
               <BillingMeteredEstimateComponent org={org} hosts={hosts ?? []} />
             </CardDisplay>
+          ),
+        },
+        {
+          size: { xs: 12 },
+          children: (
+            /*
+             * Who drew the credits the meter above counts (AGL-2928). Its own
+             * band beneath the meters, full width, because it is a table of
+             * people rather than a gauge — and it mounts only for a reader
+             * the route would admit, so a manager without `billing.view`
+             * sees no card rather than a refusal.
+             */
+            can('billing.view') ? (
+              <div id="ai-usage-by-member">
+                <CardDisplay
+                  header={'Who is generating what'}
+                  help={docsHelp('billing', {
+                    anchor: '#who-is-generating-what',
+                    excerpt:
+                      'Each member’s AI credits for a month, their share of ' +
+                      'the workspace’s spend, requests and refusals — with a ' +
+                      'month picker and a CSV export.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <BillingAiTopUsersComponent orgId={orgId} orgSlug={orgSlug} />
+                </CardDisplay>
+              </div>
+            ) : null
           ),
         },
         {
@@ -201,12 +253,12 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <div id="assist-overage">
                       <CardDisplay
-                        header={'AI assist overage'}
+                        header={'AI credits overage'}
                         subheader={
-                          'Extra AI assist credits past your included band ' +
-                          'are billed on your monthly invoice. Turn on the ' +
-                          'stop if you would rather the assistant paused ' +
-                          'there instead.'
+                          'Extra AI credits past your included band are ' +
+                          'billed on your monthly invoice. Stop at the band, ' +
+                          'or stop once the overage reaches an amount you ' +
+                          'choose.'
                         }
                         help={docsHelp('billing', {
                           anchor: '#assist-overage',
@@ -260,6 +312,21 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
             />
           ),
         },
+        ...(usageWidgets.length
+          ? [
+              {
+                size: { xs: 12 },
+                children: (
+                  <PluginWidgetSlot
+                    slot="orgBillingUsage"
+                    orgId={orgId}
+                    org={org}
+                    canManage={can('billing.manage')}
+                  />
+                ),
+              },
+            ]
+          : []),
       ]}
     />
   )

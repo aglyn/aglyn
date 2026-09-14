@@ -34,9 +34,10 @@ import {
  * `PLAN_PRICING` USD amounts. Add-ons bill as extra items on the org's
  * one subscription, so every kind has a monthly and a yearly price
  * (Stripe allows a single interval per subscription; annual orgs attach
- * the `_YEARLY` variants). Seat/member/dataset/host prices are per-plan;
- * POS registers and the Event Calendar are flat. Prices are minted by
- * `tools/scripts/setup-stripe.mjs` — keep the three in sync.
+ * the `_YEARLY` variants). Seat/member/dataset/host prices and the Aglyn AI
+ * add-on (AGL-2896) are per-plan; POS registers and the Event Calendar are
+ * flat. Prices are minted by `tools/scripts/setup-stripe.mjs` — keep the
+ * three in sync.
  */
 export type AddonKind = keyof Required<OrgSeatAddons>
 
@@ -47,6 +48,7 @@ export const ADDON_KINDS: readonly AddonKind[] = [
   'hosts',
   'posRegisters',
   'eventCalendar',
+  'aiAddon',
 ]
 
 export type BillingInterval = 'month' | 'year'
@@ -57,6 +59,7 @@ const PER_PLAN_ENV_SUFFIX: Partial<Record<AddonKind, string>> = {
   members: 'EXTRA_MEMBER',
   datasets: 'EXTRA_DATASET',
   hosts: 'EXTRA_HOST',
+  aiAddon: 'AI_ADDON',
 }
 
 /** Kinds priced flat across plans (env `STRIPE_PRICE_{SUFFIX}[_YEARLY]`). */
@@ -270,6 +273,8 @@ export function addonUnitUsd(kind: AddonKind, plan: OrgPlan): number | null {
       return POS_REGISTER_ADDON_MONTHLY_USD
     case 'eventCalendar':
       return EVENT_CALENDAR_ADDON_MONTHLY_USD
+    case 'aiAddon':
+      return pricing.aiAddonMonthlyUsd
   }
 }
 
@@ -300,8 +305,8 @@ export function addonQuantitiesFromItems(
  * Max purchasable quantity per kind, from a purchases-free entitlement
  * resolution (plan defaults + staff overrides only) so the ceiling does not
  * drift as the org buys: seat/dataset kinds stop at the plan's hard max,
- * hosts/registers use flat ceilings, the Event Calendar is a 0/1 toggle. POS
- * registers additionally require the `pos` feature.
+ * hosts/registers use flat ceilings, the Event Calendar and Aglyn AI are 0/1
+ * toggles. POS registers additionally require the `pos` feature.
  *
  * Lives here rather than inside `/api/billing/addons` because a PLAN CHANGE
  * needs the same ceiling for a different plan. The addons route asks "how many
@@ -327,6 +332,10 @@ export function addonMaxForBaseline(
     case 'posRegisters':
       return baseline.features.pos ? POS_REGISTERS_ADDON_MAX : 0
     case 'eventCalendar':
+      return 1
+    case 'aiAddon':
+      // Org-wide like the Event Calendar: one purchase, and the price map
+      // (null on Free and Enterprise) says whether the plan sells it at all.
       return 1
   }
 }
