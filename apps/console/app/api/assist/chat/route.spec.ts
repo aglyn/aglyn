@@ -211,6 +211,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       },
     },
   },
+  // The account-age rung reads the record from the token's pool; the project
+  // pool here, the same month-old account.
+  authForPool: () => ({
+    getUser: async () => ({
+      metadata: { creationTime: 'Thu, 13 Aug 2026 00:00:00 GMT' },
+    }),
+  }),
   checkRateLimit: () => ({
     allowed: mockRateAllowed,
     limit: 20,
