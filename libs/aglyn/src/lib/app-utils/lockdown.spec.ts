@@ -259,13 +259,14 @@ describe('normalizeLockdownDoc — lockdowns/{platform|user--uid}', () => {
 })
 
 describe('FEATURE scope (AGL-1510) — the pure half', () => {
-  it('the launch set is exactly the five incident levers, extensible by enum', () => {
+  it('the launch set is exactly the six incident levers, extensible by enum', () => {
     expect(LOCKDOWN_FEATURE_KEYS).toEqual([
       'signups',
       'uploads',
       'checkout',
       'marketplace-installs',
       'ai-assist',
+      'ai-generate',
     ])
     for (const key of LOCKDOWN_FEATURE_KEYS) {
       expect(isLockdownFeatureKey(key)).toBe(true)
@@ -288,6 +289,7 @@ describe('FEATURE scope (AGL-1510) — the pure half', () => {
       checkout: false,
       'marketplace-installs': true,
       'ai-assist': true,
+      'ai-generate': true,
     })
   })
 
@@ -313,6 +315,16 @@ describe('FEATURE scope (AGL-1510) — the pure half', () => {
 describe('lockdownFeaturesForPluginApiPath — the dispatcher map', () => {
   it('ai/assist is gated even while the handler 501s without a key', () => {
     expect(lockdownFeaturesForPluginApiPath('ai/assist')).toEqual(['ai-assist'])
+  })
+
+  it('ai/generate and its sub-paths are gated by ai-generate, ahead of any door (AGL-2903)', () => {
+    // The generative lever exists before the first generative route does,
+    // so registering one under this path gates it by existing.
+    for (const path of ['ai/generate', 'ai/generate/section', 'ai/generate/page']) {
+      expect(lockdownFeaturesForPluginApiPath(path)).toEqual(['ai-generate'])
+    }
+    // A sibling that merely shares the prefix is not a generative door.
+    expect(lockdownFeaturesForPluginApiPath('ai/generated-report')).toEqual([])
   })
 
   it('installs-as-a-class: every install path plus update-artifact', () => {

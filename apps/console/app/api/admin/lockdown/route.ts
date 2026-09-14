@@ -708,8 +708,8 @@ async function handler(request: Request): Promise<Response> {
         'read-only has no meaning at the user scope — a user lock is ' +
         'all-or-nothing. Use scope platform, org or host, or lock user in full.',
       //  - `feature` — a feature lock already names a single capability, and
-      //    every one of them (signups, uploads, checkout, installs, ai-assist)
-      //    IS a write. "Read-only checkout" describes nothing.
+      //    every one of them (signups, uploads, checkout, installs, ai-assist,
+      //    ai-generate) IS a write. "Read-only checkout" describes nothing.
       feature:
         'read-only has no meaning at the feature scope — a feature lock is ' +
         'all-or-nothing. Use scope platform, org or host, or lock feature in full.',

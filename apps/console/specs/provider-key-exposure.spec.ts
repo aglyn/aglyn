@@ -118,14 +118,17 @@ describe('no provider key reaches the browser (AGL-2240)', () => {
     expect(report.serverModules).toBeGreaterThan(1000)
   })
 
-  it('found the two real Anthropic readers and put both in the SERVER graph', () => {
+  it('found the three real Anthropic readers and put each in the SERVER graph', () => {
     // The positive control. Without it, a regex that stopped matching
     // `process.env.ANTHROPIC_API_KEY` would report zero readers and zero
-    // exposures — a passing suite that is watching nothing.
+    // exposures — a passing suite that is watching nothing. The two doors
+    // read the key to answer 501; the shared runtime (AGL-2903) reads it to
+    // put it on the request.
     const byFile = new Map(report.readers.map((reader) => [reader.file, reader]))
     for (const path of [
       'apps/console/app/api/assist/chat/route.ts',
       'libs/plugins/marketplace/src/lib/server/ai-assist.ts',
+      'libs/tenant/data/admin/src/lib/server/ai-runtime.ts',
     ]) {
       const reader = byFile.get(path)
       expect([path, reader?.keys]).toEqual([path, ['ANTHROPIC_API_KEY']])

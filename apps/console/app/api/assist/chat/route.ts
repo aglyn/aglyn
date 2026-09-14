@@ -66,6 +66,18 @@ import {
   visibleAssistText,
 } from '../../_lib/assist-view-context'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+// By its own entry point rather than the barrel (AGL-2903), for the reason
+// `isRefusedIdToken` is: this route's spec replaces the barrel with a
+// closed-world factory so a unit test carries no tenancy surface, and a
+// factory that does not list a symbol makes it `undefined` rather than
+// failing loudly. Nothing replaces the entry point, so the spec exercises
+// the real request shape, the real SSE parser and the real error boundary.
+import {
+  AiUpstreamError,
+  runAiRequest,
+  type AiStreamEvent,
+  type AiSystemBlock,
+} from '@aglyn/tenant-data-admin/server/ai-runtime'
 
 /**
  * Aglyn Assist chat proxy (AGL-1860, phase 1 — capability levels 1–2).
@@ -117,7 +129,12 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *
  * Streaming: the route re-emits Anthropic's SSE stream as simplified
  * `data: {type:'delta',text}` events, then one `{type:'done', exchangeId,
- * usage, quota, docs}` after the exchange + meters are recorded.
+ * usage, quota, docs}` after the exchange + meters are recorded. The
+ * provider call itself — request shape, SSE parsing, usage and cost, the
+ * error boundary — is `runAiRequest`, the runtime every AI door shares
+ * (AGL-2903); this route owns the prompt, the fence handling, the ladder
+ * and the wire format, and nothing about the wire format changed when the
+ * call moved.
  *
  * Thinking is DISABLED explicitly. On Sonnet 5 an omitted `thinking` runs
  * ADAPTIVE — the default flipped from Sonnet 4.6 — and `max_tokens` caps
@@ -163,9 +180,6 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * at all. Note the minimum moves with the model (512 on Opus 5, 4,096 on
  * Opus 4.6), so ASSIST_MODEL changes the arithmetic.
  */
-
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
-const ANTHROPIC_VERSION = '2023-06-01'
 
 /**
  * Sonnet-class default: the margin constraint on this feature is hard, and
@@ -609,18 +623,11 @@ async function docsOnlyResponse(args: DocsOnlyArgs): Promise<Response> {
  * (AGL-2815). Never the provider's own words: the panel renders this straight
  * into the answer, and those words describe our account with the vendor — a
  * key, a rate limit, a balance — and name the vendor to a white-label org's
- * users. The provider's status and payload are logged where this is called.
+ * users. The provider's status and payload are in the log under the request
+ * id, where the runtime put them; only its verdict reaches this function.
  */
-function upstreamFailureCopy(
-  status: number | null,
-  errorType: string | undefined,
-): string {
-  const busy =
-    status === 429 ||
-    status === 529 ||
-    errorType === 'rate_limit_error' ||
-    errorType === 'overloaded_error'
-  return busy
+function upstreamFailureCopy(retryable: boolean): string {
+  return retryable
     ? 'The assistant is busy right now — try again in a moment.'
     : 'The assistant request failed — try again.'
 }
@@ -935,81 +942,63 @@ async function handler(request: Request): Promise<Response> {
         role: turn.role,
         content: turn.text,
       })),
-      { role: 'user', content: body.question },
+      { role: 'user' as const, content: body.question },
     ]
 
-    const upstream = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    // Stable → volatile, with a breakpoint after each stable block. See the
+    // header: the view block is identical for everyone on the route, so the
+    // combined prefix is written once and read after; the docs block follows
+    // the QUESTION and must therefore come last, where it invalidates
+    // nothing behind it. Every per-org or per-request block is declared
+    // `volatile`, and the runtime refuses the request if one ever lands
+    // inside the cached prefix — the AGL-2352 rule, enforced rather than
+    // remembered.
+    const system: AiSystemBlock[] = [
+      { text: STATIC_SYSTEM, cacheBreakpoint: true },
+      ...(guide?.screen
+        ? [{ text: guide.screen, cacheBreakpoint: true as const }]
+        : []),
+      // Per-org, and therefore AFTER every breakpoint — see
+      // `assistBrandBlock`. Unconditional: a free workspace assembles no
+      // view block, and it must still be told what the product is called.
+      { text: assistBrandBlock(org as never), volatile: true },
+      ...(guide ? [{ text: guide.facts, volatile: true as const }] : []),
+      ...(docsBlock ? [{ text: docsBlock, volatile: true as const }] : []),
+    ]
+
+    let upstream: AsyncIterable<AiStreamEvent>
+    try {
+      upstream = await runAiRequest({
         model: assistModel(),
-        max_tokens: MAX_OUTPUT_TOKENS,
+        maxTokens: MAX_OUTPUT_TOKENS,
         stream: true,
         // See the header comment: omitting these is NOT the same as
         // sending them — the model-side defaults are adaptive thinking at
         // `high` effort, which this workload neither needs nor can afford.
-        thinking: { type: 'disabled' },
-        output_config: { effort: ASSIST_EFFORT },
-        // Stable → volatile, with a breakpoint after each stable block.
-        // See the header: the view block is identical for everyone on the
-        // route, so the combined prefix is written once and read after; the
-        // docs block follows the QUESTION and must therefore come last,
-        // where it invalidates nothing behind it.
-        system: [
-          {
-            type: 'text',
-            text: STATIC_SYSTEM,
-            cache_control: { type: 'ephemeral' },
-          },
-          ...(guide?.screen
-            ? [
-                {
-                  type: 'text',
-                  text: guide.screen,
-                  cache_control: { type: 'ephemeral' },
-                },
-              ]
-            : []),
-          // Per-org, and therefore AFTER every breakpoint — see
-          // `assistBrandBlock`. Unconditional: a free workspace assembles no
-          // view block, and it must still be told what the product is called.
-          { type: 'text', text: assistBrandBlock(org as never) },
-          ...(guide ? [{ type: 'text', text: guide.facts }] : []),
-          ...(docsBlock ? [{ type: 'text', text: docsBlock }] : []),
-        ],
+        thinking: 'off',
+        effort: ASSIST_EFFORT,
+        system,
         messages,
-      }),
-    })
-
-    if (!upstream.ok || !upstream.body) {
-      const errorPayload = await upstream.json().catch(() => null)
-      console.error('assist upstream error', upstream.status, errorPayload)
-      // The provider was never reached, so no tokens were spent — give the
-      // reservation back rather than charging an outage to the ten messages a
-      // free workspace gets in a day.
-      await releaseAssistMessage(firestore, body.orgId, quota).catch((error) =>
-        console.error('assist reservation release failed', error),
+      })
+    } catch (error) {
+      // Either way the provider produced no tokens — it refused the request
+      // outright, or it was never reached — so the reservation goes back
+      // rather than charging an outage to the ten messages a free workspace
+      // gets in a day. The provider's status and payload are already in the
+      // log, under the request id, where the runtime put them.
+      await releaseAssistMessage(firestore, body.orgId, quota).catch((releaseError) =>
+        console.error('assist reservation release failed', releaseError),
       )
+      if (!(error instanceof AiUpstreamError)) throw error
       return Response.json(
-        {
-          error: upstreamFailureCopy(
-            upstream.status,
-            (errorPayload as { error?: { type?: string } } | null)?.error?.type,
-          ),
-        },
+        { error: upstreamFailureCopy(error.retryable) },
         { status: 502 },
       )
     }
 
-    // Re-emit Anthropic's SSE as simplified events, accumulate the answer +
+    // Re-emit the runtime's events as the panel's, accumulate the answer +
     // usage, and record the exchange before the final `done` event.
     const encoder = new TextEncoder()
-    const decoder = new TextDecoder()
-    const upstreamBody = upstream.body
     const tier: 'free' | 'entitled' = entitled ? 'entitled' : 'free'
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -1025,56 +1014,28 @@ async function handler(request: Request): Promise<Response> {
         let raw = ''
         let emitted = 0
         let stopReason: string | null = null
-        const usage: AssistTokenUsage = {
+        let usage: AssistTokenUsage = {
           inputTokens: 0,
           outputTokens: 0,
           cacheReadTokens: 0,
           cacheWriteTokens: 0,
         }
         try {
-          const reader = upstreamBody.getReader()
-          let buffer = ''
-          for (;;) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() ?? ''
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue
-              let event: Record<string, unknown>
-              try {
-                event = JSON.parse(line.slice('data: '.length))
-              } catch {
-                continue
+          for await (const event of upstream) {
+            if (event.type === 'delta') {
+              raw += event.text
+              const visible = visibleAssistText(raw)
+              if (visible.length > emitted) {
+                emit({ type: 'delta', text: visible.slice(emitted) })
+                emitted = visible.length
               }
-              if (event.type === 'message_start') {
-                const messageUsage = (event.message as { usage?: Record<string, number> })?.usage
-                usage.inputTokens = messageUsage?.input_tokens ?? 0
-                usage.cacheReadTokens = messageUsage?.cache_read_input_tokens ?? 0
-                usage.cacheWriteTokens = messageUsage?.cache_creation_input_tokens ?? 0
-              } else if (event.type === 'content_block_delta') {
-                const delta = event.delta as { type?: string; text?: string }
-                if (delta?.type === 'text_delta' && delta.text) {
-                  raw += delta.text
-                  const visible = visibleAssistText(raw)
-                  if (visible.length > emitted) {
-                    emit({ type: 'delta', text: visible.slice(emitted) })
-                    emitted = visible.length
-                  }
-                }
-              } else if (event.type === 'message_delta') {
-                const deltaUsage = (event.usage as Record<string, number>) ?? {}
-                usage.outputTokens = deltaUsage.output_tokens ?? usage.outputTokens
-                stopReason =
-                  ((event.delta as { stop_reason?: string })?.stop_reason ??
-                    stopReason) ||
-                  null
-              } else if (event.type === 'error') {
-                const error = event.error as { type?: string; message?: string } | undefined
-                console.error('assist upstream stream error', error)
-                emit({ type: 'error', error: upstreamFailureCopy(null, error?.type) })
-              }
+            } else if (event.type === 'error') {
+              // The provider's own words stayed in the log (AGL-2815); the
+              // reader gets the fixed sentence for the verdict.
+              emit({ type: 'error', error: upstreamFailureCopy(event.retryable) })
+            } else if (event.type === 'done') {
+              usage = event.usage
+              stopReason = event.stopReason
             }
           }
           // End of stream: the fence ambiguity is resolved, so flush the

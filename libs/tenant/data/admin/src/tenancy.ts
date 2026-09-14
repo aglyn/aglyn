@@ -20,6 +20,10 @@ export * from './lib/server/api-http'
 export * from './lib/server/api-keys'
 export * from './lib/server/assist-answer-cache'
 export * from './lib/server/assist-usage'
+// The one Anthropic runtime and the gate ladder every AI door composes
+// (AGL-2903). Beside the meters they price with.
+export * from './lib/server/ai-runtime'
+export * from './lib/server/ai-gate'
 export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
 export * from './lib/server/client-error-report'

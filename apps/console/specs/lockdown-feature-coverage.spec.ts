@@ -135,17 +135,26 @@ const CHOKEPOINTS: Chokepoint[] = [
       'surface (subscription/invoices) stays exempt and untouched',
   },
   {
-    feature: 'marketplace-installs + ai-assist + checkout (plugin surface)',
-    covers: ['marketplace-installs', 'ai-assist', 'checkout'],
+    feature: 'marketplace-installs + ai-assist + ai-generate + checkout (plugin surface)',
+    covers: ['marketplace-installs', 'ai-assist', 'ai-generate', 'checkout'],
     file: 'apps/console/app/api/[...pluginApi]/route.ts',
     wiring: [
       'lockdownFeaturesForPluginApiPath(path)',
       'featureLockdownRefusal({ feature, staff })',
     ],
     why:
-      'the dispatcher owns ai/assist, marketplace/install* and ' +
-      'marketplace/checkout; the pure path→feature map is unit-tested in ' +
-      'libs/aglyn lockdown.spec.ts',
+      'the dispatcher owns ai/assist, ai/generate*, marketplace/install* ' +
+      'and marketplace/checkout; the pure path→feature map is unit-tested ' +
+      'in libs/aglyn lockdown.spec.ts',
+  },
+  {
+    feature: 'ai-generate',
+    file: 'libs/tenant/data/admin/src/lib/server/ai-gate.ts',
+    wiring: ['featureLockdownRefusal({', 'feature: config.lockdownFeature,'],
+    why:
+      'the gate ladder every generative door composes (AGL-2903) carries ' +
+      'the feature switch as a rung, so a door built on it is gated whether ' +
+      'or not it is served through the plugin dispatcher',
   },
   {
     feature: '(writer)',
@@ -181,6 +190,7 @@ describe('AGL-2495 · the inventory is derived from the enum, not hand-kept', ()
       'checkout',
       'marketplace-installs',
       'ai-assist',
+      'ai-generate',
     ])
     expect(parseFeatureKeys('export const nothing = 1')).toEqual([])
   })

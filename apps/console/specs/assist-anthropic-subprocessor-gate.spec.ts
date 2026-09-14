@@ -104,6 +104,10 @@ const KEY_READERS = new Map<string, string>([
     'libs/plugins/marketplace/src/lib/server/ai-assist.ts',
     'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — the key plus a Pro entitlement is the whole gate.',
   ],
+  [
+    'libs/tenant/data/admin/src/lib/server/ai-runtime.ts',
+    'The shared Anthropic runtime (AGL-2903): the ONE module that puts the key on a request. It sends whatever prompt a door hands it, so what reaches Anthropic is decided by the doors above — both of which still read the key themselves to answer 501 before they call it. A third door on the runtime is a third entry here.',
+  ],
 ])
 
 /**
@@ -147,6 +151,10 @@ const MENTIONS_ONLY = new Map<string, string>([
   [
     'libs/plugins/marketplace/src/lib/server/ai-assist.spec.ts',
     'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow.',
+  ],
+  [
+    'libs/tenant/data/admin/src/lib/server/ai-runtime.spec.ts',
+    'Sets a fake key (`sk-test`) to drive the shared runtime against a mocked fetch (AGL-2903), and asserts it refuses to run without one. A test double, not a flow.',
   ],
   [
     'apps/console/.env.development.local.example',

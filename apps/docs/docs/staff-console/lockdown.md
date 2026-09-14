@@ -373,6 +373,7 @@ page.
 | `checkout` | **New** Stripe checkout sessions only — console plan upgrades and marketplace purchases. Existing subscriptions, invoices, and the pay-your-way-out path for billing-locked orgs are untouched, and the notice says explicitly that it is *not* a payment failure. | Stripe integration bug mid-charge |
 | `marketplace-installs` | Installing anything from the marketplace (all artifact kinds, including re-copying an updated artifact). Everything already installed keeps working; publishing, reviews, and abuse reports stay open. | A malicious listing slips review (the per-plugin kill switch takes out one listing; this is the wider valve) |
 | `ai-assist` | The AI assist endpoint. The switch works even while the feature is unconfigured — it predates the API key on purpose. | Provider incident, cost runaway |
+| `ai-generate` | The generative doors (sections, pages and automations written by a model), behind the `release_ai_generative` flag. Separate from `ai-assist` because generation spends at a different rate and an incident on one need not stop the other. | Provider incident, cost runaway on generation |
 
 **Composition, not ranking:** a platform lock implies every feature; a feature
 lock implies nothing about the platform, workspace, site, or account scopes.
@@ -384,8 +385,9 @@ blast-radius class as an org or site lock, and incident response wants the
 narrow lever fast.
 
 **Staff bypass, per feature:** staff keep `uploads`, `marketplace-installs`,
-and `ai-assist` through a lock — responding staff need to upload a test file,
-reproduce an install, or make one AI call to verify the fix before lifting it.
+`ai-assist` and `ai-generate` through a lock — responding staff need to upload
+a test file, reproduce an install, or make one AI call or generation to verify
+the fix before lifting it.
 `checkout` grants **no** staff bypass: a staff-created checkout session is
 still a real charge, and verification belongs in Stripe test mode. `signups`
 is decided by account age, not claims — there is no bypass to grant.

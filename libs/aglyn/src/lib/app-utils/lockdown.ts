@@ -71,6 +71,9 @@ export type LockdownScope =
  * incident shapes the issue names — bot wave → `signups`, malware report →
  * `uploads`, billing bug → `checkout`, malicious listing →
  * `marketplace-installs`, provider incident/cost runaway → `ai-assist`.
+ * `ai-generate` (AGL-2903) is the same lever for the generative doors —
+ * separate from `ai-assist` because the two spend at different rates and
+ * an incident on one need not stop the other.
  *
  * Precedence COMPOSES rather than ranks: a platform lock implies every
  * feature (the feature verdict helpers check platform first), while a
@@ -83,6 +86,7 @@ export type LockdownFeatureKey =
   | 'checkout'
   | 'marketplace-installs'
   | 'ai-assist'
+  | 'ai-generate'
 
 const LOCKDOWN_FEATURE_KEY_SET: Record<LockdownFeatureKey, true> = {
   signups: true,
@@ -90,6 +94,7 @@ const LOCKDOWN_FEATURE_KEY_SET: Record<LockdownFeatureKey, true> = {
   checkout: true,
   'marketplace-installs': true,
   'ai-assist': true,
+  'ai-generate': true,
 }
 /** Extensible launch set — the staff surface renders its checklist from it. */
 export const LOCKDOWN_FEATURE_KEYS = Object.keys(
@@ -109,6 +114,7 @@ export const LOCKDOWN_FEATURE_LABELS: Record<LockdownFeatureKey, string> = {
   checkout: 'Checkout (new subscriptions)',
   'marketplace-installs': 'Marketplace installs',
   'ai-assist': 'AI assist',
+  'ai-generate': 'AI generation',
 }
 
 /**
@@ -126,6 +132,9 @@ export const LOCKDOWN_FEATURE_LABELS: Record<LockdownFeatureKey, string> = {
  * - `ai-assist: true` — a provider incident is verified recovered by staff
  *   making one real call, not by lifting the lock and watching customers
  *   find out.
+ * - `ai-generate: true` — the same verification, on the dearer door: one
+ *   staff generation proves the provider and the runtime are back before
+ *   every workspace's builds are let through again.
  * - `checkout: false` — a checkout lock answers a billing/Stripe bug, and a
  *   staff-created checkout session is still a real charge against a real
  *   card. There is no incident-response step that needs money to move;
@@ -141,6 +150,7 @@ export const LOCKDOWN_FEATURE_STAFF_BYPASS: Record<LockdownFeatureKey, boolean> 
     checkout: false,
     'marketplace-installs': true,
     'ai-assist': true,
+    'ai-generate': true,
   }
 
 /**
@@ -1237,6 +1247,14 @@ function featureLockdownNotice(
           `Installing from the marketplace is temporarily disabled. Everything already installed keeps working.${window}`,
         contact: lockdownSupportEmail() ?? undefined,
       }
+    case 'ai-generate':
+      return {
+        title: 'AI generation is temporarily unavailable',
+        body:
+          custom ??
+          `Generating sections, pages and automations with AI is temporarily unavailable. Everything already built is unaffected — please try again shortly.${window}`,
+        contact: lockdownSupportEmail() ?? undefined,
+      }
     case 'ai-assist':
     default:
       return {
@@ -1451,6 +1469,10 @@ export function lockdownPausedSurfaceForPluginApiPath(
  *
  * - `ai/assist` → `ai-assist` (gated even while the route 501s without an
  *   API key — the switch predates the key on purpose).
+ * - `ai/generate` and everything under it → `ai-generate` (AGL-2903). The
+ *   mapping precedes the first generative door for the same reason the
+ *   `ai-assist` switch preceded the key: a door registered under this path
+ *   is gated by existing, not by remembering to wire it.
  * - `marketplace/install*` → `marketplace-installs`: installs-as-a-class,
  *   every artifact kind. `marketplace/update-artifact` is included — it
  *   re-copies a publisher's version into the org, which is an install by
@@ -1469,6 +1491,9 @@ export function lockdownFeaturesForPluginApiPath(
   path: string,
 ): LockdownFeatureKey[] {
   if (path === 'ai/assist') return ['ai-assist']
+  if (path === 'ai/generate' || path.startsWith('ai/generate/')) {
+    return ['ai-generate']
+  }
   if (path === 'marketplace/checkout') {
     return ['checkout', 'marketplace-installs']
   }

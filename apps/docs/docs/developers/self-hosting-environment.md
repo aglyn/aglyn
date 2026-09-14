@@ -666,7 +666,7 @@ own Firebase project. See [Firebase client config](#firebase-client).
 
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Feature | Runtime | `sk-ant-…`. Powers the console Assist panel and the besigner's "Rewrite with AI". Without it both answer `501` and say they are not configured. The console panel is additionally behind the `release_assist` flag, which is **off** by default in Remote Config. |
+| `ANTHROPIC_API_KEY` | Feature | Runtime | `sk-ant-…`. Powers the console Assist panel, the besigner's "Rewrite with AI" and the generative doors — one key for every AI surface. Without it each answers `501` and says it is not configured. The console panel is additionally behind the `release_assist` flag and generation behind `release_ai_generative`, both **off** by default in Remote Config. |
 | `ASSIST_MODEL` | Optional | Runtime | The model id Assist calls. Default `claude-sonnet-5`. An id absent from the built-in rate table falls back to approximate rates, so cost telemetry and the margin alarm become estimates — and the prompt-cache minimum moves with the model, so a swap can silently stop caching. |
 | `ASSIST_FREE_DAILY_LIMIT` | Optional | Runtime | Messages per free workspace per UTC day. Default **10**. |
 | `ASSIST_ENTITLED_MONTHLY_LIMIT` | Optional | Runtime | Messages per entitled workspace per month. Default **1000**. |

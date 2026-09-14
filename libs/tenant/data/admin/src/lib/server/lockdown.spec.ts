@@ -495,6 +495,7 @@ describe('FEATURE scope (AGL-1510) — one capability off, everything else servi
       'checkout',
       'marketplace-installs',
       'ai-assist',
+      'ai-generate',
     ] as const) {
       await expect(
         featureLockdownRefusal({ feature, nowMs: NOW }),
@@ -531,6 +532,7 @@ describe('FEATURE scope (AGL-1510) — one capability off, everything else servi
       'uploads',
       'marketplace-installs',
       'ai-assist',
+      'ai-generate',
     ] as const) {
       lockFeature(feature)
       invalidateFeatureLockdownCache()
