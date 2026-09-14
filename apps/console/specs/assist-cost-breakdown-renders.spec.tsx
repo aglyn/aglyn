@@ -49,6 +49,8 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 
 jest.mock('@aglyn/aglyn', () => ({
+  // The leaderboard heads a column with the add-on's name (AGL-2930).
+  aiAddonName: () => 'Aglyn AI',
   __esModule: true,
   PLATFORM_BRAND_NAME: 'Aglyn',
 }))
