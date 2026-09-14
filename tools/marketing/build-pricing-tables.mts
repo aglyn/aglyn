@@ -404,13 +404,15 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
 
 /*
  * A rate as the page and every breakpoint print it: bare, with the unit in the
- * row's label ("per month", "per GB-month", "per 1,000"). Cells are compared
+ * row's label ("per month", "per GB-month", "per 1,000"), and a fractional
+ * figure always to the cent — "$2.50" beside "$0.50", never "$2.5" — because
+ * the page sets every rate in one ledger column. Cells are compared
  * as whole strings and rows are found by label, so a row that changed unit
  * arrives as a missing row plus an extra one rather than as a cell whose
  * digits happen to match, which on a per-1,000 rate would be a 1000x error.
  */
 const money = (v: number | null): string =>
-  v == null ? NO : v < 1 ? `$${v.toFixed(2)}` : `$${v}`
+  v == null ? NO : Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`
 
 /**
  * A `PLAN_PRICING` field that states an add-on or overage rate.

@@ -1100,9 +1100,9 @@
           "starter": "—",
           "pro": "$2.25",
           "business": "$2",
-          "scale": "$1.9",
+          "scale": "$1.90",
           "advanced": "$1.85",
-          "agency": "$1.8",
+          "agency": "$1.80",
           "enterprise": "Custom"
         }
       },
@@ -1113,7 +1113,7 @@
           "starter": "—",
           "pro": "$3",
           "business": "$2.75",
-          "scale": "$2.5",
+          "scale": "$2.50",
           "advanced": "$2.25",
           "agency": "$2",
           "enterprise": "Custom"
