@@ -19,6 +19,7 @@
 import {
   formatMediaRef,
   MediaPickerContext,
+  type MediaPickerKind,
   mediaRefFromCdnPath,
   parseMediaRef,
   type PickedMedia,
@@ -57,6 +58,10 @@ export function ConsoleMediaPickerProvider(
   // one for a product's paid media, and only the second may return a private
   // asset.
   const [allowPrivate, setAllowPrivate] = useState(false)
+  // Per open for the same reason (AGL-2953): the product editor opens this
+  // picker for a members video, which holds only a film, and for fields that
+  // take any file.
+  const [kind, setKind] = useState<MediaPickerKind | undefined>(undefined)
   const resolver = useRef<((media: PickedMedia | null) => void) | null>(null)
 
   const settle = useCallback((media: PickedMedia | null) => {
@@ -72,6 +77,7 @@ export function ConsoleMediaPickerProvider(
         resolver.current?.(null)
         resolver.current = resolve
         setAllowPrivate(options?.allowPrivate === true)
+        setKind(options?.kind)
         setOpen(true)
       }),
     [],
@@ -87,6 +93,7 @@ export function ConsoleMediaPickerProvider(
         orgId={orgId}
         open={open}
         allowPrivate={allowPrivate}
+        kind={kind}
         onClose={() => settle(null)}
         onPick={(media, context) => {
           const picked = media as {

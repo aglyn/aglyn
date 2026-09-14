@@ -15,10 +15,21 @@
  * limitations under the License.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import {
+  uploadAcceptAttribute,
+  uploadAcceptForPickerKind,
+} from '../../utils/media-upload-limits'
 import { MediaLibraryComponent } from './media-library.component'
 
 // ---------------------------------------------------------------------------
@@ -204,10 +215,22 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => ({
   __esModule: true,
-  default: (props: { label?: unknown; action?: unknown }) =>
+  default: (props: { label?: unknown; description?: unknown; action?: unknown }) =>
     jest
       .requireActual('react')
-      .createElement('div', null, props.label, props.action),
+      .createElement(
+        'div',
+        { 'data-testid': 'empty-state' },
+        jest.requireActual('react').createElement('p', null, props.label),
+        jest.requireActual('react').createElement('p', null, props.description),
+        props.action,
+      ),
+}))
+
+// jsdom has no decoder; the probe's own no-decoder answer, without its timers.
+jest.mock('../../utils/video-probe', () => ({
+  __esModule: true,
+  probeVideoFile: async () => ({ reason: 'no browser video decoder available' }),
 }))
 
 type MockSnapshotListener = (snapshot: unknown) => void
@@ -239,7 +262,9 @@ const mockReleaseFlag = {
   ready: true,
 }
 const mockCurrentOrg = {
-  org: { $id: 'org-1' },
+  // Video uploads ride the `videoMedia` entitlement, granted here so a drop
+  // reaches the checks these tests are about.
+  org: { $id: 'org-1', entitlements: { features: { videoMedia: true } } },
   orgId: 'org-1',
   ready: true,
   entitlementsFromCache: false,
@@ -307,10 +332,10 @@ const ASSETS: Array<[fileName: string, contentType: string]> = [
 const filesOf = (family: string) =>
   ASSETS.filter(([, type]) => type.startsWith(family)).map(([name]) => name)
 
-function seedHostLibrary() {
+function seedHostLibrary(assets = ASSETS) {
   mockDb.collections.set(
     'hosts/host-1/media',
-    ASSETS.map(([fileName, contentType], index) => ({
+    assets.map(([fileName, contentType], index) => ({
       id: fileName.replace(/\W/g, '-'),
       data: {
         fileName,
@@ -326,7 +351,7 @@ function seedHostLibrary() {
   )
   mockDb.collections.set('hosts/host-1/mediaFolders', [])
   mockDb.docs.set('hosts/host-1/counters/media', {
-    count: ASSETS.length,
+    count: assets.length,
     bytes: 1_000_000,
   })
   mockDb.docs.set('hosts/host-1', {
@@ -373,16 +398,18 @@ async function settle() {
   })
 }
 
+/**
+ * The library, once its first page has drawn. `readyText` is what that page
+ * shows: a picker's cards carry no File actions button to wait on.
+ */
 async function renderLibrary(
   props: Partial<Parameters<typeof MediaLibraryComponent>[0]> = {},
+  readyText = 'launch.mp4',
 ) {
-  render(<MediaLibraryComponent hostId="host-1" {...props} />)
-  await screen.findAllByRole(
-    'button',
-    { name: 'File actions' },
-    { timeout: 60_000 },
-  )
+  const view = render(<MediaLibraryComponent hostId="host-1" {...props} />)
+  await screen.findByText(readyText, {}, { timeout: 60_000 })
   await settle()
+  return view
 }
 
 /** The Type select, found by its label rather than by position. */
@@ -398,6 +425,7 @@ beforeEach(() => {
   mockDb.collections.clear()
   mockDb.docs.clear()
   mockGridQueries.length = 0
+  mockSnackbar.enqueueSnackbar.mockClear()
   seedHostLibrary()
   global.fetch = jest.fn(async (input: RequestInfo | URL) => ({
     ok: true,
@@ -482,4 +510,155 @@ describe('the Type filter under a date sort (AGL-2952)', () => {
     expect(source).toContain("where('contentType', '<', `${prefix}\\uf8ff`)")
     expect(source).not.toMatch(/\uf8ff/)
   })
+})
+
+/** The library's own upload input, as opposed to the card replace input. */
+const uploadInput = (container: HTMLElement) =>
+  container.querySelector('input[type="file"][multiple]') as HTMLInputElement
+
+/** A file dropped onto the library, the way a browser delivers one. */
+function dropFile(file: File) {
+  fireEvent.drop(screen.getByText('launch.mp4'), {
+    dataTransfer: { types: ['Files'], files: [file] },
+  })
+}
+
+/** Whether anything was sent to either upload route. */
+const uploadRequests = () =>
+  (global.fetch as jest.Mock).mock.calls.filter(([url]) =>
+    /\/api\/media\/upload/.test(String(url)),
+  )
+
+/**
+ * A library narrowed to one kind (AGL-2953).
+ *
+ * The picker for a field that can hold only a film has to offer only films:
+ * listed, chosen and uploaded. `kind` is one of the Type filter's own values,
+ * and the library behaves as though that filter were set and locked, so each
+ * assertion below is about a place the lock has to hold: the query, the
+ * client-side pass, the control, the chooser, a drop, and the empty state.
+ */
+describe('a library narrowed to one kind (AGL-2953)', () => {
+  it('asks for and lists only that kind before the Type control is touched', async () => {
+    await renderLibrary({ kind: 'video', onSelect: jest.fn() })
+
+    const query = mockGridQueries[mockGridQueries.length - 1]
+    expect(contentTypeRange(query)).toEqual({
+      lower: 'video/',
+      upper: 'video/\\uf8ff',
+    })
+    for (const fileName of filesOf('video/')) {
+      expect(screen.getByText(fileName)).toBeTruthy()
+    }
+    for (const fileName of ['hero.png', 'logo.webp', 'guide.pdf', 'brand-kit.zip']) {
+      expect(screen.queryByText(fileName)).toBeNull()
+    }
+  }, 120_000)
+
+  it('narrows the client-side pass too, when the sort keeps the type out of the query', async () => {
+    await renderLibrary({ kind: 'video', onSelect: jest.fn() })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: /^Sort\b/ }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Name' }))
+    await settle()
+
+    // Sorted by name, the query carries no type at all and answers everything.
+    const query = mockGridQueries[mockGridQueries.length - 1]
+    expect(contentTypeRange(query)).toBeNull()
+    expect(mockAnswer(query)).toHaveLength(ASSETS.length)
+    // So the only thing standing between the grid and an image is the pass.
+    for (const fileName of filesOf('video/')) {
+      expect(screen.getByText(fileName)).toBeTruthy()
+    }
+    for (const fileName of ['hero.png', 'logo.webp', 'guide.pdf', 'brand-kit.zip']) {
+      expect(screen.queryByText(fileName)).toBeNull()
+    }
+  }, 120_000)
+
+  it('shows the kind in the Type control, and offers no other', async () => {
+    await renderLibrary({ kind: 'video', onSelect: jest.fn() })
+    const control = typeSelect()
+    expect(control.getAttribute('aria-disabled')).toBe('true')
+    expect(control.textContent).toBe('Video')
+  }, 120_000)
+
+  it('offers only that kind in the upload chooser', async () => {
+    const { container } = await renderLibrary({ kind: 'video', onSelect: jest.fn() })
+    expect(uploadInput(container).accept).toBe(
+      uploadAcceptForPickerKind('video', { video: true }),
+    )
+    expect(uploadInput(container).accept).not.toContain('image/')
+  }, 120_000)
+
+  it('refuses a dropped file of another kind before anything is sent', async () => {
+    await renderLibrary({ kind: 'video', onSelect: jest.fn() })
+    dropFile(new File(['png'], 'photo.png', { type: 'image/png' }))
+
+    await waitFor(() =>
+      expect(mockSnackbar.enqueueSnackbar).toHaveBeenCalledWith(
+        '"photo.png" skipped — only videos can be added here',
+        expect.objectContaining({ variant: 'warning' }),
+      ),
+    )
+    await settle()
+    expect(uploadRequests()).toEqual([])
+  }, 120_000)
+
+  it('uploads a dropped file of its own kind', async () => {
+    await renderLibrary({ kind: 'video', onSelect: jest.fn() })
+    dropFile(new File(['mp4'], 'new-cut.mp4', { type: 'video/mp4' }))
+
+    await waitFor(() => expect(uploadRequests()).toHaveLength(1), {
+      timeout: 10_000,
+    })
+    const [, init] = uploadRequests()[0]
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual(
+      expect.objectContaining({ fileName: 'new-cut.mp4', contentType: 'video/mp4' }),
+    )
+  }, 120_000)
+
+  it('says a library with none of its kind is empty, not filtered', async () => {
+    seedHostLibrary(ASSETS.filter(([, type]) => !type.startsWith('video/')))
+    await renderLibrary(
+      { kind: 'video', onSelect: jest.fn() },
+      'No videos here yet',
+    )
+
+    const empty = screen.getByTestId('empty-state')
+    expect(
+      within(empty).getByText(
+        'Upload a video to use it here. Drop it here or use Upload media above.',
+      ),
+    ).toBeTruthy()
+    // Clear filters cannot lift the kind, so it is not offered.
+    expect(within(empty).queryByRole('button', { name: 'Clear filters' })).toBeNull()
+    expect(within(empty).getByRole('button', { name: 'Upload media' })).toBeTruthy()
+  }, 120_000)
+})
+
+describe('a library with no kind is unchanged (AGL-2953)', () => {
+  it('leaves the Type control, the chooser and the empty state to the person', async () => {
+    const { container } = await renderLibrary()
+    expect(uploadInput(container).accept).toBe(
+      uploadAcceptAttribute({ video: true }),
+    )
+    // Every family is listed.
+    for (const [fileName] of ASSETS) {
+      expect(screen.getByText(fileName)).toBeTruthy()
+    }
+    // And the Type control is the person's to set.
+    expect(typeSelect().getAttribute('aria-disabled')).not.toBe('true')
+    await chooseType('Video')
+    expect(typeSelect().textContent).toBe('Video')
+  }, 120_000)
+
+  it('still calls an empty library empty, for every family', async () => {
+    seedHostLibrary([])
+    await renderLibrary({}, 'No media here yet')
+    expect(
+      screen.getByText(
+        'Upload images, video, PDFs and documents to use on your site. ' +
+          'Drop them here or use Upload media above.',
+      ),
+    ).toBeTruthy()
+  }, 120_000)
 })

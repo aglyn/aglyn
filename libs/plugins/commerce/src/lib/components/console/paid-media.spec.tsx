@@ -390,7 +390,9 @@ describe('AGL-2814 · adding a members video', () => {
         { url: 'media:org:acme/med-film', title: 'week-1.mp4' },
       ]),
     )
-    expect(pickMedia).toHaveBeenCalledWith({ allowPrivate: true })
+    // Private films only (AGL-2953): a members video can play nothing else,
+    // so the picker neither lists nor uploads an image or a PDF here.
+    expect(pickMedia).toHaveBeenCalledWith({ allowPrivate: true, kind: 'video' })
   })
 
   it('makes a site-library file private through the site’s own scope', async () => {

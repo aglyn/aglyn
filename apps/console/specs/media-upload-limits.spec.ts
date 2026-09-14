@@ -21,12 +21,14 @@ import {
   isAllowedUploadType,
   isVideoUploadType,
   MB,
+  mediaPickerKindOf,
   normalizeUploadContentType,
   signedUploadMaxBytes,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
   UPLOAD_ACCEPT_ATTRIBUTE,
   uploadAcceptAttribute,
   uploadAcceptForKind,
+  uploadAcceptForPickerKind,
   UPLOAD_TYPES,
   UPLOAD_TYPES_MESSAGE,
   uploadTypesMessage,
@@ -332,5 +334,59 @@ describe('video uploads pause without forking the table (AGL-2830)', () => {
     expect(VIDEO_UPLOADS_PAUSED_MESSAGE).toMatch(/^Video uploads are paused\./)
     expect(VIDEO_UPLOADS_PAUSED_CODE).toBe('video_uploads_paused')
     expect(VIDEO_UPLOADS_RELEASE_FLAG).toBe('release_video_uploads')
+  })
+})
+
+/**
+ * A picker narrowed to one kind (AGL-2953) offers and takes only that kind.
+ *
+ * Two halves that must agree: the chooser's `accept`, and the check a drop
+ * goes through, which never sees the chooser. Both are derived from the one
+ * table, and the last case below holds them to each other row by row, so a
+ * type added to the table lands in the same kind on both sides.
+ */
+describe('a picker narrowed to one kind takes only that kind (AGL-2953)', () => {
+  const KINDS = ['image', 'video', 'pdf'] as const
+
+  it('names the kind of each family, and PDF alone among the documents', () => {
+    expect(mediaPickerKindOf('image/png')).toBe('image')
+    expect(mediaPickerKindOf('image/svg+xml')).toBe('image')
+    expect(mediaPickerKindOf('video/mp4')).toBe('video')
+    expect(mediaPickerKindOf('video/quicktime')).toBe('video')
+    expect(mediaPickerKindOf('application/pdf')).toBe('pdf')
+    // A document the Type filter has no value for belongs to no kind.
+    expect(mediaPickerKindOf('application/zip')).toBeUndefined()
+    expect(
+      mediaPickerKindOf(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ),
+    ).toBeUndefined()
+    // Nor does a type the DAM refuses outright.
+    expect(mediaPickerKindOf('application/x-msdownload')).toBeUndefined()
+  })
+
+  it('offers a whole family for images and video, and the PDF row for pdf', () => {
+    expect(uploadAcceptForPickerKind('image')).toBe(uploadAcceptForKind('image'))
+    expect(uploadAcceptForPickerKind('video')).toBe(uploadAcceptForKind('video'))
+    expect(uploadAcceptForPickerKind('pdf').split(',').sort()).toEqual(
+      ['.pdf', 'application/pdf'].sort(),
+    )
+  })
+
+  it.each(KINDS)('offers exactly what it lets through, for %s', (kind) => {
+    const accepted = uploadAcceptForPickerKind(kind).split(',')
+    for (const spec of UPLOAD_TYPES) {
+      const takes = mediaPickerKindOf(spec.contentType) === kind
+      expect([spec.contentType, accepted.includes(spec.contentType)]).toEqual([
+        spec.contentType,
+        takes,
+      ])
+      for (const extension of spec.extensions) {
+        expect([extension, accepted.includes(extension)]).toEqual([
+          extension,
+          takes,
+        ])
+      }
+    }
   })
 })
