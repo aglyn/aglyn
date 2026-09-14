@@ -38,6 +38,7 @@ import {
   listingArtifactType,
   resolveInstalledDatasetSchema,
 } from '../model/marketplace'
+import { readPublishedProps } from '../model/marketplace-props'
 import { recordInstallProvenance } from './provenance'
 import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
@@ -125,6 +126,19 @@ interface Target {
    * both private to their host by construction and neither carrying a scope.
    */
   forkScope: readonly ScopeToken[] | null
+  /**
+   * The declared properties the new version carries (AGL-2933), for a
+   * component or layout, sanitized; `undefined` when the version was published
+   * before properties were carried, or the type declares none.
+   *
+   * Not part of the merged content. Every base snapshot recorded before this
+   * field existed holds only the tree, so diffing properties three ways would
+   * read each installed copy's declarations as a local edit to keep. They are
+   * the publisher's contract with the tree instead: whatever the merge takes
+   * of the nodes binds to them, so the incoming list replaces the installed
+   * one, in both modes.
+   */
+  props?: ReturnType<typeof readPublishedProps>
 }
 
 const trimChanges = (changes: ArtifactChange[]): ArtifactChange[] =>
@@ -294,6 +308,7 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         },
         // `hosts/{hostId}/components` is private to its host; no scope.
         forkScope: null,
+        props: readPublishedProps(version.props),
       }
     } else if (artifactType === 'layout') {
       const existing = await hostRef
@@ -332,6 +347,7 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
         },
         // `hosts/{hostId}/templates` is private to its host; no scope.
         forkScope: null,
+        props: readPublishedProps(layout?.props),
       }
     } else if (artifactType === 'datasetSchema') {
       if (!orgId) {
@@ -536,6 +552,7 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       await target.ref.set(
         {
           ...target.write(merged.content),
+          ...(target.props && { props: target.props }),
           // A theme is a FIELD on the host document, not a document of its own,
           // so it namespaces its provenance (`themeInstalledFrom`) and has no
           // legacy `source`/`marketplace` pair — writing those here would put a
@@ -644,6 +661,11 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
       // rather than storing a scope nobody can see through.
       ...newResourceScopeFields(target.forkScope),
       ...target.write(incoming),
+      ...(target.props
+        ? { props: target.props }
+        : Array.isArray(carried.props)
+          ? { props: carried.props }
+          : {}),
       ...(artifactType === 'component'
         ? {
             marketplace: {

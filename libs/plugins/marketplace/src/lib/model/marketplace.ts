@@ -1136,7 +1136,13 @@ const KEPT_NODE_KEYS = [
   'nodes',
 ] as const
 
-/** Only navigable protocols — mirrors ScreenLink/Image/Button hardening. */
+/**
+ * Only navigable protocols — mirrors ScreenLink/Image/Button hardening.
+ *
+ * Exported for the property sanitizer (`marketplace-props.ts`), which holds a
+ * published property's Link default to the same rule as a published node's
+ * `href`.
+ */
 const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
 /**
  * `src` additionally allows inline images, which are inert.
@@ -1148,8 +1154,12 @@ const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
  * current browser blocks outright. So the permissive form bought a published
  * node nothing: the image did not render either way, it just failed at the
  * viewer instead of at publish time.
+ *
+ * Exported for the property sanitizer, which holds an Image default to it.
  */
 const SAFE_SRC = /^(https:\/\/|data:image\/|\/|#)/i
+
+export { SAFE_HREF as MARKETPLACE_SAFE_HREF, SAFE_SRC as MARKETPLACE_SAFE_SRC }
 
 /**
  * Strips props a published node must never carry into someone else's site

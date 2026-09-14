@@ -24,6 +24,7 @@ import {
   marketplacePriceRefusal,
   sanitizeMarketplaceDefinition,
 } from '../model'
+import { sanitizeMarketplaceProps } from '../model/marketplace-props'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -138,6 +139,14 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     if (sanitized.ok === false) {
       return res.status(422).json({ error: sanitized.error })
     }
+    // The properties the tree binds to (AGL-2933), read off the same document
+    // the tree is: a publish copies a version's props onto it with its nodes.
+    // A default the sanitizer refuses is cleared and its property kept — see
+    // `sanitizeMarketplaceProps`.
+    const props = sanitizeMarketplaceProps(definition.props)
+    if (props.ok === false) {
+      return res.status(422).json({ error: props.error })
+    }
 
     // One listing per source component: re-publish bumps latestVersion.
     const existing = await firestore
@@ -179,6 +188,9 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     await listingRef.collection('versions').doc(String(version)).set({
       rootId: sanitized.rootId,
       nodes: sanitized.nodes,
+      // Always a list, even an empty one: install and update read a version
+      // with none as one published before properties were carried.
+      props: props.props,
       publishedAt: now,
     })
 

@@ -38,6 +38,14 @@ This is deliberate: browsing and installing should never be able to change a sit
 real people are looking at. If the template was designed around a particular theme, that
 theme travels with it rather than being applied to your site.
 
+A marketplace **component** or **layout** brings the properties it declares — each one's
+kind, label, help text, answers, settings and condition — so its `{{prop.*}}` tokens still
+have properties to fill them, and updating to a newer version takes the publisher's new
+properties with it. A property's default is checked before it reaches your site the same
+way the published design is: a link, an image address, or formatted text that could run
+script is removed, and the property arrives with no default instead. The property itself
+always comes through, so its field still shows wherever you use the component or layout.
+
 ## Saving something as a template
 
 Look for **Save as template**:

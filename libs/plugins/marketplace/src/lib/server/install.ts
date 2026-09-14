@@ -25,6 +25,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { isPrivateListing } from '../model/marketplace'
+import { readPublishedProps } from '../model/marketplace-props'
 import { canActAsPublisher } from './publisher-profile'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
 import { requirePurchase } from './purchase-entitlement'
@@ -175,6 +176,11 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       return res.status(500).json({ error: 'Listing version missing' })
     }
 
+    // The properties the tree binds to (AGL-2933), held to the sanitizer again
+    // on the way in. `undefined` for a version published before they were
+    // carried, which leaves a re-installed copy's own properties in place.
+    const props = readPublishedProps(version.props)
+
     const componentsRef = hostRef.collection('components')
     const existing = await componentsRef
       .where('marketplace.listingId', '==', listingId)
@@ -232,6 +238,10 @@ export const installHandler: PluginApiHandler = async (req, res) => {
         // document (AGL-1151). The provenance base above keeps the decoded
         // map: it is compared by value, never rendered.
         nodes: Buffer.from(encodeStoredNodes(version.nodes ?? {})!),
+        // Beside the tree, as a publish writes them onto this document. The
+        // first version the console mints for this component copies them
+        // from here (AGL-2932).
+        ...(props && { props }),
         deletedAt: null,
         marketplace: {
           listingId,
