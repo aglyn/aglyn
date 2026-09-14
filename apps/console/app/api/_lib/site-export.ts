@@ -418,6 +418,25 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'cdnPath',
     'customMetadata',
     'private',
+    // A video's own records (AGL-2955), each written once and never rebuilt.
+    // The import writes with `merge: false`, so dropping one erases it from
+    // the restored film:
+    // * `video` — the duration and dimensions the uploader's browser measured,
+    //   which size the player and give `VideoObject` its duration. The server
+    //   has no decoder to measure them again.
+    // * `poster` — the frame captured at upload. The CDN answers `?poster=1`
+    //   only while this record is on the document, so without it a Video
+    //   element's poster, its `thumbnailUrl` and an entry cover filled from
+    //   the frame all 404.
+    // * `posterError` — why a film has no poster, so a missing frame reads as
+    //   a capture that failed rather than one never tried.
+    // * `videoRenditions` — the encoded delivery copies. The CDN chooses a
+    //   rendition from this list, so without it every request gets the
+    //   master.
+    'video',
+    'poster',
+    'posterError',
+    'videoRenditions',
   ],
   /**
    * The DAM folder tree (AGL-1392). Two fields, and the short list is the
