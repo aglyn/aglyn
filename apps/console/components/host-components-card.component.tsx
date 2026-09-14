@@ -631,7 +631,15 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                   // whose whole content is a byte array.
                   loadNodes: async () => {
                     const nodes = Aglyn.decodeStoredNodes(definition.nodes)
-                    return nodes ? { nodes, rootId: definition.rootId } : null
+                    // The published properties travel with the published
+                    // tree that binds to them (AGL-2932).
+                    return nodes
+                      ? {
+                          nodes,
+                          rootId: definition.rootId,
+                          props: definition.props,
+                        }
+                      : null
                   },
                 }),
             },

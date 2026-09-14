@@ -219,6 +219,13 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
                     },
                   },
               ...(definition?.rootId ? { rootId: definition.rootId } : {}),
+              // The published properties go into the version too (AGL-2932):
+              // the Properties dialog edits the version's, and a publish
+              // copies the version's onto this document — so a first version
+              // minted without them would publish them away.
+              ...(Array.isArray(definition?.props) && definition.props.length
+                ? { props: definition.props }
+                : {}),
             },
           })
           await updateDoc(

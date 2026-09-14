@@ -185,6 +185,8 @@ const RESOURCES: Record<string, {
       'placeholders',
       'nodes',
       'rootId',
+      // A component or layout template's declared properties (AGL-2932).
+      'props',
       'slug',
       'seo',
     ],
@@ -353,7 +355,10 @@ const RESOURCES: Record<string, {
     entitlement: 'reusableComponents',
     label: 'reusable components',
     activity: { type: 'component', noun: 'reusable component' },
-    fields: ['displayName', 'description', 'rootId', 'nodes'],
+    // `props` is sent by Use template, whose tree binds to the properties it
+    // carries (AGL-2932); a component made in the besigner declares them by
+    // update instead.
+    fields: ['displayName', 'description', 'rootId', 'nodes', 'props'],
   },
   /*
    * The form entity (`docs/specs/reusable-forms.md` §2b):

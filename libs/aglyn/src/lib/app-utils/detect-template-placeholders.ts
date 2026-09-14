@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { COMPONENT_PROP_TOKEN_PREFIX } from './reusable-component-keys'
+
 /**
  * Bare `{{name}}` tokens in the captured content (AGL-672).
  *
@@ -23,6 +25,10 @@
  * time, so turning one into a template placeholder would break the binding
  * it already has. Only the plain named form is a placeholder candidate,
  * which is the same form `resolveNamedTokens` substitutes.
+ *
+ * A `{{prop.*}}` token is not a candidate either (AGL-2932): it binds to a
+ * property the component or layout declares, which the template carries, and
+ * a placeholder filled in on use would erase the binding from what is made.
  */
 export function detectTemplatePlaceholders(nodes: Record<string, unknown>): string[] {
   const found = new Set<string>()
@@ -33,7 +39,9 @@ export function detectTemplatePlaceholders(nodes: Record<string, unknown>): stri
     if (typeof value === 'string') {
       for (const match of value.matchAll(pattern)) {
         const name = match[1]
-        if (name && !name.includes(':')) found.add(name)
+        if (!name || name.includes(':')) continue
+        if (name.startsWith(COMPONENT_PROP_TOKEN_PREFIX)) continue
+        found.add(name)
       }
       return
     }

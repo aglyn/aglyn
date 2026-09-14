@@ -156,8 +156,9 @@ function Layouts(props) {
         const nodes = decodeStoredNodes(snapshot.get('nodes'))
         // The LayoutSlot node rides along inside `nodes` — it marks where a
         // bound screen grafts in, so a layout template without it would be
-        // chrome with nowhere to put the page.
-        return nodes ? { nodes } : null
+        // chrome with nowhere to put the page. The version's properties ride
+        // with it too (AGL-2932): the tree binds to them.
+        return nodes ? { nodes, props: snapshot.get('props') } : null
       },
     }),
     [firestore, hostId],

@@ -1464,6 +1464,12 @@ export interface AglynTemplate<N = AglynNodeSchema> extends AglynDocument {
   nodes?: Record<NodeId, N>
   /** Definition tree root — `component` kind, mirroring AglynHostComponent. */
   rootId?: NodeId
+  /**
+   * The properties a `component` or `layout` template's tree binds to
+   * (AGL-2932), carried so what is made from it declares them — without them
+   * every `{{prop.*}}` in the tree renders raw.
+   */
+  props?: ReusableComponentProp[]
   /** Suggested slug — `page` kind; de-conflicted against the host on use. */
   slug?: string
   /** Mirrors AglynScreen.seo — carried through to the created page. */

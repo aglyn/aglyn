@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { TemplateKind } from '@aglyn/aglyn'
+import type { ReusableComponentProp, TemplateKind } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import {
@@ -46,6 +46,11 @@ export interface SaveAsTemplateSource {
     rootId?: string
     slug?: string
     seo?: Record<string, unknown>
+    /**
+     * A component's or layout's declared properties (AGL-2932), which its
+     * tree binds to with `{{prop.*}}` and the template has to carry.
+     */
+    props?: ReusableComponentProp[] | null
   } | null>
 }
 
@@ -111,6 +116,9 @@ export function SaveAsTemplateDialog({
           ...(placeholders.length ? { placeholders } : {}),
           nodes: captured.nodes,
           ...(captured.rootId ? { rootId: captured.rootId } : {}),
+          ...(Array.isArray(captured.props) && captured.props.length
+            ? { props: captured.props }
+            : {}),
           ...(captured.slug ? { slug: captured.slug } : {}),
           ...(captured.seo ? { seo: captured.seo } : {}),
         },

@@ -61,11 +61,13 @@ library, so you can use it as many times as you like.
   publishes it. If the address is already taken, Aglyn adds a number rather than
   overwriting the page that's there.
 - **Component** and **layout** templates just create the component or layout; there is
-  no address to pick.
+  no address to pick. The properties the component or layout declared come with it, so
+  every `{{prop.*}}` token in it still has a property to fill it.
 
 If a template defines placeholders, you'll be asked to fill them in first — the values
 are substituted into the content as it's created. A template might use `{{who}}` in its
-copy and ask you for "Who".
+copy and ask you for "Who". A component or layout property's `{{prop.*}}` token is never a
+placeholder: it stays in the content, bound to its property.
 
 Nothing you create is linked back to the template afterwards. Editing a page will never
 change the template, and updating a template will never change pages you already made.
