@@ -339,6 +339,32 @@ async function handler(request: Request): Promise<Response> {
       if (!datasetSnapshot.exists) {
         return Response.json({ error: 'Unknown dataset' }, { status: 404 })
       }
+      /**
+       * The caller has to be able to SEE the dataset they add rows to.
+       *
+       * The role and `data.manage` gates above are about the org, and a member
+       * scoped to one site passes both. The rules hold every record update and
+       * delete to the parent dataset being visible (`parentDatasetVisible()`),
+       * and refuse client record creates outright, so this route is the one
+       * place a member's create can be held to the same condition. Without it,
+       * a collaborator on one client's site could add rows, by id alone, to an
+       * internal dataset shared only with other sites.
+       *
+       * The Admin SDK evaluates no rules, so `memberCanSee` IS the enforcement
+       * here, as on the export route beside this one. Answered with the same
+       * 404 as a dataset that does not exist: whether one outside the caller's
+       * reach exists is not theirs to learn either.
+       */
+      if (
+        decoded['staff'] !== true &&
+        !memberCanSee(
+          member,
+          (datasetSnapshot.data() as { visibleTo?: string[] } | undefined)
+            ?.visibleTo,
+        )
+      ) {
+        return Response.json({ error: 'Unknown dataset' }, { status: 404 })
+      }
       const model = effectiveDatasetModel(datasetSnapshot.data() as any)
       // Before either validation below: a plugin's field validator only runs
       // once its plugin's server entry has registered it.
