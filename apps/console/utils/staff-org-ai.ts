@@ -161,11 +161,20 @@ export interface StaffOrgAiJobs {
   truncated: boolean
 }
 
+/** One row of the per-user rollup (AGL-2928), as the staff card lists it. */
 export interface StaffOrgAiUser {
   uid: string
+  /** The roster's name for them — display name, else email, else the uid. */
+  name: string
   credits: number
-  providerUsd: number
+  /** The measured provider spend behind `credits`; staff may see dollars. */
+  estCostUsd: number
+  /** Of the org's measured spend for the month, in `[0, 1]`. */
+  share: number
   requests: number
+  refusals: number
+  byKind: Record<string, number>
+  byHost: Record<string, number>
 }
 
 export interface StaffOrgAiResponse {
@@ -176,7 +185,7 @@ export interface StaffOrgAiResponse {
   refusals: StaffOrgAiRefusals
   /** Null when the jobs read failed — distinct from an org with no jobs. */
   jobs: StaffOrgAiJobs | null
-  /** Empty when the per-user rollup has nothing for the month. */
+  /** The dearest people this month; empty when nobody's month is written. */
   users: StaffOrgAiUser[]
   margin: StaffOrgAiMargin
 }

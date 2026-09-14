@@ -60,10 +60,11 @@ this month, and the last ten with their kind, credits used against reserved,
 status and who started them. An organization that has never run a job reads
 as having none; a read that failed says so instead.
 
-**Top users this month.** The people who drew the most, by credits, with
-provider dollars and request counts beside them. Until the per-user rollup
-lands, the section says so in those words rather than showing an empty
-table.
+**Top users this month.** The ten people who drew the most, by credits — named
+from the roster, with their share of the organization's spend, provider
+dollars, requests and refusals beside them. Each name opens the account's
+staff page. An organization with nobody attributed reads as exactly that, not
+as a failed read.
 
 **Margin.** This month's provider spend against what AI brings in: the
 add-on's price when it is on, the share of the plan price the band was sized
@@ -95,6 +96,15 @@ spending while the month is still open.
 share, and the fleet summary totals it. The add-on was already inside the net
 revenue figure — this names it, so the assist band's cost reads against what
 it brings in rather than as pure drag.
+
+## One account, across organizations {#one-account}
+
+**Staff → Users → an account** carries a card named after the AI add-on with the
+account's credits in **every workspace it belongs to, month by month** — the
+same rollup the customer's Team and Usage pages read, kept thirteen months. It
+is the answer to "is this one person driving the spend in three workspaces".
+Opening it writes an access row **about that person** to the staff audit log,
+which their page's *Data access by staff* card then shows.
 
 ## The spend leaderboard {#the-spend-leaderboard}
 

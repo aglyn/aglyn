@@ -404,25 +404,31 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
       stopReason: 'end_turn',
     })
 
-    // All FOUR: the exchange, its signal, the daily counter, the monthly
-    // rollup. `assistSignals` is the half AGL-1972 split out so the prose
-    // could be given a TTL without destroying the data loop — and splitting
-    // it created a new collection, which is precisely the moment a cascade
-    // silently stops covering everything. The length is asserted so a fifth
-    // collection added later cannot slip past this list unnoticed.
+    // All FIVE: the exchange, its signal, the daily counter, the monthly
+    // rollup, and the asker's own month (AGL-2928). `assistSignals` is the
+    // half AGL-1972 split out so the prose could be given a TTL without
+    // destroying the data loop — and splitting it created a new collection,
+    // which is precisely the moment a cascade silently stops covering
+    // everything. The length is asserted so a sixth collection added later
+    // cannot slip past this list unnoticed.
     // Deduped: the monthly rollup is touched by BOTH halves now — the
     // reservation counts the message, the batch folds in the tokens.
     const distinct = [...new Set(written)]
-    expect(distinct).toHaveLength(4)
+    expect(distinct).toHaveLength(5)
     for (const path of distinct) {
       expect([path, path.startsWith('orgs/org-1/')]).toEqual([path, true])
     }
     expect(distinct.map((path) => path.split('/')[2]).sort()).toEqual([
+      'aiUsageByUser',
       'assistExchanges',
       'assistSignals',
       'assistUsage',
       'counters',
     ])
+    // The per-user month is keyed by the ASKER, under the org: the org's
+    // cascade takes it, and `eraseUser` sweeps it by uid (AGL-2928).
+    expect(distinct).toContain('orgs/org-1/aiUsageByUser/user-1/months/' +
+      new Date().toISOString().slice(0, 7))
   })
 
   it('still finishes eraseOrg with a recursive delete of the org doc', () => {

@@ -113,6 +113,24 @@ Nothing here guarantees that a price or feature set will remain the same.
   up as an overage on the usage rollup rather than as mail your customers never receive.
 - Usage is rolled up with a **cost-plus estimate** for metered features.
 
+### Who is generating what {#who-is-generating-what}
+
+Beneath the meters on **Billing → Usage**, a table lists each member's AI credits for
+a month — their **share of the workspace's spend**, requests, and how often the
+assistant refused them — dearest first, with the kinds of request they mostly made.
+The month picker walks the last thirteen months; **Export CSV** hands the same month
+to a spreadsheet, and the console refuses to save a file that arrived short.
+
+Open a member from the table for their page, which splits the figure **by site and by
+kind** for this month and last — so an agency or a multi-brand workspace can see which
+client site's people are generating what. The organization **Team** page carries the
+same month's credits as a sortable column, and each site's **Users** card shows what
+its collaborators drew on that site alone.
+
+The table requires the **View billing** permission. It names who drew from the pool and
+how much; it makes no judgment about it, and it never shows a dollar figure — the
+share is of the workspace's own credits.
+
 ## Storage overage
 
 Each site includes a fixed amount of storage. On a paid plan, going past it is **not** a

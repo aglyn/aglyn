@@ -145,6 +145,14 @@ const POLICIES: Array<{
     writers: ['libs/tenant/data/admin/src/lib/server/ai-jobs.ts'],
     stamp: 'expiresAt: assistExchangeExpiry(now)',
   },
+  // AGL-2928: a person's monthly AI usage under the org, keyed by uid, kept
+  // thirteen months past the month it counts. Two writers in one file: the
+  // batch that meters a request and the counter that records a refusal.
+  {
+    collectionGroup: 'months',
+    writers: ['libs/tenant/data/admin/src/lib/server/ai-usage-by-user.ts'],
+    stamp: 'expiresAt: aiUsageByUserExpiry(',
+  },
   // AGL-1978: the churn survey's free text, split off the survey document so
   // it could expire without taking the reason breakdown with it.
   {

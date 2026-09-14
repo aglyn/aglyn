@@ -384,7 +384,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
             </Typography>
             {data.users.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                {'Per-user attribution lands with AGL-2928.'}
+                {'No AI usage attributed to a person this month.'}
               </Typography>
             ) : (
               <Table size="small">
@@ -392,8 +392,10 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
                   <TableRow>
                     <TableCell>{'Person'}</TableCell>
                     <TableCell align="right">{'Credits'}</TableCell>
+                    <TableCell align="right">{'Share'}</TableCell>
                     <TableCell align="right">{'Provider $'}</TableCell>
                     <TableCell align="right">{'Requests'}</TableCell>
+                    <TableCell align="right">{'Refusals'}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -403,14 +405,27 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
                         <AppLink
                           href={buildRoute(Route.ADMIN_USER_DETAIL, { uid: row.uid })}
                           underline="hover"
-                          sx={{ fontFamily: 'monospace' }}
                         >
-                          {row.uid}
+                          {row.name}
                         </AppLink>
+                        {/* The uid beside the name, because the name is the
+                            roster's and two people can share one. */}
+                        {row.name !== row.uid ? (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            component="div"
+                            sx={{ fontFamily: 'monospace' }}
+                          >
+                            {row.uid}
+                          </Typography>
+                        ) : null}
                       </TableCell>
                       <TableCell align="right">{credits(row.credits)}</TableCell>
-                      <TableCell align="right">{usd(row.providerUsd)}</TableCell>
+                      <TableCell align="right">{`${Math.round(row.share * 100)}%`}</TableCell>
+                      <TableCell align="right">{usd(row.estCostUsd)}</TableCell>
                       <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
+                      <TableCell align="right">{row.refusals.toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -102,6 +102,11 @@ Organization-wide members are not affected by these boxes; their AI access
 follows their org role, custom role and overrides — see
 [Custom roles & permissions](custom-roles.md#ai-permissions).
 
+A site's **Users** card also shows what each collaborator drew from the workspace's AI
+credits **on that site** this month, so an agency can see which client site's people
+are generating what. The figure is the site's slice of the member's month; the whole
+month, split by site, is on the member's page under Team.
+
 ### What a site collaborator sees
 
 Someone invited to a **specific site** rather than the whole organization gets a console

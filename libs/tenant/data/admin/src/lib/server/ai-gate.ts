@@ -37,6 +37,7 @@ import {
   rateLimitHeaders,
   type RateLimitResult,
 } from './api-http'
+import { recordUserAiRefusal } from './ai-usage-by-user'
 import {
   publicAssistQuota,
   reserveAssistMessage,
@@ -332,6 +333,9 @@ export async function aiGateLadder(
       { status: 503 },
     )
   }
+  // A refusal is the caller's as well as the workspace's (AGL-2928): the
+  // per-person month counts it beside the org counter the reservation moved.
+  recordUserAiRefusal(firestore, orgId, decoded.uid, reservation)
   if (!reservation.allowed) {
     // The org's own wall is a 402 (AGL-2653): credits past the band are for
     // sale and this workspace switched the sale off, so the sentence names

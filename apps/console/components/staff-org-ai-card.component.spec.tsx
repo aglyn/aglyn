@@ -133,7 +133,19 @@ function body(overrides: Partial<StaffOrgAiResponse> = {}): StaffOrgAiResponse {
       ],
       truncated: false,
     },
-    users: [{ uid: 'user-a', credits: 1_800, providerUsd: 1.8, requests: 30 }],
+    users: [
+      {
+        uid: 'user-a',
+        name: 'Ada',
+        credits: 1_800,
+        estCostUsd: 1.8,
+        share: 0.72,
+        requests: 30,
+        refusals: 2,
+        byKind: { assist: 1_000, page: 800 },
+        byHost: { 'host-1': 1_800 },
+      },
+    ],
     margin: {
       addonRevenueUsd: 19,
       planAssistShareUsd: 12,
@@ -234,11 +246,11 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     )
   })
 
-  it('says where per-user attribution comes from when the rollup is empty', async () => {
+  it('reads an empty per-user rollup as nobody attributed, not as a gap', async () => {
     mockAnswer.payload = body({ users: [] })
     render(<StaffOrgAiCard orgId="org-1" />)
     await waitFor(() =>
-      expect(screen.getByText('Per-user attribution lands with AGL-2928.')).toBeTruthy(),
+      expect(screen.getByText('No AI usage attributed to a person this month.')).toBeTruthy(),
     )
   })
 
@@ -246,8 +258,12 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
     render(<StaffOrgAiCard orgId="org-1" />)
     await waitFor(() => expect(screen.getByText('job-9')).toBeTruthy())
     expect(screen.getByText('queued 1')).toBeTruthy()
+    // The roster's name links to the account; the uid rides beneath it.
+    expect(screen.getByText('Ada')).toBeTruthy()
     expect(screen.getAllByText('user-a').length).toBeGreaterThan(0)
     expect(screen.getByText('1,800')).toBeTruthy()
+    expect(screen.getByText('72%')).toBeTruthy()
+    expect(screen.getByText('$1.80')).toBeTruthy()
   })
 
   it('turns the margin red when spend exceeds the add-on plus the plan’s share', async () => {

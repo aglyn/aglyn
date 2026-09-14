@@ -35,6 +35,7 @@ import {
   memberHasAiPermission,
   rateLimitHeaders,
   recordAssistCost,
+  recordUserAiRefusal,
   releaseAssistMessage,
   publicAssistQuota,
   reserveAssistMessage,
@@ -331,6 +332,9 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         .status(503)
         .json({ error: 'AI assist is temporarily unavailable' })
     }
+    // A refusal is the asker's as well as the workspace's (AGL-2928): their
+    // month counts it beside the org counter the reservation moved.
+    recordUserAiRefusal(firestore, orgId, decoded.uid, reservation)
     if (!reservation.allowed) {
       // The org's own controls are a 402, not a 429: credits past the band
       // are for sale and this workspace either switched the sale off

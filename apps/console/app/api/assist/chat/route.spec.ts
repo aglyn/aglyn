@@ -181,6 +181,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../../libs/tenant/data/admin/src/lib/server/assist-usage',
   ),
+  // The per-person refusal counter the meter's door calls (AGL-2928).
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/ai-usage-by-user',
+  ),
   // The REAL cache, spliced by path (AGL-2486). Stubbing it would prove only
   // that the route calls something; the point of the tests below is that a
   // repeated question is served from Firestore and never reaches Anthropic,

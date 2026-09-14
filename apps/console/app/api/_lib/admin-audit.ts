@@ -83,6 +83,9 @@ const ADMIN_AUDIT_ACCESS_ACTIONS: ReadonlySet<string> = new Set([
   // The staff AI card opening on an org (AGL-2930): a read of spend and
   // per-user attribution, and nothing altered.
   'org.ai-viewed',
+  // The staff user page's AI usage card (AGL-2928): one account's months
+  // across its workspaces, read and nothing altered.
+  'user.ai-usage-viewed',
 ])
 
 export function adminAuditKind(

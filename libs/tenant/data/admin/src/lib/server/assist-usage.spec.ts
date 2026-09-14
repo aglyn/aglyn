@@ -852,6 +852,13 @@ describe('recordAssistExchange', () => {
       9,
     )
     expect(Number(signal?.estCostUsd)).toBeCloseTo(expected, 9)
+
+    // And the asker's own month (AGL-2928), on the same batch: the same
+    // money, keyed by the uid the signal deliberately does not carry.
+    const person = mockDocs.get(`orgs/${ORG}/aiUsageByUser/user-1/months/2026-08`)
+    expect(person).toMatchObject({ uid: 'user-1', month: '2026-08', requests: 1 })
+    expect(Number(person?.estCostUsd)).toBeCloseTo(expected, 9)
+    expect(signal?.uid).toBeUndefined()
   })
 
   it('the cost FOLLOWS the tokens — double the usage, double the money', async () => {

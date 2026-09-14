@@ -47,6 +47,9 @@ export * from './child-contract-compose'
 export * from './lineal-order'
 export * from './ai-palette'
 export * from './console-routes'
+// The per-user AI usage rollup's shape and arithmetic (AGL-2928): the
+// month keys, the retention window, the share, kind buckets.
+export * from './ai-usage-by-user'
 export * from './console-record-links'
 // What a stored screen-link value means, with no React attached — the
 // where-used scan reads these on the server (AGL-703).

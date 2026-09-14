@@ -38,6 +38,7 @@ import {
   rateLimitHeaders,
   readAssistAnswerCache,
   recordAssistExchange,
+  recordUserAiRefusal,
   releaseAssistMessage,
   publicAssistQuota,
   reserveAssistMessage,
@@ -956,6 +957,9 @@ async function handler(request: Request): Promise<Response> {
       new Date(),
       org,
     )
+    // A refusal is the asker's as well as the workspace's (AGL-2928): their
+    // month counts it beside the org counter the reservation moved.
+    recordUserAiRefusal(firestore, body.orgId, decoded.uid, quota)
     if (!quota.allowed) {
       // Five refusals, not two. The spend ceiling (AGL-2264) is armed by
       // default at $40, and it must not borrow the message cap's words:

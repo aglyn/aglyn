@@ -48,6 +48,7 @@ import {
   type AiActivityActor,
 } from './ai-activity'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from './ai-runtime'
+import { recordUserAiRefusal } from './ai-usage-by-user'
 import {
   runAiJobTextStep,
   type AiJobStepOutcome,
@@ -865,6 +866,10 @@ export async function runAiJobStep(
       return { outcome: 'requeued', job: requeued }
     }
   }
+  // A refused step is the creator's refusal (AGL-2928), on their month,
+  // beside the org counter the reservation moved; an admitted one records
+  // nothing.
+  recordUserAiRefusal(firestore, orgId, job.createdBy, reservation)
   if (!reservation.allowed) {
     const refusal = aiJobRefusalText(org, reservation)
     const parked = await markAiJobNeedsInput(firestore, orgId, jobId, refusal, now)
@@ -934,6 +939,9 @@ export async function runAiJobStep(
         // (AGL-2925): a Free job lands on the owner's allowance and the
         // platform's day; a paid one on neither.
         free: reservation.free ?? null,
+        // The step is the creator's spend, under the job's kind (AGL-2928).
+        uid: job.createdBy,
+        kind: job.kind,
       },
       now,
     )

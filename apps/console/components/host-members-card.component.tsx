@@ -42,6 +42,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -69,7 +70,9 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
+import { useOrgAiUsage } from '../hooks/use-org-ai-usage'
 import useOrgPermissions from '../hooks/use-org-permissions'
+import { aiUsageMonthLabel } from '../utils/ai-usage-wire'
 
 /**
  * Site-collaborator roles, weakest first.
@@ -254,6 +257,14 @@ export function HostMembersCard(props: HostMembersCardProps) {
     (ownerMember?.email as string | undefined) ??
     (ownerMember?.displayName as string | undefined) ??
     'Account owner'
+
+  /**
+   * What each collaborator drew ON THIS SITE this month (AGL-2928), from
+   * the per-member rollup's split by host — so an agency sees which client
+   * site's people spend. One read per mount; a reader the route refuses
+   * sees a dash, for the roster's reason.
+   */
+  const aiUsage = useOrgAiUsage(orgId, { hostId })
 
   // A member's photo lives on their ORG member doc, not here (AGL-1126).
   //
@@ -570,6 +581,16 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   answer, so an unticked box is a closed door rather than a
                   hidden button. */}
               <TableCell>{'AI'}</TableCell>
+              {/* Credits this collaborator drew on THIS site this month
+                  (AGL-2928) — not across the workspace, which is the org
+                  Team page's column. */}
+              <TableCell align="right">
+                <Tooltip
+                  title={`AI credits drawn on this site in ${aiUsageMonthLabel(aiUsage.month)}, per collaborator.`}
+                >
+                  <span>{'AI credits (site, month)'}</span>
+                </Tooltip>
+              </TableCell>
               <TableCell align="right">{'Actions'}</TableCell>
             </TableRow>
           </TableHead>
@@ -601,6 +622,11 @@ export function HostMembersCard(props: HostMembersCardProps) {
               </TableCell>
               <TableCell>{'Admin'}</TableCell>
               <TableCell>{'By org role'}</TableCell>
+              <TableCell align="right">
+                {aiUsage.status === 'ready' && ownerUid
+                  ? (aiUsage.hostCreditsByUid.get(ownerUid) ?? 0).toLocaleString()
+                  : '—'}
+              </TableCell>
               <TableCell align="right">{'--'}</TableCell>
             </TableRow>
             {members.map((member) => (
@@ -695,6 +721,15 @@ export function HostMembersCard(props: HostMembersCardProps) {
                       />
                     ))}
                   </Stack>
+                </TableCell>
+                <TableCell align="right">
+                  {aiUsage.status === 'ready' && member.status !== 'invited'
+                    ? (
+                        aiUsage.hostCreditsByUid.get(
+                          (member.uid as string | undefined) ?? (member.$id as string),
+                        ) ?? 0
+                      ).toLocaleString()
+                    : '—'}
                 </TableCell>
                 <TableCell align="right">
                   <Button

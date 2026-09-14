@@ -48,6 +48,11 @@ import {
   type AssistMeteredOrg,
   type FreeAssistAccount,
 } from './assist-free-taste'
+import { recordUserAiUsage } from './ai-usage-by-user'
+import {
+  aiUsageKindFromRoute,
+  type AiUsageKind,
+} from '@aglyn/aglyn/app-utils/ai-usage-by-user'
 
 /**
  * Aglyn Assist metering + the data loop (AGL-1860, phase 1).
@@ -1000,6 +1005,18 @@ export interface AssistSignalRecord {
    * the owner's account allowance.
    */
   free?: FreeAssistAccount | null
+  /**
+   * Who asked, for the per-user rollup (AGL-2928) and NOTHING else: the
+   * signal document never carries it, for the reason the module header
+   * gives. Optional because a meter that cannot say who asked still owes
+   * the org its cost; such a request attributes to nobody.
+   */
+  uid?: string | null
+  /**
+   * What the request was for, as the per-user rollup buckets it. A job
+   * step names its job's kind; a meter without one is read off `route`.
+   */
+  kind?: AiUsageKind
 }
 
 /** A signal PLUS the verbatim half — the question, the answer, the asker. */
@@ -1145,6 +1162,15 @@ export async function recordAssistCost(
   const signalRef = orgRef.collection('assistSignals').doc()
   const batch = firestore.batch()
   writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now)
+  // The person's month, on the SAME batch as the org's (AGL-2928), so the
+  // two rollups commit together or not at all.
+  recordUserAiUsage(batch, orgRef, {
+    uid: record.uid,
+    month: assistUsageMonth(now),
+    estCostUsd: estimateAssistCostUsd(record.usage, record.model),
+    hostId: record.hostId,
+    kind: record.kind ?? aiUsageKindFromRoute(record.route),
+  })
   await batch.commit()
   await announceFreeTurn(firestore, record, now)
   return signalRef.id
@@ -1189,6 +1215,15 @@ export async function recordAssistExchange(
   // uses, so the two assist entrypoints can never report different money for
   // the same tokens.
   writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now)
+  // And the asker's month, on the same batch (AGL-2928). A chat turn is an
+  // `assist` request whatever console route it was asked from.
+  recordUserAiUsage(batch, orgRef, {
+    uid: record.uid,
+    month: assistUsageMonth(now),
+    estCostUsd: estimateAssistCostUsd(record.usage, record.model),
+    hostId: record.hostId,
+    kind: record.kind ?? 'assist',
+  })
   await batch.commit()
   await announceFreeTurn(firestore, record, now)
   return exchangeRef.id

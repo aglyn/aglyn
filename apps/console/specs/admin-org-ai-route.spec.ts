@@ -74,6 +74,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
       firestore: () => ({
         collection: (name: string) => mockMakeCollection(name),
+        // The per-user reader fetches each roster member's month by path.
+        getAll: async (...refs: Array<{ path: string }>) =>
+          refs.map((ref) =>
+            mockSnapshotOf(ref.path.split('/').pop() ?? '', mockDocsByPath[ref.path]),
+          ),
       }),
     }),
   },
@@ -179,10 +184,31 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
           },
         },
       ],
-      'orgs/org-1/assistUsageByUser/2026-09/users': [
-        { id: 'user-a', data: { uid: 'user-a', credits: 1800, providerUsd: 1.8, requests: 30 } },
-        { id: 'user-b', data: { uid: 'user-b', credits: 700, providerUsd: 0.7, requests: 10 } },
+      // The roster the per-user rollup is joined to (AGL-2928): names come
+      // from here, months from the documents keyed by each uid below.
+      'orgs/org-1/members': [
+        { id: 'user-a', data: { displayName: 'Ada', email: 'ada@example.com', role: 'admin' } },
+        { id: 'user-b', data: { email: 'bo@example.com', role: 'editor' } },
+        { id: 'user-c', data: { email: 'quiet@example.com', role: 'viewer' } },
       ],
+    }
+    mockDocsByPath['orgs/org-1/aiUsageByUser/user-a/months/2026-09'] = {
+      uid: 'user-a',
+      month: '2026-09',
+      credits: 1800,
+      estCostUsd: 1.8,
+      requests: 30,
+      refusals: 2,
+      byKind: { assist: 1000, page: 800 },
+      byHost: { 'host-1': 1800 },
+    }
+    mockDocsByPath['orgs/org-1/aiUsageByUser/user-b/months/2026-09'] = {
+      uid: 'user-b',
+      month: '2026-09',
+      credits: 700,
+      estCostUsd: 0.7,
+      requests: 10,
+      byKind: { element: 700 },
     }
   })
 
@@ -287,10 +313,32 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
     })
     expect(body.jobs.truncated).toBe(false)
 
-    // Users: the per-user rollup, as served.
+    // Users: the per-user rollup joined to the roster, dearest first, with
+    // each share measured against the org's $2.50. The member with no month
+    // document is not a zero row.
     expect(body.users).toEqual([
-      { uid: 'user-a', credits: 1800, providerUsd: 1.8, requests: 30 },
-      { uid: 'user-b', credits: 700, providerUsd: 0.7, requests: 10 },
+      {
+        uid: 'user-a',
+        name: 'Ada',
+        credits: 1800,
+        estCostUsd: 1.8,
+        share: 0.72,
+        requests: 30,
+        refusals: 2,
+        byKind: { assist: 1000, page: 800 },
+        byHost: { 'host-1': 1800 },
+      },
+      {
+        uid: 'user-b',
+        name: 'bo@example.com',
+        credits: 700,
+        estCostUsd: 0.7,
+        share: 0.28,
+        requests: 10,
+        refusals: 0,
+        byKind: { element: 700 },
+        byHost: {},
+      },
     ])
 
     // Margin: add-on price plus the override's dollar value, spend under it.
@@ -308,7 +356,8 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
     mockDocsByPath['orgs/org-1'] = { name: 'Fresh', plan: 'starter' }
     mockDocsByPath['orgs/org-1/billing/stripe'] = undefined
     mockQueryDocs['orgs/org-1/aiJobs'] = []
-    mockQueryDocs['orgs/org-1/assistUsageByUser/2026-09/users'] = []
+    delete mockDocsByPath['orgs/org-1/aiUsageByUser/user-a/months/2026-09']
+    delete mockDocsByPath['orgs/org-1/aiUsageByUser/user-b/months/2026-09']
     const body = await (await get({ token: 'tok' })).json()
     expect(body.addon.on).toBe(false)
     expect(body.pool.totalCredits).toBeNull()

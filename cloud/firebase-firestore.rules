@@ -718,6 +718,33 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      /**
+       * Per-user AI usage (AGL-2928): one document per person per month,
+       * keyed by their uid, carrying credits, request and refusal counts
+       * and a split by kind and by site. Integers about a PERSON, so the
+       * read is narrower than the org rollup's: the person reads their own
+       * months, and an org-wide member reads everyone's only with
+       * `billing.view` (the Usage page's gate) or `org.auditLog` (the team
+       * page's). A manager is read through `memberResolves`, whose absent
+       * map falls through to the role; anyone else needs the permission
+       * STAMPED on them by a custom role, which is `memberStamps`. A scoped
+       * collaborator sees nobody's month but their own — who else spends in
+       * the workspace is not a fact about the one site they were invited to.
+       *
+       * Server-written only: the document is a meter, and a client that
+       * could write it could clear its own spend from the roster.
+       */
+      match /aiUsageByUser/{subjectUid}/months/{month} {
+        allow read: if isStaff() ||
+          (isOrgMember() && subjectUid == request.auth.uid) ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('org.auditLog'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('org.auditLog')));
+        allow write: if false;
+      }
+
       // Monthly usage rollups (AGL-41) + the live API-request meter
       // (AGL-635): readable by the org so the Billing page usage meters show
       // real numbers — and org-wide only (AGL-1026), because how much the

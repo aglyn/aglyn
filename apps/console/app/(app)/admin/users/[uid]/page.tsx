@@ -58,6 +58,7 @@ import PasswordAdminControls from '../../../../../components/password-admin-cont
 import StaffUserDeviceSessionsCard, {
   type StaffDeviceRow,
 } from '../../../../../components/staff-user-device-sessions-card.component'
+import StaffUserAiUsageCard from '../../../../../components/staff-user-ai-usage-card.component'
 import StaffUserEraseCard from '../../../../../components/staff-user-erase-card.component'
 import StaffUserEmailHistoryCard, {
   type StaffEmailDeliveryRow,
@@ -901,6 +902,13 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             )}
                           </CardDisplay>
                         ),
+                      },
+                      {
+                        // What this account drew from every workspace's AI
+                        // pool, month by month (AGL-2928) — beside the
+                        // memberships it drew it under.
+                        key: 'ai-usage',
+                        children: <StaffUserAiUsageCard uid={uid} />,
                       },
                       {
                         key: 'password',

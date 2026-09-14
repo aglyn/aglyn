@@ -162,6 +162,18 @@ see only them.
 The feed records the act and its size, never the brief you wrote or the copy the AI
 produced — that is your site's content and stays in the site.
 
+## AI usage per member {#ai-usage}
+
+Each member's page carries an **AI usage** card: their AI credits **this month and
+last**, their share of the workspace's pool, their requests, the kinds of request they
+mostly made, and the split **by site**. The **Team** roster shows the same month's
+credits as a column you can sort on, and every member for the month is on
+[Billing → Usage](../billing-and-plans/overview.md#who-is-generating-what).
+
+The card is visible to the member themselves and to members whose role carries **View
+billing** or **Activity & audit log**; a manager without either sees the page without
+the card. It describes who drew what, on which site — nothing more.
+
 ## Tips
 
 - Start people on a least-privilege [role](custom-roles.md) and widen it with per-member

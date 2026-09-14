@@ -24,6 +24,7 @@ export * from './lib/server/assist-usage'
 // of the meter, and the request-level rungs every AI door climbs.
 export * from './lib/server/assist-free-taste'
 export * from './lib/server/ai-abuse-guards'
+export * from './lib/server/ai-usage-by-user'
 // The one Anthropic runtime and the gate ladder every AI door composes
 // (AGL-2903). Beside the meters they price with.
 export * from './lib/server/ai-runtime'

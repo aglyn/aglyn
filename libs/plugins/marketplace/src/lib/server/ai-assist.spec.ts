@@ -244,6 +244,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../tenant/data/admin/src/lib/server/assist-usage',
   ),
+  // The per-person refusal counter the door calls beside it (AGL-2928).
+  ...jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/ai-usage-by-user',
+  ),
   ...jest.requireActual(
     '../../../../../tenant/data/admin/src/lib/server/api-http',
   ),

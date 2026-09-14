@@ -29,6 +29,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { assistUsageMonth } from '@aglyn/tenant-data-admin/server/assist-usage'
 import { assistRefusalCounts } from '@aglyn/tenant-data-admin/server/assist-refusals'
+import { readOrgAiUsageByUser } from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
 import { recordAdminAudit } from '../../_lib/admin-audit'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { addonKindFromPriceId } from '../../../../utils/server/billing-addons'
@@ -246,11 +247,13 @@ export async function readOrgAiJobsSummary(
 }
 
 /**
- * The month's per-user rollup, dearest first (AGL-2928's collection).
+ * The month's per-user rollup, dearest first (AGL-2928).
  *
- * Reads `orgs/{orgId}/assistUsageByUser/{month}/users`, one document per
- * uid shaped `{ uid, credits, providerUsd, requests }`, ordered by `credits`.
- * Empty until that issue lands, which the card says in those words.
+ * `readOrgAiUsageByUser` is the one reader of
+ * `orgs/{orgId}/aiUsageByUser/{uid}/months/{month}` — the customer's Usage
+ * table reads through it too — joined to the roster for names and carrying
+ * each person's share of the org's measured spend. The card keeps the
+ * dearest `TOP_USERS`.
  */
 async function readOrgAiTopUsers(
   firestore: FirebaseFirestore.Firestore,
@@ -258,20 +261,17 @@ async function readOrgAiTopUsers(
   month: string,
 ): Promise<StaffOrgAiUser[]> {
   try {
-    const snapshot = await firestore
-      .collection('orgs')
-      .doc(orgId)
-      .collection('assistUsageByUser')
-      .doc(month)
-      .collection('users')
-      .orderBy('credits', 'desc')
-      .limit(TOP_USERS)
-      .get()
-    return snapshot.docs.map((doc) => ({
-      uid: String(doc.get('uid') ?? doc.id),
-      credits: Number(doc.get('credits') ?? 0) || 0,
-      providerUsd: Number(doc.get('providerUsd') ?? 0) || 0,
-      requests: Number(doc.get('requests') ?? 0) || 0,
+    const usage = await readOrgAiUsageByUser(firestore, orgId, month)
+    return usage.rows.slice(0, TOP_USERS).map((row) => ({
+      uid: row.uid,
+      name: row.name,
+      credits: row.credits,
+      estCostUsd: row.estCostUsd,
+      share: row.share,
+      requests: row.requests,
+      refusals: row.refusals,
+      byKind: row.byKind,
+      byHost: row.byHost,
     }))
   } catch (error) {
     console.error('[admin/org-ai] per-user read failed', error)
