@@ -212,6 +212,13 @@ const passthrough = {
   default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }
 const nullCard = { __esModule: true, default: () => null }
+// The billing page mounts plugin widget zones, which read the slot registry;
+// no plugin renders here.
+jest.mock('../components/plugin-widget-slot.component', () => ({
+  __esModule: true,
+  default: () => null,
+  useSlotWidgets: () => ({ widgets: [], ready: true }),
+}))
 jest.mock('../components/layouts/dashboard.layout', () => passthrough)
 jest.mock('../components/layouts/authenticated.layout', () => passthrough)
 jest.mock('../components/layouts/main.layout', () => passthrough)
