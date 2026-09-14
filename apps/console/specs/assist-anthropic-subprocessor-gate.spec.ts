@@ -108,6 +108,10 @@ const KEY_READERS = new Map<string, string>([
     'libs/tenant/data/admin/src/lib/server/ai-runtime.ts',
     'The shared Anthropic runtime (AGL-2903): the ONE module that puts the key on a request. It sends whatever prompt a door hands it, so what reaches Anthropic is decided by the doors above — both of which still read the key themselves to answer 501 before they call it. A third door on the runtime is a third entry here.',
   ],
+  [
+    'libs/plugins/ai/src/lib/providers/anthropic.ts',
+    'The Anthropic adapter behind the Aglyn AI provider contract (AGL-2939): it declares the key as its `apiKeyEnv` and puts it on a Messages API request to the host it names. It opens no door of its own and sends whatever request the AI runtime hands it, so what reaches Anthropic is still decided by the doors above, the same content to the same subprocessor. No door reaches it while the plugin is absent from `plugins.config.json`; once the runtime calls it instead of `ai-runtime.ts`, that entry leaves this list and this one stays.',
+  ],
 ])
 
 /**
@@ -155,6 +159,10 @@ const MENTIONS_ONLY = new Map<string, string>([
   [
     'libs/tenant/data/admin/src/lib/server/ai-runtime.spec.ts',
     'Sets a fake key (`sk-test`) to drive the shared runtime against a mocked fetch (AGL-2903), and asserts it refuses to run without one. A test double, not a flow.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/providers/conformance.spec.ts',
+    'The provider conformance suite (AGL-2939). Sets a fake key (`sk-test`) so the Anthropic adapter answers recorded fixtures through a mocked `fetch`, with no network and no real key. A test double, not a flow.',
   ],
   [
     'apps/console/.env.development.local.example',
