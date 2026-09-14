@@ -159,6 +159,7 @@ const publishedEntry = (extra: Record<string, unknown>) => ({
   body: '# Heading',
   coverImage: 'media:host-1/cover',
   coverImageAlt: 'A cover',
+  coverVideo: 'media:host-1/film',
   seoTitle: 'SEO title',
   seoDescription: 'SEO description',
   categoryId: 'guides',
@@ -373,6 +374,48 @@ describe('the loader maps the dates the head publishes (AGL-2534)', () => {
     })
 
     expect(content.entry?.updatedAt).toBeNull()
+  })
+})
+
+/**
+ * The featured video is an ordinary entry field, so it rides `mapEntryFields`
+ * to both read paths (AGL-2956). Every `{{entry.coverVideo}}` binding and the
+ * built-in entry page's player read it from what this loader returns.
+ */
+describe('the loader carries the featured video (AGL-2956)', () => {
+  it('carries it to the routed entry and to a list entry', async () => {
+    entryDocs = [
+      publishedEntry({ coverVideo: 'https://aglyn.wistia.com/medias/e4a27b971d' }),
+    ]
+
+    const routed = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      entrySlug: 'shipping-the-export',
+    })
+    const list = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+    })
+
+    expect(routed.entry?.coverVideo).toBe(
+      'https://aglyn.wistia.com/medias/e4a27b971d',
+    )
+    expect(list.entries[0]?.coverVideo).toBe(
+      'https://aglyn.wistia.com/medias/e4a27b971d',
+    )
+  })
+
+  it('is empty, never undefined, for an entry that has none', async () => {
+    entryDocs = [publishedEntry({ coverVideo: undefined })]
+
+    const content = await getCollectionContent({
+      hostId: HOST,
+      collectionSlug: 'blog',
+      entrySlug: 'shipping-the-export',
+    })
+
+    expect(content.entry?.coverVideo).toBe('')
   })
 })
 

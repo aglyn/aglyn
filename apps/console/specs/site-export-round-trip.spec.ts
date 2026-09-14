@@ -707,6 +707,10 @@ const SEEDS: Array<{
       coverImage: 'https://cdn/cover.png',
       // AGL-2418: the cover's description survives the round trip with it.
       coverImageAlt: 'A pallet of boxes on a loading dock',
+      // The featured video (AGL-2954), as the editor stores a library film.
+      // The import writes with `merge: false`, so a field missing from the
+      // allow-list would come back erased rather than merely unset.
+      coverVideo: 'media:org:org-1/film-1',
       seoTitle: 'Shipping the export',
       seoDescription: 'How the bundle works',
       authorName: 'Zach',
@@ -809,6 +813,59 @@ const SEEDS: Array<{
       cdnPath: '/api/media/cdn/media-1',
       customMetadata: { campaign: 'launch' },
       private: false,
+    },
+  },
+  /**
+   * Two films (AGL-2955), because a video's own records are what the image
+   * above cannot exercise, and one film cannot carry them all: a poster and
+   * the reason there is none are never on the same document.
+   *
+   * The first is a film the platform finished: the browser's measurements,
+   * the captured poster, and the renditions encoded after upload. Restored
+   * without them it is a player with no size, no duration for
+   * `VideoObject.duration`, no poster or `thumbnailUrl`, and only the master
+   * to serve.
+   */
+  {
+    collection: 'media',
+    path: 'orgs/org-1/media',
+    id: 'film-1',
+    doc: {
+      fileName: 'harbor.mp4',
+      contentType: 'video/mp4',
+      sizeBytes: 48_000_000,
+      url: 'https://firebasestorage.example/harbor.mp4?alt=media&token=t',
+      storagePath: 'orgs/org-1/media/harbor.mp4',
+      contentHash: 'md5-abc',
+      cdnPath: '/api/media/cdn/org:org-1/film-1',
+      video: { durationMs: 63_000, width: 1920, height: 1080, codec: 'avc1.640028' },
+      poster: { width: 1920, height: 1080, variants: [320, 640, 1280] },
+      videoRenditions: [
+        {
+          key: '720p',
+          contentType: 'video/mp4',
+          ext: 'mp4',
+          width: 1280,
+          height: 720,
+          sizeBytes: 9_000_000,
+        },
+      ],
+    },
+  },
+  {
+    // The film whose poster could not be captured. Its `posterError` is what
+    // says the missing frame was tried and failed rather than never tried.
+    collection: 'media',
+    path: 'orgs/org-1/media',
+    id: 'film-2',
+    doc: {
+      fileName: 'interview.mov',
+      contentType: 'video/quicktime',
+      sizeBytes: 120_000_000,
+      url: 'https://firebasestorage.example/interview.mov?alt=media&token=t',
+      storagePath: 'orgs/org-1/media/interview.mov',
+      cdnPath: '/api/media/cdn/org:org-1/film-2',
+      posterError: 'browser could not decode this video',
     },
   },
   /**
@@ -938,7 +995,8 @@ describe('the export/import round trip is lossless (AGL-1382)', () => {
     expect(bundle.layouts[0].version.$id).toBe('layout-version-1')
     expect(bundle.collections[0].entries).toHaveLength(1)
     expect(bundle.datasets[0].records).toHaveLength(1)
-    expect(bundle.media).toHaveLength(1)
+    // The image and the two films (AGL-2955).
+    expect(bundle.media).toHaveLength(3)
   })
 
   describe.each(SEEDS)('$collection/$id', ({ path, id, doc, restored, dropped }) => {

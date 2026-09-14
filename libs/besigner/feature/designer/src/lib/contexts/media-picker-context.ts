@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { PickMediaOptions } from '@aglyn/aglyn'
 import { createContext } from 'react'
 
 /**
@@ -55,6 +56,11 @@ export interface MediaPickerContextValue {
    * flattening them into `width`/`height` above would throw that distinction
    * away at the seam. `Aglyn.videoMediaProps` owns what happens to them; a
    * host that sends neither leaves every element exactly as it was.
+   *
+   * `options.kind` narrows the browser to the one kind of file the attribute
+   * can hold (AGL-2953), such as a Video element's source. Only `kind` is
+   * offered: a page cannot place a private asset, so the designer has no use
+   * for `allowPrivate`. A host that ignores it shows its whole library.
    */
   onPickMedia?: (
     onPick: (
@@ -69,6 +75,7 @@ export interface MediaPickerContextValue {
         poster?: unknown
       },
     ) => void,
+    options?: Pick<PickMediaOptions, 'kind'>,
   ) => void
   /**
    * External image hosts this site's owner has approved (AGL-1152).

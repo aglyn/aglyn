@@ -111,6 +111,19 @@ describe('registerPluginService', () => {
     ])
   })
 
+  it('one plugin registers several implementations on a multiple contract, told apart by key', () => {
+    registerPluginService(PROVIDERS, provider('anthropic'), { pluginId: 'ai', key: 'anthropic' })
+    registerPluginService(PROVIDERS, provider('compat'), { pluginId: 'ai', key: 'compat' })
+    // Re-registering one key replaces that one and leaves the other.
+    registerPluginService(PROVIDERS, provider('anthropic-2'), { pluginId: 'ai', key: 'anthropic' })
+    expect(resolvePluginServices(PROVIDERS).map((entry) => entry.impl.id)).toEqual([
+      'compat',
+      'anthropic-2',
+    ])
+    unregisterPluginServices('ai')
+    expect(resolvePluginServices(PROVIDERS)).toEqual([])
+  })
+
   it('a single contract refuses a second plugin and keeps the incumbent', () => {
     registerPluginService(ROUTER, { pick: () => 'a' }, { pluginId: 'ai' })
     expect(() =>

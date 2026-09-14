@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "headers": {},
+  "events": [
+    {
+      "type": "message_start",
+      "message": {
+        "usage": {
+          "input_tokens": 900
+        }
+      }
+    },
+    {
+      "type": "error",
+      "error": {
+        "type": "overloaded_error",
+        "message": "Overloaded"
+      }
+    }
+  ]
+}

@@ -172,3 +172,30 @@ export function formatCollectionEntryDate(
       return date.toLocaleDateString(locale, { timeZone })
   }
 }
+
+/**
+ * One entry's publish instant for a machine to read: an ISO 8601 date-time in
+ * UTC, or `''` for an entry with no date (AGL-2956).
+ *
+ * {@link formatCollectionEntryDate} writes the date a READER sees, and every
+ * one of its shapes is ambiguous or incomplete to a parser: `8/9/2026` is a
+ * different day in `en-GB`, and even its `iso` shape is a calendar day with no
+ * time or zone. A field that has to be parsed — a Video element's publication
+ * date, which the page publishes as `VideoObject.uploadDate` — needs the
+ * instant itself, spelled by `toISOString()` as `Article.datePublished` is.
+ *
+ * It reads the same `publishedAt` and treats a missing or zero `seconds` the
+ * same way, so an entry is dated here exactly when it is dated there.
+ *
+ * A `seconds` no `Date` can hold answers `''` rather than throwing:
+ * `toISOString` raises a RangeError on an invalid date, and this runs while a
+ * page composes.
+ */
+export function collectionEntryPublishedAtIso(
+  publishedAt: { seconds: number } | null | undefined,
+): string {
+  const seconds = publishedAt?.seconds
+  if (!seconds) return ''
+  const date = new Date(seconds * 1000)
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
+}

@@ -92,6 +92,27 @@ describe('the Wistia builders rebuild the address from the id alone', () => {
     )
   })
 
+  it('says autoPlay=false for a player the page loads before any press (AGL-2962)', () => {
+    // Stated rather than left out: an option in the embed overrides a media
+    // whose own Wistia settings autoplay.
+    expect(
+      wistiaPlayerSrc(`https://wi.st/medias/${ID}`, { autoPlay: false }),
+    ).toBe(`${WISTIA_PLAYER_ORIGIN}/embed/iframe/${ID}?autoPlay=false`)
+  })
+
+  it('keeps autoplay on for anything but an explicit false', () => {
+    for (const options of [
+      { autoPlay: true },
+      { autoPlay: undefined },
+      { doNotTrack: true },
+    ]) {
+      const params = new URL(
+        wistiaPlayerSrc(`https://wi.st/medias/${ID}`, options) as string,
+      ).searchParams
+      expect(params.get('autoPlay')).toBe('true')
+    }
+  })
+
   it('carries doNotTrack, muted and loop only when asked', () => {
     const params = new URL(
       wistiaPlayerSrc(`https://wi.st/medias/${ID}`, {

@@ -62,6 +62,12 @@ export interface PluginServiceContract<T> {
 export interface PluginServiceRegistration<T> {
   contractId: string
   pluginId: string
+  /**
+   * Which of a plugin's implementations this is, on a multiple contract
+   * where one plugin registers several (two provider adapters from one
+   * plugin). Absent when the plugin registers one.
+   */
+  key?: string
   impl: T
   /** Higher resolves first among several implementations; default 0. */
   priority: number
@@ -115,15 +121,17 @@ function requireContract<T>(contract: PluginServiceContract<T>): PluginServiceCo
  * register fn is running, else `options.pluginId`; a registration with
  * neither throws.
  *
- * Re-registration by the SAME plugin replaces its previous entry (hot
- * reload, a second surface, a repeated init). On a single-implementation
- * contract a registration from a DIFFERENT plugin throws naming both, and
- * the incumbent keeps serving.
+ * Re-registration by the SAME plugin under the same `key` replaces its
+ * previous entry (hot reload, a second surface, a repeated init); a plugin
+ * registering several implementations on a multiple contract tells them
+ * apart with `key`. On a single-implementation contract a registration
+ * from a DIFFERENT plugin throws naming both, and the incumbent keeps
+ * serving.
  */
 export function registerPluginService<T>(
   contract: PluginServiceContract<T>,
   impl: T,
-  options?: { pluginId?: string; priority?: number },
+  options?: { pluginId?: string; priority?: number; key?: string },
 ): void {
   const known = requireContract(contract)
   const pluginId = (getRegisteringPluginId() ?? options?.pluginId ?? '').trim()
@@ -133,21 +141,26 @@ export function registerPluginService<T>(
         '{ pluginId } when registering outside a plugin register fn',
     )
   }
+  const key = options?.key?.trim() || undefined
   const list = registrations.get(known.id) ?? []
-  const others = list.filter((entry) => entry.pluginId !== pluginId)
-  if (!known.multiple && others.length) {
+  const foreign = list.find((entry) => entry.pluginId !== pluginId)
+  if (!known.multiple && foreign) {
     throw new Error(
       `plugin service "${known.id}" is a single-implementation contract ` +
-        `already registered by "${others[0].pluginId}"; refused "${pluginId}"`,
+        `already registered by "${foreign.pluginId}"; refused "${pluginId}"`,
     )
   }
-  others.push({
+  const kept = list.filter(
+    (entry) => !(entry.pluginId === pluginId && (entry.key ?? null) === (key ?? null)),
+  )
+  kept.push({
     contractId: known.id,
     pluginId,
+    ...(key ? { key } : {}),
     impl,
     priority: options?.priority ?? 0,
   })
-  registrations.set(known.id, others)
+  registrations.set(known.id, kept)
 }
 
 /**

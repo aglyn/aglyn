@@ -17,6 +17,7 @@
 
 import {
   HEALTH_NO_STORE,
+  HEALTH_PROBE_TTL_MS,
   MAX_BACKUP_AGE_DAYS,
   MAX_EXPORT_AGE_DAYS,
   backupsHealth,
@@ -658,6 +659,60 @@ describe('memoizeWithTtl', () => {
     clock += 2
     expect(await probe()).toBe(2)
     expect(calls).toBe(2)
+  })
+
+  it('shares one probe among callers that arrive while it runs', async () => {
+    // The uptime check's regions, UptimeRobot and a HEAD twin land together
+    // on an expired entry; each used to start its own probe (AGL-2947).
+    let calls = 0
+    let release: (value: number) => void = () => undefined
+    const probe = memoizeWithTtl(
+      10_000,
+      () => {
+        calls += 1
+        return new Promise<number>((resolve) => {
+          release = resolve
+        })
+      },
+      () => 0,
+    )
+    const answers = Promise.all([probe(), probe(), probe()])
+    release(7)
+    expect(await answers).toEqual([7, 7, 7])
+    expect(calls).toBe(1)
+  })
+
+  it('does not keep a thrown probe, in flight or cached', async () => {
+    // A throw is not a verdict: every caller waiting on it sees it, and the
+    // next caller probes again — including a probe that throws before it
+    // ever returns a promise.
+    let calls = 0
+    const probe = memoizeWithTtl(
+      10_000,
+      (() => {
+        calls += 1
+        if (calls === 1) throw new Error('synchronous')
+        if (calls === 2) return Promise.reject(new Error('asynchronous'))
+        return Promise.resolve('ok')
+      }) as () => Promise<string>,
+      () => 0,
+    )
+    await expect(probe()).rejects.toThrow('synchronous')
+    await expect(probe()).rejects.toThrow('asynchronous')
+    await expect(probe()).resolves.toBe('ok')
+    expect(calls).toBe(3)
+  })
+
+  it('health doors reuse a verdict for two minutes, inside the ten-minute budget', () => {
+    // Worst case to a notification: this TTL + UptimeRobot's 5-minute period
+    // + its confirmation delay, which is unmeasured — so the budget must hold
+    // for a generous one. Five minutes here left no room for any delay at all.
+    const UPTIMEROBOT_PERIOD_MS = 5 * 60_000
+    const CONFIRMATION_ALLOWANCE_MS = 3 * 60_000
+    expect(HEALTH_PROBE_TTL_MS).toBe(2 * 60_000)
+    expect(
+      HEALTH_PROBE_TTL_MS + UPTIMEROBOT_PERIOD_MS + CONFIRMATION_ALLOWANCE_MS,
+    ).toBeLessThanOrEqual(10 * 60_000)
   })
 
   it('caches FAILURES too, so an outage is not a stampede', async () => {

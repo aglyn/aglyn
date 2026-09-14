@@ -527,6 +527,9 @@ const RESOURCES: Record<string, {
       'body',
       'coverImage',
       'coverImageAlt',
+      // The featured video (AGL-2954), which the editor writes beside the
+      // cover.
+      'coverVideo',
       'seoTitle',
       'seoDescription',
       'authorName',

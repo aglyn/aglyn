@@ -305,6 +305,45 @@ describe('media references (AGL-1215)', () => {
       expect(mediaRefPattern('../').test('media:site-a/med123')).toBe(false)
       expect(mediaRefPattern('').test('media:site-a/med123')).toBe(false)
     })
+
+    /**
+     * The same asset stored as the CDN path a reference resolves to.
+     *
+     * A picker for a plugin page hands back the site-qualified path of an
+     * asset shared with one site, and an entry cover filled from a film's
+     * frame stores `mediaPosterSrc`'s path, qualified whenever the film is an
+     * org asset. Neither contains the `media:` scheme or the document's own
+     * unqualified `cdnPath`, so the scan reported both as used nowhere, and
+     * the delete confirmation quotes that answer.
+     */
+    it('finds the asset spelled as a CDN path, in every scope form', () => {
+      const pattern = mediaRefPattern('med123')
+      for (const stored of [
+        `${MEDIA_CDN_ROUTE}/site-a/med123`,
+        `${MEDIA_CDN_ROUTE}/org:acme/med123`,
+        `${MEDIA_CDN_ROUTE}/org:acme:site-a/med123`,
+        `${MEDIA_CDN_ROUTE}/org:acme:site-a/med123?poster=1`,
+        `${MEDIA_CDN_ROUTE}/org:acme/med123/4f2a9c1e0b7d3a55`,
+        `https://acme.aglyn.app${MEDIA_CDN_ROUTE}/org:acme:site-a/med123?w=640`,
+      ]) {
+        expect([stored, pattern.test(JSON.stringify({ coverImage: stored }))]).toEqual([
+          stored,
+          true,
+        ])
+      }
+    })
+
+    it('does not match another asset, or another route, spelled as a path', () => {
+      expect(
+        mediaRefPattern('med12').test(`${MEDIA_CDN_ROUTE}/org:acme:site-a/med123`),
+      ).toBe(false)
+      expect(
+        mediaRefPattern('med123').test(`${MEDIA_CDN_ROUTE}/org:acme:site-a/other`),
+      ).toBe(false)
+      expect(mediaRefPattern('med123').test('/api/media/upload/org:acme/med123')).toBe(
+        false,
+      )
+    })
   })
 
   /**
@@ -366,6 +405,51 @@ describe('media references (AGL-1215)', () => {
       expect(isMediaCdnUrl('/api/media/cdn/org:acme/med123')).toBe(true)
       expect(isMediaCdnUrl(RAW_URL)).toBe(false)
       expect(isMediaCdnUrl(undefined)).toBe(false)
+    })
+
+    it('recognises a CDN url that already carries a query (AGL-2958)', () => {
+      // A captured frame and a signed private asset both arrive with one, and
+      // both still have variants to ask for.
+      expect(isMediaCdnUrl('/api/media/cdn/site-a/film?poster=1')).toBe(true)
+      expect(
+        isMediaCdnUrl('https://acme.example/api/media/cdn/site-a/med123?exp=1&sig=s'),
+      ).toBe(true)
+    })
+  })
+
+  describe('mediaVariantSrc — one url at one width (AGL-2958)', () => {
+    it('appends the width to a url with no query, as it always has', () => {
+      expect(mediaVariantSrc('media:site-a/med123', { width: 640 })).toBe(
+        `${MEDIA_CDN_ROUTE}/site-a/med123?w=640`,
+      )
+    })
+
+    it('merges the width into a query the url already carries', () => {
+      // `?poster=1?w=640` is a `poster` of `1?w=640` to the CDN: not a request
+      // for the still, and no width, so the answer is the master film.
+      expect(
+        mediaVariantSrc(`${MEDIA_CDN_ROUTE}/site-a/film?poster=1`, { width: 640 }),
+      ).toBe(`${MEDIA_CDN_ROUTE}/site-a/film?poster=1&w=640`)
+      expect(
+        mediaVariantSrc(`${MEDIA_CDN_ROUTE}/site-a/med123?exp=9&sig=s`, {
+          width: 320,
+        }),
+      ).toBe(`${MEDIA_CDN_ROUTE}/site-a/med123?exp=9&sig=s&w=320`)
+    })
+
+    it('narrows an authored poster that is itself a captured frame', () => {
+      // The single-url sinks — `<video poster>` and a `thumbnailUrl` — reach
+      // the width through `videoPosterSrc`, so they inherit the merge.
+      expect(
+        videoPosterSrc({
+          poster: `${MEDIA_CDN_ROUTE}/site-a/film?poster=1`,
+          width: 1280,
+        }),
+      ).toBe(`${MEDIA_CDN_ROUTE}/site-a/film?poster=1&w=1280`)
+    })
+
+    it('leaves an off-site url untouched, query and all', () => {
+      expect(mediaVariantSrc(RAW_URL, { width: 640 })).toBe(RAW_URL)
     })
   })
 

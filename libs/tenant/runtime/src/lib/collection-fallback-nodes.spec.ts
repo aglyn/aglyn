@@ -27,6 +27,7 @@
  * the URL** — or, for the negative cases, that it is absent.
  */
 
+import { pageVideoObjects } from '@aglyn/aglyn/server'
 import { createTheme } from '@mui/material/styles'
 import { unstable_styleFunctionSx as styleFunctionSx } from '@mui/system'
 
@@ -322,5 +323,141 @@ describe('the built-in listing has a vertical rhythm (AGL-2567)', () => {
     expect(article[STACK_ID].props.spacing).toBe(2)
     expect(article[STACK_ID].props.sx).toBeUndefined()
     expect(article[CONTAINER_ID].props.maxWidth).toBe('md')
+  })
+})
+
+/**
+ * An entry with a featured video plays it where its cover would sit
+ * (AGL-2956).
+ *
+ * The built-in entry page is the one entry page no designer builds, so it has
+ * to be a watch page on its own: a Video node carrying the entry's source, its
+ * cover as the poster, and the facts a video result needs.
+ */
+describe('the built-in entry page plays a featured video (AGL-2956)', () => {
+  const VIDEO_ID = 'cfb__video'
+  const ORIGIN = 'https://acme.example'
+  const WISTIA = 'https://aglyn.wistia.com/medias/e4a27b971d'
+
+  const film = {
+    title: 'The 60-second tour',
+    body: '# Tour',
+    excerpt: 'What the product does.',
+    coverImage: 'media:host1/still',
+    coverVideo: 'media:host1/film',
+    /** 2026-07-15T12:00:00Z. */
+    publishedAt: { seconds: 1_784_116_800 },
+  }
+
+  const article = (entry: Record<string, unknown>, hostId?: string) =>
+    buildCollectionEntryFallbackNodes(collection, entry, hostId) as Record<
+      string,
+      any
+    >
+
+  it("renders a Video node in the cover's place, carrying the entry", () => {
+    const nodes = article(film)
+    expect(nodes[VIDEO_ID]).toEqual({
+      $id: VIDEO_ID,
+      componentId: 'video',
+      pluginId: 'mui',
+      parentId: STACK_ID,
+      props: {
+        src: 'media:host1/film',
+        poster: 'media:host1/still',
+        title: 'The 60-second tour',
+        description: 'What the product does.',
+        uploadDate: '2026-07-15T12:00:00.000Z',
+        width: '100%',
+      },
+    })
+    // The cover's slot: below the title and dateline, above the body.
+    expect(nodes[STACK_ID].nodes).toEqual([
+      'cfb__title',
+      'cfb__meta',
+      VIDEO_ID,
+      'cfb__body',
+      'cfb__related',
+      'cfb__share',
+      'cfb__back',
+    ])
+    // Instead of the cover, never beside it.
+    expect(nodes[COVER_ID]).toBeUndefined()
+  })
+
+  it('describes the film with the SEO description ahead of the excerpt', () => {
+    expect(
+      article({ ...film, seoDescription: 'The search summary.' })[VIDEO_ID]
+        .props.description,
+    ).toBe('The search summary.')
+  })
+
+  it('publishes one VideoObject whose uploadDate is a zoned ISO date-time', () => {
+    const blocks = pageVideoObjects(article(film, 'host1'), {
+      origin: ORIGIN,
+      hostId: 'host1',
+    })
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toMatchObject({
+      '@type': 'VideoObject',
+      name: 'The 60-second tour',
+      description: 'What the product does.',
+      thumbnailUrl: `${ORIGIN}/api/media/cdn/host1/still?w=1280`,
+      contentUrl: `${ORIGIN}/api/media/cdn/host1/film`,
+      uploadDate: '2026-07-15T12:00:00.000Z',
+    })
+    expect(String(blocks[0]['uploadDate'])).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
+    )
+  })
+
+  it('plays a Wistia film behind the cover as its poster', () => {
+    expect(article({ ...film, coverVideo: WISTIA })[VIDEO_ID].props).toMatchObject(
+      { src: WISTIA, poster: 'media:host1/still' },
+    )
+  })
+
+  it('keeps the page a plain article when a Wistia film has no poster to press', () => {
+    // Without a poster the element renders a request for one instead of a
+    // player, which a published article must never show.
+    const nodes = article({ ...film, coverImage: '', coverVideo: WISTIA })
+    expect(nodes[VIDEO_ID]).toBeUndefined()
+    expect(nodes).toEqual(article({ ...film, coverImage: '', coverVideo: '' }))
+  })
+
+  it('gives the film no poster that the cover itself would refuse', () => {
+    // The cover's scheme rule decides for both, so an `http:` still that this
+    // page never shows as a cover never becomes the film's face either.
+    const nodes = article({
+      ...film,
+      coverImage: 'http://images.example.com/still.jpg',
+    })
+    expect(nodes[VIDEO_ID]).toBeDefined()
+    expect(Object.keys(nodes[VIDEO_ID].props)).not.toContain('poster')
+  })
+
+  it('dates nothing on an undated entry', () => {
+    const nodes = article({ ...film, publishedAt: null })
+    expect(Object.keys(nodes[VIDEO_ID].props)).not.toContain('uploadDate')
+  })
+
+  it('renders an entry without a usable video exactly as a cover article', () => {
+    const cover = article({ ...film, coverVideo: undefined })
+    expect(cover[VIDEO_ID]).toBeUndefined()
+    expect(coverUrl(cover)).toBe('/api/media/cdn/host1/still')
+    expect(cover[STACK_ID].nodes).toEqual([
+      'cfb__title',
+      'cfb__meta',
+      COVER_ID,
+      'cfb__body',
+      'cfb__related',
+      'cfb__share',
+      'cfb__back',
+    ])
+    // An empty field and a value no player could load change nothing at all,
+    // rather than rendering the element's "set a source" placeholder.
+    for (const coverVideo of ['', '   ', 'media:not a ref']) {
+      expect(article({ ...film, coverVideo })).toEqual(cover)
+    }
   })
 })

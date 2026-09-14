@@ -49,11 +49,24 @@ export interface MediaPickerDialogProps {
    */
   allowPrivate?: boolean
   /**
+   * Offer only this kind of file (AGL-2953), for a field that can hold
+   * nothing else. Both libraries the dialog shows are narrowed to it, and so
+   * are their uploads. Absent, every file is offered.
+   */
+  kind?: Aglyn.MediaPickerKind
+  /**
    * Receives the chosen media (use `media.url`/`media.cdnPath` for src) and
    * the CDN scope segment of the library it was chosen from. The scope is the
    * only way to name a private asset, which carries no `cdnPath`.
    */
   onPick: (media: Aglyn.AglynHostMedia, context: { cdnScope: string }) => void
+}
+
+/** The dialog's title when it offers one kind of file (AGL-2953). */
+const KIND_TITLES: Readonly<Record<Aglyn.MediaPickerKind, string>> = {
+  image: 'Choose an image',
+  video: 'Choose a video',
+  pdf: 'Choose a PDF',
 }
 
 /**
@@ -68,7 +81,7 @@ export interface MediaPickerDialogProps {
  * host — the org Media page — it shows everything the viewer may see.
  */
 export function MediaPickerDialog(props: MediaPickerDialogProps) {
-  const { hostId, orgId, open, onClose, onPick, allowPrivate } = props
+  const { hostId, orgId, open, onClose, onPick, allowPrivate, kind } = props
   const derivedOrgId = useHostOrgId(hostId)
   const orgScope = orgId ?? derivedOrgId
   const showTabs = Boolean(hostId) && Boolean(orgScope)
@@ -165,7 +178,7 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
         },
       }}
     >
-      <DialogTitle>{'Choose media'}</DialogTitle>
+      <DialogTitle>{kind ? KIND_TITLES[kind] : 'Choose media'}</DialogTitle>
       {/*
         `minHeight: 0` is what makes the grid scroll INSIDE the box. As a
         column flex child its `min-height: auto` resolves to min-content, so a
@@ -187,6 +200,7 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
         {showSite && hostId ? (
           <MediaLibraryComponent
             hostId={hostId}
+            kind={kind}
             onSelect={(media) => pick(media, hostId)}
           />
         ) : null}
@@ -198,6 +212,7 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
             // building a client's page cannot find — let alone place — an
             // asset restricted to the agency's internal sites.
             forHostId={hostId}
+            kind={kind}
             onSelect={(media) => pick(media, `org:${orgScope}`)}
           />
         ) : null}

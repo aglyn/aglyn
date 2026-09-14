@@ -504,7 +504,7 @@ emailed anyone when it went red — the GitHub probe only records.
 [The channel is unverified](#the-channel-is-unverified) below. Every policy
 counted in this document points at it.
 
-✅ **All thirteen checks send the firewall bypass header, and none of them
+✅ **All fifteen checks send the firewall bypass header, and none of them
 depends on an accident any more.**
 
 `marketing-home` and `customer-site` read 0% from 2026-08-21 to 2026-08-28
@@ -586,7 +586,7 @@ whose body says `"status":"degraded"`, which is precisely the shape of the
 fifty-one-hour false green this file records further down. Do not "simplify" one
 of these back to an HTTP check.
 
-Free-tier facts, so nobody re-litigates them: **50 monitors** (ten used),
+Free-tier facts, so nobody re-litigates them: **50 monitors** (fourteen used),
 5-minute floor, keyword/ping/port/DNS/heartbeat all free, **one public status
 page free** at `stats.uptimerobot.com/<id>`. Paid: custom domain (Solo,
 $144/yr — this is what `status.aglyn.com` on UptimeRobot would cost), branding
@@ -834,23 +834,23 @@ node tools/scripts/probe-uptime.mjs \
   'front-door/site=http://localhost:4500/home' --only front-door
 ```
 
-**The external half is not done.** The GCP checks `marketing-home` and
-`customer-site` still point at the render canaries, which is what this section
-says cannot see an outage. Now that all thirteen carry the bypass header, one of
-them can go back to fetching a real page — see
+**The external half fetches real pages.** Read from the live project on
+2026-09-14: the GCP checks `marketing-home` and `customer-site` request
+`aglyn.com/` and `demo.aglyn.app/` themselves, with the bypass header, and the
+render canaries are watched by UptimeRobot (`Marketing site`, `Published
+sites`). Keep both arms: `sites` red with `delivery` green is still how a reader
+tells our sample workspace from a platform event. The repoint described under
 [Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks)
-for the `gcloud monitoring uptime update` shape, and keep a canary check
-alongside rather than replacing it: `sites` red with `delivery` green is still
-how a reader tells our sample workspace from a platform event. **Nothing in this
-repository has applied that change.**
+was never applied, and should not be now.
 
 ## Production monitoring and alerting (AGL-1502, 2026-08-13)
 
 The external monitor AGL-1148 called for. Lives in **GCP Cloud Monitoring on
 `aglyn-main`** — already paid for (free tier: 1M uptime-check executions/month;
-current usage ≈ 300k), alerting built in, and not hosted on anything it
-monitors. **Every alert emails one mailbox** — notification channel
-`7043898327231541746`, the only one configured on the project.
+current usage ≈ 216k), alerting built in, and not hosted on anything it
+monitors. **Every alert emails** notification channel `7043898327231541746`;
+eight of the 22 policies also post to Slack `#alerts (outages)`
+(`12534132313907800068`).
 
 Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 
@@ -858,35 +858,42 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 
 | Check | Target | Asserts | Interval |
 | --- | --- | --- | --- |
-| `console-health` | `app.aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 5 min |
-| `console-imaging` | `app.aglyn.com/api/health` | `$.imaging.ok == true` | 15 min |
+| `console-health` | `app.aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 15 min |
+| `console-imaging` | `app.aglyn.com/api/health` | `$.imaging.ok == true` | 5 min |
 | `tenant-health` | `aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 5 min |
-| `marketing-home` | `aglyn.com/` → **repoint to** `/api/health/render/marketing` | 2xx and body contains `Aglyn` → `$.status == "ok"` | 5 min |
-| `customer-site` | `demo.aglyn.app/` → **repoint to** `/api/health/render/site` | 2xx and body contains `Aglyn Demo` → `$.status == "ok"` | 5 min |
+| `marketing-home` | `aglyn.com/` | 2xx and body contains `Aglyn` | 5 min |
+| `customer-site` | `demo.aglyn.app/` | 2xx and body contains `Aglyn Demo` | 5 min |
+| `auth-doors` | `app.aglyn.com/api/health/auth-doors` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| `journeys` | `app.aglyn.com/api/health/journeys` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | `backup-state` | `app.aglyn.com/api/health/backups` | HTTP 2xx and `$.status == "ok"` | 15 min |
-| `signup-volume` | `app.aglyn.com/api/health/signups` → **repoint to** `/api/health/signup-volume` | HTTP 2xx and `$.status == "ok"` | 5 min |
-| `rate-limiter` | `app.aglyn.com/api/health/rate-limits` | HTTP 2xx and `$.status == "ok"` | 5 min |
-| `billing-webhook` | `app.aglyn.com/api/health/billing` | HTTP 2xx and `$.status == "ok"` | 5 min |
+| `signup-volume` | `app.aglyn.com/api/health/signup-volume` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| `rate-limits` | `app.aglyn.com/api/health/rate-limits` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| `server-errors` | `app.aglyn.com/api/health/server-errors` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| `billing-webhook` | `app.aglyn.com/api/health/billing` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | `beacon-heartbeat console` | `app.aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 15 min |
-| `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `scheduled-jobs` | `app.aglyn.com/api/health/crons` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
+| Firestore rules denials | `rules/evaluation_count{result = DENY}` | > 5,000 in a trailing hour | metric |
 
-:::danger Read this table with three corrections
-**Not one check in it fetches a page.** `marketing-home` and `customer-site`
-did, and the repoint above traded that for the render canaries — which cannot
-see an ISR failure and did not see the one on 2026-09-09. The bypass header
-that makes a real page fetch answerable arrived after the repoint was written;
-see [The front door](#the-front-door) for what now covers it, and for why one
-of these two should go back to a page URL rather than the repoint being undone.
+:::caution This table was re-read from the live project on 2026-09-14
+Fifteen checks, every one from three regions, every one green for the 24 hours
+before that read. `scheduled-jobs` exists (policy `9360426648422354663`), and
+`marketing-home` / `customer-site` fetch real pages. The sections further down
+about checks sitting at 0% and a missing `scheduled-jobs` check are history.
 
-**Four of these checks have been at 0% since 2026-08-21** — every one of them
-on a host our own bot protection challenges. See
-[Four of these checks have been red](#four-checks-red).
-**`scheduled-jobs` has never been created at all**, and it is the check that
-would have caught the fifty-one-hour cron outage. See
-[Creating the missing check](#creating-the-missing-scheduled-jobs-check).
+**Detection budget (AGL-2947): an outage must reach a person within ten
+minutes.** Every uptime policy fires after 60 s of failure in 2 of the 3
+regions, and every health door reuses its verdict for at most two minutes
+(`HEALTH_PROBE_TTL_MS`). The 15-minute rows are not the fast path: each of
+those doors also has a 5-minute UptimeRobot monitor, whose worst case is
+2 min memo + 5 min period + UptimeRobot's own confirmation delay. That delay
+has not been measured on this account; the budget holds for any delay up to
+three minutes. The doors with no
+UptimeRobot monitor (`console-imaging`, `beacon-heartbeat tenant`) run every
+5 minutes here for that reason.
+
 A table of what is *meant* to be watched is not a list of what *is*; verify it
 with [the read-only commands below](#verifying-the-monitor-yourself) before
 quoting it.
@@ -894,6 +901,22 @@ quoting it.
 
 Notes that keep these honest:
 
+- **`Firestore rules denials` is a cost alarm, not an outage one** (policy
+  `376530170935955049`, AGL-2949, email only, severity WARNING). Refused
+  listens bill the reads their rules perform, and the Firebase usage graph does
+  not show those reads. From Aug 20 to Sep 4 a dead-session listener loop ran
+  400K–1.7M denials a day, about $2 of reads that only the invoice ever
+  reported (AGL-2944). Normal is under 200 an hour; the loop peaked at 89K.
+  Replayed before it was created: over 5,000 in 12 hours of Aug 20 and 15
+  hours of Sep 3, never in the week after.
+  ⚠️ The metric is published under **two** monitored resource types with
+  identical values (`firestore.googleapis.com/Database` and
+  `firestore_instance`). The condition filters to the first. Query it the same
+  way, or a sum across both can double.
+  The threshold is absolute, and fine while legitimate denials are rare: after
+  AGL-2945 a stuck listener costs at most 12 an hour past its first, so 5,000
+  an hour is hundreds stuck at once. When legitimate denials grow with users,
+  move it to a ratio against `result = ALLOW`.
 - `rate-limiter`'s check and policy were created 2026-08-17 (`rate-limits
   health check failing (AGL-1717)`), closing the gap this note used to
   describe. The forced-failure lever still exists and is still the way to
@@ -984,9 +1007,9 @@ Notes that keep these honest:
   paragraph warns about is exactly what it was earning. **Before giving any
   check a persistent-condition licence, name the event that clears it.** The
   window's floor is set by this
-  alert path, not by taste: 5 min probe memo + 5 min check period + ~10 min
-  sustained-failure before the email means anything under ~20 minutes can go
-  red and green again before anyone is told.
+  alert path, not by taste: 2 min probe memo + a 15 min GCP check period + 1 min
+  sustained failure before the email means anything under ~18 minutes can go
+  red and green again before that policy tells anyone.
 - `billing-webhook` is the AGL-1924 standing alarm over the one subsystem
   where silent failure costs money directly. **Stripe supplies the
   denominator, and it has to.** `stripeEvents` alone cannot answer this: the
@@ -1207,13 +1230,15 @@ Notes that keep these honest:
   proportionate: it is a morning summary, and a dropped day is a day nobody
   is reminded.
   **⚠️ A SINGLE PROBE OF THIS ENDPOINT PROVES NOTHING.** It memoizes its
-  Firestore read for five minutes **per lambda instance**, and a burst lands
+  Firestore read for two minutes **per lambda instance**, and a burst lands
   on many. During the 2026-08-24 incident 36 probes split cleanly — ~19
   instances holding a pre-beat memo at `age 103–105m / 503`, ~17 fresh at
   `age 1m / 200`. Either single answer, taken alone, would have been believed
   and been wrong. Burst, and read the spread.
-  **⚠️ STILL OWED, AND IT HAS NOW COST SOMETHING.** The `scheduled-jobs` row
-  in the table above has never been created in Monitoring. Verified against
+  **✅ Created since** — policy `9360426648422354663`, confirmed live
+  2026-09-14. What follows is the record of what its absence cost.
+  **It was owed, and it cost something.** The `scheduled-jobs` row
+  in the table above had never been created in Monitoring. Verified against
   the live project on 2026-08-23: `gcloud monitoring uptime list-configs
   --project=aglyn-main` returns **eleven** checks and this is not one of them,
   and no alert policy names it either. The table listed it as watched while
@@ -1239,8 +1264,9 @@ Notes that keep these honest:
   repoint is still owed** — see
   [Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks).
 - Incident emails carry a runbook snippet pointing back at this file. Alert
-  fires after ~10 minutes of sustained failure (2+ probe regions), so a single
-  blip does not page.
+  fires after 60 s of failure in 2 or more of the 3 probe regions (AGL-2947).
+  The region rule, not the duration, is what keeps a single blip in one region
+  from paging.
 
 ### ⚠️ Four of these checks have been red since 2026-08-21 {#four-checks-red}
 
@@ -1338,7 +1364,9 @@ minutes). Re-run the pass-rate query in
 ### The channel is unverified {#the-channel-is-unverified}
 
 🔴 **`notificationChannels/7043898327231541746` is UNVERIFIED, and every alert
-policy in this project points at it.** Establish this from the API, which will
+policy in this project points at it** — 14 of the 22 at nothing else.
+(Last re-tested before Slack was added; the verification test is a POST and
+has not been re-run since.) Establish this from the API, which will
 not tell you directly — `verificationStatus` is a valid field path on the
 resource and comes back unset, and the unfiltered `GET` does not return the key
 at all. The surface that does answer is `getVerificationCode`, which sends no
@@ -1463,7 +1491,7 @@ gcloud monitoring uptime list-configs --project=aglyn-main \
 ```
 
 :::caution `--validate-ssl` defaults to FALSE on the CLI
-All thirteen existing checks have `validateSsl: true`, because the console
+All fifteen existing checks have `validateSsl: true`, because the console
 checkbox is on by default — the CLI's is not. Omitting the flag creates the
 one check in the set that would keep reporting green through an expired or
 invalid certificate on `app.aglyn.com`. Verified against the live configs on
@@ -2365,8 +2393,9 @@ section as "the server tier is covered":
   service, so an outage there silences both at once. Vercel retries and then
   disables a drain that keeps failing, so a long receiver outage can require
   re-enabling the drains by hand afterwards — check the Drains page after any
-  receiver incident. Nothing watches the receiver itself; it is the one arm
-  with no monitor of its own.
+  receiver incident. The receiver has its own alert: policy
+  `15663465441534996183` (*Log-drain receiver is not receiving*) fires after an
+  hour with no requests.
 - **Anything below 500.** A route answering 200 with a broken body, a 403 storm
   from a bad rule, a 404 spike from a lost route: none is a server error and
   none of the three arms sees it.
@@ -2634,9 +2663,10 @@ Tracked in **AGL-1148**:
   and the part that must not be guessed. Four options with their tradeoffs are
   laid out in [`docs/INCIDENT_RESPONSE.md`](INCIDENT_RESPONSE.md) §"The SLA
   decision"; the number remains AGL-1148 and remains the account owner's. The constraint
-  worth carrying back here: the alert path's ~20-minute floor (5 min probe memo
-  + 5 min check period + ~10 min sustained failure) means **nothing shorter is
-  even visible**, against a 43-minute monthly budget at 99.9%.
+  worth carrying back here: the alert path's worst case is ~8 minutes (2 min
+  probe memo + 5 min UptimeRobot period + ~1 min confirmation, AGL-2947), so
+  **nothing shorter is reliably visible**, against a 43-minute monthly budget at
+  99.9%.
 
 A data breach is a different process with a statutory clock — see
 [`docs/BREACH_NOTIFICATION.md`](BREACH_NOTIFICATION.md), whose §0 is built on

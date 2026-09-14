@@ -1,0 +1,12 @@
+{
+  "status": 400,
+  "headers": {
+    "request-id": "req_a5"
+  },
+  "body": {
+    "error": {
+      "type": "invalid_request_error",
+      "message": "Your credit balance is too low to access the Anthropic API."
+    }
+  }
+}

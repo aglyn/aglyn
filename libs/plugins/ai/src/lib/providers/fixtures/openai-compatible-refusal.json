@@ -1,0 +1,22 @@
+{
+  "status": 200,
+  "headers": {
+    "x-request-id": "req_o2"
+  },
+  "body": {
+    "choices": [
+      {
+        "index": 0,
+        "finish_reason": "content_filter",
+        "message": {
+          "role": "assistant",
+          "content": ""
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 40,
+      "completion_tokens": 1
+    }
+  }
+}

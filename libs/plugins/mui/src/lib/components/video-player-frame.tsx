@@ -18,14 +18,15 @@
 import { type CSSProperties, useCallback } from 'react'
 
 /**
- * The frame a hosted player plays in, once a visitor has pressed play
- * (AGL-2826).
+ * The frame a hosted player plays in (AGL-2826).
  *
  * Shared by the Video element, which puts it where the poster was, and by the
  * lightbox, which opens it in a dialog, so the two cannot disagree about what
- * the frame may do. Nothing renders this before a press: the element's poster
- * is a button until then, which is what keeps the player's origin off the wire
- * for a visitor who only looks at the page.
+ * the frame may do. Nothing renders this before a press, except the player an
+ * element loads with the page (AGL-2962), and that only for a visitor whose
+ * analytics consent is on record. Otherwise the element's poster is a button
+ * until the press, which is what keeps the player's origin off the wire for a
+ * visitor who only looks at the page.
  */
 export interface VideoPlayerFrameProps {
   /** The player's address, rebuilt by the caller from a parsed media id. */

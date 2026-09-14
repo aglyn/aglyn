@@ -1,0 +1,39 @@
+{
+  "status": 200,
+  "headers": {
+    "x-request-id": "req_o1"
+  },
+  "body": {
+    "id": "chatcmpl-1",
+    "object": "chat.completion",
+    "model": "gpt-5-mini",
+    "choices": [
+      {
+        "index": 0,
+        "finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": "Here is the section.",
+          "tool_calls": [
+            {
+              "id": "call_1",
+              "type": "function",
+              "function": {
+                "name": "emit_section",
+                "arguments": "{\"rootId\":\"n1\",\"nodes\":{\"n1\":{\"componentId\":\"muiStack\"}}}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 1300,
+      "completion_tokens": 120,
+      "total_tokens": 1420,
+      "prompt_tokens_details": {
+        "cached_tokens": 400
+      }
+    }
+  }
+}

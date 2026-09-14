@@ -63,7 +63,7 @@ import { isEmailConfigured } from '@aglyn/shared-util-email'
 // replace the delivery reader with whatever the factory happened to list, and
 // a stub there is a green on the one fact this arm exists to establish.
 import { readEmailDeliveryHistory } from '@aglyn/tenant-data-admin/server/email-delivery-log'
-import { memoizeWithTtl } from '@aglyn/aglyn/server'
+import { HEALTH_PROBE_TTL_MS, memoizeWithTtl } from '@aglyn/aglyn/server'
 
 import {
   authActionUrl,
@@ -93,11 +93,10 @@ import {
 } from './auth-doors-verdict'
 
 /**
- * Five minutes, matching the sibling subsystem probes. The uptime workflow
- * samples every fifteen, so this TTL is never the limiting factor for
- * detection latency and it caps what a flood of requests can spend.
+ * The shared health memo — see `HEALTH_PROBE_TTL_MS` for the ten-minute detection budget it fits.
+ * It caps what a flood of requests can spend.
  */
-export const PROBE_TTL_MS = 5 * 60_000
+export const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 
 /**
  * Short enough that a hung provider cannot hold the health endpoint open past

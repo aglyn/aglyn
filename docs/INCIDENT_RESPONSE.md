@@ -195,12 +195,12 @@ guessing.
    multi-region SLA is strong; Vercel's, for us, does not exist. **An SLA we
    sign is one we owe regardless of whose outage it was**, so every minute of a
    Vercel incident is funded out of our own pocket.
-3. **Detection latency eats the budget.** The alert path is a 5-minute probe
-   memo, plus a 5-minute check period, plus ~10 minutes of sustained failure
-   before the email — so **nothing under ~20 minutes is even visible**. At
-   99.9% the entire monthly allowance is 43 minutes. One incident detected at
-   minute 20 and fixed at minute 40 spends half the month's budget on a single
-   short outage, before anyone touches a keyboard.
+3. **Detection latency eats the budget.** The alert path is a 2-minute probe
+   memo, plus UptimeRobot's 5-minute period, plus about a minute to confirm and
+   notify — a worst case of ~8 minutes, held under a standing ten-minute
+   requirement (AGL-2947). At 99.9% the entire monthly allowance is 43
+   minutes. One incident detected at minute 8 and fixed at minute 28 spends
+   two-thirds of the month's allowance on a single short outage.
 4. **No on-call rotation.** A 02:00 incident is an eight-hour response floor.
    At 99.9% that is eleven months of allowance consumed by one night.
 

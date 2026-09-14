@@ -393,8 +393,13 @@ export function MembersVideosField(props: {
         onClick={() =>
           void (async () => {
             // A private file is the only kind a members video can be, so the
-            // picker offers private files here and nowhere else.
-            const media = await pickMedia?.({ allowPrivate: true })
+            // picker offers private files here and nowhere else. And a film is
+            // the only kind of file it can play, so the picker lists and
+            // uploads nothing else (AGL-2953).
+            const media = await pickMedia?.({
+              allowPrivate: true,
+              kind: 'video',
+            })
             if (!media) return
             const url = await attach(media)
             if (!url) return

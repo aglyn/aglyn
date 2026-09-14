@@ -1,0 +1,13 @@
+{
+  "status": 400,
+  "headers": {
+    "x-request-id": "req_o5"
+  },
+  "body": {
+    "error": {
+      "message": "Incorrect API key provided: sk-****.",
+      "type": "invalid_request_error",
+      "code": "invalid_api_key"
+    }
+  }
+}

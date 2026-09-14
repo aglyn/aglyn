@@ -91,6 +91,9 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import EntryAnalyticsCard from '../analytics/entry-analytics-card.component'
 import { useDeclareDocumentSubject } from '../document-subject'
 import EntryCoverImageField from './entry-cover-image-field.component'
+import EntryCoverVideoField, {
+  featuredVideoPick,
+} from './entry-cover-video-field.component'
 import HostDisplayNameComponent from '../host-display-name.component'
 import DashboardLayout from '../layouts/dashboard.layout'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
@@ -200,6 +203,11 @@ type EntryEditorState = {
    * chosen asset's own alt at pick time; blank stores nothing.
    */
   coverImageAlt: string
+  /**
+   * The featured video (AGL-2954), in the cover image's shape: a `media:`
+   * reference to a library film, or a pasted link. Blank stores nothing.
+   */
+  coverVideo: string
   // Entry model v2 (AGL-582): SEO overrides + taxonomy. Tags stay a
   // comma-separated STRING while editing; saved as string[].
   seoTitle: string
@@ -233,6 +241,7 @@ const BLANK_ENTRY_EDITOR: EntryEditorState = {
   body: '',
   coverImage: '',
   coverImageAlt: '',
+  coverVideo: '',
   seoTitle: '',
   seoDescription: '',
   authorName: '',
@@ -261,6 +270,7 @@ const editorStateForEntry = (entry: any): EntryEditorState => ({
   body: entry.body ?? '',
   coverImage: entry.coverImage ?? '',
   coverImageAlt: entry.coverImageAlt ?? '',
+  coverVideo: entry.coverVideo ?? '',
   seoTitle: entry.seoTitle ?? '',
   seoDescription: entry.seoDescription ?? '',
   authorName: entry.authorName ?? '',
@@ -620,6 +630,12 @@ export function EntryDetailPage() {
             ...(editor.coverImage.trim() && editor.coverImageAlt.trim()
               ? { coverImageAlt: editor.coverImageAlt.trim() }
               : { coverImageAlt: deleteField() }),
+            // The featured video (AGL-2954). Removed rather than stored blank,
+            // so an entry without one carries no field a renderer could read
+            // as a video to play.
+            ...(editor.coverVideo.trim()
+              ? { coverVideo: editor.coverVideo.trim() }
+              : { coverVideo: deleteField() }),
             // Entry model v2 (AGL-582): SEO overrides + taxonomy.
             seoTitle: editor.seoTitle.trim(),
             seoDescription: editor.seoDescription.trim(),
@@ -762,9 +778,11 @@ export function EntryDetailPage() {
 
   /* ── body editing ──────────────────────────────────────────────────── */
 
-  const [pickerTarget, setPickerTarget] = useState<'cover' | 'body' | null>(
-    null,
-  )
+  // Which field the page's one picker is filling; `video` is the featured
+  // video (AGL-2954), and the only target that narrows the picker.
+  const [pickerTarget, setPickerTarget] = useState<
+    'cover' | 'video' | 'body' | null
+  >(null)
   // Body editing mode (AGL-582): the WYSIWYG surface is the default; the raw
   // markdown textarea stays one tab away. Both edit the same markdown-lite
   // string, so switching re-parses/serializes.
@@ -1784,6 +1802,39 @@ export function EntryDetailPage() {
                 ),
               },
               {
+                size: CARD_NARROW,
+                children: (
+                  <CardDisplay
+                    header={'Featured video'}
+                    help={docsHelp('buildABlog', {
+                      anchor: '#2-write-entries',
+                      title: 'The featured video',
+                      excerpt:
+                        'The film an entry is about, played in place of the ' +
+                        'cover image at the top of the entry. Choose one from ' +
+                        'the media library or paste a video or Wistia link.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
+                  >
+                    {/* Beside the cover, because a library film's captured
+                        frame fills an empty cover when it is picked
+                        (AGL-2954). */}
+                    <EntryCoverVideoField
+                      hostId={hostId}
+                      value={editor.coverVideo}
+                      onValueChange={(value) =>
+                        setEditor((prev) =>
+                          prev ? { ...prev, coverVideo: value } : prev,
+                        )
+                      }
+                      onChoose={() => setPickerTarget('video')}
+                    />
+                  </CardDisplay>
+                ),
+              },
+              {
                 size: CARD_WIDE,
                 children: (
                   <CardDisplay
@@ -2018,15 +2069,18 @@ export function EntryDetailPage() {
       <MediaPickerDialog
         hostId={hostId}
         open={pickerTarget != null}
+        // The featured video lists and uploads films only (AGL-2953). The
+        // cover and the body keep the whole library.
+        kind={pickerTarget === 'video' ? 'video' : undefined}
         onClose={() => setPickerTarget(null)}
         onPick={(media) => {
-          // ONE writer for the cover and the body (AGL-1705). `media.url`
-          // names the object's CURRENT LOCATION, so an AGL-1215 folder move —
-          // which copies the object, rewrites `url` and deletes the original —
-          // 404s every body image permanently, and a replace regenerates the
-          // embedded `&token=` and does it again. `mediaNodeSrc` stores the
-          // reference by identity and still degrades to `url` for an org with
-          // no `mediaCdn` entitlement.
+          // ONE writer for the cover, the featured video and the body
+          // (AGL-1705, AGL-2954). `media.url` names the object's CURRENT
+          // LOCATION, so an AGL-1215 folder move — which copies the object,
+          // rewrites `url` and deletes the original — 404s every body image
+          // permanently, and a replace regenerates the embedded `&token=` and
+          // does it again. `mediaNodeSrc` stores the reference by identity and
+          // still degrades to `url` for an org with no `mediaCdn` entitlement.
           const src = Aglyn.mediaNodeSrc(media)
           if (src) {
             // The asset's alt, through the one shared rule (AGL-1896). The
@@ -2035,7 +2089,27 @@ export function EntryDetailPage() {
             // reader is worse than the silence it replaced.
             const alt =
               Aglyn.inheritedMediaAlt({ assetAlt: (media as any).alt }) ?? ''
-            if (pickerTarget === 'cover') {
+            if (pickerTarget === 'video') {
+              // The featured video (AGL-2954), plus the captured frame as the
+              // cover when the entry has none; see `featuredVideoPick`. The
+              // picker lists only films, so a pick that is not one is refused
+              // with a reason rather than stored.
+              const picked = featuredVideoPick({
+                media,
+                src,
+                hostId,
+                coverImage: editor.coverImage,
+                coverImageAlt: editor.coverImageAlt,
+              })
+              if (picked) {
+                setEditor((prev) => (prev ? { ...prev, ...picked } : prev))
+              } else {
+                enqueueSnackbar(
+                  'That file is not a video. Choose a video for the featured video.',
+                  { variant: 'warning', persist: false },
+                )
+              }
+            } else if (pickerTarget === 'cover') {
               setEditor((prev) =>
                 prev
                   ? {

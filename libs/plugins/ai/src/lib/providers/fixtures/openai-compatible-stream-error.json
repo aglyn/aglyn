@@ -1,0 +1,26 @@
+{
+  "status": 200,
+  "headers": {},
+  "events": [
+    {
+      "id": "chatcmpl-3",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "content": "Open"
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "error": {
+        "message": "The server is overloaded.",
+        "type": "server_error",
+        "code": 503
+      }
+    },
+    "[DONE]"
+  ]
+}

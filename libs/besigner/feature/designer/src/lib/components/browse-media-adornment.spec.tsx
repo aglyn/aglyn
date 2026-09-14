@@ -19,7 +19,10 @@ import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 
 import { MediaPickerContext } from '../contexts/media-picker-context'
-import { ElementPropsForm } from './element-props-form.component'
+import {
+  browseMediaKind,
+  ElementPropsForm,
+} from './element-props-form.component'
 
 /**
  * AGL-2236. The Image element's `src` helper text has told authors since
@@ -84,6 +87,7 @@ function renderPanel(options: {
 
 type MediaPickerContextValueOnPick = (
   onPick: (value: string, asset?: { alt?: string }) => void,
+  options?: { kind?: Aglyn.MediaPickerKind },
 ) => void
 
 /**
@@ -184,5 +188,93 @@ describe('Browse media, on the field it fills (AGL-2236)', () => {
     expect(patch.alt).toBe('A blue kettle')
 
     jest.restoreAllMocks()
+  })
+})
+
+/**
+ * The Video element's two media attributes (the fields `video.tsx` declares).
+ * Labels are the element's own, so the buttons are found where authors find
+ * them.
+ */
+const VIDEO_SCHEMA = {
+  displayName: 'Video',
+  attributes: [
+    {
+      name: 'src',
+      description: 'Pick the film from your media library with "Browse media".',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Video source',
+    },
+    {
+      name: 'poster',
+      description: 'The still shown before anyone presses play.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'Poster image',
+    },
+  ],
+}
+
+const videoNode = () =>
+  ({
+    $id: 'node-video',
+    componentId: 'video',
+    componentSchema: VIDEO_SCHEMA,
+    props: { src: '' },
+  }) as never
+
+/**
+ * A Browse media that can only be answered with one kind of file asks for
+ * that kind (AGL-2953).
+ *
+ * A Video element's source plays a film and its poster is a still, and the
+ * picker used to offer the whole library for both, uploads included. The
+ * narrowing travels as the second argument to the host's picker, which is
+ * the only channel the designer has to it.
+ */
+describe('Browse media asks for the kind its attribute holds (AGL-2953)', () => {
+  const browse = (label: string) =>
+    fireEvent.click(
+      within(fieldControlFor(label)).getByRole('button', {
+        name: 'Browse media',
+      }),
+    )
+
+  it("narrows a Video element's source to video", () => {
+    const onPickMedia = jest.fn()
+    renderPanel({ onPickMedia, node: videoNode() })
+    browse('Video source')
+    expect(onPickMedia).toHaveBeenCalledTimes(1)
+    expect(onPickMedia.mock.calls[0][1]).toEqual({ kind: 'video' })
+  })
+
+  it("narrows a Video element's poster to images", () => {
+    const onPickMedia = jest.fn()
+    renderPanel({ onPickMedia, node: videoNode() })
+    browse('Poster image')
+    expect(onPickMedia.mock.calls[0][1]).toEqual({ kind: 'image' })
+  })
+
+  it("leaves an Image element's source unnarrowed", () => {
+    const onPickMedia = jest.fn()
+    renderPanel({ onPickMedia })
+    browse('Image source')
+    expect(onPickMedia).toHaveBeenCalledTimes(1)
+    expect(onPickMedia.mock.calls[0][1]?.kind).toBeUndefined()
+  })
+
+  it('decides from the persisted component id and the attribute alone', () => {
+    expect(browseMediaKind({ componentId: 'video', propName: 'src' })).toBe(
+      'video',
+    )
+    expect(browseMediaKind({ componentId: 'video', propName: 'poster' })).toBe(
+      'image',
+    )
+    expect(
+      browseMediaKind({ componentId: 'video', propName: 'thumbnail' }),
+    ).toBeUndefined()
+    expect(
+      browseMediaKind({ componentId: 'image', propName: 'src' }),
+    ).toBeUndefined()
+    expect(browseMediaKind({ propName: 'src' })).toBeUndefined()
   })
 })

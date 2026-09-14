@@ -55,6 +55,8 @@
       "@aglyn/tenant-runtime/*": ["./libs/tenant/runtime/src/lib/*"],
       "@aglyn/plugins-email": ["./libs/plugins/email/src/index.ts"],
       "@aglyn/plugins-email/*": ["./libs/plugins/email/src/lib/*"],
+      "@aglyn/plugins-ai": ["./libs/plugins/ai/src/index.ts"],
+      "@aglyn/plugins-ai/*": ["./libs/plugins/ai/src/lib/*"],
       "@aglyn/plugins-bookings": ["./libs/plugins/bookings/src/index.ts"],
       "@aglyn/plugins-bookings/*": ["./libs/plugins/bookings/src/lib/*"],
       "@aglyn/plugins-events-calendar": ["./libs/plugins/events-calendar/src/index.ts"],

@@ -62,6 +62,12 @@
       "@aglyn/plugins-email/*": [
         "../../libs/plugins/email/src/lib/*"
       ],
+      "@aglyn/plugins-ai": [
+        "../../libs/plugins/ai/src/index.ts"
+      ],
+      "@aglyn/plugins-ai/*": [
+        "../../libs/plugins/ai/src/lib/*"
+      ],
       "@aglyn/plugins-bookings": [
         "../../libs/plugins/bookings/src/index.ts"
       ],

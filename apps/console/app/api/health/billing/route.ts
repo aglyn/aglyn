@@ -87,6 +87,7 @@ import {
   healthHttpStatus,
   healthStatus,
   isConnectWebhookEndpoint,
+  HEALTH_PROBE_TTL_MS,
   memoizeWithTtl,
   meteredPricingHealth,
   platformVersion,
@@ -115,11 +116,11 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 /**
- * Five minutes bounds the Stripe call volume (two GETs per probe, so ~576
- * requests a day against a 100/s account limit) without letting a broken
- * webhook hide longer than one monitor interval.
+ * The shared health memo — see `HEALTH_PROBE_TTL_MS` for the ten-minute detection budget it fits.
+ * It bounds the Stripe call volume: two GETs per probe, so at most ~1,440
+ * requests a day per instance against a 100/s account limit.
  */
-const PROBE_TTL_MS = 5 * 60_000
+const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 
 /** Stripe's own timeout, so a slow API cannot hold the health check open. */
 const STRIPE_TIMEOUT_MS = 6_000

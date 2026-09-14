@@ -42,6 +42,7 @@ jest.mock('../app/[host]/[scheme]/[[...slug]]/catch-all-client', () => ({
   default: () => null,
 }))
 
+import { NODE_ROOT_ID } from '@aglyn/aglyn/canvas-manager/canvas-manager'
 import { loadPageData } from '../app/[host]/[scheme]/[[...slug]]/load-page-data'
 import CatchAllPage from '../app/[host]/[scheme]/[[...slug]]/page'
 
@@ -116,7 +117,7 @@ describe('VideoObject reaches the rendered page (AGL-2747)', () => {
       '@type': 'VideoObject',
       name: 'The 60-second tour',
       description: 'What Aglyn does, end to end.',
-      uploadDate: '2026-09-01',
+      uploadDate: '2026-09-01T12:00:00.000Z',
       thumbnailUrl: `${ORIGIN}/api/media/cdn/host-1/still?w=1280`,
       contentUrl: `${ORIGIN}/api/media/cdn/host-1/film`,
     })
@@ -140,11 +141,16 @@ describe('VideoObject reaches the rendered page (AGL-2747)', () => {
   })
 
   it('says nothing about a video whose SEO fields are blank', async () => {
-    // A block missing one of the four required fields is an error a search
+    // A block missing one of the three required fields is an error a search
     // console reports against the page, not a smaller win.
-    expect(
-      await videoBlocks({ v1: videoNode({ description: '' }) }),
-    ).toEqual([])
+    expect(await videoBlocks({ v1: videoNode({ title: '' }) })).toEqual([])
+  })
+
+  it('still publishes a video whose only blank field is the description', async () => {
+    // Google recommends a description and does not require one.
+    const [block] = await videoBlocks({ v1: videoNode({ description: '' }) })
+    expect(block?.value).toMatchObject({ name: 'The 60-second tour' })
+    expect(block?.value).not.toHaveProperty('description')
   })
 
   it('still emits the site entity and breadcrumb blocks beside it', async () => {
@@ -177,5 +183,59 @@ describe('VideoObject reaches the rendered page (AGL-2747)', () => {
     }
     walk(tree)
     expect(blocks.filter((block) => block.includes('VideoObject'))).toEqual([])
+  })
+})
+
+describe('VideoObject describes only a player the page draws (AGL-2957)', () => {
+  const names = async (nodes: Record<string, unknown>) =>
+    (await videoBlocks(nodes)).map((block) => block.value.name)
+
+  it('publishes nothing for a video no child list reaches', async () => {
+    // The shape a Collection Entries card template leaves: still in the map,
+    // named by no child list once its clones take its place.
+    expect(
+      await names({
+        [NODE_ROOT_ID]: { $id: NODE_ROOT_ID, componentId: 'div', nodes: ['v1'] },
+        v1: { ...videoNode(), parentId: NODE_ROOT_ID },
+        template: { ...videoNode({ title: 'A card template' }), $id: 'template' },
+      }),
+    ).toEqual(['The 60-second tour'])
+  })
+
+  it('publishes nothing for a video inside a lazy tab panel the page withholds', async () => {
+    // The route prunes the panels that will not mount before it builds the
+    // blocks, so only the landing panel's film is left to describe.
+    expect(
+      await names({
+        [NODE_ROOT_ID]: { $id: NODE_ROOT_ID, componentId: 'div', nodes: ['tabs'] },
+        tabs: {
+          $id: 'tabs',
+          componentId: 'muiTabs',
+          parentId: NODE_ROOT_ID,
+          props: { labels: 'Tour, Extras' },
+          nodes: ['tour', 'extras'],
+        },
+        tour: {
+          $id: 'tour',
+          componentId: 'muiTabPanel',
+          parentId: 'tabs',
+          props: { label: 'Tour' },
+          nodes: ['v1'],
+        },
+        extras: {
+          $id: 'extras',
+          componentId: 'muiTabPanel',
+          parentId: 'tabs',
+          props: { label: 'Extras' },
+          nodes: ['v2'],
+        },
+        v1: { ...videoNode(), parentId: 'tour' },
+        v2: {
+          ...videoNode({ title: 'Behind the scenes' }),
+          $id: 'v2',
+          parentId: 'extras',
+        },
+      }),
+    ).toEqual(['The 60-second tour'])
   })
 })

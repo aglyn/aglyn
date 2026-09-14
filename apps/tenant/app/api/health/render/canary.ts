@@ -82,6 +82,7 @@
  * first, env second, default third.
  */
 import {
+  HEALTH_PROBE_TTL_MS,
   renderHealth,
   type RenderCheck,
   type RenderOutcome,
@@ -141,12 +142,11 @@ export function siteHost(): string | null {
 }
 
 /**
- * Five minutes, matching every sibling subsystem probe. It bounds what a
- * public unauthenticated endpoint can be made to cost — the loader reads
- * Firestore — while staying well inside the 15-minute monitor interval, so
- * the memo is never what delays a red.
+ * The shared health memo — see `HEALTH_PROBE_TTL_MS` for the ten-minute detection budget it fits.
+ * It bounds what a public unauthenticated endpoint can be made to cost — the
+ * loader reads Firestore.
  */
-export const PROBE_TTL_MS = 5 * 60_000
+export const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 
 /**
  * Run the real page loader for `host`'s home page and describe the outcome

@@ -68,6 +68,7 @@ import {
   healthHeaders,
   healthHttpStatus,
   healthStatus,
+  HEALTH_PROBE_TTL_MS,
   memoizeWithTtl,
   platformVersion,
   type CronBeat,
@@ -82,11 +83,12 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 /**
- * Five minutes, matching the sibling probes. The tightest schedule watched
- * here is the every-minute plugin beat, whose grace is thirty minutes, so
- * the TTL is never what decides how fast a dead job is found.
+ * The shared health memo — see `HEALTH_PROBE_TTL_MS` for the ten-minute detection budget it fits.
+ * The tightest schedule watched here is the every-minute plugin beat, whose
+ * grace is thirty minutes, so that grace decides how soon a dead job reds;
+ * the memo adds at most its own length on top.
  */
-const PROBE_TTL_MS = 5 * 60_000
+const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
 
 /**
  * When this deployment started watching.

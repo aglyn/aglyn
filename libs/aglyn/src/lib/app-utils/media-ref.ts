@@ -510,6 +510,14 @@ export function isMediaCdnUrl(url: string | undefined | null): boolean {
  * Shared rather than restated at each call site because a poster attribute and
  * the `thumbnailUrl` describing it must name the SAME bytes — two spellings of
  * "resolve the poster" is how those drift apart.
+ *
+ * The width MERGES into a query the url already carries (AGL-2958). A film's
+ * captured frame is `?poster=1` on the film's own url and a signed private
+ * asset carries `exp`/`sig`, and both are values an image or poster field can
+ * hold. A bare `?w=` append turns the first into `?poster=1?w=640`, which the
+ * CDN reads as a `poster` of `1?w=640` — not a request for the still, and no
+ * width either — so it answers with the master film. `image.tsx` builds every
+ * `srcSet` candidate through here for the same reason.
  */
 export function mediaVariantSrc(
   value: unknown,
@@ -520,7 +528,9 @@ export function mediaVariantSrc(
     options,
   )
   if (!resolved) return undefined
-  return isMediaCdnUrl(resolved) ? `${resolved}?w=${options.width}` : resolved
+  return isMediaCdnUrl(resolved)
+    ? withMediaCdnQuery(resolved, [['w', String(options.width)]])
+    : resolved
 }
 
 /**
@@ -707,13 +717,23 @@ export function mediaRefFromCdnPath(
  * on its own. Had it not, the where-used scan would have started reporting
  * live assets as used nowhere the day pins shipped — a scan whose every error
  * already points at "safe to delete".
+ *
+ * It matches the same asset spelled as a CDN PATH as well (AGL-2969), in the
+ * same scope forms. The scan's needles include the document's own `cdnPath`,
+ * but that is the bare org form, and two writers store the path with the site
+ * in its scope: a plugin page's picker, for an asset shared with one site
+ * (`hostQualifiedCdnPath`), and an entry cover filled from a film's frame
+ * (`mediaPosterSrc`, qualified for every org film). A query, a content-hash
+ * segment and an origin in front all leave the match intact, and the same
+ * trailing guard applies.
  */
 export function mediaRefPattern(mediaId: string): RegExp {
   const id = mediaId.replace(/[^A-Za-z0-9_-]/g, '')
   // An id that sanitizes to nothing must match NOTHING — never everything.
   if (!id) return /(?!)/
   return new RegExp(
-    `${MEDIA_REF_PREFIX}(?:org:${SEGMENT_SOURCE}(?::${SEGMENT_SOURCE})?` +
+    `(?:${MEDIA_REF_PREFIX}|${MEDIA_CDN_ROUTE}/)` +
+      `(?:org:${SEGMENT_SOURCE}(?::${SEGMENT_SOURCE})?` +
       `|${SEGMENT_SOURCE})/${id}(?![A-Za-z0-9_-])`,
   )
 }

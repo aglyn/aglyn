@@ -17,6 +17,7 @@
 
 
 export * from './http-response-error'
+export * from './upstream-service-error'
 export * from './ns-error'
 export * from './ns-error-factory'
 export * from './tools'

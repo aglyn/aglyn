@@ -31,6 +31,7 @@ import {
   isImageUploadContentType,
   normalizeImageContentType,
 } from '@aglyn/aglyn/app-utils/image-upload-types'
+import type { MediaPickerKind } from '@aglyn/aglyn/app-utils/media-picker-context'
 
 export const MB = 1024 * 1024
 
@@ -404,6 +405,46 @@ export function uploadAcceptForKind(
     ...(kind === 'document' ? ['application/x-zip-compressed'] : []),
     ...rows.flatMap((spec) => spec.extensions),
   ].join(',')
+}
+
+/** The one upload row a picker narrowed to `pdf` takes (AGL-2953). */
+const PDF_CONTENT_TYPE = 'application/pdf'
+
+/**
+ * Which picker kind an accepted content type belongs to, or `undefined` for a
+ * type no narrowed picker takes (AGL-2953).
+ *
+ * `image` and `video` are the families {@link mediaUploadKind} names. `pdf`
+ * is one row of the document family, because the library's Type filter offers
+ * PDF and no other document: a ZIP or a Word file belongs to no kind, so a
+ * picker narrowed to PDFs refuses it rather than storing a file its own grid
+ * would then hide.
+ */
+export function mediaPickerKindOf(
+  contentType: string,
+): MediaPickerKind | undefined {
+  const family = mediaUploadKind(contentType)
+  if (family === 'image' || family === 'video') return family
+  return family === 'document' && contentType === PDF_CONTENT_TYPE
+    ? 'pdf'
+    : undefined
+}
+
+/**
+ * The `accept` for a picker narrowed to one kind (AGL-2953).
+ *
+ * A family's own attribute for `image` and `video`, through
+ * {@link uploadAcceptForKind}, and the PDF row alone for `pdf`. Derived from
+ * {@link UPLOAD_TYPES} like every other layer, so the chooser offers exactly
+ * what {@link mediaPickerKindOf} lets the upload through.
+ */
+export function uploadAcceptForPickerKind(
+  kind: MediaPickerKind,
+  options: { video: boolean } = { video: true },
+): string {
+  if (kind !== 'pdf') return uploadAcceptForKind(kind, options)
+  const row = UPLOAD_TYPES_BY_CONTENT_TYPE.get(PDF_CONTENT_TYPE)
+  return [PDF_CONTENT_TYPE, ...(row?.extensions ?? [])].join(',')
 }
 
 /** Every family but video, as the "supported uploads" sentence names them. */

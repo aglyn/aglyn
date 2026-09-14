@@ -1,0 +1,96 @@
+{
+  "status": 200,
+  "headers": {
+    "x-request-id": "req_o3"
+  },
+  "events": [
+    {
+      "id": "chatcmpl-2",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant",
+            "content": "Open the screen, "
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-2",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "content": "then press Publish."
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-2",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "emit_section",
+                  "arguments": "{\"rootId\":"
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-2",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "function": {
+                  "arguments": "\"n1\",\"nodes\":{}}"
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-2",
+      "choices": [
+        {
+          "index": 0,
+          "delta": {},
+          "finish_reason": "tool_calls"
+        }
+      ]
+    },
+    {
+      "id": "chatcmpl-2",
+      "choices": [],
+      "usage": {
+        "prompt_tokens": 1300,
+        "completion_tokens": 42,
+        "prompt_tokens_details": {
+          "cached_tokens": 400
+        }
+      }
+    },
+    "[DONE]"
+  ]
+}
