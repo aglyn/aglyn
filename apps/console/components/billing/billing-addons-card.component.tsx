@@ -87,10 +87,10 @@ export function aiAddonDescription(plan: OrgPlan | null): string {
 /**
  * How the AI add-on row is offered on a plan (AGL-2899).
  *
- * - `included`: the plan carries `aiGenerative` itself (Enterprise, in the
- *   agreement), so there is nothing to buy and no switch.
- * - `upgrade`: the plan sells no add-on and does not carry the feature
- *   (Free), so the row points at the plan grid.
+ * - `included`: the plan carries what the add-on unlocks itself (Enterprise,
+ *   in the agreement), so there is nothing to buy and no switch.
+ * - `upgrade`: the plan sells no add-on and does not include it (Free, whose
+ *   generation taste is not the add-on), so the row points at the plan grid.
  * - `sold`: every paid self-serve tier — the switch.
  *
  * Read from the plan tables rather than from the catalog's `upgradeRequired`,
@@ -101,7 +101,10 @@ export function aiAddonOffer(
   plan: OrgPlan | null,
 ): 'included' | 'upgrade' | 'sold' {
   if (!plan) return 'upgrade'
-  if (PLAN_ENTITLEMENTS[plan].features.aiGenerative) return 'included'
+  // Both flags the add-on unlocks, as `planIncludesAiAddon` in the plan grid
+  // reads them: Free carries `aiGenerative` alone for its taste.
+  const { aiGenerative, aiAssist } = PLAN_ENTITLEMENTS[plan].features
+  if (aiGenerative && aiAssist) return 'included'
   return PLAN_PRICING[plan].aiAddonMonthlyUsd == null ? 'upgrade' : 'sold'
 }
 

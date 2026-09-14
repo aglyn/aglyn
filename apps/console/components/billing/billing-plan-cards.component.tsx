@@ -230,16 +230,28 @@ interface FeatureRow {
 }
 
 /**
+ * Whether a plan carries everything the AI add-on unlocks without buying it:
+ * both `aiGenerative` and `aiAssist` (Enterprise, in the agreement). Free's
+ * generation taste carries `aiGenerative` alone, behind its own wall, and is
+ * not the add-on.
+ */
+export function planIncludesAiAddon(
+  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+): boolean {
+  return entitlements.features.aiGenerative && entitlements.features.aiAssist
+}
+
+/**
  * The AI add-on's cell on a plan (AGL-2899): the add-on's monthly price where
- * the plan sells it, "Custom" where the plan carries the feature in its
- * agreement (Enterprise), and a dash where neither holds (Free).
+ * the plan sells it, "Custom" where the plan includes it in its agreement
+ * (Enterprise), and a dash where neither holds (Free).
  */
 export function aiAddonCell(
   entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   pricing: (typeof PLAN_PRICING)[OrgPlan],
 ): string {
   if (pricing.aiAddonMonthlyUsd != null) return `+$${pricing.aiAddonMonthlyUsd}/mo`
-  return entitlements.features.aiGenerative ? 'Custom' : '—'
+  return planIncludesAiAddon(entitlements) ? 'Custom' : '—'
 }
 
 /** The add-on's line in a card's quota block, beside the other rates. */
@@ -252,7 +264,7 @@ function aiAddonLine(
   if (pricing.aiAddonMonthlyUsd != null) {
     return `${name} add-on (+$${pricing.aiAddonMonthlyUsd}/mo)`
   }
-  return entitlements.features.aiGenerative
+  return planIncludesAiAddon(entitlements)
     ? `${name} included`
     : `No ${name} add-on`
 }
