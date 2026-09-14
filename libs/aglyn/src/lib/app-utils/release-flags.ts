@@ -262,9 +262,13 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   // its flag: `release_assist` answers questions, this builds things, and
   // the two are sold, metered and disclosed separately. The server-side
   // gate lives in `aiGateLadder` (404 when off, staff preview).
+  // Labeled for what it switches — the generative doors — and not with the
+  // add-on's own name, which is sold and live whether or not the doors are
+  // released: the docs name the add-on, and a flag wearing the same words
+  // reads as documented when it is not.
   {
     key: 'release_ai_generative',
-    label: `${PLATFORM_BRAND_NAME} AI`,
+    label: `${PLATFORM_BRAND_NAME} AI generation`,
     description:
       'Generative building and automation behind the AI add-on ' +
       '(AGL-2903): sections, pages and workflows written by a model from ' +
