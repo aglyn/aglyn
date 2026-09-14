@@ -32,7 +32,7 @@ import useModifyDocCallback, {
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
 // The refused cadence is shared policy — see `scheduleRefusedReopen` in
-// `firestore-denial-reporter.ts` (AGL-1066, AGL-1440, AGL-2944).
+// `firestore-denial-reporter.ts` (AGL-1066, AGL-1440, AGL-2944, AGL-2945).
 
 /**
  * Raw `onSnapshot` listener with its own retry/backoff instead of
@@ -182,8 +182,9 @@ export function useDocData<T>(
             resolveFirstValueRef.current?.()
             // A refusal streak keeps a slow road back for a recovery nobody
             // announced — see the same branch in `use-firestore-collection`.
-            // The cadence splits on session-vs-ref evidence (AGL-1440) and
-            // waits while the tab is hidden (AGL-2944).
+            // The cadence splits on session-vs-ref evidence (AGL-1440), grows
+            // with the streak's age (AGL-2945) and waits while the tab is
+            // hidden (AGL-2944).
             if (deniedStreak > MAX_RETRIES) {
               cancelRefusedReopen = scheduleRefusedReopen(
                 subscribe,

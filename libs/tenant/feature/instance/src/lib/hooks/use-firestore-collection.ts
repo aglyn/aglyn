@@ -41,13 +41,13 @@ const MAX_RETRIES = 5
 /*
  * The cadence once a refusal streak has outlived the retry budget lives in
  * `firestore-denial-reporter.ts` (`scheduleRefusedReopen`), shared by all
- * three listener hooks: 2s while the fault could be the whole session — that
- * is what recovers the page after a heal nobody announced, and the ceiling
- * on it is the 38 AGL-1358 write guards — and 60s once another listener's
- * server answer proves the session reads and this refusal is about the ref
- * (AGL-1440). A hidden tab reopens nothing until it is visible again
- * (AGL-2944). A heal broadcast reopens instantly regardless (see
- * `subscribeFirestoreSessionHeal`).
+ * three listener hooks. It starts at 2s while the fault could be the whole
+ * session and at 60s once another listener's server answer proves the
+ * session reads and this refusal is about the ref (AGL-1440), then grows
+ * with the streak's age to a five-minute ceiling (AGL-2945). A hidden tab
+ * sets no timer (AGL-2944). The tab becoming visible, the window regaining
+ * focus and a heal broadcast (`subscribeFirestoreSessionHeal`) all reopen
+ * at once.
  */
 
 export type FirestoreCollectionStatus = 'loading' | 'success' | 'error'
@@ -348,8 +348,9 @@ export function useFirestoreCollection<T = DocumentData>(
              * Any OTHER terminal error still stops exactly as before — this
              * is deliberately keyed on the refusal streak, not on `attempt`.
              * How slow the road is depends on whether the refusal looks like
-             * the session or the ref (AGL-1440), and a hidden tab waits to be
-             * looked at (AGL-2944) — see `scheduleRefusedReopen`.
+             * the session or the ref (AGL-1440) and on how long it has
+             * lasted (AGL-2945), and a hidden tab waits to be looked at
+             * (AGL-2944) — see `scheduleRefusedReopen`.
              */
             if (deniedStreak > MAX_RETRIES) {
               cancelRefusedReopen = scheduleRefusedReopen(
