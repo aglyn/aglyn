@@ -39,6 +39,14 @@ import {
   type AiJobSummary,
 } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import { aiOutputTargetType } from '@aglyn/aglyn/app-utils/ai-activity-actions'
+import {
+  logAiJobCanceled,
+  logAiJobCreated,
+  logAiJobNeedsInput,
+  logAiJobOutput,
+  type AiActivityActor,
+} from './ai-activity'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from './ai-runtime'
 import {
   runAiJobTextStep,
@@ -200,9 +208,17 @@ export interface CreateAiJobInput {
   brief: string
   inputs?: Record<string, unknown>
   createdBy: string
+  /** The creator's address, for the activity row; the document stores the uid only. */
+  createdByEmail?: string | null
 }
 
-/** A new job, `queued`, with its step plan laid out and nothing run. */
+/**
+ * A new job, `queued`, with its step plan laid out and nothing run.
+ *
+ * The activity row is written once the document is, so the feed never names
+ * a job that does not exist. The brief's length stands in for the brief,
+ * which is the customer's own text and is not logged (AGL-2929).
+ */
 export async function createAiJob(
   firestore: Firestore,
   input: CreateAiJobInput,
@@ -241,6 +257,16 @@ export async function createAiJob(
     lease: null,
   }
   await ref.set(data)
+  await logAiJobCreated(
+    input.orgId,
+    { uid: input.createdBy, email: input.createdByEmail ?? null },
+    {
+      jobId: ref.id,
+      kind: input.kind,
+      briefLength: brief.length,
+      hostId: input.hostId ?? null,
+    },
+  )
   return { ...(data as unknown as Omit<AiJob, '$id'>), $id: ref.id }
 }
 
@@ -609,14 +635,20 @@ export async function markAiJobNeedsInput(
  * not wait for a step in flight: the runner holding the lease finishes its
  * provider call, records what it cost, and finds the job canceled when it
  * goes to complete it.
+ *
+ * The activity row is written only when the cancel changed something: a
+ * second cancel of the same job is not a second act. `actor` is the member
+ * who canceled; a cancel with nobody named is recorded as nobody's rather
+ * than as the creator's.
  */
 export async function cancelAiJob(
   firestore: Firestore,
   orgId: string,
   jobId: string,
   now = new Date(),
+  actor: AiActivityActor | null = null,
 ): Promise<{ job: AiJob; changed: boolean }> {
-  return transition(firestore, orgId, jobId, (current) =>
+  const result = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
       : {
@@ -626,6 +658,13 @@ export async function cancelAiJob(
           updatedAt: now,
         },
   )
+  if (result.changed) {
+    await logAiJobCanceled(orgId, actor ?? { uid: null }, {
+      jobId,
+      kind: result.job.kind,
+    })
+  }
+  return result
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────────
@@ -716,6 +755,12 @@ export interface RunAiJobStepOptions {
   org?: Partial<AglynOrgBilling> | null
   /** Ends the provider call when the caller's budget does. */
   signal?: AbortSignal
+  /**
+   * The person on the request when a route runs the step inline. The beat
+   * has none: what a step produces is then credited to the job's creator,
+   * whose brief it is, never to nobody (AGL-2929).
+   */
+  actor?: AiActivityActor
 }
 
 export type AiJobStepRun =
@@ -821,12 +866,23 @@ export async function runAiJobStep(
     }
   }
   if (!reservation.allowed) {
-    return {
-      outcome: 'needs_input',
-      job: await markAiJobNeedsInput(
-        firestore, orgId, jobId, aiJobRefusalText(org, reservation), now,
-      ),
+    const refusal = aiJobRefusalText(org, reservation)
+    const parked = await markAiJobNeedsInput(firestore, orgId, jobId, refusal, now)
+    // Nobody parked the job — the meter did — so the row carries no actor
+    // rather than the creator's name on an act they did not perform. Only
+    // when the job was not already parked for this: the reason the last
+    // park stored survives the beat's re-queue, so a job the meter refuses
+    // again on its hourly retry is one row, not one an hour; a different
+    // ceiling is a new row. The meter names a ceiling on every refusal; the
+    // guard narrows the type.
+    if (reservation.refusedBy && job.error !== refusal) {
+      await logAiJobNeedsInput(orgId, { uid: null }, {
+        jobId,
+        kind: job.kind,
+        reason: reservation.refusedBy,
+      })
     }
+    return { outcome: 'needs_input', job: parked }
   }
 
   let outcome: AiJobStepOutcome
@@ -906,6 +962,7 @@ export async function runAiJobStep(
     { status: 'done', creditsSpent: credits, outputs: outcome.outputs },
     now,
   )
+  const actor: AiActivityActor = options.actor ?? { uid: job.createdBy }
   for (const output of outcome.outputs) {
     await writeAiJobAudit(firestore, {
       action: 'ai.job.output',
@@ -919,6 +976,18 @@ export async function runAiJobStep(
         hostId: output.hostId,
         label: output.label,
         credits,
+      },
+    })
+    // The customer-visible row, one per output: the label names the thing,
+    // never its text, which is the site's content.
+    await logAiJobOutput(orgId, actor, {
+      jobId,
+      hostId: output.hostId,
+      resource: {
+        type: aiOutputTargetType(output.resource),
+        id: output.id,
+        name: output.label,
+        versionId: output.versionId ?? null,
       },
     })
   }

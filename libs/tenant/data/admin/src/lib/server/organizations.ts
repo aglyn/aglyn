@@ -892,19 +892,55 @@ export function aiPermissionRefusal(permission: AiPermission): Response {
 }
 
 /**
+ * An org-wide member's AI verdict on the org axis, read fresh (AGL-2929):
+ * what `memberHasAiPermission` answers for them with no site named, as a
+ * whole map. `null` for a uid with no member document and for a site
+ * collaborator, whose AI is decided per site by `setHostAiPermissions` and
+ * has no org-level verdict to compare. Read on either side of a membership
+ * write, it is how the members route tells which AI keys the write moved.
+ */
+export async function resolveMemberAiPermissionsOnOrg(
+  orgId: string,
+  uid: string,
+): Promise<Record<AiPermission, boolean> | null> {
+  const snapshot = await firestore()
+    .collection('orgs')
+    .doc(orgId)
+    .collection('members')
+    .doc(uid)
+    .get()
+  if (!snapshot.exists) return null
+  const member = { $id: uid, ...snapshot.data() } as AglynOrgMember
+  if (!isOrgWideMember(member)) return null
+  const granted = await resolveMemberOrgPermissions(orgId, member)
+  return { 'ai.use': granted['ai.use'], 'ai.generate': granted['ai.generate'] }
+}
+
+/** A collaborator's per-site AI verdict on either side of a toggle write. */
+export interface HostAiPermissionsWrite {
+  /** The verdict before the write; `null` when the member had no access to the site. */
+  before: Record<AiPermission, boolean> | null
+  after: Record<AiPermission, boolean>
+}
+
+/**
  * Set a collaborator's per-site AI toggles (AGL-2927) and re-project.
  *
  * A merge on the nested map, so the member's other sites and every other
  * field stay untouched; keys outside the AI catalog are dropped rather than
  * stored, and a non-boolean is ignored rather than coerced. Re-projection is
  * scoped to the one host whose `memberPermissions` changed.
+ *
+ * The verdict before the write comes back beside the one after it, because
+ * the caller records one activity row per key that moved (AGL-2929) and a
+ * toggle set to the value it already had is not a change.
  */
 export async function setHostAiPermissions(options: {
   orgId: string
   uid: string
   hostId: string
   permissions: Partial<Record<string, unknown>>
-}): Promise<Record<AiPermission, boolean>> {
+}): Promise<HostAiPermissionsWrite> {
   const { orgId, uid, hostId } = options
   const accepted: Partial<Record<AiPermission, boolean>> = {}
   for (const key of AI_PERMISSION_KEYS) {
@@ -912,15 +948,18 @@ export async function setHostAiPermissions(options: {
     if (typeof value === 'boolean') accepted[key] = value
   }
   const ref = firestore().collection('orgs').doc(orgId).collection('members').doc(uid)
+  const stored = { $id: uid, ...(await ref.get()).data() } as AglynOrgMember
+  const before = resolveCollaboratorAiPermissions(stored, hostId)
   await ref.set({ hostPermissions: { [hostId]: accepted } }, { merge: true })
   await syncOrgAuthProjections(orgId, hostId)
   const member = { $id: uid, ...(await ref.get()).data() } as AglynOrgMember
-  return (
-    resolveCollaboratorAiPermissions(member, hostId) ?? {
+  return {
+    before,
+    after: resolveCollaboratorAiPermissions(member, hostId) ?? {
       'ai.use': false,
       'ai.generate': false,
-    }
-  )
+    },
+  }
 }
 
 export async function listOrgMembers(

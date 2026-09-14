@@ -30,6 +30,8 @@
  * `AI_ACTIVITY_ACTION_LABELS` fails the type, not the reader.
  */
 
+import type { AiJobOutputResource } from '../foundation/definitions/ai-jobs.types'
+
 /** The action code each AI writer stores. */
 export const AI_ACTIVITY_ACTIONS = {
   jobCreated: 'ai.job.created',
@@ -73,9 +75,21 @@ export const AI_ACTIVITY_FILTER_LABEL = 'AI'
 /**
  * Why a generation stopped and asked for a person (AGL-2904): the plan's
  * band ran out, the org's own ceiling refused, the monthly message cap or
- * the job's own token budget did.
+ * the job's own token budget did — or, on the Free taste (AGL-2925), one of
+ * its own precautions: the account's credits, its daily request cap, a
+ * pause after declined briefs, or the platform's day of free spend. The
+ * union is the meter's `AssistRefusedBy` less its `null`, so a ceiling the
+ * meter can name is one the feed can label.
  */
-export type AiJobNeedsInputReason = 'band' | 'cap' | 'messages' | 'budget'
+export type AiJobNeedsInputReason =
+  | 'band'
+  | 'cap'
+  | 'messages'
+  | 'budget'
+  | 'account'
+  | 'requests'
+  | 'refusals'
+  | 'platform'
 
 export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
   AiJobNeedsInputReason,
@@ -85,6 +99,52 @@ export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
   cap: 'the overage ceiling was reached',
   messages: 'the monthly message cap was reached',
   budget: 'the job budget was reached',
+  account: 'the account’s free AI credits are used up',
+  requests: 'the daily free request cap was reached',
+  refusals: 'free generation is paused for the day after declined briefs',
+  platform: 'free AI generation is paused for the day',
+}
+
+/**
+ * The feed target types a generation job's output can be filed under: the
+ * kinds both activity logs know, so the org row and its host copy share a
+ * shape.
+ */
+export type AiOutputTargetType =
+  | 'screen'
+  | 'layout'
+  | 'component'
+  | 'template'
+  | 'workflow'
+  | 'content'
+
+/**
+ * Where the feed files each resource kind a job can write (AGL-2904).
+ *
+ * A job names its output by the resource it wrote, and the activity logs
+ * know a narrower set of targets. The map is total, so a resource kind
+ * added to the job document must say where the feed shows it before the
+ * machine can log it. `reusableComponent` is the feed's `component`; a
+ * `text` output is copy, which the feed files as `content`; the kinds whose
+ * runners have not shipped are content of the site too, and are filed there
+ * until a target of their own exists.
+ */
+const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = {
+  screen: 'screen',
+  reusableComponent: 'component',
+  layout: 'layout',
+  template: 'template',
+  form: 'content',
+  emailScreen: 'content',
+  campaign: 'content',
+  product: 'content',
+  experiment: 'content',
+  workflow: 'workflow',
+  text: 'content',
+}
+
+export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {
+  return AI_OUTPUT_TARGET_TYPES[resource]
 }
 
 /** Whether a stored action is one of the AI codes above. */

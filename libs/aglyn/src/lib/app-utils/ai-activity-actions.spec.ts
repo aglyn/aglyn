@@ -28,6 +28,7 @@ import {
   AI_ACTIVITY_ACTION_LABELS,
   AI_ACTIVITY_ACTION_LIST,
   aiActivityActionLabel,
+  aiOutputTargetType,
   isAiActivityAction,
   staffAuditActionGroup,
   staffAuditActionGroupLabel,
@@ -66,6 +67,21 @@ describe('the catalog', () => {
     expect(isAiActivityAction('ai.something.else')).toBe(false)
     expect(isAiActivityAction(undefined)).toBe(false)
     expect(aiActivityActionLabel('Saved the screen')).toBeUndefined()
+  })
+})
+
+describe('where the feed files a job output', () => {
+  it('names a target both logs know for every resource kind a job can write', () => {
+    expect(aiOutputTargetType('screen')).toBe('screen')
+    expect(aiOutputTargetType('reusableComponent')).toBe('component')
+    expect(aiOutputTargetType('layout')).toBe('layout')
+    expect(aiOutputTargetType('template')).toBe('template')
+    expect(aiOutputTargetType('workflow')).toBe('workflow')
+    // Copy is content; so are the kinds whose runners have not shipped.
+    expect(aiOutputTargetType('text')).toBe('content')
+    for (const resource of ['form', 'emailScreen', 'campaign', 'product', 'experiment'] as const) {
+      expect(aiOutputTargetType(resource)).toBe('content')
+    }
   })
 })
 

@@ -178,6 +178,7 @@ export async function POST(request: Request): Promise<Response> {
         brief: parsed.brief,
         inputs: parsed.inputs,
         createdBy: gate.uid,
+        createdByEmail: gate.decoded.email ?? null,
       },
       now,
     )
@@ -199,6 +200,9 @@ export async function POST(request: Request): Promise<Response> {
     reservation: gate.reservation,
     org: gate.org,
     signal: AbortSignal.timeout(AI_JOB_INLINE_BUDGET_MS),
+    // The caller is on the request, so what the inline step produces is
+    // attributed with their address; the beat's steps carry the uid alone.
+    actor: { uid: gate.uid, email: gate.decoded.email ?? null },
   })
   if (run.outcome === 'not-claimable') {
     // A job created a moment ago has a claimable first step; anything else

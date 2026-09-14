@@ -56,6 +56,8 @@ import {
 
 const mockVerifyIdToken = jest.fn()
 const mockLogOrgActivity = jest.fn(async () => undefined)
+/** The coded AI row per key a save moved (AGL-2929), captured at the barrel. */
+const mockLogAiPermissionChanged = jest.fn(async () => undefined)
 /**
  * The projection re-run this route owes the rules.
  *
@@ -162,6 +164,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgDoc: async () => ({ $id: 'org-1', plan: 'enterprise' }),
   lockdownRefusal: async () => null,
   logOrgActivity: (...args: unknown[]) => mockLogOrgActivity(...(args as [])),
+  logAiPermissionChanged: (...args: unknown[]) =>
+    mockLogAiPermissionChanged(...(args as [])),
   memberHasOrgPermission: async () => mockHasPermission,
   syncOrgAuthProjections: (...args: unknown[]) =>
     mockSyncOrgAuthProjections(...(args as [])),
@@ -178,9 +182,11 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => {
   const permissions = jest.requireActual('@aglyn/aglyn/app-utils/org-permissions')
+  const ai = jest.requireActual('@aglyn/aglyn/app-utils/ai-permissions')
   return {
     __esModule: true,
     ...permissions,
+    aiPermissionChanges: ai.aiPermissionChanges,
     createResourceUid: () => 'role-new',
     pluginRequestFromWeb: async (request: Request) => {
       const url = new URL(request.url)
@@ -464,5 +470,67 @@ describe('deleting a role clears every carrier (AGL-2334)', () => {
     })
     expect(response.status).toBe(403)
     expect(store['orgs/org-1/roles']['role-doomed']).toBeDefined()
+  })
+})
+
+describe('an AI key moved on a role is an activity row (AGL-2929)', () => {
+  const ACTOR = { uid: 'user-1', email: 'a@b.co' }
+  const save = (body: Record<string, unknown>) =>
+    call(rolesPost, { method: 'POST', body: { orgId: 'org-1', action: 'save', ...body } })
+
+  beforeEach(() => {
+    store['orgs/org-1/roles'] = {
+      'role-mk': {
+        name: 'Marketing',
+        permissions: { 'ai.use': true, 'ai.generate': true, 'members.manage': false },
+      },
+    }
+  })
+
+  it('one row per AI key that moved, on the role, attributed to the caller', async () => {
+    const response = await save({
+      roleId: 'role-mk',
+      name: 'Marketing',
+      permissions: { 'ai.use': true, 'ai.generate': false, 'members.manage': true },
+    })
+    expect(response.status).toBe(200)
+    // `members.manage` moved too, and is not an AI key: no row for it.
+    expect(mockLogAiPermissionChanged).toHaveBeenCalledTimes(1)
+    expect(mockLogAiPermissionChanged).toHaveBeenCalledWith('org-1', ACTOR, {
+      subject: { type: 'role', id: 'role-mk', name: 'Marketing' },
+      permission: 'ai.generate',
+      granted: false,
+    })
+  })
+
+  it('nothing when the save leaves the AI keys where they were', async () => {
+    const response = await save({
+      roleId: 'role-mk',
+      name: 'Marketing (renamed)',
+      permissions: { 'ai.use': true, 'ai.generate': true, 'members.manage': true },
+    })
+    expect(response.status).toBe(200)
+    expect(mockLogOrgActivity).toHaveBeenCalledTimes(1)
+    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
+  })
+
+  it('a new role that sets an AI key writes the row for that key', async () => {
+    const response = await save({
+      name: 'Writers',
+      permissions: { 'ai.use': true, 'ai.generate': false },
+    })
+    expect(response.status).toBe(200)
+    expect(mockLogAiPermissionChanged.mock.calls.map((args: unknown[]) => args[2])).toEqual([
+      {
+        subject: { type: 'role', id: 'role-new', name: 'Writers' },
+        permission: 'ai.use',
+        granted: true,
+      },
+      {
+        subject: { type: 'role', id: 'role-new', name: 'Writers' },
+        permission: 'ai.generate',
+        granted: false,
+      },
+    ])
   })
 })

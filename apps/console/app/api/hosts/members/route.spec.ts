@@ -52,9 +52,12 @@ const mockVerifyIdToken = jest.fn()
 const mockLogHostActivity = jest.fn(async (..._args: unknown[]) => undefined)
 const mockGrantHostAccess = jest.fn(async (..._args: unknown[]) => undefined)
 const mockRevokeHostAccess = jest.fn(async (..._args: unknown[]) => undefined)
-const mockSetHostAiPermissions = jest.fn(
-  async (..._args: unknown[]) => ({ 'ai.use': true, 'ai.generate': false }),
-)
+const mockSetHostAiPermissions = jest.fn(async (..._args: unknown[]) => ({
+  before: { 'ai.use': true, 'ai.generate': true },
+  after: { 'ai.use': true, 'ai.generate': false },
+}))
+/** The org feed's coded row per AI key a toggle moved (AGL-2929). */
+const mockLogAiPermissionChanged = jest.fn(async (..._args: unknown[]) => undefined)
 const mockFindUserByEmail = jest.fn()
 const mockCollaboratorSeatRefusal = jest.fn(
   async (..._args: unknown[]): Promise<Response | null> => null,
@@ -99,11 +102,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // route throws into its own catch, and every case here reads as a 500 that
   // looks exactly like the member operation itself regressing.
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
+  logAiPermissionChanged: (...args: unknown[]) => mockLogAiPermissionChanged(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   AI_PERMISSION_KEYS: ['ai.use', 'ai.generate'],
+  aiPermissionChanges: jest.requireActual('@aglyn/aglyn/app-utils/ai-permissions')
+    .aiPermissionChanges,
   createResourceUid: () => 'generated-id',
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
@@ -206,7 +212,11 @@ beforeEach(() => {
     email: 'admin@example.test',
     email_verified: true,
   })
-  mockHostData.mockReturnValue({ memberRoles: { 'u-1': 'admin' }, orgId: 'org-1' })
+  mockHostData.mockReturnValue({
+    memberRoles: { 'u-1': 'admin' },
+    orgId: 'org-1',
+    displayName: 'Acme',
+  })
   mockFindUserByEmail.mockResolvedValue({ record: { uid: 'uid-9', displayName: 'Nine' } })
   mockCollaboratorSeatRefusal.mockResolvedValue(null)
   // Re-armed every case, not merely cleared. `clearAllMocks` forgets the
@@ -379,6 +389,37 @@ describe('every membership change reaches the log, from the server (AGL-118)', (
       id: 'uid-9',
       name: 'nine@example.test',
     })
+    // The org feed's coded row (AGL-2929): one per key that moved — the
+    // toggle flipped generate only — on the site, naming the collaborator.
+    expect(mockLogAiPermissionChanged).toHaveBeenCalledTimes(1)
+    expect(mockLogAiPermissionChanged).toHaveBeenCalledWith(
+      'org-1',
+      { uid: 'u-1', email: 'admin@example.test' },
+      {
+        subject: { type: 'host', id: 'host-1', name: 'Acme · nine@example.test' },
+        permission: 'ai.generate',
+        granted: false,
+      },
+    )
+  })
+
+  it('writes no permission row when the toggle was already at that value (AGL-2929)', async () => {
+    docs.set('hosts/host-1/members/uid-9', {
+      email: 'nine@example.test',
+      role: 'author',
+      uid: 'uid-9',
+    })
+    mockSetHostAiPermissions.mockResolvedValueOnce({
+      before: { 'ai.use': true, 'ai.generate': false },
+      after: { 'ai.use': true, 'ai.generate': false },
+    })
+    const response = await call(PATCH, 'PATCH', {
+      hostId: 'host-1',
+      memberId: 'uid-9',
+      aiPermissions: { 'ai.generate': false },
+    })
+    expect(response.status).toBe(200)
+    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
   })
 
   it('refuses a malformed AI map, and an invited row that has no document to carry one', async () => {

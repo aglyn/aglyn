@@ -27,11 +27,12 @@ import {
   grantHostAccess,
   isImpersonationSession,
   lockdownRefusal,
+  logAiPermissionChanged,
   logHostActivity,
   revokeHostAccess,
   setHostAiPermissions,
 } from '@aglyn/tenant-data-admin'
-import { AI_PERMISSION_KEYS } from '@aglyn/aglyn/server'
+import { AI_PERMISSION_KEYS, aiPermissionChanges } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -291,7 +292,7 @@ async function handler(request: Request): Promise<Response> {
             { status: 409 },
           )
         }
-        const resolved = await setHostAiPermissions({
+        const { before, after: resolved } = await setHostAiPermissions({
           orgId,
           uid: String(member['uid']),
           hostId,
@@ -313,6 +314,22 @@ async function handler(request: Request): Promise<Response> {
             ...(member['email'] ? { name: String(member['email']) } : {}),
           },
         )
+        // The org feed's coded row per key that moved (AGL-2929), beside the
+        // site feed's sentence: the site feed answers what this collaborator
+        // may do here, the org feed answers who changed an AI permission
+        // anywhere in the workspace. A toggle set to the value it already
+        // had writes nothing.
+        const subjectName = [host['displayName'], member['email']]
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean)
+          .join(' · ')
+        for (const change of aiPermissionChanges(before, resolved)) {
+          await logAiPermissionChanged(orgId, actor, {
+            subject: { type: 'host', id: hostId, name: subjectName },
+            permission: change.permission,
+            granted: change.granted,
+          })
+        }
         return Response.json({ ok: true, aiPermissions: resolved }, { status: 200 })
       }
       await membersRef.doc(memberId).update({ role })

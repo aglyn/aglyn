@@ -48,7 +48,12 @@ export async function POST(
   const existing = await getAiJob(gate.firestore, gate.orgId, jobId)
   if (!existing) return Response.json({ error: 'Unknown job' }, { status: 404 })
   const now = new Date()
-  const { job, changed } = await cancelAiJob(gate.firestore, gate.orgId, jobId, now)
+  // The machine writes the org feed's row with this actor when the cancel
+  // changed something; the staff audit row below is this route's own.
+  const { job, changed } = await cancelAiJob(gate.firestore, gate.orgId, jobId, now, {
+    uid: gate.uid,
+    email: gate.decoded.email ?? null,
+  })
   if (changed) {
     await writeAiJobAudit(gate.firestore, {
       action: 'ai.job.cancel',

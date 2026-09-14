@@ -183,6 +183,27 @@ jest.mock('./ai-runtime', () => ({
   runAiRequest: (...args: unknown[]) => mockRunAiRequest(...args),
 }))
 
+/**
+ * The activity writers (AGL-2929), captured at the machine's seam. The row
+ * shape each one stores is proven in `ai-activity.spec.ts` against the real
+ * loggers; what this file pins is WHEN the machine calls them and WHO it
+ * names — and that the brief and the generated text never reach them.
+ */
+const mockAiActivity = {
+  logAiJobCreated: jest.fn(async (..._args: unknown[]) => undefined),
+  logAiJobOutput: jest.fn(async (..._args: unknown[]) => undefined),
+  logAiJobCanceled: jest.fn(async (..._args: unknown[]) => undefined),
+  logAiJobNeedsInput: jest.fn(async (..._args: unknown[]) => undefined),
+}
+jest.mock('./ai-activity', () => ({
+  __esModule: true,
+  logAiJobCreated: (...args: unknown[]) => mockAiActivity.logAiJobCreated(...args),
+  logAiJobOutput: (...args: unknown[]) => mockAiActivity.logAiJobOutput(...args),
+  logAiJobCanceled: (...args: unknown[]) => mockAiActivity.logAiJobCanceled(...args),
+  logAiJobNeedsInput: (...args: unknown[]) =>
+    mockAiActivity.logAiJobNeedsInput(...args),
+}))
+
 import {
   AI_JOB_LEASE_MS,
   AI_JOB_NEEDS_INPUT_RETRY_MS,
@@ -253,6 +274,7 @@ beforeEach(() => {
   mockDocs = new Map()
   mockAutoId = 0
   mockRunAiRequest.mockReset()
+  for (const writer of Object.values(mockAiActivity)) writer.mockClear()
   mockDocs.set(`orgs/${ORG}`, { plan: 'pro', billingStatus: 'active' })
   mockDocs.set('orgs/org-free', { plan: 'free' })
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -582,6 +604,106 @@ describe('runAiJobStep — the text step end to end', () => {
     await running
     const stored = await getAiJob(firestore, ORG, job.$id)
     expect(stored).toMatchObject({ status: 'canceled', creditsSpent: 6 })
+  })
+})
+
+describe('the activity log (AGL-2929)', () => {
+  const BRIEF = 'A two-line tagline for a coffee roaster.'
+
+  it('a created job is one row for its creator, naming the kind and the brief length, never the brief', async () => {
+    const job = await createAiJob(
+      firestore,
+      {
+        orgId: ORG,
+        hostId: 'host-1',
+        kind: 'text',
+        brief: BRIEF,
+        createdBy: 'uid-1',
+        createdByEmail: 'ada@example.test',
+      },
+      NOW,
+    )
+    expect(mockAiActivity.logAiJobCreated).toHaveBeenCalledTimes(1)
+    expect(mockAiActivity.logAiJobCreated).toHaveBeenCalledWith(
+      ORG,
+      { uid: 'uid-1', email: 'ada@example.test' },
+      { jobId: job.$id, kind: 'text', briefLength: BRIEF.length, hostId: 'host-1' },
+    )
+    expect(JSON.stringify(mockAiActivity.logAiJobCreated.mock.calls)).not.toContain('coffee')
+  })
+
+  it('every output is one row: credited to the creator when the beat ran the step, to the person on the request when a route did', async () => {
+    armCompletion()
+    const byBeat = await newTextJob()
+    await runAiJobStep(firestore, ORG, byBeat.$id, { owner: 'beat', now: NOW })
+    expect(mockAiActivity.logAiJobOutput).toHaveBeenCalledTimes(1)
+    expect(mockAiActivity.logAiJobOutput).toHaveBeenCalledWith(
+      ORG,
+      // The beat has no caller; the creator, whose brief it is, is named —
+      // never nobody.
+      { uid: 'uid-1' },
+      {
+        jobId: byBeat.$id,
+        hostId: 'host-1',
+        resource: { type: 'content', id: 'draft', name: 'Draft copy', versionId: null },
+      },
+    )
+    // The label names the output; the generated text is the site's content.
+    expect(JSON.stringify(mockAiActivity.logAiJobOutput.mock.calls)).not.toContain('Fresh coffee')
+
+    armCompletion()
+    const byRoute = await newTextJob()
+    await runAiJobStep(firestore, ORG, byRoute.$id, {
+      owner: 'route',
+      now: NOW,
+      actor: { uid: 'uid-1', email: 'ada@example.test' },
+    })
+    expect(mockAiActivity.logAiJobOutput).toHaveBeenCalledTimes(2)
+    expect(mockAiActivity.logAiJobOutput.mock.calls[1][1]).toEqual({
+      uid: 'uid-1',
+      email: 'ada@example.test',
+    })
+  })
+
+  it('a refused reservation is a needs_input row with the meter’s reason and no actor', async () => {
+    const job = await newTextJob({ orgId: 'org-free' })
+    // The platform's day of free spend at its ceiling (AGL-2925): the one
+    // rung that refuses a Free workspace's generation until the day rolls.
+    mockDocs.set(`platformAiFreeSpend/${assistUsageDay(NOW)}`, { estCostUsd: 25 })
+    await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'beat', now: NOW })
+    expect(mockAiActivity.logAiJobNeedsInput).toHaveBeenCalledTimes(1)
+    expect(mockAiActivity.logAiJobNeedsInput).toHaveBeenCalledWith(
+      'org-free',
+      { uid: null },
+      { jobId: job.$id, kind: 'text', reason: 'platform' },
+    )
+    expect(mockAiActivity.logAiJobOutput).not.toHaveBeenCalled()
+
+    // Rested an hour, still the same UTC day, so the beat re-queues it and
+    // the meter refuses it again for the same reason: parked again, but
+    // not a second row — the feed says a job paused, not that it is paused
+    // every hour.
+    const retried = await sweepAiJobs({
+      firestore,
+      owner: 'beat',
+      now: () => NOW.getTime() + AI_JOB_NEEDS_INPUT_RETRY_MS,
+    })
+    expect(retried.ran).toBe(1)
+    expect((await getAiJob(firestore, 'org-free', job.$id))?.status).toBe('needs_input')
+    expect(mockAiActivity.logAiJobNeedsInput).toHaveBeenCalledTimes(1)
+  })
+
+  it('a cancel that changed the job is one row for the member who canceled; a second cancel writes nothing', async () => {
+    const job = await newTextJob()
+    const bo = { uid: 'uid-2', email: 'bo@example.test' }
+    await cancelAiJob(firestore, ORG, job.$id, NOW, bo)
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledTimes(1)
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledWith(ORG, bo, {
+      jobId: job.$id,
+      kind: 'text',
+    })
+    await cancelAiJob(firestore, ORG, job.$id, NOW, bo)
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledTimes(1)
   })
 })
 

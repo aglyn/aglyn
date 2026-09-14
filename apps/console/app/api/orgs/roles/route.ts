@@ -17,8 +17,10 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  aiPermissionChanges,
   createResourceUid,
   ORG_PERMISSION_KEYS,
+  type AglynOrgCustomRole,
   type OrgPermission,
 } from '@aglyn/aglyn/server'
 import {
@@ -27,6 +29,7 @@ import {
   getOrgDoc,
   isImpersonationSession,
   lockdownRefusal,
+  logAiPermissionChanged,
   logOrgActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
@@ -145,11 +148,19 @@ async function handler(request: Request): Promise<Response> {
       const name = String(body?.name ?? '').trim()
       if (!name) return Response.json({ error: 'Name the role' }, { status: 400 })
       const roleId = String(body?.roleId ?? '') || createResourceUid()
-      await rolesRef.doc(roleId).set(
+      const roleRef = rolesRef.doc(roleId)
+      // The map as stored, read before the write: the AI keys the save
+      // moved are one activity row each (AGL-2929), and only a comparison
+      // can say which moved. A new role reads as nothing stored.
+      const stored = (await roleRef.get()).data() as
+        | Pick<AglynOrgCustomRole, 'permissions'>
+        | undefined
+      const permissions = sanitizePermissions(body?.permissions)
+      await roleRef.set(
         {
           name,
           description: String(body?.description ?? '').trim(),
-          permissions: sanitizePermissions(body?.permissions),
+          permissions,
         },
         { merge: true },
       )
@@ -176,6 +187,19 @@ async function handler(request: Request): Promise<Response> {
         body?.roleId ? 'Updated role' : 'Created role',
         { type: 'member', id: roleId, name },
       )
+      // Beside the sentence above, a coded row per AI key that moved, so
+      // the feed's AI chip finds who switched generation off for a role.
+      for (const change of aiPermissionChanges(stored?.permissions, permissions)) {
+        await logAiPermissionChanged(
+          orgId,
+          { uid: decoded.uid, email: decoded.email },
+          {
+            subject: { type: 'role', id: roleId, name },
+            permission: change.permission,
+            granted: change.granted,
+          },
+        )
+      }
       return Response.json({ ok: true, roleId }, { status: 200 })
     }
 

@@ -55,6 +55,35 @@ export function isAiPermission(value: unknown): value is AiPermission {
   return value === 'ai.use' || value === 'ai.generate'
 }
 
+/** One AI key that moved, and the direction it moved in. */
+export interface AiPermissionChange {
+  permission: AiPermission
+  granted: boolean
+}
+
+/**
+ * The AI keys whose value moved between two maps, in catalog order — what
+ * the activity log records one row each for (AGL-2929).
+ *
+ * A key the new map leaves unset is not a change: on a role it defers to
+ * the base role, on a site toggle to the host role, and neither is a grant
+ * or a revocation of its own. A key set for the first time is a change,
+ * because the verdict it produces is no longer the default's.
+ */
+export function aiPermissionChanges(
+  before: Partial<Record<AiPermission, boolean>> | null | undefined,
+  after: Partial<Record<AiPermission, boolean>> | null | undefined,
+): AiPermissionChange[] {
+  const changes: AiPermissionChange[] = []
+  for (const key of AI_PERMISSION_KEYS) {
+    const next = after?.[key]
+    if (typeof next !== 'boolean') continue
+    if (before?.[key] === next) continue
+    changes.push({ permission: key, granted: next })
+  }
+  return changes
+}
+
 /** The catalog label for an AI key — the word a refusal names. */
 export function aiPermissionLabel(permission: AiPermission): string {
   return (

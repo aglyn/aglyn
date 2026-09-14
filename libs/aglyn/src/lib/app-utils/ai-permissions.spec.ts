@@ -18,6 +18,7 @@
 import type { AglynOrgMember } from '../foundation'
 import {
   AI_PERMISSION_KEYS,
+  aiPermissionChanges,
   aiPermissionLabel,
   HOST_ROLE_AI_PERMISSIONS,
   projectHostMemberAiPermissions,
@@ -250,5 +251,33 @@ describe('the label a refusal names', () => {
   it('comes from the catalog, so the sentence and the role editor agree', () => {
     expect(aiPermissionLabel('ai.use')).toBe('Use AI assistance')
     expect(aiPermissionLabel('ai.generate')).toBe('Generate with AI')
+  })
+})
+
+describe('the keys a write moved (what the activity log records, AGL-2929)', () => {
+  it('names each key whose value changed, in catalog order, and nothing when none did', () => {
+    expect(
+      aiPermissionChanges(
+        { 'ai.use': true, 'ai.generate': true },
+        { 'ai.use': false, 'ai.generate': false },
+      ),
+    ).toEqual([
+      { permission: 'ai.use', granted: false },
+      { permission: 'ai.generate', granted: false },
+    ])
+    expect(
+      aiPermissionChanges(
+        { 'ai.use': true, 'ai.generate': false },
+        { 'ai.use': true, 'ai.generate': false },
+      ),
+    ).toEqual([])
+  })
+
+  it('a key set for the first time is a change; a key left unset is not', () => {
+    expect(aiPermissionChanges(null, { 'ai.generate': false })).toEqual([
+      { permission: 'ai.generate', granted: false },
+    ])
+    expect(aiPermissionChanges({ 'ai.generate': false }, {})).toEqual([])
+    expect(aiPermissionChanges({ 'ai.generate': false }, null)).toEqual([])
   })
 })

@@ -248,6 +248,25 @@ jest.mock('@aglyn/aglyn/server', () => ({
     '../../../../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ).checkEntitlement,
 }))
+/**
+ * The activity writers (AGL-2929), captured at the machine's seam: the row
+ * shapes are proven in `ai-activity.spec.ts`; what the routes owe is the
+ * actor — the caller, with their address, on the door they came through.
+ */
+const mockAiActivity = {
+  logAiJobCreated: jest.fn(async (..._args: unknown[]) => undefined),
+  logAiJobOutput: jest.fn(async (..._args: unknown[]) => undefined),
+  logAiJobCanceled: jest.fn(async (..._args: unknown[]) => undefined),
+  logAiJobNeedsInput: jest.fn(async (..._args: unknown[]) => undefined),
+}
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/ai-activity', () => ({
+  __esModule: true,
+  logAiJobCreated: (...args: unknown[]) => mockAiActivity.logAiJobCreated(...args),
+  logAiJobOutput: (...args: unknown[]) => mockAiActivity.logAiJobOutput(...args),
+  logAiJobCanceled: (...args: unknown[]) => mockAiActivity.logAiJobCanceled(...args),
+  logAiJobNeedsInput: (...args: unknown[]) =>
+    mockAiActivity.logAiJobNeedsInput(...args),
+}))
 
 import { GET as listJobs, POST as createJob, parseCreateAiJobBody } from './route'
 import { GET as jobEvents } from './[jobId]/events/route'
@@ -331,6 +350,7 @@ beforeEach(() => {
   mockAiPermitted = true
   mockAiPermissionAsks = []
   mockRunAiRequest.mockReset()
+  for (const writer of Object.values(mockAiActivity)) writer.mockClear()
   mockVerifyIdToken.mockReset()
   mockGetOrgForUser.mockReset()
   mockVerifyIdToken.mockResolvedValue({
@@ -474,6 +494,25 @@ describe('POST /api/ai/jobs — the green path', () => {
     const audit = [...mockDocs.entries()].filter(([path]) => path.startsWith('adminAudit/'))
     expect(audit).toHaveLength(1)
     expect(audit[0][1]).toMatchObject({ action: 'ai.job.output', actorUid: 'uid-1' })
+
+    // The customer-visible rows (AGL-2929): the job and its output, both
+    // attributed to the caller WITH their address — the route knows it, the
+    // beat would not.
+    const caller = { uid: 'uid-1', email: 'member@example.com' }
+    expect(mockAiActivity.logAiJobCreated).toHaveBeenCalledTimes(1)
+    expect(mockAiActivity.logAiJobCreated).toHaveBeenCalledWith(ORG, caller, {
+      jobId: job.id,
+      kind: 'text',
+      briefLength: VALID.brief.length,
+      hostId: 'host-1',
+    })
+    expect(mockAiActivity.logAiJobOutput).toHaveBeenCalledTimes(1)
+    expect(mockAiActivity.logAiJobOutput).toHaveBeenCalledWith(ORG, caller, {
+      jobId: job.id,
+      hostId: 'host-1',
+      resource: { type: 'content', id: 'draft', name: 'Draft copy', versionId: null },
+    })
+    expect(mockAiActivity.logAiJobNeedsInput).not.toHaveBeenCalled()
 
     // The brief rode in the user turn; the tone input beside it.
     const request = mockRunAiRequest.mock.calls[0][0] as { messages: Array<{ content: string }> }
@@ -697,6 +736,13 @@ describe('POST /api/ai/jobs/[jobId]/cancel', () => {
       target: `orgs/${ORG}/aiJobs/${job.id}`,
       after: { wasStatus: 'queued', kind: 'text' },
     })
+    // The org feed's row (AGL-2929), for the member who canceled.
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledTimes(1)
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledWith(
+      ORG,
+      { uid: 'uid-1', email: 'member@example.com' },
+      { jobId: job.id, kind: 'text' },
+    )
 
     const second = await cancelJob(
       post({ orgId: ORG }, { path: `/api/ai/jobs/${job.id}/cancel` }),
@@ -706,6 +752,8 @@ describe('POST /api/ai/jobs/[jobId]/cancel', () => {
     expect(
       [...mockDocs.keys()].filter((path) => path.startsWith('adminAudit/')),
     ).toHaveLength(1)
+    // A cancel that changed nothing is not a second act.
+    expect(mockAiActivity.logAiJobCanceled).toHaveBeenCalledTimes(1)
   })
 
   it('404 for a job id under another org, even for a member of both', async () => {
