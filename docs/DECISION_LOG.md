@@ -94,12 +94,12 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ## 2026-09-14 — The Aglyn AI add-on: a flat per-workspace line that unlocks generative building and widens the assist band
 
-- **Decided by:** recommendation recorded by the engineering session; owner confirmation pending (AGL-2895). The shape — one paid add-on, flat per workspace, one credit pool — and the figures below are the recommendation the code carries so the Stripe minting (AGL-2897) and the pricing page (AGL-2900) can be built against them; the owner's answer on AGL-2895 either ratifies them or moves them here.
+- **Decided by:** the account owner on 2026-09-14 (AGL-2895), confirming the recommendation the engineering session recorded the same day — one paid add-on, flat per workspace, one credit pool, the figures below — with one addition: the Free taste ships only together with abuse precautions (AGL-2925). The twelve live Stripe prices were minted on 2026-09-14 (AGL-2897); the pricing page card follows under AGL-2900.
 - **Scope:** pricing
 - **Evidence:** `PLAN_PRICING[*].aiAddonMonthlyUsd`, `AI_ADDON_CREDITS_PER_MONTH`, `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K` and `features.aiGenerative` on every `PLAN_ENTITLEMENTS` row in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `seatAddons.aiAddon` folded by `resolveOrgEntitlements` and billed by `orgListPriceMonthlyUsd`; `resolveAssistOverageRateUsdPer1k` in `libs/aglyn/src/lib/app-utils/assist-credits.ts`, read by the gate, the invoice and the refusal sentence; the `aiAddon` kind in `apps/console/utils/server/billing-addons.ts` (`STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]`); `apps/console/specs/tier-margin-floor.spec.ts` (every tier non-negative with the add-on band at 100% and its revenue counted; each band ≤ 50% of its price), `plan-entitlements.spec.ts`, `assist-credits.spec.ts`, `billing-addon-plan-coverage.spec.ts`; benchmarks — Zylo's 2025 SaaS pricing survey (an AI tier or add-on carries a 20–37% uplift on the base plan), aissist.io's AI add-on pricing benchmark, and the credit-priced AI add-ons of Framer, Webflow and HubSpot; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2896, AGL-2895, AGL-2897, AGL-2900.
 
-**No locked price moves; a new add-on line, recommended figures pending the
-owner's confirmation on AGL-2895.** Every base price, every band and every
+**No locked price moves; a new add-on line, its figures confirmed by the owner
+on AGL-2895.** Every base price, every band and every
 overage rate in `PLAN_PRICING` and `PLAN_ENTITLEMENTS` is where the 2026-08-18
 lock and its later entries put it. What is added is one line and one flag.
 
@@ -125,12 +125,14 @@ at $3.00 per 1,000 credits, Pro's rate, read through
 `resolveAssistOverageRateUsdPer1k` rather than written onto the plan row; every
 other tier keeps the rate it had.
 
-**What does not move.** Free's `assistCreditsPerMonth` stays 0 — a Free taste of
-the assistant is a separate pending decision. The assist overage ladder is
-unchanged. `check-pricing-drift`'s `LOCKED` pin has no place for an add-on
-ladder and is untouched; the Stripe prices are minted under AGL-2897 and the
-`/pricing` card lands under AGL-2900, so the add-on capacity table declares
-the card expected-absent until then.
+**What does not move.** Free's `assistCreditsPerMonth` stays 0 until AGL-2925
+lands: the confirmed Free taste is 300 credits a month behind a hard wall, per
+account rather than per workspace, and it ships together with its abuse
+precautions. The assist overage ladder is unchanged. `check-pricing-drift`'s
+`LOCKED` pin has no place for an add-on ladder and is untouched; the Stripe
+prices exist live since 2026-09-14 (AGL-2897) and the `/pricing` card lands
+under AGL-2900, so the add-on capacity table declares the card expected-absent
+until then.
 
 ---
 
