@@ -104,6 +104,8 @@ const METERS = [
 const EXEMPT: Record<string, string> = {
   'app/api/admin/enterprise-billing/route.ts':
     'Enterprise is quoted per deal and billed on an ad-hoc price, not a plan SKU (AGL-1110). Usage terms are part of the signed agreement, so metering it self-serve would silently add a charge nobody negotiated. Deliberately unmetered — and `meteredBackfillDecision` refuses `enterprise` for the same reason, so the webhook cannot add one behind the deal.',
+  'app/api/admin/org-ai/route.ts':
+    'Staff read-only view: it LISTS a customer\'s subscriptions (GET) to date the AI add-on item, and never creates or re-prices one.',
   'app/api/admin/org-billing/route.ts':
     'Staff read-only view: it LISTS a customer\'s subscriptions (GET) and never creates or re-prices one.',
   'app/api/billing/addons/route.ts':
