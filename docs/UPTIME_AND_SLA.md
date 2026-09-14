@@ -849,7 +849,7 @@ The external monitor AGL-1148 called for. Lives in **GCP Cloud Monitoring on
 `aglyn-main`** — already paid for (free tier: 1M uptime-check executions/month;
 current usage ≈ 216k), alerting built in, and not hosted on anything it
 monitors. **Every alert emails** notification channel `7043898327231541746`;
-eight of the 21 policies also post to Slack `#alerts (outages)`
+eight of the 22 policies also post to Slack `#alerts (outages)`
 (`12534132313907800068`).
 
 Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
@@ -875,6 +875,7 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `scheduled-jobs` | `app.aglyn.com/api/health/crons` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
+| Firestore rules denials | `rules/evaluation_count{result = DENY}` | > 5,000 in a trailing hour | metric |
 
 :::caution This table was re-read from the live project on 2026-09-14
 Fifteen checks, every one from three regions, every one green for the 24 hours
@@ -900,6 +901,22 @@ quoting it.
 
 Notes that keep these honest:
 
+- **`Firestore rules denials` is a cost alarm, not an outage one** (policy
+  `376530170935955049`, AGL-2949, email only, severity WARNING). Refused
+  listens bill the reads their rules perform, and the Firebase usage graph does
+  not show those reads. From Aug 20 to Sep 4 a dead-session listener loop ran
+  400K–1.7M denials a day, about $2 of reads that only the invoice ever
+  reported (AGL-2944). Normal is under 200 an hour; the loop peaked at 89K.
+  Replayed before it was created: over 5,000 in 12 hours of Aug 20 and 15
+  hours of Sep 3, never in the week after.
+  ⚠️ The metric is published under **two** monitored resource types with
+  identical values (`firestore.googleapis.com/Database` and
+  `firestore_instance`). The condition filters to the first. Query it the same
+  way, or a sum across both can double.
+  The threshold is absolute, and fine while legitimate denials are rare: after
+  AGL-2945 a stuck listener costs at most 12 an hour past its first, so 5,000
+  an hour is hundreds stuck at once. When legitimate denials grow with users,
+  move it to a ratio against `result = ALLOW`.
 - `rate-limiter`'s check and policy were created 2026-08-17 (`rate-limits
   health check failing (AGL-1717)`), closing the gap this note used to
   describe. The forced-failure lever still exists and is still the way to
@@ -1347,7 +1364,7 @@ minutes). Re-run the pass-rate query in
 ### The channel is unverified {#the-channel-is-unverified}
 
 🔴 **`notificationChannels/7043898327231541746` is UNVERIFIED, and every alert
-policy in this project points at it** — 13 of the 21 at nothing else.
+policy in this project points at it** — 14 of the 22 at nothing else.
 (Last re-tested before Slack was added; the verification test is a POST and
 has not been re-run since.) Establish this from the API, which will
 not tell you directly — `verificationStatus` is a valid field path on the
