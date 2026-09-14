@@ -1404,7 +1404,7 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'The same version history, the same block.',
   ],
   [
-    'apps/console/app/(app)/admin/assist-signals/page.tsx',
+    'libs/plugins/ai/src/lib/components/assist-signals-page.component.tsx',
     'Mined signal rows, which grow with usage. Another agent owns this file.',
   ],
   [

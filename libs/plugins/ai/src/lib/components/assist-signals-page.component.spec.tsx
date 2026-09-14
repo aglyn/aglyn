@@ -47,22 +47,17 @@
  */
 
 import { render, screen, waitFor, within } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 jest.mock('@aglyn/aglyn', () => ({
   // The leaderboard heads a column with the add-on's name (AGL-2930).
   aiAddonName: () => 'Aglyn AI',
   __esModule: true,
-  PLATFORM_BRAND_NAME: 'Aglyn',
-}))
-
-jest.mock('@aglyn/shared-data-enums', () => ({
-  __esModule: true,
-  ICON_VARIANT_SYMBOL_SECURE: { path: 'M0 0' },
 }))
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   __esModule: true,
-  Container: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   CardDisplay: ({
     header,
     children,
@@ -77,36 +72,18 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
 }))
 
-jest.mock('../components/layouts/dashboard.layout', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}))
-
-jest.mock('../components/staff-only.component', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}))
-
-jest.mock('../constants/route-links', () => ({
-  __esModule: true,
-  buildRoute: () => '/admin/assist-signals',
-  Route: {
-    ADMIN_OVERVIEW: 'ADMIN_OVERVIEW',
-    ADMIN_ASSIST_SIGNALS: 'ADMIN_ASSIST_SIGNALS',
-  },
-}))
-
+/**
+ * The signed-in staff reader: ONE held object, because the page keys its
+ * read on the uid and a double minted per render is a different reader
+ * every time.
+ */
+const mockUser = { uid: 'staff-1', getIdToken: async () => 'staff-token' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
-  useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
+  useUser: () => ({ data: mockUser }),
 }))
 
-jest.mock('../hooks/use-is-staff', () => ({
-  __esModule: true,
-  default: () => true,
-}))
-
-import AdminAssistSignals from '../app/(app)/admin/assist-signals/page'
+import AssistSignalsPage from './assist-signals-page.component'
 
 /**
  * A report the way the route serves it.
@@ -193,7 +170,7 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
 
   it('renders each tier and model with its OWN cost, not the first bucket everywhere', async () => {
     serve(report())
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
 
     // Each figure asserted INSIDE its own row. `entitled` and
     // `claude-sonnet-5` share a cost by construction — they are the same
@@ -217,11 +194,14 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
     const entitled = await rowFor('entitled')
     expect(entitled.getByText('2')).toBeTruthy()
     expect(entitled.getByText('95%')).toBeTruthy()
+    // Read once, from the plugin's own staff door.
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe('/api/ai/admin/signals')
   })
 
   it('puts the dearest line at the top of each breakdown', async () => {
     serve(report())
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
     await screen.findByText('entitled')
 
     // Read the order out of the TABLE ROWS, not out of the page text. The
@@ -244,7 +224,7 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
 
   it('shows cache writes beside cache reads, the premium class beside the cheap one', async () => {
     serve(report())
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
     expect(await screen.findByText('cache reads 90%')).toBeTruthy()
     expect(await screen.findByText('cache writes 8,192')).toBeTruthy()
   })
@@ -260,7 +240,7 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
    *=========================================*/
   it('moves when the measured cost moves, so a constant cannot pass', async () => {
     serve(report())
-    const first = render(<AdminAssistSignals />)
+    const first = render(<AssistSignalsPage basePath="/admin/assist-signals" />)
     expect(await (await rowFor('entitled')).findByText('$4.04')).toBeTruthy()
     first.unmount()
 
@@ -279,7 +259,7 @@ describe('the Assist cost breakdown reaches the screen (AGL-2340)', () => {
         },
       }),
     )
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
 
     // The tiers have swapped which one is expensive. Both the figures and
     // the ORDER must follow the data.
@@ -330,7 +310,7 @@ describe('zero spend is a finding, not an empty grid (AGL-2501)', () => {
         },
       }),
     )
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
 
     expect(
       await screen.findByText(/Nothing spent on these 8 turns/),
@@ -354,7 +334,7 @@ describe('zero spend is a finding, not an empty grid (AGL-2501)', () => {
         },
       }),
     )
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
 
     // THE ASSERTION that separates the two zeros. Three turns reached a
     // provider and priced at nothing, which is spend landing nowhere — the
@@ -415,7 +395,7 @@ describe('the workspace is named and the ranking states its cut (AGL-2501)', () 
         ranked: { docsGaps: 0, ungroundedRoutes: 0, orgs: 2 },
       }),
     )
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
 
     expect(await screen.findByText('Northwind Traders')).toBeTruthy()
     // The id it replaced is not also on screen — a name printed BESIDE the
@@ -442,7 +422,7 @@ describe('the workspace is named and the ranking states its cut (AGL-2501)', () 
         ranked: { docsGaps: 137, ungroundedRoutes: 0, orgs: 0 },
       }),
     )
-    const cut = render(<AdminAssistSignals />)
+    const cut = render(<AssistSignalsPage basePath="/admin/assist-signals" />)
     expect(
       await screen.findByText(/Showing the top 2 of 137 cited pages/),
     ).toBeTruthy()
@@ -457,7 +437,7 @@ describe('the workspace is named and the ranking states its cut (AGL-2501)', () 
         ranked: { docsGaps: 2, ungroundedRoutes: 0, orgs: 0 },
       }),
     )
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
     expect(
       await screen.findByText('Showing all 2 cited pages.'),
     ).toBeTruthy()
@@ -471,7 +451,27 @@ describe('the workspace is named and the ranking states its cut (AGL-2501)', () 
         ranked: { docsGaps: 1, ungroundedRoutes: 0, orgs: 0 },
       }),
     )
-    render(<AdminAssistSignals />)
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
     expect(await screen.findByText('Showing all 1 cited page.')).toBeTruthy()
+  })
+})
+
+/**
+ * THE BOARD KEEPS ITS ADDRESS (AGL-2939).
+ *
+ * The page moved out of the console into the AI plugin, and staff reach it
+ * by the URL and the tab it always had: the plugin registers it as a staff
+ * page with the old segment, and serves its read under its own prefix.
+ */
+describe('the board is the AI plugin\'s staff page, at the address it had (AGL-2939)', () => {
+  const source = (path: string) => readFileSync(resolve(__dirname, path), 'utf8')
+
+  it('is registered at /admin/assist-signals, and reads the plugin\'s staff door', () => {
+    expect(source('../plugin.ts')).toMatch(
+      /staffPages: \[\s*\{\s*id: 'assist-signals',\s*label: 'Assist signal',[\s\S]{0,400}Component: AssistSignalsPage,/,
+    )
+    expect(source('../server.ts')).toContain(
+      "registerPluginApiRoute('ai/admin/signals', { web: aiAdminSignals })",
+    )
   })
 })

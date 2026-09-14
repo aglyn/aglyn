@@ -22,7 +22,7 @@
  * "top 2 of 4" rather than imply the cut is the fleet.
  */
 
-import { rankAssistSpend, type AssistSpendRow } from '../utils/assist-signal-mining'
+import { rankAssistSpend, type AssistSpendRow } from './assist-signal-mining'
 
 const row = (
   orgId: string,

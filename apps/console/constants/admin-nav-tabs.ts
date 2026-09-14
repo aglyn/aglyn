@@ -154,11 +154,6 @@ function consoleAdminNavTabItems() {
       label: 'Maintenance',
       href: buildRoute(Route.ADMIN_MAINTENANCE),
     },
-    {
-      id: 'nav-tab-admin-assist-signals',
-      label: 'Assist signal',
-      href: buildRoute(Route.ADMIN_ASSIST_SIGNALS),
-    },
     // Directly before Sales tax, because the two read the same
     // `platformRevenue` rows for different questions: this one asks what Aglyn
     // earned, that one asks what is owed to the state (AGL-2486).

@@ -34,17 +34,18 @@ import {
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { assistRefusalCounts } from '@aglyn/tenant-data-admin/server/assist-refusals'
 import { assistUsageMonth } from '@aglyn/tenant-data-admin/server/assist-usage'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   assistSignalRow,
   mineAssistSignals,
   rankAssistSpend,
   type AssistSpendRow,
-} from '../../../../utils/assist-signal-mining'
+} from '../usage/assist-signal-mining'
 
 /**
- * The Assist docs-gap and cost mining view (AGL-1860, AGL-2252). Staff-gated,
- * read-only, and the only reader `assistSignals` has.
+ * The Assist docs-gap and cost mining view (AGL-1860, AGL-2252), served at
+ * `/api/ai/admin/signals` for the plugin's Assist signal staff page.
+ * Staff-gated, read-only, and the only reader `assistSignals` has.
  *
  * ## Why a route and not a client query
  *
@@ -52,8 +53,8 @@ import {
  * org block matches its subcollections BY NAME and carries no wildcard, so an
  * unlisted name is default-deny for every client. That is the property that
  * lets the collection hold cross-tenant analytics at all. Reading it therefore
- * goes through the Admin SDK behind the staff claim, exactly as the rest of
- * `/api/admin/*` does.
+ * goes through the Admin SDK behind the staff claim, exactly as every staff
+ * route does.
  *
  * ## The collection group, and the index it does not need
  *
@@ -132,7 +133,7 @@ async function readAssistSpendLeaderboard(
   try {
     return await rankAssistSpendForMonth(firestore, limit, month)
   } catch (error) {
-    console.error('[admin/assist-signals] spend leaderboard read failed', error)
+    console.error('[ai/admin/signals] spend leaderboard read failed', error)
     return { month, rows: [], ranked: 0, truncated: false, failed: true }
   }
 }
@@ -368,7 +369,7 @@ async function handler(request: Request): Promise<Response> {
       firestore,
       assistUsageDay(),
     ).catch((error) => {
-      console.error('[admin/assist-signals] free spend readout failed', error)
+      console.error('[ai/admin/signals] free spend readout failed', error)
       return undefined
     })
 
@@ -391,10 +392,9 @@ async function handler(request: Request): Promise<Response> {
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
-    console.error('[admin/assist-signals]', error)
+    console.error('[ai/admin/signals]', error)
     return Response.json({ error: 'Assist signal lookup failed' }, { status: 500 })
   }
 }
 
-export const dynamic = 'force-dynamic'
 export { handler as GET }

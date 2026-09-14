@@ -127,6 +127,7 @@ const PLUGIN_TOPICS = {
   actionsBuilder: '/marketing-and-automation/workflows-and-actions/actions-builder',
   aglynAssist: '/getting-started/aglyn-assist',
   aiMonitoring: '/staff-console/ai-monitoring',
+  assistSignals: '/staff-console/assist-signals',
   billing: '/workspace-and-billing/billing-and-plans/overview',
   bindings: '/building-sites/bindings/overview',
   bookings: '/commerce-and-bookings/bookings/overview',

@@ -1873,7 +1873,7 @@ service cloud.firestore {
     // `AI_FREE_DAILY_PLATFORM_CEILING_USD`. Deny ALL client access, staff
     // included: a client that could write it could un-pause the day or
     // pause it for everyone, and the figure is our provider bill. The staff
-    // readout goes through `/api/admin/assist-signals` on the Admin SDK.
+    // readout goes through `/api/ai/admin/signals` on the Admin SDK.
     //
     // Unmatched paths deny anyway; this match exists to carry the record.
     match /platformAiFreeSpend/{day} {

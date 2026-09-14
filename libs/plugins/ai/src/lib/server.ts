@@ -27,6 +27,7 @@ import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistFeedback } from './server/assist-feedback'
 import { GET as aiAdminOrg } from './server/ai-admin-org'
+import { GET as aiAdminSignals } from './server/ai-admin-signals'
 import { GET as aiAdminUser } from './server/ai-admin-user'
 import { GET as aiUsage } from './server/ai-usage'
 import { GET as billingCredits } from './server/billing-credits'
@@ -73,10 +74,12 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
   registerPluginApiRoute('ai/usage', { web: aiUsage })
-  // The staff doors (AGL-2928, AGL-2930): one org's AI in full, and one
-  // account's usage across its workspaces.
+  // The staff doors (AGL-2928, AGL-2930, AGL-2252): one org's AI in full,
+  // one account's usage across its workspaces, and the fleet's Assist
+  // signals behind the Assist signal staff page.
   registerPluginApiRoute('ai/admin/org', { web: aiAdminOrg })
   registerPluginApiRoute('ai/admin/user', { web: aiAdminUser })
+  registerPluginApiRoute('ai/admin/signals', { web: aiAdminSignals })
 }
 
 /**

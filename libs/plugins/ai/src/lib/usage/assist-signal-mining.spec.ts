@@ -108,13 +108,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 
-import { GET } from '../app/api/admin/assist-signals/route'
+import { GET } from '../server/ai-admin-signals'
 import {
   assistSignalRow,
   costSplitRows,
   mineAssistSignals,
   type AssistSignalRow,
-} from '../utils/assist-signal-mining'
+} from './assist-signal-mining'
 
 const signal = (over: Partial<AssistSignalRow> = {}): AssistSignalRow => ({
   orgId: 'org-1',
@@ -441,11 +441,11 @@ describe('the deflection rate an operator reads (AGL-2486)', () => {
   })
 })
 
-describe('/api/admin/assist-signals authorization (AGL-2252)', () => {
+describe('/api/ai/admin/signals authorization (AGL-2252)', () => {
   const get = (opts: { token?: string; limit?: string } = {}) =>
     GET(
       new Request(
-        `https://app.aglyn.com/api/admin/assist-signals${opts.limit ? `?limit=${opts.limit}` : ''}`,
+        `https://app.aglyn.com/api/ai/admin/signals${opts.limit ? `?limit=${opts.limit}` : ''}`,
         { headers: opts.token ? { authorization: `Bearer ${opts.token}` } : {} },
       ),
     )

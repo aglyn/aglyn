@@ -47,9 +47,9 @@
  *
  * ## WHAT THIS FILE HAS TO CATCH
  *
- * The whole chain is reachable from the console — `recordAssistExchange` is
- * exported through `@aglyn/tenant-data-admin`, which console code imports
- * everywhere — so every test drives the REAL writer and then the REAL route.
+ * The whole chain is reachable from the AI plugin's doors — the writer every
+ * assist turn meters through, and the staff route that reads it back — so
+ * every test drives the REAL writer and then the REAL route.
  *
  *  - EACH TURN'S OWN WORDS. Two failing turns with different questions, and
  *    each must come back carrying its own. A writer storing a constant, or a
@@ -153,9 +153,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   // The REAL writer. A stub would make this file assert that a mock agreed
   // with itself about what an exchange contains.
-  ...jest.requireActual(
-    '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
-  ),
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/assist-usage'),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -192,7 +190,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { recordAssistExchange } from '@aglyn/tenant-data-admin'
-import { GET } from '../app/api/admin/assist-signals/route'
+import { GET } from './ai-admin-signals'
 
 const ORG = 'org-1'
 
@@ -230,7 +228,7 @@ function rateDown(exchangeId: string) {
 const mine = async () =>
   (
     await GET(
-      new Request('https://app.aglyn.com/api/admin/assist-signals', {
+      new Request('https://app.aglyn.com/api/ai/admin/signals', {
         headers: { authorization: 'Bearer staff-token' },
       }),
     )
