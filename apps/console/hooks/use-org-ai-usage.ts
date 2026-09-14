@@ -19,7 +19,7 @@
 import { aiUsageMonthKeys } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { OrgAiUsageTableWire } from '../utils/ai-usage-wire'
 
 /**
@@ -62,6 +62,12 @@ export function useOrgAiUsage(
   options: { month?: string; hostId?: string; enabled?: boolean } = {},
 ): OrgAiUsageState {
   const { data: user } = useUser()
+  // The read is keyed on WHO is signed in, not on the user object's identity:
+  // a provider (or a test double) that hands back a fresh object per render
+  // would otherwise re-run the effect on every paint and never settle.
+  const uid = user?.uid ?? null
+  const userRef = useRef(user)
+  userRef.current = user
   const fallbackMonths = useMemo(() => aiUsageMonthKeys(), [])
   const month = options.month ?? fallbackMonths[0]
   const hostId = options.hostId ?? ''
@@ -73,7 +79,8 @@ export function useOrgAiUsage(
   const [epoch, setEpoch] = useState(0)
 
   useEffect(() => {
-    if (!orgId || !user || !enabled) return undefined
+    const user = userRef.current
+    if (!orgId || !uid || !user || !enabled) return undefined
     let active = true
     setState((previous) => ({ status: 'loading', data: previous.data }))
     void (async () => {
@@ -103,7 +110,7 @@ export function useOrgAiUsage(
     return () => {
       active = false
     }
-  }, [orgId, user, enabled, month, hostId, epoch])
+  }, [orgId, uid, enabled, month, hostId, epoch])
 
   const creditsByUid = useMemo(
     () => new Map((state.data?.rows ?? []).map((row) => [row.uid, row.credits])),
