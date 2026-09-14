@@ -392,6 +392,14 @@ staff of GDPR erasure requests past their 7-day hold.
 A staff toggle that serves 503s on the org's sites and shows the
 owner a banner.
 
+### [AI monitoring](ai-monitoring.md) {#ai-monitoring}
+
+One organization's AI in full on its staff page — the add-on, the credit
+pool and its parts, overage and refusals, generation jobs, the people spending
+the most, and the margin — plus the AI columns on the usage table and the
+Organizations list, the add-on's share on Margin utilization, and the month's
+spend leaderboard on Assist signal.
+
 ### [Sales tax return](sales-tax-return.md) {#sales-tax-return}
 
 The quarterly Texas return: pick a

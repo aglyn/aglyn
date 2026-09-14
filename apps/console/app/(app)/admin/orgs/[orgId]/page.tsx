@@ -83,6 +83,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
+import StaffOrgAiCard from '../../../../../components/staff-org-ai-card.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
@@ -1541,6 +1542,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       ) : null}
                     </CardDisplay>
                   ),
+                },
+                {
+                  // The org's AI usage in full (AGL-2930): the add-on, the
+                  // pool and its parts, overage, refusals, jobs, top users
+                  // and margin. The card fetches its own read.
+                  children: <StaffOrgAiCard orgId={orgId} />,
                 },
                 {
                   children: (

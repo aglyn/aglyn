@@ -80,6 +80,9 @@ export type AdminAuditKind = 'access' | 'change'
  */
 const ADMIN_AUDIT_ACCESS_ACTIONS: ReadonlySet<string> = new Set([
   'email.message-viewed',
+  // The staff AI card opening on an org (AGL-2930): a read of spend and
+  // per-user attribution, and nothing altered.
+  'org.ai-viewed',
 ])
 
 export function adminAuditKind(

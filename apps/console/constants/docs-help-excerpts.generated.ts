@@ -43,6 +43,7 @@ export const DOCS_HELP_EXCERPTS = {
   addSearch: 'Drop the Search Box element onto a screen and publish — the built-in search page does the rest.',
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
   aiAssist: 'Generate and rewrite copy, and build whole sections, with AI inside the Besigner.',
+  aiMonitoring: 'How staff watch one organization\'s AI usage — the add-on, the credit pool and its parts, overage and refusals, generation jobs, the people spending the most, the margin — and where the same figures appear across the staff console.',
   analytics: 'Built-in pageview analytics, the Traffic card and its growth figure, per-screen metrics, and average time on a screen.',
   animations: 'Add fade, slide and zoom motion to any element, stagger a row of cards, choose when it plays, and keep the page fast and accessible.',
   architectureMultiTenancy: 'How Aglyn organizes tenants — org workspaces, membership with per-site access, security rules, subdomains, and billing attribution.',

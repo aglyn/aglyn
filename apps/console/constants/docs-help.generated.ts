@@ -65,6 +65,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/ai-assist/overview',
     title: 'AI Assist',
   },
+  aiMonitoring: {
+    path: '/staff-console/ai-monitoring',
+    title: 'AI monitoring',
+  },
   analytics: {
     path: '/marketing-and-automation/analytics/overview',
     title: 'Analytics',
@@ -637,6 +641,7 @@ export const DOCS_HELP_ANCHORS = {
   addSearch: ['#steps', '#tips', '#related'],
   aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#where-an-answer-came-from', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   aiAssist: ['#copy-assist', '#ai-generate-section', '#who-can-use-it', '#limits', '#related'],
+  aiMonitoring: ['#the-ai-card', '#where-else', '#the-spend-leaderboard', '#alerts', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#traffic-card', '#traffic-delta', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#dwell-time', '#google-analytics', '#related'],
   animations: ['#add-an-animation', '#presets', '#plays', '#duration-and-delay', '#easing', '#stagger-children', '#replay-each-time', '#animations-do-not-play-on-the-canvas', '#accessibility', '#speed-and-layout', '#if-a-visitor-has-javascript-turned-off'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
@@ -753,7 +758,7 @@ export const DOCS_HELP_ANCHORS = {
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],
   sso: ['#setting-it-up', '#1-verify-your-domain', '#2-connect-your-identity-provider', '#rotating-your-signing-certificate', '#3-turn-it-on', '#how-it-works', '#enforcement', '#you-must-keep-one-way-in-that-does-not-go-through-your-idp', '#an-owner-who-signs-in-outside-your-identity-pool', '#or-a-break-glass-account-inside-the-pool', '#transferring-ownership-while-you-are-enforcing', '#if-we-cannot-check', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
-  staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#free-workspace-limit', '#entitlement-editor', '#users-admin', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#sales-tax-return', '#audit-log', '#coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
+  staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#free-workspace-limit', '#entitlement-editor', '#users-admin', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   supportAndCommunity: ['#support-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#related'],
   supportQueue: ['#triage', '#notifications', '#related'],
   supportTiers: ['#why-enterprise-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],

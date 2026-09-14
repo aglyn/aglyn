@@ -169,6 +169,54 @@ export function costSplitRows(
     .sort((a, b) => b.estCostUsd - a.estCostUsd || a.key.localeCompare(b.key))
 }
 
+/**
+ * One workspace on the month's spend leaderboard (AGL-2930).
+ *
+ * Read off `assistUsage/{month}` rather than off the signals: the signals
+ * carry every turn ever recorded and no month, so ranking them answers
+ * "who has spent the most since the beginning", and the board's question is
+ * "who is spending the most NOW". The month document is also where the
+ * refusal counter lives, so the row can say how often the org was refused
+ * beside how much it spent — the two numbers a staff reader compares.
+ */
+export interface AssistSpendRow {
+  orgId: string
+  orgLabel?: string | null
+  plan: string
+  aiAddon: boolean
+  /** Credits drawn this month, from the measured spend. */
+  credits: number
+  estCostUsd: number
+  refusals: {
+    band: number
+    cap: number
+    messages: number
+    budget: number
+    total: number
+  }
+}
+
+/**
+ * The leaderboard's ordering: dearest first, then most credits, then by id
+ * so two equal rows render in one stable order rather than the order the
+ * scan happened to return them in. Returns the top `limit` and how many
+ * were ranked, so the page can say "top 25 of 140" rather than imply the
+ * cut is the whole fleet.
+ */
+export function rankAssistSpend(
+  rows: readonly AssistSpendRow[],
+  limit: number,
+): { rows: AssistSpendRow[]; ranked: number } {
+  const sorted = [...rows].sort(
+    (a, b) =>
+      b.estCostUsd - a.estCostUsd ||
+      b.credits - a.credits ||
+      a.orgId.localeCompare(b.orgId),
+  )
+  const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : sorted.length
+  return { rows: sorted.slice(0, cap), ranked: sorted.length }
+}
+
 export interface AssistMiningReport {
   scanned: number
   /** True when the read hit its ceiling — see `mineAssistSignals`. */

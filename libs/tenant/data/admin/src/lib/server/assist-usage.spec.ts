@@ -369,7 +369,13 @@ describe('reserveAssistMessage — the cap must be spent BEFORE the tokens', () 
     // failing immediately, which is what proves it is live rather than
     // vacuously true.
     expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 10 })
-    expect(mockDocs.get(monthPath)).toBeUndefined()
+    // No COUNTER moved. The month document may now exist — a refusal is
+    // counted there under `refusals` (AGL-2930) — but `messages` must not.
+    const monthAfterRefusal = mockDocs.get(monthPath) as
+      | { messages?: unknown; refusals?: { messages?: unknown } }
+      | undefined
+    expect(monthAfterRefusal?.messages).toBeUndefined()
+    expect(monthAfterRefusal?.refusals?.messages).toBeTruthy()
   })
 
   it('THE FAIL-OPEN: concurrent requests cannot all pass the same cap', async () => {

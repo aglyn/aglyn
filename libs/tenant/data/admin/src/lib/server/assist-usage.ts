@@ -35,6 +35,7 @@ import {
   type PublicAssistCredits,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import { recordAssistRefusal } from './assist-refusals'
 
 /**
  * Aglyn Assist metering + the data loop (AGL-1860, phase 1).
@@ -599,6 +600,7 @@ export async function reserveAssistMessage(
       ? Number(monthlySnapshot.get('estCostUsd') ?? 0)
       : null
     if (!(used < limit)) {
+      recordAssistRefusal(firestore, orgId, month, 'messages')
       return {
         allowed: false,
         refusedBy: 'messages' as const,
@@ -618,6 +620,7 @@ export async function reserveAssistMessage(
     // counters untouched, exactly like the message refusal above: the point
     // of a spend ceiling is that the org above it spends nothing more.
     if (costLimitUsd !== null && costUsd !== null && !(costUsd < costLimitUsd)) {
+      recordAssistRefusal(firestore, orgId, month, ceilingIsBand ? 'band' : 'budget')
       return {
         allowed: false,
         refusedBy: ceilingIsBand ? ('band' as const) : ('budget' as const),
@@ -645,6 +648,7 @@ export async function reserveAssistMessage(
       costUsd !== null &&
       assistOverageCapReached(org, costUsd)
     ) {
+      recordAssistRefusal(firestore, orgId, month, 'cap')
       return {
         allowed: false,
         refusedBy: 'cap' as const,

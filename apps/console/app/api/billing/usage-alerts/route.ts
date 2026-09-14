@@ -71,6 +71,10 @@ import {
 } from '../../../../utils/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
 import {
+  aiAddonName,
+  hasAiAddon,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
   assistCeilingBreach,
   assistCogsAlertThresholdUsd,
   assistMarginBreach,
@@ -1101,13 +1105,26 @@ async function handler(request: Request): Promise<Response> {
         // bell can never say different things about the same number.
         const marginTitle =
           `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`
+        // The add-on state and the band, in the mail (AGL-2930): the same
+        // dollar figure is a finding on an org paying for the add-on and
+        // an incident on one that is not, and the reader should not have
+        // to open the console to know which.
+        const marginAddonClause = hasAiAddon(orgData as never)
+          ? `The ${aiAddonName()} add-on is on`
+          : `The ${aiAddonName()} add-on is off`
+        const marginBandCredits = resolveAssistCreditBudget(orgData as never)
+        const marginBandClause =
+          marginBandCredits === null
+            ? 'no AI credit band'
+            : `an AI credit band of ${marginBandCredits.toLocaleString()}`
         const marginBody =
           `${org.get('slug') ?? org.id} has run about ` +
           `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
           `tokens in ` +
           `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
           'threshold. Assist is a plan entitlement with no per-token ' +
-          'price, so this is margin, not revenue.'
+          'price, so this is margin, not revenue. ' +
+          `${marginAddonClause}, with ${marginBandClause}.`
         await notifyStaff({
           type: 'billing.usage',
           title: marginTitle,

@@ -46,6 +46,19 @@ export interface StaffOrgUsageMonth {
    */
   assistCostUsd?: number
   /**
+   * The credit view of the same spend (AGL-2930): what `report-usage` drew
+   * against the band, and the part past it that entered `billedCents`.
+   *
+   * `null` rather than 0 on a rollup written before the credit fields
+   * existed — a month that predates the meter drew nothing it can be
+   * measured by, and a `0` there would state that the org used no AI.
+   * Assist overage has no withheld twin: unlike form and contact overage it
+   * was billed from the day it was sold, so the dollar figure alone is the
+   * whole answer.
+   */
+  assistCredits?: number | null
+  assistOverageUsd?: number | null
+  /**
    * What the rollup recorded and nothing priced (AGL-2321).
    *
    * A detail LINE under the row rather than sixteen more columns: these are
@@ -215,6 +228,28 @@ export function assistPoolSentence(pool: StaffAssistPool): string {
     : `${name} add-on off — ${band}.`
 }
 
+/** A recorded count, or the dash that says the rollup predates it. */
+export function aiCreditsCell(value: number | null | undefined): string {
+  return value == null ? '—' : Math.round(value).toLocaleString()
+}
+
+/** A billed dollar figure, or the dash that says the rollup predates it. */
+export function aiOverageCell(value: number | null | undefined): string {
+  return value == null ? '—' : `$${Number(value).toFixed(2)}`
+}
+
+/** The columns every rollup row renders, in order — the spec pins them. */
+export const STAFF_ORG_USAGE_COLUMNS = [
+  'Month',
+  'Page views',
+  'Storage GB',
+  'Forms',
+  'Assist',
+  'AI credits used',
+  'AI overage billed ($)',
+  'Cost',
+] as const
+
 /**
  * The monthly usage rollup table (AGL-205), shared between the Organizations
  * list's Usage dialog and the org detail page's usage panel (AGL-939) so the
@@ -253,12 +288,11 @@ const StaffOrgUsageTable = ({
     <Table size="small">
       <TableHead>
         <TableRow>
-          <TableCell>{'Month'}</TableCell>
-          <TableCell align="right">{'Page views'}</TableCell>
-          <TableCell align="right">{'Storage GB'}</TableCell>
-          <TableCell align="right">{'Forms'}</TableCell>
-          <TableCell align="right">{'Assist'}</TableCell>
-          <TableCell align="right">{'Cost'}</TableCell>
+          {STAFF_ORG_USAGE_COLUMNS.map((column, index) => (
+            <TableCell key={column} align={index === 0 ? 'left' : 'right'}>
+              {column}
+            </TableCell>
+          ))}
         </TableRow>
       </TableHead>
       <TableBody>
@@ -304,6 +338,11 @@ const StaffOrgUsageTable = ({
               <TableCell align="right">
                 {`$${Number(row.assistCostUsd ?? 0).toFixed(4)}`}
               </TableCell>
+              {/* The credit view and the billed overage (AGL-2930) — the
+                  two figures a staff reader compares against the pool
+                  sentence above the table. */}
+              <TableCell align="right">{aiCreditsCell(row.assistCredits)}</TableCell>
+              <TableCell align="right">{aiOverageCell(row.assistOverageUsd)}</TableCell>
               <TableCell align="right">
                 {`$${row.costUsd.toFixed(2)}`}
                 {row.deltas?.costUsd != null ? (
@@ -323,7 +362,7 @@ const StaffOrgUsageTable = ({
               </TableCell>
             </TableRow>
             <TableRow>
-              <TableCell colSpan={6} sx={{ pt: 0 }}>
+              <TableCell colSpan={STAFF_ORG_USAGE_COLUMNS.length} sx={{ pt: 0 }}>
                 {recordedUsageLines(row.recorded).length ? (
                   recordedUsageLines(row.recorded).map((line) => (
                     <Typography
