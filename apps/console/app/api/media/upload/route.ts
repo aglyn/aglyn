@@ -32,6 +32,7 @@ import {
   scopeBillsStorageOverage,
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
+import { resolveUploadSite } from '../../../../utils/server/media-upload-site'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
 import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
@@ -181,6 +182,16 @@ async function handler(request: Request): Promise<Response> {
         orgId: scope.orgId,
       })
       if (refusal) return refusal
+    }
+    // The site the upload was made from, which the org's Default sharing can
+    // narrow the new asset to. A client claim, so it is checked before the
+    // body is even decoded — see `resolveUploadSite`.
+    const uploadSite = await resolveUploadSite(scope, body)
+    if ('error' in uploadSite) {
+      return Response.json(
+        { error: uploadSite.error.message },
+        { status: uploadSite.error.status },
+      )
     }
     const uploaded = Buffer.from(data, 'base64')
     /**
@@ -434,18 +445,18 @@ async function handler(request: Request): Promise<Response> {
       // and a serverless log keeps it for about an hour — same reasoning as
       // `variantsError` above. Absent on every clean asset.
       ...(svg?.changed ? { svgSanitized: svg.removed } : {}),
-      // Org-wide by default — today's behavior (AGL-1043). Stamping it on
-      // every new asset is what makes the scoped reads work at all:
-      // `array-contains-any` matches nothing on a doc lacking the field.
-      // Flipping this default to the uploading site is AGL-1048's
-      // `defaultResourceScope` decision, not this route's.
+      // The org's Default sharing (AGL-1048) applied to the site the upload
+      // was made from, which is All sites when the org chose that or when no
+      // site was on screen. Stamping it on every new asset is what makes the
+      // scoped reads work at all: `array-contains-any` matches nothing on a
+      // doc lacking the field.
       ...(scope.collection === 'orgs'
         ? {
             visibleTo: defaultScopeForNewResource({
               defaultResourceScope: (scope.billing as {
                 defaultResourceScope?: 'org' | 'host'
               }).defaultResourceScope,
-              hostId: String(body?.['forHostId'] ?? '') || null,
+              hostId: uploadSite.hostId,
             }),
           }
         : {}),

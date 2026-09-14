@@ -106,9 +106,11 @@ Three details worth knowing before you publish one:
 
 - A **dataset schema** installs as a brand-new dataset every time; it never
   merges into an existing one, since a schema change over existing rows would
-  reinterpret live data. `reference` fields are relinked to the installing
-  organization's datasets **by display name**, and any that can't be matched
-  are degraded to plain text — the installer is told which ones.
+  reinterpret live data. The new dataset is shared with every site in the
+  installing organization. `reference` fields are relinked **by display name**
+  to that organization's datasets that are also shared with every site, and
+  any that can't be matched are degraded to plain text — the installer is told
+  which ones.
 - An **email template** installs as an inactive version of the same catalog
   email it was designed for. The site owner activates it in the email
   designer, so installing can't silently replace an email a site is already

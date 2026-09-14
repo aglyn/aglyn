@@ -38,10 +38,12 @@ it in the console's model builder. You *can* send one on write (see
 ### Where a new dataset is visible {#dataset-visibility}
 
 A dataset created over the API is shared with **the whole organization**, so every
-site can bind to it. That is not configurable here, and it isn't the console's
-behavior either: the console offers a site picker because a site is on screen, and an
-API key is an organization credential with no site in context. If you need a dataset
-scoped to one site, create it in the console — or create it here and narrow it there.
+site can bind to it. That is not configurable here. In the console, the workspace's
+**Default sharing for new data and media** can start a dataset on one site, but only
+when it is created on that site's **Data** page. An API key is an organization
+credential with no site in context, so the setting has no site to narrow to. If you
+need a dataset scoped to one site, create it here and narrow its sharing in the
+console.
 
 This matters more than it looks. A dataset stored with no scope at all is visible to
 **no** site, so it would render nowhere while the API cheerfully answered `201`.

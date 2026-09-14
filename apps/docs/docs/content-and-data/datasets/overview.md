@@ -64,9 +64,24 @@ Datasets belong to the **workspace**, not to a single site, so one dataset can d
 on every site you run. When that isn't what you want, the **Sharing** control on each
 dataset decides which sites can see it:
 
-- **All sites** — everyone in the workspace, on every site. A dataset you create on a
-  Data page starts here.
+- **All sites** — everyone in the workspace, on every site.
 - **Selected sites…** — pick the sites that share it, up to 30.
+
+Where a new dataset starts depends on where you create it and on your workspace's
+**Default sharing for new data and media**, the setting at the top of the workspace
+[**Media** page](../media/overview.md#who-an-asset-is-shared-with):
+
+- **Created on a site's Data page** — it follows that setting. Set to **All sites**, the
+  dataset starts on **All sites**. Set to **Only the site they were created in**, it
+  starts shared with that site alone, and its control reads **Selected sites…** with
+  just that site picked.
+- **Created on the organization Data page** — it starts on **All sites** whatever the
+  setting says, because there is no site to limit it to.
+- **Installed from the Marketplace, or created through the REST API** — it starts on
+  **All sites** too. Both act for the whole organization, not for one site.
+
+The setting only decides where a new dataset starts. It changes nothing that already
+exists, and you can widen or narrow any dataset afterwards.
 
 A dataset with no sharing stored is visible to **no** site; its control reads **Not
 shared with any site** until you choose one of the two.

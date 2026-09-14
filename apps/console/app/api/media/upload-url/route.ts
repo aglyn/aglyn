@@ -35,6 +35,7 @@ import {
   scopeBillsStorageOverage,
 } from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
+import { resolveUploadSite } from '../../../../utils/server/media-upload-site'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
 import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
@@ -166,6 +167,18 @@ async function handler(request: Request): Promise<Response> {
         })
         if (refusal) return refusal
       }
+      // The site the upload is made from, checked here as well as at finalize
+      // so a site this org does not own is refused before any bytes move.
+      // Finalize is where it is written, and it checks again there.
+      {
+        const uploadSite = await resolveUploadSite(scope, body)
+        if ('error' in uploadSite) {
+          return Response.json(
+            { error: uploadSite.error.message },
+            { status: uploadSite.error.status },
+          )
+        }
+      }
       if (
         !Number.isFinite(sizeBytes) ||
         sizeBytes <= 0 ||
@@ -282,6 +295,19 @@ async function handler(request: Request): Promise<Response> {
         await file.delete().catch(() => undefined)
         return refusal
       }
+    }
+    // The site the upload was made from, which the org's Default sharing can
+    // narrow the new asset to — checked again rather than trusted from the
+    // mint, because this is the request that writes it. A refusal deletes the
+    // object like every other finalize refusal: it is already in the bucket,
+    // and without a document it is billed to nobody and readable by nobody.
+    const uploadSite = await resolveUploadSite(scope, body)
+    if ('error' in uploadSite) {
+      await file.delete().catch(() => undefined)
+      return Response.json(
+        { error: uploadSite.error.message },
+        { status: uploadSite.error.status },
+      )
     }
 
     /**
@@ -695,15 +721,16 @@ async function handler(request: Request): Promise<Response> {
       ...(contentSha256 ? { contentSha256 } : {}),
       // AGL-1474 — absent on every clean asset. See `/api/media/upload`.
       ...(svgRemoved.length ? { svgSanitized: svgRemoved } : {}),
-      // Org-wide by default, same as the direct upload route (AGL-1043) —
-      // the scoped reads need the field present on every asset.
+      // The org's Default sharing applied to the site the upload was made
+      // from, same as the direct upload route (AGL-1043/1048) — the scoped
+      // reads need the field present on every asset.
       ...(scope.collection === 'orgs'
         ? {
             visibleTo: defaultScopeForNewResource({
               defaultResourceScope: (scope.billing as {
                 defaultResourceScope?: 'org' | 'host'
               }).defaultResourceScope,
-              hostId: String(body?.['forHostId'] ?? '') || null,
+              hostId: uploadSite.hostId,
             }),
           }
         : {}),

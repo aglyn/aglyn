@@ -9,6 +9,30 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.121 — 2026-09-14
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.120...v1.0.0-beta.121)
+
+### Fixed
+
+- **data:** a member adds records only to a dataset they can see ([AGL-2894](https://linear.app/aglyn/issue/AGL-2894))
+- **media:** a file uploaded in a site follows Default sharing ([AGL-2892](https://linear.app/aglyn/issue/AGL-2892), [AGL-1048](https://linear.app/aglyn/issue/AGL-1048))
+- **data:** a dataset created from a site's Data page follows Default sharing ([AGL-2891](https://linear.app/aglyn/issue/AGL-2891))
+- **tools:** the promotion verdict grades a pinned release bump by its parent ([AGL-2890](https://linear.app/aglyn/issue/AGL-2890))
+
+### Documentation
+
+- **release:** back-merge the moment a pinned promotion merges ([AGL-2888](https://linear.app/aglyn/issue/AGL-2888), [AGL-2594](https://linear.app/aglyn/issue/AGL-2594))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **tools:** raise the checked-in Linear ceiling to AGL-2894 ([AGL-2894](https://linear.app/aglyn/issue/AGL-2894), [AGL-2893](https://linear.app/aglyn/issue/AGL-2893))
+- **tools:** raise the checked-in Linear ceiling to AGL-2892 ([AGL-2892](https://linear.app/aglyn/issue/AGL-2892), [AGL-2891](https://linear.app/aglyn/issue/AGL-2891))
+- **tools:** raise the checked-in Linear ceiling to AGL-2890 ([AGL-2890](https://linear.app/aglyn/issue/AGL-2890), [AGL-2889](https://linear.app/aglyn/issue/AGL-2889), [AGL-2863](https://linear.app/aglyn/issue/AGL-2863), [AGL-2887](https://linear.app/aglyn/issue/AGL-2887))
+
+</details>
+
 ## v1.0.0-beta.120 — 2026-09-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.119...v1.0.0-beta.120)

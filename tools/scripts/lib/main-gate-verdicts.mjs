@@ -74,6 +74,24 @@
 // The sweep must be on THE TIP. An ancestor's `full` graded different code, so
 // it cannot vouch for what is being shipped; it is reported as context for the
 // person deciding (how far back the last swept commit is) and never as a pass.
+//
+// ── A RELEASE BUMP ON A PINNED BRANCH IS GRADED BY ITS PARENT (AGL-2890) ───
+//
+// docs/RELEASING.md cuts the version bump on a `release/v*` branch so later
+// pushes to `main` cannot ride along, and opens the promotion PR from that
+// branch. The PR's head is therefore the `chore(release)` commit, which reaches
+// `main` only through the back-merge after the promotion merges. Main Gate
+// grades pushes to `main`, so it never writes a status on that commit, and
+// every pinned promotion graded "no verdict" with advice to re-run once a push
+// that will never happen had been graded.
+//
+// The rule above still decides the exception. A bump whose diff is only the
+// version fields and CHANGELOG.md ships its parent's code under a new number,
+// so the parent's verdict is the verdict on that code. The substitution is
+// exact or it does not happen: the caller proves the diff from git with
+// `releaseBumpProof`, the tip must carry no gate status of its own, the parent
+// must be in the range, and the reason names the commit that was graded. The
+// PR's own required checks still run on the bump itself.
 
 /** The prefix every Main Gate commit status shares. */
 export const MAIN_GATE_CONTEXT_PREFIX = 'main-gate/'
@@ -164,16 +182,132 @@ function lastSweptCommit(list) {
   return null
 }
 
+/** The subject `release-prepare.mjs` gives a bump: `chore(release): v<semver>`. */
+const RELEASE_SUBJECT =
+  /^chore\(release\): v\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?(?:\s|$)/
+
+/** Whether a subject is the one a release bump carries, before any git reads. */
+export function isReleaseSubject(subject) {
+  return RELEASE_SUBJECT.test(String(subject ?? ''))
+}
+
+/** The only paths a release bump writes. */
+const RELEASE_BUMP_PATHS = new Set([
+  'package.json',
+  'package-lock.json',
+  'CHANGELOG.md',
+])
+
+function parseJson(text) {
+  try {
+    return typeof text === 'string' ? JSON.parse(text) : null
+  } catch {
+    return null
+  }
+}
+
+/** `package.json` without its version, serialized in the file's own key order. */
+function manifestWithoutVersion(manifest) {
+  return JSON.stringify({ ...manifest, version: undefined })
+}
+
+/** `package-lock.json` without the two fields that carry the version. */
+function lockfileWithoutVersion(lockfile) {
+  const packages = lockfile.packages ?? {}
+  const root = packages['']
+    ? { ...packages[''], version: undefined }
+    : undefined
+  return JSON.stringify({
+    ...lockfile,
+    version: undefined,
+    packages: { ...packages, '': root },
+  })
+}
+
+/**
+ * Whether a commit is provably a release bump, from what git says about it.
+ *
+ * `parents` are the commit's parent shas, `files` the paths its diff against
+ * that parent touches, and the four texts are `package.json` and
+ * `package-lock.json` at the parent and at the commit (`null` when unread).
+ * Every condition must hold, and a text that does not parse fails the proof:
+ * this decides whether another commit's verdict is allowed to stand in, so an
+ * answer it cannot prove is no.
+ */
+export function releaseBumpProof({
+  subject,
+  parents,
+  files,
+  packageBefore,
+  packageAfter,
+  lockBefore,
+  lockAfter,
+}) {
+  const no = (why) => ({ ok: false, why })
+  if (!isReleaseSubject(subject)) {
+    return no('the subject is not chore(release): v<semver>')
+  }
+  if (!Array.isArray(parents) || parents.length !== 1) {
+    return no('it does not have exactly one parent')
+  }
+  const touched = Array.isArray(files) ? files : []
+  const stray = touched.filter((file) => !RELEASE_BUMP_PATHS.has(file))
+  if (stray.length > 0) {
+    return no(`it changes more than the release files: ${stray.join(', ')}`)
+  }
+  if (!touched.includes('package.json')) {
+    return no('it does not change package.json')
+  }
+
+  const before = parseJson(packageBefore)
+  const after = parseJson(packageAfter)
+  if (!before || !after)
+    return no('package.json could not be read on both sides')
+  if (before.version === after.version) {
+    return no('package.json keeps its version')
+  }
+  if (manifestWithoutVersion(before) !== manifestWithoutVersion(after)) {
+    return no('package.json changes more than its version')
+  }
+
+  if (touched.includes('package-lock.json')) {
+    const lockA = parseJson(lockBefore)
+    const lockB = parseJson(lockAfter)
+    if (!lockA || !lockB) {
+      return no('package-lock.json could not be read on both sides')
+    }
+    if (lockfileWithoutVersion(lockA) !== lockfileWithoutVersion(lockB)) {
+      return no('package-lock.json changes more than its version fields')
+    }
+  }
+
+  return { ok: true, why: 'only the version fields and CHANGELOG.md change' }
+}
+
+/**
+ * The commit whose statuses decide the verdict: the tip, or the parent of a
+ * proven release bump that carries no gate status of its own. The CLI sets
+ * `releaseBumpOf` to the parent sha only when `releaseBumpProof` held.
+ */
+function gradedCommit(list, tip) {
+  const parentSha = tip.releaseBumpOf
+  if (!parentSha || gateContexts(tip).length > 0) return tip
+  return list.find((c) => c !== tip && c.sha === parentSha) ?? tip
+}
+
 /**
  * Grade a promotion range.
  *
  * `commits` is oldest-first, exactly as `git log --reverse base..head` gives
  * it, so the LAST entry is the tip being promoted. Each entry is
- * `{ sha, subject, contexts: [{ context, state, targetUrl }] }`.
+ * `{ sha, subject, contexts: [{ context, state, targetUrl }] }`, and a tip may
+ * carry `releaseBumpOf: <parent sha>` (see the header).
  *
  * The verdict carries `sweep` (`passed` / `pending` / `absent` / `red`) and
  * `lastSwept` alongside the code, so a caller can say WHICH kind of green it
- * is holding without re-deriving it from the contexts.
+ * is holding without re-deriving it from the contexts. `graded` is the commit
+ * whose statuses decided it, which is the tip unless a release bump deferred
+ * to its parent.
  */
 export function gradePromotion(commits) {
   const list = Array.isArray(commits) ? commits : []
@@ -190,6 +324,7 @@ export function gradePromotion(commits) {
     return {
       code: UNVERIFIED,
       tip: null,
+      graded: null,
       reds,
       sweep: 'absent',
       lastSwept,
@@ -197,29 +332,34 @@ export function gradePromotion(commits) {
     }
   }
 
-  const sweep = sweepStanding(tip)
-  const base = { tip, reds, sweep, lastSwept }
+  const graded = gradedCommit(list, tip)
+  const who =
+    graded === tip
+      ? `the tip ${tip.sha.slice(0, 9)}`
+      : `the tip ${tip.sha.slice(0, 9)} is a release bump that changes only ` +
+        `version fields and CHANGELOG.md, so its parent grades it: ` +
+        graded.sha.slice(0, 9)
+  const sweep = sweepStanding(graded)
+  const base = { tip, graded, reds, sweep, lastSwept }
 
-  const tipRed = redContexts(tip)
-  if (tipRed.length > 0) {
+  const gradedRed = redContexts(graded)
+  if (gradedRed.length > 0) {
     return {
       ...base,
       code: REFUSE,
-      reason:
-        `the tip ${tip.sha.slice(0, 9)} is RED: ` +
-        tipRed.map((c) => c.context).join(', '),
+      reason: `${who} is RED: ` + gradedRed.map((c) => c.context).join(', '),
     }
   }
 
-  const tipGate = gateContexts(tip)
-  const decided = tipGate.filter((c) => !PENDING_STATES.has(c.state))
+  const gate = gateContexts(graded)
+  const decided = gate.filter((c) => !PENDING_STATES.has(c.state))
   if (decided.length === 0) {
     return {
       ...base,
       code: UNVERIFIED,
-      reason: tipGate.length
-        ? `the tip ${tip.sha.slice(0, 9)} has only a pending gate verdict`
-        : `the tip ${tip.sha.slice(0, 9)} carries no Main Gate status at all`,
+      reason: gate.length
+        ? `${who} has only a pending gate verdict`
+        : `${who} carries no Main Gate status at all`,
     }
   }
 
@@ -228,7 +368,7 @@ export function gradePromotion(commits) {
       ...base,
       code: UNEXAMINED,
       reason:
-        `the tip ${tip.sha.slice(0, 9)} is green on ` +
+        `${who} is green on ` +
         `${decided.map((c) => c.context).join(', ')}, and ` +
         (sweep === 'pending'
           ? `${FULL_SWEEP_CONTEXT} is still running on it`
@@ -241,7 +381,7 @@ export function gradePromotion(commits) {
     ...base,
     code: OK,
     reason:
-      `the tip ${tip.sha.slice(0, 9)} passed a full sweep — green on ` +
+      `${who} passed a full sweep — green on ` +
       decided.map((c) => c.context).join(', '),
   }
 }

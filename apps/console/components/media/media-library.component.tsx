@@ -465,6 +465,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const scopeCollection = orgId ? 'orgs' : 'hosts'
   const scopeId = (orgId ?? hostId) as string
   const scopeBody = orgId ? { orgId } : { hostId }
+  /**
+   * The site an upload into the ORG library is made from, sent on the
+   * requests that create an asset and on nothing else.
+   *
+   * The org's Default sharing (AGL-1048) can narrow a new file to the site it
+   * was created in, and the upload routes only know that site if they are
+   * told it. `forHostId` is set exactly where a site is on screen — a site's
+   * Media tab and a picker opened for a site — so the org Media page names
+   * none and its uploads stay on All sites, as the setting says. A site's own
+   * library stores no scope, so it has nothing to send.
+   */
+  const uploadSiteBody = useMemo(
+    () => (orgId && forHostId ? { forHostId } : {}),
+    [orgId, forHostId],
+  )
   // Scoped sharing (AGL-1045). Under the AGL-1042 rules a scoped member's
   // UNFILTERED list is rejected outright — Firestore fails the whole query
   // if any candidate document would fail — so this constraint is required
@@ -3026,6 +3041,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ...scopeBody,
+              // Checked at the mint too, so a refused site moves no bytes.
+              ...uploadSiteBody,
               contentType,
               fileName: file.name,
               sizeBytes: file.size,
@@ -3062,6 +3079,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 ...scopeBody,
+                // The finalize writes the document, so it is the request the
+                // site's Default sharing is applied from.
+                ...uploadSiteBody,
                 mediaId: minted.mediaId,
                 fileName: file.name,
                 folderId: uploadFolderId,
@@ -3094,6 +3114,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...scopeBody,
+            ...uploadSiteBody,
             fileName: file.name,
             contentType,
             folderId: uploadFolderId,
@@ -3130,6 +3151,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [
       user,
       scopeId,
+      // So a picker retargeted at another site uploads there.
+      uploadSiteBody,
       org,
       orgReady,
       usedBytes,
@@ -4769,6 +4792,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     ...scopeBody,
+                    // A copy is a new asset, created where the editor is open.
+                    ...uploadSiteBody,
                     fileName: copyName,
                     contentType: result.contentType,
                     folderId:

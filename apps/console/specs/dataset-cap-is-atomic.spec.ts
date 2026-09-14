@@ -275,6 +275,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   validateDocument: () => ({}),
   defaultScopeForNewResource: () => 'org',
   newResourceScopeFields: () => ({ resourceScope: ['org'] }),
+  // The REAL visibility check: both record actions ask it before they count,
+  // and an omitted helper is a CLOSED WORLD — every record case would 500
+  // before reaching the cap. The owner these cases run as sees every dataset,
+  // so it never refuses one here.
+  memberCanSee: jest.requireActual('@aglyn/aglyn/app-utils/organizations')
+    .memberCanSee,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     body: await request.json().catch(() => ({})),

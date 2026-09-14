@@ -21,7 +21,7 @@ import {
   createResourceUid,
   defaultScopeForNewResource,
   newResourceScopeFields,
-  visibleToHost,
+  scopeCovers,
 } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
@@ -45,7 +45,9 @@ import { recordVersionMove } from './version-stats'
  * another dataset rather than replacing one, for the same reason.
  *
  * Accepts either `orgId` or a `hostId` to derive it, so the shared install
- * hook (which is host-oriented) works unchanged.
+ * hook (which is host-oriented) works unchanged. The site is ONLY that: a way
+ * to find the org. It is never the site the dataset is created in — see the
+ * scope decision below.
  */
 export const installDatasetSchemaHandler: PluginApiHandler = async (
   req,
@@ -174,17 +176,37 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
       })
     }
 
+    /**
+     * Who the new dataset is shared with. Decided before relinking, because
+     * it also decides what a reference field may point at.
+     *
+     * A dataset schema installs at ORGANIZATION scope and nowhere else
+     * (`INSTALL_TARGETS.datasetSchema`), from the organization Marketplace —
+     * the one surface that installs anything. The `hostId` that surface sends
+     * is the site it acts THROUGH so the org can be resolved: the org's first
+     * site, not a site anyone is working in. So no site is in context, and the
+     * dataset starts where a create on an organization page starts: All
+     * sites, whatever the org's Default sharing says. Honoring the acting site
+     * instead would hide the dataset from every other site, under an install
+     * dialog that says it lands on "the whole organization — every site".
+     */
+    const visibleTo = defaultScopeForNewResource({
+      defaultResourceScope: org?.defaultResourceScope,
+      hostId: null,
+    })
+
     // Relink reference fields onto this org's datasets by display name; what
     // can't be relinked degrades to text and is reported to the installer.
-    // Only datasets visible in the INSTALL's scope are relink candidates
-    // (AGL-1046). Matching against every dataset the org owns would let an
-    // install into a client site silently bind its reference fields to the
-    // agency's internal dataset of the same name — the display-name
-    // collision AGL-1039 fixed on the render path, arriving here instead.
-    // An org-context install (no host) sees them all, as its installer does.
+    // A candidate has to be visible everywhere the new dataset is, which is
+    // the rule every reference answers to (`scopeCovers`, AGL-1044): one
+    // pointing at a dataset some of those sites cannot see resolves to nothing
+    // there, and nothing says why. That is also what keeps an install from
+    // binding its reference fields to an agency's internal dataset of the same
+    // name (AGL-1046) — the display-name collision AGL-1039 fixed on the
+    // render path, arriving here instead.
     const byLabel: Record<string, string> = {}
     for (const entry of datasets.docs) {
-      if (hostId && !visibleToHost(entry.get('visibleTo'), hostId)) continue
+      if (!scopeCovers(entry.get('visibleTo'), visibleTo)) continue
       const label = String(entry.get('displayName') ?? '').toLowerCase()
       if (label && !byLabel[label]) byLabel[label] = entry.id
     }
@@ -223,20 +245,14 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
           version: listing.latestVersion ?? null,
         },
         installedFrom: provenance.installedFrom,
-        // Scoped like every other dataset creator (AGL-1046): the org's
-        // default, applied to the site the install came from. Stamping it
-        // is not optional — a dataset with no `visibleTo` matches no scoped
-        // read and would render on no site at all.
+        // The scope decided above. Stamping it is not optional — a dataset
+        // with no `visibleTo` matches no scoped read and would render on no
+        // site at all.
         //
         // Through the AGL-1478 gate since AGL-1484, so "every other dataset
         // creator" is a fact about the type rather than about four object
         // literals that happen to agree today.
-        ...newResourceScopeFields(
-          defaultScopeForNewResource({
-            defaultResourceScope: org?.defaultResourceScope,
-            hostId,
-          }),
-        ),
+        ...newResourceScopeFields(visibleTo),
         createdAt: now,
       })
 

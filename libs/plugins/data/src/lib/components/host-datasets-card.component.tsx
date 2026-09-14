@@ -120,6 +120,22 @@ export interface HostDatasetsCardProps {
 const IMPORT_KEY_WINDOW = 500
 
 /**
+ * The sentence that says who a NEW dataset is shared with, for the card and
+ * for the site Data page's banner above it.
+ *
+ * `siteOnly` is true only on a site's Data page in an org whose Default
+ * sharing is "Only the site they were created in". Everywhere else a new
+ * dataset starts on All sites: the org Data page has no site to limit it to.
+ */
+export function newDatasetSharingNote(siteOnly: boolean): string {
+  return siteOnly
+    ? 'Datasets belong to your organization. Your default sharing starts a ' +
+        'new one on this site only — use Schema to share it with more.'
+    : 'Datasets belong to your organization. A new one is shared with ' +
+        'every site — use Schema to narrow that.'
+}
+
+/**
  * Datasets editor (AGL-102): org-shared document collections at
  * `orgs/{orgId}/datasets` (AGL-237/239) with a `records` subcollection,
  * consumed by repeatable components (AGL-103) via `{{item.field}}`.
@@ -166,6 +182,32 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const { org } = props
   const logActivity = useHostActivityLogger(hostId)
   const { data: user } = useUser()
+  /**
+   * The site a dataset created here is created FROM, or undefined on the
+   * organization Data page.
+   *
+   * `/api/orgs/datasets` stamps a new dataset with the org's Default sharing,
+   * and that setting can only narrow to a site the request names — so a
+   * create that names none lands on All sites whatever the org chose. The
+   * explicit `orgId` is the org Data page's own scope and already wins over
+   * `hostId` when the org is resolved, so it wins here too: a create made
+   * there names no site, even if a caller hands the card both.
+   */
+  const createdFromHostId = props.orgId ? undefined : hostId || undefined
+  const createdFrom = useMemo(
+    () => (createdFromHostId ? { hostId: createdFromHostId } : {}),
+    [createdFromHostId],
+  )
+  /**
+   * Whether a dataset created here starts on this site alone: the org chose
+   * "Only the site they were created in" and there is a site to limit it to.
+   * The caption reads it so it never promises All sites to a create that
+   * will not get it.
+   */
+  const createsSiteOnly =
+    Boolean(createdFromHostId) &&
+    (org as { defaultResourceScope?: 'org' | 'host' } | undefined)
+      ?.defaultResourceScope === 'host'
 
   // Creates go through the console API (AGL-473): rules deny client-side
   // `create` on org datasets/records so quotas are server-enforced.
@@ -489,6 +531,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         fields: creatorFields,
         // Typed model from day one (AGL-178); refine in the Schema dialog.
         model: modelFromFieldEntries(creatorEntries),
+        ...createdFrom,
       })
       id = String(result.id)
     } catch (error: any) {
@@ -509,7 +552,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       id,
       name: creator.name.trim(),
     })
-  }, [creator, creatorEntries, creatorFields, orgId, callDatasetApi, enqueueSnackbar, logActivity])
+  }, [creator, creatorEntries, creatorFields, orgId, createdFrom, callDatasetApi, enqueueSnackbar, logActivity])
 
   // Join collection template (AGL-180): extrinsic many-to-many as a
   // visible, editable collection of FKey pairs — no magic.
@@ -545,6 +588,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       const result = await callDatasetApi({
         action: 'create-dataset',
         ...payload,
+        // A join collection is a dataset, so the same Default sharing applies.
+        ...createdFrom,
       })
       id = String(result.id)
     } catch (error: any) {
@@ -561,7 +606,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       variant: 'success',
       persist: false,
     })
-  }, [joiner, datasets, orgId, callDatasetApi, enqueueSnackbar])
+  }, [joiner, datasets, orgId, createdFrom, callDatasetApi, enqueueSnackbar])
 
   const handleDeleteDataset = useCallback(async () => {
     if (!selected) return
@@ -1268,11 +1313,9 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       <Stack spacing={1.5}>
         {orgId ? (
           <Typography variant="caption" color="text.secondary">
-            {/* Was "…and are shared by all of its sites", which stopped
-                being true when AGL-1044 shipped the sharing control.
-                Ownership and visibility are now separate facts. */}
-            {'Datasets belong to your organization. Each one is shared with ' +
-              'every site by default — use Schema to narrow that.'}
+            {/* Ownership and visibility are separate facts (AGL-1044), and
+                what a new dataset starts on depends on where it is made. */}
+            {newDatasetSharingNote(createsSiteOnly)}
           </Typography>
         ) : null}
         {datasets.length === 0 ? (
