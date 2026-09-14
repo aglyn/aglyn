@@ -41,6 +41,9 @@ let mockFlagOn = true
 let mockRateAllowed = true
 let mockLockdown: Response | null = null
 let mockFeatureLockdown: Response | null = null
+/** What the permission rung answers (AGL-2927); the site it was asked about. */
+let mockAiPermitted = true
+let mockAiPermissionAsks: unknown[][] = []
 
 const mockVerifyIdToken = jest.fn()
 const mockGetOrgForUser = jest.fn()
@@ -208,6 +211,15 @@ jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/id-token-refu
 jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
   __esModule: true,
   getOrgForUser: (...args: unknown[]) => mockGetOrgForUser(...args),
+  memberHasAiPermission: async (...args: unknown[]) => {
+    mockAiPermissionAsks.push(args)
+    return mockAiPermitted
+  },
+  aiPermissionRefusal: (permission: string) =>
+    Response.json(
+      { error: `Your role does not include ${permission}`, reason: 'permission', permission },
+      { status: 403 },
+    ),
 }))
 jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/release-flags', () => ({
   __esModule: true,
@@ -316,6 +328,8 @@ beforeEach(() => {
   mockRateAllowed = true
   mockLockdown = null
   mockFeatureLockdown = null
+  mockAiPermitted = true
+  mockAiPermissionAsks = []
   mockRunAiRequest.mockReset()
   mockVerifyIdToken.mockReset()
   mockGetOrgForUser.mockReset()
@@ -380,6 +394,19 @@ describe('POST /api/ai/jobs — the ladder', () => {
     const response = await createJob(post(VALID))
     expect(response.status).toBe(403)
     expect((await response.json()).reason).toBe('entitlement')
+  })
+
+  it('403 for a member whose role lacks ai.generate, asked about the named site', async () => {
+    // The permission is a fact about the caller, so it is refused before the
+    // plan or the quota is disclosed: no reservation, no job document.
+    mockAiPermitted = false
+    const response = await createJob(post(VALID))
+    expect(response.status).toBe(403)
+    expect((await response.json()).reason).toBe('permission')
+    expect(mockAiPermissionAsks).toHaveLength(1)
+    expect(mockAiPermissionAsks[0][1]).toBe(VALID.hostId ?? null)
+    expect(mockAiPermissionAsks[0][3]).toBe('ai.generate')
+    expect(jobDocs()).toHaveLength(0)
   })
 
   it('423 under a scope lockdown and under the ai-generate switch', async () => {

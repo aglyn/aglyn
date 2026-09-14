@@ -142,12 +142,17 @@ export async function POST(request: Request): Promise<Response> {
   // refused with the ladder's 400 rather than a shape error; every other
   // shape fault waits until the caller has proven who they are.
   const orgId = typeof parsed === 'string' ? String((payload as Record<string, unknown> | null)?.orgId ?? '') : parsed.orgId
+  // The site rides along for the same reason: a collaborator's `ai.generate`
+  // is decided per site (AGL-2927), so the ladder needs it before it can say
+  // whether this member may generate here at all.
+  const hostId = typeof parsed === 'string' ? null : parsed.hostId
   const gate = await aiGateLadder(
-    { request, orgId },
+    { request, orgId, hostId },
     {
       feature: 'aiGenerative',
       releaseFlag: 'release_ai_generative',
       lockdownFeature: 'ai-generate',
+      permission: 'ai.generate',
       rateLimit: AI_JOBS_RATE_LIMIT,
     },
   )
