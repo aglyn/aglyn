@@ -162,6 +162,10 @@ export interface VideoProps {
    * Google requires, and the one nothing else on the page can supply: a
    * screen's own publish date is when the PAGE went up, which for a film
    * embedded months later is simply a different fact.
+   *
+   * The day is what an author types; the page's `VideoObject` publishes it as
+   * that day at noon UTC, because Google reads `uploadDate` as a date-time
+   * with a zone (`uploadDateTime` in the VideoObject builder).
    */
   uploadDate?: string
   /**

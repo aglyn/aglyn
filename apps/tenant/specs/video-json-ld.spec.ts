@@ -116,7 +116,7 @@ describe('VideoObject reaches the rendered page (AGL-2747)', () => {
       '@type': 'VideoObject',
       name: 'The 60-second tour',
       description: 'What Aglyn does, end to end.',
-      uploadDate: '2026-09-01',
+      uploadDate: '2026-09-01T12:00:00.000Z',
       thumbnailUrl: `${ORIGIN}/api/media/cdn/host-1/still?w=1280`,
       contentUrl: `${ORIGIN}/api/media/cdn/host-1/film`,
     })

@@ -43,7 +43,7 @@ describe('videoObjectJsonLd', () => {
       '@type': 'VideoObject',
       name: 'The 60-second tour',
       description: 'What Aglyn does, end to end.',
-      uploadDate: '2026-09-01',
+      uploadDate: '2026-09-01T12:00:00.000Z',
       thumbnailUrl: `${ORIGIN}/api/media/cdn/host1/still?w=1280`,
     })
   })
@@ -131,6 +131,53 @@ describe('videoObjectJsonLd', () => {
   })
 })
 
+describe('uploadDate is the DateTime Google reads (AGL-2948)', () => {
+  const uploadDateOf = (uploadDate: unknown) =>
+    build({ ...complete, uploadDate })?.['uploadDate']
+
+  it('publishes a calendar day as that day at noon UTC', () => {
+    // A bare day is what Search Console reports twice against the page: an
+    // invalid datetime, and one missing its timezone.
+    expect(uploadDateOf('2026-09-12')).toBe('2026-09-12T12:00:00.000Z')
+    expect(uploadDateOf(' 2026-09-12 ')).toBe('2026-09-12T12:00:00.000Z')
+  })
+
+  it('keeps the typed day in every zone from UTC-12 through UTC+11', () => {
+    // Midnight UTC would read as the 11th everywhere in the Americas.
+    const instant = Date.parse(uploadDateOf('2026-09-12') as string)
+    for (let offsetHours = -12; offsetHours <= 11; offsetHours++) {
+      const local = new Date(instant + offsetHours * 3_600_000)
+      expect(local.toISOString().slice(0, 10)).toBe('2026-09-12')
+    }
+  })
+
+  it('keeps the instant of a date-time that names its zone', () => {
+    expect(uploadDateOf('2026-09-12T09:30:00-05:00')).toBe(
+      '2026-09-12T14:30:00.000Z',
+    )
+    expect(uploadDateOf('2026-09-12T14:30:00.25Z')).toBe(
+      '2026-09-12T14:30:00.250Z',
+    )
+    expect(uploadDateOf('2028-02-29T23:00:00+14:00')).toBe(
+      '2028-02-29T09:00:00.000Z',
+    )
+  })
+
+  it('publishes as typed what it cannot read without guessing', () => {
+    // Which zone a zoneless time meant is a guess; a day that does not exist
+    // is not one `Date` should quietly roll into March.
+    for (const typed of [
+      '2026-09-12T09:30:00',
+      '2026-02-30',
+      '2026-02-29T10:00:00Z',
+      '2026-13-01',
+      'September 12, 2026',
+    ]) {
+      expect(uploadDateOf(typed)).toBe(typed)
+    }
+  })
+})
+
 describe('pageVideoObjects', () => {
   it('walks the flat composed map, not a tree of children', () => {
     // ⚠️ The composed map is DENORMALIZED: children are id STRINGS under
@@ -182,7 +229,7 @@ describe('a Wistia video (AGL-2826)', () => {
       name: 'The 60-second tour',
       description: 'What Aglyn does, end to end.',
       thumbnailUrl: `${ORIGIN}/api/media/cdn/host1/still?w=1280`,
-      uploadDate: '2026-09-01',
+      uploadDate: '2026-09-01T12:00:00.000Z',
       embedUrl: 'https://fast.wistia.net/embed/iframe/e4a27b971d',
       duration: 'PT1M',
     })

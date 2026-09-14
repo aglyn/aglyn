@@ -82,6 +82,75 @@ const text = (value: unknown): string | undefined => {
 }
 
 /**
+ * The UTC hour a bare calendar day is published at. An author names a day,
+ * not a moment, and noon UTC is still that same day in every zone from UTC-12
+ * through UTC+11. Midnight UTC is the previous evening in every zone behind
+ * UTC, so a video result dated from it reads a day early across the Americas.
+ */
+const CALENDAR_DAY_UTC_HOUR = 12
+
+/** A calendar day: the shape the Publication date field asks an author for. */
+const CALENDAR_DAY = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * An ISO 8601 date-time that names its zone, as `Z` or an offset — the shape
+ * a bound timestamp or a video host's own metadata arrives in.
+ */
+const ZONED_DATE_TIME =
+  /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/
+
+/**
+ * The instant at `hour` UTC on the day a match's year, month and day groups
+ * name, or `undefined` when that day does not exist. `Date.UTC` rolls
+ * 2026-02-30 over to March 2 rather than refusing it, so a real day is one
+ * whose parts survive the round trip.
+ */
+const utcDay = (match: RegExpExecArray, hour = 0): number | undefined => {
+  const year = Number(match[1])
+  const month = Number(match[2]) - 1
+  const day = Number(match[3])
+  const time = Date.UTC(year, month, day, hour)
+  const date = new Date(time)
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month &&
+    date.getUTCDate() === day
+    ? time
+    : undefined
+}
+
+/**
+ * `uploadDate` as Google reads it: an ISO 8601 date AND time, with its zone
+ * (AGL-2948).
+ *
+ * Google types the property as a DateTime. A bare `YYYY-MM-DD` is reported
+ * against the page twice, as an invalid datetime and as one missing its
+ * timezone, and a time with no zone is read in Googlebot's. Converting where
+ * the block is built covers every writer at once: the field, a bound
+ * property, an agent, and every document already published with a bare day.
+ *
+ * - A calendar day becomes that day at {@link CALENDAR_DAY_UTC_HOUR}:00 UTC.
+ * - A date-time that names its zone keeps its instant.
+ * - Both are spelled by `toISOString()`, as `Article.datePublished` is.
+ * - Anything else — a time with no zone, a day that does not exist, free
+ *   text — is published exactly as typed. Which zone an author meant is a
+ *   guess, and a confidently wrong date is harder to notice than a warning.
+ */
+const uploadDateTime = (value: string | undefined): string | undefined => {
+  if (!value) return undefined
+  const day = CALENDAR_DAY.exec(value)
+  if (day) {
+    const noon = utcDay(day, CALENDAR_DAY_UTC_HOUR)
+    return noon === undefined ? value : new Date(noon).toISOString()
+  }
+  const zoned = ZONED_DATE_TIME.exec(value)
+  if (!zoned || utcDay(zoned) === undefined) return value
+  // `toISOString` throws on an invalid date, and a page render is no place
+  // to find out which fraction lengths this runtime's parser accepts.
+  const instant = Date.parse(value)
+  return Number.isNaN(instant) ? value : new Date(instant).toISOString()
+}
+
+/**
  * The `VideoObject` for one Video node, or `undefined` when the author has not
  * given it enough to be worth publishing.
  *
@@ -104,7 +173,7 @@ export function videoObjectJsonLd(
   const hostId = context?.hostId
   const name = text(props['title'])
   const description = text(props['description'])
-  const uploadDate = text(props['uploadDate'])
+  const uploadDate = uploadDateTime(text(props['uploadDate']))
   // The SAME rule the element renders with, so the thumbnail a crawler
   // fetches is the poster a visitor sees — including the refusal to derive a
   // generated poster's url unless the node records that one exists, which is
