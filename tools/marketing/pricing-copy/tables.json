@@ -751,6 +751,20 @@
             }
           },
           {
+            "label": "Aglyn AI: generate pages, emails, campaigns, products and more",
+            "duplicateOf": null,
+            "values": {
+              "free": "300 credits",
+              "starter": "add-on",
+              "pro": "add-on",
+              "business": "add-on",
+              "scale": "add-on",
+              "advanced": "add-on",
+              "agency": "add-on",
+              "enterprise": "✓"
+            }
+          },
+          {
             "label": "AI credits / mo",
             "duplicateOf": null,
             "values": {
@@ -1093,7 +1107,7 @@
         }
       },
       {
-        "label": "AI assist, per 1,000 credits over the included band",
+        "label": "AI credits, per 1,000 over the included band",
         "rate": "extraAssistCreditsUsdPer1k",
         "values": {
           "starter": "—",
@@ -1277,7 +1291,9 @@
           "advanced": 49000,
           "agency": 149000,
           "enterprise": 298000
-        }
+        },
+        "priceLabel": "From $9 / mo",
+        "blurb": "Starter $9 · Pro $19 · Business $39 · Scale $69 · Advanced $99 · Agency $299 a month, per workspace. Adds AI credits to your plan’s included band — 4,000 on Starter, 9,000 on Pro, 19,000 on Business, 34,000 on Scale, 49,000 on Advanced, 149,000 on Agency. Enterprise by agreement."
       }
     ]
   }

@@ -873,6 +873,22 @@
               ]
             },
             {
+              "figmaNodeId": null,
+              "name": "row",
+              "cells": [
+                "Aglyn AI: generate pages, emails, campaigns, products and more",
+                "add-on"
+              ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": "row",
+              "cells": [
+                "AI credits / mo",
+                "2.75k / mo"
+              ]
+            },
+            {
               "figmaNodeId": "268:2152",
               "name": "row",
               "cells": [
@@ -1106,6 +1122,14 @@
                 "CRM records, per 1,000 over the included band",
                 "$0.75"
               ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": "row",
+              "cells": [
+                "AI credits, per 1,000 over the included band",
+                "$3"
+              ]
             }
           ]
         },
@@ -1135,6 +1159,14 @@
               "cells": [
                 "Extra POS register",
                 "$89 / mo"
+              ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": "fa",
+              "cells": [
+                "Aglyn AI",
+                "From $9 / mo"
               ]
             }
           ]
@@ -1190,7 +1222,15 @@
               "name": "qa",
               "cells": [
                 "What happens if I exceed a plan limit?",
-                "On paid plans you’re not cut off. Add extra sites, seats, and datasets at the rates in the usage table — they’re added to your subscription and itemized on your invoice. Free-plan limits are hard caps."
+                "On paid plans you’re not cut off. Add extra sites, seats, and datasets at the rates in the usage table — they’re added to your subscription and itemized on your invoice — and AI credits past your included band are billed per 1,000 at your plan’s rate, unless you set a stop or a monthly ceiling in Billing. Free-plan limits are hard caps: when Free’s AI credits are used, generation stops until next month."
+              ]
+            },
+            {
+              "figmaNodeId": null,
+              "name": "qa",
+              "cells": [
+                "What does Aglyn AI cost?",
+                "Aglyn AI is a per-workspace add-on on any paid plan — $9 a month on Starter, $19 on Pro, $39 on Business, $69 on Scale, $99 on Advanced, $299 on Agency; Enterprise by agreement. It adds AI credits to your plan’s included band every month, from 4,000 on Starter to 149,000 on Agency, and credits past the band are billed per 1,000 at the rate in the usage table. If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — nothing is billed."
               ]
             },
             {

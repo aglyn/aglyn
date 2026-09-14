@@ -39,7 +39,7 @@ export const DOCS_HELP_EXCERPTS = {
   actionsBuilder: 'Map a single event to a single action without building a full workflow.',
   activities: 'Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, email one person from their record, and read it all in one timeline beside everything captured and every campaign sent.',
   addALocale: 'Create a language variant of your site and translate its screens.',
-  addOns: 'Buy extra seats, sites, datasets, POS registers, and the Event Calendar from the Billing page — prorated, self-serve, no support ticket.',
+  addOns: 'Buy extra seats, sites, datasets, POS registers, the Event Calendar, and Aglyn AI from the Billing page — prorated, self-serve, no support ticket.',
   addSearch: 'Drop the Search Box element onto a screen and publish — the built-in search page does the rest.',
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
   aiAssist: 'Generate and rewrite copy, and build whole sections, with AI inside the Besigner.',

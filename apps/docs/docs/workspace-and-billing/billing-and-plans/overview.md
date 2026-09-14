@@ -172,8 +172,10 @@ of your allowance mean nobody first learns about overage from an invoice. The op
 ## AI assist overage {#assist-overage}
 
 Paid plans include a monthly band of **AI assist credits** — the **Aglyn Assist credits**
-meter on the billing page shows how much of it this month's assistant use has drawn. On a
-plan that sells credits past the band, reaching it is not a wall:
+meter on the billing page shows how much of it this month's assistant use has drawn. The
+[Aglyn AI add-on](add-ons.md#aglyn-ai) widens that band and opens generative building;
+it is one pool, so everything below applies to the widened band as a whole. On a plan
+that sells credits past the band, reaching it is not a wall:
 
 - **The assistant keeps answering.** Nothing stops because you reached your included
   credits.
@@ -207,12 +209,13 @@ removing the ceiling needs the **Manage billing** permission, and a ceiling is n
 applied unless you set one.
 
 :::info Plans that sell no overage
-Starter includes no AI assist credits by default, so there is nothing to stop at. A
-workspace on a plan that sells no credits past its band — Enterprise, whose credits are
-set by agreement, or a Free workspace — stops at the band on its own: the assistant
-refuses there until next month or an upgrade, and **nothing is ever billed** for AI
-assist. Neither the switch nor the ceiling is offered, because neither would change
-anything.
+Starter includes no AI assist credits by default, so there is nothing to stop at — with
+the [Aglyn AI add-on](add-ons.md#aglyn-ai) it has the add-on's band, sells credits past
+it at Pro's rate, and gets the switch and the ceiling like Pro. A workspace on a plan
+that sells no credits past its band — Enterprise, whose credits are set by agreement, or
+a Free workspace — stops at the band on its own: the assistant refuses there until next
+month or an upgrade, and **nothing is ever billed** for AI assist. Neither the switch
+nor the ceiling is offered, because neither would change anything.
 :::
 
 ### Free workspaces {#free-ai-credits}

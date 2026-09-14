@@ -32,8 +32,10 @@
  * content, served from Firestore, and no build step can read it. So the
  * numbers below are a TRANSCRIPTION of what the public page serves — first
  * fetched **2026-08-19**, re-transcribed row by row from the republish of
- * **2026-09-07** (screen `v0clP6xQl-`, version `zj-21jtrPG`), and with the
- * CRM rows taken from version `uMk4E9o739` of **2026-09-11** — and their
+ * **2026-09-07** (screen `v0clP6xQl-`, version `zj-21jtrPG`), with the
+ * CRM rows taken from version `uMk4E9o739` of **2026-09-11** and the AI rows
+ * — the generative door, the credits band, the credits overage rate and the
+ * add-on card — from the AGL-2900 republish of **2026-09-14** — and their
  * whole job is to be a fixed point that does NOT move when the constants do.
  * Deriving them from `PLAN_ENTITLEMENTS` would make the file assert `x === x`
  * and prove nothing at all.
@@ -64,6 +66,7 @@ import { join } from 'node:path'
 
 import { METERED_MARKUP, METERED_UNIT_RATES_USD } from '../utils/usage-metering'
 import {
+  AI_ADDON_CREDITS_PER_MONTH,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   RELEASE_FLAGS,
@@ -747,6 +750,35 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         5000000,
       ] satisfies Row)
     })
+
+    /**
+     * THE GENERATIVE DOOR (AGL-2900). The page's cell is "add-on" on every
+     * plan that prices the add-on, "300 credits" on Free — whose generative
+     * flag is on and whose band is the taste — and a tick on Enterprise,
+     * which carries it in the agreement. "add-on" is a claim that the plan
+     * SELLS it, so the pin is the price being non-null, not the flag.
+     */
+    describe('Aglyn AI: generate pages, emails, campaigns, products and more', () => {
+      it('300 credits · add-on ×6 · ✓ — Free generates against its taste, every paid plan sells the add-on', () => {
+        const PUBLISHED = ['300 credits', 'add-on', 'add-on', 'add-on', 'add-on', 'add-on', 'add-on']
+        expect(
+          PUBLISHED_COLUMNS.map((plan) =>
+            PLAN_PRICING[plan].aiAddonMonthlyUsd !== null
+              ? 'add-on'
+              : PLAN_ENTITLEMENTS[plan].features.aiGenerative
+                ? `${PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth} credits`
+                : '—',
+          ),
+        ).toEqual(PUBLISHED)
+        expect(PLAN_ENTITLEMENTS.enterprise.features.aiGenerative).toBe(true)
+        expect(PLAN_PRICING.enterprise.aiAddonMonthlyUsd).toBeNull()
+      })
+    })
+
+    it('AI credits / mo — 300 · — · 2.75k · 7.5k · 10k · 13k · 58k', () => {
+      const PUBLISHED: Row = [300, NONE, 2750, 7500, 10000, 13000, 58000]
+      expect(quotaColumn('assistCreditsPerMonth')).toEqual(PUBLISHED)
+    })
   })
 
   // ---------------------------------------------------------------------
@@ -846,7 +878,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         free.extraDataGbMonthlyUsd,
         free.extraApiRequestsUsdPer1k,
         free.extraContactsUsdPer1k,
-      ]).toEqual([null, null, null, null, null, null, null])
+        free.extraAssistCreditsUsdPer1k,
+        free.aiAddonMonthlyUsd,
+      ]).toEqual([null, null, null, null, null, null, null, null, null])
     })
 
     /**
@@ -950,6 +984,44 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       // contract raises, and the page still reads "Talk to us" for it.
       expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(1_000_000)
       expect(PLAN_PRICING.enterprise.extraContactsUsdPer1k).toBeNull()
+    })
+
+    /**
+     * THE AI CREDITS ROW (AGL-2900). Starter's dash is the page saying the
+     * plan sells no credits past a band it does not have; the ladder from
+     * Pro down is the rate `priceAssistCreditOverage` bills. With the add-on,
+     * Starter joins at Pro's rate — read through `assist-credits.ts`, never
+     * written onto `PLAN_PRICING.starter`, and stated on the page by the
+     * add-on card's sentence rather than by this row.
+     */
+    it('AI credits per 1,000 over band — — · $3 · $2.75 · $2.50 · $2.25 · $2', () => {
+      const PUBLISHED = [null, 3, 2.75, 2.5, 2.25, 2]
+      expect(PAID.map((p) => PLAN_PRICING[p].extraAssistCreditsUsdPer1k)).toEqual(
+        PUBLISHED,
+      )
+      expect(PLAN_PRICING.enterprise.extraAssistCreditsUsdPer1k).toBeNull()
+    })
+
+    /**
+     * THE AGLYN AI CARD (AGL-2900). The page prints "From $9 / mo" and the
+     * ladder in the card's sentence, with the credits each plan's purchase
+     * adds to its band. Free prices none; Enterprise carries generative
+     * building in the agreement and prices none either.
+     */
+    describe('Aglyn AI add-on card', () => {
+      it('From $9 / mo — $9 · $19 · $39 · $69 · $99 · $299 a month, per workspace', () => {
+        const PUBLISHED = [9, 19, 39, 69, 99, 299]
+        expect(PAID.map((p) => PLAN_PRICING[p].aiAddonMonthlyUsd)).toEqual(PUBLISHED)
+        expect(Math.min(...PUBLISHED)).toBe(9)
+        expect(PLAN_PRICING.free.aiAddonMonthlyUsd).toBeNull()
+        expect(PLAN_PRICING.enterprise.aiAddonMonthlyUsd).toBeNull()
+      })
+
+      it('adds 4,000 · 9,000 · 19,000 · 34,000 · 49,000 · 149,000 AI credits a month', () => {
+        const PUBLISHED = [4000, 9000, 19000, 34000, 49000, 149000]
+        expect(PAID.map((p) => AI_ADDON_CREDITS_PER_MONTH[p])).toEqual(PUBLISHED)
+        expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+      })
     })
   })
 
