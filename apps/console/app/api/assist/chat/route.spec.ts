@@ -642,6 +642,64 @@ describe('the gate ladder — every guard forced red once', () => {
     })
   })
 
+  it('THE ORG’S OWN CEILING: overage at the figure is refused with a 402 that names it (AGL-2898)', async () => {
+    // Pro: 2,750 credits at $3.00 per 1,000. $4.75 of provider spend is
+    // 4,750 credits — 2,000 over the band, $6.00 of overage — against a $6
+    // ceiling the org set. Not the switch: the sentence names the ceiling
+    // and its figure, so the reader is sent to the right control.
+    //
+    // FORCED RED by returning 429 for every `!quota.allowed`: the status
+    // assertion failed first, then the error text.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    seedOrgs()
+    mockDocs.set(`orgs/${PRO_ORG}`, {
+      ...(mockDocs.get(`orgs/${PRO_ORG}`) ?? {}),
+      assistOverage: { capUsd: 6 },
+    })
+    mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 4.75,
+    })
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(402)
+    const payload = await response.json()
+    expect(payload).toMatchObject({ reason: 'quota', quota: { refusedBy: 'cap' } })
+    expect(String(payload.error)).toContain('"Stop AI when this month’s overage reaches"')
+    expect(String(payload.error)).toContain('$6.00')
+    expect(String(payload.error)).toContain('Billing → Usage')
+    expect(String(payload.error)).not.toContain('Stop AI assist at the included band')
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.get(`orgs/${PRO_ORG}/assistUsage/${MONTH}`)).toMatchObject({
+      messages: 5,
+    })
+    // And the body still ships no dollar figure of OURS.
+    const wire = JSON.stringify(payload)
+    for (const leak of ['costUsd', 'costLimitUsd', 'budgetUsd', '4.75']) {
+      expect(wire).not.toContain(leak)
+    }
+  })
+
+  it('THE CEILING’S PAIRED CONTROL: overage under the figure still reaches the model', async () => {
+    // $3.75 is 1,000 credits over the band — $3.00 of overage against the
+    // same $6 ceiling — so the org is buying credits and has not reached
+    // the figure it chose.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    seedOrgs()
+    armUpstream()
+    mockDocs.set(`orgs/${PRO_ORG}`, {
+      ...(mockDocs.get(`orgs/${PRO_ORG}`) ?? {}),
+      assistOverage: { capUsd: 6 },
+    })
+    mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 3.75,
+    })
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(mockFetch).toHaveBeenCalled()
+  })
+
   it('THE PAIRED CONTROL: an ordinary paid month still reaches the model', async () => {
     // Without this, the test above is satisfied by a build that refuses every
     // entitled org. $1.80 of provider spend is two thirds of the way into

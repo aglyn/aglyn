@@ -358,6 +358,20 @@ export function assistBandRefuses(
 }
 
 /**
+ * Which ceiling refused a reservation, or `null` when it was admitted.
+ *
+ * - `messages`: the message cap (daily on the free rung, monthly entitled).
+ * - `budget`:   the operator's spend backstop.
+ * - `band`:     the plan's own band, as a wall — the switch, or a plan with
+ *               no rate to sell past it at.
+ * - `cap`:      the org's own dollar ceiling on overage (AGL-2898).
+ *
+ * Declared here, beside the helpers that read it, so the reservation, its
+ * public projection and both doors name one union.
+ */
+export type AssistRefusedBy = 'messages' | 'budget' | 'band' | 'cap' | null
+
+/**
  * Whether a refusal at the band was the org's OWN doing — the switch is on
  * AND turning it off would have let the exchange through. The refusal that
  * names the switch has to be the one the switch caused: on a plan with no
@@ -366,7 +380,7 @@ export function assistBandRefuses(
  */
 export function assistRefusedByHardCap(
   org: Partial<AglynOrgBilling> | null | undefined,
-  refusedBy: 'messages' | 'budget' | 'band' | null,
+  refusedBy: AssistRefusedBy,
 ): boolean {
   return (
     refusedBy === 'band' &&
@@ -433,4 +447,108 @@ export function assistMonthOverage(
       assistCreditOverage(usedCredits, bandCredits),
     ),
   }
+}
+
+/** The console's name for the org's overage ceiling (AGL-2898). */
+export const ASSIST_OVERAGE_CAP_CONTROL_LABEL =
+  'Stop AI when this month’s overage reaches'
+
+/**
+ * Bounds on the ceiling a self-serve org may set. The floor is a dollar
+ * because a ceiling of cents would refuse on the first exchange past the
+ * band while reading as a limit; the roof is the storage cap's, so no
+ * self-serve org writes itself an enterprise-sized commitment.
+ */
+export const ASSIST_OVERAGE_CAP_MIN_USD = 1
+export const ASSIST_OVERAGE_CAP_MAX_USD = 100_000
+
+/**
+ * The org's monthly ceiling on AI overage dollars, or `null` for none.
+ *
+ * Strictly a finite positive number. `null`, absent, a string, `NaN`,
+ * `Infinity` and zero all read as no ceiling — the failure mode of the
+ * alternative is a wall of `NaN` that every comparison passes, or a ceiling
+ * of zero that refuses the first exchange past the band while the card
+ * says nothing is set.
+ */
+export function resolveAssistOverageCapUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number | null {
+  const raw = org?.assistOverage?.capUsd
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return null
+  return raw
+}
+
+/**
+ * Has this month's overage reached the org's own ceiling (AGL-2898)?
+ *
+ * Composed from `assistMonthOverage`, the ONE derivation the invoice reads,
+ * so the figure the ceiling stops at is the figure the invoice would have
+ * billed. That composition is also what confines the ceiling to plans that
+ * sell past their band: a plan with no rate prices its overage to zero, and
+ * zero never reaches a positive ceiling — Free and Enterprise cannot get here
+ * without a check that could be forgotten. `>=` rather than `>`, because an
+ * org that asked to stop AT a figure is stopped when the figure is met.
+ */
+export function assistOverageCapReached(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  estCostUsd: number,
+): boolean {
+  const cap = resolveAssistOverageCapUsd(org)
+  if (cap === null) return false
+  return assistMonthOverage(org, estCostUsd).overageMonthlyUsd >= cap
+}
+
+/**
+ * Whether a refusal was the org's own ceiling. The reservation answers
+ * `'cap'` only when `assistOverageCapReached` did, and that helper only
+ * reaches a ceiling on a plan with a rate, so the two conditions restated
+ * here are the same guarantee `assistRefusedByHardCap` gives the switch: the
+ * control the sentence names is the control that refused.
+ */
+export function assistRefusedByOverageCap(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  refusedBy: AssistRefusedBy,
+): boolean {
+  return (
+    refusedBy === 'cap' &&
+    resolveAssistOverageCapUsd(org) !== null &&
+    PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k !== null
+  )
+}
+
+/**
+ * The sentence a workspace is told when its own overage ceiling refused it.
+ * ONE string for both assist entrypoints, as `assistHardCapRefusalText` is
+ * for the switch. It names the control by its label, quotes the figure the
+ * org chose, and says where to raise or clear it.
+ */
+export function assistOverageCapRefusalText(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): string {
+  const cap = resolveAssistOverageCapUsd(org)
+  const figure = cap === null ? '' : ` $${cap.toFixed(2)}`
+  return (
+    `This month’s AI assist overage reached${figure}, the figure you set as ` +
+    `"${ASSIST_OVERAGE_CAP_CONTROL_LABEL}". Raise or remove it under ` +
+    `${ASSIST_HARD_CAP_CONTROL_LOCATION} to keep going.`
+  )
+}
+
+/**
+ * The refusal sentence for whichever of the org's OWN controls refused, or
+ * `null` when the refusal was nobody's control — the message cap, the
+ * operator's backstop, or a plan that sells no overage. Both doors answer a
+ * 402 with this text when it is a string and their usual 429 otherwise, so
+ * the status and the sentence cannot disagree about whose decision it was.
+ */
+export function assistOwnControlRefusalText(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  refusedBy: AssistRefusedBy,
+): string | null {
+  if (assistRefusedByHardCap(org, refusedBy)) return assistHardCapRefusalText(org)
+  if (assistRefusedByOverageCap(org, refusedBy)) {
+    return assistOverageCapRefusalText(org)
+  }
+  return null
 }

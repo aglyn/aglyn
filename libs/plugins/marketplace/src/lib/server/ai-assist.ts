@@ -20,10 +20,7 @@ import {
   type PluginApiHandler,
   type PluginApiResponse,
 } from '@aglyn/aglyn/server'
-import {
-  assistHardCapRefusalText,
-  assistRefusedByHardCap,
-} from '@aglyn/aglyn/app-utils/assist-credits'
+import { assistOwnControlRefusalText } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   checkRateLimit,
   firebaseAdmin,
@@ -287,15 +284,17 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'AI assist is temporarily unavailable' })
     }
     if (!reservation.allowed) {
-      // The org's own wall is a 402, not a 429 (AGL-2653): credits past the
-      // band are for sale and this workspace switched the sale off, so the
-      // sentence names the switch — the same sentence the console assistant
-      // gives, from the same helper. Every other refusal keeps the 429.
-      const hardCapped = assistRefusedByHardCap(org, reservation.refusedBy)
-      return res.status(hardCapped ? 402 : 429).json({
-        error: hardCapped
-          ? assistHardCapRefusalText(org)
-          : 'This workspace reached its AI assist limit for the month — contact support if you need a higher cap',
+      // The org's own controls are a 402, not a 429: credits past the band
+      // are for sale and this workspace either switched the sale off
+      // (AGL-2653) or capped what it would buy (AGL-2898), so the sentence
+      // names the control that refused — the same sentence the console
+      // assistant gives, from the same helper. Every other refusal keeps
+      // the 429.
+      const ownControl = assistOwnControlRefusalText(org, reservation.refusedBy)
+      return res.status(ownControl ? 402 : 429).json({
+        error:
+          ownControl ??
+          'This workspace reached its AI assist limit for the month — contact support if you need a higher cap',
         // CREDITS, never the reservation itself — see `publicAssistQuota`.
         quota: publicAssistQuota(reservation),
       })

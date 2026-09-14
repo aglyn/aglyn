@@ -27,8 +27,11 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   assistBandRefuses,
+  assistOverageCapReached,
   publicAssistCredits,
   resolveAssistBudgetUsd,
+  resolveAssistOverageCapUsd,
+  type AssistRefusedBy,
   type PublicAssistCredits,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -431,12 +434,14 @@ export interface AssistReservation extends AssistQuotaVerdict {
    * to buy past — so its refusal has to name the switch that made it a wall.
    * `'band'` is answered only when the figure that refused IS the band; an
    * operator's lower figure refuses as `'budget'` even on a plan with one.
+   * `'cap'` (AGL-2898) is the org's own dollar ceiling on the overage it
+   * buys past the band — reachable only on a plan that sells past it.
    *
    * Only on the reservation, not on `AssistQuotaVerdict` — `checkAssistQuota`
    * is a reporting read that never consults the spend ceiling, and widening
    * the shared type would let a caller believe it had.
    */
-  refusedBy: 'messages' | 'budget' | 'band' | null
+  refusedBy: AssistRefusedBy
   /**
    * Measured provider spend for `monthKey` in USD as read inside the
    * transaction, or `null` when the transaction did not consult it.
@@ -572,6 +577,10 @@ export async function reserveAssistMessage(
   // the operator's decision and keeps the operator's word.
   const ceilingIsBand =
     bandRefuses && budgetUsd !== null && costLimitUsd === budgetUsd
+  // The org's own ceiling on the overage it buys (AGL-2898). Only a band
+  // that is SOLD past has an overage to cap, so a band that refuses leaves
+  // no ceiling to consult: past a wall there is nothing to be over.
+  const overageCapUsd = bandRefuses ? null : resolveAssistOverageCapUsd(org)
 
   return firestore.runTransaction(async (tx) => {
     // Every read before any write — Firestore requires that ordering, and it
@@ -623,6 +632,33 @@ export async function reserveAssistMessage(
         budgetUsd,
       }
     }
+    // The org's ceiling on its OVERAGE (AGL-2898), checked after the band
+    // because it only exists on a band that is sold past. Same shape as the
+    // refusals above — inside the transaction, against the spend the
+    // transaction read, moving no counter — so a burst of concurrent
+    // requests at the ceiling cannot each read "under" and all proceed.
+    // `assistOverageCapReached` prices the month's overage the way the
+    // invoice will, so the figure that stops here is the figure that would
+    // have been billed.
+    if (
+      overageCapUsd !== null &&
+      costUsd !== null &&
+      assistOverageCapReached(org, costUsd)
+    ) {
+      return {
+        allowed: false,
+        refusedBy: 'cap' as const,
+        period,
+        dayKey: day,
+        monthKey: month,
+        used,
+        limit,
+        remaining: Math.max(0, limit - used),
+        costUsd,
+        costLimitUsd,
+        budgetUsd,
+      }
+    }
     // `set(…, { merge: true })` and never `update()`: the counter document
     // does not exist before an org's first message, and `update()` throws
     // NOT_FOUND on a missing doc where a merging set conjures it.
@@ -655,7 +691,7 @@ export interface PublicAssistQuota {
   used: number
   limit: number
   remaining: number
-  refusedBy: 'messages' | 'budget' | 'band' | null
+  refusedBy: AssistRefusedBy
   /**
    * The credit standing, or `null` when the org's plan sells no assist band.
    *

@@ -173,11 +173,39 @@ lives — and you are never billed for AI assist. Turn it off at any time to kee
 your plan's rate; either change takes effect on the next message. Changing it needs the
 **Manage billing** permission.
 
+### If you would rather it kept going, up to a figure you choose {#ai-overage-ceiling}
+
+With the switch off, the same card offers a **monthly ceiling** on the extra credits you
+will pay for: **Stop AI when this month's overage reaches** a dollar figure you type.
+Once the month's overage — the extra credits priced at your plan's rate, exactly as the
+invoice would price them — reaches that figure, the assistant stops for the rest of the
+month, and the refusal names the ceiling and where to raise or remove it. It resets with
+the month.
+
+The ceiling and the switch are separate controls. The switch decides whether anything
+past the band is sold at all; the ceiling bounds how much. With the switch on the
+ceiling is never reached, because nothing past the band is sold. Setting, changing or
+removing the ceiling needs the **Manage billing** permission, and a ceiling is never
+applied unless you set one.
+
 :::info Plans that sell no overage
-Free and Starter include no AI assist credits, so there is nothing to stop at. Enterprise
-credits are set by agreement and are never billed past the band, so the assistant stops
-there on its own and the switch is not offered.
+Free and Starter include no AI assist credits by default, so there is nothing to stop at.
+A workspace on a plan that sells no credits past its band — Enterprise, whose credits are
+set by agreement, or a Free workspace that has been given a band — stops at the band on
+its own: the assistant refuses there until next month or an upgrade, and **nothing is
+ever billed** for AI assist. Neither the switch nor the ceiling is offered, because
+neither would change anything.
 :::
+
+### Alerts on the way there {#ai-credit-alerts}
+
+Workspace owners and admins are notified — in the console and by email — when the month's
+AI assist use passes **80%** of the included credits, and again at **100%**, once per
+threshold per month. The 100% notice says what happens next for your plan: on a plan
+that sells credits past the band, that the assistant keeps answering and the extra credits
+are metered at your plan's rate unless you set a stop; on a plan that sells none, that the
+assistant stops until next month or an upgrade. The same warning appears as a banner in
+the console, with a link to **Billing → Usage**.
 
 ## Usage budget
 
@@ -188,8 +216,8 @@ hear about — the same shape as a Google Cloud billing budget. Set it in
 - **It warns, it never limits.** Passing a budget sends a notification and an email.
   Nothing stops, no upload is refused, and your bill is unaffected. If you want usage to
   actually stop, that is the [storage cap](#storage-overage) or the
-  [AI assist stop](#assist-overage) above — different controls, deliberately kept
-  separate.
+  [AI assist stop and ceiling](#assist-overage) above — different controls, deliberately
+  kept separate.
 - **You choose the alert points.** The default is **50%, 90% and 100%**; you can set your
   own, including percentages above 100 so a runaway month keeps speaking. Up to six.
 - **One alert per percentage per month.** Crossing 50% tells you once, not once an hour.

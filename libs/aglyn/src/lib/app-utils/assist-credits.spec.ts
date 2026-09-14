@@ -32,13 +32,18 @@ import {
   ASSIST_CREDIT_MIN_MARGIN_PCT,
   ASSIST_HARD_CAP_CONTROL_LABEL,
   ASSIST_HARD_CAP_CONTROL_LOCATION,
+  ASSIST_OVERAGE_CAP_CONTROL_LABEL,
   assistBandRefuses,
   assistCreditOverage,
   assistCreditRateMarginPct,
   assistCreditsFromUsd,
   assistHardCapRefusalText,
   assistMonthOverage,
+  assistOverageCapReached,
+  assistOverageCapRefusalText,
+  assistOwnControlRefusalText,
   assistRefusedByHardCap,
+  assistRefusedByOverageCap,
   assistUsdFromCredits,
   priceAssistCreditOverage,
   publicAssistCredits,
@@ -46,6 +51,7 @@ import {
   resolveAssistCreditBudget,
   resolveAssistHardCap,
   resolveAssistOverageRateUsdPer1k,
+  resolveAssistOverageCapUsd,
 } from './assist-credits'
 import {
   AI_ADDON_CREDITS_PER_MONTH,
@@ -54,6 +60,7 @@ import {
   hasAiAddon,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  resolveEffectivePlan,
 } from './plan-entitlements'
 /**
  * Measured cost of one grounded answer, and of one generated screen, at the
@@ -639,5 +646,167 @@ describe('the Aglyn AI add-on widens the ONE pool and sells past it (AGL-2896)',
     for (const band of Object.values(AI_ADDON_CREDITS_PER_MONTH)) {
       expect(Number.isFinite(band)).toBe(true)
     }
+  })
+})
+
+describe('the dollar ceiling on overage (AGL-2898)', () => {
+  /** Pro: 2,750 credits at $3.00 per 1,000. 2,000 credits over is $6.00. */
+  const PRO_BAND = 2_750
+  const capped = (capUsd: unknown) => ({
+    plan: 'pro' as const,
+    assistOverage: { capUsd: capUsd as number },
+  })
+
+  it('resolves only a finite positive number; everything else is NO ceiling', () => {
+    expect(resolveAssistOverageCapUsd(capped(6))).toBe(6)
+    expect(resolveAssistOverageCapUsd(capped(0.5))).toBe(0.5)
+    // A string "6" must not become a ceiling — the route refuses it too —
+    // and neither may junk become a wall of NaN that every comparison passes.
+    for (const junk of ['6', 0, -6, Number.NaN, Number.POSITIVE_INFINITY, null, undefined, true]) {
+      expect(resolveAssistOverageCapUsd(capped(junk))).toBeNull()
+    }
+    expect(resolveAssistOverageCapUsd({ plan: 'pro' })).toBeNull()
+    expect(resolveAssistOverageCapUsd(null)).toBeNull()
+  })
+
+  it('is reached when the month’s PRICED overage meets the figure, not before', () => {
+    // FORCED RED by comparing credits to the cap instead of dollars: 2,000
+    // credits over reads as 2,000 >= 6 and the ceiling fires at the band.
+    const org = capped(6)
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND))).toBe(false)
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND + 1_000))).toBe(false)
+    // $5.97 of overage against a $6 ceiling: under.
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND + 1_990))).toBe(false)
+    // Exactly $6.00: reached. An org that asked to stop AT a figure is
+    // stopped when the figure is met.
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND + 2_000))).toBe(true)
+    expect(assistOverageCapReached(org, assistUsdFromCredits(PRO_BAND + 9_000))).toBe(true)
+  })
+
+  it('is the invoice’s own arithmetic — the figure it stops at is the figure billed', () => {
+    const org = capped(6)
+    const spend = assistUsdFromCredits(PRO_BAND + 2_000)
+    expect(assistMonthOverage(org, spend).overageMonthlyUsd).toBe(6)
+    expect(assistOverageCapReached(org, spend)).toBe(true)
+  })
+
+  it('is never reached without a ceiling, however far past the band', () => {
+    expect(assistOverageCapReached({ plan: 'pro' }, assistUsdFromCredits(PRO_BAND + 90_000))).toBe(false)
+    expect(assistOverageCapReached(capped('6'), assistUsdFromCredits(PRO_BAND + 90_000))).toBe(false)
+  })
+
+  it('is never reached on a plan with no rate — the overage prices to zero, structurally', () => {
+    // Enterprise: a band, no rate. Free with a contracted band: the same.
+    // Neither has a check for it; zero simply never meets a positive figure.
+    for (const org of [
+      { plan: 'enterprise' as const, assistOverage: { capUsd: 1 } },
+      {
+        plan: 'free' as const,
+        entitlements: { assistCreditsPerMonth: 300 },
+        assistOverage: { capUsd: 1 },
+      },
+    ]) {
+      expect(assistOverageCapReached(org, 500)).toBe(false)
+      expect(assistRefusedByOverageCap(org, 'cap')).toBe(false)
+    }
+  })
+
+  it('a refusal is the ceiling’s own only when the ceiling caused it', () => {
+    const org = capped(6)
+    expect(assistRefusedByOverageCap(org, 'cap')).toBe(true)
+    for (const other of ['band', 'budget', 'messages', null] as const) {
+      expect(assistRefusedByOverageCap(org, other)).toBe(false)
+    }
+    // No ceiling set: a `cap` refusal is not this org's and must not send
+    // the user to a control that shows nothing.
+    expect(assistRefusedByOverageCap({ plan: 'pro' }, 'cap')).toBe(false)
+  })
+
+  it('the switch and the ceiling are told apart, and each names only itself', () => {
+    const stoppedAtBand = { plan: 'pro' as const, assistOverage: { hardCap: true, capUsd: 6 } }
+    expect(assistRefusedByHardCap(stoppedAtBand, 'band')).toBe(true)
+    expect(assistRefusedByOverageCap(stoppedAtBand, 'band')).toBe(false)
+    expect(assistRefusedByHardCap(stoppedAtBand, 'cap')).toBe(false)
+    expect(assistRefusedByOverageCap(stoppedAtBand, 'cap')).toBe(true)
+    expect(assistOwnControlRefusalText(stoppedAtBand, 'band')).toContain(
+      `"${ASSIST_HARD_CAP_CONTROL_LABEL}"`,
+    )
+    expect(assistOwnControlRefusalText(stoppedAtBand, 'cap')).toContain(
+      `"${ASSIST_OVERAGE_CAP_CONTROL_LABEL}"`,
+    )
+    // Nobody's control: the message cap, the operator's figure, an admission.
+    for (const other of ['messages', 'budget', null] as const) {
+      expect(assistOwnControlRefusalText(stoppedAtBand, other)).toBeNull()
+    }
+  })
+
+  it('the refusal sentence names the control, quotes the figure, and says where it lives', () => {
+    const text = assistOverageCapRefusalText(capped(6))
+    expect(text).toContain(`"${ASSIST_OVERAGE_CAP_CONTROL_LABEL}"`)
+    expect(text).toContain('$6.00')
+    expect(text).toContain(ASSIST_HARD_CAP_CONTROL_LOCATION)
+    // No dollar figure of OURS — the ceiling is the customer's own number.
+    for (const leak of ['costUsd', 'estCostUsd', '0.001', 'provider']) {
+      expect(text).not.toContain(leak)
+    }
+    expect(ASSIST_OVERAGE_CAP_CONTROL_LABEL).toMatch(/^[A-Z][a-z]/)
+    expect(ASSIST_OVERAGE_CAP_CONTROL_LABEL).not.toMatch(/[_{}]/)
+  })
+})
+
+describe('Free is a WALL, even when given a band (AGL-2898)', () => {
+  /**
+   * A Free org that staff handed 300 credits through the entitlements
+   * override. It has a band to measure against and no rate to sell past it
+   * at, so the band is a wall: refused there, billed nothing, offered no
+   * control — and nothing here is a Free-specific check, it all follows from
+   * `extraAssistCreditsUsdPer1k` being `null`.
+   */
+  const freeWithBand = {
+    plan: 'free' as const,
+    entitlements: { assistCreditsPerMonth: 300 },
+  }
+
+  it('has the band, and no rate', () => {
+    expect(resolveAssistCreditBudget(freeWithBand)).toBe(300)
+    expect(PLAN_PRICING.free.extraAssistCreditsUsdPer1k).toBeNull()
+    expect(assistBandRefuses(freeWithBand)).toBe(true)
+  })
+
+  it('prices NOTHING past the band', () => {
+    // FORCED RED by pricing a null rate as 0 per 1,000 instead of skipping:
+    // the overage credits would still count and the dollars would be 0, so
+    // this asserts both halves of "billed nothing".
+    const month = assistMonthOverage(freeWithBand, assistUsdFromCredits(900))
+    expect(month).toMatchObject({
+      usedCredits: 900,
+      bandCredits: 300,
+      overageCredits: 600,
+      overageMonthlyUsd: 0,
+      overageRateUsd: null,
+    })
+  })
+
+  it('names NO control when refused at the band — there is nothing to switch', () => {
+    // A refusal at the band on this org is the plan's, not the org's: the
+    // switch is off, and turning it on would change nothing.
+    expect(assistRefusedByHardCap(freeWithBand, 'band')).toBe(false)
+    expect(assistRefusedByHardCap({ ...freeWithBand, assistOverage: { hardCap: true } }, 'band')).toBe(false)
+    expect(assistOwnControlRefusalText(freeWithBand, 'band')).toBeNull()
+    // And a ceiling on it is inert: zero overage never reaches one.
+    expect(assistOverageCapReached({ ...freeWithBand, assistOverage: { capUsd: 1 } }, 500)).toBe(false)
+    expect(assistOwnControlRefusalText({ ...freeWithBand, assistOverage: { capUsd: 1 } }, 'cap')).toBeNull()
+  })
+
+  it('the card’s "nothing to stop" reading: sells no overage, switch off', () => {
+    // What the assist-overage route serves the card, from the same
+    // resolvers: a band, no rate, so `sellsOverage` is false and with the
+    // switch off the card offers neither the switch nor the ceiling.
+    const bandCredits = resolveAssistCreditBudget(freeWithBand)
+    const rate = PLAN_PRICING[resolveEffectivePlan(freeWithBand)].extraAssistCreditsUsdPer1k
+    const sellsOverage = bandCredits !== null && rate !== null
+    const nothingToStop = !sellsOverage && !resolveAssistHardCap(freeWithBand)
+    expect(sellsOverage).toBe(false)
+    expect(nothingToStop).toBe(true)
   })
 })

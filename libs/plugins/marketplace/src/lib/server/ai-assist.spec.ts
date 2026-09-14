@@ -705,6 +705,36 @@ describe('the ladder refuses before it spends (AGL-2073)', () => {
     expect(mockDocs.size).toBe(0)
   })
 
+  it('402s the org’s OWN overage ceiling, naming it — the besigner door (AGL-2898)', async () => {
+    // The same helper the console assistant answers from, so the two doors
+    // cannot describe the same control in two ways. Pro: $4.75 of spend is
+    // 2,000 credits over the band, $6.00 of overage, against a $6 ceiling.
+    //
+    // FORCED RED by keeping the 429 for every refusal: the status failed.
+    mockGetOrgForUser = async (uid: string, orgId?: string | null) =>
+      orgId === ORG
+        ? {
+            orgId: ORG,
+            org: { plan: 'pro', assistOverage: { capUsd: 6 } },
+            member: { $id: uid },
+          }
+        : null
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] })
+    jest.setSystemTime(new Date('2026-08-17T12:00:00.000Z'))
+    mockDocs.set('orgs/org-pro/assistUsage/2026-08', { messages: 5, estCostUsd: 4.75 })
+    const result = await call(BODY, 'token-capped')
+    expect(result.status).toBe(402)
+    expect(String((result.body as any).error)).toContain(
+      '"Stop AI when this month’s overage reaches"',
+    )
+    expect(String((result.body as any).error)).toContain('$6.00')
+    expect((result.body as any).quota).toMatchObject({ refusedBy: 'cap' })
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(mockDocs.get('orgs/org-pro/assistUsage/2026-08')?.['messages']).toBe(5)
+    // No dollar figure of ours on the wire.
+    expect(JSON.stringify(result.body)).not.toContain('4.75')
+  })
+
   it('FAILS CLOSED when the reservation cannot be taken', async () => {
     // The deliberate asymmetry: the rate limiter is a per-instance smoother
     // and may fail soft, but the reservation is the only global bound on what

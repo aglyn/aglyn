@@ -22,11 +22,12 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import { assistBandRefuses } from '@aglyn/aglyn/app-utils/assist-credits'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Alert, Button } from '@mui/material'
 import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFirestore, useScopeTokens, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { buildRoute, Route } from '../constants/route-links'
@@ -70,7 +71,16 @@ interface QuotaState {
   label: string
   used: number
   limit: number
+  /**
+   * The AI credits row (AGL-2898) carries a key because its sentence is its
+   * own: what happens at the band differs by plan, and the generic "upgrade
+   * to keep adding" is wrong for a band that is sold past.
+   */
+  key?: 'assistCredits'
 }
+
+/** The AI credits row's label, used to find it again among the others. */
+const ASSIST_CREDITS_LABEL = 'AI assist credits'
 
 /**
  * Site-wide quota warnings (AGL-136, grown from the AGL-98 dashboard
@@ -197,7 +207,12 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       if (!active) return
       const mediaBytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       setQuotas((previous) => [
-        ...previous.filter((quota) => quota.label === 'team seats'),
+        // The org-level rows — seats and AI credits — are owned by their
+        // own effects and survive a host change untouched.
+        ...previous.filter(
+          (quota) =>
+            quota.label === 'team seats' || quota.key === 'assistCredits',
+        ),
         {
           label: 'screens',
           used: screens?.data().count ?? 0,
@@ -306,6 +321,52 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, orgId, plan, orgWideViewer, user, orgInScope])
+
+  // The token source, held in a ref rather than listed as a dependency. The
+  // credits fetch below needs the user only to sign its request, and keying
+  // the effect on the object's IDENTITY would re-issue the request — and
+  // cancel the one in flight — on every render in which the provider hands
+  // back a fresh object, which is every render under a hook that does not
+  // memoize. The seats effect survives that by caching in sessionStorage;
+  // a standing that must be fresh every mount cannot.
+  const userRef = useRef(user)
+  userRef.current = user
+
+  // The AI credits band (AGL-2898), from the billing route that owns the
+  // meter. Not a Firestore read: `orgs/{id}/assistUsage` is default-deny for
+  // every client, and the route answers in CREDITS, the unit the customer was
+  // sold — no dollar figure of ours crosses this boundary. Gated exactly as
+  // the seat count is: an org-scoped route, and a viewer who can see org
+  // totals. `credits: null` is a plan with no band, and no band is no row.
+  useEffect(() => {
+    if (!orgInScope || !plan || !orgId || !orgWideViewer) return
+    let active = true
+    void (async () => {
+      try {
+        const response = await authorizedFetch(
+          userRef.current,
+          `/api/billing/assist-credits?orgId=${encodeURIComponent(orgId)}`,
+        )
+        if (!response.ok || !active) return
+        const payload = await response.json().catch(() => null)
+        const credits = payload?.credits
+        const used = Number(credits?.used)
+        const limit = Number(credits?.limit)
+        // A standing we could not read is not a standing of zero — the
+        // datasets and seats rows hold the same line, for the same reason.
+        if (!active || !Number.isFinite(used) || !Number.isFinite(limit)) return
+        setQuotas((previous) => [
+          ...previous.filter((quota) => quota.key !== 'assistCredits'),
+          { key: 'assistCredits', label: ASSIST_CREDITS_LABEL, used, limit },
+        ])
+      } catch {
+        // Network trouble: no AI credits row, and no stale one either.
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [orgId, plan, orgWideViewer, orgInScope])
 
   // ONE gate for every branch below (AGL-1916), placed above all three rather
   // than repeated inside them. Suspension and dunning are org claims of the
@@ -464,7 +525,26 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   )
   if (!breached.length) return null
   const exceeded = breached.some((quota) => quota.used >= quota.limit)
-  const names = breached.map((quota) => quota.label).join(' and ')
+  // The AI credits row speaks for itself (AGL-2898); every other row shares
+  // the one sentence below.
+  const assistRow = breached.find((quota) => quota.key === 'assistCredits')
+  const others = breached.filter((quota) => quota.key !== 'assistCredits')
+  const names = others.map((quota) => quota.label).join(' and ')
+  // What happens at the AI band is a fact about the plan and the org's own
+  // switch, and it is the same predicate the reservation refuses on — so the
+  // banner cannot promise a stop the assistant will not make, or a charge
+  // the plan cannot bill.
+  const assistStops = assistBandRefuses(org)
+  const assistSentence = !assistRow
+    ? ''
+    : assistRow.used >= assistRow.limit
+      ? assistStops
+        ? "You've used your included AI assist credits — AI assist stops " +
+          'until next month or an upgrade, and nothing is billed for it.'
+        : "You've used your included AI assist credits — extra credits are " +
+          'billed at your plan’s rate unless you set a stop under ' +
+          'Billing → Usage.'
+      : "You're above 80% of your included AI assist credits."
 
   return (
     <Alert
@@ -474,6 +554,18 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         // MUI's action slot replaces the onClose icon, so the dismiss
         // button lives beside Upgrade explicitly.
         <>
+          {orgWideViewer && assistRow ? (
+            // Where the AI stop and ceiling live (AGL-2898): the sentence
+            // names the page, so the button takes the reader there.
+            <AppLink
+              componentVariant="button"
+              color="inherit"
+              size="small"
+              href={buildRoute(Route.MANAGE_BILLING_USAGE, { orgSlug })}
+            >
+              {'Usage'}
+            </AppLink>
+          ) : null}
           {orgWideViewer ? (
             <AppLink
               componentVariant="button"
@@ -505,14 +597,21 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
        * limit stays and only the call to action changes. The org's quotas
        * are theirs to work within, not to act on.
        */}
-      {scopedViewer
-        ? exceeded
-          ? `This site has reached its ${names} limit — ask a workspace ` +
-            'admin to upgrade to keep adding.'
-          : `This site is above 80% of its ${names} quota.`
-        : exceeded
-          ? `You've reached your ${names} limit — upgrade to keep adding.`
-          : `You're above 80% of your ${names} quota.`}
+      {[
+        !others.length
+          ? ''
+          : scopedViewer
+            ? others.some((quota) => quota.used >= quota.limit)
+              ? `This site has reached its ${names} limit — ask a workspace ` +
+                'admin to upgrade to keep adding.'
+              : `This site is above 80% of its ${names} quota.`
+            : others.some((quota) => quota.used >= quota.limit)
+              ? `You've reached your ${names} limit — upgrade to keep adding.`
+              : `You're above 80% of your ${names} quota.`,
+        assistSentence,
+      ]
+        .filter(Boolean)
+        .join(' ')}
     </Alert>
   )
 }

@@ -814,6 +814,23 @@ export interface OrgStorageOverage {
  * On a plan whose `extraAssistCreditsUsdPer1k` is `null` the switch changes
  * nothing: there is no rate to sell past the band at, so the band stays the
  * wall it always was, on or off.
+ *
+ * ## The dollar ceiling beside the switch (AGL-2898)
+ *
+ * `capUsd` is the second control, and it answers a different question. The
+ * switch asks "sell past the band at all?"; the ceiling asks "and if so, how
+ * much?" — a monthly figure in USD of OVERAGE, priced at the plan's rate, past
+ * which the assistant refuses for the rest of the month. It is the
+ * `storageOverage.capUsd` of this meter: optional, absent by default, and the
+ * customer's own number rather than a band the plan sold them. Read through
+ * `resolveAssistOverageCapUsd`, and enforced by `assistOverageCapReached`
+ * inside the same reservation transaction as the band.
+ *
+ * The two are independent. With the switch on the ceiling is never reached,
+ * because nothing past the band is ever sold; with the switch off and no
+ * ceiling the overage is open-ended, bounded only by the plan's message cap.
+ * On a plan with no rate the ceiling, like the switch, changes nothing:
+ * overage on such a plan prices to zero and zero never reaches a ceiling.
  */
 export interface OrgAssistOverage {
   /** True stops assist at the included band; absent or false sells past it. */
@@ -822,6 +839,16 @@ export interface OrgAssistOverage {
   hardCapSetAt?: ITimestamp | null
   /** The uid that wrote it. */
   hardCapSetBy?: string | null
+  /**
+   * The month's ceiling on AI overage, in USD at the plan's rate. `null` or
+   * absent is no ceiling; anything that is not a finite positive number reads
+   * as none too, so a corrupt value cannot become a wall of `NaN`.
+   */
+  capUsd?: number | null
+  /** When the ceiling was last written or cleared, for the audit trail. */
+  capSetAt?: ITimestamp | null
+  /** The uid that wrote it. */
+  capSetBy?: string | null
 }
 
 /**

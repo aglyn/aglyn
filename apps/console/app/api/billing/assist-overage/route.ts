@@ -22,8 +22,12 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   ASSIST_HARD_CAP_CONTROL_LABEL,
+  ASSIST_OVERAGE_CAP_CONTROL_LABEL,
+  ASSIST_OVERAGE_CAP_MAX_USD,
+  ASSIST_OVERAGE_CAP_MIN_USD,
   resolveAssistCreditBudget,
   resolveAssistHardCap,
+  resolveAssistOverageCapUsd,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   emailUnverifiedResponse,
@@ -41,27 +45,32 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 // stops an org accruing assist charges, so a 423 would trap it accruing them.
 
 /**
- * Read or set the org's own assist hard-cap switch (AGL-2653).
+ * Read or set the org's own assist controls: the hard-cap switch (AGL-2653)
+ * and the dollar ceiling on overage (AGL-2898).
  *
  * Credits past the plan's assist band are SOLD by default, at
- * `PLAN_PRICING.extraAssistCreditsUsdPer1k`. This route is the one control a
- * customer has over that, and nothing else — it is not a consent surface,
- * and there is nothing here an org must do before assist works.
+ * `PLAN_PRICING.extraAssistCreditsUsdPer1k`. This route holds the two
+ * controls a customer has over that, and nothing else — it is not a consent
+ * surface, and there is nothing here an org must do before assist works.
  *
- *   `get`        → whether the switch is on, the band, the rate the overage
- *                  bills at, and whether the plan sells overage at all
+ *   `get`        → whether the switch is on, the ceiling if any, the band,
+ *                  the rate the overage bills at, and whether the plan sells
+ *                  overage at all
  *   `setHardCap` → store `hardCap: true | false`
+ *   `setCap`     → store `capUsd: number`, or `null` to clear the ceiling
  *
- * `billing.manage`-gated, because the switch bounds spend in both directions:
- * turning it off is what lets the org be invoiced past its band, and turning
- * it on is what stops a workspace's assistant at the band. Admin-SDK-only by
- * construction — `assistOverage` is denied to every client in the rules, so a
- * member cannot lift their own ceiling or lower somebody else's.
+ * `billing.manage`-gated, because both controls bound spend in both
+ * directions: lifting either is what lets the org be invoiced further past
+ * its band, and setting either is what stops a workspace's assistant.
+ * Admin-SDK-only by construction — `assistOverage` is denied to every client
+ * in the rules, so a member cannot lift their own ceiling or lower somebody
+ * else's.
  *
- * TURNING IT OFF IS ALWAYS AVAILABLE, on any plan and at any usage level: an
- * org that wants the sale back on must not have to argue with a precondition.
- * Turning it ON is refused, 409, on a plan that sells no overage — there the
- * band is already the wall (`assistBandRefuses`), and storing a switch that
+ * TURNING THE SWITCH OFF AND CLEARING THE CEILING ARE ALWAYS AVAILABLE, on
+ * any plan and at any usage level: an org that wants the sale back on must
+ * not have to argue with a precondition. Turning the switch on, or setting a
+ * ceiling, is refused, 409, on a plan that sells no overage — there the band
+ * is already the wall (`assistBandRefuses`), and storing a control that
  * changes nothing would read as protection the org does not have.
  */
 async function handler(request: Request): Promise<Response> {
@@ -77,7 +86,7 @@ async function handler(request: Request): Promise<Response> {
   if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   const orgId = String(body?.orgId ?? '')
   const action = String(body?.action ?? '')
-  if (!orgId || !['get', 'setHardCap'].includes(action)) {
+  if (!orgId || !['get', 'setHardCap', 'setCap'].includes(action)) {
     return Response.json({ error: 'Bad request' }, { status: 400 })
   }
 
@@ -102,6 +111,7 @@ async function handler(request: Request): Promise<Response> {
     }
     const org = (orgSnapshot.data() ?? {}) as Record<string, unknown>
     const hardCap = resolveAssistHardCap(org as never)
+    const capUsd = resolveAssistOverageCapUsd(org as never)
     const bandCredits = resolveAssistCreditBudget(org as never)
     // The rate the card quotes must be the rate the rollup bills, so it is
     // served from the same table rather than duplicated into the bundle.
@@ -113,13 +123,86 @@ async function handler(request: Request): Promise<Response> {
       return Response.json(
         {
           hardCap,
+          capUsd,
           bandCredits,
           overageRateUsdPer1k,
           sellsOverage,
           label: ASSIST_HARD_CAP_CONTROL_LABEL,
+          capLabel: ASSIST_OVERAGE_CAP_CONTROL_LABEL,
+          minCapUsd: ASSIST_OVERAGE_CAP_MIN_USD,
+          maxCapUsd: ASSIST_OVERAGE_CAP_MAX_USD,
         },
         { status: 200 },
       )
+    }
+
+    if (action === 'setCap') {
+      const raw = body?.capUsd
+      // `null` clears; anything else must be a real number in a real range.
+      // A string "25" is refused rather than coerced, the way the switch
+      // refuses a string "false": the resolver reads the field strictly, so
+      // a value that reached the document as a string would be no ceiling
+      // at all while the card said one was set.
+      const clearing = raw === null
+      if (
+        !clearing &&
+        (typeof raw !== 'number' ||
+          !Number.isFinite(raw) ||
+          raw < ASSIST_OVERAGE_CAP_MIN_USD ||
+          raw > ASSIST_OVERAGE_CAP_MAX_USD)
+      ) {
+        return Response.json(
+          {
+            error:
+              `Set a monthly AI overage ceiling between ` +
+              `$${ASSIST_OVERAGE_CAP_MIN_USD} and ` +
+              `$${ASSIST_OVERAGE_CAP_MAX_USD.toLocaleString('en-US')}, ` +
+              `or clear it.`,
+            code: 'invalid_cap',
+          },
+          { status: 400 },
+        )
+      }
+      if (!clearing && !sellsOverage) {
+        return Response.json(
+          {
+            error:
+              bandCredits === null
+                ? 'Your plan includes no AI assist credits, so there is no ' +
+                  'overage to cap. Upgrade in Billing to add AI assist.'
+                : 'Your plan already stops AI assist at its included band — ' +
+                  'it sells no credits past it, so there is no overage to cap.',
+            code: 'not_sold',
+          },
+          { status: 409 },
+        )
+      }
+      const requestedCap = clearing ? null : (raw as number)
+      await orgRef.set(
+        {
+          assistOverage: {
+            capUsd: requestedCap,
+            capSetAt: FieldValue.serverTimestamp(),
+            capSetBy: decoded.uid,
+          },
+        },
+        { merge: true },
+      )
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('adminAudit')
+        .add({
+          actorUid: decoded.uid,
+          actorEmail: decoded.email ?? null,
+          action: 'billing.assistOverage.setCap',
+          target: `orgs/${orgId}`,
+          before: { capUsd },
+          after: { capUsd: requestedCap },
+          at: FieldValue.serverTimestamp(),
+        })
+        .catch(() => undefined)
+      return Response.json({ ok: true, capUsd: requestedCap }, { status: 200 })
     }
 
     // Strictly a boolean, the same way the resolver reads it strictly: a

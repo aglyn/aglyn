@@ -28,7 +28,12 @@
  * instead of adding would fabricate green counters).
  */
 
-export {}
+import {
+  assistMonthOverage,
+  assistOwnControlRefusalText,
+  assistRefusedByHardCap,
+  assistUsdFromCredits,
+} from '@aglyn/aglyn/app-utils/assist-credits'
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 
@@ -1474,5 +1479,152 @@ describe('what leaves the server is credits, never our provider bill', () => {
     })
     expect(reservation.allowed).toBe(false)
     expect(publicAssistQuota(reservation).credits).toBeNull()
+  })
+})
+
+describe('the org’s own ceiling on OVERAGE refuses inside the transaction (AGL-2898)', () => {
+  const dailyPath = `orgs/${ORG}/counters/assistMessagesDaily`
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+  /** Pro: 2,750 credits at $3.00 per 1,000 — 2,000 credits over is $6.00. */
+  const PRO_BAND = 2_750
+  const proCapped = { plan: 'pro' as const, assistOverage: { capUsd: 6 } }
+
+  it('REFUSES as `cap` once the priced overage meets the ceiling, and moves no counter', async () => {
+    // FORCED RED by dropping the cap check from the transaction: the
+    // reservation admitted the org and moved `messages` to 13.
+    mockDocs.set(monthPath, {
+      messages: 12,
+      estCostUsd: assistUsdFromCredits(PRO_BAND + 2_000),
+    })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, proCapped)
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'cap',
+      // Messages remain — the ceiling is dollars, not messages.
+      remaining: expect.any(Number),
+    })
+    expect(reservation.remaining).toBeGreaterThan(0)
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
+    expect(mockDocs.get(dailyPath)).toBeUndefined()
+    // And the sentence for it is the org's own, telling the ceiling from
+    // the switch.
+    expect(assistOwnControlRefusalText(proCapped, reservation.refusedBy)).toContain('$6.00')
+    expect(assistRefusedByHardCap(proCapped, reservation.refusedBy)).toBe(false)
+  })
+
+  it('THE NEGATIVE CONTROL: the same spend with NO ceiling reserves', async () => {
+    mockDocs.set(monthPath, {
+      messages: 12,
+      estCostUsd: assistUsdFromCredits(PRO_BAND + 2_000),
+    })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, { plan: 'pro' })
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
+  })
+
+  it('THE SECOND NEGATIVE CONTROL: overage under the ceiling still reserves', async () => {
+    // $5.97 of overage against $6: the org is past its band, buying credits
+    // at the plan's rate, and has not yet reached the figure it chose.
+    mockDocs.set(monthPath, {
+      messages: 12,
+      estCostUsd: assistUsdFromCredits(PRO_BAND + 1_990),
+    })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, proCapped)
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
+  })
+
+  it('the switch outranks the ceiling: with the band a wall, the refusal is `band`', async () => {
+    // With the switch on nothing past the band is sold, so there is no
+    // overage for a ceiling to bound — the band refuses first and in its
+    // own name.
+    const stopped = { plan: 'pro' as const, assistOverage: { hardCap: true, capUsd: 6 } }
+    mockDocs.set(monthPath, {
+      messages: 12,
+      estCostUsd: assistUsdFromCredits(PRO_BAND + 2_000),
+    })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, stopped)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
+  })
+
+  it('the MESSAGE cap still wins when both apply, so the words stay true', async () => {
+    process.env.ASSIST_ENTITLED_MONTHLY_LIMIT = '12'
+    mockDocs.set(monthPath, {
+      messages: 12,
+      estCostUsd: assistUsdFromCredits(PRO_BAND + 2_000),
+    })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, proCapped)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'messages' })
+  })
+
+  it('holds under concurrency: eight requests at the ceiling all refuse, none slip through', async () => {
+    mockDocs.set(monthPath, {
+      messages: 12,
+      estCostUsd: assistUsdFromCredits(PRO_BAND + 2_000),
+    })
+    const store = firestore()
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => reserveAssistMessage(store, ORG, true, NOW, proCapped)),
+    )
+    expect(results.filter((r) => r.allowed)).toHaveLength(0)
+    expect(results.every((r) => r.refusedBy === 'cap')).toBe(true)
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
+  })
+})
+
+describe('Free is a WALL, even when given a band (AGL-2898)', () => {
+  const dailyPath = `orgs/${ORG}/counters/assistMessagesDaily`
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+  /**
+   * A Free org handed 300 credits through the entitlements override. Its
+   * plan sells no credits past the band, so the band is a wall — and it is
+   * refused there in the plan's name, not by any control the org could set.
+   */
+  const freeWithBand = {
+    plan: 'free' as const,
+    entitlements: { assistCreditsPerMonth: 300 },
+  }
+
+  it('is refused AT the band as `band`, on its own daily rung, with nothing billed', async () => {
+    // FORCED RED by making `assistBandRefuses` answer false for a null
+    // rate: the band stopped being a ceiling and the org reserved past it.
+    mockDocs.set(dailyPath, { '2026-08-17': 2 })
+    mockDocs.set(monthPath, { messages: 40, estCostUsd: assistUsdFromCredits(300) })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, freeWithBand)
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'band',
+      period: 'day',
+      // Daily messages remain — this is the band, not the message cap.
+      remaining: 8,
+    })
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 2 })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 40 })
+    // Nothing is owed for the refusal or for anything before it.
+    expect(assistMonthOverage(freeWithBand, reservation.costUsd ?? 0).overageMonthlyUsd).toBe(0)
+    // And no control is named: the switch did not cause this, and neither
+    // could a ceiling — so the doors answer the plain credits sentence and a
+    // 429, never a 402 pointing at a control that does nothing.
+    expect(assistRefusedByHardCap(freeWithBand, reservation.refusedBy)).toBe(false)
+    expect(assistOwnControlRefusalText(freeWithBand, reservation.refusedBy)).toBeNull()
+  })
+
+  it('reads the same with a switch or a ceiling written on it — both are inert', async () => {
+    for (const assistOverage of [{ hardCap: true }, { capUsd: 1 }, { hardCap: false, capUsd: 1 }]) {
+      mockDocs = new Map()
+      mockDocs.set(monthPath, { messages: 40, estCostUsd: assistUsdFromCredits(900) })
+      const org = { ...freeWithBand, assistOverage }
+      const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, org)
+      expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
+      expect(assistOwnControlRefusalText(org, reservation.refusedBy)).toBeNull()
+      expect(assistMonthOverage(org, 0.9).overageMonthlyUsd).toBe(0)
+    }
+  })
+
+  it('THE PAIRED CONTROL: inside the band, the same Free org is answered', async () => {
+    mockDocs.set(monthPath, { messages: 40, estCostUsd: assistUsdFromCredits(200) })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, freeWithBand)
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
   })
 })
