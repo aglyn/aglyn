@@ -25,6 +25,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { checkEntitlement } from '@aglyn/aglyn/server'
 import {
   assistCreditsFromUsd,
+  assistFreeTasteRefusalText,
   assistHardCapRefusalText,
   assistRefusedByHardCap,
 } from '@aglyn/aglyn/app-utils/assist-credits'
@@ -683,6 +684,10 @@ export function aiJobRefusalText(
   if (assistRefusedByHardCap(org, reservation.refusedBy)) {
     return assistHardCapRefusalText(org)
   }
+  // The Free taste's own precautions (AGL-2925), in the sentences every
+  // other door uses — each names a clock or an upgrade.
+  const taste = assistFreeTasteRefusalText(reservation.refusedBy)
+  if (taste) return taste
   switch (reservation.refusedBy) {
     case 'cap':
       return 'This workspace reached the AI spending cap it set for the month'
@@ -869,6 +874,10 @@ export async function runAiJobStep(
         docsPaths: [],
         stopReason: outcome.stopReason,
         deflected: false,
+        // The account this job drew on, as the reservation decided it
+        // (AGL-2925): a Free job lands on the owner's allowance and the
+        // platform's day; a paid one on neither.
+        free: reservation.free ?? null,
       },
       now,
     )

@@ -205,9 +205,9 @@ import {
   type AiJobStepRun,
 } from './ai-jobs'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from './ai-runtime'
+import { assistFreeTasteRefusalText } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   ASSIST_EXCHANGE_RETENTION_DAYS,
-  assistFreeDailyLimit,
   assistUsageDay,
   assistUsageMonth,
 } from './assist-usage'
@@ -430,6 +430,8 @@ describe('runAiJobStep — the text step end to end', () => {
         costUsd: 0,
         costLimitUsd: 40,
         budgetUsd: 40,
+        // A paid workspace: attributed to no Free account (AGL-2925).
+        free: null,
       },
     })
     expect(mockDocs.get(`orgs/${ORG}/assistUsage/${monthKey}`)?.['messages']).toBe(1)
@@ -437,15 +439,17 @@ describe('runAiJobStep — the text step end to end', () => {
 
   it('parks the job as needs_input when the reservation is refused, and never calls the provider', async () => {
     const job = await newTextJob({ orgId: 'org-free' })
-    mockDocs.set('orgs/org-free/counters/assistMessagesDaily', {
-      [assistUsageDay(NOW)]: assistFreeDailyLimit(),
-    })
+    // A Free workspace is entitled to generation (the taste, AGL-2925), so
+    // it meters monthly here and its daily message cap is not the rung that
+    // refuses. The platform's day of free spend at the ceiling is: it
+    // refuses every Free reservation until the UTC day rolls.
+    mockDocs.set(`platformAiFreeSpend/${assistUsageDay(NOW)}`, { estCostUsd: 25 })
     const run = await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'beat', now: NOW })
     expect(run.outcome).toBe('needs_input')
     const stored = await getAiJob(firestore, 'org-free', job.$id)
     expect(stored).toMatchObject({
       status: 'needs_input',
-      error: 'This workspace reached its AI limit for the month',
+      error: assistFreeTasteRefusalText('platform'),
       lease: null,
     })
     // The step is pending again and the refused attempt is not counted.
@@ -488,6 +492,8 @@ describe('runAiJobStep — the text step end to end', () => {
         costUsd: 0,
         costLimitUsd: 40,
         budgetUsd: 40,
+        // A paid workspace: attributed to no Free account (AGL-2925).
+        free: null,
       },
     })
     expect((await getAiJob(firestore, ORG, job.$id))?.status).toBe('failed')
@@ -750,9 +756,9 @@ describe('sweepAiJobs — the beat', () => {
 
   it('re-queues a needs_input job only once it has rested, then lets the reservation decide', async () => {
     const job = await newTextJob({ orgId: 'org-free' })
-    mockDocs.set('orgs/org-free/counters/assistMessagesDaily', {
-      [assistUsageDay(NOW)]: assistFreeDailyLimit(),
-    })
+    // The platform's free-spend ceiling for TODAY (AGL-2925) — a refusal
+    // keyed on the UTC day, so a rolled day is a fresh document.
+    mockDocs.set(`platformAiFreeSpend/${assistUsageDay(NOW)}`, { estCostUsd: 25 })
     await runAiJobStep(firestore, 'org-free', job.$id, { owner: 'beat', now: NOW })
     expect((await getAiJob(firestore, 'org-free', job.$id))?.status).toBe('needs_input')
 

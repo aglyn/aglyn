@@ -229,11 +229,26 @@ describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
   })
 
   it('a plan that sells no band keeps today\'s wording: no meter, no link', async () => {
-    // Free sells neither a band nor the add-on; the meter section is silent
+    // Starter without the add-on sells no band; the meter section is silent
     // there rather than upselling against a band that does not exist.
     mockCredits = null
-    render(<BillingUsageComponent org={FREE} hosts={HOSTS} billingHref="/acme/billing" />)
+    render(<BillingUsageComponent org={STARTER} hosts={HOSTS} billingHref="/acme/billing" />)
     await waitFor(() => expect(screen.queryAllByText(METER)).toHaveLength(0))
+    expect(screen.queryByRole('link', { name: 'Add Aglyn AI' })).toBeNull()
+  })
+
+  it('Free shows the taste as a meter and never the add-on link (AGL-2925)', async () => {
+    // Free carries a real band of 300 since the taste, so the meter renders
+    // — and Free sells no add-on, so there is nothing to link to.
+    mockCredits = { used: 120, limit: 300, remaining: 180 }
+    render(
+      <BillingUsageComponent
+        org={{ $id: 'org-1', plan: 'free' } as any}
+        hosts={HOSTS}
+        billingHref="/acme/billing"
+      />,
+    )
+    await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     expect(screen.queryByRole('link', { name: 'Add Aglyn AI' })).toBeNull()
   })
 })
