@@ -92,6 +92,21 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-14 — Outreach is on no plan: `features.outreach` is false on every tier, Enterprise included, until packaging is decided
+
+- **Decided by:** the scope of AGL-2974, filed in the account owner's Linear workspace on 2026-09-14: the Outreach entitlement is false on every plan including Enterprise, because which plans carry sequences and connected mailboxes, and at what caps, is an owner decision that has not been made. That decision is AGL-2976, still open. This entry records that no packaging is decided; it is not a packaging decision.
+- **Scope:** packaging
+- **Evidence:** `features.outreach: false` on all eight rows of `PLAN_ENTITLEMENTS` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `OrgFeatureFlags.outreach` in `libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts`; `orgCarriesOutreach` in `cloud/firebase-firestore.rules`, which reads only the per-org `entitlements.features.outreach` override and is held to the plan table by `libs/aglyn/src/lib/foundation/definitions/outreach-rules-drift.spec.ts`; the `outreach` row of `docs/feature-matrix.md` and its Drive copy; AGL-2974, AGL-2976.
+
+**No price moves and no plan gains anything.** A workspace reaches Outreach
+only through a per-organization entitlement override, and the release flag
+`release_outreach` ships off besides. There is no `/pricing` row, no Stripe
+price and no add-on line for it. When packaging is decided, the plan rows, the
+Firestore rules' entitlement helper (which then needs a plan list) and the
+drift spec move together, under a new entry here.
+
+---
+
 ## 2026-09-14 — The Free AI taste: 300 credits a month behind a hard wall, per account, shipped with its abuse precautions
 
 - **Decided by:** the account owner on 2026-09-14 (AGL-2895), as the one addition to the add-on decision below: Free gets a taste of AI generation only together with the precautions that stop it multiplying, which is AGL-2925.
