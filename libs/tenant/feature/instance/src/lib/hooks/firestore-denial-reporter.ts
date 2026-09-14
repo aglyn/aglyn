@@ -166,6 +166,68 @@ export function refusedRetryDelayMs(streakStartedAt: number): number {
     : SESSION_REFUSED_RETRY_DELAY_MS
 }
 
+/** No `document` (SSR, a worker) counts as visible: nothing to wait for. */
+function tabIsHidden(): boolean {
+  return (
+    typeof document !== 'undefined' && document.visibilityState === 'hidden'
+  )
+}
+
+/**
+ * Schedule the reopen of a spent refusal streak, and return its cancel.
+ *
+ * In a visible tab this is {@link refusedRetryDelayMs}, unchanged: someone is
+ * looking at the page, and the 2s session cadence is how it comes back.
+ *
+ * In a HIDDEN tab nobody is waiting for that heal, so the listen is not
+ * reopened at all until the tab is visible again — and then immediately, so a
+ * person who returns never waits out a cadence. The heal broadcast still
+ * reopens instantly while hidden; this only removes the timer.
+ *
+ * Why an unattended tab cannot keep the 2s cadence (AGL-2944): a tab whose
+ * session died reopens EVERY listener every 2s for as long as it stays open.
+ * Aug 20 – Sep 4 a loop of this shape ran in ~8-hour blocks at 400K–1.7M
+ * rules denials a day, and refused listens are not free — the bill carried
+ * ~3.8M reads the `read_ops_count` metric never showed, about $2 of the $3.32
+ * billed from Aug 20 to Sep 13.
+ *
+ * Nothing that needs the fast cadence lives in a hidden tab. An AGL-1358
+ * write guard waits on a save someone clicked, which requires a visible tab,
+ * and returning to the tab reopens before they can click.
+ */
+export function scheduleRefusedReopen(
+  reopen: () => void,
+  streakStartedAt: number,
+): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let onVisible: (() => void) | null = null
+
+  const cancel = () => {
+    if (timer !== null) clearTimeout(timer)
+    timer = null
+    if (onVisible) document.removeEventListener('visibilitychange', onVisible)
+    onVisible = null
+  }
+
+  if (tabIsHidden()) {
+    const wake = () => {
+      // `visibilitychange` also fires on the way INTO hidden.
+      if (tabIsHidden()) return
+      cancel()
+      reopen()
+    }
+    onVisible = wake
+    document.addEventListener('visibilitychange', wake)
+  } else {
+    timer = setTimeout(() => {
+      timer = null
+      reopen()
+    }, refusedRetryDelayMs(streakStartedAt))
+  }
+
+  return cancel
+}
+
 /**
  * The same seam in the other direction: the app telling refused listeners
  * that the session came back (AGL-1066).

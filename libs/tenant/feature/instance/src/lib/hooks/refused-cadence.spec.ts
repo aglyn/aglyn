@@ -40,6 +40,11 @@
  * is how a recovery nobody announced comes back, and its ceiling is the 38
  * AGL-1358 write guards. And the heal broadcast reopens instantly at either
  * cadence.
+ *
+ * Both of those hold in a VISIBLE tab. A hidden tab has nobody waiting for
+ * the heal, so it reopens nothing until it is visible again, and then at
+ * once (AGL-2944) — an unattended tab left on the 2s cadence billed ~$2 of
+ * refused reads in two weeks.
  */
 
 import { act, renderHook } from '@testing-library/react'
@@ -84,6 +89,21 @@ const TEN_MINUTES_MS = 10 * 60_000
 
 const denied = { code: 'permission-denied' }
 const buildQuery = () => ({}) as never
+
+/**
+ * jsdom's tab is always `visible`. The getter makes it switchable, and every
+ * test starts visible, so the cadence invariants below run in the tab a
+ * person would be looking at.
+ */
+let mockVisibility: DocumentVisibilityState = 'visible'
+Object.defineProperty(document, 'visibilityState', {
+  configurable: true,
+  get: () => mockVisibility,
+})
+const setVisibility = (next: DocumentVisibilityState) => {
+  mockVisibility = next
+  document.dispatchEvent(new Event('visibilitychange'))
+}
 /**
  * Stable identity, deliberately at module scope: `useDocData`'s effect deps
  * are `[ref.firestore, ref.path]`, so an inline literal would re-run the
@@ -156,6 +176,7 @@ describe.each([
   beforeEach(() => {
     mockHandlers = []
     answeredCount = 0
+    mockVisibility = 'visible'
     jest.useFakeTimers()
     resetFirestoreServerReadEvidence()
   })
@@ -286,5 +307,72 @@ describe.each([
     )
     expect(waited).toBeGreaterThan(RULES_REFUSED_RETRY_DELAY_MS - 500)
     expect(waited).toBeLessThanOrEqual(RULES_REFUSED_RETRY_DELAY_MS + 500)
+  })
+
+  /**
+   * Hide a tab whose session-wide fault is on the 2s cadence, and refuse the
+   * one reopen that was already scheduled while it was visible. Returns the
+   * open count at that point: every open after it is one the hidden tab paid.
+   */
+  const hideRefusedTab = (): number => {
+    measureOpens(
+      MAX_RETRIES * RETRY_DELAY_MS + SESSION_REFUSED_RETRY_DELAY_MS * 2,
+    )
+    act(() => setVisibility('hidden'))
+    expect(
+      waitForNextOpen(SESSION_REFUSED_RETRY_DELAY_MS * 2),
+    ).toBeGreaterThan(0)
+    act(() => denyPending())
+    return mockHandlers.length
+  }
+
+  /**
+   * THE AGL-2944 measurement. A dead session in a tab nobody is looking at
+   * used to reopen every listener every 2s — 1,800 refusals an hour each —
+   * for as long as the tab stayed open. Hidden, it reopens nothing; the
+   * moment it is visible it reopens at once, so a returning person never
+   * waits out a cadence.
+   */
+  it('a hidden tab reopens nothing until it is visible, then reopens at once', () => {
+    mount()
+    const opened = hideRefusedTab()
+
+    measureOpens(HOUR_MS)
+    expect(mockHandlers).toHaveLength(opened)
+
+    act(() => setVisibility('visible'))
+    expect(mockHandlers).toHaveLength(opened + 1)
+
+    // Back in a visible tab, a listen still refused resumes the 2s cadence.
+    act(() => denyPending())
+    const waited = waitForNextOpen(SESSION_REFUSED_RETRY_DELAY_MS * 2)
+    expect(waited).toBeGreaterThan(0)
+    expect(waited).toBeLessThanOrEqual(SESSION_REFUSED_RETRY_DELAY_MS + 100)
+  })
+
+  /**
+   * A resolved re-auth does not wait for anyone to look: the heal broadcast
+   * reopens a hidden tab immediately, and the visibility wait it replaced is
+   * gone — becoming visible afterwards does not open a second listen.
+   */
+  it('the heal broadcast reopens a hidden tab at once, and only once', () => {
+    mount()
+    const opened = hideRefusedTab()
+
+    act(() => reportFirestoreSessionHeal())
+    expect(mockHandlers).toHaveLength(opened + 1)
+
+    act(() => setVisibility('visible'))
+    expect(mockHandlers).toHaveLength(opened + 1)
+  })
+
+  /** An unmounted hook leaves no visibility wait behind to reopen it. */
+  it('an unmounted hook does not reopen when its tab becomes visible', () => {
+    const { unmount } = mount()
+    const opened = hideRefusedTab()
+
+    unmount()
+    act(() => setVisibility('visible'))
+    expect(mockHandlers).toHaveLength(opened)
   })
 })
