@@ -16,8 +16,8 @@ billing and access keys — one first-party plugin, provider-generic.
   and per-user monthly rollups, the refusal counters, the Free taste's
   account and platform halves, the account-erasure sweep, and the staff
   readouts' arithmetic.
-- `model/` — the per-user usage shapes and arithmetic the cards and the
-  doors share, free of any server dependency.
+- `model/` — the generation job model and the per-user usage shapes and
+  arithmetic the cards and the doors share, free of any server dependency.
 - `server/` — the API handlers, registered under the `ai` and `assist`
   prefixes with `registerPluginApiRoute`.
 - `components/` — the assistant dock, the billing, member and staff cards

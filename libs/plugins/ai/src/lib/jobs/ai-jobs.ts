@@ -37,7 +37,7 @@ import {
   type AiJobStatus,
   type AiJobStep,
   type AiJobSummary,
-} from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+} from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { aiOutputTargetType } from '../activity/ai-activity-actions'
 import {

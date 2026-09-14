@@ -6,8 +6,8 @@ work longer than a request survives the request. The console route runs what
 it can inline; the platform job beat resumes whatever is left. The document is
 the whole state — no process holds anything the next beat cannot read back.
 
-Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939) except the model:
-`libs/aglyn/src/lib/foundation/definitions/ai-jobs.types.ts` (the model),
+Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939):
+`src/lib/model/ai-jobs.types.ts` (the model),
 `src/lib/jobs/ai-jobs.ts` (the machine, the step registry, the sweep),
 `src/lib/jobs/ai-job-text-step.ts` (the one step kind that runs today),
 `src/lib/server/ai-jobs-route.ts`, `ai-jobs-events-route.ts` and

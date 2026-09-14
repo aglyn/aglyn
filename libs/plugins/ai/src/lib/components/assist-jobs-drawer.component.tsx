@@ -22,7 +22,7 @@ import {
   type AiJobOutput,
   type AiJobStatus,
   type AiJobSummary,
-} from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+} from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'

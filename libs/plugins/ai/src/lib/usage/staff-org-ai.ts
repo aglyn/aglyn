@@ -18,7 +18,7 @@
 // Imported from BOTH graphs — the staff card (client) and the App Route that
 // serves it — so it may import neither entry barrel, for the reason
 // `margin-utilization.ts` states at its own head.
-import type { AiJobStatus } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+import type { AiJobStatus } from '../model/ai-jobs.types'
 import type { AglynOrgBilling, OrgPlan } from '@aglyn/aglyn/foundation'
 import {
   assistBandRefuses,

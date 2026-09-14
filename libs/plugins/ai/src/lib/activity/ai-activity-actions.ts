@@ -30,7 +30,7 @@
  * `AI_ACTIVITY_ACTION_LABELS` fails the type, not the reader.
  */
 
-import type { AiJobOutputResource } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+import type { AiJobOutputResource } from '../model/ai-jobs.types'
 import {
   pluginStaffAuditActionGroup,
   pluginStaffAuditActionGroupLabel,

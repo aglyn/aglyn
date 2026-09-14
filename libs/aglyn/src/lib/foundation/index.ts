@@ -23,9 +23,6 @@
 // 👇
 
 export * from './definitions/components.types'
-// AI generation jobs (AGL-2904): the job, step and output model, plus the
-// kind list as a VALUE so a route can validate a body against the union.
-export * from './definitions/ai-jobs.types'
 // One postal address + one phone format, shared by the personal profile, the
 // org billing address and the Stripe customer (AGL-1133). The failure this
 // prevents is a phone number stored three ways in three collections.

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AiJobKind } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+import type { AiJobKind } from './ai-jobs.types'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 
 /**

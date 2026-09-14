@@ -24,7 +24,7 @@ import {
   AI_JOB_KINDS,
   type AiJobKind,
   type AiJobStatus,
-} from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+} from '../model/ai-jobs.types'
 // By their own entry points rather than the barrel (AGL-2903): the specs
 // stub the barrel closed-world, and the ladder, the machine and the runtime
 // are the things under test here, not things to be stubbed away.

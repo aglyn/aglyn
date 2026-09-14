@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { AI_JOB_TERMINAL_STATUSES } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
-import type { AiJobSummary } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+import { AI_JOB_TERMINAL_STATUSES } from '../model/ai-jobs.types'
+import type { AiJobSummary } from '../model/ai-jobs.types'
 
 /**
  * One job's progress as a server-sent event stream (AGL-2904).

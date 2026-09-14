@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AiJob, AiJobOutput } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { runAiRequest, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
