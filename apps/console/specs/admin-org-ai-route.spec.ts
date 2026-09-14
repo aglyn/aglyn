@@ -162,9 +162,9 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
             kind: 'screen',
             status: 'running',
             creditsReserved: 400,
-            creditsUsed: 120,
+            creditsSpent: 120,
             createdAt: new Date('2026-09-10T12:00:00Z'),
-            createdByUid: 'user-a',
+            createdBy: 'user-a',
           },
         },
         {
@@ -173,9 +173,9 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
             kind: 'copy',
             status: 'failed',
             creditsReserved: 50,
-            creditsUsed: 0,
+            creditsSpent: 0,
             createdAt: new Date('2026-09-09T12:00:00Z'),
-            createdByUid: 'user-b',
+            createdBy: 'user-b',
           },
         },
       ],
@@ -261,7 +261,7 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
       queued: 0,
       running: 1,
       needs_input: 0,
-      succeeded: 0,
+      done: 0,
       failed: 1,
       canceled: 0,
     })
@@ -271,9 +271,9 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
       kind: 'screen',
       status: 'running',
       creditsReserved: 400,
-      creditsUsed: 120,
+      creditsSpent: 120,
       createdAt: '2026-09-10T12:00:00.000Z',
-      createdByUid: 'user-a',
+      createdBy: 'user-a',
     })
     expect(body.jobs.truncated).toBe(false)
 
@@ -305,7 +305,7 @@ describe('/api/admin/org-ai (AGL-2930)', () => {
     expect(body.pool.usedCredits).toBe(0)
     expect(body.refusals.total).toBe(0)
     expect(body.jobs).toEqual({
-      counts: { queued: 0, running: 0, needs_input: 0, succeeded: 0, failed: 0, canceled: 0 },
+      counts: { queued: 0, running: 0, needs_input: 0, done: 0, failed: 0, canceled: 0 },
       recent: [],
       truncated: false,
     })

@@ -18,6 +18,7 @@
 // Imported from BOTH graphs — the staff card (client) and the App Route that
 // serves it — so it may import neither entry barrel, for the reason
 // `margin-utilization.ts` states at its own head.
+import type { AiJobStatus } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
 import type { AglynOrgBilling, OrgPlan } from '@aglyn/aglyn/foundation'
 import {
   assistBandRefuses,
@@ -140,22 +141,17 @@ export interface StaffOrgAiMargin {
   }
 }
 
-export type StaffOrgAiJobStatus =
-  | 'queued'
-  | 'running'
-  | 'needs_input'
-  | 'succeeded'
-  | 'failed'
-  | 'canceled'
+/** The job model's own status set: the card renders every one by name. */
+export type StaffOrgAiJobStatus = AiJobStatus
 
 export interface StaffOrgAiJob {
   id: string
   kind: string
   status: StaffOrgAiJobStatus | string
   creditsReserved: number
-  creditsUsed: number
+  creditsSpent: number
   createdAt: string | null
-  createdByUid: string | null
+  createdBy: string | null
 }
 
 export interface StaffOrgAiJobs {
@@ -319,7 +315,7 @@ export const STAFF_ORG_AI_JOB_STATUSES: readonly StaffOrgAiJobStatus[] = [
   'queued',
   'running',
   'needs_input',
-  'succeeded',
+  'done',
   'failed',
   'canceled',
 ]

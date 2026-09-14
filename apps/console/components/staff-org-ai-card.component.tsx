@@ -174,7 +174,7 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
             label={`${status.replace('_', ' ')} ${jobs.counts[status]}`}
           />
         ))}
-        <Chip size="small" variant="outlined" label={`succeeded ${jobs.counts.succeeded}`} />
+        <Chip size="small" variant="outlined" label={`done ${jobs.counts.done}`} />
       </Stack>
       {jobs.truncated ? (
         <Typography variant="caption" color="text.secondary">
@@ -198,18 +198,18 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
               <TableCell>{job.kind || '—'}</TableCell>
               <TableCell>{job.status.replace('_', ' ')}</TableCell>
               <TableCell align="right">
-                {`${credits(job.creditsUsed)} / ${credits(job.creditsReserved)}`}
+                {`${credits(job.creditsSpent)} / ${credits(job.creditsReserved)}`}
               </TableCell>
               <TableCell>
                 {when(job.createdAt)}
-                {job.createdByUid ? (
+                {job.createdBy ? (
                   <AppLink
-                    href={buildRoute(Route.ADMIN_USER_DETAIL, { uid: job.createdByUid })}
+                    href={buildRoute(Route.ADMIN_USER_DETAIL, { uid: job.createdBy })}
                     variant="caption"
                     underline="hover"
                     sx={{ ml: 1, fontFamily: 'monospace' }}
                   >
-                    {job.createdByUid}
+                    {job.createdBy}
                   </AppLink>
                 ) : null}
               </TableCell>

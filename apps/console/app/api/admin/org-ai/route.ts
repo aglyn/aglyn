@@ -195,9 +195,9 @@ const toIso = (value: unknown): string | null => {
  * month, newest first, up to `JOBS_SCAN`. An org with no such collection
  * answers an empty snapshot, which is the honest "no generation jobs yet";
  * a read that FAILED answers `null`, which the card renders as a failure
- * rather than as an idle org. The field names assumed are the ones the jobs
- * issue declares: `kind`, `status`, `creditsReserved`, `creditsUsed`,
- * `createdAt`, `createdByUid`.
+ * rather than as an idle org. The field names are the ones `AiJob` declares
+ * in `ai-jobs.types.ts`: `kind`, `status`, `creditsReserved`, `creditsSpent`,
+ * `createdAt`, `createdBy`.
  */
 export async function readOrgAiJobsSummary(
   firestore: FirebaseFirestore.Firestore,
@@ -229,11 +229,11 @@ export async function readOrgAiJobsSummary(
           kind: String(doc.get('kind') ?? ''),
           status,
           creditsReserved: Number(doc.get('creditsReserved') ?? 0) || 0,
-          creditsUsed: Number(doc.get('creditsUsed') ?? 0) || 0,
+          creditsSpent: Number(doc.get('creditsSpent') ?? 0) || 0,
           createdAt: toIso(doc.get('createdAt')),
-          createdByUid:
-            typeof doc.get('createdByUid') === 'string'
-              ? String(doc.get('createdByUid'))
+          createdBy:
+            typeof doc.get('createdBy') === 'string'
+              ? String(doc.get('createdBy'))
               : null,
         })
       }
