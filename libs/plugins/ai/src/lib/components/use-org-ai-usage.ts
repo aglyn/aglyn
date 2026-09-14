@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { aiUsageMonthKeys } from '@aglyn/aglyn'
+import { aiUsageMonthKeys } from '../model/ai-usage-by-user'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'

@@ -25,7 +25,7 @@ import {
   resolveEffectivePlan,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import { sendStaffAlertEmail } from './staff-alert-email'
+import { sendStaffAlertEmail } from '@aglyn/tenant-data-admin/server/staff-alert-email'
 
 /**
  * The Free AI taste's precautions (AGL-2925) — the half of the meter that

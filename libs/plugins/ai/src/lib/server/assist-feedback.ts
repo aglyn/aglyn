@@ -21,8 +21,8 @@ import {
   getOrgForUser,
   isImpersonationSession,
   lockdownRefusal,
-  recordAssistFeedback,
 } from '@aglyn/tenant-data-admin'
+import { recordAssistFeedback } from '../usage/assist-usage'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 
 /**

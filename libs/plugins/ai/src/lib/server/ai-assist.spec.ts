@@ -238,20 +238,14 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
-// The REAL reservation, meters and rate limiter are spliced in by path: the
-// point of this suite is that the route is behind the shared ladder, and a
-// stubbed `reserveAssistMessage` would prove only that the route calls
+// The REAL reservation and meters (the plugin's `usage/assist-usage`, which
+// the route imports unmocked) and the REAL rate limiter, spliced in by path:
+// the point of this suite is that the route is behind the shared ladder, and
+// a stubbed `reserveAssistMessage` would prove only that the route calls
 // something. The barrel itself stays mocked — importing it for real pulls the
 // whole tenancy surface (and `next/cache`) into a unit test.
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  ...jest.requireActual(
-    '@aglyn/tenant-data-admin/server/assist-usage',
-  ),
-  // The per-person refusal counter the door calls beside it (AGL-2928).
-  ...jest.requireActual(
-    '@aglyn/tenant-data-admin/server/ai-usage-by-user',
-  ),
   ...jest.requireActual(
     '@aglyn/tenant-data-admin/server/api-http',
   ),

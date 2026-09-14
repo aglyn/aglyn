@@ -1,4 +1,9 @@
 /**
+ * @jest-environment node
+ *
+ * Pragma must stay in the FIRST block comment — behind the license header it
+ * is silently ignored and the suite runs on jsdom.
+ *
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -26,7 +31,7 @@
  * only ever held the last request.
  */
 
-import { aiUsageByUserExpiry } from '@aglyn/aglyn/app-utils/ai-usage-by-user'
+import { aiUsageByUserExpiry } from '../model/ai-usage-by-user'
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 /** Every path handed to `recursiveDelete`, in order. */

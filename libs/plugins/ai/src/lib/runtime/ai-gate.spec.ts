@@ -93,7 +93,7 @@ jest.mock('@aglyn/tenant-data-admin/server/api-http', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   rateLimitHeaders: () => ({ 'X-RateLimit-Limit': '5' }),
 }))
-jest.mock('@aglyn/tenant-data-admin/server/assist-usage', () => ({
+jest.mock('../usage/assist-usage', () => ({
   __esModule: true,
   reserveAssistMessage: (...args: unknown[]) => mockReserve(...args),
   publicAssistQuota: (reservation: { used: number; limit: number }) => ({

@@ -19,7 +19,7 @@ import type {
   PluginUserErasureReport,
   PluginUserErasureRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
-import { eraseUserAiUsage } from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
+import { eraseUserAiUsage } from './ai-usage-by-user'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 
 /**

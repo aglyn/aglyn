@@ -195,10 +195,7 @@ export function estimateAiCostUsd(usage: AiUsage, modelId: string): number {
   return Math.round(raw * 1_000_000) / 1_000_000
 }
 
-/**
- * The rate table in the shape the usage meter has always read
- * (`ASSIST_MODEL_RATES_USD`): model id → rates, sentinels at zero.
- */
+/** The rate table as one record: model id → rates, sentinels at zero. */
 export function aiModelRatesTable(): Record<string, AiTokenRates> {
   const table: Record<string, AiTokenRates> = {}
   for (const sentinel of Object.values(AI_METER_SENTINELS)) table[sentinel] = ZERO_RATES

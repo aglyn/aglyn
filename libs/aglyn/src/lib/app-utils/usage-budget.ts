@@ -428,6 +428,103 @@ export function assistCogsAlertThresholdUsd(
 }
 
 /**
+ * The repo default spend ceiling: **$40 per org per month** (AGL-2264).
+ *
+ * The number is arithmetic rather than pricing. After AGL-2441 the
+ * 1,000-message entitled guard bounds roughly $28/org/month of worst-case
+ * spend at Sonnet, and the staff margin alert already fires at $25. $40
+ * therefore sits ABOVE anything the message cap can produce at the current
+ * model, so it changes no charged amount and no plan's behaviour — it is a
+ * ceiling on OUR cost, not a customer price, which is why it is outside the
+ * Sept-1 pricing lock. It binds only when an assumption behind that
+ * arithmetic has moved: an `ASSIST_MODEL` swap to an Opus-class tier, a
+ * longer prompt, or a caller finding another way to inflate input. That is
+ * the failure it exists for.
+ *
+ * It ships as a DEFAULT rather than as an environment variable someone must
+ * remember, because an unset ceiling is the fail-open this issue was opened
+ * about: a fresh deployment and a self-hoster both inherit a sane bound
+ * without knowing the variable exists.
+ *
+ * The free tier gets no separate figure and needs none — its 10 messages a
+ * UTC day bound it at roughly $0.28/day, so this is a backstop it cannot
+ * reach rather than a cap it runs into.
+ *
+ * ⚠️ It applies only to an org whose plan sells NO assist band. Agency and
+ * Enterprise include more assist than $40 of spend, so the meter's
+ * `assistMonthlyCeilingUsd` keeps this default off every plan that sells a
+ * band — see there for which figure binds when.
+ */
+export const ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD = 40
+
+/**
+ * The per-org monthly PROVIDER-SPEND ceiling in USD — the dollar half of
+ * the cap (AGL-2264), from `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` as the caller
+ * read it. Defaults to {@link ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD};
+ * `off` removes it.
+ *
+ * Pure over the configured value, like {@link assistCogsAlertThresholdUsd}:
+ * the meter that refuses at the ceiling and the cron that announces the
+ * refusal read the one variable and must agree on what it means.
+ *
+ * The meter's message caps bound spend only through an assumed cost per
+ * message, and that assumption is exactly what drifts: `ASSIST_MODEL` is an
+ * env override, prompts grow, and a client controls how much history it
+ * posts. The ceiling is measured against the real figure instead: the
+ * running `estCostUsd` on the month's assist usage document, which the meter
+ * increments at the SERVING model's rates. So it bounds the actual bill
+ * rather than a forecast of it.
+ *
+ * The refusal is deliberately the same shape as the message refusal (a
+ * reservation that did not move the counter), so an org at the ceiling
+ * spends nothing at all rather than spending less. It refuses — it does
+ * NOT quietly swap to a cheaper model. A silent quality drop is worse than
+ * an honest stop, because nobody can tell it happened.
+ *
+ * ⚠️ **Fails to the DEFAULT, never to “no ceiling”.** An empty, negative or
+ * unparseable value reads as unconfigured and takes the repo default, so a
+ * typo cannot reopen the fail-open this exists to close. It cannot become a
+ * ceiling of `$0` either — a value of zero is not “refuse everyone”, it is
+ * “not a number I will honour” — because an outage across every workspace
+ * would be worse than the overspend being guarded.
+ *
+ * Removing the ceiling therefore takes a WORD rather than a number:
+ * `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD=off`. A deployment paying its own
+ * provider bill may genuinely want none, and that is a decision someone
+ * should have to write down rather than reach by mistyping a digit.
+ */
+export function assistOrgMonthlyCostLimitUsd(
+  configured?: string | null,
+): number | null {
+  const operator = assistOperatorCeilingUsd(configured)
+  return operator === undefined
+    ? ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD
+    : operator
+}
+
+/**
+ * The operator's ceiling exactly as CONFIGURED — three states, not two:
+ * a number, `null` for the word `off`, and `undefined` for unset or
+ * unparseable.
+ *
+ * `assistOrgMonthlyCostLimitUsd` collapses `undefined` onto the repo default
+ * and is the reading every existing caller wants. The composition with a
+ * plan's own band needs the third state, because "the operator wrote a
+ * number" and "nobody configured anything" have to bind differently against a
+ * band that was sold: an operator's figure is a decision, and the repo
+ * default is a backstop for orgs that have no band of their own.
+ */
+export function assistOperatorCeilingUsd(
+  configured?: string | null,
+): number | null | undefined {
+  const raw = String(configured ?? '').trim()
+  if (raw === '') return undefined
+  if (raw.toLowerCase() === 'off') return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+/**
  * Whether this org's Assist spend has newly crossed the margin threshold.
  *
  * Dedupes through the same guard shape and the same month semantics as the

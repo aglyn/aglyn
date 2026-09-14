@@ -511,8 +511,8 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
            * turns were answered from the docs index or the answer cache
            * with no provider call, so nothing was spent because nothing
            * was bought. A turn that reached a model and still priced at
-           * zero is the other case — the model is missing from
-           * `ASSIST_MODEL_RATES_USD` and its spend is landing nowhere,
+           * zero is the other case — the model is missing from the
+           * model catalog's rates and its spend is landing nowhere,
            * which is a hole in the meter and must not be reported as
            * thrift.
            */

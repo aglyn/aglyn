@@ -18,11 +18,6 @@
 export * from './lib/server/analytics-retention'
 export * from './lib/server/api-http'
 export * from './lib/server/api-keys'
-export * from './lib/server/assist-usage'
-// The Free taste's precautions (AGL-2925): the account and platform half
-// of the meter.
-export * from './lib/server/assist-free-taste'
-export * from './lib/server/ai-usage-by-user'
 export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
 export * from './lib/server/client-error-report'

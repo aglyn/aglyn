@@ -17,12 +17,11 @@
 
 /**
  * `FieldValue` comes straight from the SDK rather than through the admin
- * barrel (AGL-2073). This module now serves BOTH assist entrypoints — the
- * console chat route and the besigner `/api/ai/assist` handler, which lives in
- * a lib and cannot import from an app — so it had to move here. Importing
- * `./firebase-admin` would drag the default-app initialization (cert
- * credential, RTDB, AppCheck) into every unit test that touches a counter;
- * `FieldValue`'s statics need no app at all.
+ * barrel (AGL-2073). This module serves every metered AI door — the chat
+ * door, the besigner copy assistant and the generation jobs — and importing
+ * the admin lib's `firebase-admin` module would drag the default-app
+ * initialization (cert credential, RTDB, AppCheck) into every unit test that
+ * touches a counter; `FieldValue`'s statics need no app at all.
  */
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -34,7 +33,12 @@ import {
   type AssistRefusedBy,
   type PublicAssistCredits,
 } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  assistOperatorCeilingUsd,
+  assistOrgMonthlyCostLimitUsd,
+} from '@aglyn/aglyn/app-utils/usage-budget'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import { estimateAiCostUsd } from '../providers/catalog'
 import { recordAssistRefusal } from './assist-refusals'
 import {
   announcePlatformFreeSpend,
@@ -52,7 +56,7 @@ import { recordUserAiUsage } from './ai-usage-by-user'
 import {
   aiUsageKindFromRoute,
   type AiUsageKind,
-} from '@aglyn/aglyn/app-utils/ai-usage-by-user'
+} from '../model/ai-usage-by-user'
 
 /**
  * Aglyn Assist metering + the data loop (AGL-1860, phase 1).
@@ -167,7 +171,7 @@ export function assistExchangeExpiry(now = new Date()): Date {
  *
  * What ten messages actually cost: about **$0.28 a day** at Sonnet list
  * rates, taking the worst case the clamps allow (see
- * {@link ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD} for the same arithmetic
+ * `ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD` for the same arithmetic
  * carried to the monthly ceiling). A typical question costs a fraction of
  * that, because the worst case assumes a full 8,000-character history and a
  * 4,000-character question on every one of the ten.
@@ -198,100 +202,13 @@ export function assistEntitledMonthlyLimit(): number {
 }
 
 /**
- * The repo default spend ceiling: **$40 per org per month** (AGL-2264).
- *
- * The number is arithmetic rather than pricing. After AGL-2441 the
- * 1,000-message entitled guard bounds roughly $28/org/month of worst-case
- * spend at Sonnet, and the staff margin alert already fires at $25. $40
- * therefore sits ABOVE anything the message cap can produce at the current
- * model, so it changes no charged amount and no plan's behaviour — it is a
- * ceiling on OUR cost, not a customer price, which is why it is outside the
- * Sept-1 pricing lock. It binds only when an assumption behind that
- * arithmetic has moved: an `ASSIST_MODEL` swap to an Opus-class tier, a
- * longer prompt, or a caller finding another way to inflate input. That is
- * the failure it exists for.
- *
- * It ships as a DEFAULT rather than as an environment variable someone must
- * remember, because an unset ceiling is the fail-open this issue was opened
- * about: a fresh deployment and a self-hoster both inherit a sane bound
- * without knowing the variable exists.
- *
- * The free tier gets no separate figure and needs none — its 10 messages a
- * UTC day bound it at roughly $0.28/day, so this is a backstop it cannot
- * reach rather than a cap it runs into.
- *
- * ⚠️ It applies only to an org whose plan sells NO assist band. Agency and
- * Enterprise include more assist than $40 of spend, so
- * `assistMonthlyCeilingUsd` keeps this default off every plan that sells a
- * band — see there for which figure binds when.
- */
-export const ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD = 40
-
-/**
- * The per-org monthly PROVIDER-SPEND ceiling in USD — the dollar half of
- * the cap (AGL-2264). Defaults to
- * {@link ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD}; `off` removes it.
- *
- * The message caps above bound spend only through an assumed cost per
- * message, and that assumption is exactly what drifts: `ASSIST_MODEL` is an
- * env override, prompts grow, and a client controls how much history it
- * posts. This reads the measured figure instead: the running `estCostUsd`
- * on the month's assist usage document, which `writeSignalAndRollup`
- * already increments at the SERVING model's rates. So it bounds the actual
- * bill rather than a forecast of it.
- *
- * The refusal is deliberately the same shape as the message refusal (a
- * reservation that did not move the counter), so an org at the ceiling
- * spends nothing at all rather than spending less. It refuses — it does
- * NOT quietly swap to a cheaper model. A silent quality drop is worse than
- * an honest stop, because nobody can tell it happened.
- *
- * ⚠️ **Fails to the DEFAULT, never to “no ceiling”.** An empty, negative or
- * unparseable value reads as unconfigured and takes the repo default, so a
- * typo cannot reopen the fail-open this exists to close. It cannot become a
- * ceiling of `$0` either — a value of zero is not “refuse everyone”, it is
- * “not a number I will honour” — because an outage across every workspace
- * would be worse than the overspend being guarded.
- *
- * Removing the ceiling therefore takes a WORD rather than a number:
- * `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD=off`. A deployment paying its own
- * provider bill may genuinely want none, and that is a decision someone
- * should have to write down rather than reach by mistyping a digit.
- */
-export function assistOrgMonthlyCostLimitUsd(): number | null {
-  const configured = assistOperatorCeilingUsd()
-  return configured === undefined
-    ? ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD
-    : configured
-}
-
-/**
- * The operator's ceiling exactly as CONFIGURED — three states, not two:
- * a number, `null` for the word `off`, and `undefined` for unset or
- * unparseable.
- *
- * `assistOrgMonthlyCostLimitUsd` collapses `undefined` onto the repo default
- * and is the reading every existing caller wants. The composition with a
- * plan's own band needs the third state, because "the operator wrote a
- * number" and "nobody configured anything" have to bind differently against a
- * band that was sold: an operator's figure is a decision, and the repo
- * default is a backstop for orgs that have no band of their own.
- */
-function assistOperatorCeilingUsd(): number | null | undefined {
-  const raw = String(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD ?? '').trim()
-  if (raw === '') return undefined
-  if (raw.toLowerCase() === 'off') return null
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-}
-
-/**
  * The ceiling one reservation is actually measured against, given the org's
  * plan band.
  *
  * ## Why the repo default must not bind an org that has a band
  *
- * `ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD` is $40, which was sized as a
+ * `ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD` (in `usage-budget.ts`, beside
+ * the alert that announces the ceiling) is $40, which was sized as a
  * runaway guard back when every org's assist spend was bounded by a message
  * cap. It is BELOW what Agency and Enterprise include, so applying it to a
  * plan band would refuse those workspaces partway through capacity they are
@@ -327,79 +244,13 @@ export function assistMonthlyCeilingUsd(
   budgetUsd: number | null,
   bandRefuses = true,
 ): number | null {
-  if (budgetUsd === null) return assistOrgMonthlyCostLimitUsd()
-  const operator = assistOperatorCeilingUsd()
+  const configured = process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
+  if (budgetUsd === null) return assistOrgMonthlyCostLimitUsd(configured)
+  const operator = assistOperatorCeilingUsd(configured)
   if (!bandRefuses) return typeof operator === 'number' ? operator : null
   return typeof operator === 'number'
     ? Math.min(budgetUsd, operator)
     : budgetUsd
-}
-
-export interface AssistTokenRates {
-  inputPerToken: number
-  outputPerToken: number
-  cacheReadPerToken: number
-  cacheWritePerToken: number
-}
-
-/** List price per MTok → per-token rates, cache read at 0.1x, write 1.25x. */
-function rates(inputPerMTok: number, outputPerMTok: number): AssistTokenRates {
-  return {
-    inputPerToken: inputPerMTok / 1_000_000,
-    outputPerToken: outputPerMTok / 1_000_000,
-    cacheReadPerToken: (inputPerMTok * 0.1) / 1_000_000,
-    cacheWritePerToken: (inputPerMTok * 1.25) / 1_000_000,
-  }
-}
-
-/**
- * List-rate unit costs (USD per token) BY MODEL. Telemetry estimates for
- * margin tuning, not billing.
- *
- * Keyed by model rather than fixed at Sonnet's rates because `ASSIST_MODEL`
- * is an env override: a one-line incident swap to an Opus-class model would
- * otherwise keep reporting Sonnet money, and per-org cost would read as
- * roughly right — the failure mode this whole meter exists to prevent. An
- * unknown id falls back to the most EXPENSIVE known tier on purpose: a
- * cost estimate that errs low is worse than one that errs high.
- */
-export const ASSIST_MODEL_RATES_USD: Record<string, AssistTokenRates> = {
-  /**
-   * Not a model — the sentinel a docs-only answer is metered under
-   * (AGL-2486), so a deflected turn lands in the same rollup as a served one
-   * and an operator reads both from one document.
-   *
-   * Zero rates rather than an absent entry: an unknown id falls back to the
-   * DEAREST known tier by design, and inheriting that here would price the
-   * one path that spends nothing at $10/MTok. The tokens are zero too, so
-   * this is belt and braces — but the fallback is the kind of default that
-   * only shows up when someone later records a token count against it.
-   */
-  'docs-retrieval': rates(0, 0),
-  /**
-   * The sentinel a CLOSEST-PAGES answer is metered under (AGL-2486) — a
-   * deployment with no `ANTHROPIC_API_KEY` handing back the best docs links
-   * it has instead of refusing. Zero for the reason above; distinct from
-   * `docs-retrieval` because it counts questions that went UNANSWERED, and
-   * folding the two would make a keyless deployment look like the most
-   * efficient one on the platform.
-   */
-  'docs-links': rates(0, 0),
-  'claude-sonnet-5': rates(3, 15),
-  'claude-sonnet-4-6': rates(3, 15),
-  'claude-haiku-4-5': rates(1, 5),
-  'claude-opus-5': rates(5, 25),
-  'claude-opus-4-8': rates(5, 25),
-}
-
-/** Rates for the assist tier's default model — Sonnet class. */
-export const ASSIST_TOKEN_RATES_USD = ASSIST_MODEL_RATES_USD['claude-sonnet-5']
-
-/** The dearest known tier, used when a model id is not in the table. */
-const FALLBACK_RATES: AssistTokenRates = rates(10, 50)
-
-export function assistRatesForModel(model: string): AssistTokenRates {
-  return ASSIST_MODEL_RATES_USD[model] ?? FALLBACK_RATES
 }
 
 export interface AssistTokenUsage {
@@ -411,20 +262,23 @@ export interface AssistTokenUsage {
 
 /**
  * Estimated cost in USD for one exchange, at the SERVING model's list
- * rates, rounded to 6dp. `model` is optional only so the older call shape
- * keeps working; the route always passes it.
+ * rates, rounded to 6dp — telemetry for margin tuning, not billing.
+ *
+ * The rates are the model catalog's (AGL-2939), keyed by model rather than
+ * fixed at one model's because `ASSIST_MODEL` is an env override: a
+ * one-line incident swap to a dearer model would otherwise keep reporting
+ * the cheaper money, and per-org cost would read as roughly right — the
+ * failure mode this whole meter exists to prevent. An unknown id is priced
+ * at the dearest known tier on purpose, because a cost estimate that errs
+ * low is worse than one that errs high, and a docs-only answer is metered
+ * under a zero-priced sentinel (`AI_METER_SENTINELS`) so it lands in the
+ * same rollup as a served one.
  */
 export function estimateAssistCostUsd(
   usage: AssistTokenUsage,
-  model = 'claude-sonnet-5',
+  model: string,
 ): number {
-  const rate = assistRatesForModel(model)
-  const raw =
-    usage.inputTokens * rate.inputPerToken +
-    usage.outputTokens * rate.outputPerToken +
-    usage.cacheReadTokens * rate.cacheReadPerToken +
-    usage.cacheWriteTokens * rate.cacheWritePerToken
-  return Math.round(raw * 1_000_000) / 1_000_000
+  return estimateAiCostUsd(usage, model)
 }
 
 export interface AssistQuotaVerdict {

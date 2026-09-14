@@ -27,7 +27,7 @@ import {
   sumAiUsageCredits,
   topAiUsageKinds,
 } from './ai-usage-by-user'
-import { assistCreditsFromUsd } from './assist-credits'
+import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 
 /**
  * The per-user rollup's arithmetic (AGL-2928): the window a reader may ask

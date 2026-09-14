@@ -48,7 +48,7 @@ import {
   type AiActivityActor,
 } from '../activity/ai-activity'
 import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../runtime/ai-runtime'
-import { recordUserAiRefusal } from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
+import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import {
   runAiJobTextStep,
   type AiJobStepOutcome,
@@ -60,7 +60,7 @@ import {
   releaseAssistMessage,
   reserveAssistMessage,
   type AssistReservation,
-} from '@aglyn/tenant-data-admin/server/assist-usage'
+} from '../usage/assist-usage'
 
 /**
  * AI generation jobs — the Firestore state machine (AGL-2904).

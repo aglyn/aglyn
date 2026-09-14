@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type { AiJobKind } from '../foundation/definitions/ai-jobs.types'
-import { assistCreditsFromUsd } from './assist-credits'
+import type { AiJobKind } from '@aglyn/aglyn/foundation/definitions/ai-jobs.types'
+import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 
 /**
  * PER-USER AI USAGE (AGL-2928): the pure half.
@@ -28,10 +28,10 @@ import { assistCreditsFromUsd } from './assist-credits'
  * people, on which site, is generating what. No prose, no PII beyond the uid
  * the document is keyed by.
  *
- * The write lives in `@aglyn/tenant-data-admin` (`ai-usage-by-user.ts`),
- * inside the same batch as the org rollup. Everything here is dependency-free
- * so the console's tables and the routes that serve them read one definition
- * of a share, a month key and a retention window.
+ * The write lives in the plugin's `usage/ai-usage-by-user.ts`, inside the
+ * same batch as the org rollup. Everything here is dependency-free so the
+ * plugin's tables and the doors that serve them read one definition of a
+ * share, a month key and a retention window.
  */
 
 /** `orgs/{orgId}/{this}/{uid}/{months}/{YYYY-MM}` — the subcollection names. */

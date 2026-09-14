@@ -283,7 +283,7 @@ import { POST as cancelJob } from './ai-jobs-cancel'
 import { aiJobEventStream } from './ai-jobs-events'
 import {
   assistUsageMonth,
-} from '@aglyn/tenant-data-admin/server/assist-usage'
+} from '../usage/assist-usage'
 import { AI_JOB_NOT_AVAILABLE_COPY } from '../jobs/ai-jobs'
 
 const ORG = 'org-1'

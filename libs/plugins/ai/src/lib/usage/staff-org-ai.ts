@@ -38,7 +38,7 @@ import {
   resolveEffectivePlan,
   type DiscountMarginRating,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import type { AssistRefusalCounts } from '@aglyn/tenant-data-admin/server/assist-refusals'
+import type { AssistRefusalCounts } from './assist-refusals'
 
 /**
  * THE STAFF AI CARD'S FIGURES (AGL-2930), composed from the same helpers the

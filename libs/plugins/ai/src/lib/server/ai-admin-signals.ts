@@ -21,19 +21,18 @@ import {
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import {
-  assistUsageDay,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
-  readPlatformFreeSpend,
 } from '@aglyn/tenant-data-admin'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   hasAiAddon,
   resolveEffectivePlan,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { assistRefusalCounts } from '@aglyn/tenant-data-admin/server/assist-refusals'
-import { assistUsageMonth } from '@aglyn/tenant-data-admin/server/assist-usage'
+import { readPlatformFreeSpend } from '../usage/assist-free-taste'
+import { assistRefusalCounts } from '../usage/assist-refusals'
+import { assistUsageDay, assistUsageMonth } from '../usage/assist-usage'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   assistSignalRow,

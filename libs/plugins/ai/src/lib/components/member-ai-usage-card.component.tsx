@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { aiAddonName, aiUsageMonthKeys, topAiUsageKinds } from '@aglyn/aglyn'
+import { aiAddonName } from '@aglyn/aglyn'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -33,6 +33,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { aiUsageMonthKeys, topAiUsageKinds } from '../model/ai-usage-by-user'
 import {
   aiUsageMonthLabel,
   formatAiUsageShare,

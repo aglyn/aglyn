@@ -37,7 +37,7 @@ import {
   listAiJobs,
   runAiJobStep,
 } from '../jobs/ai-jobs'
-import { releaseAssistMessage } from '@aglyn/tenant-data-admin/server/assist-usage'
+import { releaseAssistMessage } from '../usage/assist-usage'
 import { aiJobsGate } from './ai-jobs-gate'
 
 /**

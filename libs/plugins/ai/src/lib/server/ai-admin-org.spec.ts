@@ -88,7 +88,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   readOrgBilling: async () => ({}),
 }))
 
-jest.mock('@aglyn/tenant-data-admin/server/assist-usage', () => ({
+jest.mock('../usage/assist-usage', () => ({
   __esModule: true,
   assistUsageMonth: () => '2026-09',
 }))

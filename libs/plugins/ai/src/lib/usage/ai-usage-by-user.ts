@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-// Straight from the SDK, not the admin barrel, for the reason `assist-usage.ts`
-// gives at its head: the statics need no app, and the barrel would drag the
+// Straight from the SDK, not the admin lib, for the reason `assist-usage.ts`
+// gives at its head: the statics need no app, and the admin lib would drag the
 // default-app initialization into every unit test that touches a counter.
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import {
@@ -28,7 +28,7 @@ import {
   aiUsageShare,
   type AiUsageByUserMonth,
   type AiUsageKind,
-} from '@aglyn/aglyn/app-utils/ai-usage-by-user'
+} from '../model/ai-usage-by-user'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 
 /**

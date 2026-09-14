@@ -238,7 +238,7 @@ import {
   ASSIST_EXCHANGE_RETENTION_DAYS,
   assistUsageDay,
   assistUsageMonth,
-} from '@aglyn/tenant-data-admin/server/assist-usage'
+} from '../usage/assist-usage'
 
 const NOW = new Date('2026-09-14T10:00:00.000Z')
 const ORG = 'org-pro'

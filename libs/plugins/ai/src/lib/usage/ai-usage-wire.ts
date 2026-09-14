@@ -20,7 +20,7 @@
 import {
   topAiUsageKinds,
   type AiUsageByUserMonth,
-} from '@aglyn/aglyn/app-utils/ai-usage-by-user'
+} from '../model/ai-usage-by-user'
 import { csvCell } from '@aglyn/aglyn/app-utils/csv-import'
 
 /**

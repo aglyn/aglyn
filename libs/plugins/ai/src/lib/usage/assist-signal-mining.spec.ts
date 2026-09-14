@@ -80,9 +80,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       { error: 'Verify your email to continue', reason: 'email-unverified' },
       { status: 403 },
     ),
-  // The Free taste's day (AGL-2925): read beside the mined report and
-  // attached to it, so the staff page can render the ceiling chip.
+}))
+
+// The Free taste's day (AGL-2925): read beside the mined report and attached
+// to it, so the staff page can render the ceiling chip. The day is pinned and
+// the readout is a double; the rest of both modules is real.
+jest.mock('./assist-usage', () => ({
+  __esModule: true,
+  ...jest.requireActual('./assist-usage'),
   assistUsageDay: () => '2026-09-14',
+}))
+jest.mock('./assist-free-taste', () => ({
+  __esModule: true,
+  ...jest.requireActual('./assist-free-taste'),
   readPlatformFreeSpend: async (_firestore: unknown, day: string) => ({
     day,
     estCostUsd: 21.5,

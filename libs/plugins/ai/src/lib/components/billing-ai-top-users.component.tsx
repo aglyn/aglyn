@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { aiAddonName, countCsvDataRows, topAiUsageKinds } from '@aglyn/aglyn'
+import { aiAddonName, countCsvDataRows } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -39,6 +39,7 @@ import {
 } from '@mui/material'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { useCallback, useEffect, useState } from 'react'
+import { topAiUsageKinds } from '../model/ai-usage-by-user'
 import { useOrgAiUsage } from './use-org-ai-usage'
 import {
   AI_USAGE_EXPORT_ROWS_HEADER,

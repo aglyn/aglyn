@@ -37,13 +37,13 @@ import {
   rateLimitHeaders,
   type RateLimitResult,
 } from '@aglyn/tenant-data-admin/server/api-http'
-import { recordUserAiRefusal } from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
+import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import { authForPool } from '@aglyn/tenant-data-admin/server/auth-pools'
 import {
   publicAssistQuota,
   reserveAssistMessage,
   type AssistReservation,
-} from '@aglyn/tenant-data-admin/server/assist-usage'
+} from '../usage/assist-usage'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,

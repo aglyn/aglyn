@@ -21,7 +21,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { readUserAiUsageMonths } from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
+import { readUserAiUsageMonths } from '../usage/ai-usage-by-user'
 import { recordAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 

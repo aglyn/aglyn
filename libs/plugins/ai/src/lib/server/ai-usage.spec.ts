@@ -137,7 +137,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 
-import { aiUsageMonthKeys } from '@aglyn/aglyn/app-utils/ai-usage-by-user'
+import { aiUsageMonthKeys } from '../model/ai-usage-by-user'
 import { GET } from './ai-usage'
 import {
   AI_USAGE_CSV_HEADER,

@@ -15,14 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  aiUsageMonthKeys,
-  aiUsageMonthWithinRetention,
-  aiUsageShare,
-  csvCell,
-  pluginRequestFromWeb,
-  type AiUsageByUserMonth,
-} from '@aglyn/aglyn/server'
+import { csvCell, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -31,9 +24,15 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import {
+  aiUsageMonthKeys,
+  aiUsageMonthWithinRetention,
+  aiUsageShare,
+  type AiUsageByUserMonth,
+} from '../model/ai-usage-by-user'
+import {
   readOrgAiUsageByUser,
   readUserAiUsageMonths,
-} from '@aglyn/tenant-data-admin/server/ai-usage-by-user'
+} from '../usage/ai-usage-by-user'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {

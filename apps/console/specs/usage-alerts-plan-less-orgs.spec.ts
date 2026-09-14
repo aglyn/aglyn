@@ -355,11 +355,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyStaff: async (payload: { title: string }) => {
     mockStaffNotifications.push({ title: payload.title })
   },
-  assistOrgMonthlyCostLimitUsd: (
-    jest.requireActual(
-      '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
-    ) as typeof import('../../../libs/tenant/data/admin/src/lib/server/assist-usage')
-  ).assistOrgMonthlyCostLimitUsd,
 }))
 
 // THE EMAIL SIDE IS ASSERTED, NEVER SENT. Mocked at the module the route

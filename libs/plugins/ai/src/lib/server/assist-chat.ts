@@ -37,13 +37,15 @@ import {
   lockdownRefusal,
   memberHasAiPermission,
   rateLimitHeaders,
-  recordAssistExchange,
-  recordUserAiRefusal,
-  releaseAssistMessage,
+} from '@aglyn/tenant-data-admin'
+import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
+import {
   publicAssistQuota,
+  recordAssistExchange,
+  releaseAssistMessage,
   reserveAssistMessage,
   type AssistTokenUsage,
-} from '@aglyn/tenant-data-admin'
+} from '../usage/assist-usage'
 import {
   assistAnswerCacheKey,
   readAssistAnswerCache,
@@ -498,7 +500,7 @@ function buildViewBlock(
 
 /**
  * The model id a docs-only answer is metered under (AGL-2486). Not a model —
- * a sentinel, priced at zero in `ASSIST_MODEL_RATES_USD`, so a deflected turn
+ * a sentinel, priced at zero by the model catalog, so a deflected turn
  * lands in the same monthly rollup as a served one and the two are told apart
  * by a field rather than by their absence.
  */
@@ -521,9 +523,9 @@ const CACHED_ANSWER_MODEL = 'assist-cache'
  * zero-cost path that represents a MISSING capability rather than a saved
  * call, and an operator reading the signals needs to see it as such — a rising
  * count here means questions are going unanswered, which is the opposite of
- * what a rising `docs-retrieval` count means. Priced at zero in
- * `ASSIST_MODEL_RATES_USD` for the same reason the other two are: an unknown
- * id inherits the DEAREST tier.
+ * what a rising `docs-retrieval` count means. Priced at zero by the model
+ * catalog for the same reason the other two are: an unknown id inherits the
+ * DEAREST tier.
  */
 const DOCS_LINKS_MODEL = 'docs-links'
 

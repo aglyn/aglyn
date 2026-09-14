@@ -25,14 +25,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RELEASE_FLAGS } from '@aglyn/aglyn'
 
-// `assist-usage` moved into the admin lib (AGL-2073) so the besigner's
-// `/api/ai/assist` handler — which lives in a lib and cannot import from an
-// app — can reserve and meter through the same code. Importing the barrel for
-// real would pull the whole tenancy surface (and `next/cache`) with it, so the
-// barrel stays stubbed and the REAL module is spliced back in by path. The
-// module itself only reaches `firebase-admin/firestore` for FieldValue, which
-// is stubbed to the two sentinels the batch writes — the assertions below stay
-// about PATHS.
+// The meter every AI door reserves and records through lives in the AI
+// plugin (AGL-2939), and an app reaches a plugin only through its generated
+// manifests — so the REAL module is required by path, the way the retention
+// assertions below need it. It reaches `firebase-admin/firestore` only for
+// FieldValue, which is stubbed to the two sentinels the batch writes — the
+// assertions below stay about PATHS.
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   FieldValue: {
@@ -41,14 +39,9 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
-jest.mock('@aglyn/tenant-data-admin', () => ({
-  __esModule: true,
-  ...jest.requireActual(
-    '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
-  ),
-}))
-
-import { recordAssistExchange, reserveAssistMessage } from '@aglyn/tenant-data-admin'
+const { recordAssistExchange, reserveAssistMessage } = jest.requireActual(
+  '../../../libs/plugins/ai/src/lib/usage/assist-usage',
+) as typeof import('../../../libs/plugins/ai/src/lib/usage/assist-usage')
 
 /**
  * AGL-1909: Anthropic must be a published subprocessor BEFORE it processes
@@ -192,10 +185,6 @@ const MENTIONS_ONLY = new Map<string, string>([
   [
     'docs/SELF_HOSTING.md',
     'The self-host runbook (AGL-2014). Documents the same key as an optional operator-supplied credential. Documentation, not a flow.',
-  ],
-  [
-    'libs/tenant/data/admin/src/lib/server/assist-usage.ts',
-    'The meters (AGL-2486). Names the key only in the comment on the `docs-links` zero-rate sentinel, explaining which deployments produce it. Rates and counters; no provider call and no `process.env` read.',
   ],
   [
     'libs/plugins/ai/src/lib/components/assist-panel.component.spec.tsx',

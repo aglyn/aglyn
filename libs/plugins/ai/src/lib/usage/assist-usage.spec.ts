@@ -38,6 +38,11 @@ import {
   FREE_AI_TASTE_CREDITS_PER_MONTH,
   PLAN_ENTITLEMENTS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
+  assistOrgMonthlyCostLimitUsd,
+} from '@aglyn/aglyn/app-utils/usage-budget'
+import { aiRatesForModel } from '../providers/catalog'
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 
@@ -211,7 +216,7 @@ jest.mock('firebase-admin/firestore', () => ({
 
 /** The staff mail the platform ceiling sends (AGL-2925), captured. */
 const mockStaffAlerts: Array<{ subject: string; text: string; context: string }> = []
-jest.mock('./staff-alert-email', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/staff-alert-email', () => ({
   __esModule: true,
   sendStaffAlertEmail: async (input: { subject: string; text: string; context: string }) => {
     mockStaffAlerts.push(input)
@@ -225,13 +230,10 @@ const {
   assistExchangeExpiry,
   assistFreeDailyLimit,
   assistMonthlyCeilingUsd,
-  ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
-  assistOrgMonthlyCostLimitUsd,
   publicAssistQuota,
   recordAssistCost,
   assistUsageDay,
   assistUsageMonth,
-  assistRatesForModel,
   checkAssistQuota,
   estimateAssistCostUsd,
   recordAssistExchange,
@@ -296,22 +298,28 @@ describe('period keys and limits', () => {
 
 describe('estimateAssistCostUsd', () => {
   it('prices tokens at Sonnet list rates', () => {
-    const cost = estimateAssistCostUsd({
-      inputTokens: 1_000_000,
-      outputTokens: 1_000_000,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    })
+    const cost = estimateAssistCostUsd(
+      {
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+      'claude-sonnet-5',
+    )
     expect(cost).toBe(18)
   })
 
   it('prices cache reads at a tenth of input', () => {
-    const cost = estimateAssistCostUsd({
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 1_000_000,
-      cacheWriteTokens: 0,
-    })
+    const cost = estimateAssistCostUsd(
+      {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 1_000_000,
+        cacheWriteTokens: 0,
+      },
+      'claude-sonnet-5',
+    )
     expect(cost).toBe(0.3)
   })
 
@@ -334,12 +342,12 @@ describe('estimateAssistCostUsd', () => {
     // A pinned snapshot id, a model released after this table was written,
     // a typo in the env var: none of them may quietly make an org look
     // cheap. The fallback is the dearest tier on purpose.
-    const rate = assistRatesForModel('claude-something-not-in-the-table')
+    const rate = aiRatesForModel('claude-something-not-in-the-table')
     expect(rate.inputPerToken).toBeGreaterThan(
-      assistRatesForModel('claude-opus-5').inputPerToken,
+      aiRatesForModel('claude-opus-5').inputPerToken,
     )
     expect(rate.outputPerToken).toBeGreaterThan(
-      assistRatesForModel('claude-opus-5').outputPerToken,
+      aiRatesForModel('claude-opus-5').outputPerToken,
     )
   })
 })
@@ -562,12 +570,12 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
 
   it('defaults to $40, and junk falls back to it rather than to zero or none', () => {
-    expect(assistOrgMonthlyCostLimitUsd()).toBe(
+    expect(assistOrgMonthlyCostLimitUsd(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD)).toBe(
       ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
     )
     expect(ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD).toBe(40)
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '120'
-    expect(assistOrgMonthlyCostLimitUsd()).toBe(120)
+    expect(assistOrgMonthlyCostLimitUsd(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD)).toBe(120)
     // Junk must not become a ceiling of $0, which would refuse every
     // workspace on the deployment. Nor an empty string — `Number('')` is 0,
     // the same outage by a different route — and nor NO ceiling, which is
@@ -575,14 +583,14 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     // unconfigured and take the default.
     for (const junk of ['forty dollars', '', '  ', '-5', '0']) {
       process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = junk
-      expect(assistOrgMonthlyCostLimitUsd()).toBe(
+      expect(assistOrgMonthlyCostLimitUsd(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD)).toBe(
         ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
       )
     }
     // Removing it takes a WORD, so nobody reaches "no ceiling" by mistyping
     // a digit — every mistyped digit above landed on the default instead.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'OFF'
-    expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
+    expect(assistOrgMonthlyCostLimitUsd(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD)).toBeNull()
   })
 
   it('REFUSES an entitled org over the ceiling, and moves no counter', async () => {
@@ -838,7 +846,7 @@ describe('recordAssistExchange', () => {
     // to prevent. Cost telemetry nobody has tied to tokens can drift from
     // the truth with nothing going red, and tuning price against measured
     // margin is this meter's entire reason to exist.
-    const rate = assistRatesForModel('claude-sonnet-5')
+    const rate = aiRatesForModel('claude-sonnet-5')
     const expected =
       1200 * rate.inputPerToken +
       300 * rate.outputPerToken +

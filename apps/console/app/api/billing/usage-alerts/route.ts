@@ -59,7 +59,6 @@ import {
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/server'
 import {
-  assistOrgMonthlyCostLimitUsd,
   firebaseAdmin,
   notifyOrgAdmins,
   notifyStaff,
@@ -79,6 +78,7 @@ import {
   assistCogsAlertThresholdUsd,
   assistMarginBreach,
   assistMarginMultiple,
+  assistOrgMonthlyCostLimitUsd,
   budgetAlertDue,
   BUDGET_GUARD_KEY,
   orgMonthlySpend,
@@ -1171,7 +1171,9 @@ async function handler(request: Request): Promise<Response> {
        * when the customer complained. Its own guard key, announced once for
        * the month, because crossing is a state rather than an escalating sum.
        *=========================================*/
-      const assistCeilingUsd = assistOrgMonthlyCostLimitUsd()
+      const assistCeilingUsd = assistOrgMonthlyCostLimitUsd(
+        process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD,
+      )
       if (
         assistCeilingBreach({
           assistUsd: spend.assistUsd,

@@ -46,7 +46,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   },
 }))
 
-import { aiUsageMonthKeys } from '@aglyn/aglyn'
+import { aiUsageMonthKeys } from '../model/ai-usage-by-user'
 import {
   AiCollaboratorCreditsCell,
   AiMemberCreditsCell,

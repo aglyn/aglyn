@@ -37,7 +37,7 @@ jest.mock('./activity/ai-activity', () => ({
 /** One held Firestore: the eraser must hand the meter the app's own. */
 const mockFirestore = { name: 'the app firestore' }
 const mockEraseUserAiUsage = jest.fn(async () => ({ orgs: 2, sweptMonths: 1 }))
-jest.mock('@aglyn/tenant-data-admin/server/ai-usage-by-user', () => ({
+jest.mock('./usage/ai-usage-by-user', () => ({
   __esModule: true,
   eraseUserAiUsage: (...args: unknown[]) => mockEraseUserAiUsage(...(args as [])),
 }))

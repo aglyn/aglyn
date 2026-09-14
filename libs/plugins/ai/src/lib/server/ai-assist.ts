@@ -33,13 +33,15 @@ import {
   lockdownRefusal,
   memberHasAiPermission,
   rateLimitHeaders,
-  recordAssistCost,
-  recordUserAiRefusal,
-  releaseAssistMessage,
+} from '@aglyn/tenant-data-admin'
+import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
+import {
   publicAssistQuota,
+  recordAssistCost,
+  releaseAssistMessage,
   reserveAssistMessage,
   type AssistReservation,
-} from '@aglyn/tenant-data-admin'
+} from '../usage/assist-usage'
 import { logAiAssistSection } from '../activity/ai-activity'
 // By its own entry point rather than the barrel (AGL-2903): this handler's
 // spec replaces the barrel with a closed-world factory, and nothing replaces

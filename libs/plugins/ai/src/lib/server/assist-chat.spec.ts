@@ -166,12 +166,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ).PLATFORM_BRAND_NAME,
 }))
 
-// The reservation/metering module moved into the admin lib (AGL-2073) so the
-// besigner assist handler can share it. The barrel is still stubbed here — a
-// real import would pull the whole tenancy surface — so the REAL module is
-// spliced back in by path, and its `FieldValue` is stubbed to the sentinels the
-// fake Firestore below understands. Without the splice the route would call
-// undefined and the cap tests would go green on nothing.
+// The route reserves and meters through the plugin's REAL meter
+// (`usage/assist-usage`), unmocked, so the cap tests below run the shipped
+// arithmetic. The meter reaches `firebase-admin/firestore` only for
+// `FieldValue`, stubbed here to the sentinels the fake Firestore below
+// understands. The admin barrel stays stubbed — a real import would pull the
+// whole tenancy surface.
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   FieldValue: {
@@ -182,13 +182,6 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  ...jest.requireActual(
-    '@aglyn/tenant-data-admin/server/assist-usage',
-  ),
-  // The per-person refusal counter the meter's door calls (AGL-2928).
-  ...jest.requireActual(
-    '@aglyn/tenant-data-admin/server/ai-usage-by-user',
-  ),
   // The REAL cache, spliced by path (AGL-2486). Stubbing it would prove only
   // that the route calls something; the point of the tests below is that a
   // repeated question is served from Firestore and never reaches Anthropic,

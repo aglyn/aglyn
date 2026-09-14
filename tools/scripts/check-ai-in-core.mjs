@@ -37,8 +37,8 @@
 // ## The allowlist, and why it may only shrink
 //
 // `ai-in-core-allowlist.json` names the files that still carry a vendor
-// literal while the last of the AI code moves (the usage meter's rate table
-// waits for AGL-2928's rollups to settle). Each row names the file and the
+// literal while the last of the AI code moves (the subprocessor inventory
+// waits for a plugin-declared subprocessor seam). Each row names the file and the
 // reason; a row for a file that no longer trips the guard is itself a red,
 // so the list cannot outlive what it excuses, and a NEW file is refused
 // rather than recorded.

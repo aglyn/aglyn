@@ -151,9 +151,6 @@ const fakeFirestore: any = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  // The REAL writer. A stub would make this file assert that a mock agreed
-  // with itself about what an exchange contains.
-  ...jest.requireActual('@aglyn/tenant-data-admin/server/assist-usage'),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -165,8 +162,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
-  // The Free taste's day (AGL-2925), attached beside the report; this file
-  // is about the prose, so an idle day is enough.
+}))
+
+// The Free taste's day (AGL-2925), attached beside the report; this file is
+// about the prose, so an idle day is enough. The rest of the module is real.
+jest.mock('../usage/assist-free-taste', () => ({
+  __esModule: true,
+  ...jest.requireActual('../usage/assist-free-taste'),
   readPlatformFreeSpend: async (_firestore: unknown, day: string) => ({
     day,
     estCostUsd: 0,
@@ -189,7 +191,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
-import { recordAssistExchange } from '@aglyn/tenant-data-admin'
+// The REAL writer. A stub would make this file assert that a mock agreed
+// with itself about what an exchange contains.
+import { recordAssistExchange } from '../usage/assist-usage'
 import { GET } from './ai-admin-signals'
 
 const ORG = 'org-1'
