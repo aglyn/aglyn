@@ -19,6 +19,7 @@ import {
   claimAttempt,
   isCustomPricedPlan,
   isOrgSubscriptionLive,
+  PLATFORM_BRAND_NAME,
   pluginRequestFromWeb,
   type AttemptClaim,
   type OrgPlan,
@@ -273,7 +274,7 @@ async function handler(request: Request): Promise<Response> {
   const aiAddonWanted = body?.aiAddon === true
   if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan) === null) {
     return Response.json(
-      { error: 'This plan does not include the Aglyn AI add-on.' },
+      { error: `This plan does not include the ${PLATFORM_BRAND_NAME} AI add-on.` },
       { status: 400 },
     )
   }
@@ -285,7 +286,7 @@ async function handler(request: Request): Promise<Response> {
       error:
         'Billing is not configured: STRIPE_PRICE_' +
         `${plan.toUpperCase()}_AI_ADDON${interval === 'year' ? '_YEARLY' : ''} ` +
-        'is unset, so the Aglyn AI add-on cannot be sold on this plan yet.',
+        `is unset, so the ${PLATFORM_BRAND_NAME} AI add-on cannot be sold on this plan yet.`,
     }, { status: 501 })
   }
 
