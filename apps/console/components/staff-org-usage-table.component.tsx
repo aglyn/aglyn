@@ -24,6 +24,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
+import { aiAddonName } from '@aglyn/aglyn'
 import { Fragment } from 'react'
 
 /** One monthly org usage rollup as `/api/admin/org-usage` serves it. */
@@ -182,19 +183,73 @@ export function recordedUsageLines(
 }
 
 /**
+ * The org's AI credit pool as the caller resolved it (AGL-2899): whether the
+ * AI add-on is on, the credits the add-on contributes, and the whole
+ * band the Assist column above is drawn against. Resolved by the caller from
+ * the org document — this table only has months — so the org detail page,
+ * which holds the document, passes it and the list's dialog, which holds an
+ * id, does not.
+ */
+export interface StaffAssistPool {
+  aiAddon: boolean
+  /** The add-on's band alone; 0 without the add-on. */
+  addonCredits: number
+  /** Plan band plus add-on band, or null where the plan sells no band. */
+  creditsPerMonth: number | null
+}
+
+/**
+ * The pool as one line: the reader of the Assist column needs to know what
+ * fraction of what band the dollars above represent, and whether an add-on
+ * is part of the band.
+ */
+export function assistPoolSentence(pool: StaffAssistPool): string {
+  const band =
+    pool.creditsPerMonth === null
+      ? 'no AI credit band'
+      : `${pool.creditsPerMonth.toLocaleString()} AI credits/mo`
+  const name = aiAddonName()
+  return pool.aiAddon
+    ? `${name} add-on on — ${band}, ${pool.addonCredits.toLocaleString()} ` +
+        'of them from the add-on.'
+    : `${name} add-on off — ${band}.`
+}
+
+/**
  * The monthly usage rollup table (AGL-205), shared between the Organizations
  * list's Usage dialog and the org detail page's usage panel (AGL-939) so the
  * two surfaces can never drift on what a rollup row means.
  */
-const StaffOrgUsageTable = ({ months }: { months: StaffOrgUsageMonth[] }) => {
+const StaffOrgUsageTable = ({
+  months,
+  assistPool,
+}: {
+  months: StaffOrgUsageMonth[]
+  assistPool?: StaffAssistPool
+}) => {
+  const pool = assistPool ? (
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      component="div"
+      sx={{ mb: 1 }}
+    >
+      {assistPoolSentence(assistPool)}
+    </Typography>
+  ) : null
   if (months.length === 0) {
     return (
-      <Typography variant="body2" color="text.secondary">
-        {'No usage rollups recorded for this organization yet.'}
-      </Typography>
+      <>
+        {pool}
+        <Typography variant="body2" color="text.secondary">
+          {'No usage rollups recorded for this organization yet.'}
+        </Typography>
+      </>
     )
   }
   return (
+    <>
+    {pool}
     <Table size="small">
       <TableHead>
         <TableRow>
@@ -301,6 +356,7 @@ const StaffOrgUsageTable = ({ months }: { months: StaffOrgUsageMonth[] }) => {
         ))}
       </TableBody>
     </Table>
+    </>
   )
 }
 StaffOrgUsageTable.displayName = 'StaffOrgUsageTable'

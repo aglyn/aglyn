@@ -36,10 +36,12 @@ import BillingUsageBudgetCardComponent from '../../../../../../components/billin
 import BillingUsageHistoryComponent from '../../../../../../components/billing/billing-usage-history.component'
 import BillingUsageComponent from '../../../../../../components/billing/billing-usage.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
+import { buildRoute, Route } from '../../../../../../constants/route-links'
 import useConfirmedDoc from '../../../../../../hooks/use-confirmed-doc'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../../../hooks/use-org-hosts'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
+import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 
 /**
  * What this workspace is consuming, and the three controls over what that
@@ -61,6 +63,14 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { org: orgDoc, orgId, ready: orgReady } = useCurrentOrg()
   const { can } = useOrgPermissions()
+  // The overview's path, for the one meter caption that points at the
+  // add-ons card rather than at an upgrade (AGL-2899): hash links from this
+  // section resolve against THIS page, where neither `#plans` nor `#addons`
+  // exists.
+  const orgSlug = useOrgSlug()
+  const billingHref = orgSlug
+    ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
+    : ''
   // Org-scoped (AGL-236): the meters must count this workspace's hosts, not
   // every host the viewer can reach.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
@@ -117,7 +127,11 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
-              <BillingUsageComponent org={org} hosts={hosts ?? []} />
+              <BillingUsageComponent
+                org={org}
+                hosts={hosts ?? []}
+                billingHref={billingHref}
+              />
             </CardDisplay>
           ),
         },
@@ -201,12 +215,12 @@ const BillingUsageSection: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <div id="assist-overage">
                       <CardDisplay
-                        header={'AI assist overage'}
+                        header={'AI credits overage'}
                         subheader={
-                          'Extra AI assist credits past your included band ' +
-                          'are billed on your monthly invoice. Turn on the ' +
-                          'stop if you would rather the assistant paused ' +
-                          'there instead.'
+                          'Extra AI credits past your included band are ' +
+                          'billed on your monthly invoice. Stop at the band, ' +
+                          'or stop once the overage reaches an amount you ' +
+                          'choose.'
                         }
                         help={docsHelp('billing', {
                           anchor: '#assist-overage',

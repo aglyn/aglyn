@@ -17,6 +17,13 @@
 
 'use client'
 
+import {
+  AI_ADDON_CREDITS_PER_MONTH,
+  aiAddonName,
+  PLAN_ENTITLEMENTS,
+  PLAN_PRICING,
+  type OrgPlan,
+} from '@aglyn/aglyn'
 import { useConfirmationContext, useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
@@ -26,6 +33,7 @@ import {
   Box,
   Button,
   IconButton,
+  Link,
   Stack,
   Switch,
   Typography,
@@ -46,6 +54,60 @@ export const ADDON_LABELS: Record<string, string> = {
   hosts: 'extra sites',
   posRegisters: 'POS registers',
   eventCalendar: 'Event Calendar',
+  aiAddon: aiAddonName(),
+}
+
+/**
+ * The org-wide 0/1 kinds. One purchase covers the workspace, so a caption
+ * that names them prints the label alone — "Event Calendar", never "1 Event
+ * Calendar" — where the seat kinds print their count.
+ */
+export const TOGGLE_ADDON_KINDS: ReadonlySet<string> = new Set([
+  'eventCalendar',
+  'aiAddon',
+])
+
+/**
+ * The AI add-on row's per-plan sentence (AGL-2899): what the add-on unlocks,
+ * and the credit band it adds to the workspace's one AI pool. The band is
+ * `AI_ADDON_CREDITS_PER_MONTH[plan]`, the figure `resolveOrgEntitlements`
+ * folds into `assistCreditsPerMonth`, so the row and the meter agree.
+ */
+export function aiAddonDescription(plan: OrgPlan | null): string {
+  const unlocks =
+    'Generate pages, components, emails, campaigns, products and more, ' +
+    'then edit anything.'
+  const band = plan ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0
+  return band > 0
+    ? `${unlocks} Adds ${band.toLocaleString()} AI credits a month to your ` +
+        "workspace's pool."
+    : unlocks
+}
+
+/**
+ * How the AI add-on row is offered on a plan (AGL-2899).
+ *
+ * - `included`: the plan carries `aiGenerative` itself (Enterprise, in the
+ *   agreement), so there is nothing to buy and no switch.
+ * - `upgrade`: the plan sells no add-on and does not carry the feature
+ *   (Free), so the row points at the plan grid.
+ * - `sold`: every paid self-serve tier — the switch.
+ *
+ * Read from the plan tables rather than from the catalog's `upgradeRequired`,
+ * which is true for Free and Enterprise alike: one of those needs an upgrade
+ * and the other already has the thing, and the row has to say which.
+ */
+export function aiAddonOffer(
+  plan: OrgPlan | null,
+): 'included' | 'upgrade' | 'sold' {
+  if (!plan) return 'upgrade'
+  if (PLAN_ENTITLEMENTS[plan].features.aiGenerative) return 'included'
+  return PLAN_PRICING[plan].aiAddonMonthlyUsd == null ? 'upgrade' : 'sold'
+}
+
+/** The route's plan string as an `OrgPlan`, or null for anything else. */
+function knownPlan(plan: string | undefined): OrgPlan | null {
+  return plan && plan in PLAN_PRICING ? (plan as OrgPlan) : null
 }
 
 interface AddonRow {
@@ -56,7 +118,10 @@ interface AddonRow {
   toggle?: boolean
 }
 
-const addonRows = (brand: string): readonly AddonRow[] => [
+const addonRows = (
+  brand: string,
+  plan: OrgPlan | null,
+): readonly AddonRow[] => [
   {
     kind: 'managers',
     label: 'Manager seats',
@@ -89,6 +154,12 @@ const addonRows = (brand: string): readonly AddonRow[] => [
     description:
       'The Event Calendar add-on for your whole workspace, supported ' +
       `directly by ${brand}.`,
+    toggle: true,
+  },
+  {
+    kind: 'aiAddon',
+    label: aiAddonName(brand),
+    description: aiAddonDescription(plan),
     toggle: true,
   },
 ]
@@ -413,6 +484,7 @@ export default function BillingAddonsCardComponent({
   // plan grants; whether it can be BOUGHT here is a separate question, and the
   // card should answer both.
   const noSubscription = !state.hasSubscription
+  const plan = knownPlan(state.plan)
 
   return (
     <Stack spacing={2}>
@@ -425,7 +497,7 @@ export default function BillingAddonsCardComponent({
             'cannot be changed here. Contact support to adjust them.'}
         </Alert>
       ) : null}
-      {addonRows(branding.productName).map((row) => {
+      {addonRows(branding.productName, plan).map((row) => {
         const entry = state.catalog[row.kind]
         const current = state.quantities[row.kind] ?? 0
         const draft = drafts[row.kind] ?? current
@@ -437,6 +509,10 @@ export default function BillingAddonsCardComponent({
           // produce a failed request.
           !noSubscription
         const changed = draft !== current
+        // The AI add-on row on a plan that cannot buy it says WHICH way it
+        // cannot — Enterprise already has it, Free upgrades to a plan that
+        // sells it — where the catalog marks both `upgradeRequired`.
+        const aiOffer = row.kind === 'aiAddon' ? aiAddonOffer(plan) : 'sold'
         return (
           <Stack
             key={row.kind}
@@ -455,7 +531,20 @@ export default function BillingAddonsCardComponent({
                 {row.description}
               </Typography>
             </Box>
-            {!purchasable ? (
+            {aiOffer === 'included' ? (
+              <Typography variant="caption" color="text.secondary">
+                {'Included in your plan'}
+              </Typography>
+            ) : aiOffer === 'upgrade' ? (
+              <Link
+                href="#plans"
+                variant="caption"
+                color="primary"
+                underline="hover"
+              >
+                {`Upgrade your plan to add ${aiAddonName(branding.productName)}`}
+              </Link>
+            ) : !purchasable ? (
               <Typography variant="caption" color="text.secondary">
                 {entry?.upgradeRequired
                   ? 'Upgrade your plan to add these'

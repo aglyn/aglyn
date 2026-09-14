@@ -17,7 +17,10 @@
 'use client'
 
 import {
+  AI_ADDON_CREDITS_PER_MONTH,
+  aiAddonName,
   checkDiscountMargin,
+  hasAiAddon,
   MARGIN_SCOPE_NOTE,
   netMarginRating,
   ORG_BILLING_DOC_ID,
@@ -29,6 +32,7 @@ import {
   orgSiteCount,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -1002,6 +1006,25 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const planDefaults = org?.plan
     ? PLAN_ENTITLEMENTS[org.plan as keyof typeof PLAN_ENTITLEMENTS]
     : null
+  /*
+   * The AI credit pool as the meter resolves it (AGL-2899): the plan's band
+   * plus the AI add-on's, folded by `resolveOrgEntitlements`. Read off
+   * the EFFECTIVE plan through `hasAiAddon`, so a dead subscription's add-on
+   * reads as off here exactly as it does on the customer's own meter.
+   */
+  const aiAddon = hasAiAddon(org)
+  const assistPool = resolved
+    ? {
+        aiAddon,
+        addonCredits: aiAddon
+          ? AI_ADDON_CREDITS_PER_MONTH[resolveEffectivePlan(org)]
+          : 0,
+        creditsPerMonth:
+          resolved.assistCreditsPerMonth > 0
+            ? resolved.assistCreditsPerMonth
+            : null,
+      }
+    : undefined
   const formatLimit = (value: number) =>
     value === UNLIMITED ? '∞' : value.toLocaleString()
 
@@ -1448,6 +1471,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                           sx={{ ml: 1 }}
                                         />
                                       ) : null}
+                                      {/* The one key an add-on widens
+                                          (AGL-2899): without the chip the
+                                          effective band differs from the
+                                          plan default with no override to
+                                          explain it. */}
+                                      {key === 'assistCreditsPerMonth' &&
+                                      aiAddon ? (
+                                        <Chip
+                                          label={`${aiAddonName()} add-on`}
+                                          size="small"
+                                          variant="outlined"
+                                          color="primary"
+                                          sx={{ ml: 1 }}
+                                        />
+                                      ) : null}
                                     </TableCell>
                                     <TableCell align="right">
                                       {usageByKey[key] != null
@@ -1496,7 +1534,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             'read, not zero usage.'}
                         </Alert>
                       ) : (
-                        <StaffOrgUsageTable months={usageMonths} />
+                        <StaffOrgUsageTable
+                          months={usageMonths}
+                          assistPool={assistPool}
+                        />
                       )}
                     </CardDisplay>
                   ),

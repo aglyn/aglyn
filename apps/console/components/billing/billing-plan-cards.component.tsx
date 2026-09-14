@@ -18,6 +18,7 @@
 
 import {
   type AglynOrgBilling,
+  aiAddonName,
   checkEntitlement,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
@@ -217,6 +218,46 @@ const mbLabel = (mb: number) =>
 type FeatureKey = keyof (typeof PLAN_ENTITLEMENTS)['free']['features']
 
 /**
+ * One checklist row. A `priced` row is sold as an add-on rather than carried
+ * by a tier (AGL-2899): its cell is the per-plan price instead of a tick,
+ * and it is left out of the tick lists that describe what a tier INCLUDES —
+ * an add-on is not a gain of the step up, nor something a lower tier lacks.
+ */
+interface FeatureRow {
+  key: FeatureKey
+  label: string
+  priced?: 'aiAddon'
+}
+
+/**
+ * The AI add-on's cell on a plan (AGL-2899): the add-on's monthly price where
+ * the plan sells it, "Custom" where the plan carries the feature in its
+ * agreement (Enterprise), and a dash where neither holds (Free).
+ */
+export function aiAddonCell(
+  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+  pricing: (typeof PLAN_PRICING)[OrgPlan],
+): string {
+  if (pricing.aiAddonMonthlyUsd != null) return `+$${pricing.aiAddonMonthlyUsd}/mo`
+  return entitlements.features.aiGenerative ? 'Custom' : '—'
+}
+
+/** The add-on's line in a card's quota block, beside the other rates. */
+function aiAddonLine(
+  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
+  pricing: (typeof PLAN_PRICING)[OrgPlan],
+  brand: string,
+): string {
+  const name = aiAddonName(brand)
+  if (pricing.aiAddonMonthlyUsd != null) {
+    return `${name} add-on (+$${pricing.aiAddonMonthlyUsd}/mo)`
+  }
+  return entitlements.features.aiGenerative
+    ? `${name} included`
+    : `No ${name} add-on`
+}
+
+/**
  * Flags deliberately absent from the checklist, each with the reason. The
  * guard in `billing-plan-feature-rows.spec.ts` derives the expected row set
  * from `PLAN_ENTITLEMENTS.free.features` and allows exactly these — so a new
@@ -284,7 +325,7 @@ const featureGroups = (
   options: { videoUploads: boolean } = { videoUploads: true },
 ): Array<{
   title: string
-  rows: Array<{ key: FeatureKey; label: string }>
+  rows: FeatureRow[]
 }> => [
   {
     title: 'Build & publish',
@@ -310,6 +351,14 @@ const featureGroups = (
     title: 'Grow & automate',
     rows: [
       { key: 'aiAssist', label: 'AI assist' },
+      // Generative building is an ADD-ON on every self-serve tier (AGL-2896),
+      // so this row prices it per plan rather than ticking it; Enterprise
+      // carries it in the agreement and reads "Custom".
+      {
+        key: 'aiGenerative',
+        label: `${aiAddonName(brand)} (add-on)`,
+        priced: 'aiAddon',
+      },
       { key: 'workflows', label: 'Workflows & automations' },
       { key: 'actions', label: 'Actions builder' },
       { key: 'dataStore', label: 'Datasets & dynamic data' },
@@ -357,7 +406,7 @@ const featureGroups = (
  * key coverage and non-empty labels. The rendered grid calls `featureGroups`
  * with the org's resolved `productName` instead (AGL-2319).
  */
-export const FEATURE_ROWS: Array<{ key: FeatureKey; label: string }> =
+export const FEATURE_ROWS: FeatureRow[] =
   featureGroups(PLATFORM_BRAND_NAME).flatMap((group) => group.rows)
 
 
@@ -501,6 +550,7 @@ function headlineLimits(
    * approximation of it.
    */
   contactsOverageBilled: boolean | null,
+  brand: string,
 ): string[] {
   /*
    * ⚠️ THE PER-UNIT PRICE IS PART OF THE LIMIT, not decoration on it.
@@ -612,6 +662,9 @@ function headlineLimits(
       ? `${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo` +
         perThousand(pricing.extraEmailSendsUsdPer1k)
       : 'No campaign email',
+    // The AI add-on's rate (AGL-2899), a line rather than a suffix: it is a
+    // purchase on its own, not overage on a band above.
+    aiAddonLine(entitlements, pricing, brand),
   ]
 }
 
@@ -653,7 +706,9 @@ function upgradeGains(
 ): string[] {
   return featureGroups(brand, options)
     .flatMap((group) => group.rows)
-    .filter((row) => !from.features[row.key] && to.features[row.key])
+    .filter(
+      (row) => !row.priced && !from.features[row.key] && to.features[row.key],
+    )
     .map((row) => row.label)
 }
 
@@ -672,7 +727,7 @@ function keyFeatures(
 ): string[] {
   return featureGroups(brand, options)
     .flatMap((group) => group.rows)
-    .filter((row) => entitlements.features[row.key])
+    .filter((row) => !row.priced && entitlements.features[row.key])
     .map((row) => row.label)
 }
 
@@ -696,6 +751,7 @@ function missingFromTier(
     .flatMap((group) => group.rows)
     .filter(
       (row) =>
+        !row.priced &&
         !mine.features[row.key] &&
         above.some((tier) => PLAN_ENTITLEMENTS[tier].features[row.key]),
     )
@@ -1117,6 +1173,7 @@ function FocusedTierView(props: {
                       rung === 'enterprise' ? 'enterprise' : (rung as OrgPlan)
                     ],
                     contactsOverageBilled,
+                    brand,
                   ).map((line) => (
                     <Typography
                       key={line}
@@ -1355,10 +1412,12 @@ function PlanCardBody({
   entitlements,
   pricing,
   groups,
+  brand,
 }: {
   entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan]
   pricing: (typeof PLAN_PRICING)[OrgPlan]
   groups: ReturnType<typeof featureGroups>
+  brand: string
 }) {
   const contactsOverageBilled = useContactsOverageBilled()
   return (
@@ -1522,6 +1581,11 @@ function PlanCardBody({
             : '0% platform fees, plus card processing at cost'
           : 'No storefront'}
       </Typography>
+      {/* The AI add-on's rate on this tier (AGL-2899), in the same slot on
+          every card so the ladder reads across. */}
+      <Typography variant="body2">
+        {aiAddonLine(entitlements, pricing, brand)}
+      </Typography>
     </Stack>
     <Stack spacing={1.5}>
       {/* Grouped since AGL-2079: the checklist went from 19 rows
@@ -1537,7 +1601,36 @@ function PlanCardBody({
       >
         {group.title}
       </Typography>
-      {group.rows.map(({ key, label }) => {
+      {group.rows.map(({ key, label, priced }) => {
+        // A priced row (the AI add-on) is a purchase, not an
+        // inclusion: its cell is the plan's price for it, a tick where the
+        // plan sells it or carries it, and a dash where it does neither.
+        if (priced) {
+          const cell = aiAddonCell(entitlements, pricing)
+          const offered = cell !== '—'
+          return (
+            <Stack
+              key={key}
+              direction="row"
+              spacing={0.75}
+              sx={{
+                alignItems: 'center',
+                color: offered ? 'text.primary' : 'text.disabled',
+              }}
+            >
+              <MdiIcon
+                fontSize="inherit"
+                sx={{ color: offered ? 'success.main' : 'text.disabled' }}
+                path={
+                  offered
+                    ? ICON_VARIANT_SYMBOL_CONFIRMED.path
+                    : ICON_VARIANT_SYMBOL_MINUS.path
+                }
+              />
+              <Typography variant="body2">{`${label} · ${cell}`}</Typography>
+            </Stack>
+          )
+        }
         const enabled = entitlements.features[key]
         return (
           <Stack
@@ -1921,6 +2014,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   entitlements={entitlements}
                   pricing={pricing}
                   groups={groups}
+                  brand={branding.productName}
                 />
               </CardContent>
             </Card>
@@ -2111,6 +2205,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
               entitlements={PLAN_ENTITLEMENTS.enterprise}
               pricing={PLAN_PRICING.enterprise}
               groups={groups}
+              brand={branding.productName}
             />
           </CardContent>
         </Card>

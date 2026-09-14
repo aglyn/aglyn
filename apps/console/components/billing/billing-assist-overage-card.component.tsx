@@ -32,6 +32,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { aiAddonName } from '@aglyn/aglyn'
 import {
   ASSIST_OVERAGE_CAP_CONTROL_LABEL,
   ASSIST_OVERAGE_CAP_MAX_USD,
@@ -383,9 +384,14 @@ export default function BillingAssistOverageCardComponent({
       </Stack>
 
       {nothingToStop && band === null ? (
+        // Free: no band, and nothing is ever billed for AI, so neither
+        // stop applies — the switch has no band to stop at and the ceiling
+        // has no overage to bound.
         <Alert severity="info">
-          Your plan includes no AI assist credits, so there is no band to stop
-          at and nothing to configure here. Upgrade above to add AI assist.
+          Your plan includes no AI credits and is never charged for any, so
+          there is no band to stop at, no overage to put a dollar ceiling on,
+          and nothing to configure here. Upgrade above, or add{' '}
+          {aiAddonName()} on a paid plan, to get a band.
         </Alert>
       ) : nothingToStop ? (
         // Enterprise: a band, and no rate to sell past it at. The assistant

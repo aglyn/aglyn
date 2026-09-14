@@ -75,6 +75,7 @@ import { overLimitSummary as computeOverLimitSummary } from '../../../../../util
 import { stripeOtherModeInvoiceNotice } from '../../../../../utils/stripe-mode-notice'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
+  TOGGLE_ADDON_KINDS,
 } from '../../../../../components/billing/billing-addons-card.component'
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
@@ -96,7 +97,10 @@ import BillingPlanQuoteComponent from '../../../../../components/billing/billing
 import BillingUpgradeDialogComponent from '../../../../../components/billing/billing-upgrade.dialog'
 import { useBillingProfile } from '../../../../../components/billing/use-billing-profile'
 import { getBrowserStripe } from '../../../../../utils/browser-stripe'
-import { prorationQuote } from '../../../../../utils/proration-quote'
+import {
+  carriedAiAddonSentence,
+  prorationQuote,
+} from '../../../../../utils/proration-quote'
 import { purchaseConfirmQuote } from '../../../../../utils/purchase-confirm-quote'
 import { subscriptionPeriodNotice } from '../../../../../utils/subscription-period-notice'
 import {
@@ -1126,6 +1130,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   `to ${targetPlan}. You can keep your current plan any ` +
                   `time before then.`
                 : prorationQuote(preview, effective)) +
+              // The add-on the plan carries with it, named (AGL-2899): the
+              // proration already prices its move to the target's rate, and
+              // the figure alone cannot say a line changed.
+              carriedAiAddonSentence(org, targetPlan, preview.droppedAddons) +
               // A pending cancel and a pending plan change cannot both stand
               // (AGL-2151). The server clears the cancellation as part of this
               // operation — a customer picking a smaller plan is trying to
@@ -1473,7 +1481,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       {`Plan add-ons: ${Object.entries(org.seatAddons)
                         .filter(([, count]) => Number(count) > 0)
                         .map(([kind, count]) =>
-                          kind === 'eventCalendar'
+                          TOGGLE_ADDON_KINDS.has(kind)
                             ? ADDON_LABELS[kind]
                             : `${count} ${ADDON_LABELS[kind] ?? kind}`)
                         .join(', ')}`}

@@ -376,6 +376,16 @@ describe('BillingAssistOverageCard ceiling (AGL-2898)', () => {
     }
   })
 
+  it('Free has neither control, and the copy says why (AGL-2899)', async () => {
+    global.fetch = jest.fn(async () => jsonResponse(BANDLESS)) as unknown as typeof fetch
+    render(<BillingAssistOverageCardComponent orgId="org-1" canManage />)
+    expect(await screen.findByText(/never charged for any/)).toBeTruthy()
+    expect(screen.getByText(/no overage to put a dollar ceiling on/)).toBeTruthy()
+    expect(screen.getByText(/add Aglyn AI on a paid plan/)).toBeTruthy()
+    expect(screen.queryByLabelText(CAP_LABEL)).toBeNull()
+    expect(screen.queryByRole('switch', { name: LABEL })).toBeNull()
+  })
+
   it('view-only without billing.manage: the field and buttons are disabled', async () => {
     global.fetch = jest.fn(async () => jsonResponse(CAPPED)) as unknown as typeof fetch
     render(<BillingAssistOverageCardComponent orgId="org-1" canManage={false} />)

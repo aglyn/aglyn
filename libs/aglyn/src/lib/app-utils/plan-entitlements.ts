@@ -1183,6 +1183,16 @@ export const AI_ADDON_CREDITS_PER_MONTH: Record<OrgPlan, number> = {
 }
 
 /**
+ * The generative add-on's name as a person sees it (AGL-2896): the brand,
+ * then "AI". Read from the platform brand by default and from the org's
+ * resolved `productName` where the surface has one, for the reason every
+ * rendered product name is: a self-host operator renames the product by
+ * configuration, and a white-label org must not see ours.
+ */
+export const aiAddonName = (brand: string = PLATFORM_BRAND_NAME): string =>
+  `${brand} AI`
+
+/**
  * The per-1,000 rate Starter sells assist credits at past its band when it
  * carries the Aglyn AI add-on (AGL-2896).
  *

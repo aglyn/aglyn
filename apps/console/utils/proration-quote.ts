@@ -15,7 +15,54 @@
  * limitations under the License.
  */
 
+import {
+  type AglynOrgBilling,
+  aiAddonName,
+  hasAiAddon,
+  PLAN_LABELS,
+  PLAN_PRICING,
+  type OrgPlan,
+} from '@aglyn/aglyn'
 import { taxExplanation } from './tax-explanation'
+
+/**
+ * What happens to the org's AI add-on on a plan change (AGL-2899), as
+ * the sentence the switch confirm appends — or '' for an org that does not
+ * carry it.
+ *
+ * `/api/billing/subscription` re-prices every add-on item to the target plan
+ * in the same update and DROPS a kind the target does not sell, reporting it
+ * as `droppedAddons`. The proration figure above this sentence already
+ * includes that re-pricing, but a figure cannot say that a $19 line became a
+ * $39 one, and a customer who reads "switch to Business" as "the plan moves
+ * and nothing else does" is about to be surprised on the invoice. So the
+ * add-on is named, with the price it will bill at on the target — read from
+ * `PLAN_PRICING` rather than from the preview, because the preview carries
+ * the change and not the ongoing line.
+ *
+ * The drop is stated from the server's own list, never inferred from the
+ * price table: the server decides what it deleted.
+ */
+export function carriedAiAddonSentence(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  targetPlan: OrgPlan,
+  droppedAddons: readonly string[] | null | undefined,
+): string {
+  if (!hasAiAddon(org)) return ''
+  const label = PLAN_LABELS[targetPlan] ?? targetPlan
+  const price = PLAN_PRICING[targetPlan]?.aiAddonMonthlyUsd ?? null
+  const name = aiAddonName()
+  if ((droppedAddons ?? []).includes('aiAddon') || price === null) {
+    return (
+      ` Your ${name} add-on is not sold on ${label}, so it is removed with ` +
+      'this change and its AI credits go with it.'
+    )
+  }
+  return (
+    ` Your ${name} add-on carries over at $${price}/mo on ${label}, ` +
+    'billed with the plan.'
+  )
+}
 
 /**
  * What a mid-cycle plan switch actually costs, and WHEN.
