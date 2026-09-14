@@ -182,8 +182,11 @@ describe('layout properties set per screen (AGL-2893)', () => {
   })
 
   it('leaves a layout that declares nothing exactly as it was', () => {
-    const plain = { ...SITE_LAYOUT, banner: { ...SITE_LAYOUT['banner'], props: {} } }
-    delete (plain as Record<string, unknown>)['nav']
+    const plain: Record<string, AglynNodeSchema> = {
+      ...SITE_LAYOUT,
+      banner: { ...SITE_LAYOUT['banner'], props: {} },
+    }
+    delete plain['nav']
     plain[ROOT] = { ...plain[ROOT], nodes: ['banner', 'slot'] }
     expect(applyLayoutProps(plain, undefined, undefined)).toBe(plain)
     expect(applyLayoutProps(undefined, SITE_PROPS, {})).toBeUndefined()
@@ -195,7 +198,7 @@ describe('layout properties set per screen (AGL-2893)', () => {
       SCREEN,
       { site: { darkNav: true } },
     )
-    const grafted = composeReusableComponentNodes(laidOut, {
+    const grafted = composeReusableComponentNodes<AglynNodeSchema>(laidOut, {
       siteNav: {
         rootId: 'n-root',
         nodes: {
