@@ -158,8 +158,9 @@ the cascade reaches them with no extra sweep:
 `orgs/{orgId}/assistExchanges/{id}`, `orgs/{orgId}/assistSignals/{id}`,
 `orgs/{orgId}/assistUsage/{month}`,
 `orgs/{orgId}/counters/assistMessagesDaily`. Pinned by
-`apps/console/specs/assist-anthropic-subprocessor-gate.spec.ts` §"assist
-records stay reachable by eraseOrg", which asserts both halves — that every
+`libs/plugins/ai/src/lib/usage/assist-records-reachable-by-erase-org.spec.ts`
+§"assist records stay reachable by eraseOrg", beside the meter it drives, which
+asserts both halves — that every
 written path starts `orgs/{orgId}/`, *and* that `erase.ts` still contains
 `recursiveDelete(orgRef)`, because the first assertion is decorative without
 the second. The spec asserts the COUNT as well as the names, so the next
