@@ -29,6 +29,7 @@
  * (AGL-2573). Observed at `revalidateLivePages`, beneath the real helper.
  */
 
+import { HostScreenVisibility } from '@aglyn/aglyn'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
@@ -190,8 +191,6 @@ jest.mock('next/navigation', () => ({
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ScreenDetails =
   require('../app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page').default
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { HostScreenVisibility } = require('@aglyn/aglyn')
 
 beforeAll(() => {
   if (!globalThis.crypto?.subtle) {
