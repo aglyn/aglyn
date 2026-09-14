@@ -34,13 +34,28 @@ jest.mock('./activity/ai-activity', () => ({
   logAiPermissionChanged: (...args: unknown[]) => mockPermission(...(args as [])),
 }))
 
+/** One held Firestore: the eraser must hand the meter the app's own. */
+const mockFirestore = { name: 'the app firestore' }
+const mockEraseUserAiUsage = jest.fn(async () => ({ orgs: 2, sweptMonths: 1 }))
+jest.mock('@aglyn/tenant-data-admin/server/ai-usage-by-user', () => ({
+  __esModule: true,
+  eraseUserAiUsage: (...args: unknown[]) => mockEraseUserAiUsage(...(args as [])),
+}))
+jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
+  __esModule: true,
+  firebaseAdmin: { app: () => ({ firestore: () => mockFirestore }) },
+}))
+
 import {
   listPluginEventHandlers,
   listPluginLockdownFeatures,
   listPluginSeatAddons,
+  listPluginUserErasers,
   resetPluginEntitlementsForTests,
   resetPluginEventHandlersForTests,
+  resetPluginUserErasersForTests,
   runPluginEventHandlers,
+  runPluginUserErasers,
 } from '@aglyn/aglyn/server'
 import { AI_PLUGIN_ENTITLEMENTS, registerAiDeclarations } from './declarations'
 import { registerAiServerDeclarations } from './declarations.server'
@@ -119,5 +134,29 @@ describe('the server declarations subscribe the activity writers', () => {
       permission: 'ai.generate',
       granted: false,
     })
+  })
+})
+
+describe('the server declarations register the AI usage eraser', () => {
+  beforeEach(() => {
+    resetPluginUserErasersForTests()
+    mockEraseUserAiUsage.mockClear()
+  })
+
+  it('registers once, attributed to the plugin, and again after a reset', () => {
+    expect(listPluginUserErasers()).toEqual([])
+    registerAiServerDeclarations()
+    registerAiServerDeclarations()
+    expect(listPluginUserErasers()).toEqual(['ai'])
+  })
+
+  it('an account erasure reaches the meter\'s eraser with every org the person was in', async () => {
+    registerAiServerDeclarations()
+    const reports = await runPluginUserErasers({ uid: 'person-1', orgIds: ['org-a', 'org-b'] })
+    expect(mockEraseUserAiUsage).toHaveBeenCalledWith(mockFirestore, 'person-1', [
+      'org-a',
+      'org-b',
+    ])
+    expect(reports).toEqual({ ai: { orgs: 2, sweptMonths: 1 } })
   })
 })

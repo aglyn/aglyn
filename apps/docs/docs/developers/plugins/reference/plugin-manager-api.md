@@ -222,6 +222,34 @@ after, never a reference to the plugin.
 | `registerPluginEventHandler(event, handler, { pluginId? })` | Subscribes; attributed to the registering plugin. Idempotence is the subscriber's to keep — check `listPluginEventHandlers(event)` before subscribing again after a registry reset. |
 | `runPluginEventHandlers(event, payload)` | What the core route calls after its write: every handler in registration order, a failure logged and counted (`{ handled, failed }`), never the route's failure. |
 
+## Account erasure — `plugin-user-erasure` (`/server`)
+
+The account erasure deletes what core stores about a person. A plugin that
+keeps data about a person where core's deletes do not reach — documents
+under an org keyed by the uid, a collection carrying the uid as a field —
+registers an eraser from its `serverDeclarations` entry:
+
+```ts
+registerPluginUserEraser(
+  async ({ uid, orgIds }) => {
+    const { eraseSnapshotsFor } = await import('./server/snapshots')
+    return { snapshots: await eraseSnapshotsFor(uid, orgIds) }
+  },
+  { pluginId: 'acme-backups' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginUserEraser(eraser, { pluginId? })` | One eraser per plugin, attributed like an event handler; registering again replaces it in place. Check `listPluginUserErasers()` before registering again after a registry reset. |
+| `runPluginUserErasers({ uid, orgIds })` | What the erasure calls once the person's memberships are removed: every eraser in registration order, with every workspace the person belonged to. Answers each plugin's report by plugin id, or `null` for an eraser that threw — logged, and never the erasure's failure. |
+
+A report is counts and flags (`Record<string, number | boolean | null>`),
+never the erased content: it lands in the erasure's audit record, which
+outlives the data. `null` in a field is a figure the eraser could not
+measure, and a `null` report says the plugin's data may remain — neither
+is zero.
+
 ## Activity actions — `plugin-activity-actions`
 
 A plugin whose activity rows are read by more than a person stores a CODE
@@ -244,6 +272,7 @@ registerPluginActivityActions({
 | `pluginActivityActionLabel(action)` | What a reader sees for a code — `activityActionLabel` in the presenter reads it, so every feed, table and card shows the same words. |
 | `listPluginActivityFilters()` | One chip per group with the codes it keeps: the org feed and the actor table draw their chips from this, and send `action isAnyOf …`. |
 | `pluginStaffAuditActionGroup(action)` / `pluginStaffAuditActionGroupLabel(group)` | The staff audit facet's grouping: a registered group by code or by `staffAuditPrefixes`, else the action's leading namespace. |
+| `isPluginStaffAuditAccess(action)` | Whether a staff audit action is one a plugin's group names in `staffAuditAccessActions` — the actions its staff doors write when staff READ something rather than change it. The audit log files them as accesses. Matched exactly. |
 
 ## Billing and access keys — `plugin-entitlements`
 
