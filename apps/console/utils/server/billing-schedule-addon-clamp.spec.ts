@@ -39,7 +39,7 @@
 export {}
 
 import { buildTargetItems } from './billing-schedule'
-import { addonMaxForPlan } from './billing-addons'
+import { addonMaxForPlan } from '@aglyn/tenant-data-admin/server/billing-addons'
 
 const ORIGINAL_ENV = process.env
 
@@ -61,7 +61,9 @@ function load() {
   process.env = { ...ORIGINAL_ENV, ...ENV } as NodeJS.ProcessEnv
   return {
     build: require('./billing-schedule').buildTargetItems as typeof buildTargetItems,
-    maxFor: require('./billing-addons').addonMaxForPlan as typeof addonMaxForPlan,
+    // The plan tables, which no environment moves: the static import is the
+    // same answer the fresh module would give.
+    maxFor: addonMaxForPlan,
   }
 }
 

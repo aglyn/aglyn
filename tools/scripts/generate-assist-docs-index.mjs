@@ -27,7 +27,7 @@
  *
  * Emits ONE generated file (server-only import — never ship it client-side):
  *
- *   apps/console/constants/assist-docs-index.generated.ts
+ *   libs/aglyn/src/lib/app-utils/docs-index.generated.ts
  *
  * Re-run after editing apps/docs:
  *
@@ -40,7 +40,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const DOCS_ROOT = join(ROOT, 'apps/docs/docs')
-const OUT = join(ROOT, 'apps/console/constants/assist-docs-index.generated.ts')
+const OUT = join(ROOT, 'libs/aglyn/src/lib/app-utils/docs-index.generated.ts')
 
 // Same exclusions as generate-docs-help.mjs: chrome / staff-internal routes.
 // `staff-console` additionally excluded — customer assist must never cite

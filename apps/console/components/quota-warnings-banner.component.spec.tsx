@@ -532,14 +532,14 @@ describe('a subscription whose first payment never completed', () => {
 /**
  * The AI credits row (AGL-2898).
  *
- * Read from `/api/billing/assist-credits` — the meter's own route, answering
+ * Read from `/api/ai/billing/credits` — the meter's own route, answering
  * in credits — never from Firestore, which denies `assistUsage` to every
  * client. Its sentence is its own because what happens at the band differs
  * by plan: sold past at a rate unless a stop is set, or a wall until next
  * month. The predicate is the one the reservation refuses on.
  */
 describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
-  const assistFetches = () => seatFetches.filter((url) => url.includes('assist-credits'))
+  const assistFetches = () => seatFetches.filter((url) => url.includes('/api/ai/billing/credits'))
 
   /**
    * Answer the credits route with a standing; the seat route as before.
@@ -553,7 +553,7 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
     global.fetch = jest.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       seatFetches.push(url)
-      const body = url.includes('assist-credits')
+      const body = url.includes('/api/ai/billing/credits')
         ? { credits: credits && { ...credits, remaining: Math.max(0, credits.limit - credits.used) } }
         : { managerSeats: 1, memberCount: 1 }
       return { ok: true, status: 200, json: async () => body } as unknown as Response
@@ -577,7 +577,7 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
     answerCredits({ used: 2_300, limit: 2_750 })
     render(<QuotaWarningsBanner />)
     await screen.findByText(/above 80% of your included AI assist credits/)
-    expect(assistFetches().join('\n')).toContain('/api/billing/assist-credits?orgId=org-1')
+    expect(assistFetches().join('\n')).toContain('/api/ai/billing/credits?orgId=org-1')
   })
 
   it('at the band on a plan that sells past it: billed at the rate unless a stop is set, with a Usage link', async () => {

@@ -35,6 +35,7 @@ import {
   ensureCrmInboundToken,
   fileCrmInboundEmail,
   findOrgByCrmInboundToken,
+  loadCrmInboundRoster,
 } from './crm-inbound-email'
 
 // ---------------------------------------------------------------------------
@@ -121,6 +122,7 @@ function collectionRef(path: string): any {
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${(autoId += 1)}`}`),
     where: (field: string, _op: string, value: unknown) => query(path, [[field, value]], null),
     limit: (n: number) => query(path, [], n),
+    get: async () => ({ docs: children(path).map((key) => snapshot(key)) }),
   }
 }
 
@@ -378,5 +380,108 @@ describe('filing a message', () => {
     )
     expect(result.outcome).toBe('filed')
     expect(activities()[0]).toMatchObject({ body: 'Hello there\nBye' })
+  })
+})
+
+describe("a send from a member's alias (AGL-2975)", () => {
+  // Avery signs in as avery@example.com, sends outreach from the send-as alias
+  // avery@example.org, and copies the capture address in BCC. The alias is ALSO
+  // a contact — an earlier capture filed it as a stranger — which is what
+  // makes a misreading visible: the row lands on the alias, not the prospect.
+  const outreach = () =>
+    message({
+      from: 'Avery Quinn <avery@example.org>',
+      to: ['Pat Prospect <pat@prospect.example>'],
+      bcc: [CAPTURE],
+      subject: 'Aglyn for Prospect Co',
+      text: 'Worth a call next week?',
+      messageId: '<outreach-1@aglyn.io>',
+      inReplyTo: '',
+    })
+
+  const seedAlias = (alias: Record<string, unknown>) =>
+    store.set(`orgs/${ORG}/memberEmailAliases/u-avery`, { uid: 'u-avery', aliases: [alias], updatedAtMs: 1 })
+
+  const fileWithRoster = async (msg: ReceivedEmail) =>
+    fileCrmInboundEmail(firestore, {
+      orgId: ORG,
+      org: store.get(`orgs/${ORG}`) as Record<string, unknown>,
+      message: msg,
+      domain: DOMAIN,
+      members: await loadCrmInboundRoster(firestore, ORG),
+      hostIds: ['site-1', 'site-2'],
+    })
+
+  beforeEach(() => {
+    store.set(`orgs/${ORG}/members/u-avery`, { role: 'admin', email: 'avery@example.com', displayName: 'Avery Quinn' })
+    store.set(`orgs/${ORG}/contacts/con-pat`, {
+      email: 'pat@prospect.example',
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+    })
+    store.set(`orgs/${ORG}/contacts/con-alias`, {
+      email: 'avery@example.org',
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+    })
+  })
+
+  it('files it on the prospect in To, as outbound, stamped with the member, once the alias is confirmed', async () => {
+    seedAlias({ address: 'avery@example.org', addedAtMs: 1, verifiedAtMs: 2 })
+    const result = await fileWithRoster(outreach())
+    expect(result.outcome).toBe('filed')
+    if (result.outcome !== 'filed') return
+    expect(result.match).toMatchObject({
+      email: 'pat@prospect.example',
+      direction: 'outbound',
+      link: { contactId: 'con-pat' },
+    })
+    expect(activities()).toEqual([
+      expect.objectContaining({
+        direction: 'outbound',
+        from: 'avery@example.org',
+        to: 'pat@prospect.example',
+        byUid: 'u-avery',
+        byName: 'Avery Quinn',
+        contactId: 'con-pat',
+      }),
+    ])
+  })
+
+  it('reads an alias the member has not confirmed as a stranger, exactly as before', async () => {
+    seedAlias({ address: 'avery@example.org', addedAtMs: 1 })
+    const result = await fileWithRoster(outreach())
+    expect(result.outcome).toBe('filed')
+    if (result.outcome !== 'filed') return
+    expect(result.match).toMatchObject({
+      email: 'avery@example.org',
+      direction: 'inbound',
+      link: { contactId: 'con-alias' },
+    })
+    expect(activities()[0]).toMatchObject({ direction: 'inbound', byUid: '', contactId: 'con-alias' })
+  })
+
+  it('names no author for an alias two members confirmed, but still reads it as the team’s', async () => {
+    seedAlias({ address: 'sales@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 })
+    store.set(`orgs/${ORG}/members/u-kim`, { role: 'editor', email: 'kim@aglyn.com', displayName: 'Kim' })
+    store.set(`orgs/${ORG}/memberEmailAliases/u-kim`, {
+      uid: 'u-kim',
+      aliases: [{ address: 'sales@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }],
+    })
+    const result = await fileWithRoster({ ...outreach(), from: 'Sales <sales@aglyn.io>' })
+    expect(result.outcome).toBe('filed')
+    expect(activities()[0]).toMatchObject({ direction: 'outbound', byUid: '', contactId: 'con-pat' })
+    expect('byName' in (activities()[0] as object)).toBe(false)
+  })
+
+  it('reads the roster: confirmed aliases only, no suspended member, no alias without a member', async () => {
+    seedAlias({ address: 'avery@example.org', addedAtMs: 1, verifiedAtMs: 2 })
+    store.set(`orgs/${ORG}/members/u-off`, { email: 'off@aglyn.com', orgSuspended: true })
+    store.set(`orgs/${ORG}/memberEmailAliases/u-left`, {
+      aliases: [{ address: 'left@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }],
+    })
+    expect(await loadCrmInboundRoster(firestore, ORG)).toEqual([
+      { uid: 'u-avery', email: 'avery@example.com', name: 'Avery Quinn', verifiedAliases: ['avery@example.org'] },
+    ])
   })
 })

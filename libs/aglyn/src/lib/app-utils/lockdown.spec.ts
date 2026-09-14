@@ -57,14 +57,42 @@ import {
   registerPluginEntitlements,
   resetPluginEntitlementsForTests,
 } from '../plugin-manager/plugin-entitlements'
-import { AI_PLUGIN_ENTITLEMENTS } from './ai-entitlements'
 
-// The AI levers arrive through the generic seam (AGL-2940); the reset in
-// `beforeEach` below forgets them, so every case re-registers what the
-// barrel would have.
+/**
+ * A plugin's levers, as the AI plugin declares its own (AGL-2939): the
+ * catalog is proven here against a declaration shaped like a real one, and
+ * the plugin's own spec proves its declaration. Registered before every
+ * case because the reset forgets it.
+ */
+const AI_LEVERS = {
+  pluginId: 'ai',
+  lockdownFeatures: [
+    {
+      key: 'ai-assist',
+      label: 'AI assist',
+      staffBypass: true,
+      notice: {
+        title: 'AI assist is temporarily unavailable',
+        body: 'AI assist is temporarily unavailable. Your content is unaffected — please try again shortly.',
+      },
+      apiPaths: { exact: ['ai/assist', 'assist/chat'] },
+    },
+    {
+      key: 'ai-generate',
+      label: 'AI generation',
+      staffBypass: true,
+      notice: {
+        title: 'AI generation is temporarily unavailable',
+        body: 'Generating sections, pages and automations with AI is temporarily unavailable. Everything already built is unaffected — please try again shortly.',
+      },
+      apiPaths: { prefixes: ['ai/generate', 'ai/jobs'] },
+    },
+  ],
+}
+
 beforeEach(() => {
   resetPluginEntitlementsForTests()
-  registerPluginEntitlements(AI_PLUGIN_ENTITLEMENTS)
+  registerPluginEntitlements(AI_LEVERS)
 })
 
 const NOW = 1_755_000_000_000

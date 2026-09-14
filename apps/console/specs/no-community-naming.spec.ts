@@ -109,7 +109,7 @@ const ALLOWED = new Map<string, string>([
       'stops carrying 20 KB of tooltip prose to paint a `?`.',
   ],
   [
-    'apps/console/constants/assist-docs-index.generated.ts',
+    'libs/aglyn/src/lib/app-utils/docs-index.generated.ts',
     'The second generated docs artifact (AGL-1860) — Aglyn Assist’s ' +
       'retrieval index, which carries docs PROSE rather than just anchors, ' +
       'so it inherits the word from every forum page indexed above: ' +

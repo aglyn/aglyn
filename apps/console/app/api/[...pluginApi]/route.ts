@@ -19,8 +19,9 @@ import {
   lockdownFeaturesForPluginApiPath,
   pluginIdForRegisteredApiPath,
   resolveHostEnabledPlugins,
-  resolvePluginApiRoute,
+  resolvePluginApiMatch,
   runLegacyHandler,
+  runPluginApiMatch,
 } from '@aglyn/aglyn/server'
 import {
   consoleApiRateLimitRefusal,
@@ -208,8 +209,8 @@ async function dispatch(
     if (featureLocked) return featureLocked
   }
 
-  const route = resolvePluginApiRoute(path)
-  if (!route) return Response.json({ error: 'Not found' }, { status: 404 })
+  const match = resolvePluginApiMatch(path)
+  if (!match) return Response.json({ error: 'Not found' }, { status: 404 })
 
   // Console-write rate limit. This dispatcher is the single chokepoint for
   // every plugin's console handler — marketplace installs and publishes,
@@ -234,8 +235,15 @@ async function dispatch(
   const limited = await consoleApiRateLimitRefusal({ path, uid, request })
   if (limited) return limited
 
-  return runLegacyHandler(route, request, { pluginApi: pluginApi ?? [] })
+  return runPluginApiMatch(match, request, { pluginApi: pluginApi ?? [] }, runLegacyHandler)
 }
+
+/**
+ * The longest a door behind this dispatcher may run (AGL-2939): the
+ * assistant's chat streams an answer and a generation job's first step runs
+ * inline, and both used to carry this on their own route files.
+ */
+export const maxDuration = 60
 
 export {
   dispatch as GET,

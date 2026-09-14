@@ -22,14 +22,13 @@ import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
  *
  * `STAFF_ALERT_EMAIL` is the one inbox every subsystem's alert lands in —
  * the console's `emailStaffAlert` in `apps/console/app/api/_lib/
- * usage-alert-email.ts` sends the cron's alerts there. The AI doors cannot
- * call that: `/api/ai/assist` lives in a plugin library and the meter they
- * share lives here, and a library cannot import from an app. So the meter's
- * own alert — the platform-wide free-spend ceiling — sends through this,
- * to the same address, with the same posture: unset is the ordinary answer
- * outside production and reports `unconfigured`, and nothing here throws,
- * because the mail is a courtesy and the refusal it announces is the
- * control.
+ * usage-alert-email.ts` sends the cron's alerts there. A library cannot
+ * call that, because a library cannot import from an app. So a library's
+ * own alert — the AI meter's platform-wide free-spend ceiling is one —
+ * sends through this, to the same address, with the same posture: unset is
+ * the ordinary answer outside production and reports `unconfigured`, and
+ * nothing here throws, because the mail is a courtesy and the refusal it
+ * announces is the control.
  *
  * Platform email metering is loaded lazily and only after a send, so that
  * importing this module — which every unit test of the meter does — never

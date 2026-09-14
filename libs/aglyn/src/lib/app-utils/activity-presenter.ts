@@ -34,7 +34,6 @@ import {
   type CrmRecordKind,
 } from './console-record-links'
 import { hostEventLabel } from './workflows'
-import { aiActivityActionLabel, isAiActivityAction } from './ai-activity-actions'
 import { duplicateActivityActionLabel } from './duplicate-resource'
 import {
   pluginActivityActionLabel,
@@ -166,7 +165,6 @@ export function activityActionLabel(action: string | undefined): string {
   const stored = action?.trim() ?? ''
   return (
     pluginActivityActionLabel(stored) ??
-    aiActivityActionLabel(stored) ??
     duplicateActivityActionLabel(stored) ??
     stored
   )

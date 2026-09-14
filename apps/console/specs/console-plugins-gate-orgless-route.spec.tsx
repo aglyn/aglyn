@@ -57,8 +57,16 @@ jest.mock('next/navigation', () => ({
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ orgSlug: route.subdomainSlug }),
 }))
+// The gate resolves the reader's AI permissions for every provider
+// (AGL-2927); that read walks the org-permissions and host-role hooks, none
+// of which this suite is about. Held, as they answer before they know.
+jest.mock('../hooks/use-ai-permissions', () => {
+  const useAiPermissions = () => ({ loaded: false, use: false, generate: false })
+  return { __esModule: true, default: useAiPermissions, useAiPermissions }
+})
 jest.mock('../constants/console-plugin-loader', () => ({
   consolePluginLoader: { ensure: (...args: unknown[]) => mockEnsure(...args) },
+  pluginDeclarationsReady: Promise.resolve(),
 }))
 jest.mock('../utils/realm-plugins.client', () => ({
   loadOrgRealmPlugins: (...args: unknown[]) => mockLoadOrgRealmPlugins(...args),
@@ -111,9 +119,13 @@ function SiteProbe() {
 const renderGate = (children?: ReactNode) =>
   render(<ConsolePluginsGate>{children}</ConsolePluginsGate>)
 
-/** Let every queued microtask/effect in the gate settle. */
+/**
+ * Let every queued microtask/effect in the gate settle: the declarations
+ * hold (AGL-2939) lifts a tick after mount, and an org-less route holds for
+ * nothing else.
+ */
 const settle = () =>
-  waitFor(() => expect(mockEnsure.mock.calls.length).toBeGreaterThanOrEqual(0))
+  waitFor(() => expect(screen.queryByTestId('boot-splash')).toBeNull())
 
 describe('ConsolePluginsGate on an org-less route (AGL-1937)', () => {
   beforeEach(() => {

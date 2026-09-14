@@ -832,6 +832,13 @@ jobs:
       - run: npm run test:brand-literals
       - run: npm run check:brand-literals
 
+      # AI stays in its plugin (AGL-2939): a vendor host, header or model id
+      # outside `libs/plugins/ai/src/lib/providers`, or an app importing the
+      # plugin outside the generated manifests, is a red. The forced-red
+      # fixture runs first so a detector that matched nothing cannot pass.
+      - run: npm run test:ai-in-core
+      - run: npm run check:ai-in-core
+
       # British-spelling ratchet (AGL-2763), the third of the same shape. The
       # standing rule is American spelling on every customer-facing surface;
       # nothing mechanical enforced it, and the drift it was written about came

@@ -20,6 +20,7 @@ design: the surface is small and curated, and each entry needs semantics
 | `listConsoleNavItems()` / `resolveConsolePluginPage(href)` | How the shell renders nav + serves plugin pages under `/[orgSlug]/hosts/[host]/[...pluginSlug]`. The resolver matches an exact `href`, or a declared section beneath one — longest href wins, prefixes match on a segment boundary, and a tie between two enabled plugins refuses. It answers `{ extension, navItem, section?, segments }`. |
 | `listConsoleOrgNavItems()` / `resolveConsoleOrgPluginPage(href)` | The same pair for **organization-level** surfaces — the extension's `orgNavItems`, listed on the organization's tab strip and served under `/[orgSlug]/[...pluginSlug]` with the same matching rules. Neither pair reads the other's list. |
 | `listConsoleWidgets(slot)` | Widgets registered for a named zone — see [Injection zones](injection-zones.md). |
+| `listConsoleStaffPages()` / `resolveConsoleStaffPage(id)` | How the shell draws a plugin's staff pages: a tab after the staff strip's own, and a page at `/admin/{id}` from the generic staff route. Two plugins claiming one id resolve to nothing, and say so. |
 | `listConsoleProviders()` | App-level providers mounted around every console page. |
 | `defineUiFeatureBundle(options, components)` | Site/canvas component bundle; auto-depends on the base `mui` bundle. Component and bundle ids are **persisted in screen docs — never rename**. |
 | `CONSOLE_WIDGET_SLOTS` | The typed injection-zone catalog. A widget with a `column: { header, sortKey?, align? }` is a column of a shell-owned table on the zones documented as column zones. |
@@ -35,7 +36,18 @@ receives `hostId: null` and an `orgMount` naming the organization and its
 sites, and the shell admits only a member whose access spans the whole
 organization; an `href` that names one of the console's own organization
 routes, such as `/team` or `/settings`, never renders), `dashboardCards?`,
-`settingsSections?`, `widgets?`, `providers?`.
+`settingsSections?`, `widgets?`, `providers?`, `staffPages?`.
+
+`ConsoleExtension.staffPages?` adds pages to the staff area: each
+`{ id, label, header?: { title, icon?, docsTopic? }, Component }` becomes a
+tab in the staff strip and a page at `/admin/{id}`, rendered inside the staff
+chrome with `ConsoleStaffPageProps { basePath }`. Staff pages load with the
+plugins that name a `staff` register surface (see
+[the manifest](./manifest-and-envs.md)), and the staff claim alone admits a
+reader: the extension's `featureFlag` and `permission` do not apply, so every
+read the page makes must be refused server-side to a caller without the
+claim. The console's own staff routes win the segments they use, and a staff
+page whose id is one of them gets no tab.
 
 `ConsoleExtension.permission?` (and `ConsoleNavItem.permission?`, which
 narrows one surface) name a permission the reader must hold. `featureFlag`
@@ -85,8 +97,10 @@ batch, so read registries lazily rather than snapshotting.
 
 | API | Semantics |
 | --- | --- |
-| `registerPluginApiRoute(path, handler)` | Registers an exact path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. |
+| `registerPluginApiRoute(path, handler)` | Registers a path under the `[...pluginApi]` dispatchers. Ownership is recorded at registration time for the per-request org gate — a disabled plugin's paths 404 for that workspace. `path` may carry `:name` segments (`ai/jobs/:jobId/cancel`); an exact registration wins over a pattern. |
+| `handler` as `(req, res)` or `{ web }` | The node shape takes `PluginApiRequest` / `PluginApiResponse`. The Web shape, `{ web: (request, { params }) => Response }`, takes the dispatcher's own `Request` and answers a `Response` — the form for a door that streams (server-sent events, a chat answer) or reads the raw body itself; `params` carries the path segments and every `:name` filled. |
 | `PluginApiRequest` | `{ method, query, body, headers, rawBody? }` — `rawBody` carries the unparsed payload for Stripe/Svix signature verification. |
+| `resolvePluginApiMatch(path)` / `runPluginApiMatch(match, request, params, runLegacy)` | What a dispatcher does: the route and its filled `:name` params for a path, then either shape run — the host app supplies `runLegacy` for the node shape. `resolvePluginApiRoute(path)` answers the node handler alone, for the specs that drive one directly. |
 
 ## Site pipeline — `site-runtime`, `site-page-hooks` (`/server` for hooks)
 
@@ -209,6 +223,51 @@ registerPluginService(AI_PROVIDERS, ollamaProvider, { pluginId: 'acme-llm', prio
 const providers = resolvePluginServices(AI_PROVIDERS) // acme-llm first, then ai
 ```
 
+## Platform events — `plugin-events` (`/server`)
+
+Core raises the events; a plugin that must react to what a core route did
+subscribes from its `serverDeclarations` entry, so the subscription is in
+place before the first request. Payloads carry the actor and the before /
+after, never a reference to the plugin.
+
+| Event | Raised by | Payload |
+| --- | --- | --- |
+| `org.seatAddons.changed` | the add-on checkout and the billing webhook | `{ orgId, actor, before, after }` — the `org.seatAddons` maps |
+| `org.permissions.changed` | the member, role and host-member routes | `{ orgId, actor, subject: { type, id?, name? }, permission, granted }` |
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginEventHandler(event, handler, { pluginId? })` | Subscribes; attributed to the registering plugin. Idempotence is the subscriber's to keep — check `listPluginEventHandlers(event)` before subscribing again after a registry reset. |
+| `runPluginEventHandlers(event, payload)` | What the core route calls after its write: every handler in registration order, a failure logged and counted (`{ handled, failed }`), never the route's failure. |
+
+## Account erasure — `plugin-user-erasure` (`/server`)
+
+The account erasure deletes what core stores about a person. A plugin that
+keeps data about a person where core's deletes do not reach — documents
+under an org keyed by the uid, a collection carrying the uid as a field —
+registers an eraser from its `serverDeclarations` entry:
+
+```ts
+registerPluginUserEraser(
+  async ({ uid, orgIds }) => {
+    const { eraseSnapshotsFor } = await import('./server/snapshots')
+    return { snapshots: await eraseSnapshotsFor(uid, orgIds) }
+  },
+  { pluginId: 'acme-backups' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginUserEraser(eraser, { pluginId? })` | One eraser per plugin, attributed like an event handler; registering again replaces it in place. Check `listPluginUserErasers()` before registering again after a registry reset. |
+| `runPluginUserErasers({ uid, orgIds })` | What the erasure calls once the person's memberships are removed: every eraser in registration order, with every workspace the person belonged to. Answers each plugin's report by plugin id, or `null` for an eraser that threw — logged, and never the erasure's failure. |
+
+A report is counts and flags (`Record<string, number | boolean | null>`),
+never the erased content: it lands in the erasure's audit record, which
+outlives the data. `null` in a field is a figure the eraser could not
+measure, and a `null` report says the plugin's data may remain — neither
+is zero.
+
 ## Activity actions — `plugin-activity-actions`
 
 A plugin whose activity rows are read by more than a person stores a CODE
@@ -231,6 +290,7 @@ registerPluginActivityActions({
 | `pluginActivityActionLabel(action)` | What a reader sees for a code — `activityActionLabel` in the presenter reads it, so every feed, table and card shows the same words. |
 | `listPluginActivityFilters()` | One chip per group with the codes it keeps: the org feed and the actor table draw their chips from this, and send `action isAnyOf …`. |
 | `pluginStaffAuditActionGroup(action)` / `pluginStaffAuditActionGroupLabel(group)` | The staff audit facet's grouping: a registered group by code or by `staffAuditPrefixes`, else the action's leading namespace. |
+| `isPluginStaffAuditAccess(action)` | Whether a staff audit action is one a plugin's group names in `staffAuditAccessActions` — the actions its staff doors write when staff READ something rather than change it. The audit log files them as accesses. Matched exactly. |
 
 ## Billing and access keys — `plugin-entitlements`
 

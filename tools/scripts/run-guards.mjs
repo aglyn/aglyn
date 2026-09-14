@@ -133,6 +133,9 @@ const REPO_WIDE = new Set([
   'generate:plugin-manifests:check',
   'sync:next-tsconfigs:check',
   'check:ai-palette',
+  // Sweeps apps/ and libs/ for a vendor AI literal outside the AI plugin's
+  // providers and for an app importing the plugin statically (AGL-2939).
+  'check:ai-in-core',
   'check:manifest-versions',
   // Walk every app's routes and every lib they reach; a cost only a bundler
   // or a graph walk can see, which a green typecheck and green tests miss.

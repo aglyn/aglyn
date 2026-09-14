@@ -20,8 +20,9 @@ import {
   lockdownPausedSurfaceForPluginApiPath,
   pluginIdForRegisteredApiPath,
   resolveHostEnabledPlugins,
-  resolvePluginApiRoute,
+  resolvePluginApiMatch,
   runLegacyHandler,
+  runPluginApiMatch,
 } from '@aglyn/aglyn/server'
 import {
   filterEnabledPluginsByReleaseFlags,
@@ -159,8 +160,8 @@ async function dispatch(
     if (paused) return paused
   }
 
-  const route = resolvePluginApiRoute(path)
-  if (!route) return Response.json({ error: 'Not found' }, { status: 404 })
+  const match = resolvePluginApiMatch(path)
+  if (!match) return Response.json({ error: 'Not found' }, { status: 404 })
 
   // Visitor-write rate limit (AGL-1770). Until this, the dispatcher applied
   // NO rate limit of any kind to any visitor-facing write, so an
@@ -187,7 +188,7 @@ async function dispatch(
   })
   if (limited) return limited
 
-  return runLegacyHandler(route, request, { pluginApi: pluginApi ?? [] })
+  return runPluginApiMatch(match, request, { pluginApi: pluginApi ?? [] }, runLegacyHandler)
 }
 
 export {

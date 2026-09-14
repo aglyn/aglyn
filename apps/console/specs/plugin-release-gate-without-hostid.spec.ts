@@ -85,7 +85,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/plugin-manager/enabled-plugins',
   ),
-  resolvePluginApiRoute: jest.fn(() => ({ path: 'bookings/services' })),
+  resolvePluginApiMatch: jest.fn(() => ({ route: { path: 'bookings/services' }, params: {} })),
+  // The dispatcher runs a matched (req, res) route through the adapter it
+  // is handed, which is the mocked `runLegacyHandler` below.
+  runPluginApiMatch: jest.requireActual('@aglyn/aglyn/app-utils/api-plugins').runPluginApiMatch,
   runLegacyHandler: jest.fn(async () => {
     mockHandlerCalls += 1
     return Response.json({ services: [] }, { status: 200 })

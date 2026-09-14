@@ -97,6 +97,16 @@ export const CHECKS = Object.freeze([
     when: (path) => /^(?:apps|libs|cloud)\//.test(path) && JS.test(path) && !SPEC.test(path),
   },
   {
+    // A vendor AI literal outside the AI plugin's providers, or an app
+    // importing the plugin statically (AGL-2939). Whole-corpus, because
+    // the allowlist it reads must be checked for staleness against every
+    // file, not only the pushed ones.
+    name: 'check:ai-in-core',
+    script: 'tools/scripts/check-ai-in-core.mjs',
+    scoped: false,
+    when: (path) => /^(?:apps|libs)\//.test(path) && JS.test(path) && !SPEC.test(path),
+  },
+  {
     name: 'check:test-wiring',
     script: 'tools/scripts/check-test-wiring.mjs',
     scoped: false,

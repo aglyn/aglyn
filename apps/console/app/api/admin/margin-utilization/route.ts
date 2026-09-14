@@ -27,7 +27,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { orgMarginRow, type OrgMarginRow } from '../../../../utils/margin-utilization'
+import { orgMarginRow, type OrgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
 
 /**
  * REALISED BAND UTILIZATION, PER ORGANIZATION.

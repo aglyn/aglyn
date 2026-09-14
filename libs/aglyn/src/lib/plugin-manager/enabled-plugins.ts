@@ -139,6 +139,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<
   marketing: 'elements',
   redirects: 'routes',
   workflows: 'routes',
+  ai: 'console-only',
 }
 
 /**
@@ -170,6 +171,19 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       'Forms on the site and the catalog that owns them. Always on: the ' +
       'submit endpoint and the publish-time contract check are core, so a ' +
       'switch here would remove only the half that draws the form.',
+  },
+  {
+    id: 'ai',
+    label: 'AI',
+    alwaysOn: true,
+    description: 'The assistant, generative building and automation, and the AI add-on.',
+    // Always on, and no catalog flag (AGL-2939): the assistant was a console
+    // fixture before it was a plugin, so it stays on every workspace's set
+    // whether or not the switchboard was ever touched, and its doors gate
+    // themselves one by one — the assistant by `release_assist`, the
+    // generative doors by `release_ai_generative` inside their gate ladder,
+    // the copy assistant by the provider key. A flag on the bundle would
+    // switch off the released doors with the unreleased ones.
   },
   {
     id: ACCOUNTS_PLUGIN_ID,

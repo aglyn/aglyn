@@ -16,8 +16,9 @@
  */
 'use client'
 
+import { listConsoleStaffPages } from '@aglyn/aglyn'
 import { usePathname } from 'next/navigation'
-import { useMemo } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import { useEnabledPluginIds } from '../components/console-plugins-gate.component'
 import {
   useHostId,
@@ -27,6 +28,11 @@ import {
 import adminNavTabItems from '../constants/admin-nav-tabs'
 import hostNavTabItems from '../constants/host-nav-tabs'
 import manageNavTabItems from '../constants/manage-nav-tabs'
+import {
+  STAFF_PLUGIN_IDS,
+  staffPluginsSettled,
+  subscribeStaffPluginsSettled,
+} from '../constants/staff-plugins'
 import useIsStaff from './use-is-staff'
 import useOrgNavTabItems from './use-org-nav-tabs'
 import { useOrgReach } from './use-org-reach'
@@ -159,6 +165,14 @@ export function useSecondaryNav(): {
   // A site collaborator gets no org strip at all (AGL-1032) — the tab set is
   // the one place to do this, since the bar mounts once for every route.
   const { orgWide, ready: reachReady } = useOrgReach()
+  // The staff strip's plugin tabs (AGL-2939) come from the plugins the staff
+  // layout loads, and the bar is drawn above that layout: it redraws them
+  // when the load settles rather than waiting for the next navigation.
+  const staffSettled = useSyncExternalStore(
+    subscribeStaffPluginsSettled,
+    staffPluginsSettled,
+    () => false,
+  )
 
   const addressable = useMemo(
     () =>
@@ -198,7 +212,11 @@ export function useSecondaryNav(): {
         // as a broken link rather than a refusal. `null` (claim still
         // resolving) yields nothing, so neither audience gets a flash of
         // the wrong strip.
-        return isStaff === true ? adminNavTabItems() : []
+        return isStaff === true
+          ? adminNavTabItems(
+              staffSettled ? listConsoleStaffPages(STAFF_PLUGIN_IDS) : [],
+            )
+          : []
       case 'manage':
         return manageNavTabItems()
       default:
@@ -213,6 +231,7 @@ export function useSecondaryNav(): {
     isStaff,
     orgWide,
     reachReady,
+    staffSettled,
   ])
 
   const activeTab = useMemo(

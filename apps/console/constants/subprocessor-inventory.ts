@@ -317,7 +317,7 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'Generating the responses of the in-product assistant and the besigner copy assistant',
     publishedOn: '2026-08-18',
     reason:
-      "Two model endpoints. `apps/console/app/api/assist/chat/route.ts` is gated by `release_assist` AND the key; `libs/plugins/marketplace/src/lib/server/ai-assist.ts` carries NO release flag, so setting `ANTHROPIC_API_KEY` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-reader detail and is the deeper guard for this one vendor.",
+      "Reached through the AI plugin's Anthropic adapter (`libs/plugins/ai/src/lib/providers/anthropic.ts`) by the doors that call the AI runtime. `libs/plugins/ai/src/lib/server/assist-chat.ts` is gated by `release_assist` AND the key, and a generation job's text step by `release_ai_generative`; `libs/plugins/ai/src/lib/server/ai-assist.ts` carries NO release flag, so setting `ANTHROPIC_API_KEY` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-door detail and is the deeper guard for this one vendor.",
     dataReceived:
       "The customer's question and a trailing window of the thread, and — for the besigner assistant — the site copy, blog bodies and section briefs being written. On Pro and above the current route, host and organization name travel with the question.",
   },

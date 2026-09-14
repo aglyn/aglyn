@@ -532,7 +532,10 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgSettings: 'orgSettings',
   /** Host setup page, below the built-in cards. Props: hostId, org. */
   hostSettings: 'hostSettings',
-  /** Staff admin org detail (staff-only surfaces). Props: orgId. */
+  /**
+   * Staff admin org detail (staff-only surfaces). Props: orgId. A staff
+   * zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
   adminOrgDetail: 'adminOrgDetail',
   /**
    * Billing → Usage, below the meters (AGL-2940). Props: `orgId`, `org` (the
@@ -549,15 +552,19 @@ export const CONSOLE_WIDGET_SLOTS = {
   /**
    * The staff org page, among its cards (AGL-2940). Props: `orgId`. Staff
    * only — the page is behind `StaffOnly`, and a widget here may read the
-   * staff-only routes.
+   * staff-only routes. A staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
    */
   staffOrg: 'staffOrg',
-  /** The staff user page, below the account's activity. Props: `uid`. */
+  /**
+   * The staff user page, below the account's activity. Props: `uid`. A
+   * staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
   staffUser: 'staffUser',
   /**
    * The org's team member detail page, below the member's activity
-   * (AGL-2940). Props: `orgId`, `uid`, `member` (the org member document as
-   * the page loaded it), `canManage` (the reader may manage the org).
+   * (AGL-2940). Props: `orgId`, `orgSlug`, `uid`, `member` (the org member
+   * document as the page loaded it), `hosts` (the org's sites, for naming
+   * them), `canManage` (the reader may manage the org).
    */
   orgMember: 'orgMember',
   /**
@@ -569,9 +576,10 @@ export const CONSOLE_WIDGET_SLOTS = {
   orgMembersListColumn: 'orgMembersListColumn',
   /**
    * The site collaborators card (AGL-2940). A widget with a `column` is a
-   * column of its table, rendered per row with `{ member, hostId, canManage
-   * }`; a widget without one renders beneath the table with `{ hostId,
-   * canManage }`.
+   * column of its table, rendered per row with `{ member, orgId, hostId,
+   * canManage }` — the owner's row too, with `member` carrying the owner's
+   * `uid` and `role: 'owner'`; a widget without one renders beneath the
+   * table with `{ hostId, canManage }`.
    */
   hostMembers: 'hostMembers',
   /**
@@ -592,6 +600,29 @@ export type ConsoleWidgetSlot =
   (typeof CONSOLE_WIDGET_SLOTS)[keyof typeof CONSOLE_WIDGET_SLOTS]
 
 /**
+ * The zones on the STAFF pages (AGL-2939): the staff org page, its detail
+ * zone, and the staff user page.
+ *
+ * No workspace names the plugin set there. A staff page is ABOUT an org or
+ * an account, and the reader's own memberships have nothing to do with what
+ * it shows, so the console reads these zones from the plugins it loads for
+ * the staff area — every plugin that declares a `staff` register surface —
+ * and consults neither a widget's entitlement nor its permission: both are
+ * answers about a workspace, and the staff area's guard is what admits the
+ * reader.
+ */
+export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
+  CONSOLE_WIDGET_SLOTS.adminOrgDetail,
+  CONSOLE_WIDGET_SLOTS.staffOrg,
+  CONSOLE_WIDGET_SLOTS.staffUser,
+]
+
+/** Whether a slot is one of the {@link CONSOLE_STAFF_WIDGET_SLOTS}. */
+export function isConsoleStaffWidgetSlot(slot: string): boolean {
+  return (CONSOLE_STAFF_WIDGET_SLOTS as readonly string[]).includes(slot)
+}
+
+/**
  * A column a widget contributes to a shell-owned table (AGL-2940) — the org
  * Team table and the site collaborators table read these. The widget's
  * `Component` is the CELL renderer, mounted once per row with the row as a
@@ -599,7 +630,7 @@ export type ConsoleWidgetSlot =
  * table's to draw.
  */
 export interface ConsoleWidgetColumn {
-  /** The header cell's text. */
+  /** The header cell's text, and the column's name wherever it is listed. */
   header: string
   /**
    * The row field a table that sorts orders this column by. Carried for
@@ -608,6 +639,30 @@ export interface ConsoleWidgetColumn {
    */
   sortKey?: string
   align?: 'left' | 'right' | 'center'
+  /**
+   * The header cell's content when a plain `header` is not enough
+   * (AGL-2939): a hint, or a sort over values only the plugin can read.
+   * Mounted once per table with the slot's props beside
+   * {@link ConsoleWidgetColumnHeaderProps}; without it the table draws
+   * `header` as text.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Header?: ComponentType<any>
+}
+
+/**
+ * What a column's own header receives beside the slot's props (AGL-2939).
+ * The table keeps one sort at a time, so a column that sorts replaces
+ * another's order.
+ */
+export interface ConsoleWidgetColumnHeaderProps {
+  /**
+   * Hands the table a row comparator, or `null` to put the rows back in the
+   * table's own order. Stable for the life of the table.
+   */
+  onSort: (compare: ((a: never, b: never) => number) | null) => void
+  /** Whether the rows are in this column's order. */
+  sorted: boolean
 }
 
 /**
@@ -741,6 +796,42 @@ export interface ConsoleUpgradeNotice {
   billingAnchor?: string
 }
 
+/** What the console's generic staff route hands a staff page. */
+export interface ConsoleStaffPageProps {
+  /** The page's own console path, `/admin/{id}`. */
+  basePath: string
+}
+
+/**
+ * A page a plugin adds to the STAFF area (AGL-2939): a tab in the staff
+ * strip and a page at `/admin/{id}`, rendered by the console's generic staff
+ * route. The shell owns the layout, the header, the breadcrumbs, the staff
+ * guard and the tab; the plugin owns the body.
+ *
+ * Staff pages load with the staff area's plugins — those declaring a `staff`
+ * register surface — not with a workspace's, because no org names the plugin
+ * set on `/admin`. They are admitted by the staff claim alone, so the
+ * extension's `featureFlag` and `permission` do not apply, and every read a
+ * staff page makes is refused server-side to a caller without the claim.
+ */
+export interface ConsoleStaffPage {
+  /**
+   * The URL segment under `/admin`, and the page's identity. The console's
+   * own staff routes win a segment they use, so pick one they do not. It is
+   * in links staff keep — treat it as persisted.
+   */
+  id: string
+  /** The tab's label in the staff strip. */
+  label: string
+  /**
+   * The page header (title and icon), and the docs topic its help `?`
+   * explains — a plain string for the reason {@link ConsoleNavItem.header}
+   * gives, validated by the console.
+   */
+  header?: { title: string; icon?: MdiIconProps; docsTopic?: string }
+  Component: ComponentType<ConsoleStaffPageProps>
+}
+
 export interface ConsoleExtension {
   pluginId: PluginId
   displayName: string
@@ -807,6 +898,11 @@ export interface ConsoleExtension {
   settingsSections?: ConsoleSettingsSection[]
   /** Slot-addressed components the shell renders in place (AGL-419). */
   widgets?: ConsoleWidget[]
+  /**
+   * Pages in the STAFF area (AGL-2939) — see {@link ConsoleStaffPage}.
+   * Neither `featureFlag` nor `permission` applies to them.
+   */
+  staffPages?: readonly ConsoleStaffPage[]
   /**
    * App-level providers the shell mounts around every console page
    * (AGL-419) — e.g. the marketplace plugin's AI-assist provider.
@@ -1058,6 +1154,53 @@ function resolvePluginPageAmong(
     return undefined
   }
   return best
+}
+
+/** A staff page flattened with its owning extension's id. */
+export interface ConsoleStaffPageEntry extends ConsoleStaffPage {
+  pluginId: PluginId
+}
+
+/**
+ * Every registered staff page, in registration order — the staff strip's
+ * plugin tabs, after the console's own.
+ */
+export function listConsoleStaffPages(
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleStaffPageEntry[] {
+  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
+    (extension.staffPages ?? []).map((page) => ({
+      ...page,
+      pluginId: extension.pluginId,
+    })),
+  )
+}
+
+/**
+ * The staff page at `/admin/{id}` (AGL-2939), or `undefined`.
+ *
+ * Two plugins claiming one id resolve to nothing, and say so: registry order
+ * is an accident of which chunk loaded first, and a staff page that is one
+ * plugin's on one load and another's on the next cannot be debugged from the
+ * symptom — the same rule {@link resolveConsolePluginPage} applies to paths.
+ */
+export function resolveConsoleStaffPage(
+  id: string,
+  enabledPluginIds?: readonly PluginId[],
+): ConsoleStaffPageEntry | undefined {
+  const matches = listConsoleStaffPages(enabledPluginIds).filter(
+    (page) => page.id === id,
+  )
+  const owners = [...new Set(matches.map((page) => page.pluginId))]
+  if (owners.length > 1) {
+    console.error(
+      `[aglyn] staff page "/admin/${id}" is claimed by more than one plugin ` +
+        `(${owners.join(', ')}); refusing to guess which one owns it. ` +
+        "Change one plugin's staff page id.",
+    )
+    return undefined
+  }
+  return matches[0]
 }
 
 /** Widgets registered for a slot, across every extension (AGL-419). */

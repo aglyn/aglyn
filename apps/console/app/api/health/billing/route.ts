@@ -101,7 +101,7 @@ import {
 // reads its own copy of the env key names is a guard that keeps reporting
 // green after somebody renames one — it would be asserting its own literals,
 // not the configuration the checkout actually resolves.
-import { meteredPriceId } from '../../../../utils/server/billing-addons'
+import { meteredPriceId } from '@aglyn/tenant-data-admin/server/billing-addons'
 import {
   LIVE_EVENT_COLLECTION,
   TEST_EVENT_COLLECTION,

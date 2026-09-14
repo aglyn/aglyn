@@ -134,11 +134,90 @@ function describeDrift(expected, actual) {
   return lines
 }
 
+/**
+ * The declarations manifests (AGL-2939): each plugin's `declarations` entry
+ * (both apps, client and server) and its `serverDeclarations` entry (server
+ * only), each a light module that registers what core must know before any
+ * surface of the plugin loads — billing and access keys, activity codes,
+ * settings schemas, platform-event subscriptions. The loader manifests
+ * above are per-org; these run once per process, at boot on the server
+ * (`instrumentation.ts`) and with the plugin loader module on the console
+ * client, so a core billing route folds a plugin's add-on and the staff
+ * lockdown page lists its levers whether or not a request has touched the
+ * plugin yet.
+ *
+ * Loaded with `import()` like the loader manifests, never statically: the
+ * project graph reads a static specifier as the app depending on the
+ * plugin, which the package map refuses (AGL-2941). The function resolves
+ * once the declarations are registered, in catalog order, and the apps
+ * hold their first render on it.
+ */
+function declarationsContent(surfaces, constName, entryPoint) {
+  const calls = []
+  for (const plugin of config.plugins) {
+    for (const surface of surfaces) {
+      const fn = plugin.register?.[surface]
+      if (!fn) continue
+      const specifier =
+        surface === 'serverDeclarations'
+          ? `${plugin.package}/declarations.server`
+          : `${plugin.package}/declarations`
+      calls.push(`    ;(await import('${specifier}')).${fn}()`)
+    }
+  }
+  return (
+    `/**\n * GENERATED FILE — do not edit. Regenerate with:\n` +
+    ` *   node tools/scripts/generate-plugin-manifests.mjs\n *\n` +
+    ` * The plugins' DECLARATIONS (AGL-2939): the light registrations core\n` +
+    ` * reads before any plugin surface loads, imported dynamically like the\n` +
+    ` * loader manifests. One of the sanctioned @aglyn/plugins-* references\n` +
+    ` * outside libs/plugins (AGL-417).\n` +
+    ` * Source of truth: plugins.config.json.\n */\n` +
+    `/* eslint-disable @nx/enforce-module-boundaries */\n\n` +
+    `let done: Promise<void> | undefined\n\n` +
+    `/** Registers every plugin's ${entryPoint} declarations once per process. */\n` +
+    `export function ${constName}(): Promise<void> {\n` +
+    `  done ??= (async () => {\n` +
+    (calls.length ? calls.join('\n') + '\n' : '') +
+    `  })()\n` +
+    `  return done\n` +
+    `}\n`
+  )
+}
+
+const DECLARATION_MANIFESTS = [
+  {
+    file: 'apps/console/constants/plugins.declarations.generated.ts',
+    surfaces: ['declarations'],
+    constName: 'registerPluginDeclarations',
+    entryPoint: 'client',
+  },
+  {
+    file: 'apps/console/constants/plugins.declarations.server.generated.ts',
+    surfaces: ['declarations', 'serverDeclarations'],
+    constName: 'registerPluginServerDeclarations',
+    entryPoint: 'server',
+  },
+  {
+    file: 'apps/tenant/utils/plugins.declarations.server.generated.ts',
+    surfaces: ['declarations', 'serverDeclarations'],
+    constName: 'registerPluginServerDeclarations',
+    entryPoint: 'server',
+  },
+]
+
+/**
+ * `staff` (AGL-2939) is the console surface the STAFF area loads. The org
+ * routes load each workspace's enabled plugins, and a staff page names no
+ * workspace, so a plugin with widgets on the staff zones names the
+ * registrar that carries them here — usually its `console` one — and the
+ * staff area loads exactly those plugins.
+ */
 const MANIFESTS = [
   {
     file: 'apps/console/constants/plugins.client.generated.ts',
     entryPoint: 'client',
-    surfaces: ['console', 'site'],
+    surfaces: ['console', 'site', 'staff'],
     constName: 'CONSOLE_PLUGIN_MANIFEST',
   },
   {
@@ -164,8 +243,18 @@ const MANIFESTS = [
 const check = process.argv.includes('--check')
 const drifted = []
 
-for (const { file, entryPoint, surfaces, constName } of MANIFESTS) {
-  const content = expectedContent(entryPoint, surfaces, constName)
+const ALL = [
+  ...MANIFESTS.map((manifest) => ({
+    ...manifest,
+    content: expectedContent(manifest.entryPoint, manifest.surfaces, manifest.constName),
+  })),
+  ...DECLARATION_MANIFESTS.map((manifest) => ({
+    ...manifest,
+    content: declarationsContent(manifest.surfaces, manifest.constName, manifest.entryPoint),
+  })),
+]
+
+for (const { file, content } of ALL) {
 
   if (!check) {
     writeFileSync(join(ROOT, file), content)
@@ -201,4 +290,4 @@ if (check && drifted.length) {
   process.exit(1)
 }
 
-if (check) console.log(`\n${MANIFESTS.length} plugin manifests in sync`)
+if (check) console.log(`\n${ALL.length} plugin manifests in sync`)

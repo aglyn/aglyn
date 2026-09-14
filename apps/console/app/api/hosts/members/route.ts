@@ -27,12 +27,15 @@ import {
   grantHostAccess,
   isImpersonationSession,
   lockdownRefusal,
-  logAiPermissionChanged,
   logHostActivity,
   revokeHostAccess,
   setHostAiPermissions,
 } from '@aglyn/tenant-data-admin'
-import { AI_PERMISSION_KEYS, aiPermissionChanges } from '@aglyn/aglyn/server'
+import {
+  AI_PERMISSION_KEYS,
+  aiPermissionChanges,
+  runPluginEventHandlers,
+} from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -324,7 +327,9 @@ async function handler(request: Request): Promise<Response> {
           .filter(Boolean)
           .join(' · ')
         for (const change of aiPermissionChanges(before, resolved)) {
-          await logAiPermissionChanged(orgId, actor, {
+          await runPluginEventHandlers('org.permissions.changed', {
+            orgId,
+            actor,
             subject: { type: 'host', id: hostId, name: subjectName },
             permission: change.permission,
             granted: change.granted,

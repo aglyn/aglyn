@@ -70,6 +70,7 @@ import AssignmentRuleDrawer from './assignment-rule-drawer'
 import EmailTemplatesCard from './email-templates-card'
 import EmailCaptureCard from './email-capture-card'
 import RecipesCard from './recipes-card'
+import SendingAddressesCard from './sending-addresses-card'
 
 export type CrmSettingsSectionProps = Pick<ConsolePluginPageProps, 'hostId' | 'org'>
 
@@ -727,6 +728,11 @@ RoundRobinCard.displayName = 'RoundRobinCard'
  * write to — a template is working material, not policy — and mounts at
  * both levels, listing the site's letters under a site and the whole
  * workspace's from the organization's hub.
+ *
+ * Your sending addresses (AGL-2975) sits directly under Email capture,
+ * because it is where a member who copies that address from an alias looks
+ * next: it is the reader's OWN list, at both levels, and writes through the
+ * core route rather than the org document.
  */
 export function CrmSettingsSection(props: CrmSettingsSectionProps) {
   const { hostId, org } = props
@@ -744,6 +750,7 @@ export function CrmSettingsSection(props: CrmSettingsSectionProps) {
       <RoundRobinCard hostId={hostId} org={org} />
       <EmailTemplatesCard hostId={hostId} org={org} />
       <EmailCaptureCard hostId={hostId} canManage={canManage} ready={scopeReady && roleReady} />
+      <SendingAddressesCard orgId={orgId} ready={scopeReady} />
       {mount ? <RecipesCard org={org} /> : null}
     </Stack>
   )

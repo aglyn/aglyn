@@ -51,6 +51,17 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
+
+// The AI levers as their plugin declares them (AGL-2939): the bypass rule
+// is read off the declaration, so the cases that pull them register it.
+registerPluginEntitlements({
+  pluginId: 'ai',
+  lockdownFeatures: [
+    { key: 'ai-assist', label: 'AI assist', staffBypass: true, notice: { title: 'a', body: 'a' } },
+    { key: 'ai-generate', label: 'AI generation', staffBypass: true, notice: { title: 'g', body: 'g' } },
+  ],
+})
 import {
   featureLockdownRefusal,
   getFeatureLockdown,

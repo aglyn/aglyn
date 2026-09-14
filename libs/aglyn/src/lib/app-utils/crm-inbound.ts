@@ -23,6 +23,11 @@ import {
   type CrmActivityLink,
   type CrmEmailDirection,
 } from './crm'
+import {
+  type MemberAddresses,
+  memberEmailAddresses,
+  verifiedMemberEmailAliases,
+} from './member-email-aliases'
 
 /**
  * EMAIL CAPTURE (AGL-2657): the pure half.
@@ -54,6 +59,9 @@ import {
  * that is not the capture address and not a member of the workspace — the
  * workspace's own people are never the correspondent — in that order,
  * because a reply's From is the correspondent and a copied send's To is.
+ * A member is every address that is theirs: the one they sign in with and
+ * each alias they have confirmed (`member-email-aliases.ts`), so a send
+ * from an outbound-domain alias is read as the member's, not as a stranger.
  * A message a teammate forwarded names the correspondent nowhere in its
  * headers, only in the forwarded block of the body, so that block's `From:`
  * is the last candidate. Which candidate matched decides the direction:
@@ -357,6 +365,53 @@ export interface CrmInboundCandidate {
   via: 'from' | 'to' | 'cc' | 'forwarded'
 }
 
+/** One member of the workspace, as the capture filer reads them. */
+export interface CrmInboundMember extends MemberAddresses {
+  uid: string
+  /** The address they sign in with; `''` for a roster row that carries none. */
+  email: string
+  name?: string | null
+}
+
+/** A roster row as {@link crmInboundRoster} reads it — `AglynOrgMember`'s fields. */
+export interface CrmInboundRosterRow {
+  $id: string
+  email?: string | null
+  displayName?: string | null
+  orgSuspended?: boolean
+}
+
+/**
+ * The roster a captured message is matched against: every roster row that
+ * does not carry the org's suspension flag, each with the address the
+ * member signs in with and the aliases they have CONFIRMED, read off their
+ * stored alias document by uid. The confirmed filter is applied here, from
+ * the stored documents, so no caller can hand the rule an address a member
+ * only typed. An alias document with no roster row beside it belongs to
+ * somebody who is no longer a member, and is never read.
+ */
+export function crmInboundRoster(
+  rows: readonly CrmInboundRosterRow[],
+  aliasDocuments: ReadonlyMap<string, unknown>,
+): CrmInboundMember[] {
+  const roster: CrmInboundMember[] = []
+  for (const row of rows) {
+    if (row.orgSuspended === true) continue
+    const uid = String(row.$id ?? '')
+    if (!uid) continue
+    const email = normalizeContactEmail(row.email) ?? ''
+    const verifiedAliases = verifiedMemberEmailAliases(aliasDocuments.get(uid))
+    if (!email && !verifiedAliases.length) continue
+    roster.push({
+      uid,
+      email,
+      name: row.displayName ?? null,
+      ...(verifiedAliases.length ? { verifiedAliases } : {}),
+    })
+  }
+  return roster
+}
+
 export interface CrmInboundCandidatesInput {
   from: unknown
   to: readonly unknown[]
@@ -365,8 +420,12 @@ export interface CrmInboundCandidatesInput {
   forwardedFrom?: unknown
   /** The capture domain, so the capture address itself is never a candidate. */
   domain: string
-  /** Every address on the workspace's roster; none of them is a correspondent. */
-  memberEmails: readonly string[]
+  /**
+   * The workspace's roster. Every address that is a member's — the one
+   * they sign in with and each alias they have confirmed — is theirs, and
+   * none of them is ever a correspondent.
+   */
+  members: readonly MemberAddresses[]
 }
 
 export interface CrmInboundCandidates {
@@ -385,9 +444,8 @@ export interface CrmInboundCandidates {
  */
 export function crmInboundCandidates(input: CrmInboundCandidatesInput): CrmInboundCandidates {
   const members = new Set<string>()
-  for (const email of input.memberEmails) {
-    const normalized = normalizeContactEmail(email)
-    if (normalized) members.add(normalized)
+  for (const member of input.members) {
+    for (const address of memberEmailAddresses(member)) members.add(address)
   }
   const sender = emailAddressOf(input.from)
   const senderIsMember = sender !== null && members.has(sender)

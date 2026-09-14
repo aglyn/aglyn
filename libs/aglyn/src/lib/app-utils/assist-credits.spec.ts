@@ -64,9 +64,25 @@ import {
   PLAN_PRICING,
   resolveEffectivePlan,
 } from './plan-entitlements'
-// The AI add-on is declared through the plugin entitlement seam; the resolver
-// reads that declaration, so the spec loads it as the barrel does.
-import './ai-entitlements'
+import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
+
+// The AI add-on is the AI plugin's declaration (AGL-2939), and core cannot
+// import a plugin: a stand-in with the plugin's own figures, so the fold
+// under test is the generic one and the numbers are the shipped ones.
+beforeAll(() => {
+  registerPluginEntitlements({
+    pluginId: 'ai',
+    seatAddons: [
+      {
+        key: 'aiAddon',
+        label: 'AI add-on',
+        maxUnits: 1,
+        quota: { key: 'assistCreditsPerMonth', perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH },
+        features: ['aiGenerative', 'aiAssist'],
+      },
+    ],
+  })
+})
 /**
  * Measured cost of one grounded answer, and of one generated screen, at the
  * shipped Sonnet rates.

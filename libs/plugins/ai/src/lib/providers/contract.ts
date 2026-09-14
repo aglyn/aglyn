@@ -217,8 +217,15 @@ export class AiRequestShapeError extends Error {
 export interface AiProvider {
   readonly id: string
   readonly label: string
-  /** The environment variable that carries this provider's key. */
+  /** The environment variable that carries this provider's key, for operator messages. */
   readonly apiKeyEnv: string
+  /**
+   * The key from the server environment, or `undefined` when the provider
+   * is not configured to answer. Each adapter reads its own variable by
+   * name in its own module, so every key read is one the key-exposure
+   * guard can see (AGL-2240) and no door names a vendor's variable.
+   */
+  readApiKey(): string | undefined
   /** The host the provider is reached at, for the subprocessor inventory. */
   readonly endpointHost: string
   models(): readonly AiModelDescriptor[]

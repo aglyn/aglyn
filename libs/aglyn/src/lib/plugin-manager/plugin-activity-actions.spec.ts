@@ -16,6 +16,7 @@
  */
 
 import {
+  isPluginStaffAuditAccess,
   listPluginActivityActions,
   listPluginActivityFilters,
   pluginActivityActionLabel,
@@ -98,5 +99,24 @@ describe('registerPluginActivityActions', () => {
     registerPluginActivityActions(AI)
     resetPluginActivityActionsForTests()
     expect(listPluginActivityFilters()).toEqual([])
+  })
+})
+
+describe('isPluginStaffAuditAccess', () => {
+  it('answers true only for the staff reads a plugin declared, and for any plugin', () => {
+    registerPluginActivityActions({
+      ...AI,
+      group: { ...AI.group, staffAuditAccessActions: ['org.ai-viewed'] },
+    })
+    registerPluginActivityActions({
+      ...BACKUPS,
+      group: { ...BACKUPS.group, staffAuditAccessActions: ['backup.snapshot.viewed'] },
+    })
+    expect(isPluginStaffAuditAccess('org.ai-viewed')).toBe(true)
+    expect(isPluginStaffAuditAccess('backup.snapshot.viewed')).toBe(true)
+    // Exact, not a prefix: a restore is a change, not a read.
+    expect(isPluginStaffAuditAccess('backup.snapshot.viewed.restored')).toBe(false)
+    expect(isPluginStaffAuditAccess('org.plan-changed')).toBe(false)
+    expect(isPluginStaffAuditAccess(undefined)).toBe(false)
   })
 })

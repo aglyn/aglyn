@@ -64,7 +64,7 @@ const MAX_BODY_BYTES = 65_536
  * own console: the docs beacon posted to us (fixed on the sending side), and
  * this end refused theirs. Reads the same docs-origin configuration the rest
  * of the console already uses (`constants/docs-links.ts`,
- * `api/_lib/assist-retrieval.ts`), reduced to a bare origin because an ACAO
+ * `@aglyn/aglyn/app-utils/docs-retrieval`), reduced to a bare origin because an ACAO
  * header carrying a path never matches.
  */
 const DOCS_ORIGIN = (() => {

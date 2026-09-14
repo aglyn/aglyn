@@ -29,11 +29,11 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   isServerReleaseFlagOnForOrg,
-  logAiAddonChanged,
   memberHasOrgPermission,
   readOrgBilling,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 import {
   ADDON_KINDS,
   addonPriceId,
@@ -46,7 +46,7 @@ import {
   planPriceId,
   type AddonKind,
   type BillingInterval,
-} from '../../../../utils/server/billing-addons'
+} from '@aglyn/tenant-data-admin/server/billing-addons'
 import {
   buildTargetItems,
   phaseItemsOf,
@@ -933,11 +933,12 @@ async function handler(request: Request): Promise<Response> {
     // member who bought it — the webhook confirming the same map afterwards
     // sees no change and writes no second row.
     if (kind === 'aiAddon') {
-      await logAiAddonChanged(
+      await runPluginEventHandlers('org.seatAddons.changed', {
         orgId,
-        { uid: decoded.uid, email: decoded.email ?? null },
-        { before: org?.seatAddons, after: quantities },
-      )
+        actor: { uid: decoded.uid, email: decoded.email ?? null },
+        before: org?.seatAddons,
+        after: quantities,
+      })
     }
     return Response.json(
       {

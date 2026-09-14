@@ -1338,14 +1338,14 @@ const NOT_A_LIST: Array<[string, string]> = [
       'A pager under a search box pages what the box already filters.',
   ],
   [
-    'apps/console/components/member-ai-usage-card.component.tsx',
+    'libs/plugins/ai/src/lib/components/member-ai-usage-card.component.tsx',
     'One member’s AI usage (AGL-2928): exactly two month rows, this ' +
       'month and last, requested at `limit: 2`, and beneath them one row ' +
       'per site that member generated on in those months, bounded by the ' +
       'workspace’s sites.',
   ],
   [
-    'apps/console/components/staff-org-ai-card.component.tsx',
+    'libs/plugins/ai/src/lib/components/staff-org-ai-card.component.tsx',
     'Staff previews, each capped by the route (AGL-2930): the ' +
       '`JOBS_RECENT` (10) most recent generation jobs, and the ' +
       '`TOP_USERS` (10) dearest members this month. The counts beside the ' +
@@ -1404,7 +1404,7 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'The same version history, the same block.',
   ],
   [
-    'apps/console/app/(app)/admin/assist-signals/page.tsx',
+    'libs/plugins/ai/src/lib/components/assist-signals-page.component.tsx',
     'Mined signal rows, which grow with usage. Another agent owns this file.',
   ],
   [

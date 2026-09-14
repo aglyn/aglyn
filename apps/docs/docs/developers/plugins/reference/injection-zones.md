@@ -42,6 +42,19 @@ not reach for console-app hooks; data access goes through
 plugin is enabled and released — the shell never mounts widgets from
 unloaded plugins.
 
+## Staff zones
+
+`adminOrgDetail`, `staffOrg` and `staffUser` are on the staff pages, which
+name no workspace: a staff page is about an org or an account, not about the
+reader's own. So these zones do not read an org's enabled plugins. The staff
+area loads every plugin whose `plugins.config.json` entry names a `staff`
+register surface (see [the manifest](./manifest-and-envs.md)), before any
+staff page renders, and a staff zone renders those plugins' widgets. A
+widget's `featureFlag` and `permission` are not consulted there: both are
+answers about a workspace, and the staff area's guard admits the reader.
+A plugin with a widget on a staff zone and no `staff` surface is never
+loaded on the staff pages, so its widget never renders.
+
 ## Column zones
 
 A zone documented as a **column** (`orgMembersListColumn`, and `hostMembers`

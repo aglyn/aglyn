@@ -17,8 +17,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import AssistPanelComponent from '../../components/assist-panel-mount.component'
-import PluginWidgetSlot from '../../components/plugin-widget-slot.component'
+import AssistDockSlot from '../../components/assist-dock-slot.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import LegalReacceptanceBanner from '../../components/legal-reacceptance-banner.component'
@@ -56,14 +55,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               appearing on whichever page happened to render it. */}
           <LegalReacceptanceBanner />
           {children}
-          {/* Aglyn Assist (AGL-1860): the floating helper on every console
-              page — this is the one slot above every route boundary, same
-              reason the secondary app bar lives here. Release-flag gated
-              inside the component (hidden entirely when released off). */}
-          <AssistPanelComponent />
-          {/* The assistant dock's plugin slot (AGL-2940): the same position
-              above every route boundary, for a helper a plugin owns. */}
-          <PluginWidgetSlot slot="assistPanel" />
+          {/* The assistant dock (AGL-1860, AGL-2940): the floating helper
+              on every console page — this is the one slot above every route
+              boundary, same reason the secondary app bar lives here. The AI
+              plugin owns the panel; the shell resolves the scope and the
+              release verdicts and hands them down. */}
+          <AssistDockSlot />
         </MainLayout>
       </PlatformLockdownGate>
     </AuthenticatedLayout>

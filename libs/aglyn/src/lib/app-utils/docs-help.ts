@@ -44,7 +44,7 @@ export {
  * bundle, where the bracket form is never substituted and every help link
  * would point at Aglyn's docs regardless of what an operator configured.
  */
-const DOCS_BASE_URL = (
+export const DOCS_BASE_URL = (
   process.env.NEXT_PUBLIC_DOCS_ORIGIN ||
   process.env.NEXT_PUBLIC_AGLYN_DOCS_URL ||
   'https://docs.aglyn.com'

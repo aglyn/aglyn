@@ -91,7 +91,7 @@ import {
   meteredPriceId,
   planFromPriceId,
   PAID_PLANS,
-} from './billing-addons'
+} from '@aglyn/tenant-data-admin/server/billing-addons'
 import { isLiveSubscriptionStatus, type OrgPlan } from '@aglyn/aglyn/server'
 
 /**

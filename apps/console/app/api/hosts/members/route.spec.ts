@@ -56,8 +56,15 @@ const mockSetHostAiPermissions = jest.fn(async (..._args: unknown[]) => ({
   before: { 'ai.use': true, 'ai.generate': true },
   after: { 'ai.use': true, 'ai.generate': false },
 }))
-/** The org feed's coded row per AI key a toggle moved (AGL-2929). */
-const mockLogAiPermissionChanged = jest.fn(async (..._args: unknown[]) => undefined)
+/**
+ * Every platform event the route raised (AGL-2929, AGL-2939). An AI key a
+ * toggle moved is `org.permissions.changed`, which the AI plugin's handler
+ * turns into the org feed's coded row; that half is proven in the plugin.
+ */
+const mockRunPluginEventHandlers = jest.fn(async (..._args: unknown[]) => ({
+  handled: 1,
+  failed: [] as string[],
+}))
 const mockFindUserByEmail = jest.fn()
 const mockCollaboratorSeatRefusal = jest.fn(
   async (..._args: unknown[]): Promise<Response | null> => null,
@@ -102,7 +109,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // route throws into its own catch, and every case here reads as a 500 that
   // looks exactly like the member operation itself regressing.
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
-  logAiPermissionChanged: (...args: unknown[]) => mockLogAiPermissionChanged(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -111,6 +117,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   aiPermissionChanges: jest.requireActual('@aglyn/aglyn/app-utils/ai-permissions')
     .aiPermissionChanges,
   createResourceUid: () => 'generated-id',
+  runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
@@ -389,18 +396,17 @@ describe('every membership change reaches the log, from the server (AGL-118)', (
       id: 'uid-9',
       name: 'nine@example.test',
     })
-    // The org feed's coded row (AGL-2929): one per key that moved — the
-    // toggle flipped generate only — on the site, naming the collaborator.
-    expect(mockLogAiPermissionChanged).toHaveBeenCalledTimes(1)
-    expect(mockLogAiPermissionChanged).toHaveBeenCalledWith(
-      'org-1',
-      { uid: 'u-1', email: 'admin@example.test' },
-      {
-        subject: { type: 'host', id: 'host-1', name: 'Acme · nine@example.test' },
-        permission: 'ai.generate',
-        granted: false,
-      },
-    )
+    // The org feed's coded row (AGL-2929), raised for the plugin that writes
+    // it: one event per key that moved — the toggle flipped generate only —
+    // on the site, naming the collaborator.
+    expect(mockRunPluginEventHandlers).toHaveBeenCalledTimes(1)
+    expect(mockRunPluginEventHandlers).toHaveBeenCalledWith('org.permissions.changed', {
+      orgId: 'org-1',
+      actor: { uid: 'u-1', email: 'admin@example.test' },
+      subject: { type: 'host', id: 'host-1', name: 'Acme · nine@example.test' },
+      permission: 'ai.generate',
+      granted: false,
+    })
   })
 
   it('writes no permission row when the toggle was already at that value (AGL-2929)', async () => {
@@ -419,7 +425,7 @@ describe('every membership change reaches the log, from the server (AGL-118)', (
       aiPermissions: { 'ai.generate': false },
     })
     expect(response.status).toBe(200)
-    expect(mockLogAiPermissionChanged).not.toHaveBeenCalled()
+    expect(mockRunPluginEventHandlers).not.toHaveBeenCalled()
   })
 
   it('refuses a malformed AI map, and an invited row that has no document to carry one', async () => {

@@ -66,6 +66,7 @@ import {
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/app-utils/org-billing-doc'
+import { MEMBER_EMAIL_ALIASES_COLLECTION } from '@aglyn/aglyn/app-utils/member-email-aliases'
 import { FieldValue } from 'firebase-admin/firestore'
 import { cache } from 'react'
 import { findUserByUidAcrossPools } from './auth-pools'
@@ -2260,7 +2261,14 @@ export async function revokeHostAccess(
   await syncMemberHostProjections(orgId, uid)
 }
 
-/** Removes a member + reverse index entry, then re-syncs projections. */
+/**
+ * Removes a member + reverse index entry, then re-syncs projections.
+ *
+ * The addresses the member added in this workspace (AGL-2975) go in the
+ * same batch. They sit beside the roster row rather than under it, so no
+ * delete of the row reaches them, and an erasure of the person runs through
+ * here once per workspace.
+ */
 export async function removeOrgMember(
   orgId: string,
   uid: string,
@@ -2269,6 +2277,13 @@ export async function removeOrgMember(
   const batch = db.batch()
   batch.delete(
     db.collection('orgs').doc(orgId).collection('members').doc(uid),
+  )
+  batch.delete(
+    db
+      .collection('orgs')
+      .doc(orgId)
+      .collection(MEMBER_EMAIL_ALIASES_COLLECTION)
+      .doc(uid),
   )
   batch.delete(db.collection('users').doc(uid).collection('orgs').doc(orgId))
   await batch.commit()

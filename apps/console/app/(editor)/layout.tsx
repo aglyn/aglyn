@@ -17,8 +17,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import AssistPanelComponent from '../../components/assist-panel-mount.component'
-import PluginWidgetSlot from '../../components/plugin-widget-slot.component'
+import AssistDockSlot from '../../components/assist-dock-slot.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 
 /**
@@ -42,10 +41,7 @@ export default function EditorLayout({ children }: { children: ReactNode }) {
           check answers false for them exactly as it did before. Every
           provider it needs is above the route groups, in `app/providers.tsx`
           and `firebase-app.layout.tsx`, so it needs nothing added here. */}
-      <AssistPanelComponent />
-      {/* The assistant dock's plugin slot (AGL-2940), mounted here for the
-          reason the shell's own assistant is. */}
-      <PluginWidgetSlot slot="assistPanel" />
+      <AssistDockSlot />
     </AuthenticatedLayout>
   )
 }

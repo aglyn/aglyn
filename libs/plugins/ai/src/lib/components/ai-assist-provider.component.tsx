@@ -1,0 +1,483 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import * as Aglyn from '@aglyn/aglyn'
+import {
+  checkEntitlement,
+  lockdownRefusalText,
+  parseLockdownRefusal,
+} from '@aglyn/aglyn'
+import { marketplaceDefinitionToNested } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import {
+  Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { useCallback, useMemo, useState } from 'react'
+import { useUser } from '@aglyn/tenant-feature-instance'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+
+
+export interface AiAssistProviderProps {
+  /** Org billing doc for the entitlement gate (mounted by the shell). */
+  org?: unknown
+  /**
+   * True once `org` is a trustworthy answer (AGL-1380). The shell mounts
+   * this provider above the whole console route tree, so it cannot hold its
+   * render until the billing doc settles the way the plugin-page route does
+   * — and an undefined `org` is not "unknown" to `checkEntitlement`, it is
+   * the free tier. Without this flag the gates below told a Pro org that AI
+   * assist is not on its plan for as long as the read was in flight.
+   */
+  orgReady?: boolean
+  /**
+   * The org every assist call is metered against (AGL-2073). The route no
+   * longer resolves it from the signed-in user — a user with one paid org was
+   * getting assist on all of their free ones, and their spend was landing on
+   * whichever org the server happened to resolve.
+   */
+  orgId?: string
+  /**
+   * The site the canvas belongs to (AGL-2927), sent with every assist call
+   * so the door can decide a site collaborator's permission on THAT site.
+   * Null off a host route, where there is no canvas to assist on.
+   */
+  hostId?: string | null
+  /**
+   * The reader's AI verdict, resolved by the shell (AGL-2927). The gates
+   * below HOLD until `loaded` — a door opened on a pending answer would
+   * spend the workspace's credits on a permission nobody has confirmed —
+   * and a refused key removes its callback from the context, so the
+   * designer draws no control for it. Omitted, the answer is pending.
+   */
+  aiPermissions?: { loaded: boolean; use: boolean; generate: boolean }
+  children?: JSX.Children
+}
+
+const PERMISSIONS_PENDING = 'Checking your permissions — try again in a moment'
+const AI_USE_REFUSED =
+  'Your role does not include AI assistance — ask an organization admin'
+const AI_GENERATE_REFUSED =
+  'Your role does not include AI generation — ask an organization admin'
+
+/**
+ * Console-side AI copy assist (AGL-89): provides the designer's "Rewrite
+ * with AI" callback, hosts the instruction dialog, and calls the assist API
+ * (which 501-degrades when no AI provider is configured). The commit
+ * spreads the node's current props — `updateNodeProps` REPLACES the props
+ * object — and clears any stale rich-text `html` so the new text renders.
+ */
+export function AiAssistProvider(props: AiAssistProviderProps) {
+  const org = props.org
+  const orgReady = props.orgReady
+  const orgId = props.orgId
+  const hostId = props.hostId ?? null
+  const aiPermissions = props.aiPermissions
+  const { children } = props
+  const { enqueueSnackbar } = useSnackbar()
+  const { data: user } = useUser()
+  const [node, setNode] = useState<Aglyn.NodeSchema<any> | null>(null)
+  const [instruction, setInstruction] = useState('')
+  // Rewrite target (AGL-130): 'children' for text-editable elements, or
+  // any text attribute the element's schema declares (alt text, labels…).
+  const [targetProp, setTargetProp] = useState('children')
+  const [busy, setBusy] = useState(false)
+  // Generate section (AGL-169).
+  const [sectionOpen, setSectionOpen] = useState(false)
+  const [sectionPrompt, setSectionPrompt] = useState('')
+
+  const textTargets = useMemo(() => {
+    const schema = node?.componentSchema
+    const textEditable =
+      ((schema?.flags?.textEditable ?? Aglyn.FEATURE_FLAG.DISABLED) &
+        Aglyn.FEATURE_FLAG.ENABLED) !==
+      0
+    const attributes = (schema?.attributes ?? [])
+      .filter(
+        (field: any) =>
+          field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
+          field.component === Aglyn.FieldComponentType.TEXTAREA,
+      )
+      .map((field: any) => ({
+        prop: String(field.name),
+        label: String(field.label ?? field.name),
+      }))
+    return textEditable
+      ? [{ prop: 'children', label: 'Element text' }, ...attributes]
+      : attributes
+  }, [node])
+
+  const handleRewrite = useCallback(
+    (target: Aglyn.NodeSchema<any>) => {
+      // The permission first (AGL-2927): it is a fact about the reader, and
+      // pending asserts nothing here either. The refusal is unreachable
+      // through the designer — a refused key publishes no callback — and
+      // stands for any other caller of the context.
+      if (!aiPermissions?.loaded) {
+        return void enqueueSnackbar(PERMISSIONS_PENDING, {
+          variant: 'info',
+          persist: false,
+        })
+      }
+      if (!aiPermissions.use) {
+        return void enqueueSnackbar(AI_USE_REFUSED, {
+          variant: 'warning',
+          persist: false,
+        })
+      }
+      // AGL-1380: pending asserts nothing. See `orgReady` on the props.
+      if (!orgReady) {
+        return void enqueueSnackbar(
+          'Checking your plan — try again in a moment',
+          { variant: 'info', persist: false },
+        )
+      }
+      if (!checkEntitlement(org as never, 'aiAssist')) {
+        return void enqueueSnackbar(
+          'AI assist requires a Pro plan — see Billing to upgrade',
+          { variant: 'warning', persist: false },
+        )
+      }
+      setInstruction('')
+      setTargetProp('children')
+      setNode(target)
+    },
+    [org, orgReady, aiPermissions, enqueueSnackbar],
+  )
+
+  // Keep the target valid for the selected element.
+  const effectiveTarget = textTargets.some((item) => item.prop === targetProp)
+    ? targetProp
+    : (textTargets[0]?.prop ?? 'children')
+
+  const handleConfirm = useCallback(async () => {
+    if (!node || !instruction.trim() || busy) return
+    setBusy(true)
+    try {
+      const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
+        node.$id
+      ]
+      const text =
+        typeof current?.props?.[effectiveTarget] === 'string'
+          ? (current.props[effectiveTarget] as string)
+          : ''
+      const response = await authorizedFetch(user, '/api/ai/assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgId,
+          hostId,
+          text,
+          instruction: instruction.trim(),
+        }),
+      })
+      const payload = await response.json()
+      // An ai-assist feature lockdown (AGL-1510/1532) reads as a pause, not
+      // as "AI request failed" — a provider incident or a cost runaway is
+      // something WE turned off, and saying so keeps the user's content out
+      // of the story.
+      const locked = parseLockdownRefusal(response.status, payload)
+      if (locked) {
+        return void enqueueSnackbar(lockdownRefusalText(locked), {
+          variant: 'warning',
+          persist: true,
+        })
+      }
+      if (response.status === 501) {
+        return void enqueueSnackbar(
+          'AI assist is not configured on this deployment',
+          { variant: 'info', persist: false },
+        )
+      }
+      if (!response.ok || !payload?.text) {
+        return void enqueueSnackbar(payload?.error ?? 'AI request failed', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      Aglyn.canvas.updateNodeProps(node, {
+        ...current?.props,
+        [effectiveTarget]: payload.text,
+        // Rich-text elements render `html` over `children`; drop it so the
+        // rewrite is what shows (the user can re-format inline afterwards).
+        ...(effectiveTarget === 'children' ? { html: undefined } : {}),
+      })
+      setNode(null)
+      enqueueSnackbar('Text rewritten — undo restores the original', {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }, [node, instruction, busy, user, effectiveTarget, orgId, hostId, enqueueSnackbar])
+
+  const handleGenerateSection = useCallback(() => {
+    // The permission first (AGL-2927) — a section is a generation, so this
+    // door sells under `ai.generate`; see `handleRewrite`.
+    if (!aiPermissions?.loaded) {
+      return void enqueueSnackbar(PERMISSIONS_PENDING, {
+        variant: 'info',
+        persist: false,
+      })
+    }
+    if (!aiPermissions.generate) {
+      return void enqueueSnackbar(AI_GENERATE_REFUSED, {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+    // AGL-1380: same gate as `handleRewrite`.
+    if (!orgReady) {
+      return void enqueueSnackbar('Checking your plan — try again in a moment', {
+        variant: 'info',
+        persist: false,
+      })
+    }
+    if (!checkEntitlement(org as never, 'aiAssist')) {
+      return void enqueueSnackbar(
+        'AI assist requires a Pro plan — see Billing to upgrade',
+        { variant: 'warning', persist: false },
+      )
+    }
+    setSectionPrompt('')
+    setSectionOpen(true)
+  }, [org, orgReady, aiPermissions, enqueueSnackbar])
+
+  const handleSectionConfirm = useCallback(async () => {
+    if (!sectionPrompt.trim() || busy) return
+    setBusy(true)
+    try {
+      const response = await authorizedFetch(user, '/api/ai/assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgId,
+          hostId,
+          mode: 'section',
+          instruction: sectionPrompt.trim(),
+        }),
+      })
+      const payload = await response.json()
+      // Same pause notice on the section-generation door (AGL-1532).
+      const locked = parseLockdownRefusal(response.status, payload)
+      if (locked) {
+        return void enqueueSnackbar(lockdownRefusalText(locked), {
+          variant: 'warning',
+          persist: true,
+        })
+      }
+      if (response.status === 501) {
+        return void enqueueSnackbar(
+          'AI assist is not configured on this deployment',
+          { variant: 'info', persist: false },
+        )
+      }
+      if (!response.ok || !payload?.section?.rootId) {
+        return void enqueueSnackbar(payload?.error ?? 'AI request failed', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      const nested = marketplaceDefinitionToNested(
+        payload.section.rootId,
+        payload.section.nodes,
+      )
+      if (!nested) {
+        return void enqueueSnackbar('AI returned an empty section', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      // Graft through the preset path: ids regenerate, history is saved,
+      // and the subtree lands at the end of the canvas root.
+      const stamped = (function stamp(node: any): any {
+        const schema = Aglyn.components.getSchema(node.componentId)
+        return {
+          ...node,
+          ...(schema?.pluginId ? { pluginId: schema.pluginId } : {}),
+          nodes: (node.nodes ?? []).map(stamp),
+        }
+      })(nested)
+      Aglyn.canvas.addNodeFromPreset(
+        { type: Aglyn.NodeType.PRESET, data: stamped } as any,
+        Aglyn.canvas.rootNode as any,
+      )
+      setSectionOpen(false)
+      enqueueSnackbar('Section added — undo removes it', {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }, [sectionPrompt, busy, user, orgId, hostId, enqueueSnackbar])
+
+  // A REFUSED key publishes no callback (AGL-2927): the designer renders
+  // its AI controls only when the callback exists, so the refusal removes
+  // the button rather than dimming it. A PENDING answer keeps both
+  // callbacks, and each holds with a notice when pressed — a control that
+  // vanishes and reappears while the read lands is worse than one that is
+  // briefly inert (the `useHostRole` argument, applied here).
+  const refusedUse = aiPermissions?.loaded === true && !aiPermissions.use
+  const refusedGenerate =
+    aiPermissions?.loaded === true && !aiPermissions.generate
+  const contextValue = useMemo(
+    () => ({
+      ...(refusedUse ? {} : { onRewrite: handleRewrite }),
+      ...(refusedGenerate ? {} : { onGenerateSection: handleGenerateSection }),
+    }),
+    [handleRewrite, handleGenerateSection, refusedUse, refusedGenerate],
+  )
+
+  return (
+    <Aglyn.DesignerAssistContext.Provider value={contextValue}>
+      {children}
+      <Dialog
+        open={Boolean(node)}
+        onClose={() => (busy ? null : setNode(null))}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{'Rewrite with AI'}</DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {'Describe how the text should change — tone, length, message.'}
+          </Typography>
+          {textTargets.length > 1 ? (
+            <TextField
+              select
+              label="Field"
+              value={effectiveTarget}
+              onChange={(event) => setTargetProp(event.target.value)}
+              size="small"
+              disabled={busy}
+            >
+              {textTargets.map((item) => (
+                <MenuItem key={item.prop} value={item.prop}>
+                  {item.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
+          <TextField
+            label="Instruction"
+            placeholder="e.g. Make it punchier and half as long"
+            value={instruction}
+            onChange={(event) => setInstruction(event.target.value)}
+            size="small"
+            autoFocus
+            multiline
+            minRows={2}
+            disabled={busy}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                handleConfirm()
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={busy} onClick={() => setNode(null)}>
+            {'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={!instruction.trim() || busy}
+            startIcon={busy ? <CircularProgress size={16} /> : undefined}
+            onClick={handleConfirm}
+          >
+            {busy ? 'Rewriting…' : 'Rewrite'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={sectionOpen}
+        onClose={() => (busy ? null : setSectionOpen(false))}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{'Generate a section with AI'}</DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {'Describe the section — e.g. "hero with headline, subtext, ' +
+              'and a call-to-action button" or "three-column feature grid".'}
+          </Typography>
+          <TextField
+            label="Section"
+            value={sectionPrompt}
+            onChange={(event) => setSectionPrompt(event.target.value)}
+            size="small"
+            autoFocus
+            multiline
+            minRows={2}
+            disabled={busy}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                handleSectionConfirm()
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={busy} onClick={() => setSectionOpen(false)}>
+            {'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={!sectionPrompt.trim() || busy}
+            startIcon={busy ? <CircularProgress size={16} /> : undefined}
+            onClick={handleSectionConfirm}
+          >
+            {busy ? 'Generating…' : 'Generate'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Aglyn.DesignerAssistContext.Provider>
+  )
+}
+AiAssistProvider.displayName = 'AiAssistProvider'
+
+export default AiAssistProvider

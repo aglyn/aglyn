@@ -71,12 +71,33 @@ export type PluginApiHandler = (
   res: PluginApiResponse,
 ) => void | Promise<void>
 
+/**
+ * A handler in the Web shape (AGL-2939): the dispatcher's own `Request`
+ * in, a `Response` out — with a streamed body when the door streams, as
+ * the assistant's chat and a job's event feed do. `params` carries the
+ * dispatcher's path segments and any `:name` segment the registered path
+ * declared.
+ */
+export type PluginWebApiHandler = (
+  request: Request,
+  context: { params: Record<string, string | string[]> },
+) => Response | Promise<Response>
+
+/** What a route registers: the (req, res) shape, or a Web handler. */
+export type PluginApiRoute = PluginApiHandler | { web: PluginWebApiHandler }
+
+/** A registered route matched to a request path, with its `:name` segments filled. */
+export interface PluginApiMatch {
+  route: PluginApiRoute
+  params: Record<string, string>
+}
+
 /** Leading/trailing slashes stripped so '/events/list' and 'events/list' key alike. */
 function normalizeApiPath(path: string): string {
   return path.replace(/^\/+|\/+$/g, '')
 }
 
-const apiRoutes = new Map<string, PluginApiHandler>()
+const apiRoutes = new Map<string, PluginApiRoute>()
 const apiRouteOwners = new Map<string, string>()
 
 /**
@@ -116,7 +137,7 @@ export {
  */
 export function registerPluginApiRoute(
   path: string,
-  handler: PluginApiHandler,
+  handler: PluginApiRoute,
 ): void {
   const key = normalizeApiPath(path)
   const owner = getRegisteringPluginId() ?? ANONYMOUS_OWNER
@@ -154,11 +175,74 @@ export function unregisterPluginApiRoute(path: string): void {
   apiRouteOwners.delete(key)
 }
 
-/** The handler for a request path, or undefined when nothing is registered. */
-export function resolvePluginApiRoute(
-  path: string,
-): PluginApiHandler | undefined {
-  return apiRoutes.get(normalizeApiPath(path))
+/**
+ * The route for a request path, or undefined when nothing is registered.
+ *
+ * An exact registration wins; otherwise a registration whose path carries
+ * `:name` segments matches segment for segment (`ai/jobs/:jobId/cancel`
+ * answers `ai/jobs/abc/cancel`), and the named segments come back as
+ * `params`. Patterns are tried in registration order and a static segment
+ * beats a named one only by being registered exactly.
+ */
+export function resolvePluginApiMatch(path: string): PluginApiMatch | undefined {
+  const key = normalizeApiPath(path)
+  const exact = apiRoutes.get(key)
+  if (exact) return { route: exact, params: {} }
+  const segments = key.split('/')
+  for (const [registered, route] of apiRoutes) {
+    if (!registered.includes(':')) continue
+    const pattern = registered.split('/')
+    if (pattern.length !== segments.length) continue
+    const params: Record<string, string> = {}
+    let matched = true
+    for (let index = 0; index < pattern.length; index += 1) {
+      const part = pattern[index]
+      if (part.startsWith(':') && segments[index]) {
+        params[part.slice(1)] = segments[index]
+      } else if (part !== segments[index]) {
+        matched = false
+        break
+      }
+    }
+    if (matched) return { route, params }
+  }
+  return undefined
+}
+
+/**
+ * The legacy (node-style) handler at a request path, or undefined when
+ * nothing is registered there or the route is a web handler — a web route
+ * is reached through `resolvePluginApiMatch` and `runPluginApiMatch`, since
+ * it takes the `Request` and the filled `:name` segments, not a `req`/`res`
+ * pair.
+ */
+export function resolvePluginApiRoute(path: string): PluginApiHandler | undefined {
+  const route = resolvePluginApiMatch(path)?.route
+  return typeof route === 'function' ? route : undefined
+}
+
+/**
+ * Runs a matched route against the dispatcher's request: a Web handler is
+ * called as it is, and a (req, res) handler goes through the adapter the
+ * caller supplies — the adapter lives on the `/server` entry, which this
+ * module may not import.
+ */
+export async function runPluginApiMatch(
+  match: PluginApiMatch,
+  request: Request,
+  params: Record<string, string | string[]>,
+  runLegacy: (
+    handler: PluginApiHandler,
+    request: Request,
+    params: Record<string, string | string[]>,
+  ) => Promise<Response>,
+): Promise<Response> {
+  const merged = { ...params, ...match.params }
+  const route = match.route as { web?: PluginWebApiHandler }
+  if (typeof route === 'object' && route !== null && typeof route.web === 'function') {
+    return route.web(request, { params: merged })
+  }
+  return runLegacy(match.route as PluginApiHandler, request, merged)
 }
 
 /** Registered paths, for diagnostics. */

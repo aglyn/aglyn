@@ -168,7 +168,7 @@ function visibleCopy(relativePath: string): string {
 const SURFACES: readonly string[] = [
   'apps/console/components/consent-banner-card.component.tsx',
   'apps/console/constants/cookie-inventory.ts',
-  'apps/console/constants/assist-docs-index.generated.ts',
+  'libs/aglyn/src/lib/app-utils/docs-index.generated.ts',
   'apps/docs/docs/marketing-and-automation/analytics/cookie-consent.md',
   'docs/ANALYTICS.md',
   'libs/aglyn/src/lib/app-utils/visitor-consent.ts',
@@ -309,7 +309,7 @@ describe('advertising-consent copy tracks advertising-consent behaviour', () => 
     // `not.toContain` on the old phrase alone would not.
     //
     // Regenerate with `node tools/scripts/generate-assist-docs-index.mjs`.
-    const index = flatten('apps/console/constants/assist-docs-index.generated.ts')
+    const index = flatten('libs/aglyn/src/lib/app-utils/docs-index.generated.ts')
     expect(index).toContain('runs from their first visit')
   })
 })

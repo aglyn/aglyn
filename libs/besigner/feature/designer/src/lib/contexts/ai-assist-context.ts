@@ -15,26 +15,16 @@
  * limitations under the License.
  */
 
-import type * as Aglyn from '@aglyn/aglyn'
-import { createContext } from 'react'
+import { DesignerAssistContext, type DesignerAssistContextValue } from '@aglyn/aglyn'
 
 /**
- * Host-app callback for AI copy assist (AGL-89). The designer stays
- * network-agnostic: the console provides `onRewrite` (opens its instruction
- * dialog and calls the assist API); the Attributes panel shows "Rewrite with
- * AI" on text-editable elements only when the callback exists.
+ * The designer's name for the core assistant seam (AGL-2939): the console's
+ * AI provider fills `DesignerAssistContext`, and the attributes panel shows
+ * "Rewrite with AI" and the toolbar "Generate section" only where the
+ * callback exists. The context lives in core so neither the designer nor a
+ * plugin has to import the other.
  */
-export interface AiAssistContextValue {
-  onRewrite?: (node: Aglyn.NodeSchema<any>) => void
-  /**
-   * Generate section (AGL-169): opens the host app's prompt dialog and
-   * grafts the AI-proposed subtree into the canvas root. The toolbar
-   * button renders only when the callback exists.
-   */
-  onGenerateSection?: () => void
-}
-
-export const AiAssistContext = createContext<AiAssistContextValue>({})
-AiAssistContext.displayName = 'AiAssistContext'
+export type AiAssistContextValue = DesignerAssistContextValue
+export const AiAssistContext = DesignerAssistContext
 
 export default AiAssistContext

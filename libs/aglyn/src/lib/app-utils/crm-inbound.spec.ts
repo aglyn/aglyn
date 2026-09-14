@@ -25,6 +25,7 @@ import {
   crmInboundCandidates,
   crmInboundDomain,
   crmInboundExcerpt,
+  crmInboundRoster,
   crmInboundTokenOf,
   crmInboundTokensIn,
   crmThreadSubject,
@@ -197,7 +198,7 @@ describe('the excerpt', () => {
 })
 
 describe('who the message was with', () => {
-  const members = ['sam@acme.com', 'Kim@Acme.com']
+  const members = [{ email: 'sam@acme.com' }, { email: 'Kim@Acme.com' }]
   const capture = `crm+${TOKEN}@in.aglyn.com`
 
   it('names a reply’s From first, as inbound, and never the capture address or a member', () => {
@@ -206,7 +207,7 @@ describe('who the message was with', () => {
       to: ['sam@acme.com', capture],
       cc: ['kim@acme.com', 'bob@other.example'],
       domain: DOMAIN,
-      memberEmails: members,
+      members,
     })
     expect(result.sender).toBe('ada@example.com')
     expect(result.senderIsMember).toBe(false)
@@ -222,7 +223,7 @@ describe('who the message was with', () => {
       to: ['Ada <ada@example.com>'],
       cc: [capture],
       domain: DOMAIN,
-      memberEmails: members,
+      members,
     })
     expect(result.senderIsMember).toBe(true)
     expect(result.candidates).toEqual([
@@ -236,7 +237,7 @@ describe('who the message was with', () => {
       to: [capture],
       forwardedFrom: 'ada@example.com',
       domain: DOMAIN,
-      memberEmails: members,
+      members,
     })
     expect(result.candidates).toEqual([
       { email: 'ada@example.com', direction: 'inbound', via: 'forwarded' },
@@ -249,9 +250,110 @@ describe('who the message was with', () => {
       to: ['ADA@example.com'],
       forwardedFrom: 'ada@example.com',
       domain: DOMAIN,
-      memberEmails: [],
+      members: [],
     })
     expect(result.candidates).toHaveLength(1)
+  })
+})
+
+describe("a member's confirmed alias is the member (AGL-2975)", () => {
+  const capture = `crm+${TOKEN}@in.aglyn.com`
+  // Avery signs in as avery@example.com and sends outreach from a send-as alias
+  // on the outbound domain, copying the capture address in BCC.
+  const avery = { email: 'avery@example.com', verifiedAliases: ['avery@example.org'] }
+  const outreach = {
+    from: 'Avery Quinn <avery@example.org>',
+    to: ['Pat Prospect <pat@prospect.example>'],
+    cc: [capture],
+    domain: DOMAIN,
+  }
+
+  it('reads a send from a confirmed alias as the member’s: the prospect in To is the correspondent', () => {
+    const result = crmInboundCandidates({ ...outreach, members: [avery] })
+    expect(result.sender).toBe('avery@example.org')
+    expect(result.senderIsMember).toBe(true)
+    expect(result.candidates).toEqual([
+      { email: 'pat@prospect.example', direction: 'outbound', via: 'to' },
+    ])
+  })
+
+  it('leaves an alias the member has not confirmed a stranger, exactly as before', () => {
+    const row = { $id: 'u-avery', email: 'avery@example.com' }
+    const stored = (verifiedAtMs?: number) =>
+      new Map<string, unknown>([
+        ['u-avery', { aliases: [{ address: 'avery@example.org', addedAtMs: 1, ...(verifiedAtMs ? { verifiedAtMs } : {}) }] }],
+      ])
+    const unconfirmed = crmInboundCandidates({ ...outreach, members: crmInboundRoster([row], stored()) })
+    const noAlias = crmInboundCandidates({ ...outreach, members: crmInboundRoster([row], new Map()) })
+    expect(unconfirmed).toEqual(noAlias)
+    expect(unconfirmed.senderIsMember).toBe(false)
+    expect(unconfirmed.candidates).toEqual([
+      { email: 'avery@example.org', direction: 'inbound', via: 'from' },
+      { email: 'pat@prospect.example', direction: 'inbound', via: 'to' },
+    ])
+    // The same document, confirmed, and the alias is the member's.
+    const confirmed = crmInboundCandidates({ ...outreach, members: crmInboundRoster([row], stored(2)) })
+    expect(confirmed.senderIsMember).toBe(true)
+  })
+
+  it('never names an alias as the correspondent in To, Cc, Bcc or a forwarded From', () => {
+    const result = crmInboundCandidates({
+      from: 'pat@prospect.example',
+      to: ['AVERY@EXAMPLE.ORG '],
+      cc: ['avery@example.org', capture],
+      forwardedFrom: 'Avery <avery@example.org>',
+      domain: DOMAIN,
+      members: [avery],
+    })
+    expect(result.senderIsMember).toBe(false)
+    expect(result.candidates).toEqual([
+      { email: 'pat@prospect.example', direction: 'inbound', via: 'from' },
+    ])
+  })
+
+  it('normalizes an alias’s case, spacing and plus addressing the way a sign-in address is', () => {
+    const shouting = { email: ' AVERY@EXAMPLE.COM ', verifiedAliases: ['  Avery@Example.ORG\t'] }
+    expect(crmInboundCandidates({ ...outreach, members: [shouting] }).senderIsMember).toBe(true)
+    // A plus-addressed variant is another address — for a sign-in address
+    // and an alias alike.
+    const plusAlias = crmInboundCandidates({ ...outreach, from: 'avery+news@example.org', members: [avery] })
+    const plusSignIn = crmInboundCandidates({ ...outreach, from: 'avery+news@example.com', members: [avery] })
+    expect(plusAlias.senderIsMember).toBe(false)
+    expect(plusSignIn.senderIsMember).toBe(false)
+  })
+})
+
+describe('the roster the filer matches against (AGL-2975)', () => {
+  const rows = [
+    { $id: 'u-avery', email: 'Avery@Example.com', displayName: 'Avery Quinn' },
+    { $id: 'u-kim', email: 'kim@aglyn.com', displayName: 'Kim' },
+    { $id: 'u-gone', email: 'gone@aglyn.com', orgSuspended: true },
+    { $id: 'u-alias-only', email: null },
+    { $id: 'u-nobody', email: '' },
+  ]
+
+  it('carries each member’s CONFIRMED aliases and none they only typed', () => {
+    const roster = crmInboundRoster(
+      rows,
+      new Map<string, unknown>([
+        [
+          'u-avery',
+          {
+            aliases: [
+              { address: 'avery@example.org', addedAtMs: 1, verifiedAtMs: 2 },
+              { address: 'typo@aglyn.io', addedAtMs: 3 },
+            ],
+          },
+        ],
+        ['u-alias-only', { aliases: [{ address: 'ops@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }] }],
+        ['u-stranger', { aliases: [{ address: 'left@aglyn.io', addedAtMs: 1, verifiedAtMs: 2 }] }],
+      ]),
+    )
+    expect(roster).toEqual([
+      { uid: 'u-avery', email: 'avery@example.com', name: 'Avery Quinn', verifiedAliases: ['avery@example.org'] },
+      { uid: 'u-kim', email: 'kim@aglyn.com', name: 'Kim' },
+      { uid: 'u-alias-only', email: '', name: null, verifiedAliases: ['ops@aglyn.io'] },
+    ])
   })
 })
 

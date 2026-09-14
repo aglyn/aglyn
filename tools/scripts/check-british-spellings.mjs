@@ -96,7 +96,7 @@ const SOURCE = /\.(?:tsx?|jsx?|mjs|cjs)$/
  * Naming the spellings is what these files are FOR, and a spec that pins a
  * British spelling is usually pinning it on purpose.
  *
- * `assist-deflection.spec.ts` is the case worth stating: its fixture queries
+ * `docs-deflection.spec.ts` is the case worth stating: its fixture queries
  * include *"how do I edit my theme colours and fonts"* and *"how do I
  * customise the error screens"* because REAL USERS TYPE THAT. The corpus is
  * American and the queries are not, which is precisely the retrieval the suite

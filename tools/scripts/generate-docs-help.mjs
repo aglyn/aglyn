@@ -125,6 +125,10 @@ const BESIGNER_TOPICS = {
 // drift in either direction.
 const PLUGIN_TOPICS = {
   actionsBuilder: '/marketing-and-automation/workflows-and-actions/actions-builder',
+  aglynAssist: '/getting-started/aglyn-assist',
+  aiMonitoring: '/staff-console/ai-monitoring',
+  assistSignals: '/staff-console/assist-signals',
+  billing: '/workspace-and-billing/billing-and-plans/overview',
   bindings: '/building-sites/bindings/overview',
   bookings: '/commerce-and-bookings/bookings/overview',
   buildAWorkflow: '/marketing-and-automation/workflows-and-actions/build-a-workflow',
@@ -150,6 +154,7 @@ const PLUGIN_TOPICS = {
   events: '/content-and-data/events/overview',
   forms: '/content-and-data/forms/overview',
   installYourFirstPlugin: '/guides/install-your-first-plugin',
+  inviteTeammates: '/workspace-and-billing/teams-and-roles/invite-teammates',
   marketingOverlays: '/marketing-and-automation/marketing-overlays/overview',
   membersOnly: '/workspace-and-billing/teams-and-roles/members-only',
   plugins: '/developers/plugins/overview',

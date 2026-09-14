@@ -300,6 +300,9 @@ export const openAiCompatibleProvider: AiProvider = {
   id: OPENAI_COMPATIBLE_PROVIDER_ID,
   label: 'OpenAI-compatible endpoint',
   apiKeyEnv: OPENAI_COMPAT_API_KEY_ENV,
+  // Ready only with both halves: a key with no endpoint has nowhere to go.
+  readApiKey: () =>
+    openAiCompatibleBaseUrl() ? process.env.AI_OPENAI_COMPAT_API_KEY?.trim() || undefined : undefined,
   get endpointHost() {
     return openAiCompatibleHost()
   },

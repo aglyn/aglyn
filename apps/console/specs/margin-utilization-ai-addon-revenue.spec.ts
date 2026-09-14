@@ -26,7 +26,7 @@
  */
 
 import { PLAN_PRICING } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { fleetUtilization, orgMarginRow } from '../utils/margin-utilization'
+import { fleetUtilization, orgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
 
 const row = (org: Record<string, unknown>) =>
   orgMarginRow({ orgId: 'org-1', org: org as never, rollup: null, month: null })

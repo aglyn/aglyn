@@ -74,16 +74,14 @@ export const TTL_POLICIES = Object.freeze([
     why: 'per-screen analytics counters, 400 days',
   },
 
-  // ── Declared and documented, gcloud not yet run on aglyn-main ──────────────
-  // The doc records these three as "declared and OWED": the index file declares
-  // them, the writers stamp `expiresAt`, and the gcloud command in
-  // FIRESTORE_MANUAL_CONFIG.md has not been run. They belong in this list
-  // regardless — the list is what the platform's retention policy IS, and this
-  // script is the documented way to apply it. On a fresh self-host project that
-  // means all eight get created; on aglyn-main, running the script would
-  // discharge the three owed ones, which is the doc's own instruction. Nothing
-  // here applies anything on import — only `set-firestore-ttl.mjs` does, and
-  // only when run.
+  // ── Declared after the list left the script ────────────────────────────────
+  // Each of these is declared in the index file, stamped by its writer and
+  // recorded in FIRESTORE_MANUAL_CONFIG.md. A policy belongs in this list from
+  // the day it is declared, not the day it goes live: the list is what the
+  // platform's retention policy IS, and `set-firestore-ttl.mjs` enables any
+  // that a project lacks while skipping those already ACTIVE. Whether each is
+  // live on aglyn-main is recorded in the doc, not here. Nothing here applies
+  // anything on import — only `set-firestore-ttl.mjs` does, and only when run.
   {
     collection: 'assistExchanges',
     field: 'expiresAt',

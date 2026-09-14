@@ -1,5 +1,5 @@
 {
-  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests \u2014 the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry). `alwaysOn` here is the LOADER's meaning \u2014 the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead.",
+  "$comment": "First-party plugin registry (AGL-417). THE single place that maps plugin ids to packages, register entry points, and API path prefixes. `tools/scripts/generate-plugin-manifests.mjs` turns this into the per-app generated loader manifests — the only files allowed to reference @aglyn/plugins-* outside libs/plugins. Ids must match FIRST_PARTY_PLUGINS in libs/aglyn plugin-manager/enabled-plugins.ts. register keys: site = canvas/site components (client barrel), console = ConsoleExtension (client barrel), tenantApi/consoleApi = API handlers (/server entry), declarations = the light registrations core reads before any surface loads (`/declarations`, both apps, client and server), serverDeclarations = the same for the server alone (`/declarations.server`, platform-event subscriptions). `alwaysOn` here is the LOADER's meaning — the bundle activates whatever ids `ensure()` is given, so it defeats the per-page narrowing in required-site-plugins.ts and belongs only to `mui`, which the canvas cannot render without. A plugin that merely may not be switched OFF says so with `alwaysOn` in FIRST_PARTY_PLUGINS instead.",
   "plugins": [
     {
       "id": "mui",
@@ -116,7 +116,9 @@
         "console": "registerInboxConsole",
         "consoleApi": "registerInboxConsoleApi"
       },
-      "apiPrefixes": ["inbox"]
+      "apiPrefixes": [
+        "inbox"
+      ]
     },
     {
       "id": "logic",
@@ -156,6 +158,22 @@
       },
       "apiPrefixes": [
         "hooks"
+      ]
+    },
+    {
+      "id": "ai",
+      "package": "@aglyn/plugins-ai",
+      "register": {
+        "console": "registerAiConsole",
+        "staff": "registerAiConsole",
+        "tenantApi": "registerAiApi",
+        "consoleApi": "registerAiConsoleApi",
+        "declarations": "registerAiDeclarations",
+        "serverDeclarations": "registerAiServerDeclarations"
+      },
+      "apiPrefixes": [
+        "ai",
+        "assist"
       ]
     }
   ]

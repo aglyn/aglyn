@@ -348,6 +348,7 @@ export const anthropicProvider: AiProvider = {
   id: ANTHROPIC_PROVIDER_ID,
   label: 'Anthropic',
   apiKeyEnv: ANTHROPIC_API_KEY_ENV,
+  readApiKey: () => process.env.ANTHROPIC_API_KEY?.trim() || undefined,
   endpointHost: ANTHROPIC_HOST,
   models(): readonly AiModelDescriptor[] {
     return aiModelIdsForProvider(ANTHROPIC_PROVIDER_ID)

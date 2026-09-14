@@ -25,31 +25,6 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RELEASE_FLAGS } from '@aglyn/aglyn'
 
-// `assist-usage` moved into the admin lib (AGL-2073) so the besigner's
-// `/api/ai/assist` handler — which lives in a lib and cannot import from an
-// app — can reserve and meter through the same code. Importing the barrel for
-// real would pull the whole tenancy surface (and `next/cache`) with it, so the
-// barrel stays stubbed and the REAL module is spliced back in by path. The
-// module itself only reaches `firebase-admin/firestore` for FieldValue, which
-// is stubbed to the two sentinels the batch writes — the assertions below stay
-// about PATHS.
-jest.mock('firebase-admin/firestore', () => ({
-  __esModule: true,
-  FieldValue: {
-    increment: (n: number) => ({ __inc: n }),
-    serverTimestamp: () => '__now__',
-  },
-}))
-
-jest.mock('@aglyn/tenant-data-admin', () => ({
-  __esModule: true,
-  ...jest.requireActual(
-    '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
-  ),
-}))
-
-import { recordAssistExchange, reserveAssistMessage } from '@aglyn/tenant-data-admin'
-
 /**
  * AGL-1909: Anthropic must be a published subprocessor BEFORE it processes
  * customer content — and the dependency has to be structural, because as
@@ -64,7 +39,10 @@ import { recordAssistExchange, reserveAssistMessage } from '@aglyn/tenant-data-a
  *  2. The set of files that read `ANTHROPIC_API_KEY` is exactly the known
  *     list. This is the load-bearing one.
  *  3. Every Assist record is written UNDER the org document, which is what
- *     makes the retention promise in the privacy disclosure true.
+ *     makes the retention promise in the privacy disclosure true. That claim
+ *     drives the AI plugin's meter, so it is pinned beside the meter, in
+ *     `libs/plugins/ai/src/lib/usage/assist-records-reachable-by-erase-org.spec.ts`:
+ *     an app reaches a plugin only through its generated manifests.
  *
  * ## Why the key, and not the flag
  *
@@ -72,7 +50,7 @@ import { recordAssistExchange, reserveAssistMessage } from '@aglyn/tenant-data-a
  * turns Anthropic into a production subprocessor. It is not, and the
  * difference matters for the ordering the issue exists to protect:
  * `/api/ai/assist` — the besigner copy assistant, AGL-89/130/169, registered
- * unconditionally in `libs/plugins/marketplace/src/lib/server.ts` — carries no
+ * unconditionally in `libs/plugins/ai/src/lib/server.ts` — carries no
  * release flag at all. It sends customer site copy, blog bodies and section
  * briefs to Anthropic on `ANTHROPIC_API_KEY` plus a Pro entitlement, and
  * nothing else. So setting that key in production makes Anthropic a
@@ -97,20 +75,29 @@ const REPO_ROOT = join(__dirname, '..', '..', '..')
  */
 const KEY_READERS = new Map<string, string>([
   [
-    'apps/console/app/api/assist/chat/route.ts',
-    'Aglyn Assist (AGL-1860): the customer question, a trailing window of the thread, and — on Pro+ — the current route, host and org name. Gated by `release_assist` AND the key.',
-  ],
-  [
-    'libs/plugins/marketplace/src/lib/server/ai-assist.ts',
-    'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — the key plus a Pro entitlement is the whole gate.',
-  ],
-  [
-    'libs/tenant/data/admin/src/lib/server/ai-runtime.ts',
-    'The shared Anthropic runtime (AGL-2903): the ONE module that puts the key on a request. It sends whatever prompt a door hands it, so what reaches Anthropic is decided by the doors above — both of which still read the key themselves to answer 501 before they call it. A third door on the runtime is a third entry here.',
-  ],
-  [
     'libs/plugins/ai/src/lib/providers/anthropic.ts',
-    'The Anthropic adapter behind the Aglyn AI provider contract (AGL-2939): it declares the key as its `apiKeyEnv` and puts it on a Messages API request to the host it names. It opens no door of its own and sends whatever request the AI runtime hands it, so what reaches Anthropic is still decided by the doors above, the same content to the same subprocessor. No door reaches it while the plugin is absent from `plugins.config.json`; once the runtime calls it instead of `ai-runtime.ts`, that entry leaves this list and this one stays.',
+    'The Anthropic adapter behind the Aglyn AI provider contract (AGL-2939): it declares the key as its `apiKeyEnv` and puts it on a Messages API request to the host it names. It opens no door of its own and sends whatever request the AI runtime hands it, so what reaches Anthropic is still decided by the doors, the same content to the same subprocessor, and `AI_DOORS` below pins them one by one. The runtime calls it in place of the shared runtime that read the key in `libs/tenant/data/admin` (AGL-2903), which is why that entry left this list and this one stayed.',
+  ],
+])
+
+/**
+ * Every tracked source file that calls the AI runtime, and what customer
+ * content it sends to the active provider. The adapter above is the only
+ * key reader, so a new door no longer adds a reader — it adds a caller, and
+ * this is the list that goes red for it.
+ */
+const AI_DOORS = new Map<string, string>([
+  [
+    'libs/plugins/ai/src/lib/server/assist-chat.ts',
+    'Aglyn Assist (AGL-1860) at /api/assist/chat: the customer question, a trailing window of the thread, and — on Pro+ — the current route, host and org name. Gated by `release_assist` AND a ready provider. The same URL, content and gates it had as the console route before it moved into the AI plugin (AGL-2939): a move, not a new flow, so /legal/subprocessors still describes it.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/server/ai-assist.ts',
+    'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — a ready provider plus a Pro entitlement is the whole gate. The same URL, content and gate it had in the marketplace plugin before it moved into the AI plugin (AGL-2939): a move, not a new flow, so /legal/subprocessors still describes it.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/jobs/ai-job-text-step.ts',
+    'A generation job’s text step (AGL-2904): the brief the job was created with. Behind `release_ai_generative`, the `aiGenerative` entitlement and the `ai-generate` lockdown key. It called the shared runtime before the AI plugin existed too; it is listed because the runtime’s callers are now the list that pins each flow, not because the flow is new.',
   ],
 ])
 
@@ -149,16 +136,16 @@ const MENTIONS_ONLY = new Map<string, string>([
     'The DEPLOYED flag seed and its staff-facing description — the one that actually decides the flag in production.',
   ],
   [
-    'apps/console/app/api/assist/chat/route.spec.ts',
-    'Sets a fake key to exercise the 501 gate.',
+    'libs/plugins/ai/src/lib/server/assist-chat.spec.ts',
+    'Sets a fake key to exercise the 501 gate. It moved with the chat door into the AI plugin (AGL-2939); still a test double, not a flow.',
   ],
   [
-    'libs/plugins/marketplace/src/lib/server/ai-assist.spec.ts',
-    'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow.',
+    'libs/plugins/ai/src/lib/server/ai-assist.spec.ts',
+    'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow. It moved with its handler into the AI plugin (AGL-2939).',
   ],
   [
-    'libs/tenant/data/admin/src/lib/server/ai-runtime.spec.ts',
-    'Sets a fake key (`sk-test`) to drive the shared runtime against a mocked fetch (AGL-2903), and asserts it refuses to run without one. A test double, not a flow.',
+    'libs/plugins/ai/src/lib/runtime/ai-runtime.spec.ts',
+    'Sets a fake key (`sk-test`) to drive the shared runtime against a mocked fetch (AGL-2903), and asserts it refuses to run without one. A test double, not a flow. It moved with the runtime into the AI plugin (AGL-2939).',
   ],
   [
     'libs/plugins/ai/src/lib/providers/conformance.spec.ts',
@@ -185,20 +172,8 @@ const MENTIONS_ONLY = new Map<string, string>([
     'The self-host runbook (AGL-2014). Documents the same key as an optional operator-supplied credential. Documentation, not a flow.',
   ],
   [
-    'libs/plugins/marketplace/src/lib/components/ai-assist-provider.component.tsx',
-    'Client component; names the key only to explain the 501 degrade.',
-  ],
-  [
-    'apps/console/app/api/_lib/assist-deflection.ts',
-    'The deflection gate (AGL-2486). Names the key only in prose, explaining why a keyless deployment must still answer follow-ups from the docs. It never reads `process.env` and holds no client — it takes retrieved sections and returns strings, which is the reason the route can answer at all with no provider configured.',
-  ],
-  [
-    'libs/tenant/data/admin/src/lib/server/assist-usage.ts',
-    'The meters (AGL-2486). Names the key only in the comment on the `docs-links` zero-rate sentinel, explaining which deployments produce it. Rates and counters; no provider call and no `process.env` read.',
-  ],
-  [
-    'apps/console/components/assist-panel.component.spec.tsx',
-    'The panel suite (AGL-2486). Names the key only inside a CANNED 501 body it arms, to assert the panel does NOT relay that operator string to the user. A test double, not a flow — and the assertion is that the string stops there.',
+    'libs/plugins/ai/src/lib/components/assist-panel.component.spec.tsx',
+    'The panel suite (AGL-2486). Names the key only inside a CANNED 501 body it arms, to assert the panel does NOT relay that operator string to the user. A test double, not a flow — and the assertion is that the string stops there. It moved with the panel into the AI plugin (AGL-2939).',
   ],
   ['docs/PLATFORM_PROVISIONING.md', 'Documentation.'],
   ['apps/docs/docs/developers/self-hosting.md', 'Documentation.'],
@@ -321,132 +296,39 @@ describe('every Anthropic data flow is a known one (AGL-1909)', () => {
     }
   })
 
-  it('records the besigner assistant as unflagged, so nobody re-derives it', () => {
-    const besigner = KEY_READERS.get(
-      'libs/plugins/marketplace/src/lib/server/ai-assist.ts',
+  it('has exactly the expected doors calling the AI runtime', () => {
+    // The adapter is the only key reader, so a new customer-content path is a
+    // new CALLER of the runtime rather than a new reader of the key. Specs
+    // drive the runtime with doubles and are not doors.
+    const tracked = execSync('git ls-files libs apps', {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    })
+      .split('\n')
+      .filter((path) => /\.(ts|tsx)$/.test(path) && !/\.spec\.tsx?$/.test(path))
+    const callers = tracked.filter(
+      (path) =>
+        path !== 'libs/plugins/ai/src/lib/runtime/ai-runtime.ts' &&
+        /\brunAiRequest\(/.test(readFileSync(join(REPO_ROOT, path), 'utf8')),
     )
+    expect(callers.sort()).toEqual([...AI_DOORS.keys()].sort())
+  })
+
+  it('records the besigner assistant as unflagged, so nobody re-derives it', () => {
+    const besigner = AI_DOORS.get('libs/plugins/ai/src/lib/server/ai-assist.ts')
     expect(besigner).toContain('NO release flag')
     // And the claim is checked against the source, not just asserted about
     // the comment: the handler is registered with no flag around it.
     const server = readFileSync(
-      join(REPO_ROOT, 'libs/plugins/marketplace/src/lib/server.ts'),
+      join(REPO_ROOT, 'libs/plugins/ai/src/lib/server.ts'),
       'utf8',
     )
     expect(server).toContain("registerPluginApiRoute('ai/assist', aiAssistHandler)")
     const handler = readFileSync(
-      join(REPO_ROOT, 'libs/plugins/marketplace/src/lib/server/ai-assist.ts'),
+      join(REPO_ROOT, 'libs/plugins/ai/src/lib/server/ai-assist.ts'),
       'utf8',
     )
     expect(handler).not.toMatch(/isServerReleaseFlagOnForOrg|release_/)
-  })
-})
-
-/**
- * The retention half of the disclosure, pinned as behaviour.
- *
- * The privacy text can promise that erasing a workspace erases its assistant
- * history only because all four Assist collections are genuine
- * SUBCOLLECTIONS of the org document — `eraseOrg` finishes with
- * `recursiveDelete(orgRef)`, and a path-scoped cascade is structurally blind
- * to anything not under the path. `apiKeys`, `ssoDomains` and the console
- * domain claims are the standing proof of that blindness: each carries
- * `orgId` as a FIELD and needed its own sweep.
- *
- * So this asserts the WRITES, not the doc comment. The standing condition it
- * enforces: if a later phase denormalizes exchanges into a top-level
- * staff-mining collection — which the AGL-1860 spec explicitly wants, ranking
- * docs gaps by question frequency across orgs — this goes red, and the right
- * response is to change the published policy or add the sweep, not to widen
- * the assertion.
- */
-describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () => {
-  it('writes every record under orgs/{orgId}/', async () => {
-    const written: string[] = []
-    const makeDoc = (path: string) => ({
-      path,
-      id: path.split('/').pop(),
-      collection: (name: string) => makeCollection(`${path}/${name}`),
-    })
-    const makeCollection = (prefix: string) => ({
-      doc: (id?: string) => makeDoc(`${prefix}/${id ?? 'auto-1'}`),
-    })
-    const firestore = {
-      collection: (name: string) => makeCollection(name),
-      // The counters/rollup writes moved into the RESERVATION (AGL-2057), so
-      // the erasure surface is only complete if this test drives both halves.
-      runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-        fn({
-          get: async () => ({
-            exists: false,
-            data: () => undefined,
-            get: () => undefined,
-          }),
-          set: (ref: { path: string }) => {
-            written.push(ref.path)
-          },
-        }),
-      batch: () => ({
-        set: (ref: { path: string }) => {
-          written.push(ref.path)
-        },
-        commit: async () => undefined,
-      }),
-    } as unknown as FirebaseFirestore.Firestore
-
-    await reserveAssistMessage(firestore, 'org-1', false)
-    await recordAssistExchange(firestore, 'org-1', {
-      uid: 'user-1',
-      question: 'How do I publish?',
-      answer: 'Press Publish.',
-      route: '/acme/screens',
-      hostId: 'host-1',
-      model: 'claude-sonnet-5',
-      tier: 'free',
-      usage: {
-        inputTokens: 1,
-        outputTokens: 1,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-      docsPaths: [],
-      stopReason: 'end_turn',
-    })
-
-    // All FIVE: the exchange, its signal, the daily counter, the monthly
-    // rollup, and the asker's own month (AGL-2928). `assistSignals` is the
-    // half AGL-1972 split out so the prose could be given a TTL without
-    // destroying the data loop — and splitting it created a new collection,
-    // which is precisely the moment a cascade silently stops covering
-    // everything. The length is asserted so a sixth collection added later
-    // cannot slip past this list unnoticed.
-    // Deduped: the monthly rollup is touched by BOTH halves now — the
-    // reservation counts the message, the batch folds in the tokens.
-    const distinct = [...new Set(written)]
-    expect(distinct).toHaveLength(5)
-    for (const path of distinct) {
-      expect([path, path.startsWith('orgs/org-1/')]).toEqual([path, true])
-    }
-    expect(distinct.map((path) => path.split('/')[2]).sort()).toEqual([
-      'aiUsageByUser',
-      'assistExchanges',
-      'assistSignals',
-      'assistUsage',
-      'counters',
-    ])
-    // The per-user month is keyed by the ASKER, under the org: the org's
-    // cascade takes it, and `eraseUser` sweeps it by uid (AGL-2928).
-    expect(distinct).toContain('orgs/org-1/aiUsageByUser/user-1/months/' +
-      new Date().toISOString().slice(0, 7))
-  })
-
-  it('still finishes eraseOrg with a recursive delete of the org doc', () => {
-    // The other half of the reachability claim. Org-scoped paths only help
-    // while something actually walks the org tree; if this call goes away the
-    // subcollection assertion above becomes decorative.
-    const erase = readFileSync(
-      join(REPO_ROOT, 'libs/tenant/data/admin/src/lib/server/erase.ts'),
-      'utf8',
-    )
-    expect(erase).toContain('recursiveDelete(orgRef)')
   })
 })

@@ -60,6 +60,12 @@ export interface PluginActivityGroup {
    * by prefix (`billing.assistOverage.`).
    */
   staffAuditPrefixes?: readonly string[]
+  /**
+   * Staff audit actions a plugin's staff doors write when staff READ
+   * something rather than change it (AGL-2939): the audit log files them as
+   * an access. Matched exactly.
+   */
+  staffAuditAccessActions?: readonly string[]
 }
 
 export interface PluginActivityRegistration {
@@ -166,6 +172,15 @@ export function pluginStaffAuditActionGroup(action: unknown): string {
   }
   const dot = text.indexOf('.')
   return dot > 0 ? text.slice(0, dot) : text
+}
+
+/** Whether a staff audit action is a read some plugin declared (AGL-2939). */
+export function isPluginStaffAuditAccess(action: unknown): boolean {
+  if (typeof action !== 'string' || !action) return false
+  for (const registration of registrations.values()) {
+    if (registration.group.staffAuditAccessActions?.includes(action)) return true
+  }
+  return false
 }
 
 /** How a facet group reads in the menu: a registered label, else the id. */
