@@ -35,6 +35,7 @@ import {
 } from './console-record-links'
 import { hostEventLabel } from './workflows'
 import { aiActivityActionLabel, isAiActivityAction } from './ai-activity-actions'
+import { duplicateActivityActionLabel } from './duplicate-resource'
 
 /** The stored `target` sub-object, read defensively (any field may be absent). */
 export interface ActivityTargetLike {
@@ -152,13 +153,16 @@ export function activityTargetLabel(
 
 /**
  * What the action column reads (AGL-2929). Most actions are the sentence
- * their writer stored; the AI rows store a code (`ai.job.output`) so that
- * three surfaces can recognize them without parsing prose, and the code is
+ * their writer stored; the AI rows store a code (`ai.job.output`) and the
+ * duplicate rows another (`screen.duplicated`, AGL-2936) so that three
+ * surfaces can recognize them without parsing prose, and the code is
  * translated here — once — rather than shown to a reader as a dotted path.
  */
 export function activityActionLabel(action: string | undefined): string {
   const stored = action?.trim() ?? ''
-  return aiActivityActionLabel(stored) ?? stored
+  return (
+    aiActivityActionLabel(stored) ?? duplicateActivityActionLabel(stored) ?? stored
+  )
 }
 
 /** Whether an entry is one the feed's "AI" chip keeps. */

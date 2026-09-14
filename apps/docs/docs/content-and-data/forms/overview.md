@@ -389,6 +389,14 @@ The sender's name and email are recognized from the field name (see
 Submissions collected before a form became a form entity are filed under the name they
 were sent with rather than this form's id, so they stay in the Inbox under **All forms**.
 
+## Duplicate a form
+
+**Duplicate…** in a form's row menu makes a second form with the same design,
+fields, validation, consent field and routing, named `Copy of <form>` unless
+you type another name. It is a form of its own: submissions stay with the
+original, the copy starts collecting only once you place it on a page and
+publish, and it counts against your form allowance like a new form.
+
 ## Related
 
 - [Datasets & dynamic content](../datasets/overview.md)

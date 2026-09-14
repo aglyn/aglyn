@@ -89,6 +89,10 @@ let served = TOTAL
 const FIRESTORE = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // Duplicate (AGL-2936) is a door of its own; these specs exercise the
+  // rest of the card, so the flow is a stub and its dialog is not mounted.
+  DUPLICATE_MENU_LABEL: 'Duplicate…',
+  useDuplicateResource: () => ({ request: jest.fn(), dialog: null }),
   useFirestore: () => FIRESTORE,
   useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
   useHostActivityLogger: () => jest.fn(),

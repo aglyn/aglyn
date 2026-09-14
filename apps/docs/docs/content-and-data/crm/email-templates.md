@@ -70,6 +70,14 @@ A template written under a site is that site's, and is listed on that site's
 hub and to every org-wide member. One written from the organization's own
 CRM is the whole workspace's, and every site's hub lists it.
 
+### Duplicate a template
+
+**Duplicate…** in a template's row menu makes a second template with the same
+subject, body and merge fields under the name you give it. The copy keeps
+the original's kind and scope — a site's template stays that site's — and is
+filed under you: a copy of a personal template is personal to you. The
+listing's ceiling applies to copies as it does to new templates.
+
 ## Shared or personal {#shared-or-personal}
 
 | | Who sees it | Who can change or delete it |

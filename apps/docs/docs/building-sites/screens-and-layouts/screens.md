@@ -63,6 +63,22 @@ that address. The **Error pages** card tells you when that's the case and offers
 one-click **Remove address**; the screen carries on rendering for its status code
 afterwards.
 
+## Duplicate a screen
+
+Every row on the Screens list has **Duplicate…** in its menu, and a screen's
+detail page carries the same action. The copy takes the latest saved version
+whole — the element tree, layout values, description and SEO fields — under
+the name you give it (`Copy of Home` by default; a name another screen already
+has gets a number). Its slug becomes `home-copy`, then `home-copy-2`, so it
+never claims the original's address.
+
+The copy is a **draft**: it has no address on the live site until you publish
+it, exactly like a screen you created from scratch. Components and layouts
+placed on the original are shared, not copied — the duplicate points at the
+same ones. A duplicate counts against your screen allowance the moment it is
+made, and is refused with the same message a new screen would be when the
+allowance is spent.
+
 ## Error & maintenance screens
 
 You can design custom **404 / 401 / 403 / 503** screens and turn on **maintenance mode**.

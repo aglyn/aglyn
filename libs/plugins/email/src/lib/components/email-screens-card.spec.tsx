@@ -55,6 +55,10 @@ let screenDocs: Array<Record<string, unknown>> = []
 let ceilingsAsked: number[] = []
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // Duplicate (AGL-2936) is a door of its own; these specs exercise the
+  // rest of the card, so the flow is a stub and its dialog is not mounted.
+  DUPLICATE_MENU_LABEL: 'Duplicate…',
+  useDuplicateResource: () => ({ request: jest.fn(), dialog: null }),
   useFirestore: () => FIRESTORE,
   useConsoleHostRoute: () => ({ orgSlug: 'acme', subdomain: 'site' }),
   useHostResourceApi: () => jest.fn(),
@@ -244,12 +248,12 @@ describe('a template row opens the template', () => {
 })
 
 describe('the template row’s actions are in the shared overflow menu', () => {
-  it('offers exactly Open details, Edit in besigner and Delete', async () => {
+  it('offers exactly Open details, Edit in besigner, Duplicate and Delete', async () => {
     await mountCard()
     openMenuFor('Welcome')
     expect(
       screen.getAllByRole('menuitem').map((item) => item.textContent),
-    ).toEqual(['Open details', 'Edit in besigner', 'Delete'])
+    ).toEqual(['Open details', 'Edit in besigner', 'Duplicate…', 'Delete'])
   })
 
   it('the besigner item points at the screen’s own version', async () => {

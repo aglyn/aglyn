@@ -79,6 +79,13 @@
  */
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import { logResourceDuplicated } from '@aglyn/tenant-data-admin/server/duplicate-activity'
+import {
+  DUPLICATE_BUSY_MESSAGE,
+  duplicateDisplayName,
+  uniqueDuplicateName,
+} from '@aglyn/aglyn/app-utils/duplicate-resource'
+import { claimAttempt, createResourceUid } from '@aglyn/aglyn/server'
 /*
  * The MODULES again, for the same reason: `consentGroupForSite` and
  * `orgDataCollectionForHost` are what the contact pass needs, and taking them
@@ -438,6 +445,87 @@ async function discardDraft(
  * a second door to the same document would be a second place for the two to
  * disagree about what a campaign may hold.
  */
+/**
+ * The fields a copy of a message carries (AGL-2936): what was written and
+ * how it is sent — never who it goes to or when. The audience, list,
+ * segment, addresses, schedule and experiment are the decisions a person
+ * makes about THIS send, and a copy that inherited them would be one click
+ * from mailing the same people twice.
+ */
+const DUPLICATED_MESSAGE_FIELDS = [
+  'subject',
+  'body',
+  'fromName',
+  'replyTo',
+  'senderId',
+  'templateScreenId',
+  'plainText',
+  'plainTextVersionId',
+  'topicId',
+  CAMPAIGN_SEND_CONTAINER_FIELD,
+] as const
+
+/**
+ * Copies a message as a new draft (AGL-2936). Any status can be copied —
+ * a sent email is the usual source — and the copy is always `draft`, with
+ * the name the person gave it made unique among the site's messages.
+ */
+async function duplicateMessage(
+  hostId: string,
+  hostRef: FirebaseFirestore.DocumentReference,
+  emailId: string,
+  requestedName: string,
+  actor: { uid: string; email: string | null; orgId: string },
+): Promise<ManageResult> {
+  const messages = hostRef.collection('campaigns')
+  const firestore = hostRef.firestore
+  const id = createResourceUid()
+  const outcome = await firestore.runTransaction(
+    async (transaction): Promise<ManageResult & { name?: string; sourceName?: string }> => {
+      const [source, siblings] = await Promise.all([
+        transaction.get(messages.doc(emailId)),
+        transaction.get(messages.select('displayName', 'subject')),
+      ])
+      if (!source.exists) {
+        return { status: 404, body: { error: 'Unknown email' } }
+      }
+      const data = (source.data() ?? {}) as Record<string, unknown>
+      const sourceName = String(data['displayName'] ?? data['subject'] ?? '').trim()
+      const name = uniqueDuplicateName(
+        requestedName.trim() || duplicateDisplayName(sourceName),
+        siblings.docs.map((row) => String(row.get('displayName') ?? row.get('subject') ?? '')),
+      )
+      const copy: Record<string, unknown> = {}
+      for (const field of DUPLICATED_MESSAGE_FIELDS) {
+        if (data[field] !== undefined && data[field] !== null) copy[field] = data[field]
+      }
+      const nowMs = Date.now()
+      transaction.create(messages.doc(id), {
+        ...copy,
+        displayName: name,
+        status: 'draft',
+        createdAtMs: nowMs,
+        draftedAt: new Date(nowMs),
+        draftedBy: actor.uid,
+      })
+      return { status: 200, body: { emailId: id, name }, name, sourceName }
+    },
+  )
+  if (outcome.status === 200) {
+    await logResourceDuplicated(
+      'campaign',
+      { uid: actor.uid, email: actor.email },
+      {
+        orgId: actor.orgId,
+        hostId,
+        source: { id: emailId, name: outcome.sourceName ?? '' },
+        target: { id, name: outcome.name ?? '' },
+      },
+    )
+  }
+  return { status: outcome.status, body: outcome.body }
+}
+
 export const campaignManageHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -449,7 +537,11 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
   if (!isDocumentId(targetId)) {
     return res.status(400).json({ error: 'Invalid campaignId' })
   }
-  if (action !== 'deleteCampaign' && action !== 'discardEmail') {
+  if (
+    action !== 'deleteCampaign' &&
+    action !== 'discardEmail' &&
+    action !== 'duplicate'
+  ) {
     return res.status(400).json({ error: 'Unknown action' })
   }
 
@@ -472,6 +564,35 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
       return res.status(403).json({ error: 'Not a site admin or editor' })
     }
 
+    if (action === 'duplicate') {
+      // One attempt key, one copy (AGL-2936): a double click on Duplicate
+      // replays the first answer rather than drafting the message twice.
+      const attemptKey = String(req.body?.attemptKey ?? '').trim().slice(0, 200)
+      const orgId = (await resolveOrgIdForHost(hostId)) ?? ''
+      const claimed = attemptKey
+        ? await claimAttempt(firestore as never, {
+            kind: 'duplicate-campaign',
+            scopeId: `${hostId}:${targetId}`,
+            orgId,
+            key: attemptKey,
+            busyMessage: DUPLICATE_BUSY_MESSAGE,
+          })
+        : null
+      if (claimed && 'replay' in claimed) {
+        return res.status(claimed.replay.status).json(claimed.replay.body)
+      }
+      const claim = claimed && 'claim' in claimed ? claimed.claim : null
+      const copied = await duplicateMessage(
+        hostId,
+        hostRef,
+        targetId,
+        String(req.body?.name ?? ''),
+        { uid: decoded.uid, email: decoded.email ?? null, orgId },
+      )
+      if (copied.status === 200) await claim?.record(copied.status, copied.body)
+      else await claim?.release()
+      return res.status(copied.status).json(copied.body)
+    }
     const result =
       action === 'deleteCampaign'
         ? await deleteCampaign(hostId, hostRef, targetId)

@@ -82,8 +82,13 @@ const mockComponentDocs = [
 ]
 
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
+const mockDuplicateRequest = jest.fn()
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // Duplicate (AGL-2936) is a door of its own; these specs exercise the
+  // rest of the card, so the flow is a stub and its dialog is not mounted.
+  DUPLICATE_MENU_LABEL: 'Duplicate…',
+  useDuplicateResource: () => ({ request: mockDuplicateRequest, dialog: null }),
   useFirestore: () => ({}),
   useHost: () => ({
     doc: {
@@ -336,6 +341,19 @@ describe('LanguagesCard (AGL-1358)', () => {
     expect(payload.locales).toEqual(['en', 'es', 'fr'])
     // The default rides along off the same seed.
     expect(payload.defaultLocale).toBe('en')
+  })
+})
+
+describe('HostComponentsCard (AGL-2936)', () => {
+  it('the row menu offers Duplicate…, and it asks the flow for THIS component', () => {
+    mockDuplicateRequest.mockClear()
+    render(<HostComponentsCard hostId="host-1" />)
+    fireEvent.click(screen.getByRole('button', { name: /More actions/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate…' }))
+    expect(mockDuplicateRequest).toHaveBeenCalledWith('component', {
+      id: 'cmp-1',
+      name: 'Hero band',
+    })
   })
 })
 

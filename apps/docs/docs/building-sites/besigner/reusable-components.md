@@ -382,6 +382,15 @@ canvas badge, and in the element drawer under **Your components**. A page assemb
 promoted sections becomes readable at a glance. Components without an icon keep the
 generic package glyph.
 
+## Duplicate
+
+To start a new component from an existing one, choose **Duplicate…** in its
+row menu on the Components page, or **More → Duplicate** on its detail page.
+The copy carries the definition, its properties and the latest saved version,
+under the name you give it. It has no instances: every screen keeps pointing
+at the original, and you place the copy where you want it. Duplicating needs
+the same plan as creating a component.
+
 ## Copy & paste vs. reusable components
 
 | You want | Use |

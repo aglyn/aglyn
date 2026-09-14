@@ -34,6 +34,7 @@ import {
   WEBHOOK_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
 import {
+  duplicateResource,
   emailUnverifiedResponse,
   firebaseAdmin,
   getLockdownVerdict,
@@ -43,6 +44,7 @@ import {
   lockdownJsonResponse,
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
+import { isDuplicableHostResourceKind } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
   billableScreenIds,
@@ -613,11 +615,24 @@ async function handler(request: Request): Promise<Response> {
 
   const hostId = String(body?.hostId ?? '')
   const resourceKey = String(body?.resource ?? '')
-  const resource = RESOURCES[resourceKey]
-  if (!hostId || !resource) {
+  /**
+   * `action: 'duplicate'` (AGL-2936): the same door, copying a document the
+   * site already holds instead of creating one from a payload. The kind
+   * vocabulary is the duplicate catalog's — `component` rather than this
+   * table's `reusableComponent`, plus `emailDesign` for a `kind: 'email'`
+   * screen — because that catalog is what the row menus, the docs and the
+   * AI tool share. Nothing else in the body is read: the copy is made from
+   * the stored source, never from anything the client sends about it.
+   */
+  const duplicating = String(body?.action ?? '') === 'duplicate'
+  const resource = duplicating ? undefined : RESOURCES[resourceKey]
+  if (!hostId || (!duplicating && !resource)) {
     return Response.json({ error: 'Missing hostId or unknown resource' }, { status: 400 })
   }
-  const data = body?.data
+  if (duplicating && !isDuplicableHostResourceKind(resourceKey)) {
+    return Response.json({ error: 'That resource cannot be duplicated' }, { status: 400 })
+  }
+  const data = duplicating ? {} : body?.data
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return Response.json({ error: 'Missing data' }, { status: 400 })
   }
@@ -647,12 +662,12 @@ async function handler(request: Request): Promise<Response> {
     // which matters here because `strictNullChecks` is off and the missing
     // role would otherwise just be falsy in whichever direction the
     // expression happened to lean.
-    const roleOk = resource.requiresPublishRole
+    const roleOk = resource?.requiresPublishRole
       ? hostRoleCanPublish(memberRole)
       : hostRoleCanWrite(memberRole)
     if (!roleOk) {
       return Response.json({
-        error: resource.requiresPublishRole
+        error: resource?.requiresPublishRole
           ? `Creating ${resource.label} requires a publishing role`
           : 'Editing requires the editor role',
       }, { status: 403 })
@@ -678,6 +693,29 @@ async function handler(request: Request): Promise<Response> {
       host: hostSnapshot.data(),
     })
     if (lockdown) return lockdownJsonResponse(lockdown)
+    // The copy itself: the shared module meets the band, makes the name and
+    // slug unique, carries the version, writes the activity rows and honors
+    // the attempt key. This route's part is the door — who is asking, and
+    // whether they may write this site — which it has just settled.
+    if (duplicating && isDuplicableHostResourceKind(resourceKey)) {
+      const result = await duplicateResource(resourceKey, {
+        orgId: ownerOrg?.orgId ?? String(hostSnapshot.get('orgId') ?? ''),
+        hostId,
+        sourceId: String(body?.sourceId ?? ''),
+        name: typeof body?.name === 'string' ? body.name : null,
+        uid: decoded.uid,
+        email: decoded.email ? String(decoded.email) : null,
+        org,
+        attemptKey: typeof body?.attemptKey === 'string' ? body.attemptKey : null,
+      })
+      if (result.ok === false) {
+        return Response.json({ error: result.error }, { status: result.status })
+      }
+      return Response.json(result, { status: 200 })
+    }
+    if (!resource) {
+      return Response.json({ error: 'Unknown resource' }, { status: 400 })
+    }
     if (resource.entitlement && !checkEntitlement(org, resource.entitlement)) {
       return Response.json({
         error: `This feature is not included in your plan — see Billing`,

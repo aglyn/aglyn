@@ -29,6 +29,7 @@ import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import {
   mdiArchiveArrowDownOutline,
   mdiArchiveArrowUpOutline,
+  mdiContentCopy,
   mdiEyeOutline,
   mdiVectorSquare,
 } from '@aglyn/shared-data-mdi'
@@ -45,7 +46,9 @@ import { Alert, Button, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection, doc, updateDoc } from 'firebase/firestore'
 import {
+  DUPLICATE_MENU_LABEL,
   useConsoleHostRoute,
+  useDuplicateResource,
   useFirestore,
   useHostResourceApi,
   useLiveArtifactCount,
@@ -110,6 +113,12 @@ export interface HostFormsCardProps {
 export function HostFormsCard(props: HostFormsCardProps) {
   const { hostId, basePath, org } = props
   const router = useRouter()
+  // Duplicate (AGL-2936): the copy is a form of its own — its submissions
+  // start empty — and opens on its detail page once made.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) => router.push(formHref(copy.id)),
+  })
   const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
@@ -427,6 +436,16 @@ export function HostFormsCard(props: HostFormsCardProps) {
              * collecting. `/api/forms/submit` refuses a retired form, so one
              * still placed on a published page will turn visitors away.
              */
+            {
+              key: 'duplicate',
+              label: DUPLICATE_MENU_LABEL,
+              icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+              onClick: () =>
+                duplicate.request('form', {
+                  id: form.$id,
+                  name: form.displayName ?? '',
+                }),
+            },
             isFormArchived(form)
               ? {
                   key: 'restore',
@@ -448,6 +467,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
 
   return (
     <>
+      {duplicate.dialog}
       {/*
         The readout leads the create button, in the PAGE header — where Sites,
         screens, layouts, components and templates put theirs. Forms declares

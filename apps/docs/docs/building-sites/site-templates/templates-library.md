@@ -112,6 +112,15 @@ Marketplace **plugins and add-ons** work differently: those install once for the
 whole organization and apply to every site, and a site can override the
 organization's choice for itself.
 
+## Duplicating
+
+**Duplicate…** in a template's row menu makes a second template with the same
+element tree, placeholders, properties and SEO fields, named `Copy of
+<template>` unless you type another name. A copy of a marketplace or starter
+template is your own — it is listed as *Saved here* and counts against your
+template allowance like one you saved yourself. Starter bundles are used, not
+duplicated: use the bundle to get its pages.
+
 ## Deleting
 
 Deleting a template removes it from your library. Anything you already created from

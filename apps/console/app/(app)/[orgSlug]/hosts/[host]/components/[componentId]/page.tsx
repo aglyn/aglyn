@@ -44,9 +44,12 @@ import {
   Typography,
 } from '@mui/material'
 import {
+  DUPLICATE_MENU_LABEL,
+  useDuplicateResource,
   useFirestore,
   useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
@@ -83,6 +86,15 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
   const createHostVersion = useHostVersionApi()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
+  // More → Duplicate (AGL-2936): the same copy the list's row menu makes.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}”`, {
+        variant: 'success',
+        persist: false,
+      }),
+  })
   const { queueLoading } = useLoading()
 
   const { data: definition, status } = useFirestoreDoc<any>(
@@ -323,10 +335,25 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
           >
             {opening ? 'Opening…' : 'Open Besigner'}
           </Button>
+            <RowActionsMenu
+              label={definition?.displayName ?? componentId}
+              items={[
+                {
+                  key: 'duplicate',
+                  label: DUPLICATE_MENU_LABEL,
+                  onClick: () =>
+                    duplicate.request('component', {
+                      id: componentId,
+                      name: definition?.displayName ?? '',
+                    }),
+                },
+              ]}
+            />
           </Stack>
         )
       }
     >
+      {duplicate.dialog}
       {notFound ? (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <ArtifactNotFound

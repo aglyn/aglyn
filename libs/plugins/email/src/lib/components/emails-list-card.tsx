@@ -19,6 +19,7 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
   mdiBullhornOutline,
+  mdiContentCopy,
   mdiDeleteOutline,
   mdiEyeOutline,
   mdiPaletteOutline,
@@ -40,7 +41,12 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
-import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import {
+  DUPLICATE_MENU_LABEL,
+  useDuplicateResource,
+  useFirestore,
+  useFirestoreCollection,
+} from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,
@@ -201,6 +207,31 @@ export function EmailsListCard(props: EmailsListCardProps) {
 
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
+  // Duplicate (AGL-2936): a new draft with the message and its design, and
+  // nobody to send to until the person chooses — through the manage door,
+  // which is the plugin's own.
+  const manageForCopy = useCampaignManageApi(hostId)
+  const duplicate = useDuplicateResource({
+    hostId,
+    perform: async ({ sourceId, name, attemptKey }) => {
+      const { response, payload } = await manageForCopy({
+        action: 'duplicate',
+        campaignId: sourceId,
+        name,
+        attemptKey,
+      })
+      if (!response.ok) throw new Error(payload?.error ?? 'Duplicate failed')
+      return {
+        id: String(payload.emailId),
+        versionId: null,
+        name: String(payload.name ?? name),
+      }
+    },
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}” — a draft with no audience yet`, {
+        variant: 'success',
+      }),
+  })
   const manageApi = useCampaignManageApi(hostId)
   /** The email a discard is in flight for, so its row menu can say so. */
   const [discardingId, setDiscardingId] = useState('')
@@ -322,6 +353,16 @@ export function EmailsListCard(props: EmailsListCardProps) {
         disabledReason: 'This message was not built from a template',
       },
       {
+        key: 'duplicate',
+        label: DUPLICATE_MENU_LABEL,
+        icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+        onClick: () =>
+          duplicate.request('campaign', {
+            id: String(email.$id),
+            name: String(email?.displayName ?? email?.subject ?? ''),
+          }),
+      },
+      {
         key: 'discard',
         label: 'Discard draft',
         icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
@@ -439,6 +480,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
       contentGutterX
       contentGutterY
     >
+      {duplicate.dialog}
       <Stack spacing={2}>
         {emails.length === 0 ? (
           <Stack spacing={2} sx={{ alignItems: 'flex-start' }}>

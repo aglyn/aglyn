@@ -82,6 +82,10 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // Duplicate (AGL-2936) is a door of its own; these specs exercise the
+  // rest of the card, so the flow is a stub and its dialog is not mounted.
+  DUPLICATE_MENU_LABEL: 'Duplicate…',
+  useDuplicateResource: () => ({ request: jest.fn(), dialog: null }),
   useFirestore: () => FIRESTORE,
   // Signed in and able to mint an ID token: the card's actions post through
   // `useCampaignSendApi` and `useCampaignManageApi`, which authorize from one
@@ -226,6 +230,7 @@ describe('the message row’s other destinations are in the menu', () => {
       'Open report',
       'Open its campaign',
       'Open its template',
+      'Duplicate…',
       'Discard draft',
     ])
   })

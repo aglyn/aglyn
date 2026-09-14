@@ -57,6 +57,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   mdiBookmarkOutline,
+  mdiContentCopy,
   mdiOpenInNew,
   mdiTranslate,
 } from '@aglyn/shared-data-mdi'
@@ -85,6 +86,8 @@ import {
 import { useParams, useRouter } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  DUPLICATE_MENU_LABEL,
+  useDuplicateResource,
   useFirestore,
   useHostResourceApi,
   useHostVersionApi,
@@ -273,6 +276,16 @@ function Screens(props) {
     return map
   }, [screens])
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
+  // Duplicate (AGL-2936): the copy is a draft — no routing entry — so the
+  // list gains a row and the live site gains nothing until it is published.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(
+        `Duplicated as “${copy.name}” — a draft until you publish it`,
+        { variant: 'success', persist: false },
+      ),
+  })
   const { org, ready: orgReady } = useCurrentOrg()
   /** The cap behind the header readout; the create gate reads the same key. */
   const screenQuota = checkOrgQuota(org, 'screensPerHost', billableScreenCount)
@@ -907,6 +920,12 @@ function Screens(props) {
                 ]
               : []),
             {
+              key: 'duplicate',
+              label: DUPLICATE_MENU_LABEL,
+              icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+              onClick: () => duplicate.request('screen', { id: row.$id, name: label }),
+            },
+            {
               key: 'save-template',
               label: 'Save as template',
               icon: <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />,
@@ -937,6 +956,7 @@ function Screens(props) {
       collectionTemplates,
       orgSlug,
       host,
+      duplicate,
     ],
   )
 
@@ -944,6 +964,7 @@ function Screens(props) {
 
   return (
     <>
+      {duplicate.dialog}
       <DashboardLayout
         breadcrumbItems={[
           {

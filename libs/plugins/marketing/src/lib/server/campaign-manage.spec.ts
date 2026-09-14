@@ -196,6 +196,9 @@ function collectionRef(path: string): any {
   })
   return {
     doc: (id: string) => docRef(`${path}/${id}`),
+    // A projection changes which fields come back, not which rows; this
+    // double hands back whole documents either way.
+    select: () => filtered(null, '==', undefined, Infinity),
     ...filtered(null, '==', undefined, Infinity),
   }
 }
@@ -233,7 +236,16 @@ function mockFirestore(): any {
     runTransaction: async (body: (transaction: any) => Promise<any>) => {
       const writes: Array<() => void> = []
       const transaction = {
-        get: async (ref: any) => snapshotOf(ref.path),
+        get: async (ref: any) =>
+          typeof ref.path === 'string' && ref.get && !ref.doc
+            ? snapshotOf(ref.path)
+            : ref.get(),
+        create: (ref: any, value: Record<string, any>) => {
+          writes.push(() => {
+            if (store.has(ref.path)) throw new Error(`exists: ${ref.path}`)
+            store.set(ref.path, value)
+          })
+        },
         update: (ref: any, value: Record<string, any>) => {
           writes.push(() => {
             store.set(ref.path, applyUpdate(store.get(ref.path) ?? {}, value))
@@ -278,6 +290,12 @@ import {
   unsubscribeSignatureMatches,
 } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
 import { campaignManageHandler } from './campaign-manage'
+
+const mockLogResourceDuplicated = jest.fn(async (..._args: unknown[]) => undefined)
+jest.mock('@aglyn/tenant-data-admin/server/duplicate-activity', () => ({
+  __esModule: true,
+  logResourceDuplicated: (...args: unknown[]) => mockLogResourceDuplicated(...args),
+}))
 
 const HOST = 'host-1'
 const CAMPAIGN = 'spring-2026'
@@ -889,5 +907,78 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     })
 
     expect(result.body.detachedMembers).toBe(4)
+  })
+})
+
+describe('action: duplicate (AGL-2936)', () => {
+  const duplicate = (body: Record<string, unknown> = {}) =>
+    post({ hostId: HOST, action: 'duplicate', campaignId: 'sent-1', name: '', ...body })
+
+  beforeEach(() => {
+    mockLogResourceDuplicated.mockClear()
+    store.set(`hosts/${HOST}/campaigns/sent-1`, {
+      subject: 'Spring sale',
+      body: 'Hello {{contact.firstName}}',
+      fromName: 'Acme',
+      replyTo: 'hi@acme.test',
+      senderId: 'sender-1',
+      templateScreenId: 'scr-1',
+      topicId: 'news',
+      [CAMPAIGN_SEND_CONTAINER_FIELD]: CAMPAIGN,
+      displayName: 'Spring blast',
+      status: 'sent',
+      audience: 'list',
+      listId: 'list-1',
+      segmentId: 'seg-1',
+      emails: ['a@example.test'],
+      sendAtMs: 1,
+      sentAt: 2,
+      experimentId: 'exp-1',
+      stats: { delivered: 10 },
+    })
+  })
+
+  it('makes a draft with the message and its design, and nobody to send to', async () => {
+    const { status, body } = await duplicate({ name: 'Summer blast' })
+    expect(status).toBe(200)
+    expect(body).toEqual({ emailId: expect.any(String), name: 'Summer blast' })
+    const copy = store.get(`hosts/${HOST}/campaigns/${body.emailId}`) as Record<string, any>
+    expect(copy).toMatchObject({
+      subject: 'Spring sale',
+      body: 'Hello {{contact.firstName}}',
+      fromName: 'Acme',
+      replyTo: 'hi@acme.test',
+      senderId: 'sender-1',
+      templateScreenId: 'scr-1',
+      topicId: 'news',
+      [CAMPAIGN_SEND_CONTAINER_FIELD]: CAMPAIGN,
+      displayName: 'Summer blast',
+      status: 'draft',
+      draftedBy: 'uid-1',
+    })
+    for (const cleared of ['audience', 'listId', 'segmentId', 'emails', 'sendAtMs', 'sentAt', 'experimentId', 'stats']) {
+      expect(copy).not.toHaveProperty(cleared)
+    }
+    expect(mockLogResourceDuplicated).toHaveBeenCalledWith(
+      'campaign',
+      { uid: 'uid-1', email: null },
+      expect.objectContaining({
+        hostId: HOST,
+        source: { id: 'sent-1', name: 'Spring blast' },
+        target: { id: body.emailId, name: 'Summer blast' },
+      }),
+    )
+  })
+
+  it('defaults the name and numbers a taken one', async () => {
+    store.set(`hosts/${HOST}/campaigns/other`, { displayName: 'Copy of Spring blast', status: 'draft' })
+    const { body } = await duplicate()
+    expect(body.name).toBe('Copy of Spring blast 2')
+  })
+
+  it('answers 404 for an unknown email and 403 for a viewer', async () => {
+    expect((await duplicate({ campaignId: 'missing' })).status).toBe(404)
+    store.set(`hosts/${HOST}`, { memberRoles: { 'uid-1': 'viewer' } })
+    expect((await duplicate()).status).toBe(403)
   })
 })

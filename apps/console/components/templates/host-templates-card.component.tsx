@@ -37,12 +37,15 @@ import {
   mdiFileMultipleOutline,
   mdiPencilOutline,
   mdiPlusBoxOutline,
+  mdiContentCopy,
   mdiTrashCanOutline,
   mdiEyeOutline,
 } from '@aglyn/shared-data-mdi'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  DUPLICATE_MENU_LABEL,
+  useDuplicateResource,
   useFirestore,
   useHostResourceApi,
   useHostVersionApi,
@@ -178,6 +181,16 @@ export function HostTemplatesCard({
 }) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  // Duplicate (AGL-2936): one template at a time — a starter bundle's pages
+  // are copied by using it, not by copying the bundle row.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}”`, {
+        variant: 'success',
+        persist: false,
+      }),
+  })
   const { confirm } = useConfirmationContext()
   const { queueLoading } = useLoading()
   const { data: user } = useUser()
@@ -779,6 +792,20 @@ export function HostTemplatesCard({
             ? handleUseBundle(row)
             : () => setUseTemplate(template),
         },
+        ...(bundle
+          ? []
+          : [
+              {
+                key: 'duplicate',
+                label: DUPLICATE_MENU_LABEL,
+                icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+                onClick: () =>
+                  duplicate.request('template', {
+                    id: template.$id,
+                    name: template.displayName ?? '',
+                  }),
+              },
+            ]),
         {
           key: 'delete',
           label: bundle ? `Delete all ${row.pages.length} pages` : 'Delete',
@@ -854,6 +881,7 @@ export function HostTemplatesCard({
 
   return (
     <CardDisplay>
+      {duplicate.dialog}
       {/*
         The ceiling, said out loud. A starter's pages are grouped across the
         WHOLE window, so a library cut short does not merely hide rows — it can

@@ -60,6 +60,14 @@ dashboard's **Recent Activity** card and **Admin → Activity** show every one o
 as *"Workflow ran on formSubmission"* with the duration appended and failures in red.
 :::
 
+## Duplicate a workflow
+
+Each workflow on the list has a **Duplicate…** button beside Edit. The copy
+keeps every step and the return value under the name you give it, and arrives
+**disarmed**: its trigger is cleared, so nothing runs twice until you open the
+copy and choose a trigger. It counts against your workflow allowance like a
+new workflow.
+
 ## Tips
 
 - Keep steps small and named — a workflow reads like a checklist.

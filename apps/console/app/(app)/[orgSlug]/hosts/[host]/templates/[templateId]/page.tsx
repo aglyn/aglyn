@@ -42,7 +42,12 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  DUPLICATE_MENU_LABEL,
+  useDuplicateResource,
+  useFirestore,
+} from '@aglyn/tenant-feature-instance'
+import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -111,6 +116,15 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
+  // More → Duplicate (AGL-2936): the same copy the list's row menu makes.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}”`, {
+        variant: 'success',
+        persist: false,
+      }),
+  })
   const { queueLoading } = useLoading()
   const { confirm } = useConfirmationContext()
 
@@ -322,10 +336,25 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
             >
               {'Open Besigner'}
             </Button>
+            <RowActionsMenu
+              label={template?.displayName ?? templateId}
+              items={[
+                {
+                  key: 'duplicate',
+                  label: DUPLICATE_MENU_LABEL,
+                  onClick: () =>
+                    duplicate.request('template', {
+                      id: templateId,
+                      name: template?.displayName ?? '',
+                    }),
+                },
+              ]}
+            />
           </Stack>
         )
       }
     >
+      {duplicate.dialog}
       {notFound ? (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <ArtifactNotFound

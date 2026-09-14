@@ -70,6 +70,14 @@ Pages the site builds without a screen of their own — search results, author p
 collection with no template screen — render inside the site's built-in page layout with its
 properties' defaults.
 
+## Duplicate
+
+**Duplicate…** in a layout's row menu (and under **More** on its detail page)
+makes a second layout with the same element tree and properties as the latest
+saved version, named `Copy of <layout>` unless you type another name. No
+screen uses the copy until you assign it, so nothing on the live site changes.
+The copy counts against your shared-layout allowance like a new layout.
+
 ## Used by
 
 A layout's detail page has a **Used by** card listing everything that renders inside it,

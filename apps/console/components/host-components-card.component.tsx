@@ -26,6 +26,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { type GridColDef } from '@mui/x-data-grid'
 import {
   mdiBookmarkOutline,
+  mdiContentCopy,
   mdiEyeOutline,
   mdiPencilOutline,
   mdiStorefrontOutline,
@@ -72,6 +73,8 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
 import { useCallback, useEffect, useState } from 'react'
 import {
+  DUPLICATE_MENU_LABEL,
+  useDuplicateResource,
   useFirestore,
   useHostVersionApi,
   usePagedCollection,
@@ -133,6 +136,16 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   const firestore = useFirestore()
   const createHostVersion = useHostVersionApi()
   const { enqueueSnackbar } = useSnackbar()
+  // Duplicate (AGL-2936): the copy has the definition and a first version
+  // of its own and no instances, so no screen changes.
+  const duplicate = useDuplicateResource({
+    hostId,
+    onDuplicated: (_kind, copy) =>
+      enqueueSnackbar(`Duplicated as “${copy.name}”`, {
+        variant: 'success',
+        persist: false,
+      }),
+  })
   const { confirm } = useConfirmationContext()
   const { org, ready: orgReady } = useCurrentOrg()
   /**
@@ -616,6 +629,16 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                 }),
             },
             {
+              key: 'duplicate',
+              label: DUPLICATE_MENU_LABEL,
+              icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+              onClick: () =>
+                duplicate.request('component', {
+                  id: definition.$id,
+                  name: definition.displayName ?? '',
+                }),
+            },
+            {
               key: 'save-template',
               label: 'Save as template',
               icon: <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />,
@@ -673,6 +696,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   // and screens/layouts do not repeat it either (AGL-693).
   return (
     <CardDisplay>
+      {duplicate.dialog}
       <ListTable
         rowHeight={TABLE_ROW_HEIGHT}
         columns={columns}
