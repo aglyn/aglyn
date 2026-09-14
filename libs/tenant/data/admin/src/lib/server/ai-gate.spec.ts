@@ -36,9 +36,8 @@ const mockCheckEntitlement = jest.fn()
 const mockGetUser = jest.fn()
 const mockFirestore = { kind: 'firestore' }
 
-jest.mock('./firebase-admin', () => ({
-  __esModule: true,
-  firebaseAdmin: {
+jest.mock('./firebase-admin', () => {
+  const admin = {
     app: () => ({
       auth: () => ({
         verifyIdToken: (token: string) => mockVerifyIdToken(token),
@@ -46,15 +45,21 @@ jest.mock('./firebase-admin', () => ({
       }),
       firestore: () => mockFirestore,
     }),
-  },
-  emailUnverifiedResponse: () =>
-    Response.json(
-      { error: 'Verify your email to continue', reason: 'email-unverified' },
-      { status: 403 },
-    ),
-  isImpersonationSession: (decoded: { impersonatedBy?: unknown }) =>
-    typeof decoded.impersonatedBy === 'string',
-}))
+  }
+  return {
+    __esModule: true,
+    firebaseAdmin: admin,
+    // `authForPool`, which reads the account record, takes the default export.
+    default: admin,
+    emailUnverifiedResponse: () =>
+      Response.json(
+        { error: 'Verify your email to continue', reason: 'email-unverified' },
+        { status: 403 },
+      ),
+    isImpersonationSession: (decoded: { impersonatedBy?: unknown }) =>
+      typeof decoded.impersonatedBy === 'string',
+  }
+})
 jest.mock('./id-token-refusal', () => ({
   __esModule: true,
   isRefusedIdToken: (error: unknown) =>

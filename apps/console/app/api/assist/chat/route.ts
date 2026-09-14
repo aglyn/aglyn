@@ -26,6 +26,7 @@ import {
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
   aiPermissionRefusal,
+  authForPool,
   checkRateLimit,
   emailUnverifiedResponse,
   featureLockdownRefusal,
@@ -933,11 +934,9 @@ async function handler(request: Request): Promise<Response> {
       uid: decoded.uid,
       org,
       staff,
-      getUser: (uid) =>
-        (decoded.firebase?.tenant
-          ? app.auth().tenantManager().authForTenant(decoded.firebase.tenant)
-          : app.auth()
-        ).getUser(uid),
+      // The pool the token was minted in: a tenant user is not in the
+      // project pool.
+      getUser: (uid) => authForPool(decoded.firebase?.tenant).getUser(uid),
     })
     if (tooYoung) return tooYoung
 

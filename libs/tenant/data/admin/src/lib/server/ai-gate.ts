@@ -38,6 +38,7 @@ import {
   type RateLimitResult,
 } from './api-http'
 import { recordUserAiRefusal } from './ai-usage-by-user'
+import { authForPool } from './auth-pools'
 import {
   publicAssistQuota,
   reserveAssistMessage,
@@ -302,11 +303,7 @@ export async function aiGateLadder(
     uid: decoded.uid,
     org,
     staff,
-    getUser: (uid) =>
-      (decoded.firebase?.tenant
-        ? app.auth().tenantManager().authForTenant(decoded.firebase.tenant)
-        : app.auth()
-      ).getUser(uid),
+    getUser: (uid) => authForPool(decoded.firebase?.tenant).getUser(uid),
     now: input.now,
   })
   if (tooYoung) return tooYoung
