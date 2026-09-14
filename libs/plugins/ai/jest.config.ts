@@ -1,3 +1,4 @@
+/* eslint-disable */
 /**
  * @license
  * Copyright 2022 Aglyn LLC
@@ -15,10 +16,18 @@
  * limitations under the License.
  */
 
-
-export * from './http-response-error'
-export * from './upstream-service-error'
-export * from './ns-error'
-export * from './ns-error-factory'
-export * from './tools'
-export * from './types'
+export default {
+  displayName: 'plugins-ai',
+  preset: '../../../jest.preset.js',
+  testEnvironment: 'jsdom',
+  transform: {
+    '^.+\\.[tj]sx?$': [
+      '@swc/jest',
+      // swcrc: false keeps the build-oriented .swcrc (which excludes spec
+      // files) from being applied to the jest transform.
+      { swcrc: false, jsc: { transform: { react: { runtime: 'automatic' } } } },
+    ],
+  },
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  coverageDirectory: '../../../coverage/libs/plugins/ai',
+}

@@ -1,0 +1,12 @@
+{
+  "status": 429,
+  "headers": {
+    "request-id": "req_a4"
+  },
+  "body": {
+    "error": {
+      "type": "rate_limit_error",
+      "message": "This organization has exceeded its rate limit."
+    }
+  }
+}

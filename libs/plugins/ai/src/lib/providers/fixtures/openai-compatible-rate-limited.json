@@ -1,0 +1,13 @@
+{
+  "status": 429,
+  "headers": {
+    "x-request-id": "req_o4"
+  },
+  "body": {
+    "error": {
+      "message": "Rate limit reached for gpt-5-mini.",
+      "type": "rate_limit_error",
+      "code": "rate_limit_exceeded"
+    }
+  }
+}

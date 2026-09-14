@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-
-export * from './http-response-error'
-export * from './upstream-service-error'
-export * from './ns-error'
-export * from './ns-error-factory'
-export * from './tools'
-export * from './types'
+// The server entry: the provider contract, the registry a provider
+// registers against, the model catalog and the routing table.
+export * from './providers/contract'
+export * from './providers/catalog'
+export * from './providers/registry'
+export * from './providers/routing'

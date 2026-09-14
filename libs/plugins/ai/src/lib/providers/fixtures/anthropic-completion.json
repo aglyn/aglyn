@@ -1,0 +1,42 @@
+{
+  "status": 200,
+  "headers": {
+    "request-id": "req_a1"
+  },
+  "body": {
+    "id": "msg_1",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-4-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "Here is "
+      },
+      {
+        "type": "text",
+        "text": "the section."
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_1",
+        "name": "emit_section",
+        "input": {
+          "rootId": "n1",
+          "nodes": {
+            "n1": {
+              "componentId": "muiStack"
+            }
+          }
+        }
+      }
+    ],
+    "stop_reason": "tool_use",
+    "usage": {
+      "input_tokens": 900,
+      "output_tokens": 120,
+      "cache_read_input_tokens": 400,
+      "cache_creation_input_tokens": 50
+    }
+  }
+}

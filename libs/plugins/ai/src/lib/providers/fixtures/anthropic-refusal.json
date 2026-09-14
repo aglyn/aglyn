@@ -1,0 +1,18 @@
+{
+  "status": 200,
+  "headers": {
+    "request-id": "req_a2"
+  },
+  "body": {
+    "content": [],
+    "stop_reason": "refusal",
+    "stop_details": {
+      "type": "refusal",
+      "category": "cyber"
+    },
+    "usage": {
+      "input_tokens": 40,
+      "output_tokens": 1
+    }
+  }
+}
