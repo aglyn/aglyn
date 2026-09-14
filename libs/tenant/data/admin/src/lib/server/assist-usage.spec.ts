@@ -34,6 +34,10 @@ import {
   assistRefusedByHardCap,
   assistUsdFromCredits,
 } from '@aglyn/aglyn/app-utils/assist-credits'
+import {
+  FREE_AI_TASTE_CREDITS_PER_MONTH,
+  PLAN_ENTITLEMENTS,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 
@@ -241,10 +245,6 @@ const {
   freeAssistAccount,
   readPlatformFreeSpend,
 } = require('./assist-free-taste') as typeof import('./assist-free-taste')
-const {
-  FREE_AI_TASTE_CREDITS_PER_MONTH,
-  PLAN_ENTITLEMENTS,
-} = require('@aglyn/aglyn/app-utils/plan-entitlements') as typeof import('@aglyn/aglyn/app-utils/plan-entitlements')
 
 const NOW = new Date('2026-08-17T12:00:00Z')
 const ORG = 'org-assist'
