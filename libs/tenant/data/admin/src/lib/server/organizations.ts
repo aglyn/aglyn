@@ -1018,6 +1018,31 @@ async function loadOrgCustomRoles(
 }
 
 /**
+ * How the projections are written: REPLACED, not merged (AGL-2985).
+ *
+ * `{ merge: true }` merges a map key by key and keeps every key the new map
+ * does not name, so a projection written that way could add a member and
+ * never take one away. A collaborator whose site access was revoked, or a
+ * member removed from the organization, drops out of the recomputed
+ * `memberRoles` — and kept their old key on the host document, which is the
+ * one thing the Firestore rules read to let a person edit and publish a
+ * site. `memberPermissions` kept their AI verdict the same way. The member
+ * projections are written by the same rule, so no recomputed field can keep
+ * a value its recomputation dropped.
+ *
+ * `mergeFields` overwrites exactly the listed fields whole and leaves the
+ * rest of the document untouched, which is all the merge was for. Every
+ * listed map is recomputed from the complete roster on every write, so
+ * replacing it loses nothing a merge would have kept correctly.
+ */
+const HOST_PROJECTION_WRITE: FirebaseFirestore.SetOptions = {
+  mergeFields: ['orgId', 'memberRoles', 'memberPermissions', 'updatedAt'],
+}
+const MEMBER_PROJECTION_WRITE: FirebaseFirestore.SetOptions = {
+  mergeFields: ['scopeTokens', 'resolvedPermissions'],
+}
+
+/**
  * Recomputes the denormalized authorization projections after a membership
  * change: `memberRoles` and `memberPermissions` on every host the org owns
  * (or one host when given), and `scopeTokens` + `resolvedPermissions` on
@@ -1067,7 +1092,9 @@ export async function syncOrgAuthProjections(
         ((await orgRef.get()).data() as AglynOrganization | undefined)
           ?.hosts ?? {},
       )
-  const writes: Array<[FirebaseFirestore.DocumentReference, object]> = [
+  const writes: Array<
+    [FirebaseFirestore.DocumentReference, object, FirebaseFirestore.SetOptions]
+  > = [
     ...hostIds.map(
       (id) =>
         [
@@ -1085,7 +1112,12 @@ export async function syncOrgAuthProjections(
             ),
             updatedAt: FieldValue.serverTimestamp(),
           },
-        ] as [FirebaseFirestore.DocumentReference, object],
+          HOST_PROJECTION_WRITE,
+        ] as [
+          FirebaseFirestore.DocumentReference,
+          object,
+          FirebaseFirestore.SetOptions,
+        ],
     ),
     ...members.map(
       (member) =>
@@ -1104,15 +1136,23 @@ export async function syncOrgAuthProjections(
               member.roleId ? (customRoles.get(member.roleId) ?? null) : null,
             ),
           },
-        ] as [FirebaseFirestore.DocumentReference, object],
+          MEMBER_PROJECTION_WRITE,
+        ] as [
+          FirebaseFirestore.DocumentReference,
+          object,
+          FirebaseFirestore.SetOptions,
+        ],
     ),
   ]
   // Hosts alone rarely approached the 500-write batch cap; hosts plus the
   // whole roster can, so commit in chunks rather than throwing on big orgs.
   for (let i = 0; i < writes.length; i += FIRESTORE_BATCH_LIMIT) {
     const batch = db.batch()
-    for (const [ref, data] of writes.slice(i, i + FIRESTORE_BATCH_LIMIT)) {
-      batch.set(ref, data, { merge: true })
+    for (const [ref, data, options] of writes.slice(
+      i,
+      i + FIRESTORE_BATCH_LIMIT,
+    )) {
+      batch.set(ref, data, options)
     }
     await batch.commit()
   }

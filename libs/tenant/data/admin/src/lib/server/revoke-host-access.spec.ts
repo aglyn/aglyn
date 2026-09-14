@@ -37,7 +37,11 @@
  *  - the fake's `set({ merge: true })` merges maps RECURSIVELY and honours
  *    delete sentinels at ANY depth. A shallow spread invents reds — it drops
  *    sentinels on the floor and replaces whole maps, so tests fail for a
- *    reason the subject never had.
+ *    reason the subject never had. `set({ mergeFields })` replaces each
+ *    listed field WHOLE and leaves every other field alone, and refuses a
+ *    listed field the data does not carry, as the SDK does — the projections
+ *    are written that way (AGL-2985), and a fake that read it as a plain
+ *    overwrite would wipe the member document it is meant to leave standing.
  *  - the fake's `update()` reproduces BOTH halves of the real contract: it
  *    rejects a missing document with the real gRPC `NOT_FOUND`, and it rejects
  *    a delete sentinel below the patch root with `INVALID_ARGUMENT`
@@ -173,8 +177,31 @@ function makeDoc(path: string) {
     }),
     set: async (
       data: Record<string, unknown>,
-      options?: { merge?: boolean },
+      options?: { merge?: boolean; mergeFields?: string[] },
     ) => {
+      if (options?.mergeFields) {
+        const next = { ...(docs.get(path) ?? {}) }
+        for (const field of options.mergeFields) {
+          const segments = field.split('.')
+          const value = segments.reduce<unknown>(
+            (node, segment) =>
+              isPlainObject(node)
+                ? (node as Record<string, unknown>)[segment]
+                : undefined,
+            data,
+          )
+          if (value === undefined) {
+            throw grpcError(
+              GRPC_INVALID_ARGUMENT,
+              `Field "${field}" is specified in your field mask but not in ` +
+                `your input data (${path})`,
+            )
+          }
+          writeFieldPath(next, segments, value)
+        }
+        docs.set(path, next)
+        return undefined
+      }
       docs.set(
         path,
         options?.merge
@@ -245,7 +272,7 @@ function makeFirestore() {
         set: (
           ref: { path: string },
           data: Record<string, unknown>,
-          options?: { merge?: boolean },
+          options?: { merge?: boolean; mergeFields?: string[] },
         ) => {
           queued.push(async () => {
             await makeDoc(ref.path).set(data, options)
