@@ -19,6 +19,7 @@ import type { AglynNodeSchema, NodeId } from '../foundation'
 import {
   COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
   type CollectionEntryDateFormat,
+  collectionEntryPublishedAtIso,
   formatCollectionEntryDate,
   normalizeCollectionEntryDateFormat,
 } from './collection-entry-date'
@@ -301,6 +302,19 @@ export interface CollectionEntryRecord {
   author?: ContentAuthorRecord | null
   body?: string
   coverImage?: string
+  /**
+   * The entry's featured video (AGL-2956), stored in the shape
+   * {@link coverImage} is: a `media:{scope}/{id}` reference or a URL, a Wistia
+   * media link included. Raw here for the reason every image field in this
+   * file is raw — the resolver needs the rendering host, which this record
+   * does not carry.
+   *
+   * An entry of a video collection is an article whose featured video sits
+   * where a post's cover image would, which is what makes its page a watch
+   * page. `{{entry.coverVideo}}` binds it into a template's Video element, and
+   * the built-in entry page plays it with no template at all.
+   */
+  coverVideo?: string
   /** Search-result title override (AGL-582); falls back to `title`. */
   seoTitle?: string
   /** Meta description override (AGL-582); falls back to `excerpt`. */
@@ -500,6 +514,10 @@ export function collectionEntryTokens(
     'entry.excerpt': entry.excerpt ?? '',
     'entry.body': entry.body ?? '',
     'entry.coverImage': entry.coverImage ?? '',
+    // The featured video (AGL-2956), raw like the cover: a template binds it
+    // into a Video element's source, and the element resolves a reference
+    // against the site rendering it.
+    'entry.coverVideo': entry.coverVideo ?? '',
     'entry.slug': entry.slug ?? '',
     'entry.url': `/${slug}/${entry.slug ?? ''}`,
     // Which section this entry belongs to (AGL-2518). Worth binding only on a
@@ -509,6 +527,10 @@ export function collectionEntryTokens(
     'entry.collectionSlug': slug,
     'entry.collectionUrl': slug ? `/${slug}` : '',
     'entry.date': meta.date,
+    // The same instant for a parser (AGL-2956). `entry.date` is written for a
+    // reader, so a Video element's publication date bound to it publishes an
+    // `uploadDate` no crawler can read; this one is an ISO date-time.
+    'entry.publishedAt': collectionEntryPublishedAtIso(entry.publishedAt),
     // The byline (AGL-1459). Bindable by hand for the same reason every other
     // field is: a template that wants it somewhere Entry Meta does not reach.
     'entry.author': meta.author,

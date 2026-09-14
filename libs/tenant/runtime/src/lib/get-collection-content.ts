@@ -109,6 +109,12 @@ export interface CollectionEntrySummary {
   coverImage?: string
   /** `og:image:alt` for the cover (AGL-2417); travels WITH `coverImage`. */
   coverImageAlt?: string
+  /**
+   * The featured video (AGL-2956): a media reference or a URL, a Wistia link
+   * included, in the shape `coverImage` is. See
+   * `CollectionEntryRecord.coverVideo`.
+   */
+  coverVideo?: string
   /** Search-result title override (AGL-582); falls back to `title`. */
   seoTitle?: string
   /** Meta description override (AGL-582); falls back to `excerpt`. */
@@ -150,6 +156,7 @@ function mapEntryFields(
   | 'excerpt'
   | 'coverImage'
   | 'coverImageAlt'
+  | 'coverVideo'
   | 'seoTitle'
   | 'seoDescription'
   | 'authorName'
@@ -173,6 +180,9 @@ function mapEntryFields(
     authorId: value['authorId'] ?? '',
     coverImage: value['coverImage'] ?? '',
     coverImageAlt: value['coverImageAlt'] ?? '',
+    // Here, where both read paths pick it up, so a list card and the routed
+    // entry page can each bind the featured video (AGL-2956).
+    coverVideo: value['coverVideo'] ?? '',
     seoTitle: value['seoTitle'] ?? '',
     seoDescription: value['seoDescription'] ?? '',
     categoryId: value['categoryId'] ?? '',

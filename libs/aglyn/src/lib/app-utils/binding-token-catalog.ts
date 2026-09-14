@@ -68,6 +68,18 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     label: 'Published date',
     description: 'Formatted publish date.',
   },
+  /*
+    Beside the readable date on purpose: a designer reaching for "the date" in
+    a Video element's Publication date field has to see that the readable one
+    is the wrong pick there, and why.
+  */
+  {
+    token: '{{entry.publishedAt}}',
+    label: 'Publish timestamp',
+    description:
+      'The publish date and time in ISO 8601, for a field that needs a ' +
+      'machine-readable date, such as a Video element’s publication date.',
+  },
   {
     token: '{{entry.author}}',
     label: 'Author',
@@ -131,6 +143,13 @@ export const ENTRY_TOKEN_CATALOG: readonly BindingTokenCatalogEntry[] = [
     token: '{{entry.coverImage}}',
     label: 'Cover image',
     description: 'Cover image URL.',
+  },
+  {
+    token: '{{entry.coverVideo}}',
+    label: 'Featured video',
+    description:
+      'The featured video’s source — a library film, a video link or a ' +
+      'Wistia link — for a Video element.',
   },
   {
     token: '{{entry.category}}',
