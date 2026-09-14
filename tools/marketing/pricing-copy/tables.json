@@ -1239,6 +1239,31 @@
           "agency": 20,
           "enterprise": 40
         }
+      },
+      {
+        "label": "Aglyn AI",
+        "priceUsdByPlan": {
+          "free": null,
+          "starter": 9,
+          "pro": 19,
+          "business": 39,
+          "scale": 69,
+          "advanced": 99,
+          "agency": 299,
+          "enterprise": null
+        },
+        "scope": "organization",
+        "maxQuantity": 1,
+        "creditsByPlan": {
+          "free": 0,
+          "starter": 4000,
+          "pro": 9000,
+          "business": 19000,
+          "scale": 34000,
+          "advanced": 49000,
+          "agency": 149000,
+          "enterprise": 298000
+        }
       }
     ]
   }

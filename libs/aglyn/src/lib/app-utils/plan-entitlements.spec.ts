@@ -81,7 +81,12 @@ import {
   marketplacePriceCostNote,
   marketplacePriceFloorHint,
   marketplaceSaleEconomics,
+  AI_ADDON_CREDITS_PER_MONTH,
+  AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
+  aiAddonUnits,
+  hasAiAddon,
 } from './plan-entitlements'
+import { ASSIST_CREDIT_COST_USD } from './assist-credits'
 import type { OrgPlan } from '../foundation'
 
 describe('plan entitlements', () => {
@@ -255,6 +260,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
         extraAssistCreditsUsdPer1k: null,
+        aiAddonMonthlyUsd: null,
         extraContactsUsdPer1k: null,
         extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
@@ -269,6 +275,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
         extraAssistCreditsUsdPer1k: null,
+        aiAddonMonthlyUsd: 9,
         extraContactsUsdPer1k: 1,
         extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: true,
@@ -283,6 +290,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: null,
         extraAssistCreditsUsdPer1k: 3,
+        aiAddonMonthlyUsd: 19,
         extraContactsUsdPer1k: 0.75,
         extraEmailSendsUsdPer1k: 2.25,
         meteredInfraPassThrough: true,
@@ -297,6 +305,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.5,
         extraAssistCreditsUsdPer1k: 2.75,
+        aiAddonMonthlyUsd: 39,
         extraContactsUsdPer1k: 0.5,
         extraEmailSendsUsdPer1k: 2,
         meteredInfraPassThrough: true,
@@ -311,6 +320,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.35,
         extraAssistCreditsUsdPer1k: 2.5,
+        aiAddonMonthlyUsd: 69,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.9,
         meteredInfraPassThrough: true,
@@ -325,6 +335,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.2,
         extraAssistCreditsUsdPer1k: 2.25,
+        aiAddonMonthlyUsd: 99,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.85,
         meteredInfraPassThrough: true,
@@ -339,6 +350,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.36,
         extraApiRequestsUsdPer1k: 0.15,
         extraAssistCreditsUsdPer1k: 2,
+        aiAddonMonthlyUsd: 299,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.8,
         meteredInfraPassThrough: true,
@@ -356,6 +368,7 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
         extraAssistCreditsUsdPer1k: null,
+        aiAddonMonthlyUsd: null,
         extraContactsUsdPer1k: null,
         extraEmailSendsUsdPer1k: null,
         meteredInfraPassThrough: false,
@@ -2957,5 +2970,170 @@ describe('the saved-form catalog is one ceiling, not a ladder', () => {
       expect(checkFormSubmissionQuota(starter, 0).allowed).toBe(true)
       expect(checkFormSubmissionQuota(starter, 199).allowed).toBe(true)
     })
+  })
+})
+
+describe('the Aglyn AI add-on (AGL-2896)', () => {
+  const PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
+  const SOLD = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency'] as const
+
+  it('no self-serve tier includes generative building; Enterprise carries it in the agreement', () => {
+    for (const plan of PLANS) {
+      expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].features.aiGenerative}`).toBe(
+        `${plan}: ${plan === 'enterprise'}`,
+      )
+    }
+    // The flag is distinct from `aiAssist`, which Pro and up already carry.
+    expect(PLAN_ENTITLEMENTS.pro.features.aiAssist).toBe(true)
+    expect(PLAN_ENTITLEMENTS.pro.features.aiGenerative).toBe(false)
+    expect(checkEntitlement({ plan: 'agency' } as any, 'aiGenerative')).toBe(false)
+  })
+
+  it('expands the assist pool and flips BOTH features when purchased', () => {
+    const starter = resolveOrgEntitlements({
+      plan: 'starter',
+      seatAddons: { aiAddon: 1 },
+    } as any)
+    expect(starter.assistCreditsPerMonth).toBe(
+      PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.starter,
+    )
+    expect(starter.assistCreditsPerMonth).toBe(4_000)
+    expect(starter.features.aiGenerative).toBe(true)
+    // Starter has no `aiAssist` of its own; the add-on is its whole assistant.
+    expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(false)
+    expect(starter.features.aiAssist).toBe(true)
+    // Nothing else moves.
+    expect(starter.hostLimit).toBe(PLAN_ENTITLEMENTS.starter.hostLimit)
+    expect(starter.features.eventCalendar).toBe(PLAN_ENTITLEMENTS.starter.features.eventCalendar)
+    // On a plan with a band, the add-on ADDS to it — never replaces it.
+    const pro = resolveOrgEntitlements({ plan: 'pro', seatAddons: { aiAddon: 1 } } as any)
+    expect(pro.assistCreditsPerMonth).toBe(2_750 + 9_000)
+    expect(checkEntitlement({ plan: 'pro', seatAddons: { aiAddon: 1 } } as any, 'aiGenerative')).toBe(true)
+  })
+
+  it('clamps at one: the add-on is org-wide, so a quantity above one is one purchase', () => {
+    // FORCED RED by multiplying the band by the stored quantity.
+    for (const quantity of [1, 2, 9]) {
+      expect(
+        resolveOrgEntitlements({ plan: 'business', seatAddons: { aiAddon: quantity } } as any)
+          .assistCreditsPerMonth,
+      ).toBe(PLAN_ENTITLEMENTS.business.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.business)
+      expect(aiAddonUnits({ aiAddon: quantity })).toBe(1)
+    }
+    for (const quantity of [0, -3, Number.NaN, undefined]) {
+      expect(aiAddonUnits({ aiAddon: quantity })).toBe(0)
+      expect(
+        resolveOrgEntitlements({ plan: 'business', seatAddons: { aiAddon: quantity } } as any)
+          .features.aiGenerative,
+      ).toBe(false)
+    }
+    expect(aiAddonUnits(null)).toBe(0)
+  })
+
+  it('stacks on a per-org override, after it, the way purchased sites stack on a raised hostLimit', () => {
+    const contracted = resolveOrgEntitlements({
+      plan: 'starter',
+      entitlements: { assistCreditsPerMonth: 1_000 },
+      seatAddons: { aiAddon: 1 },
+    } as any)
+    expect(contracted.assistCreditsPerMonth).toBe(1_000 + 4_000)
+    // A feature override the other way is not taken back by the add-on.
+    const overridden = resolveOrgEntitlements({
+      plan: 'agency',
+      entitlements: { features: { aiGenerative: true } },
+    } as any)
+    expect(overridden.features.aiGenerative).toBe(true)
+    expect(overridden.assistCreditsPerMonth).toBe(PLAN_ENTITLEMENTS.agency.assistCreditsPerMonth)
+  })
+
+  it('goes with the subscription, and adds free’s zero when a dead one resolves to free', () => {
+    const dead = {
+      plan: 'pro',
+      subscription: { status: 'canceled' },
+      seatAddons: { aiAddon: 1 },
+    } as any
+    expect(hasAiAddon(dead)).toBe(false)
+    expect(resolveOrgEntitlements(dead).assistCreditsPerMonth).toBe(0)
+    expect(resolveOrgEntitlements(dead).features.aiGenerative).toBe(false)
+    expect(resolveOrgEntitlements(dead).features.aiAssist).toBe(false)
+    // Dunning grace keeps it, as it keeps every other add-on.
+    const pastDue = { ...dead, subscription: { status: 'past_due' } }
+    expect(hasAiAddon(pastDue)).toBe(true)
+    expect(resolveOrgEntitlements(pastDue).assistCreditsPerMonth).toBe(2_750 + 9_000)
+    // Free never sells it: a quantity on a Free org adds nothing.
+    expect(
+      resolveOrgEntitlements({ plan: 'free', seatAddons: { aiAddon: 1 } } as any)
+        .assistCreditsPerMonth,
+    ).toBe(0)
+  })
+
+  it('reaches the revenue figure: the add-on bills once, monthly, on either interval', () => {
+    expect(
+      orgListPriceMonthlyUsd({
+        plan: 'starter',
+        subscription: { status: 'active' },
+        seatAddons: { aiAddon: 1 },
+      } as any),
+    ).toBe(25 + 9)
+    // Annual: the base takes the annual price; the add-on is x12 with no
+    // discount, so its monthly contribution is the same.
+    expect(
+      orgMonthlyRevenueUsd({
+        plan: 'starter',
+        subscription: { status: 'active', interval: 'year' },
+        seatAddons: { aiAddon: 1 },
+      } as any),
+    ).toBe(16 + 9)
+    // A stored quantity above one bills ONCE — the entitlement it buys is
+    // one, so the charge must be one.
+    expect(
+      orgListPriceMonthlyUsd({
+        plan: 'agency',
+        subscription: { status: 'active' },
+        seatAddons: { aiAddon: 3, hosts: 1 },
+      } as any),
+    ).toBe(1299 + 299 + 8)
+    // A plan with no price for it adds nothing.
+    expect(
+      orgListPriceMonthlyUsd({
+        plan: 'enterprise',
+        subscription: { status: 'active' },
+        seatAddons: { aiAddon: 1 },
+      } as any),
+    ).toBe(0)
+  })
+
+  it('prices a ladder that rises with the tier while its share of the base price falls', () => {
+    // As a list, so a failure prints the whole shape.
+    expect(SOLD.map((plan) => PLAN_PRICING[plan].aiAddonMonthlyUsd)).toEqual([9, 19, 39, 69, 99, 299])
+    expect(PLAN_PRICING.free.aiAddonMonthlyUsd).toBeNull()
+    expect(PLAN_PRICING.enterprise.aiAddonMonthlyUsd).toBeNull()
+    const shares = SOLD.map(
+      (plan) =>
+        (PLAN_PRICING[plan].aiAddonMonthlyUsd as number) / PLAN_PRICING[plan].basePriceMonthlyUsd,
+    )
+    for (let i = 1; i < shares.length; i += 1) {
+      expect(`${SOLD[i]}: ${shares[i] <= shares[i - 1]}`).toBe(`${SOLD[i]}: true`)
+    }
+    // The field's ~30% uplift, top and bottom of the ladder.
+    expect(Math.round(shares[0] * 100)).toBe(36)
+    expect(Math.round(shares[shares.length - 1] * 100)).toBe(23)
+  })
+
+  it('every band costs at most 50% of the add-on price, and Enterprise is Agency x 2, finite', () => {
+    for (const plan of SOLD) {
+      const price = PLAN_PRICING[plan].aiAddonMonthlyUsd as number
+      const costUsd = AI_ADDON_CREDITS_PER_MONTH[plan] * ASSIST_CREDIT_COST_USD
+      expect(`${plan}: ${costUsd <= price * 0.5}`).toBe(`${plan}: true`)
+    }
+    expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+    expect(AI_ADDON_CREDITS_PER_MONTH.enterprise).toBe(AI_ADDON_CREDITS_PER_MONTH.agency * 2)
+    for (const plan of PLANS) {
+      const band = AI_ADDON_CREDITS_PER_MONTH[plan]
+      expect(Number.isFinite(band)).toBe(true)
+      expect(band).not.toBe(UNLIMITED)
+    }
+    // Starter's overage rate joins the ladder at Pro's figure.
+    expect(AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K).toBe(PLAN_PRICING.pro.extraAssistCreditsUsdPer1k)
   })
 })

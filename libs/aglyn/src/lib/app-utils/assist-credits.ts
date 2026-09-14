@@ -16,6 +16,8 @@
  */
 
 import {
+  AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
+  hasAiAddon,
   PLAN_PRICING,
   resolveEffectivePlan,
   resolveOrgEntitlements,
@@ -118,6 +120,12 @@ export function assistCreditsFromUsd(usd: number): number {
  * budget of `$0` would refuse that rung outright — a tier's whole assistant
  * turned off by a pricing field that was never about it.
  *
+ * Starter WITH the Aglyn AI add-on (AGL-2896) is a different org: the
+ * resolver has added `AI_ADDON_CREDITS_PER_MONTH.starter` to its band, so it
+ * answers a real budget here and is metered like any Pro-and-up plan. The
+ * add-on widens the one pool rather than opening a second, which is why this
+ * function needs no knowledge of it.
+ *
  * The same reading is what makes the guard survive a stubbed entitlements
  * module. A test double that answers 0 for every quota produces `null` here,
  * which falls through to the operator backstop, rather than a budget of zero
@@ -166,6 +174,38 @@ export function assistCreditOverage(
   return Math.max(0, used - band)
 }
 
+/**
+ * The per-1,000 rate the org's assist credits are sold at past its band, or
+ * `null` when nothing is sold past it — the ONE reading of the rate
+ * (AGL-2896). `priceAssistCreditOverage`, `assistBandRefuses`,
+ * `assistRefusedByHardCap` and `assistHardCapRefusalText` all go through
+ * it, so the gate, the invoice and the refusal sentence cannot quote three
+ * different rates for one org.
+ *
+ * The plan's `extraAssistCreditsUsdPer1k` is the answer wherever it is set.
+ * Starter's is null because Starter sells no band — but Starter with the
+ * Aglyn AI add-on HAS a band, and a finite band with no rate beside it is
+ * usage past a bound that is silently free. That org sells at
+ * `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K`, read here rather than written
+ * onto `PLAN_PRICING`, where it would advertise a rate on a band the plan
+ * does not carry without the add-on. The add-on is read through
+ * `hasAiAddon`, so a dead subscription takes the rate away with the band.
+ *
+ * Free and Enterprise stay null with or without the add-on: Free sells
+ * neither the add-on nor a band, and Enterprise's usage is in the contract.
+ */
+export function resolveAssistOverageRateUsdPer1k(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number | null {
+  const plan = resolveEffectivePlan(org)
+  const listed = PLAN_PRICING[plan].extraAssistCreditsUsdPer1k
+  if (listed !== null) return listed
+  if (plan === 'starter' && hasAiAddon(org)) {
+    return AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K
+  }
+  return null
+}
+
 export interface AssistCreditOveragePrice {
   /** Credits past the plan's band, as handed in. */
   overageCredits: number
@@ -200,8 +240,7 @@ export function priceAssistCreditOverage(
   org: Partial<AglynOrgBilling> | null | undefined,
   overageCredits: number,
 ): AssistCreditOveragePrice {
-  const overageRateUsd =
-    PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k
+  const overageRateUsd = resolveAssistOverageRateUsdPer1k(org)
   const credits = Number(overageCredits)
   const over = Number.isFinite(credits) && credits > 0 ? credits : 0
   return {
@@ -300,11 +339,11 @@ export function resolveAssistHardCap(
  *
  * - **The org asked.** `assistOverage.hardCap` is the customer's own ceiling,
  *   the `storageOverage.capUsd` of this meter.
- * - **There is nothing to sell past it at.** A plan whose
- *   `extraAssistCreditsUsdPer1k` is `null` has no rate to bill, so credits
- *   past its band would be provider spend with no invoice line — the silent
- *   free overage `plan-entitlements.spec.ts` forbids. Enterprise is the
- *   case: its band is contractual and the switch changes nothing there.
+ * - **There is nothing to sell past it at.** An org whose
+ *   `resolveAssistOverageRateUsdPer1k` is `null` has no rate to bill, so
+ *   credits past its band would be provider spend with no invoice line — the
+ *   silent free overage `plan-entitlements.spec.ts` forbids. Enterprise is
+ *   the case: its band is contractual and the switch changes nothing there.
  *
  * Everything else sells past the band by default, which is the 2026-09-07
  * decision this function encodes. A plan with no band at all (Free, Starter)
@@ -315,9 +354,7 @@ export function assistBandRefuses(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
   if (resolveAssistHardCap(org)) return true
-  return (
-    PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k === null
-  )
+  return resolveAssistOverageRateUsdPer1k(org) === null
 }
 
 /**
@@ -334,7 +371,7 @@ export function assistRefusedByHardCap(
   return (
     refusedBy === 'band' &&
     resolveAssistHardCap(org) &&
-    PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k !== null
+    resolveAssistOverageRateUsdPer1k(org) !== null
   )
 }
 
@@ -348,7 +385,7 @@ export function assistRefusedByHardCap(
 export function assistHardCapRefusalText(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): string {
-  const rate = PLAN_PRICING[resolveEffectivePlan(org)].extraAssistCreditsUsdPer1k
+  const rate = resolveAssistOverageRateUsdPer1k(org)
   const rateClause =
     rate === null ? '' : ` at $${rate.toFixed(2)} per 1,000 credits`
   return (

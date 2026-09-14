@@ -45,9 +45,13 @@ import {
   resolveAssistBudgetUsd,
   resolveAssistCreditBudget,
   resolveAssistHardCap,
+  resolveAssistOverageRateUsdPer1k,
 } from './assist-credits'
 import {
+  AI_ADDON_CREDITS_PER_MONTH,
+  AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
   ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
+  hasAiAddon,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
 } from './plan-entitlements'
@@ -497,5 +501,143 @@ describe('the overage is SOLD past the band at the plan rate, unless the org ask
       expect(ASSIST_HARD_CAP_CONTROL_LABEL).toMatch(/^[A-Z][a-z]/)
       expect(ASSIST_HARD_CAP_CONTROL_LABEL).not.toMatch(/[_{}]/)
     })
+  })
+})
+
+describe('the Aglyn AI add-on widens the ONE pool and sells past it (AGL-2896)', () => {
+  const starterWithAddon = { plan: 'starter' as const, seatAddons: { aiAddon: 1 } }
+
+  it('gives Starter a band, a budget and a rate it had none of', () => {
+    // Without the add-on Starter is the "no band" case every ANTI-VACUITY
+    // assertion above pins. With it, the same org resolves a real budget.
+    expect(resolveAssistCreditBudget({ plan: 'starter' })).toBeNull()
+    expect(resolveAssistCreditBudget(starterWithAddon)).toBe(
+      AI_ADDON_CREDITS_PER_MONTH.starter,
+    )
+    expect(resolveAssistCreditBudget(starterWithAddon)).toBe(4_000)
+    expect(resolveAssistBudgetUsd(starterWithAddon)).toBe(4)
+    // …and a rate to sell past it at, which is Pro's, not a new rung.
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'starter' })).toBeNull()
+    expect(resolveAssistOverageRateUsdPer1k(starterWithAddon)).toBe(
+      AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
+    )
+    expect(AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K).toBe(
+      PLAN_PRICING.pro.extraAssistCreditsUsdPer1k,
+    )
+    // The rate is NOT written onto the plan: the table still says Starter
+    // sells no overage, because without the add-on it does not.
+    expect(PLAN_PRICING.starter.extraAssistCreditsUsdPer1k).toBeNull()
+  })
+
+  it('ADDS to a plan that already has a band, at the plan rate it already had', () => {
+    // FORCED RED by replacing the band rather than adding to it.
+    expect(resolveAssistCreditBudget({ plan: 'pro', seatAddons: { aiAddon: 1 } })).toBe(
+      2_750 + 9_000,
+    )
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'pro', seatAddons: { aiAddon: 1 } })).toBe(3)
+    expect(resolveAssistCreditBudget({ plan: 'agency', seatAddons: { aiAddon: 1 } })).toBe(
+      58_000 + 149_000,
+    )
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'agency', seatAddons: { aiAddon: 1 } })).toBe(2)
+  })
+
+  it('leaves Free and Enterprise with no rate, add-on or not', () => {
+    // Free sells no add-on: a quantity written onto it adds free's zero, so
+    // the budget stays "no band" and the assistant's docs rung keeps running.
+    expect(resolveAssistCreditBudget({ plan: 'free', seatAddons: { aiAddon: 1 } })).toBeNull()
+    expect(resolveAssistOverageRateUsdPer1k({ plan: 'free', seatAddons: { aiAddon: 1 } })).toBeNull()
+    // Enterprise: the band widens by the fallback figure, and the usage is
+    // still in the contract — no rate, so the band stays a wall.
+    expect(resolveAssistCreditBudget({ plan: 'enterprise', seatAddons: { aiAddon: 1 } })).toBe(
+      ENTERPRISE_ASSIST_CREDITS_PER_MONTH + AI_ADDON_CREDITS_PER_MONTH.enterprise,
+    )
+    expect(
+      resolveAssistOverageRateUsdPer1k({ plan: 'enterprise', seatAddons: { aiAddon: 1 } }),
+    ).toBeNull()
+    expect(assistBandRefuses({ plan: 'enterprise', seatAddons: { aiAddon: 1 } })).toBe(true)
+  })
+
+  it('every reader of the rate reads the SAME one', () => {
+    // The gate, the invoice and the refusal sentence, on the org whose rate
+    // comes from the add-on and not from the plan table.
+    expect(assistBandRefuses(starterWithAddon)).toBe(false)
+    expect(assistBandRefuses({ ...starterWithAddon, assistOverage: { hardCap: true } })).toBe(true)
+    expect(
+      assistRefusedByHardCap({ ...starterWithAddon, assistOverage: { hardCap: true } }, 'band'),
+    ).toBe(true)
+    expect(assistHardCapRefusalText(starterWithAddon)).toContain('$3.00 per 1,000 credits')
+    expect(priceAssistCreditOverage(starterWithAddon, 2_000)).toEqual({
+      overageCredits: 2_000,
+      overageMonthlyUsd: 6,
+      overageRateUsd: 3,
+    })
+    // The month's derivation, end to end: the band edge is the add-on's.
+    expect(assistMonthOverage(starterWithAddon, assistUsdFromCredits(4_000 + 2_500))).toEqual({
+      usedCredits: 6_500,
+      bandCredits: 4_000,
+      overageCredits: 2_500,
+      overageMonthlyUsd: 7.5,
+      overageRateUsd: 3,
+    })
+    // And without the add-on the same spend on Starter bills nothing and
+    // refuses at the (absent) band — the pre-add-on shape, unchanged.
+    expect(assistMonthOverage({ plan: 'starter' }, assistUsdFromCredits(6_500))).toMatchObject({
+      bandCredits: null,
+      overageMonthlyUsd: 0,
+      overageRateUsd: null,
+    })
+    expect(assistBandRefuses({ plan: 'starter' })).toBe(true)
+  })
+
+  it('is a toggle: any quantity from one up is one purchase, anything else is none', () => {
+    for (const quantity of [1, 2, 7, 1e6]) {
+      expect(hasAiAddon({ plan: 'starter', seatAddons: { aiAddon: quantity } })).toBe(true)
+      expect(
+        resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: quantity } }),
+      ).toBe(4_000)
+    }
+    for (const quantity of [0, -1, 0.5, Number.NaN, undefined] as unknown[]) {
+      expect(
+        hasAiAddon({ plan: 'starter', seatAddons: { aiAddon: quantity as number } }),
+      ).toBe(false)
+    }
+    expect(hasAiAddon({ plan: 'starter' })).toBe(false)
+    expect(hasAiAddon(null)).toBe(false)
+  })
+
+  it('goes with the subscription: a dead one drops the band and the rate together', () => {
+    // A rate on a band that has gone would be the silent free overage in
+    // reverse — a fee quoted on nothing. Both come from `hasAiAddon`.
+    const dead = {
+      plan: 'starter' as const,
+      subscription: { status: 'canceled' },
+      seatAddons: { aiAddon: 1 },
+    } as never
+    expect(hasAiAddon(dead)).toBe(false)
+    expect(resolveAssistCreditBudget(dead)).toBeNull()
+    expect(resolveAssistOverageRateUsdPer1k(dead)).toBeNull()
+    expect(assistBandRefuses(dead)).toBe(true)
+  })
+
+  it('every band costs at most 50% of the add-on price in provider spend', () => {
+    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, applied to the add-on line
+    // itself: what the band costs at 100% against what the add-on charges.
+    // Free and Enterprise sell no add-on and are asserted separately.
+    for (const plan of ['starter', ...PAID_TIERS] as const) {
+      const price = PLAN_PRICING[plan].aiAddonMonthlyUsd
+      if (price === null) throw new Error(`${plan} must price the add-on`)
+      const cost = assistUsdFromCredits(AI_ADDON_CREDITS_PER_MONTH[plan])
+      expect(`${plan}: ${cost / price <= 1 - ASSIST_CREDIT_MIN_MARGIN_PCT}`).toBe(`${plan}: true`)
+      // …and it is a real band, not a token one hiding under the floor.
+      expect(cost / price).toBeGreaterThan(0.4)
+    }
+    expect(PLAN_PRICING.free.aiAddonMonthlyUsd).toBeNull()
+    expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+    expect(PLAN_PRICING.enterprise.aiAddonMonthlyUsd).toBeNull()
+    // Enterprise's band follows the Agency x 2 rule and is finite.
+    expect(AI_ADDON_CREDITS_PER_MONTH.enterprise).toBe(AI_ADDON_CREDITS_PER_MONTH.agency * 2)
+    for (const band of Object.values(AI_ADDON_CREDITS_PER_MONTH)) {
+      expect(Number.isFinite(band)).toBe(true)
+    }
   })
 })

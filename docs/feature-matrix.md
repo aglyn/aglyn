@@ -24,6 +24,7 @@ this file is the last step, not the decision.
 | `abandonedCart` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `actions` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `aiAssist` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `aiGenerative` | — | — | — | — | — | — | — | ✓ |
 | `apiAccess` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `bookings` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `commerce` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -58,4 +59,4 @@ this file is the last step, not the decision.
 | `whiteLabel` | — | — | — | — | — | — | ✓ | ✓ |
 | `workflows` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-_37 features across 8 plans._
+_38 features across 8 plans._

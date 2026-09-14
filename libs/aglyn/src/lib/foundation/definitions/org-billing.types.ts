@@ -132,6 +132,23 @@ export interface OrgFeatureFlags {
   marketplaceSelling?: boolean
   /** AI copy assist in the besigner (AGL-89). */
   aiAssist?: boolean
+  /**
+   * Generative building and automation (AGL-2896): pages, components,
+   * layouts, templates, SEO, email, campaigns, A/B variants, analytics
+   * insights, products, CRM records, onboarding and workflows produced by
+   * the assistant rather than assembled by hand.
+   *
+   * Distinct from `aiAssist`, which is the chat guide, copy assist and
+   * generate-section rung every tier from Pro up carries. This is the
+   * expensive rung: a generated surface carries the node tree, the catalog
+   * and the theme in and iterates, so it draws credits by the hundreds where
+   * a question draws tens. No self-serve tier includes it; the Aglyn AI
+   * add-on (`OrgSeatAddons.aiAddon`) switches it on and adds the credit band
+   * that funds it, and `resolveOrgEntitlements` flips this flag together
+   * with `aiAssist` when the add-on is present. Enterprise carries it in the
+   * agreement.
+   */
+  aiGenerative?: boolean
   /** No-code workflow builder (AGL-101). */
   workflows?: boolean
   /** Datasets + repeatable components (AGL-102/103). */
@@ -558,7 +575,10 @@ export interface OrgEntitlements {
    * it held before assist was sold at all. `tier-margin-floor.spec.ts` is the
    * model, and it pins both the rule and the resulting figures.
    *
-   * 0 on Free and Starter, which carry no `aiAssist` and no band.
+   * 0 on Free and Starter, which carry no `aiAssist` and no band. The Aglyn
+   * AI add-on (AGL-2896) adds `AI_ADDON_CREDITS_PER_MONTH[plan]` to this
+   * band in `resolveOrgEntitlements` — one pool, widened, rather than a
+   * second meter — so Starter with the add-on carries a band after all.
    */
   assistCreditsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
@@ -647,6 +667,16 @@ export interface OrgSeatAddons {
   posRegisters?: number
   /** Event Calendar org-wide toggle, 0/1 (AGL-145/524). */
   eventCalendar?: number
+  /**
+   * Aglyn AI org-wide toggle, 0/1 (AGL-2896). One purchase covers every
+   * host in the org, the way Event Calendar does: `resolveOrgEntitlements`
+   * reads any quantity >= 1 as one, adds the plan's
+   * `AI_ADDON_CREDITS_PER_MONTH` band to `assistCreditsPerMonth`, and
+   * switches `features.aiGenerative` and `features.aiAssist` on. Priced per
+   * plan at `PlanPricing.aiAddonMonthlyUsd`; `null` there means the plan
+   * does not sell it.
+   */
+  aiAddon?: number
 }
 
 /**

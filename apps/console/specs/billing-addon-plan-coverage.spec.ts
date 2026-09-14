@@ -39,10 +39,14 @@
  * dashboard) could be re-priced as if it were the plan.
  */
 
-import { SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
+import { PLAN_PRICING, SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
 import {
+  ADDON_KINDS,
   addonKindFromPriceId,
+  addonMaxForPlan,
+  addonPriceId,
   addonQuantitiesFromItems,
+  addonUnitUsd,
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
@@ -60,7 +64,7 @@ const PRICE_ENV: Record<string, string> = {}
 for (const plan of ['STARTER', 'PRO', 'BUSINESS', 'SCALE', 'ADVANCED', 'AGENCY']) {
   PRICE_ENV[`STRIPE_PRICE_${plan}`] = `price_${plan.toLowerCase()}`
   PRICE_ENV[`STRIPE_PRICE_${plan}_YEARLY`] = `price_${plan.toLowerCase()}_yearly`
-  for (const suffix of ['EXTRA_SEAT', 'EXTRA_MEMBER', 'EXTRA_DATASET', 'EXTRA_HOST']) {
+  for (const suffix of ['EXTRA_SEAT', 'EXTRA_MEMBER', 'EXTRA_DATASET', 'EXTRA_HOST', 'AI_ADDON']) {
     const base = `price_${plan.toLowerCase()}_${suffix.toLowerCase()}`
     PRICE_ENV[`STRIPE_PRICE_${plan}_${suffix}`] = base
     PRICE_ENV[`STRIPE_PRICE_${plan}_${suffix}_YEARLY`] = `${base}_yearly`
@@ -120,6 +124,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
         item(`${prefix}_extra_host`, 2),
         item('price_pos_register', 5),
         item('price_event_calendar', 1),
+        item(`${prefix}_ai_addon`, 1),
       ]
       // The bug, precisely: every one of these was 0 before the fix, and the
       // webhook merged that onto the org doc as the truth.
@@ -130,6 +135,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
         hosts: 2,
         posRegisters: 5,
         eventCalendar: 1,
+        aiAddon: 1,
       })
     },
   )
@@ -195,6 +201,7 @@ describe('the base plan item is identified explicitly (AGL-1340)', () => {
       hosts: 0,
       posRegisters: 0,
       eventCalendar: 0,
+      aiAddon: 0,
     })
   })
 
@@ -254,5 +261,48 @@ describe('the metered price is chosen by billing interval (AGL-1280)', () => {
         plan,
       ]),
     ).toBe(plan)
+  })
+})
+
+describe('the Aglyn AI add-on is a per-plan, 0/1 kind (AGL-2896)', () => {
+  it('is a kind the catalog enumerates, priced from PLAN_PRICING on every plan', () => {
+    expect(ADDON_KINDS).toContain('aiAddon')
+    for (const plan of SELF_SERVE_PLANS) {
+      expect(`${plan}: ${addonUnitUsd('aiAddon', plan)}`).toBe(
+        `${plan}: ${PLAN_PRICING[plan].aiAddonMonthlyUsd}`,
+      )
+    }
+    // Sold on every paid self-serve plan, and on neither end of the ladder.
+    expect(addonUnitUsd('aiAddon', 'starter')).toBe(9)
+    expect(addonUnitUsd('aiAddon', 'agency')).toBe(299)
+    expect(addonUnitUsd('aiAddon', 'free')).toBeNull()
+    expect(addonUnitUsd('aiAddon', 'enterprise')).toBeNull()
+  })
+
+  it('names its Stripe price per plan and per interval, and round-trips it', () => {
+    // `STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]`, the per-plan shape the seat
+    // kinds use — not the flat one, because the price differs by tier.
+    expect(addonPriceId('aiAddon', 'pro', 'month')).toBe('price_pro_ai_addon')
+    expect(addonPriceId('aiAddon', 'pro', 'year')).toBe('price_pro_ai_addon_yearly')
+    expect(addonPriceId('aiAddon', 'free', 'month')).toBeNull()
+    for (const plan of PAID_PLANS) {
+      for (const interval of ['month', 'year'] as const) {
+        expect(addonKindFromPriceId(addonPriceId('aiAddon', plan, interval))).toBe('aiAddon')
+      }
+    }
+    // …and the webhook's read-back sees it, so the purchase lands on the org.
+    expect(
+      addonQuantitiesFromItems([item('price_starter'), item('price_starter_ai_addon_yearly', 1)]),
+    ).toMatchObject({ aiAddon: 1 })
+  })
+
+  it('caps at one on every plan: it is an org-wide toggle', () => {
+    for (const plan of PAID_PLANS) {
+      expect(`${plan}: ${addonMaxForPlan('aiAddon', plan)}`).toBe(`${plan}: 1`)
+    }
+    // The ceiling is one for the plans that cannot buy it too; the price map
+    // (null) is what refuses the sale there, exactly as it does for a
+    // register on a plan without POS.
+    expect(addonMaxForPlan('eventCalendar', 'pro')).toBe(1)
   })
 })

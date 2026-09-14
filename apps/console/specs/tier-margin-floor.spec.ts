@@ -120,6 +120,7 @@ import {
   meteredIncludedAllowance,
 } from '../utils/usage-metering'
 import {
+  AI_ADDON_CREDITS_PER_MONTH,
   BANDWIDTH_ABUSE_CEILING_FLOOR,
   BANDWIDTH_ABUSE_CEILING_MULTIPLE,
   ESTIMATED_PAGE_TRANSFER_BYTES,
@@ -1883,5 +1884,129 @@ describe('the infra pass-through is priced by a different rule', () => {
     // Finite, where it used to be `Infinity` — an org-wide form band that no
     // amount of usage could exceed billed nothing, ever.
     expect(Number.isFinite(allowance.formSubmissions)).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// THE AGLYN AI ADD-ON (AGL-2896). It widens the assist band on the plan an
+// org already has, so every figure above is the tier WITHOUT it. This block
+// is the same rule with the add-on's band at 100% and the add-on's own
+// revenue counted: the customer who buys it and spends all of it must still
+// pay for themselves, at the annual price, net of Stripe.
+// ---------------------------------------------------------------------------
+describe('the Aglyn AI add-on band clears the same invariant with its revenue counted', () => {
+  /** What the add-on's band costs at 100%, on the rate the meter uses. */
+  const addonCostUsd = (plan: OrgPlan) =>
+    AI_ADDON_CREDITS_PER_MONTH[plan] * ASSIST_CREDIT_COST_USD
+
+  /** The add-on's monthly price; the plan sells it, or this block is not about it. */
+  const addonPriceUsd = (plan: OrgPlan) => {
+    const price = PLAN_PRICING[plan].aiAddonMonthlyUsd
+    if (price === null) throw new Error(`${plan} sells no Aglyn AI add-on`)
+    return price
+  }
+
+  /**
+   * The tier's margin with the add-on: the plan at `interval` plus the
+   * add-on's flat monthly price (x12 on annual, no discount — the one charge
+   * for the year is what the fee amortizes over), net of Stripe, less the
+   * plan's full-utilization cost plus the add-on band's.
+   */
+  const marginWithAddon = (plan: OrgPlan, interval: Interval) => {
+    const price = listPriceUsd(plan, interval) + addonPriceUsd(plan)
+    const net = netOfProcessorFee(price, interval === 'year')
+    const cost = tierCostUsd(plan, 1) + addonCostUsd(plan)
+    return (net - cost) / price
+  }
+
+  it('is non-negative on every tier that sells it, at 100% of every band and the add-on band', () => {
+    // FORCED RED by pricing the add-on band at Agency's size on Starter:
+    // $149 of spend against $24.25 net.
+    const offenders = PAID.filter((plan) => !(marginWithAddon(plan, 'year') >= 0))
+    expect(
+      Object.fromEntries(
+        offenders.map((plan) => [
+          plan,
+          `$${listPriceUsd(plan, 'year') + addonPriceUsd(plan)} annual price, vs ` +
+            `$${(tierCostUsd(plan, 1) + addonCostUsd(plan)).toFixed(2)} cost`,
+        ]),
+      ),
+    ).toEqual({})
+    expect(PAID.filter((plan) => !(marginWithAddon(plan, 'month') >= 0))).toEqual([])
+    // Pinned, both intervals, so a band widened or a price cut has to come
+    // here and say what it did.
+    expect(
+      Object.fromEntries(
+        PAID.map((plan) => [
+          plan,
+          [Number((marginWithAddon(plan, 'year') * 100).toFixed(1)),
+            Number((marginWithAddon(plan, 'month') * 100).toFixed(1))],
+        ]),
+      ),
+    ).toEqual({
+      starter: [39.6, 54],
+      pro: [18.2, 35.7],
+      business: [14.9, 33.2],
+      scale: [14.8, 32.8],
+      advanced: [13.5, 30.2],
+      agency: [12.5, 25.7],
+    })
+  })
+
+  it('IMPROVES every tier’s margin: the add-on earns more than its band costs', () => {
+    // The add-on line clears the retail floor on its own, so stacking it on
+    // a plan at 100% cannot pull the plan under — asserted per tier rather
+    // than argued, because "sold above cost" and "improves the bundle" are
+    // two claims and only the second is what a customer buying it exercises.
+    for (const plan of PAID) {
+      expect(`${plan}: ${marginWithAddon(plan, 'year') > tierMargin(plan, 1, 'year')}`).toBe(
+        `${plan}: true`,
+      )
+    }
+  })
+
+  it('costs at most 50% of the add-on price on every tier, in provider spend', () => {
+    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, held on the add-on line the
+    // way `assist-credits.spec.ts` holds it on the overage ladder — and pinned
+    // as the share, to one decimal, so the next band move is visible.
+    expect(
+      Object.fromEntries(
+        PAID.map((plan) => [
+          plan,
+          Number(((addonCostUsd(plan) / addonPriceUsd(plan)) * 100).toFixed(1)),
+        ]),
+      ),
+    ).toEqual({
+      starter: 44.4,
+      pro: 47.4,
+      business: 48.7,
+      scale: 49.3,
+      advanced: 49.5,
+      agency: 49.8,
+    })
+    for (const plan of PAID) {
+      expect(addonCostUsd(plan) / addonPriceUsd(plan)).toBeLessThanOrEqual(0.5)
+    }
+    // CONTROL: the detector can fail. One more thousand credits on Agency
+    // crosses the floor.
+    expect((addonCostUsd('agency') + 1) / addonPriceUsd('agency')).toBeGreaterThan(0.5)
+  })
+
+  it('reads the add-on band on the SAME rate the meter does, and it is finite everywhere', () => {
+    expect(ASSIST_CREDIT_COST_USD).toBe(0.001)
+    for (const plan of PAID) {
+      expect(`${plan}: ${addonCostUsd(plan)}`).toBe(
+        `${plan}: ${assistUsdFromCredits(AI_ADDON_CREDITS_PER_MONTH[plan])}`,
+      )
+    }
+    // Free sells none and Enterprise is Agency x 2 — the rule every
+    // Enterprise fallback follows — and neither is `UNLIMITED`, for the
+    // reason the `UNLIMITED` block above gives.
+    expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+    expect(AI_ADDON_CREDITS_PER_MONTH.enterprise).toBe(AI_ADDON_CREDITS_PER_MONTH.agency * 2)
+    for (const plan of SELF_SERVE_PLANS) {
+      expect(Number.isFinite(AI_ADDON_CREDITS_PER_MONTH[plan])).toBe(true)
+    }
+    expect(Number.isFinite(AI_ADDON_CREDITS_PER_MONTH.enterprise)).toBe(true)
   })
 })

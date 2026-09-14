@@ -486,6 +486,7 @@ variable the code looks up:
 | Extra members | `STRIPE_PRICE_{…}_EXTRA_MEMBER[_YEARLY]` |
 | Extra datasets | `STRIPE_PRICE_{…}_EXTRA_DATASET[_YEARLY]` |
 | Extra hosts | `STRIPE_PRICE_{…}_EXTRA_HOST[_YEARLY]` |
+| Aglyn AI | `STRIPE_PRICE_{…}_AI_ADDON[_YEARLY]` |
 
 Flat add-ons, priced the same across plans:
 

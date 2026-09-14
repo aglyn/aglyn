@@ -92,6 +92,48 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-14 — The Aglyn AI add-on: a flat per-workspace line that unlocks generative building and widens the assist band
+
+- **Decided by:** recommendation recorded by the engineering session; owner confirmation pending (AGL-2895). The shape — one paid add-on, flat per workspace, one credit pool — and the figures below are the recommendation the code carries so the Stripe minting (AGL-2897) and the pricing page (AGL-2900) can be built against them; the owner's answer on AGL-2895 either ratifies them or moves them here.
+- **Scope:** pricing
+- **Evidence:** `PLAN_PRICING[*].aiAddonMonthlyUsd`, `AI_ADDON_CREDITS_PER_MONTH`, `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K` and `features.aiGenerative` on every `PLAN_ENTITLEMENTS` row in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `seatAddons.aiAddon` folded by `resolveOrgEntitlements` and billed by `orgListPriceMonthlyUsd`; `resolveAssistOverageRateUsdPer1k` in `libs/aglyn/src/lib/app-utils/assist-credits.ts`, read by the gate, the invoice and the refusal sentence; the `aiAddon` kind in `apps/console/utils/server/billing-addons.ts` (`STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]`); `apps/console/specs/tier-margin-floor.spec.ts` (every tier non-negative with the add-on band at 100% and its revenue counted; each band ≤ 50% of its price), `plan-entitlements.spec.ts`, `assist-credits.spec.ts`, `billing-addon-plan-coverage.spec.ts`; benchmarks — Zylo's 2025 SaaS pricing survey (an AI tier or add-on carries a 20–37% uplift on the base plan), aissist.io's AI add-on pricing benchmark, and the credit-priced AI add-ons of Framer, Webflow and HubSpot; the same-dated entry in Drive → Pricing & Packaging → 05-Pricing-Decision-Log; AGL-2896, AGL-2895, AGL-2897, AGL-2900.
+
+**No locked price moves; a new add-on line, recommended figures pending the
+owner's confirmation on AGL-2895.** Every base price, every band and every
+overage rate in `PLAN_PRICING` and `PLAN_ENTITLEMENTS` is where the 2026-08-18
+lock and its later entries put it. What is added is one line and one flag.
+
+| | Starter | Pro | Business | Scale | Advanced | Agency |
+|---|---|---|---|---|---|---|
+| Aglyn AI, per workspace per month | $9 | $19 | $39 | $69 | $99 | $299 |
+| share of the base price | 36% | 34% | 28% | 28% | 25% | 23% |
+| credits added to the assist band | 4,000 | 9,000 | 19,000 | 34,000 | 49,000 | 149,000 |
+| band cost at 100%, as a share of the add-on | 44% | 47% | 49% | 49% | 49% | 50% |
+
+Free sells no add-on (`null`, band 0). Enterprise sells none either: it carries
+`aiGenerative` in the agreement and its fallback band is 298,000 credits,
+Agency × 2, the 2026-09-07 rule for every Enterprise fallback. Annual is ×12
+with no discount, as every add-on is.
+
+**What it buys.** `features.aiGenerative` — generative building and automation,
+which no self-serve tier includes — and the band above added to the plan's
+`assistCreditsPerMonth`. One pool and one meter: the add-on widens the band the
+assist meter already draws on, so the overage ladder, the hard-cap switch and
+the usage panel see one number. It also switches `aiAssist` on, so on Starter
+the add-on is the whole assistant. Starter with the add-on sells past its band
+at $3.00 per 1,000 credits, Pro's rate, read through
+`resolveAssistOverageRateUsdPer1k` rather than written onto the plan row; every
+other tier keeps the rate it had.
+
+**What does not move.** Free's `assistCreditsPerMonth` stays 0 — a Free taste of
+the assistant is a separate pending decision. The assist overage ladder is
+unchanged. `check-pricing-drift`'s `LOCKED` pin has no place for an add-on
+ladder and is untouched; the Stripe prices are minted under AGL-2897 and the
+`/pricing` card lands under AGL-2900, so the add-on capacity table declares
+the card expected-absent until then.
+
+---
+
 ## 2026-09-13 — `LEGAL_DOCUMENT_VERSION` moves to `v2`, reusing the pre-collapse label
 
 - **Decided by:** the account owner. On 2026-09-11: Privacy Policy §3 names video hosting (Wistia, on the platform's own marketing site), and that change costs the clickwrap a version instead of folding into `v1`. On 2026-09-13: the Terms §4.1 plan-list correction rides the same version, so people re-accept once, and the label is `v2` rather than `v7`, chosen with the consequence below in view. Supersedes the 2026-08-24 entry below (`v1` until launch) now that acceptances are on record.

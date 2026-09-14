@@ -44,6 +44,7 @@ import {
   PLAN_PRICING,
   PLAN_LABELS,
   UNLIMITED,
+  AI_ADDON_CREDITS_PER_MONTH,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   POS_REGISTER_ADDON_MONTHLY_USD,
   POS_REGISTERS_ADDON_MAX,
@@ -907,6 +908,19 @@ const addons = {
       included: Object.fromEntries(
         PLANS.map((p) => [p, PLAN_ENTITLEMENTS[p].posRegisters]),
       ),
+    },
+    {
+      label: 'Aglyn AI',
+      // Priced PER PLAN, unlike the two flat cards above: the line is an
+      // uplift on the tier, so there is no single `priceUsd` to print. `null`
+      // is a plan that does not sell it (Free; Enterprise carries generative
+      // building in the agreement).
+      priceUsdByPlan: Object.fromEntries(
+        PLANS.map((p) => [p, PLAN_PRICING[p].aiAddonMonthlyUsd]),
+      ) as Record<Plan, number | null>,
+      scope: 'organization',
+      maxQuantity: 1,
+      creditsByPlan: AI_ADDON_CREDITS_PER_MONTH,
     },
   ],
 }
@@ -1877,14 +1891,31 @@ feeLadder.finish()
  *=========================================*/
 const ADDONS_STALE: Record<string, Divergence> = {}
 
-const addonCards = reconciler('add-on cards', ADDONS_STALE)
+/**
+ * The card the product sells and the page has never carried.
+ *
+ * The Aglyn AI add-on (AGL-2896) is priced in `PLAN_PRICING` and sold by the
+ * add-ons route, and no breakpoint has a card for it: the `/pricing` card is
+ * AGL-2900, and until it ships there is no cell to compare the ladder against.
+ * Declared, like the two `USAGE_EXPECTED_ABSENT` rates, so the gap is a
+ * recorded fact with an owner — and so this fails the day the card lands,
+ * at which point the per-plan price becomes comparable and the comparison
+ * below has to be written for the shape the card takes.
+ */
+const ADDONS_EXPECTED_ABSENT: Record<string, string> = {
+  'Aglyn AI':
+    'the page carries no Aglyn AI card; `PLAN_PRICING[*].aiAddonMonthlyUsd` is sold by `/api/billing/addons` from Starter up. Resolves when AGL-2900 publishes the card',
+}
+
+const addonCards = reconciler('add-on cards', ADDONS_STALE, ADDONS_EXPECTED_ABSENT)
 /**
  * What each card is called on the frame. Every breakpoint carries the page's
- * name for both cards, so each has exactly one.
+ * name for both published cards, so each has exactly one.
  */
 const ADDON_FRAME_LABELS: Record<string, string[]> = {
   'Event Calendar': ['Event Calendar'],
   'Extra POS register': ['Extra POS register'],
+  'Aglyn AI': ['Aglyn AI'],
 }
 
 for (const v of frames) {
@@ -1899,7 +1930,17 @@ for (const v of frames) {
     const names = ADDON_FRAME_LABELS[row.label] ?? [row.label]
     const rec = cards.find((r) => names.includes(r.cells[0]) && r.cells.length > 1)
     if (!rec) {
-      addonCards.absent(`the ${row.label} card`, v.name)
+      addonCards.absentRow(row.label, v.name)
+      continue
+    }
+    if (!('priceUsd' in row)) {
+      // A per-plan card has no single price string to match. The card does
+      // not exist yet (see `ADDONS_EXPECTED_ABSENT`); when it does, its shape
+      // decides how the ladder is read, and that reading is written then.
+      addonCards.absent(
+        `a reading for the per-plan ${row.label} card — the card exists now, so write one`,
+        v.name,
+      )
       continue
     }
     const bare = `$${row.priceUsd} / mo`
