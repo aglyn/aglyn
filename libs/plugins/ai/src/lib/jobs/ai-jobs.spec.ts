@@ -668,6 +668,26 @@ describe('a step’s own failure, and what a runner is handed (AGL-2938)', () =>
     expect(Number(month['estCostUsd'] ?? 0)).toBe(0)
   })
 
+  it('stops for a person before the provider: the message goes back and nothing is metered (AGL-2909)', async () => {
+    const limit = 'This site has no room for another shared layout.'
+    registerAiJobStep('insight', async () => ({
+      outputs: [],
+      usage: ZERO,
+      estCostUsd: 0,
+      model: 'claude-sonnet-5',
+      stopReason: null,
+      review: { reason: 'limit', message: limit, findings: [] },
+    }))
+    const job = await newInsightJob()
+    const run = await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    expect(run.outcome).toBe('needs_review')
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    expect(stored).toMatchObject({ status: 'needs_review', creditsSpent: 0 })
+    const month = mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth(NOW)}`) ?? {}
+    expect(Number(month['messages'] ?? 0)).toBe(0)
+    expect(Number(month['estCostUsd'] ?? 0)).toBe(0)
+  })
+
   it('fails after an unusable answer: metered first, then failed with the step’s sentence and no output', async () => {
     registerAiJobStep('insight', async () => ({
       outputs: [],

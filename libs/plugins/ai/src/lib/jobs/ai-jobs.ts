@@ -1120,33 +1120,44 @@ export async function runAiJobStep(
     }
   }
 
-  // Tokens were spent, so the bill is written first and its failure is a
-  // log line, never a failed job — the same rule the chat route keeps.
-  try {
-    await recordAssistCost(
-      firestore,
-      orgId,
-      {
-        route: 'ai/jobs',
-        hostId: job.hostId ?? null,
-        model: outcome.model,
-        tier: entitled ? 'entitled' : 'free',
-        usage: outcome.usage,
-        docsPaths: [],
-        stopReason: outcome.stopReason,
-        deflected: false,
-        // The account this job drew on, as the reservation decided it
-        // (AGL-2925): a Free job lands on the owner's allowance and the
-        // platform's day; a paid one on neither.
-        free: reservation.free ?? null,
-        // The step is the creator's spend, under the job's kind (AGL-2928).
-        uid: job.createdBy,
-        kind: job.kind,
-      },
-      now,
+  // A step that stopped before the provider without failing — a site with no
+  // room for the draft (AGL-2909), say — spent nothing too: its message goes
+  // back and there is nothing to meter. What it returns is still recorded
+  // below, as any step's is.
+  const spentNothing = aiJobStepSpentNothing(outcome)
+  if (spentNothing) {
+    await releaseAssistMessage(firestore, orgId, reservation).catch((releaseError) =>
+      console.error('ai job release failed', { orgId, jobId, releaseError }),
     )
-  } catch (error) {
-    console.error('ai job cost record failed', { orgId, jobId, error })
+  } else {
+    // Tokens were spent, so the bill is written first and its failure is a
+    // log line, never a failed job — the same rule the chat route keeps.
+    try {
+      await recordAssistCost(
+        firestore,
+        orgId,
+        {
+          route: 'ai/jobs',
+          hostId: job.hostId ?? null,
+          model: outcome.model,
+          tier: entitled ? 'entitled' : 'free',
+          usage: outcome.usage,
+          docsPaths: [],
+          stopReason: outcome.stopReason,
+          deflected: false,
+          // The account this job drew on, as the reservation decided it
+          // (AGL-2925): a Free job lands on the owner's allowance and the
+          // platform's day; a paid one on neither.
+          free: reservation.free ?? null,
+          // The step is the creator's spend, under the job's kind (AGL-2928).
+          uid: job.createdBy,
+          kind: job.kind,
+        },
+        now,
+      )
+    } catch (error) {
+      console.error('ai job cost record failed', { orgId, jobId, error })
+    }
   }
   const credits = assistCreditsFromUsd(outcome.estCostUsd)
 

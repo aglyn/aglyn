@@ -89,6 +89,8 @@ step's own `failure` sentence), or a step that has exhausted its attempts. A
 retryable failure or a budget that ended first hands the message back and
 re-queues the step, and so does a step that fails before it reaches the
 provider — its outcome carries no tokens and no cost, so nothing is metered.
+A step that stops for a person before the provider, such as one whose site has
+no room for its draft, hands its message back the same way.
 
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
