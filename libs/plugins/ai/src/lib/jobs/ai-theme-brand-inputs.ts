@@ -274,7 +274,7 @@ async function readLogoColors(
   const [buffer] = (await firebaseAdmin
     .app()
     .storage()
-    .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'] || undefined)
+    .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || undefined)
     .file(objectPath)
     .download()) as [Buffer]
   if (buffer.length > AI_THEME_LOGO_MAX_BYTES) return null
