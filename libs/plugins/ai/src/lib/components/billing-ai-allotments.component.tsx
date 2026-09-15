@@ -18,6 +18,8 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -36,6 +38,27 @@ import { AI_ALLOTMENT_ORG_SUBJECT, aiAllotmentState } from '../model/ai-allotmen
 import type { AiAllotmentRowWire } from '../usage/ai-usage-wire'
 import { AiAllotmentEditor, type AiAllotmentValue } from './ai-allotment-editor.component'
 import { saveAiAllotments, useAiAllotments } from './use-ai-allotments'
+
+/**
+ * One table's page on the shared footer. The page is clamped to the rows
+ * there are, so a table that shrinks under the reader — an allotment removed
+ * on its last page — shows its new last page rather than an empty one.
+ */
+function useTablePage() {
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  return {
+    pageSize,
+    setPage,
+    setPageSize,
+    /** The rows on the current page, and the page they are on. */
+    slice<T>(rows: readonly T[]): { page: number; rows: T[] } {
+      const last = Math.max(0, Math.ceil(rows.length / pageSize) - 1)
+      const current = Math.min(page, last)
+      return { page: current, rows: rows.slice(current * pageSize, (current + 1) * pageSize) }
+    },
+  }
+}
 
 /** An allotment as a table cell reads it: used of credits, mode, models. */
 export function aiAllotmentSummary(
@@ -98,6 +121,11 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
   const [editing, setEditing] = useState<Editing | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Each table pages on its own. A selection is kept by member and site id
+  // rather than by row, so it survives a page change.
+  const teamPage = useTablePage()
+  const sitePage = useTablePage()
+  const collaboratorPage = useTablePage()
   const data = allotments.data
   const bySubject = useMemo(
     () => new Map((data?.allotments ?? []).map((row) => [row.subject, row])),
@@ -131,6 +159,9 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
   const siteName = (hostId: string | null) =>
     data.hosts.find((host) => host.hostId === hostId)?.name ?? hostId ?? ''
   const collaborators = data.allotments.filter((row) => row.scope === 'collab')
+  const teamShown = teamPage.slice(team)
+  const sitesShown = sitePage.slice(data.hosts)
+  const collaboratorsShown = collaboratorPage.slice(collaborators)
   const restriction = bySubject.get(AI_ALLOTMENT_ORG_SUBJECT)
 
   const editSubjects = (subjects: string[], title: string, description: string) => {
@@ -223,7 +254,7 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {team.map((member) => {
+          {teamShown.rows.map((member) => {
             const subject = `member:${member.uid}`
             const row = bySubject.get(subject)
             return (
@@ -258,6 +289,14 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
           })}
         </TableBody>
       </Table>
+      <ListPagination
+        page={teamShown.page}
+        pageSize={teamPage.pageSize}
+        rowCount={teamShown.rows.length}
+        count={team.length}
+        onPageChange={teamPage.setPage}
+        onPageSizeChange={teamPage.setPageSize}
+      />
 
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
         <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
@@ -302,7 +341,7 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.hosts.map((host) => {
+          {sitesShown.rows.map((host) => {
             const subject = `host:${host.hostId}`
             const row = bySubject.get(subject)
             return (
@@ -337,6 +376,14 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
           })}
         </TableBody>
       </Table>
+      <ListPagination
+        page={sitesShown.page}
+        pageSize={sitePage.pageSize}
+        rowCount={sitesShown.rows.length}
+        count={data.hosts.length}
+        onPageChange={sitePage.setPage}
+        onPageSizeChange={sitePage.setPageSize}
+      />
 
       {collaborators.length ? (
         <>
@@ -351,7 +398,7 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {collaborators.map((row) => (
+              {collaboratorsShown.rows.map((row) => (
                 <TableRow key={row.subject} hover>
                   <TableCell>{nameOf(row.uid)}</TableCell>
                   <TableCell>{siteName(row.hostId)}</TableCell>
@@ -376,6 +423,14 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
               ))}
             </TableBody>
           </Table>
+          <ListPagination
+            page={collaboratorsShown.page}
+            pageSize={collaboratorPage.pageSize}
+            rowCount={collaboratorsShown.rows.length}
+            count={collaborators.length}
+            onPageChange={collaboratorPage.setPage}
+            onPageSizeChange={collaboratorPage.setPageSize}
+          />
         </>
       ) : null}
 
