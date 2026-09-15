@@ -249,7 +249,7 @@ function asKeyring(
 
 /** Version and key id, then the caller's context, as authenticated data. */
 function additionalData(keyId: string, context: string | undefined): Buffer {
-  return Buffer.from(`${SECRET_BOX_VERSION} ${keyId} ${context ?? ''}`, 'utf8')
+  return Buffer.from(`${SECRET_BOX_VERSION}\u0000${keyId}\u0000${context ?? ''}`, 'utf8')
 }
 
 /**

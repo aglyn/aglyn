@@ -609,7 +609,7 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     reason:
       "Google's OAuth consent address, built by `buildGoogleAuthorizationUrl` in `libs/plugins/outreach/src/lib/transport/google-oauth.ts` and handed to the rep's own browser, which opens it to grant Outreach access to the rep's own mailbox. No server of ours requests it; the browser's visit is between the rep and their Google account.",
     dataReceived:
-      "Nothing from Aglyn's servers. The rep's browser carries the OAuth client id, the requested scopes, a signed state, a PKCE challenge and a login hint — the rep's own sign-in address.",
+      "Nothing from our servers. The rep's browser carries the OAuth client id, the requested scopes, a signed state, a PKCE challenge and a login hint — the rep's own sign-in address.",
   },
 
   // The two Google control-plane endpoints `check:app-check-debug-tokens`

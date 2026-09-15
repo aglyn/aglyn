@@ -22,7 +22,3 @@ export * from './lib/components/outreach-console-sections'
 // The document model both halves share (AGL-2974): collection names and the
 // mailbox, sequence, enrollment and credential shapes.
 export * from './lib/model/outreach.types'
-// A mailbox's settings rules — cap, ramp, window, health — and the mailbox
-// routes' contract (AGL-2978). Client-safe; the routes themselves are server-only.
-export * from './lib/mailboxes/mailbox-settings'
-export * from './lib/mailboxes/mailbox-api'
