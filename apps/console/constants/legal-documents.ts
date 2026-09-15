@@ -497,6 +497,54 @@ export interface LegalDocumentManifestEntry {
  * byte-for-byte, and each new capture differs from the pre-publication capture
  * of the same page by exactly the published edits.
  *
+ * v7 (2026-09-15, AGL-2902 + AGL-2963 + AGL-2971): one version for three
+ * changes, so every account re-accepts once.
+ *
+ * ⚠️ THE LABEL IS `v7`, NOT `v3`. On 2026-09-15 production held acceptance
+ * records labeled `v1` (6), `v2` (2) and `v6` (1), and a new version reaches
+ * only the records it outranks (the warning at the top of this file): under
+ * `v3` the account whose latest acceptance is `v6` would never be asked. `v7`
+ * is the lowest label above every stored record, which is what the 2026-09-13
+ * entry in `docs/DECISION_LOG.md` said a later bump would need.
+ *
+ *   - AGL-2902, the AI clauses. Terms: §2 defines AI Features, AI Input and AI
+ *     Output; new §4.11 meters AI Features in AI credits, with allotments, a
+ *     spending limit and the Free plan's extra limits; new §8.6 makes AI Input
+ *     and AI Output Customer Content and assigns Aglyn's rights in output to
+ *     the customer; new §8.7 requires review before output is applied,
+ *     published or sent, and says AI Features only draft, propose or leave
+ *     unsaved changes; §11 says which AI providers receive AI Input; §14.5
+ *     disclaims warranties on AI Features and AI Output. Privacy: §2 says what
+ *     each AI feature sends, and records generation jobs, monthly AI usage and
+ *     allotments; §3 names Anthropic among the providers; §5 gives the AI
+ *     retention periods, which are 180 days for Assist exchanges and
+ *     generation jobs (the D2 decision on AGL-2902) and 13 months for monthly
+ *     usage records. The Acceptable Use Policy's §5, the DPA's nature and
+ *     purpose, the Subprocessors Anthropic row and three new console storage
+ *     rows in the Cookie Policy published in the same sitting; none of those
+ *     four is acceptance-pinned.
+ *   - AGL-2963, Privacy §3: Wistia's player loads when the visitor presses play
+ *     or, on a page built to show a single film, with the page for a visitor
+ *     whose privacy choices permit analytics. The Subprocessors Wistia row and
+ *     change log, and the Cookie Policy's Wistia row and §3, moved with it.
+ *   - AGL-2971, Privacy §1.3 and §11: business contact information about
+ *     prospective customers, from public sources and data providers, used
+ *     only to contact them about Aglyn; a prospect may opt out by replying.
+ *     No fixed retention period is stated.
+ *
+ * All six documents move "Last updated" to September 15, 2026; the Terms keep
+ * "Effective date: August 5, 2026".
+ *
+ * TODO(AGL-2902): after both pages publish, capture them from the live site
+ * with the method below, archive the captures as
+ * `Acceptance-Snapshots/v7/terms.txt` and `privacy.txt`, record them here as
+ * terms TODO-bytes / `TODO-sha256` and privacy TODO-bytes / `TODO-sha256`,
+ * and only then move `LEGAL_DOCUMENT_VERSION` to `v7` with the pins below.
+ * Both pinned documents change in this version, so no control survives
+ * publication; the method was proven beforehand instead, on 2026-09-15, by
+ * reproducing the `v2` pins (terms 39062 bytes / `7257cc…`, privacy 15426
+ * bytes / `6cb2c8…`) byte for byte from the live pages.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —

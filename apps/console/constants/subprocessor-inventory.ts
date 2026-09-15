@@ -311,15 +311,15 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
 
   'api.anthropic.com': {
     disposition: 'subprocessor',
-    entity: 'Anthropic PBC',
+    entity: 'Anthropic, PBC',
     region: 'United States',
     purpose:
-      'Generating the responses of the in-product assistant and the besigner copy assistant',
-    publishedOn: '2026-08-18',
+      "AI-assisted features in the console and the site editor: the Aglyn Assist helper, including changes it proposes to a page, component, or layout open in the editor; editor assistance (rewriting element copy, drafting blog bodies, generating a section layout); and AI generation, which creates drafts and proposals for a customer's site from a brief, such as copy, layouts, templates, search titles and descriptions, and theme changes",
+    publishedOn: '2026-09-15',
     reason:
       "Reached through the AI plugin's Anthropic adapter (`libs/plugins/ai/src/lib/providers/anthropic.ts`) by the doors that call the AI runtime. `libs/plugins/ai/src/lib/server/assist-chat.ts` is gated by `release_assist` AND the key, and a generation job's text step by `release_ai_generative`; `libs/plugins/ai/src/lib/server/ai-assist.ts` carries NO release flag, so setting `ANTHROPIC_API_KEY` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-door detail and is the deeper guard for this one vendor.",
     dataReceived:
-      "The customer's question and a trailing window of the thread, and — for the besigner assistant — the site copy, blog bodies and section briefs being written. On Pro and above the current route, host and organization name travel with the question.",
+      "What the user submits — a question, instruction or brief, with the earlier messages of the same Assist conversation — and the content of the element, post, section or page being worked on, with the generated response. On Pro and above, the organization's name and the console route and host travel with an Assist question. For an edit the assistant proposes in the besigner, an outline of the open page, component or layout: element and component ids, layer names, shortened setting values and the selected element's styles. For a generation job, the site inventory: the names and addresses of its screens and collections, the names of its components, layouts, templates, forms and datasets with their prop and field names, and the theme's summary, colors and fonts. For a theme change, the site's current theme settings and brand colors as hex values, from the organization's brand settings, the site logo in the media library or a public page the brief links to. For features that review or write search information, the text and structure of the pages concerned. No account identifiers, email addresses or authentication tokens.",
   },
 
   // MARK – Google LLC
@@ -551,12 +551,12 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     entity: 'Wistia, Inc.',
     region: 'United States',
     purpose:
-      "Hosting and streaming the platform's own films on its marketing site, loaded only when a visitor presses play",
-    publishedOn: '2026-09-13',
+      'Hosting and streaming Aglyn’s own films on its marketing site, aglyn.com. The player loads when a visitor presses play on a film. On a page built to show a single film, it loads with the page for a visitor whose privacy choices on aglyn.com permit analytics. For every other visitor and page, nothing is requested from Wistia before a press',
+    publishedOn: '2026-09-15',
     reason:
-      "The Wistia player frame the Video element (`libs/plugins/mui/src/lib/components/video.tsx`) loads when a visitor presses play, at an address `libs/aglyn/src/lib/app-utils/wistia-embed.ts` rebuilds from the media id alone. Declared a subprocessor because the platform plays its own films on its marketing site through it. A Wistia link a customer's author pastes on their own site is still that customer's choice, as a YouTube or Vimeo link is, and gets no row of its own.",
+      "The Wistia player frame the Video element (`libs/plugins/mui/src/lib/components/video.tsx`) loads when a visitor presses play, or with the page when the element's `loadPlayer` switch is on and the visitor's stored consent grants analytics, at an address `libs/aglyn/src/lib/app-utils/wistia-embed.ts` rebuilds from the media id alone. Declared a subprocessor because the platform plays its own films on its marketing site through it. A Wistia link a customer's author pastes on their own site is still that customer's choice, as a YouTube or Vimeo link is, and gets no row of its own.",
     dataReceived:
-      "From a visitor who presses play: the browser's requests for the player and the film, carrying the visitor's IP address and user-agent, and the viewing data Wistia's player reports. `video.tsx` adds Wistia's `doNotTrack` option unless the visitor's stored consent grants analytics, so a visitor still deciding, refused, opted out or sending GPC gets a player that does not record a viewing session; the player still keeps its own local storage inside its frame. A visitor who never presses play sends nothing.",
+      "From a visitor who presses play, or whose stored consent grants analytics on a page that loads the player with the page: the browser's requests for the player and, once it plays, the film, carrying the visitor's IP address and user-agent, and the viewing data Wistia's player reports. `video.tsx` adds Wistia's `doNotTrack` option to a pressed player unless the visitor's stored consent grants analytics, so a visitor still deciding, refused, opted out or sending GPC gets a player that does not record a viewing session; a player loaded with the page is loaded only for a visitor whose consent grants analytics. Either way the player keeps its own local storage inside its frame from the moment it loads. A visitor who neither presses play nor opens such a page with that consent sends nothing.",
   },
 
   // MARK – Requests that are made, and are still not Annex III rows
