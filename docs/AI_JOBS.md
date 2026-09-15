@@ -172,6 +172,20 @@ live answer.
   no provider. The candidates on main are authored references, so the offline
   scores prove the scorers and pin the doctrine's verdicts on answers known to
   be good or bad; they measure no model until a live run records one.
+- **A live run is explicit.** `AI_EVAL_LIVE=1 npm run eval:ai-live` asks the
+  provider for real answers, grades each through `grade_output` on the
+  provider's deepest tier, and writes them under
+  `tools/ai-eval/recordings/<kind>/`, where the offline harness scores them
+  beside the authored ones. It spends real money, so without the variable it
+  refuses before anything runs (`tools/ai-eval/record-live.mjs`,
+  `recordAiEvalLive`). Each recorder answers through the door that answers
+  the kind in production — the plan step's runner, the text step's runner, the
+  theme step's own generation call — so a recording measures the production
+  request. A planned kind records its plan alone until its generator lands
+  (a `plan`-scope answer, counted toward the plan step rather than the kind's
+  floor); a kind whose door is a request route (the copy assistant's modes,
+  the chat door) has no recorder yet, and a door that gains one registers it
+  with `registerAiEvalRecorder`.
 
 ## Planning, and a job that waits for a person
 

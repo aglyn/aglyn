@@ -45,7 +45,11 @@ import {
   type AiThemeProposalMode,
 } from '../model/ai-theme-proposal'
 import { aiModelForStep } from '../providers/routing'
-import { runValidatedGeneration, type AiGenerationCheck } from '../runtime/ai-doctrine'
+import {
+  runValidatedGeneration,
+  type AiCustomGenerationInput,
+  type AiGenerationCheck,
+} from '../runtime/ai-doctrine'
 import type { AiSystemBlock, AiUsage } from '../runtime/ai-runtime'
 import {
   AI_THEME_TOOL_NAME,
@@ -258,7 +262,7 @@ export function aiJobThemePrompt(input: {
  * does. A call that proposes no change and refuses nothing is a real answer —
  * the theme already does what the brief asks.
  */
-const checkThemeAnswer: AiGenerationCheck<AiThemeToolParse> = (answer) => {
+export const aiJobThemeCheck: AiGenerationCheck<AiThemeToolParse> = (answer) => {
   const parse = parseAiThemeToolInput(answer)
   const nothingUsable =
     !parse.changes.length && !parse.components.length && !parse.resetComponents
@@ -266,6 +270,40 @@ const checkThemeAnswer: AiGenerationCheck<AiThemeToolParse> = (answer) => {
   return {
     value: null,
     violations: parse.dropped.map((message) => ({ rule: null, code: 'theme-control', message })),
+  }
+}
+
+/** What a theme generation is asked from, once the site and its brand have been read. */
+export interface AiJobThemeRequest {
+  brief: string
+  mode: AiThemeProposalMode
+  theme: HostTheme | undefined
+  source: HostThemeSource
+  brand: readonly AiThemeBrandColor[]
+  model: string
+  signal?: AbortSignal
+}
+
+/**
+ * The theme step's generation as the doctrine's loop runs it: its cached
+ * block, which carries the acceptable-use rules, then this step's
+ * instructions; the site's theme in the user turn rather than a site
+ * inventory; the strict tool, the ceiling and the check. The eval harness
+ * records a theme answer through this same call.
+ */
+export function aiJobThemeGeneration(
+  request: AiJobThemeRequest,
+): AiCustomGenerationInput<AiThemeToolParse> {
+  return {
+    step: 'job.theme',
+    model: request.model,
+    instructions: AI_JOB_THEME_INSTRUCTIONS,
+    messages: [{ role: 'user', content: aiJobThemePrompt(request) }],
+    tool: aiThemeTool(),
+    maxTokens: AI_JOB_THEME_MAX_TOKENS,
+    thinking: 'adaptive',
+    ...(request.signal ? { signal: request.signal } : {}),
+    check: aiJobThemeCheck,
   }
 }
 
@@ -331,32 +369,19 @@ export const runAiJobThemeStep: AiJobStepRunner = async ({
     brief: job.brief,
     signal,
   })
-  // The doctrine's loop: its cached block, which carries the acceptable-use
-  // rules, then these instructions. The theme rides in the user turn rather
-  // than a site inventory, and a second refused answer ends in this step's
-  // own sentence.
-  const generation = await runValidatedGeneration('theme', {
-    step: 'job.theme',
-    model,
-    instructions: AI_JOB_THEME_INSTRUCTIONS,
-    messages: [
-      {
-        role: 'user',
-        content: aiJobThemePrompt({
-          brief: job.brief,
-          mode,
-          theme: site.theme,
-          source: site.source,
-          brand: brand.colors,
-        }),
-      },
-    ],
-    tool: aiThemeTool(),
-    maxTokens: AI_JOB_THEME_MAX_TOKENS,
-    thinking: 'adaptive',
-    ...(signal ? { signal } : {}),
-    check: checkThemeAnswer,
-  })
+  // A second refused answer ends in this step's own sentence, below.
+  const generation = await runValidatedGeneration(
+    'theme',
+    aiJobThemeGeneration({
+      brief: job.brief,
+      mode,
+      theme: site.theme,
+      source: site.source,
+      brand: brand.colors,
+      model,
+      ...(signal ? { signal } : {}),
+    }),
+  )
   const spent: Pick<AiJobStepOutcome, 'usage' | 'estCostUsd' | 'model' | 'stopReason' | 'effort'> = {
     usage: generation.usage,
     estCostUsd: generation.estCostUsd,

@@ -605,8 +605,12 @@ function unreadableAnswer(
 // ── The loop ─────────────────────────────────────────────────────────────
 
 interface AiGenerationInputBase {
-  /** The routing table's step kind: it decides the model (never a model literal). */
-  step: AiStepKind
+  /**
+   * The routing table's step kind: it decides the model (never a model
+   * literal) unless `model` names one already resolved. One of the two is
+   * required.
+   */
+  step?: AiStepKind
   /** The org's resolved `pluginSettings/ai`, for its provider and model choices. */
   settings?: AiPluginSettings
   /** A route the door already resolved; the routing table's answer for `step` otherwise. */
@@ -766,7 +770,11 @@ export async function runValidatedGeneration(
   input: Omit<AiGenerationInputBase, 'inventory'> & { inventory?: AiSiteInventory | null },
 ): Promise<AiValidatedGeneration<unknown>> {
   const check = checkFor(kind, input)
-  const model = input.model ?? aiModelForStep(input.step, input.settings)
+  const model =
+    input.model ?? (input.step ? aiModelForStep(input.step, input.settings) : undefined)
+  if (!model) {
+    throw new Error(`runValidatedGeneration: a ${kind} names neither its step nor its model`)
+  }
   const system = aiDoctrineSystemBlocks(input.inventory, {
     instructions: input.instructions,
     ...(isAiOutputKind(kind) ? { surface: AI_OUTPUT_SURFACE[kind] } : {}),

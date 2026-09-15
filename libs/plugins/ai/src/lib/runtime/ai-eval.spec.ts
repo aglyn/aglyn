@@ -20,14 +20,16 @@
  * limitations under the License.
  */
 
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import {
   AI_EVAL_KINDS,
   readAiEvalCase,
+  readAiEvalRecording,
   scoreAiEvalCandidate,
   scoreAiEvalControl,
   summarizeAiEval,
+  summarizeAiEvalPlans,
   type AiEvalCase,
 } from './ai-eval'
 
@@ -41,6 +43,8 @@ import {
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const CASES_DIR = join(REPO_ROOT, 'tools', 'ai-eval', 'cases')
+/** What a live run recorded (`npm run eval:ai-live`); none until one has run. */
+const RECORDINGS_DIR = join(REPO_ROOT, 'tools', 'ai-eval', 'recordings')
 
 function caseFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -60,6 +64,15 @@ const cases: AiEvalCase[] = caseFiles(CASES_DIR).map((file) => {
   return evalCase
 })
 
+// Each recording joins its brief's candidates, scored like any other answer.
+for (const file of existsSync(RECORDINGS_DIR) ? caseFiles(RECORDINGS_DIR) : []) {
+  const name = relative(REPO_ROOT, file)
+  const recording = readAiEvalRecording(JSON.parse(readFileSync(file, 'utf8')), name)
+  const evalCase = cases.find((entry) => entry.id === recording.caseId)
+  if (!evalCase) throw new Error(`${name}: no golden brief has the id ${recording.caseId}`)
+  evalCase.candidates.push(recording.candidate)
+}
+
 describe('the golden briefs', () => {
   it('hold at least one case for every kind, with unique ids', () => {
     expect(AI_EVAL_KINDS.filter((kind) => !cases.some((evalCase) => evalCase.kind === kind))).toEqual([])
@@ -76,9 +89,9 @@ describe.each(cases.map((evalCase) => [evalCase.id, evalCase] as const))('%s', (
       expect({ pass: score.pass, checks: score.checks, findings: score.findings }).toEqual({
         pass: true,
         checks: {
-          readable: true,
-          rules: true,
-          budget: true,
+          readable: (candidate.scope ?? 'full') === 'full' ? true : null,
+          rules: (candidate.scope ?? 'full') === 'full' ? true : null,
+          budget: (candidate.scope ?? 'full') === 'full' ? true : null,
           plan: evalCase.expected?.plan ? true : null,
           rubric: true,
         },
@@ -104,5 +117,15 @@ describe('the floors', () => {
       ),
     )
     expect(summary.filter((kind) => kind.belowFloor)).toEqual([])
+  })
+
+  it('holds every plan a brief expects to its shape', () => {
+    const plans = summarizeAiEvalPlans(
+      cases.flatMap((evalCase) =>
+        evalCase.candidates.map((candidate) => scoreAiEvalCandidate(evalCase, candidate)),
+      ),
+    )
+    expect(plans.plans).toBeGreaterThan(0)
+    expect(plans.passRate).toBe(1)
   })
 })

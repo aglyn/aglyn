@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { HostTheme } from '@aglyn/shared-data-types'
+import type { HostThemeSource } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import type { AiBuildPlanCreateKind } from '../model/ai-build-plan'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
@@ -141,6 +143,13 @@ export interface AiEvalPlanShape {
 export interface AiEvalCandidate {
   /** `authored` for a reference written by hand; `recorded` for one a live run captured. */
   source: 'authored' | 'recorded'
+  /**
+   * `full` for an answer to the whole brief, the default; `plan` for the plan
+   * alone, which a live run records for a planned kind whose generator has
+   * not landed. A plan answer is held to the plan checks and its rubric, and
+   * counts toward the plan step's score rather than the kind's floor.
+   */
+  scope?: 'full' | 'plan'
   /** The routing step and model a recorded answer came from; `null` for an authored one. */
   step: AiStepKind | null
   model: string | null
@@ -181,6 +190,9 @@ export interface AiEvalCase {
   /** Copy ceilings the brief sets, beside the kind's own. */
   maxChars?: number
   maxWords?: number
+  /** For a theme brief: the site's current theme and where it comes from. */
+  siteTheme?: HostTheme
+  themeSource?: HostThemeSource
   expected?: { plan?: AiEvalPlanShape }
   candidates: AiEvalCandidate[]
   controls: AiEvalControl[]
@@ -231,8 +243,10 @@ export interface AiEvalScore {
   caseId: string
   kind: AiEvalKind
   source: AiEvalCandidate['source']
+  scope: NonNullable<AiEvalCandidate['scope']>
   model: string | null
-  checks: Record<Exclude<AiEvalCheck, 'plan'>, boolean> & { plan: boolean | null }
+  /** A check that does not apply to the answer — the plan of an unplanned kind, the document of a plan answer — is `null`. */
+  checks: Record<'rubric', boolean> & Record<Exclude<AiEvalCheck, 'rubric'>, boolean | null>
   /** The rubric's mean, from 0 (every criterion 1) to 1 (every criterion 5). */
   rubricScore: number
   /** The checks and the rubric, averaged: from 0 to 1. */
@@ -474,34 +488,36 @@ export function aiEvalRubricVerdict(rubric: AiEvalRubric | null | undefined): {
 
 /** One answer to one golden brief, scored. */
 export function scoreAiEvalCandidate(evalCase: AiEvalCase, candidate: AiEvalCandidate): AiEvalScore {
-  const checked = checkAnswer(evalCase, candidate.answer)
+  const scope = candidate.scope ?? 'full'
+  const checked = scope === 'full' ? checkAnswer(evalCase, candidate.answer) : null
   const plan = evalCase.expected?.plan ? checkAiEvalPlan(evalCase, candidate.plan) : null
   const rubric = aiEvalRubricVerdict(candidate.rubric)
   const rubricScore = (rubric.mean - 1) / 4
   const parts = [
-    checked.readable ? 1 : 0,
-    checked.rules ? 1 : 0,
-    checked.budget ? 1 : 0,
+    ...(checked ? [checked.readable ? 1 : 0, checked.rules ? 1 : 0, checked.budget ? 1 : 0] : []),
     ...(plan ? [plan.pass ? 1 : 0] : []),
     rubricScore,
   ]
   const score = Math.round((parts.reduce((sum, part) => sum + part, 0) / parts.length) * 10_000) / 10_000
+  const documentPasses = checked ? checked.readable && checked.rules && checked.budget : true
   return {
     caseId: evalCase.id,
     kind: evalCase.kind,
     source: candidate.source,
+    scope,
     model: candidate.model,
     checks: {
-      readable: checked.readable,
-      rules: checked.rules,
-      budget: checked.budget,
+      readable: checked ? checked.readable : null,
+      rules: checked ? checked.rules : null,
+      budget: checked ? checked.budget : null,
       plan: plan ? plan.pass : null,
       rubric: rubric.pass,
     },
     rubricScore: Math.round(rubricScore * 10_000) / 10_000,
     score,
-    pass: checked.readable && checked.rules && checked.budget && (plan?.pass ?? true) && rubric.pass,
-    findings: [...checked.findings, ...(plan?.findings ?? [])],
+    // A plan answer to a brief with no expected plan has nothing to pass.
+    pass: documentPasses && (plan?.pass ?? scope === 'full') && rubric.pass,
+    findings: [...(checked?.findings ?? []), ...(plan?.findings ?? [])],
   }
 }
 
@@ -534,7 +550,7 @@ export interface AiEvalKindSummary {
 /** Every kind's pass rate and mean score against its floor; a kind with no candidate is below it. */
 export function summarizeAiEval(scores: readonly AiEvalScore[]): AiEvalKindSummary[] {
   return AI_EVAL_KINDS.map((kind) => {
-    const own = scores.filter((score) => score.kind === kind)
+    const own = scores.filter((score) => score.kind === kind && score.scope === 'full')
     const passed = own.filter((score) => score.pass).length
     const passRate = own.length ? passed / own.length : null
     const meanScore = own.length
@@ -555,6 +571,41 @@ export function summarizeAiEval(scores: readonly AiEvalScore[]): AiEvalKindSumma
         meanScore < floor.meanScore,
     }
   })
+}
+
+/** How the plans a planned kind's answers carry score, across every brief. */
+export interface AiEvalPlanSummary {
+  plans: number
+  passed: number
+  passRate: number | null
+}
+
+/**
+ * The plan step's own score: every answer that carried a plan checked
+ * against its brief's expected shape, whole answers and plan answers alike.
+ */
+export function summarizeAiEvalPlans(scores: readonly AiEvalScore[]): AiEvalPlanSummary {
+  const plans = scores.filter((score) => score.checks.plan !== null)
+  const passed = plans.filter((score) => score.checks.plan && score.checks.rubric).length
+  return { plans: plans.length, passed, passRate: plans.length ? passed / plans.length : null }
+}
+
+/** A recording a live run wrote: the brief it answers, and the answer. */
+export interface AiEvalRecording {
+  caseId: string
+  candidate: AiEvalCandidate
+}
+
+/** A recording file read and checked for shape; throws naming the field at fault. */
+export function readAiEvalRecording(raw: unknown, file: string): AiEvalRecording {
+  if (!isRecord(raw) || typeof raw['caseId'] !== 'string' || !isRecord(raw['candidate'])) {
+    throw new Error(`${file}: a recording holds a caseId and a candidate`)
+  }
+  const candidate = raw['candidate'] as Record<string, unknown>
+  if (candidate['source'] !== 'recorded' || !isRecord(candidate['rubric'])) {
+    throw new Error(`${file}: a recording's candidate is recorded and graded`)
+  }
+  return raw as unknown as AiEvalRecording
 }
 
 // ── Reading a case file ───────────────────────────────────────────────────
