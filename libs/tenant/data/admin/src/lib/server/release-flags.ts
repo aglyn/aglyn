@@ -226,6 +226,13 @@ export async function filterEnabledPluginsByReleaseFlags(
     orgId?: string | null
     /** Raw Authorization header, when the caller has one (API dispatch). */
     authorization?: string | null
+    /**
+     * The account a TOKENLESS request acts for, as its route proved it
+     * (AGL-2978) — see `PluginApiRequestSubject.uid`. Consulted for the staff
+     * preview only, and only when the request carries no bearer token: a
+     * request with a token is the token's, whatever else it names.
+     */
+    subjectUid?: string | null
   },
 ): Promise<string[]> {
   const [values, targeting] = await Promise.all([
@@ -255,6 +262,20 @@ export async function filterEnabledPluginsByReleaseFlags(
       if (decoded['staff'] === true) return [...pluginIds]
     } catch {
       // Invalid token — gate as anonymous.
+    }
+    return filtered
+  }
+  if (options.subjectUid) {
+    // The same claim the token path reads, looked up by account: a staff
+    // member's own provider redirect carries no token, and previewing a dark
+    // plugin has to survive the round trip their session started. Paid only
+    // when a flag actually subtracted something and a route vouched for the
+    // account.
+    try {
+      const account = await firebaseAdmin.app().auth().getUser(options.subjectUid)
+      if (account.customClaims?.['staff'] === true) return [...pluginIds]
+    } catch {
+      // No such account, or Auth did not answer — gate as anonymous.
     }
   }
   return filtered

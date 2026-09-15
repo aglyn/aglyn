@@ -21,6 +21,7 @@ import {
   pluginIdForRegisteredApiPath,
   resolveHostEnabledPlugins,
   resolvePluginApiMatch,
+  resolvePluginApiRequestSubject,
   runLegacyHandler,
   runPluginApiMatch,
 } from '@aglyn/aglyn/server'
@@ -94,7 +95,8 @@ async function dispatch(
         // Non-JSON body — fall through to handler self-gating.
       }
     }
-    let orgId: string | null = null
+    let orgId: string | null
+    let subjectUid: string | null = null
     if (hostId) {
       // Per-site enablement (AGL-1014): the org set minus the host's
       // deny-list — a plugin disabled for THIS site has no API surface for
@@ -112,6 +114,13 @@ async function dispatch(
       ) {
         return Response.json({ error: 'Not found' }, { status: 404 })
       }
+    } else {
+      // The registry is shared with the console dispatcher, so a route's
+      // declared subject (AGL-2978) is honored here on the same terms: only
+      // when no site is named, and a null answer is the anonymous reading.
+      const subject = await resolvePluginApiRequestSubject(path, request)
+      orgId = subject?.orgId ?? null
+      subjectUid = subject?.uid ?? null
     }
     // Plugin release gate (AGL-422), UNCONDITIONAL since AGL-1689: a
     // flagged-off plugin's API surface does not exist — except for staff
@@ -128,6 +137,7 @@ async function dispatch(
       {
         orgId,
         authorization: request.headers.get('authorization'),
+        subjectUid,
       },
     )
     if (!releaseFiltered.length) {
