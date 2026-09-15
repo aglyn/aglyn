@@ -307,6 +307,55 @@ writes only unpublished drafts under the org. The lock that applies is the
 — a lock that stopped the doors and not the beat would keep spending on every
 job already queued.
 
+## The `seo` kind
+
+SEO by AI (AGL-2910): `src/lib/jobs/ai-job-seo-step.ts`, its generation call in
+`src/lib/runtime/seo-fields.ts`, its strict tools and their answer checks in
+`src/lib/tools/ai-seo-tool.ts`, and the audit's scoring — no model — in
+`src/lib/runtime/seo-audit.ts`. `inputs.target` names the work:
+
+- `screen` (`screenId`, `versionId`, `fields`, `keywords`): one page's search
+  listing, written from the version's text. Asked by the "Write SEO" card in
+  the page's SEO panel, through the `seoFields` zone.
+- `product` (`name`, `text`, `productId`, `currentTitle`, `currentDescription`,
+  `fields`): one product's listing, from what the product editor handed over.
+  The step never reads a product document; the commerce plugin's editor hosts
+  the same zone through `useConsoleWidgetSlot`.
+- `site` (`keywords`, one `/path: keyword, keyword` line a page): the audit.
+
+Every output is `resource: 'seo'` with a `proposal` (`src/lib/model/ai-seo.ts`),
+and the step writes nothing. `generateSeoFields` is the stable entry point a page
+generator calls for a new page's title and description.
+
+**An audit continues.** The first pass reads the pages the sitemap lists — the
+routing map less template, status and non-public screens, through the shared
+predicates — with their published versions and the shared layouts; scores every
+page; records `audit:report`; and runs the first unit of generated work. Each
+later pass runs one more unit — `audit:site` (structured data and the agent
+guidance `/llms.txt` leads with), then `audit:fixes:{n}` batches of pages — and
+returns `continue: true` while units remain. The machine records a continuing
+pass exactly as it records a finished step (the cost, the credits, the outputs,
+the audit rows) and hands the same step back as `pending`, its attempts reset
+and its `passes` counted; `AI_JOB_STEP_MAX_PASSES` bounds it. Every pass is one
+reservation and one provider exchange, so a large site is a few beats of work,
+and the job's `creditsSpent` is what the whole audit cost.
+
+**Apply.** `POST /api/ai/seo/apply { orgId, hostId, jobId }`
+(`src/lib/server/ai-seo-apply.ts`) takes a finished audit. It opens a NEW
+version per page with content fixes — the published version copied, the fixes
+applied to the copy by `src/lib/runtime/seo-content-fixes.ts`, a new or rewritten
+heading passed through `validateAiNodeTree` — and records the pages whose
+listing values wait in their SEO card as the job's `applied.staged`. It never
+writes a screen's `seo` or `versionId`, nor the host document; the site-wide
+proposals go into the site SEO form as unsaved edits. A page this job already
+opened a version for keeps it. Audited `ai.job.apply`, logged `ai.seo.applied`,
+behind the jobs read gate, the site's content-write role and the site's
+lockdown verdict.
+
+**The doctrine.** Until AGL-2935 lands, `runValidatedGenerationStandIn` in
+`src/lib/runtime/seo-fields.ts` stands for `runValidatedGeneration`: the same
+input and result as its custom overload, so the swap is an import.
+
 ## Indexes and retention
 
 `cloud/firebase-firestore.indexes.json`: `aiJobs` (status, createdAt desc) at

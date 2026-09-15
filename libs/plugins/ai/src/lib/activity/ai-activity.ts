@@ -218,6 +218,47 @@ export async function logAiEditApplied(
 }
 
 /**
+ * `ai.seo.applied` — a site audit's fixes were applied as drafts (AGL-2910).
+ *
+ * Written by the door that applied them. The name carries the counts — new
+ * unpublished versions, listings staged for a person to save — and never
+ * the text proposed, which is the site's content. Org feed, and the site's
+ * own feed when a person is named.
+ */
+export async function logAiSeoApplied(
+  orgId: string,
+  actor: AiActivityActor,
+  apply: {
+    jobId: string
+    hostId: string
+    hostName?: string | null
+    versions: number
+    staged: number
+  },
+): Promise<void> {
+  const versions = Math.max(0, Math.floor(apply.versions))
+  const staged = Math.max(0, Math.floor(apply.staged))
+  const target = {
+    type: 'aiJob' as const,
+    id: apply.jobId,
+    name: named(
+      apply.hostName ?? apply.hostId,
+      `${versions} draft ${versions === 1 ? 'version' : 'versions'}`,
+      `${staged} ${staged === 1 ? 'listing' : 'listings'} to review`,
+    ),
+  }
+  await logOrgActivity(orgId, actor, AI_ACTIVITY_ACTIONS.seoApplied, target)
+  const onHost = hostActor(actor)
+  if (onHost) {
+    await logHostActivity(apply.hostId, onHost, AI_ACTIVITY_ACTIONS.seoApplied, {
+      type: 'host',
+      id: apply.hostId,
+      name: target.name,
+    })
+  }
+}
+
+/**
  * `ai.assist.section` — the assist door returned a section subtree.
  *
  * Into the site's feed when the request named a site, else the org's, so

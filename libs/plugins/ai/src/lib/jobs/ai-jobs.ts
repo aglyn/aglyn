@@ -32,6 +32,7 @@ import {
 import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJob,
+  type AiJobApplied,
   type AiJobKind,
   type AiJobOutput,
   type AiJobPlan,
@@ -113,6 +114,13 @@ export const AI_JOB_LEASE_MS = 90_000
 
 /** A step handed back by a retryable provider failure this many times fails. */
 export const AI_JOB_STEP_MAX_ATTEMPTS = 3
+
+/**
+ * The most passes one step may take by asking to continue (AGL-2910). A site
+ * audit's passes are its units of generated work; this bounds a runner that
+ * never finishes, not a real site.
+ */
+export const AI_JOB_STEP_MAX_PASSES = 40
 
 /**
  * The nominal credit figure shown as held per outstanding step. Not a
@@ -244,6 +252,16 @@ registerAiJobStep('text', runAiJobTextStep)
 registerAiJobStep('theme', async (context) => {
   const { runAiJobThemeStep } = await import('./ai-job-theme-step')
   return runAiJobThemeStep(context)
+})
+
+/**
+ * The SEO step (AGL-2910), loaded the first time an SEO job runs rather than
+ * when this module does: it reads pages, versions and layouts, and a process
+ * that never runs one should load none of that.
+ */
+registerAiJobStep('seo', async (context) => {
+  const { runAiJobSeoStep } = await import('./ai-job-seo-step')
+  return runAiJobSeoStep(context)
 })
 
 // ── Documents ─────────────────────────────────────────────────────────────
@@ -399,6 +417,14 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
         }
       : null,
     review: job.review ?? null,
+    applied: job.applied
+      ? {
+          at: toIso(job.applied.at as Instant),
+          by: job.applied.by,
+          versions: job.applied.versions ?? {},
+          staged: job.applied.staged ?? [],
+        }
+      : null,
   }
 }
 
@@ -518,6 +544,12 @@ export interface RecordStepInput {
   plan?: AiJobPlan
   /** The step stopped for a person: the job parks `needs_review` in this same write. */
   review?: AiJobReview
+  /**
+   * With `pending`: the step is handed back because it made progress and
+   * asked to continue (AGL-2910), not because an attempt failed. Its
+   * attempts count again from zero and its passes by one.
+   */
+  continued?: boolean
 }
 
 export interface RecordedStep {
@@ -559,6 +591,9 @@ export async function recordStep(
             endedAt: input.status === 'pending' ? null : now,
             creditsSpent: (step.creditsSpent ?? 0) + input.creditsSpent,
             error: input.error ?? null,
+            ...(input.continued && input.status === 'pending'
+              ? { attempts: 0, passes: (step.passes ?? 0) + 1 }
+              : {}),
           }
         : step,
     )
@@ -804,9 +839,29 @@ export async function resumeAiJob(
   })
 }
 
+/**
+ * Record what a person applied from a finished job's outputs (AGL-2910): the
+ * versions an apply opened and the listings it staged. The apply door calls
+ * this after its own writes, so the record names only what exists. It never
+ * changes the job's status, its steps or its spend.
+ */
+export async function recordAiJobApplied(
+  firestore: Firestore,
+  orgId: string,
+  jobId: string,
+  applied: AiJobApplied,
+  now = new Date(),
+): Promise<AiJob> {
+  const { job } = await transition(firestore, orgId, jobId, () => ({
+    applied,
+    updatedAt: now,
+  }))
+  return job
+}
+
 // ── Audit ─────────────────────────────────────────────────────────────────
 
-export type AiJobAuditAction = 'ai.job.output' | 'ai.job.cancel' | 'ai.job.resume'
+export type AiJobAuditAction = 'ai.job.output' | 'ai.job.cancel' | 'ai.job.resume' | 'ai.job.apply'
 
 export interface AiJobAuditEntry {
   action: AiJobAuditAction
@@ -1184,11 +1239,24 @@ export async function runAiJobStep(
   // records it (AGL-2935): a plan review completes the step, so confirming
   // runs the next one; a doctrine or limit review hands it back, so trying
   // again runs the same one.
+  //
+  // A step that asks to continue (AGL-2910) is recorded as this pass — its
+  // cost, its credits, its outputs, its audit rows — and handed back as
+  // `pending`, so the next claim runs the same step again. A step that stopped
+  // for a person never continues: the review is what it waits on. The pass
+  // cap is what stops a runner that never finishes: past it the pass is
+  // recorded as the step's last, and what it produced stands.
   const review = outcome.review
+  const continuing =
+    !review && Boolean(outcome.continue) && (step.passes ?? 0) + 1 < AI_JOB_STEP_MAX_PASSES
+  if (!review && outcome.continue && !continuing) {
+    console.warn('ai job step reached its pass cap', { orgId, jobId, stepIndex })
+  }
   const recorded = await recordStep(
     firestore, orgId, jobId, options.owner, stepIndex,
     {
-      status: review && review.reason !== 'plan' ? 'pending' : 'done',
+      status: continuing || (review && review.reason !== 'plan') ? 'pending' : 'done',
+      ...(continuing ? { continued: true } : {}),
       creditsSpent: credits,
       outputs: outcome.outputs,
       ...(outcome.plan ? { plan: outcome.plan } : {}),

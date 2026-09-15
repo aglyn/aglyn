@@ -16,7 +16,12 @@
  */
 'use client'
 
+import { useCallback, useRef } from 'react'
+import { useHostSubdomain } from '../../../../../../../../components/host-id-provider'
+import PluginWidgetSlot from '../../../../../../../../components/plugin-widget-slot.component'
 import SearchIndexingCard from '../../../../../../../../components/search-indexing-card.component'
+import useCurrentOrg from '../../../../../../../../hooks/use-current-org'
+import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import {
   HostSettingsForm,
   useHostSettingsScope,
@@ -29,11 +34,39 @@ import {
  * The indexing switch is its own card rather than a field on the schema: a
  * toggle that writes on change does not belong inside a form that writes on
  * save.
+ *
+ * The `hostSeo` zone sits above the form (AGL-2910). A widget there proposes
+ * values for the form's fields — a structured-data description, the agent
+ * guidance `/llms.txt` leads with — and they land in the form as unsaved
+ * edits. The form's Update is still the only write, so nothing a widget
+ * proposes reaches the published site until somebody saves it.
  */
 export default function HostSetupSeoSection() {
-  const { hostId } = useHostSettingsScope()
+  const { hostId, data, proposeFormDraft } = useHostSettingsScope()
+  const { orgId } = useCurrentOrg()
+  const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
+  /** The last proposal applied, so a widget that proposes the same thing twice applies it once. */
+  const lastKeyRef = useRef<string | null>(null)
+  const proposeDraft = useCallback(
+    (values: Record<string, string>, key: string) => {
+      if (key && key === lastKeyRef.current) return
+      lastKeyRef.current = key || null
+      proposeFormDraft('hostSeo', values)
+    },
+    [proposeFormDraft],
+  )
   return (
     <>
+      <PluginWidgetSlot
+        slot="hostSeo"
+        hostId={hostId}
+        orgId={orgId}
+        orgSlug={orgSlug}
+        host={host ?? null}
+        seo={data?.seo}
+        proposeDraft={proposeDraft}
+      />
       <HostSettingsForm schemaId="hostSeo" />
       <div style={{ marginTop: 24 }}>
         <SearchIndexingCard hostId={hostId} />

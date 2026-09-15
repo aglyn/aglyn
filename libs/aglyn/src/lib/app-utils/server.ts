@@ -25,6 +25,9 @@
 export * from './binding-token-catalog'
 export * from './binding-tokens'
 export * from './breadcrumb-json-ld'
+// What a search listing holds and how long each field may be (AGL-2910):
+// the SEO editors and anything that proposes a value read one catalog.
+export * from './seo-listing-fields'
 // `VideoObject` for the Video elements a page actually ships (AGL-2747).
 // Beside the other structured-data builders, and server-only like them: only
 // the route emits JSON-LD, and a crawler-facing block has no client caller.

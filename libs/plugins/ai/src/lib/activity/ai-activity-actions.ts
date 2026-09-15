@@ -45,6 +45,7 @@ export const AI_ACTIVITY_ACTIONS = {
   jobCanceled: 'ai.job.canceled',
   jobNeedsInput: 'ai.job.needs_input',
   editApplied: 'ai.edit.applied',
+  seoApplied: 'ai.seo.applied',
   assistSection: 'ai.assist.section',
   overageHardCap: 'ai.overage.hardCap',
   overageCap: 'ai.overage.cap',
@@ -64,6 +65,7 @@ export const AI_ACTIVITY_ACTION_LABELS: Record<AiActivityAction, string> = {
   'ai.job.canceled': 'Canceled an AI generation',
   'ai.job.needs_input': 'AI generation paused for input',
   'ai.edit.applied': 'Applied AI edits',
+  'ai.seo.applied': 'Applied AI SEO fixes as drafts',
   'ai.assist.section': 'AI generated a section',
   'ai.overage.hardCap': 'AI stop-at-band switch',
   'ai.overage.cap': 'AI overage ceiling',
@@ -162,6 +164,8 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   product: 'content',
   experiment: 'content',
   workflow: 'workflow',
+  // An SEO proposal (AGL-2910) is about the site's content, and is filed there.
+  seo: 'content',
   text: 'content',
   theme: 'theme',
 }
@@ -215,6 +219,7 @@ const AI_ACTIVITY_ACTION_SCOPES: Record<
   'ai.job.canceled': ['org', 'host'],
   'ai.job.needs_input': ['org', 'host'],
   'ai.edit.applied': ['org', 'host'],
+  'ai.seo.applied': ['org', 'host'],
   'ai.assist.section': ['org', 'host'],
   'ai.overage.hardCap': 'org',
   'ai.overage.cap': 'org',

@@ -60,6 +60,14 @@ export const AI_JOB_BRIEF_MAX_CHARS = 4_000
  */
 export interface AiJobStepOutcome {
   outputs: AiJobOutput[]
+  /**
+   * The step made progress and has more of the same work to do (AGL-2910):
+   * a site audit works through its pages a batch at a time. The machine
+   * records this pass — its spend and its outputs — and hands the SAME step
+   * back to run again, so every pass is one reservation and one provider
+   * exchange, and the job document says how far it got.
+   */
+  continue?: boolean
   usage: AssistTokenUsage
   estCostUsd: number
   model: string

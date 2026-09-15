@@ -224,6 +224,7 @@ export type AiStepKind =
   | 'generate.section'
   | 'job.layout'
   | 'job.template'
+  | 'job.seo'
   | 'job.text'
   | 'job.theme'
   | 'job.plan'
@@ -239,6 +240,9 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // building rule; the fast tier re-asks more than it saves.
   'job.layout': 'balanced',
   'job.template': 'balanced',
+  // SEO fields, alt text and an audit's fixes (AGL-2910): short answers
+  // through a strict tool, held to a length and to the page's own text.
+  'job.seo': 'fast',
   'job.text': 'balanced',
   // A theme is one structured answer over a small, fixed control set; the
   // judgment is in the color choices, which the fast tier makes worse.

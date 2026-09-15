@@ -40,6 +40,7 @@
 
 import { runInAction } from 'mobx'
 import type { OrgPermissions } from '../app-utils/org-permissions'
+import type { SeoListingFieldKey } from '../app-utils/seo-listing-fields'
 import type { AglynOrgBilling, OrgFeatureFlags } from '../foundation'
 import type {
   ComponentSchema,
@@ -610,6 +611,28 @@ export const CONSOLE_WIDGET_SLOTS = {
    * under the selected element's own fields. Props: `hostId`.
    */
   besignerInspector: 'besignerInspector',
+  /**
+   * Inside a SEARCH LISTING editor (AGL-2910), under its fields. Props:
+   * {@link ConsoleSeoFieldsZoneProps} — what the listing describes, the
+   * fields the editor edits and what they hold, and `proposeValues`, which
+   * stages values in those fields as unsaved edits.
+   *
+   * Two editors host it: the screen detail page's SEO card, and the commerce
+   * product editor's search engine listing, which draws it through
+   * `useConsoleWidgetSlot` because a plugin's dialog cannot mount the shell's
+   * slot itself. A widget here proposes and never writes: the editor's own
+   * Save is the write, with the guards that write carries. A keyword checker,
+   * a translation memory and a generator are the same shape of widget.
+   */
+  seoFields: 'seoFields',
+  /**
+   * The host setup SEO section, above the site SEO form (AGL-2910). Props:
+   * {@link ConsoleHostSeoZoneProps} — the site, its stored SEO settings, and
+   * `proposeDraft`, which puts values in the form as unsaved edits. The
+   * form's Update stores them; nothing a widget proposes reaches the
+   * published site before that.
+   */
+  hostSeo: 'hostSeo',
 } as const
 
 export type ConsoleWidgetSlot =
@@ -659,6 +682,78 @@ export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
 /** Whether a slot is one of the {@link CONSOLE_STAFF_WIDGET_SLOTS}. */
 export function isConsoleStaffWidgetSlot(slot: string): boolean {
   return (CONSOLE_STAFF_WIDGET_SLOTS as readonly string[]).includes(slot)
+}
+
+/** Search listing values by field; a field the editor does not hold is absent. */
+export type ConsoleSeoFieldValues = Partial<Record<SeoListingFieldKey, string>>
+
+/**
+ * What a search listing describes (AGL-2910). A screen is read from its own
+ * documents by whoever needs more than its name; a product travels with its
+ * name and description, because the product document is the commerce
+ * plugin's and nothing else reads it.
+ */
+export type ConsoleSeoFieldsSubject =
+  | {
+      kind: 'screen'
+      /** The screen document id. */
+      id: string
+      /** The version the page is showing, whose content the listing is about. */
+      versionId: string | null
+      name: string
+    }
+  | {
+      kind: 'product'
+      /** `null` for a product that has not been saved yet. */
+      id: string | null
+      name: string
+      description: string
+    }
+
+/** What the `seoFields` zone hands each widget (AGL-2910). */
+export interface ConsoleSeoFieldsZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  subject: ConsoleSeoFieldsSubject
+  /**
+   * The fields this editor edits, in its order — the only ones a widget may
+   * propose. Keys of the `seo-listing-fields` catalog, which carries each
+   * field's label and length.
+   */
+  fields: readonly SeoListingFieldKey[]
+  /** What each field holds as the editor shows it: saved, or staged and unsaved. */
+  values: ConsoleSeoFieldValues
+  /** Whether the listing has a social image — an image description needs one. */
+  hasImage: boolean
+  /**
+   * Stages `values` in the editor as unsaved edits under `key`. Fields the
+   * editor does not edit are ignored. The editor's own Save is what stores
+   * them; a widget never writes the listing itself.
+   */
+  proposeValues: (values: ConsoleSeoFieldValues, key: string) => void
+}
+
+/** What the `hostSeo` zone hands each widget (AGL-2910). */
+export interface ConsoleHostSeoZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site's subdomain, which is what a console URL names a site by. */
+  host: string | null
+  /** The site's stored `seo` settings, as the form was seeded with them. */
+  seo: Record<string, unknown> | undefined
+  /**
+   * Puts `values` in the site SEO form as unsaved edits, keyed by the form's
+   * field names (`seo.entity.description`, `seo.agent.whenToUse`). Proposals
+   * land in the form's draft beside what was typed, the same `key` twice
+   * applies once, and the form's Update is what stores them.
+   */
+  proposeDraft: (values: Record<string, string>, key: string) => void
 }
 
 /**

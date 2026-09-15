@@ -37,7 +37,7 @@ export type ScreenSeoTextField = (typeof SCREEN_SEO_TEXT_FIELDS)[number]
  */
 export const SCREEN_SEO_TEXT_GUIDANCE: Readonly<Record<ScreenSeoTextField, number>> = {
   title: 60,
-  description: 160,
+  description: 155,
 }
 
 /** The key an editor offers a field for staging under (`seo.title`). */

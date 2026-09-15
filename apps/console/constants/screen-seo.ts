@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { SCREEN_SEO_TEXT_FIELDS } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import {
+  SCREEN_SEO_CARD_TEXT_FIELDS,
+  type ScreenSeoCardTextField,
+} from '@aglyn/aglyn/app-utils/seo-listing-fields'
 
 /**
  * How a screen's `seo` map is rebuilt from a partial edit (AGL-1437).
@@ -88,15 +91,18 @@ export interface ScreenSeoEdits {
   title?: string | null
   /** Staged search description. */
   description?: string | null
+  /** Staged breadcrumb label (AGL-2910). */
+  breadcrumb?: string | null
   /** Staged social image; an empty `image` means the author cleared it. */
   image?: ScreenSocialImageDraft | null
 }
 
 /**
- * The text fields, which share their emptied-means-removed rule — the one
- * list every editor and proposer of these fields reads.
+ * The text fields, which share their emptied-means-removed rule: the SEO
+ * card's plain inputs (the listing's title and description, and the
+ * breadcrumb label), from the one catalog both panels and every proposer read.
  */
-const TEXT_FIELDS = SCREEN_SEO_TEXT_FIELDS
+const TEXT_FIELDS: readonly ScreenSeoCardTextField[] = SCREEN_SEO_CARD_TEXT_FIELDS
 
 /** The social image, its dimensions and its alt: written and removed together. */
 const IMAGE_FIELDS = [

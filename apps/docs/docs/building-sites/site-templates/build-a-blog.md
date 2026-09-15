@@ -163,7 +163,7 @@ field above them — so an author who ignores both keeps the page they have toda
 author page. The bio is the fallback because it is already the sentence that
 describes them to a stranger; it is often the wrong length, because it is printed
 beside a heading and runs as long as you like, while a search result cuts off at
-roughly 160 characters.
+roughly 155 characters.
 
 **Share card** overrides the portrait as the picture the page is shared with, and
 changes the card's shape with it: a page with a share card shares as the **large**

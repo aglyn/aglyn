@@ -96,6 +96,19 @@ const CHROME_COMPONENTS: ReadonlySet<string> = new Set([
   'icon',
 ])
 
+/**
+ * Whether a node is navigation rather than content: a chrome component, or
+ * an element its author declared `nav`, `header` or `footer`. Exported so a
+ * reader of a page's CONTENT — the SEO audit's heading and image scan
+ * (AGL-2910) — skips exactly what this serializer skips.
+ */
+export function isPageChromeNode(node: PageMarkdownNode | undefined): boolean {
+  if (!node) return false
+  if (CHROME_COMPONENTS.has(String(node.componentId ?? ''))) return true
+  const element = elementOf(node)
+  return element === 'nav' || element === 'header' || element === 'footer'
+}
+
 /** Heading levels, as either `props.component` or `props.variant` spells them. */
 const HEADING = /^h([1-6])$/
 
@@ -209,12 +222,11 @@ function walk(
   seen.add(rootId)
 
   const componentId = String(node.componentId ?? '')
-  if (CHROME_COMPONENTS.has(componentId)) return
-  // `nav`, `header` and `footer` are chrome by their OWN declaration — an
-  // author who set the element picker to one of them named it navigation, and
-  // that is a stronger signal than any component-id list can be.
-  const element = elementOf(node)
-  if (element === 'nav' || element === 'header' || element === 'footer') return
+  // Chrome components, and `nav`, `header` and `footer` by their OWN
+  // declaration — an author who set the element picker to one of them named
+  // it navigation, and that is a stronger signal than any component-id list
+  // can be.
+  if (isPageChromeNode(node)) return
 
   const props = node.props ?? {}
   const childIds = Array.isArray(node.nodes)

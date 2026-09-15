@@ -31,6 +31,7 @@ import { POST as cancelAiJob } from './server/ai-jobs-cancel'
 import { GET as aiJobEvents } from './server/ai-jobs-events-route'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { POST as resumeAiJob } from './server/ai-jobs-resume'
+import { POST as applyAiSeoAudit } from './server/ai-seo-apply'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistEditApplied } from './server/assist-edit-applied'
 import { POST as assistFeedback } from './server/assist-feedback'
@@ -88,6 +89,9 @@ export function registerAiConsoleApi(): void {
     web: (request, context) =>
       aiJobEvents(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
   })
+  // A site SEO audit's "Apply all" (AGL-2910): content fixes as new
+  // unpublished versions, listing values staged for their SEO cards.
+  registerPluginApiRoute('ai/seo/apply', { web: applyAiSeoAudit })
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
   registerPluginApiRoute('ai/usage', { web: aiUsage })

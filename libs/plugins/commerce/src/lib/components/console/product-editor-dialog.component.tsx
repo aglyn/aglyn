@@ -52,6 +52,13 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
+import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import {
+  seoListingFieldCount,
+  seoListingFieldTooLong,
+  type SeoListingFieldKey,
+} from '@aglyn/aglyn/app-utils/seo-listing-fields'
+import type { ConsoleSeoFieldValues } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import {
   EntitlementUpsell,
   useCommerceEntitlement,
@@ -91,6 +98,27 @@ export interface ProductEditorDialogProps {
   seedUnreadable?: boolean
   open: boolean
   onClose: () => void
+}
+
+/**
+ * The search listing fields this editor holds (AGL-2910): `product.seo`
+ * carries a title and a description beside its share image, and nothing
+ * else a listing zone may propose.
+ */
+const PRODUCT_SEO_LISTING_FIELDS: readonly Extract<SeoListingFieldKey, 'title' | 'description'>[] = [
+  'title',
+  'description',
+]
+
+/** A product nobody has saved yet, as the editor starts one. */
+function blankProduct(): CommerceModel.HostProduct {
+  return {
+    name: '',
+    slug: '',
+    type: 'physical',
+    status: 'draft',
+    variants: [{ id: 'default', priceUsd: 0 }],
+  }
 }
 
 /** Stable key for matching variants across matrix regenerations. */
@@ -214,17 +242,33 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     [pickMedia],
   )
   // Lazy-init per open; parent remounts via `key` on product change.
-  const current: CommerceModel.HostProduct =
-    draft ??
-    lifted ?? {
-      name: '',
-      slug: '',
-      type: 'physical',
-      status: 'draft',
-      variants: [{ id: 'default', priceUsd: 0 }],
-    }
+  const current: CommerceModel.HostProduct = draft ?? lifted ?? blankProduct()
   const update = (patch: Partial<CommerceModel.HostProduct>) =>
     setDraft({ ...current, ...patch })
+
+  /** The shell's zone renderer (AGL-2910); `null` outside the console shell. */
+  const SeoFieldsSlot = useConsoleWidgetSlot()
+  /**
+   * A listing zone widget's proposal, staged into the draft like typing.
+   * Functional, because a proposal can arrive after a generation finishes,
+   * and a closure over the render that started it would put back every edit
+   * made while it ran. Only the fields a product's listing holds are taken.
+   */
+  const proposeSeoValues = useCallback(
+    (values: ConsoleSeoFieldValues) => {
+      const staged: { title?: string; description?: string } = {}
+      for (const field of PRODUCT_SEO_LISTING_FIELDS) {
+        const value = values[field]
+        if (typeof value === 'string') staged[field] = value
+      }
+      if (!Object.keys(staged).length) return
+      setDraft((prior) => {
+        const base = prior ?? lifted ?? blankProduct()
+        return { ...base, seo: { ...base.seo, ...staged } }
+      })
+    },
+    [lifted],
+  )
 
   const error = current.name ? CommerceModel.validateProduct(current) : null
 
@@ -1166,6 +1210,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             onChange={(event) =>
               update({ seo: { ...current.seo, title: event.target.value } })
             }
+            // The counts every search listing editor prints (AGL-2910): what a
+            // search result shows before it truncates.
+            helperText={seoListingFieldCount('title', current.seo?.title)}
+            error={seoListingFieldTooLong('title', current.seo?.title)}
             size="small"
             fullWidth
           />
@@ -1186,10 +1234,40 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           onChange={(event) =>
             update({ seo: { ...current.seo, description: event.target.value } })
           }
+          helperText={seoListingFieldCount('description', current.seo?.description)}
+          error={seoListingFieldTooLong('description', current.seo?.description)}
           size="small"
           multiline
           minRows={2}
         />
+        {/*
+          The search listing zone (AGL-2910), hosted here through the shell's
+          renderer: a plugin's dialog cannot mount the console's slot itself.
+          A widget proposes a title and a description from what this product
+          says; they are staged in the fields above like typing, and Save
+          product is still the only write.
+        */}
+        {SeoFieldsSlot ? (
+          <SeoFieldsSlot
+            slot="seoFields"
+            hostId={hostId}
+            orgId={undefined}
+            orgSlug=""
+            subject={{
+              kind: 'product',
+              id: product?.$id ?? null,
+              name: current.name,
+              description: String(current.description ?? ''),
+            }}
+            fields={PRODUCT_SEO_LISTING_FIELDS}
+            values={{
+              title: current.seo?.title ?? '',
+              description: current.seo?.description ?? '',
+            }}
+            hasImage={Boolean(current.seo?.imageUrl)}
+            proposeValues={proposeSeoValues}
+          />
+        ) : null}
 
         {error ? <Alert severity="warning">{error}</Alert> : null}
         {product?.$id ? (

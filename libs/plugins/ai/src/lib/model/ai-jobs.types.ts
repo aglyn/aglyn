@@ -139,6 +139,12 @@ export interface AiJobStep {
    * provider outage re-running a step forever.
    */
   attempts?: number
+  /**
+   * Passes of a step that works through a list (AGL-2910): each one a
+   * recorded, metered exchange that asked to continue. Attempts count again
+   * from zero after a pass; this count is what bounds the step.
+   */
+  passes?: number
 }
 
 export type AiJobOutputResource =
@@ -154,6 +160,7 @@ export type AiJobOutputResource =
   | 'workflow'
   | 'text'
   | 'theme'
+  | 'seo'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
@@ -165,6 +172,13 @@ export type AiJobOutputResource =
  * the Theme section's editor performs, which a job never does. So the change
  * set rides on the output as `proposal`, and a person puts it in the editor
  * and saves it there, or does not.
+ *
+ * An `seo` output is a proposal rather than a document (AGL-2910): search
+ * listing values for a page or a product, or a site audit's findings and
+ * fixes. A screen's listing is served from the screen document itself, so a
+ * job never writes it; the values ride on the output as `proposal`, a person
+ * puts them in the editor and saves them there, and an audit's content fixes
+ * become new versions only when a person applies them.
  */
 export interface AiJobOutput {
   resource: AiJobOutputResource
@@ -184,7 +198,7 @@ export interface AiJobOutput {
   text?: string
   /**
    * The change set of an output a person applies rather than opens — a
-   * `theme` proposal — in the shape its job kind's runner defines.
+   * `theme` or `seo` proposal — in the shape its job kind's runner defines.
    */
   proposal?: Record<string, unknown>
   /**
@@ -282,6 +296,25 @@ export interface AiJob {
   plan?: AiJobPlan | null
   /** What the person is asked to decide while the job is `needs_review`. */
   review?: AiJobReview | null
+  /**
+   * What a person applied from the job's outputs (AGL-2910). Written by the
+   * door that applied them, never by a step runner, and absent until then.
+   */
+  applied?: AiJobApplied | null
+}
+
+/**
+ * The record of an apply (AGL-2910): what became a new unpublished version,
+ * and what waits in its editor for a person to save.
+ */
+export interface AiJobApplied {
+  at: ITimestamp
+  /** The member who applied. */
+  by: string
+  /** The new version opened for each resource, by resource id. */
+  versions: Record<string, string>
+  /** Resource ids whose proposed values wait in their editor, unsaved. */
+  staged: string[]
 }
 
 /** The plan on the wire: every instant an ISO string. */
@@ -323,4 +356,11 @@ export interface AiJobSummary {
   running: boolean
   plan: AiJobPlanSummary | null
   review: AiJobReview | null
+  /** What a person applied from the outputs (AGL-2910); instants as ISO strings. */
+  applied?: {
+    at: string | null
+    by: string
+    versions: Record<string, string>
+    staged: string[]
+  } | null
 }

@@ -858,6 +858,15 @@ export interface HostSettingsScope {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   SeoFormTemplate: any
   draftsRef: MutableRefObject<Record<string, Record<string, unknown>>>
+  /**
+   * Puts `values` in a form as unsaved edits (AGL-2910), keyed by the form's
+   * field names — what a plugin zone proposes. They land in the form's
+   * draft, the same place typing lands, and the form re-applies its draft
+   * as edits: the card reads as changed and its Update is the write.
+   */
+  proposeFormDraft: (schemaId: string, values: Record<string, string>) => void
+  /** Moves each time a proposal lands, so the form picks its draft up again. */
+  formDraftRevision: number
 }
 
 const HostSettingsScopeContext = createContext<HostSettingsScope | null>(null)
@@ -881,7 +890,8 @@ export function useHostSettingsScope(): HostSettingsScope {
  * places for the draft recording to be forgotten on the next one added.
  */
 export function HostSettingsForm({ schemaId }: { schemaId: string }) {
-  const { forms, SeoFormTemplate, draftsRef } = useHostSettingsScope()
+  const { forms, SeoFormTemplate, draftsRef, formDraftRevision } =
+    useHostSettingsScope()
   const form = forms.find((entry) => entry.schema.id === schemaId)
 
   /**
@@ -909,13 +919,17 @@ export function HostSettingsForm({ schemaId }: { schemaId: string }) {
     ]
     // Read once per mount, deliberately: this restores what was typed BEFORE
     // this form existed, and re-running it would fight the reader's cursor.
+    // A proposal landing (AGL-2910) is the one other time it runs: the
+    // revision moves, the renderer below remounts on its key, and the draft
+    // — typed values and proposed ones together — is applied as edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schemaId])
+  }, [schemaId, formDraftRevision])
 
   if (!form) return null
   const { schema, initialValues, onSubmit } = form
   return (
     <FormRenderer
+      key={`${schemaId}:${formDraftRevision}`}
       /*
         The SEO section renders its media controls INSIDE its own card
         (AGL-2486), which is why it gets `SeoFormTemplate` instead of the
@@ -1367,6 +1381,28 @@ export function HostSettingsScopeProvider({
    */
   const draftsRef = useRef<Record<string, Record<string, unknown>>>({})
 
+  /**
+   * A proposal from a plugin zone (AGL-2910), put in the form's DRAFT beside
+   * whatever was typed, by field name — `seo.agent.whenToUse` — rather than
+   * written anywhere. The revision is what makes the mounted form apply it:
+   * `HostSettingsForm` keys its renderer on it and re-applies the draft as
+   * edits, so the card reads as changed and Update is the write. Field names
+   * go after the typed values, so a proposed field wins over a stale draft of
+   * the same field.
+   */
+  const [formDraftRevision, setFormDraftRevision] = useState(0)
+  const proposeFormDraft = useCallback(
+    (schemaId: string, values: Record<string, string>) => {
+      if (!Object.keys(values).length) return
+      draftsRef.current[schemaId] = {
+        ...(draftsRef.current[schemaId] ?? {}),
+        ...values,
+      }
+      setFormDraftRevision((revision) => revision + 1)
+    },
+    [],
+  )
+
   /*
    * Seeded from the HOST DOCUMENT, always — never from the draft.
    *
@@ -1470,6 +1506,8 @@ export function HostSettingsScopeProvider({
       forms,
       SeoFormTemplate,
       draftsRef,
+      proposeFormDraft,
+      formDraftRevision,
     }),
     [
       hostId,
@@ -1484,6 +1522,8 @@ export function HostSettingsScopeProvider({
       settleThemeDraft,
       forms,
       SeoFormTemplate,
+      proposeFormDraft,
+      formDraftRevision,
     ],
   )
 

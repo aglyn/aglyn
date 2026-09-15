@@ -88,7 +88,9 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
         title: 'AI generation is temporarily unavailable',
         body: 'Generating sections, pages and automations with AI is temporarily unavailable. Everything already built is unaffected — please try again shortly.',
       },
-      apiPaths: { prefixes: ['ai/generate', 'ai/jobs'] },
+      // `ai/seo` (AGL-2910) applies a finished audit's drafts; it spends
+      // nothing, and it is still a generative door the switch stops.
+      apiPaths: { prefixes: ['ai/generate', 'ai/jobs', 'ai/seo'] },
     },
   ],
 }

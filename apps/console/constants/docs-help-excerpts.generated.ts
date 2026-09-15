@@ -160,6 +160,7 @@ export const DOCS_HELP_EXCERPTS = {
   selfHosting: 'Run the whole Aglyn platform on your own infrastructure with Docker — your own Firebase project, your own domains, your own keys.',
   selfHostingEnvironment: 'Every environment variable a self-hosted Aglyn deployment reads — what it drives, where to get its value, what shape it takes, and whether changing it needs a rebuild.',
   seo: 'Per-screen SEO, sitemap and robots, Open Graph/Twitter cards, and structured data.',
+  seoByAi: 'Have AI write a page\'s or a product\'s search listing, audit every published page with a proposed fix for each finding, and draft your structured data and /llms.txt guidance — as drafts you review and save.',
   serverApis: 'Plugin API routes behind the dispatchers, Stripe/Svix signature verification, billing hooks, and scheduled jobs.',
   settings: 'What the CRM does on its own for every site — whether a company is created from a contact\'s work email domain, who a new contact is assigned to, the address that files replies on a record, and each site\'s recipes.',
   siteProtection: 'Password-protect screens, design custom error pages, and put your site in maintenance mode.',

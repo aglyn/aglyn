@@ -33,7 +33,9 @@ import {
   resolveConsoleStaffPage,
   unregisterConsoleExtension,
   type ComponentRegistrar,
+  type ConsoleHostSeoZoneProps,
   type ConsoleHostThemeZoneProps,
+  type ConsoleSeoFieldsZoneProps,
 } from './feature-plugins'
 
 function fakeRegistrar() {
@@ -862,5 +864,142 @@ describe('organization-level surfaces (AGL-2974)', () => {
     expect(resolveConsoleOrgPluginPage('/outreach')).toBeUndefined()
     expect(error).toHaveBeenCalled()
     error.mockRestore()
+  })
+})
+
+/**
+ * AGL-2910: the two SEO zones. A widget in either proposes values and never
+ * writes them; the editor's own Save does. Two unrelated plugins contribute
+ * to each — a keyword checker and the AI plugin to the listing editor, a
+ * structured-data importer and the AI plugin to the site SEO form — written
+ * against the same typed props.
+ */
+describe('the SEO zones (AGL-2910)', () => {
+  afterEach(() => {
+    for (const extension of listConsoleExtensions()) {
+      unregisterConsoleExtension(extension.pluginId)
+    }
+  })
+
+  describe('the search listing zone', () => {
+    const staged: Array<{ key: string; values: unknown }> = []
+    const props: ConsoleSeoFieldsZoneProps = {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      subject: { kind: 'screen', id: 'screen-1', versionId: 'v1', name: 'Pricing' },
+      fields: ['title', 'description', 'breadcrumb', 'imageAlt'],
+      values: { title: 'Pricing', description: '' },
+      hasImage: false,
+      proposeValues: (values, key) => staged.push({ key, values }),
+    }
+    const KeywordChecker = (zone: ConsoleSeoFieldsZoneProps): null => {
+      // A checker that appends the page's own name to a blank description.
+      if (!zone.values.description && zone.fields.includes('description')) {
+        zone.proposeValues(
+          { description: `${zone.subject.name} plans and prices.` },
+          `keywords:${zone.subject.kind}:${zone.subject.id}`,
+        )
+      }
+      return null
+    }
+    const Generator = (): null => null
+
+    beforeEach(() => {
+      staged.length = 0
+      registerConsoleExtension({
+        pluginId: 'acme-keywords',
+        displayName: 'Keyword checker',
+        widgets: [
+          { widgetId: 'keyword-coverage', slot: CONSOLE_WIDGET_SLOTS.seoFields, Component: KeywordChecker },
+        ],
+      })
+      registerConsoleExtension({
+        pluginId: 'ai',
+        displayName: 'AI',
+        widgets: [
+          { widgetId: 'ai-seo-fields', slot: CONSOLE_WIDGET_SLOTS.seoFields, Component: Generator },
+        ],
+      })
+    })
+
+    it('is a workspace zone, listing only the plugins the workspace has enabled', () => {
+      expect(CONSOLE_WIDGET_SLOTS.seoFields).toBe('seoFields')
+      expect(isConsoleStaffWidgetSlot('seoFields')).toBe(false)
+      expect(
+        listConsoleWidgets('seoFields', ['acme-keywords', 'ai']).map((entry) => entry.widget.widgetId),
+      ).toEqual(['keyword-coverage', 'ai-seo-fields'])
+      expect(
+        listConsoleWidgets('seoFields', ['ai']).map((entry) => entry.widget.widgetId),
+      ).toEqual(['ai-seo-fields'])
+    })
+
+    it('hands a widget the listing and the one door it proposes through', () => {
+      const [entry] = listConsoleWidgets('seoFields', ['acme-keywords'])
+      const Widget = entry.widget.Component as (zone: ConsoleSeoFieldsZoneProps) => null
+      Widget(props)
+      expect(staged).toEqual([
+        { key: 'keywords:screen:screen-1', values: { description: 'Pricing plans and prices.' } },
+      ])
+      // The same widget, in a product's listing editor.
+      Widget({
+        ...props,
+        subject: { kind: 'product', id: null, name: 'Mug', description: 'Stoneware.' },
+        fields: ['title', 'description'],
+      })
+      expect(staged[1]).toEqual({
+        key: 'keywords:product:null',
+        values: { description: 'Mug plans and prices.' },
+      })
+    })
+  })
+
+  describe('the site SEO zone', () => {
+    const drafts: Array<{ key: string; values: Record<string, string> }> = []
+    const props: ConsoleHostSeoZoneProps = {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      host: 'shop',
+      seo: { title: 'Acme Widgets' },
+      proposeDraft: (values, key) => drafts.push({ key, values }),
+    }
+    const SchemaImporter = (zone: ConsoleHostSeoZoneProps): null => {
+      zone.proposeDraft({ 'seo.entity.name': String(zone.seo?.['title'] ?? '') }, `schema:${zone.hostId}`)
+      return null
+    }
+    const Audit = (): null => null
+
+    beforeEach(() => {
+      drafts.length = 0
+      registerConsoleExtension({
+        pluginId: 'acme-schema',
+        displayName: 'Structured data importer',
+        widgets: [{ widgetId: 'schema-import', slot: CONSOLE_WIDGET_SLOTS.hostSeo, Component: SchemaImporter }],
+      })
+      registerConsoleExtension({
+        pluginId: 'ai',
+        displayName: 'AI',
+        widgets: [{ widgetId: 'ai-seo-audit', slot: CONSOLE_WIDGET_SLOTS.hostSeo, Component: Audit }],
+      })
+    })
+
+    it('is a workspace zone, listing only the plugins the site has enabled', () => {
+      expect(CONSOLE_WIDGET_SLOTS.hostSeo).toBe('hostSeo')
+      expect(isConsoleStaffWidgetSlot('hostSeo')).toBe(false)
+      expect(
+        listConsoleWidgets('hostSeo', ['acme-schema', 'ai']).map((entry) => entry.widget.widgetId),
+      ).toEqual(['schema-import', 'ai-seo-audit'])
+      expect(listConsoleWidgets('hostSeo', ['acme-schema']).map((entry) => entry.widget.widgetId)).toEqual([
+        'schema-import',
+      ])
+    })
+
+    it('hands a widget the stored settings and the draft door, keyed by form field name', () => {
+      const [entry] = listConsoleWidgets('hostSeo', ['acme-schema'])
+      const Widget = entry.widget.Component as (zone: ConsoleHostSeoZoneProps) => null
+      Widget(props)
+      expect(drafts).toEqual([{ key: 'schema:host-1', values: { 'seo.entity.name': 'Acme Widgets' } }])
+    })
   })
 })

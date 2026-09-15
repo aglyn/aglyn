@@ -42,6 +42,8 @@ describe('the catalog', () => {
       'ai.job.canceled',
       'ai.job.needs_input',
       'ai.edit.applied',
+      // A site audit applied as drafts (AGL-2910).
+      'ai.seo.applied',
       'ai.assist.section',
       'ai.overage.hardCap',
       'ai.overage.cap',
@@ -82,8 +84,10 @@ describe('where the feed files a job output', () => {
     // A theme proposal is filed under the site's theme (AGL-2938), which the
     // host feed links to the Theme section.
     expect(aiOutputTargetType('theme')).toBe('theme')
-    // Copy is content; so are the kinds whose runners have not shipped.
+    // Copy is content, and so is a search listing; so are the kinds whose
+    // runners have not shipped.
     expect(aiOutputTargetType('text')).toBe('content')
+    expect(aiOutputTargetType('seo')).toBe('content')
     for (const resource of ['form', 'emailScreen', 'campaign', 'product', 'experiment'] as const) {
       expect(aiOutputTargetType(resource)).toBe('content')
     }

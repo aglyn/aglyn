@@ -39,6 +39,8 @@ import MemberAiUsageCard from './components/member-ai-usage-card.component'
 import AiThemeProposalCard from './components/ai-theme-proposal-card.component'
 import StaffOrgAiCard from './components/staff-org-ai-card.component'
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
+import AiSeoAuditCard from './components/ai-seo-audit-card.component'
+import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
 import { AI_PLUGIN_ID } from './constants'
 import { registerAiDeclarations } from './declarations'
 
@@ -190,6 +192,28 @@ export function registerAiConsole(): void {
           Header: AiCollaboratorCreditsHeader,
         },
         Component: AiCollaboratorCreditsCell,
+      },
+      // SEO by AI (AGL-2910): "Write SEO" inside every search listing editor
+      // — a page's SEO card and a product's listing — and the site audit on
+      // the site's SEO section. Generation is sold as `aiGenerative` and held
+      // by `ai.generate`, so the shell withholds both from a plan or a member
+      // without either; each card asks the jobs route about the release flag
+      // before it shows anything, and neither ever writes what it proposes.
+      {
+        slot: 'seoFields',
+        widgetId: 'ai-seo-fields',
+        title: 'SEO assistant',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSeoFieldsCard,
+      },
+      {
+        slot: 'hostSeo',
+        widgetId: 'ai-seo-audit',
+        title: 'SEO audit',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiSeoAuditCard,
       },
     ],
   })

@@ -44,6 +44,9 @@ const REPO_ROOT = resolve(__dirname, '../../..')
 /** The slot the registry is asked for, and what it answers. */
 let mockSlot: string
 let lastWidgetProps: Record<string, unknown> | undefined
+/** The SEO zones' proposal doors (AGL-2910), passed through by identity. */
+const mockProposeValues = jest.fn()
+const mockProposeDraft = jest.fn()
 
 function MockWidget(props: Record<string, unknown>) {
   lastWidgetProps = props
@@ -137,6 +140,34 @@ const MOUNTS: Record<
       'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx',
     how: 'slot',
     props: { hostId: 'host-1' },
+  },
+  // AGL-2910: the screen detail page's SEO card, and the site SEO section.
+  seoFields: {
+    file:
+      'apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      subject: { kind: 'screen', id: 'screen-1', versionId: 'v1', name: 'Pricing' },
+      fields: ['title', 'description', 'breadcrumb', 'imageAlt'],
+      values: { title: 'Pricing' },
+      hasImage: false,
+      proposeValues: mockProposeValues,
+    },
+  },
+  hostSeo: {
+    file: 'apps/console/app/(app)/[orgSlug]/hosts/[host]/setup/(sections)/seo/page.tsx',
+    how: 'slot',
+    props: {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      host: 'shop',
+      seo: { title: 'Acme Widgets' },
+      proposeDraft: mockProposeDraft,
+    },
   },
 }
 
