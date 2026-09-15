@@ -1351,6 +1351,17 @@ const NOT_A_LIST: Array<[string, string]> = [
       '`TOP_USERS` (10) dearest members this month. The counts beside the ' +
       'jobs table are the whole population; the rows are a sample of it.',
   ],
+  [
+    'libs/plugins/ai/src/lib/components/ai-theme-proposal-card.component.tsx',
+    'One theme PROPOSAL, read back as the change it would make (AGL-2938): ' +
+      'a row per control it sets — the editor’s color controls in each ' +
+      'scheme and its few type, shape, spacing and navigation controls — ' +
+      'and at most `AI_THEME_TOOL_MAX_COMPONENT_LEAVES` (40) component ' +
+      'leaves, the ceilings the theme tool holds an answer to before it ' +
+      'becomes a proposal. The count is bounded by the editor’s controls, ' +
+      'not by anything a site accumulates, and the recent proposals above ' +
+      'it are the last `RECENT_PROPOSALS_SHOWN` (3).',
+  ],
 ]
 
 /**
