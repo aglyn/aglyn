@@ -1955,7 +1955,7 @@ describe('a Free turn is metered on the account and the platform; a refusal draw
 
   it('an answered Free turn lands on the org, the account AND the platform day', async () => {
     await recordAssistCost(firestore(), ORG, record('end_turn', { accountUid: 'owner-1' }), NOW)
-    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: cost, refusals: 0, refusedCostUsd: 0 })
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: cost, refusedTurns: 0, refusedCostUsd: 0 })
     expect(mockDocs.get(accountPath)).toMatchObject({ month: '2026-08', estCostUsd: cost })
     expect(mockDocs.get(platformPath)).toMatchObject({ day, estCostUsd: cost, requests: 1, refusals: 0 })
     // Accumulates, on all three, through the other writer too.
@@ -1973,7 +1973,7 @@ describe('a Free turn is metered on the account and the platform; a refusal draw
     // FORCED RED by metering a refusal like any other turn: the org's
     // `estCostUsd` moved and the account's did too.
     await recordAssistCost(firestore(), ORG, record('refusal', { accountUid: 'owner-1' }), NOW)
-    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: 0, refusals: 1, refusedCostUsd: cost })
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: 0, refusedTurns: 1, refusedCostUsd: cost })
     expect(mockDocs.get(accountPath)).toMatchObject({ days: { [day]: { refusals: 1 } } })
     expect(mockDocs.get(accountPath)?.estCostUsd).toBeUndefined()
     expect(mockDocs.get(platformPath)).toMatchObject({ estCostUsd: cost, requests: 1, refusals: 1 })
@@ -1984,9 +1984,22 @@ describe('a Free turn is metered on the account and the platform; a refusal draw
 
   it('a PAID turn — no attribution — is metered exactly as before, refusal or not', async () => {
     await recordAssistCost(firestore(), ORG, { ...record('refusal', null), tier: 'entitled' }, NOW)
-    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: cost, refusals: 0, refusedCostUsd: 0 })
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ estCostUsd: cost, refusedTurns: 0, refusedCostUsd: 0 })
     expect(mockDocs.get(platformPath)).toBeUndefined()
     expect([...mockDocs.keys()].some((path) => path.startsWith('users/'))).toBe(false)
+  })
+
+  it('a metered turn leaves the gate’s refusal map intact — the two counts are two fields (AGL-2986)', async () => {
+    // FORCED RED by writing the declined-turn count back under `refusals`:
+    // an increment over the map replaces it, and the staff card's refusals
+    // would only ever count back to the last answered request.
+    mockDocs.set(orgMonthPath, { month: '2026-08', refusals: { band: 2, cap: 1 } })
+    await recordAssistCost(firestore(), ORG, { ...record('end_turn', null), tier: 'entitled' }, NOW)
+    await recordAssistCost(firestore(), ORG, record('refusal', { accountUid: 'owner-1' }), NOW)
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({
+      refusals: { band: 2, cap: 1 },
+      refusedTurns: 1,
+    })
   })
 
   it('a Free workspace with NO owner meters the platform day and nothing else', async () => {

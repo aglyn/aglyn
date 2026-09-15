@@ -951,8 +951,11 @@ function writeSignalAndRollup(
       cacheWriteTokens: increment(record.usage.cacheWriteTokens),
       estCostUsd: increment(refusedFree ? 0 : estCostUsd),
       // The refused half of a Free month, kept beside the credited half so
-      // the rollup still says what the month cost us in total.
-      refusals: increment(refusedFree ? 1 : 0),
+      // the rollup still says what the month cost us in total. Its own field
+      // name (AGL-2986): `refusals` on this document is the gate's map of
+      // refusal counts by reason (`recordAssistRefusal`), and an increment
+      // over a map replaces the map with the operand.
+      refusedTurns: increment(refusedFree ? 1 : 0),
       refusedCostUsd: increment(refusedFree ? estCostUsd : 0),
       updatedAt: serverTimestamp(),
     },
