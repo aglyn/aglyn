@@ -239,7 +239,7 @@ function syncCatalog(): void {
       CORE_ORG_PERMISSION_KEYS.has(declared.key) ||
       LEGACY_PERMISSION_KEYS.has(declared.key)
     ) {
-      const refusal = `${declared.pluginId} ${declared.key}`
+      const refusal = `${declared.pluginId}\x00${declared.key}`
       if (!reportedRefusals.has(refusal)) {
         reportedRefusals.add(refusal)
         console.error(
