@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v2'
+export const LEGAL_DOCUMENT_VERSION = 'v7'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -535,15 +535,13 @@ export interface LegalDocumentManifestEntry {
  * All six documents move "Last updated" to September 15, 2026; the Terms keep
  * "Effective date: August 5, 2026".
  *
- * TODO(AGL-2902): after both pages publish, capture them from the live site
- * with the method below, archive the captures as
- * `Acceptance-Snapshots/v7/terms.txt` and `privacy.txt`, record them here as
- * terms TODO-bytes / `TODO-sha256` and privacy TODO-bytes / `TODO-sha256`,
- * and only then move `LEGAL_DOCUMENT_VERSION` to `v7` with the pins below.
- * Both pinned documents change in this version, so no control survives
- * publication; the method was proven beforehand instead, on 2026-09-15, by
- * reproducing the `v2` pins (terms 39062 bytes / `7257cc…`, privacy 15426
- * bytes / `6cb2c8…`) byte for byte from the live pages.
+ * Publication-first: all six documents and the index were published, the
+ * live pages confirmed serving the new text, and only then were these
+ * captured — terms 43836 bytes, privacy 20785 bytes, each identical across
+ * two requests and a cache-busting query. Both pinned documents changed, so
+ * no control could run after publication. The method was proven before it
+ * instead: on 2026-09-15 the live pages reproduced the `v2` pins (terms 39062
+ * bytes / `7257cc…`, privacy 15426 bytes / `6cb2c8…`) byte for byte.
  *
  * ## ONE snapshot in the tree, and why that is enough
  *
@@ -604,14 +602,14 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '7257cce3324dc001b361532ebb922b665c374d8e40926087c83289eed0e27d9f',
-    bytes: 39062,
+      '69d59b4367067a1c95adc9ed825fb09165e5e6b1817ebacad835234b15561b7a',
+    bytes: 43836,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '6cb2c8bbafade158292c77dcb58606d241c02b2c75892968125f0fe601c4ff90',
-    bytes: 15426,
+      '59e577d3072aff8acf0da0260feb2b34da775a4974aa5e7d7bf45faa043e467b',
+    bytes: 20785,
   },
 ]
