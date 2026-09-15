@@ -104,6 +104,11 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   // uncached, and a full-palette answer is about 1,300 characters of JSON with
   // as much again to think in.
   'job.theme': { inputTokens: 500, outputTokens: 850, cacheReadTokens: 2_500, cacheWriteTokens: 0 },
+  // The plan step: the tool's schema, the doctrine and the plan instructions
+  // (about 10,000 characters) are the cached prefix, the site inventory and the
+  // brief ride uncached, and a plan answer is about 600 characters of JSON with
+  // as much again to think in.
+  'job.plan': { inputTokens: 500, outputTokens: 400, cacheReadTokens: 3_400, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */
