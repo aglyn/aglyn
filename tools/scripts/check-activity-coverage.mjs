@@ -126,6 +126,11 @@ const MUTATION_PATHS = [
   // `app/api` one, which is why a glob over the app would never have listed
   // it — the same shape as the provisioning module above.
   'libs/plugins/crm/src/lib/server.ts',
+  // Outreach's mailbox routes (AGL-2978): `outreach/mailboxes/connect/complete`
+  // brings a connected mailbox and the grant to send as a rep into being,
+  // and `outreach/mailboxes/disconnect` destroys both. Plugin routes again,
+  // written through the route module's injected `logOrgActivity`.
+  'libs/plugins/outreach/src/lib/mailboxes/mailbox-routes.ts',
   // Converting a lead brings a contact, a company and a deal into being from
   // one lead. `convertHostLead` performs every write and writes the entry,
   // and both doors call it: the console's `crm/lead-convert` route and the

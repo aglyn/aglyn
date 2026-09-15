@@ -1196,6 +1196,9 @@ export interface OrgActivityTarget {
     // the host feed gets its own copy of the host-scoped ones.
     | 'aiJob' | 'role'
     | 'screen' | 'layout' | 'component' | 'template' | 'workflow' | 'content'
+    // An Outreach mailbox a member connected, paused or disconnected
+    // (AGL-2978): an organization-level resource with no site to log under.
+    | 'mailbox'
   id?: string
   name?: string
   /** Present on a generated screen output so the deep link can hit the exact version. */

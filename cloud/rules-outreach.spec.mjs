@@ -23,7 +23,9 @@
  * `orgs/{orgId}` are read through `canReadOutreach()`: an org-wide member,
  * holding `outreach.use`, in an org whose per-org override carries Outreach —
  * no plan grants it. Every one of them is server-written. The top-level
- * `outreachMailboxCredentials` is closed to every client, staff included.
+ * `outreachMailboxCredentials` is closed to every client, staff included, and
+ * so is `outreachOAuthStates`, the pending record that makes a mailbox
+ * connect's OAuth state single-use (AGL-2978).
  *
  * ⚠️ Half the rows are controls against a lockout. "The revoked admin is
  * refused" also passes against a rule that refuses every admin, and "the
@@ -109,11 +111,17 @@ const COLLECTIONS = [
   },
 ]
 
+// `firebase emulators:exec` exports the emulator's address; a run on other
+// ports than the shared default must not reach whichever emulator holds 8082.
+const [emulatorHost, emulatorPort] = (
+  process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8082'
+).split(':')
+
 const env = await initializeTestEnvironment({
   projectId: 'aglyn-main',
   firestore: {
-    host: '127.0.0.1',
-    port: 8082,
+    host: emulatorHost,
+    port: Number(emulatorPort),
     rules: readFileSync('cloud/firebase-firestore.rules', 'utf8'),
   },
 })
@@ -370,6 +378,57 @@ await check(
     ),
 )
 
+// ── A pending mailbox connect is closed to every client (AGL-2978) ──────────
+// Seeded as the connect route writes one, for the member reading it: a rule
+// that let a member read their own pending record would pass the "outsider"
+// row and still expose it, so every row here is the member's own.
+const PENDING_STATE = 'state-outreach-owner'
+const pendingStateOf = (db, id = PENDING_STATE) => doc(db, 'outreachOAuthStates', id)
+await env.withSecurityRulesDisabled(async (context) => {
+  await setDoc(pendingStateOf(context.firestore()), {
+    orgId: ORG,
+    uid: OWNER,
+    nonceDigest: 'digest',
+    redirectUri: 'https://app.example.com/api/outreach/mailboxes/oauth/callback',
+    expiresAtMs: Date.now() + 600_000,
+    createdAtMs: Date.now(),
+  })
+})
+await check(
+  'outreachOAuthStates: the member who started the connect cannot get its record',
+  () => assertFails(getDoc(pendingStateOf(as(OWNER)))),
+)
+await check(
+  'outreachOAuthStates: the member cannot list the org’s pending connects by orgId',
+  () =>
+    assertFails(
+      getDocs(query(collection(as(OWNER), 'outreachOAuthStates'), where('orgId', '==', ORG))),
+    ),
+)
+await check(
+  'outreachOAuthStates: the member cannot re-arm or create a pending connect',
+  () =>
+    assertFails(
+      setDoc(pendingStateOf(as(OWNER), 'state-outreach-new'), {
+        orgId: ORG,
+        uid: OWNER,
+        nonceDigest: 'replayed',
+        expiresAtMs: Date.now() + 600_000,
+      }),
+    ),
+)
+await check(
+  'outreachOAuthStates: a STAFF token cannot get a pending connect',
+  () =>
+    assertFails(
+      getDoc(
+        pendingStateOf(
+          env.authenticatedContext(STAFF, { staff: true, email_verified: true }).firestore(),
+        ),
+      ),
+    ),
+)
+
 // Remove ONLY what this spec seeded — and the documents its write rows would
 // have created had a rule let them, so a regression leaves no residue behind
 // for the next run to read. Deliberately not `clearFirestore()` — the emulator
@@ -378,6 +437,8 @@ await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
   await deleteDoc(credentialOf(db))
   await deleteDoc(credentialOf(db, 'mbx-outreach-2'))
+  await deleteDoc(pendingStateOf(db))
+  await deleteDoc(pendingStateOf(db, 'state-outreach-new'))
   for (const orgId of [ORG, ENTERPRISE_ORG, OVERRIDE_OFF_ORG]) {
     for (const entry of COLLECTIONS) {
       await deleteDoc(docOf(db, orgId, entry))

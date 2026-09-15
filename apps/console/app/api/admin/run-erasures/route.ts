@@ -32,6 +32,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
+import { loadPluginGrantRevokers } from '../../../../utils/server/plugin-grant-revokers'
 import {
   countPendingPersonErasures,
   runPersonErasures,
@@ -294,6 +295,10 @@ async function handler(request: Request): Promise<Response> {
          */
         tearDownSendingDomain: (teardown) =>
           teardownSendingDomain(teardown, { immediate: true }),
+        // Revocation at the provider for the OAuth grants a plugin stored
+        // (AGL-2978), loaded only for an org that holds one. The grants are
+        // deleted whether or not it loads.
+        loadProviderGrantRevokers: loadPluginGrantRevokers,
       }).catch((error) => {
         console.error(`run-erasures: erasure failed for ${org.id}`, error)
         return { ok: false, skippedReason: 'erase-failed' }
