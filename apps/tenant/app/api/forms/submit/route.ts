@@ -193,11 +193,17 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
  * (`docs/specs/email-overhaul.md` §1d): the join can only ever be as good as
  * what the capture surfaces record.
  *
- * ⛔ THE FACT OF SUBMISSION IS NOT AN OPT-IN. Only a field whose VALUE is an
- * affirmative checkbox state counts, and only under a name that means
- * marketing consent. A form is submitted to ask a question, book a table or
- * claim a refund, and treating any of those as a subscription is exactly the
- * inference the consent arc refused to make.
+ * ⛔ THE FACT OF SUBMISSION IS NOT AN OPT-IN. Only a field whose VALUE is a
+ * tick counts, and only under a name that means marketing consent. A form is
+ * submitted to ask a question, book a table or claim a refund, and treating
+ * any of those as a subscription is exactly the inference the consent arc
+ * refused to make.
+ *
+ * What a tick is comes from `isConsentCheckboxTicked`. A box with no text of
+ * its own posts an affirmative value on any form. A Checkboxes field posts
+ * the text of its option, which is a tick only where a BOUND form's stored
+ * `declarations` show that field is a checkbox with exactly one option: an
+ * unbound form has no declaration, and the request never supplies one.
  *
  * The name list is `MARKETING_CONSENT_FIELD_NAMES`, closed rather than a
  * substring match on "consent" (a clinic intake form's `consentToTreatment`
@@ -205,21 +211,18 @@ async function recordHoneypotHit(hostId: unknown): Promise<void> {
  * `checkFormContract` accepts as recording consent is one this route reads
  * an opt-in from.
  */
-
-/** Checkbox values a browser form actually posts for a ticked box. */
-const AFFIRMATIVE = new Set(['true', 'on', 'yes', '1', 'checked'])
-
 function readDeclaredMarketingConsent(
   payload: Record<string, any>,
   fields: Record<string, unknown>,
+  declarations: readonly Aglyn.FormFieldDecl[],
 ): boolean {
   // A first-class body field, for a caller that models the checkbox
   // explicitly rather than as one more form field.
   if (payload['marketingConsent'] === true) return true
   for (const [key, value] of Object.entries(fields)) {
     if (!Aglyn.isMarketingConsentFieldName(key)) continue
-    if (value === true) return true
-    if (AFFIRMATIVE.has(String(value ?? '').trim().toLowerCase())) return true
+    const declaration = declarations.find((entry) => entry?.fieldName === key)
+    if (Aglyn.isConsentCheckboxTicked(value, declaration)) return true
   }
   return false
 }
@@ -448,13 +451,25 @@ export async function POST(request: Request): Promise<Response> {
      * name list below rather than recording nothing. Adoption must not be the
      * moment a form that was capturing opt-ins stops — consent is carried
      * forward, never dropped as a side effect of a migration.
+     *
+     * Both readers are handed the form's STORED declaration: a Checkboxes
+     * field posts the text of the option that was ticked, and only the
+     * declaration says a consent field has exactly one option, whose text is
+     * then the tick. An unbound form has none, so its boxes count only by an
+     * affirmative value.
      */
+    const formFieldDecls = Array.isArray(form?.get('fields'))
+      ? (form?.get('fields') as Aglyn.FormFieldDecl[])
+      : []
     const declaredMarketingConsent = form?.get('consentFieldName')
       ? Aglyn.readFormDeclaredConsent(
-          { consentFieldName: String(form.get('consentFieldName')) },
+          {
+            consentFieldName: String(form.get('consentFieldName')),
+            fields: formFieldDecls,
+          },
           sanitizedFields,
         )
-      : readDeclaredMarketingConsent(payload, fields)
+      : readDeclaredMarketingConsent(payload, fields, formFieldDecls)
     /*
      * THE CAMPAIGNS THE FORM IS FILED UNDER.
      *
@@ -490,9 +505,6 @@ export async function POST(request: Request): Promise<Response> {
      * over the API are stored as the same thing. A blank field contributes no
      * key at all, so a submission never clears a value the merchant set.
      */
-    const formFieldDecls = Array.isArray(form?.get('fields'))
-      ? (form?.get('fields') as Aglyn.FormFieldDecl[])
-      : []
     const mappedContactCustom =
       form && owningOrg?.orgId && formFieldDecls.some((decl) => decl?.contactFieldKey)
         ? Aglyn.collectMappedContactCustom({
