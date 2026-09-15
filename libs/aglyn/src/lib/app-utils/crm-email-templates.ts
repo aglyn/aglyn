@@ -258,6 +258,16 @@ export interface CrmMergeContext {
   sender?: { name?: string | null; email?: string | null } | null
   /** The site the email leaves from. */
   site?: { name?: string | null } | null
+  /**
+   * Fields a caller brings from a record of its own, keyed by the whole
+   * `group.field` name — a plugin's `enrollment.personalLine`, say.
+   *
+   * Read only for a group the resolver above does not know, so no caller can
+   * change what `contact.email` means. The fixed list is a promise about what
+   * a person will read, and this is where a caller that makes its own promise
+   * keeps it: the value is passed as written, never looked up by path.
+   */
+  extra?: Readonly<Record<string, string | null | undefined>> | null
 }
 
 export interface CrmMergeResult {
@@ -398,8 +408,12 @@ function resolveCrmMergeField(key: string, context: CrmMergeContext): string {
     }
     case 'site':
       return field === 'name' ? text(context.site?.name) : ''
-    default:
-      return ''
+    default: {
+      const extra = context.extra
+      return extra && Object.prototype.hasOwnProperty.call(extra, key)
+        ? text(extra[key])
+        : ''
+    }
   }
 }
 
