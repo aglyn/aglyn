@@ -22,6 +22,7 @@ import {
   memberEmailAliasRows,
   normalizeMemberEmailAlias,
   pluginRequestFromWeb,
+  resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
 import {
   addMemberEmailAlias,
@@ -272,7 +273,7 @@ async function handler(request: Request): Promise<Response> {
       orgId,
       org: (org ?? null) as Record<string, unknown> | null,
       uid: decoded.uid,
-      memberName: membership.member.displayName || String(decoded['name'] ?? '') || null,
+      memberName: membership.member.displayName || resolveIdpDisplayName(decoded) || null,
       address: alias.address,
       confirmUrl,
     })
