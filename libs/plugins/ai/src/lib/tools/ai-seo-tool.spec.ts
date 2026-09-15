@@ -141,6 +141,18 @@ describe('checkAiSeoFields', () => {
   it('refuses a value that is not text', () => {
     expect(checkAiSeoFields({ ...good, title: 42 }, context).violations[0].code).toBe('type')
   })
+
+  it('never hands back a value beside a violation, so the doctrine asks again for every refusal (AGL-3009)', () => {
+    const results = [
+      good,
+      { ...good, title: 'x'.repeat(SEO_LISTING_FIELDS.title.maxLength + 1) },
+      { ...good, breadcrumb: null },
+      { ...good, title: 'Brass lamps | brass lamps shop' },
+      { ...good, title: 42 },
+    ].map((answer) => checkAiSeoFields(answer, context))
+    expect(results.map((result) => result.violations.length > 0)).toEqual([false, true, true, true, true])
+    for (const result of results) expect(result.value === null || result.violations.length === 0).toBe(true)
+  })
 })
 
 describe('keywords', () => {
@@ -226,6 +238,17 @@ describe('checkAiSeoFixes', () => {
     expect(checkAiSeoFixes({}, [page(['title-missing'])], []).violations[0].code).toBe('shape')
   })
 
+  it('never hands back a value beside a violation, so the doctrine asks again for every refusal (AGL-3009)', () => {
+    const results = [
+      checkAiSeoFixes({ pages: [entry] }, [page(['title-missing', 'image-alt-missing'])], []),
+      checkAiSeoFixes({ pages: [{ ...entry, title: 'x'.repeat(61) }] }, [page(['title-missing'])], []),
+      checkAiSeoFixes({ pages: [entry] }, [page(['title-duplicate'])], ['BRASS DESK LAMPS']),
+      checkAiSeoFixes({}, [page(['title-missing'])], []),
+    ]
+    expect(results.map((result) => result.violations.length > 0)).toEqual([false, true, true, true])
+    for (const result of results) expect(result.value === null || result.violations.length === 0).toBe(true)
+  })
+
   it('offers only the batch’s pages in the tool', () => {
     const schema = aiSeoFixesTool(['s1', 's2']).inputSchema as {
       properties: { pages: { items: { properties: { screenId: { enum: string[] } } } } }
@@ -290,6 +313,16 @@ describe('checkAiSeoSite', () => {
       code: 'too-long',
       message: 'The entity description is 301 characters; the limit is 300.',
     })
+  })
+
+  it('never hands back a value beside a violation, so the doctrine asks again for every refusal (AGL-3009)', () => {
+    const results = [
+      checkAiSeoSite(answer, { blank, siteText }),
+      checkAiSeoSite({ ...answer, contactEmail: 'sales@acme.test' }, { blank, siteText }),
+      checkAiSeoSite({ ...answer, entityDescription: 'x'.repeat(301) }, { blank, siteText }),
+    ]
+    expect(results.map((result) => result.violations.length > 0)).toEqual([false, false, true])
+    for (const result of results) expect(result.value === null || result.violations.length === 0).toBe(true)
   })
 
   it('is a strict tool whose every field is required', () => {

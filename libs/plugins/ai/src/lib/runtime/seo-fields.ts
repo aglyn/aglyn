@@ -19,24 +19,15 @@ import type { SeoListingFieldKey } from '@aglyn/aglyn/app-utils/seo-listing-fiel
 import type { AiSeoFieldValues } from '../model/ai-seo'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiProvider } from '../providers/contract'
-import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
+import { AI_ROUTING_TABLE, type AiPluginSettings } from '../providers/routing'
 import {
   AI_SEO_FIELDS_TOOL_NAME,
   aiSeoFieldsTool,
   checkAiSeoFields,
   orderedSeoListingFields,
 } from '../tools/ai-seo-tool'
-import {
-  AI_ACCEPTABLE_USE_BLOCK,
-  runAiRequest,
-  type AiCompletion,
-  type AiEffort,
-  type AiMessage,
-  type AiSystemBlock,
-  type AiThinking,
-  type AiTool,
-  type AiUsage,
-} from './ai-runtime'
+import { runValidatedGeneration, type AiValidatedGeneration } from './ai-doctrine'
+import type { AiSystemBlock } from './ai-runtime'
 
 /**
  * SEO fields by AI (AGL-2910): a search listing — title, description,
@@ -55,229 +46,13 @@ import {
  * ## The request
  *
  * The fast tier through the routing table (`job.seo`), never a model
- * literal. The rules are one static block, cached; the page's text, its
- * current listing, the site's name and the target keywords ride in the user
- * turn, so no byte of a site sits inside the cached prefix.
+ * literal, and the building doctrine's generation call
+ * (`runValidatedGeneration`, AGL-3009): the doctrine's cached block, which
+ * carries the acceptable-use rules, then these rules, cached after it. The
+ * page's text, its current listing, the site's name and the target keywords
+ * ride in the user turn, so no byte of a site sits inside the cached prefix,
+ * and no site inventory is sent: a listing is written from its page.
  */
-
-/* ------------------------------------------------------------------------ *
- * The generation call, in the building doctrine's shape (AGL-2935)
- * ------------------------------------------------------------------------ */
-
-/** A building doctrine rule number (AGL-2935). */
-export type AiDoctrineRuleNumber =
-  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17
-
-/** What rule 17 weighs a generated document by. */
-type AiBudgetMetric =
-  | 'nodes' | 'bytes' | 'imageBytes' | 'embeds' | 'fontFamilies' | 'emailHtmlBytes'
-
-/** One broken rule or refused value, as the doctrine names it. */
-export interface AiDoctrineViolation {
-  rule: AiDoctrineRuleNumber | null
-  code: string
-  /** One customer-safe sentence: what was refused and what to do instead. */
-  message: string
-  detail?: string
-  nodeIds?: string[]
-  paths?: string[]
-  /**
-   * Rule 17 only: a document's measured weight against its budget. A length
-   * a listing's check refuses is said in `message`, never here.
-   */
-  figure?: { metric: AiBudgetMetric; value: number; budget: number }
-}
-
-/**
- * Stands for the doctrine's `AiSiteInventory` (AGL-2935). An SEO generation
- * reads the page it writes about and passes `null`.
- */
-type AiSiteInventory = Readonly<Record<string, unknown>>
-
-export interface AiGenerationInputBase {
-  /** The routing table's step kind, never a model literal. */
-  step: AiStepKind
-  settings?: AiPluginSettings
-  /** An already-resolved route (specs); else `aiModelForStep(step, settings)`. */
-  model?: string
-  /** The door's static text, cached after the shared block. */
-  instructions: readonly AiSystemBlock[]
-  inventory: AiSiteInventory | null
-  messages: readonly AiMessage[]
-  /** Strict. */
-  tool: AiTool
-  maxTokens?: number
-  thinking?: AiThinking
-  effort?: AiEffort
-  signal?: AbortSignal
-  provider?: AiProvider
-}
-
-export interface AiCustomGenerationInput<T> extends AiGenerationInputBase {
-  check: (answer: Record<string, unknown>) => {
-    value: T | null
-    violations: AiDoctrineViolation[]
-    offending?: Record<string, unknown>
-  }
-}
-
-export interface AiGenerationSpend {
-  attempts: number
-  /** Summed over every call. */
-  usage: AiUsage
-  estCostUsd: number
-  model: string
-  stopReason: string | null
-}
-
-export type AiValidatedGeneration<T> =
-  | (AiGenerationSpend & { status: 'ok'; value: T })
-  | (AiGenerationSpend & {
-      status: 'needs_input'
-      violations: AiDoctrineViolation[]
-      /** Customer-safe. */
-      message: string
-    })
-  | (AiGenerationSpend & { status: 'refused' })
-
-const ZERO_USAGE: AiUsage = {
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  cacheWriteTokens: 0,
-}
-
-function addUsage(a: AiUsage, b: AiUsage): AiUsage {
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
-    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
-  }
-}
-
-/** A custom kind's output budget when the door names none, as the doctrine sets it. */
-const AI_CUSTOM_GENERATION_MAX_TOKENS = 8_000
-
-/** How much of the offending part of an answer a re-ask quotes. */
-const REASK_OFFENDING_MAX_CHARS = 2_000
-
-/** The sentence a generation that could not be held to its checks ends with. */
-export const AI_SEO_NEEDS_INPUT_COPY =
-  'The AI could not propose values that fit. Try again, or write them yourself.'
-
-/** The answer a completion carries: its call to the tool, else a JSON text answer. */
-export function aiGenerationAnswer(
-  result: Pick<AiCompletion, 'text' | 'toolUse'>,
-  toolName: string,
-): Record<string, unknown> | null {
-  const call = result.toolUse.find((use) => use.name === toolName)
-  if (call) return call.input
-  const text = result.text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-  if (!text.startsWith('{')) return null
-  try {
-    const parsed = JSON.parse(text) as unknown
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * STAND-IN: becomes `runValidatedGeneration(kind, …)` — the third, custom
- * overload the building doctrine (AGL-2935) posted — once that lands. The
- * input and the result are that function's, so the swap is an import and
- * the removal of this function and the types above it; every check stays in
- * its caller's `check`, and the acceptable-use block below becomes the
- * doctrine's block, which already carries it.
- *
- * Until then it behaves as the doctrine does: one call through the strict
- * tool, the answer read off the tool call or, failing that, a JSON text
- * answer; one re-ask naming only what was wrong and quoting only the parts
- * at fault; then `needs_input` with a customer-safe sentence. Usage from
- * every call is summed, because every call was spent. Rule 13 is held on the
- * answer: a generation proposes and never publishes. It throws only what
- * `runAiRequest` throws, so a job step's retry and failure paths stay the
- * machine's.
- */
-export async function runValidatedGenerationStandIn<T>(
-  _kind: string,
-  input: AiCustomGenerationInput<T>,
-): Promise<AiValidatedGeneration<T>> {
-  const model = input.model ?? aiModelForStep(input.step, input.settings)
-  const system: AiSystemBlock[] = [{ text: AI_ACCEPTABLE_USE_BLOCK }, ...input.instructions]
-  let spend: AiGenerationSpend = {
-    attempts: 0,
-    usage: ZERO_USAGE,
-    estCostUsd: 0,
-    model,
-    stopReason: null,
-  }
-  let violations: AiDoctrineViolation[] = []
-  let reask: string | null = null
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const last = input.messages.length - 1
-    const messages = input.messages.map((message, index) =>
-      reask && index === last ? { ...message, content: `${message.content}\n\n${reask}` } : message,
-    )
-    const result = await runAiRequest({
-      model,
-      system,
-      messages,
-      tools: [input.tool],
-      maxTokens: input.maxTokens ?? AI_CUSTOM_GENERATION_MAX_TOKENS,
-      ...(input.thinking ? { thinking: input.thinking } : {}),
-      ...(input.effort ? { effort: input.effort } : {}),
-      ...(input.settings ? { settings: input.settings } : {}),
-      ...(input.provider ? { provider: input.provider } : {}),
-      stream: false,
-      ...(input.signal ? { signal: input.signal } : {}),
-    })
-    spend = {
-      attempts: attempt + 1,
-      usage: addUsage(spend.usage, result.usage),
-      estCostUsd: Math.round((spend.estCostUsd + result.estCostUsd) * 1_000_000) / 1_000_000,
-      model,
-      stopReason: result.stopReason,
-    }
-    if (result.kind === 'refusal') return { ...spend, status: 'refused' }
-    const answer = aiGenerationAnswer(result, input.tool.name)
-    if (!answer) {
-      violations = [
-        { rule: null, code: 'no-answer', message: `The last reply did not call ${input.tool.name}.` },
-      ]
-      reask = `Your last reply did not call ${input.tool.name}. Answer by calling it.`
-      continue
-    }
-    if (Object.prototype.hasOwnProperty.call(answer, 'publish')) {
-      violations = [
-        { rule: 13, code: 'publish', message: 'A proposal is a draft; it never asks to publish anything.' },
-      ]
-      reask = `${violations[0].message} Call ${input.tool.name} again with the proposal alone.`
-      continue
-    }
-    const checked = input.check(answer)
-    if (checked.value !== null) return { ...spend, status: 'ok', value: checked.value }
-    violations = checked.violations.length
-      ? checked.violations
-      : [{ rule: null, code: 'unusable', message: 'Nothing in the last answer could be used.' }]
-    const offending = checked.offending
-      ? JSON.stringify(checked.offending).slice(0, REASK_OFFENDING_MAX_CHARS)
-      : ''
-    reask = [
-      `Your last call to ${input.tool.name} broke these rules:`,
-      ...violations.map((violation) => `- ${violation.message}`),
-      ...(offending ? ['The parts at fault:', offending] : []),
-      `Call ${input.tool.name} again with values that keep every rule.`,
-    ].join('\n')
-  }
-  return { ...spend, status: 'needs_input', violations, message: AI_SEO_NEEDS_INPUT_COPY }
-}
 
 /* ------------------------------------------------------------------------ *
  * The request
@@ -413,12 +188,11 @@ export async function generateSeoFields(
     (key) => key !== 'imageAlt' || hasImage,
   )
   const keywords = input.keywords ?? []
-  return runValidatedGenerationStandIn('seo-fields', {
+  return runValidatedGeneration('seo-fields', {
     step: input.step ?? 'job.seo',
     ...(input.settings ? { settings: input.settings } : {}),
     ...(input.model ? { model: input.model } : {}),
     instructions: AI_SEO_FIELDS_INSTRUCTIONS,
-    inventory: null,
     messages: [{ role: 'user', content: aiSeoFieldsPrompt({ ...input, fields, keywords }) }],
     tool: aiSeoFieldsTool(fields),
     maxTokens: AI_SEO_FIELDS_MAX_TOKENS,

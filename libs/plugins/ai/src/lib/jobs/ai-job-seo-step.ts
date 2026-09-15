@@ -62,11 +62,11 @@ import {
   type AiSeoAuditPage,
 } from '../runtime/seo-audit'
 import {
-  generateSeoFields,
-  runValidatedGenerationStandIn,
+  runValidatedGeneration,
   type AiGenerationSpend,
   type AiValidatedGeneration,
-} from '../runtime/seo-fields'
+} from '../runtime/ai-doctrine'
+import { generateSeoFields } from '../runtime/seo-fields'
 import {
   AI_SEO_PAGE_TEXT_MAX_CHARS,
   aiSeoPageFacts,
@@ -679,11 +679,10 @@ async function proposeSite(
     .filter((line) => line !== '')
     .join('\n')
   const siteText = scan.pages.map((page) => page.facts.text).join('\n')
-  const generation = await runValidatedGenerationStandIn('seo-site', {
+  const generation = await runValidatedGeneration('seo-site', {
     step: 'job.seo',
     model,
     instructions: AI_SEO_SITE_INSTRUCTIONS,
-    inventory: null,
     messages: [{ role: 'user', content: prompt }],
     tool: aiSeoSiteTool(),
     maxTokens: AI_SEO_SITE_MAX_TOKENS,
@@ -830,11 +829,10 @@ async function proposeFixes(
   let answers: Record<string, AiSeoBatchAnswer> = {}
   const notes: string[] = []
   if (pages.length) {
-    const generation = await runValidatedGenerationStandIn('seo-fixes', {
+    const generation = await runValidatedGeneration('seo-fixes', {
       step: 'job.seo',
       model,
       instructions: AI_SEO_FIXES_INSTRUCTIONS,
-      inventory: null,
       messages: [{ role: 'user', content: aiSeoFixesPrompt(pages, titlesElsewhere) }],
       tool: aiSeoFixesTool(pages.map((page) => page.screenId)),
       maxTokens: AI_SEO_FIXES_MAX_TOKENS,

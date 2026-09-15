@@ -112,14 +112,14 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'job.layout': { inputTokens: 700, outputTokens: 1_000, cacheReadTokens: 5_400, cacheWriteTokens: 0 },
   'job.template': { inputTokens: 1_200, outputTokens: 700, cacheReadTokens: 6_200, cacheWriteTokens: 0 },
   // The SEO step's listing exchange, which a page's or a product's listing is
-  // exactly one of: the acceptable-use block, the listing rules and the tool's
-  // schema (about 3,600 characters) are the cached prefix; the page text,
-  // capped at 2,000 characters, rides uncached with the current listing and a
-  // dozen other titles (about 3,000); the largest answer the tool accepts is
-  // about 600 characters of JSON, and the request asks for no thinking. An
-  // audit pass is heavier: eight pages' findings and text, about 9,000
-  // characters, with up to about 8,000 back.
-  'job.seo': { inputTokens: 1_100, outputTokens: 250, cacheReadTokens: 1_200, cacheWriteTokens: 0 },
+  // exactly one of: the doctrine's block, which carries the acceptable-use
+  // rules, the listing rules and the tool's schema (about 8,800 characters)
+  // are the cached prefix; the page text, capped at 2,000 characters, rides
+  // uncached with the current listing and a dozen other titles (about 3,000);
+  // the largest answer the tool accepts is about 600 characters of JSON, and
+  // the request asks for no thinking. An audit pass is heavier: eight pages'
+  // findings and text, about 9,000 characters, with up to about 8,000 back.
+  'job.seo': { inputTokens: 1_100, outputTokens: 250, cacheReadTokens: 2_900, cacheWriteTokens: 0 },
   // The form step: the doctrine, the form instructions, the form surface's
   // catalog (about 150 tokens) and the tool's schema are the cached prefix, the
   // site inventory and the brief ride uncached, and a form's answer is 200 to

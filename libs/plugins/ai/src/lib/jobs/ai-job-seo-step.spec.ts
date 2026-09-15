@@ -50,7 +50,8 @@ import { aiSeoAuditView, readAiSeoProposal, type AiSeoAuditReport } from '../mod
 import { aiModelForStep } from '../providers/routing'
 import { AI_TEXT_LIMITS } from '../runtime/ai-palette'
 import { AI_SEO_AUDIT_BATCH_SIZE } from '../runtime/seo-audit'
-import { AI_SEO_FIELDS_MAX_TOKENS, AI_SEO_NEEDS_INPUT_COPY } from '../runtime/seo-fields'
+import { AI_DOCTRINE_SYSTEM_BLOCK, aiDoctrineNeedsInputMessage } from '../runtime/ai-doctrine'
+import { AI_SEO_FIELDS_MAX_TOKENS } from '../runtime/seo-fields'
 import {
   AI_SEO_AGENT_GUIDANCE_MAX_CHARS,
   AI_SEO_ENTITY_DESCRIPTION_MAX_CHARS,
@@ -59,6 +60,7 @@ import {
   AI_SEO_FIX_ALT_MAX_CHARS,
   AI_SEO_FIX_IMAGES_PER_PAGE,
   AI_SEO_SITE_TOOL_NAME,
+  checkAiSeoFields,
 } from '../tools/ai-seo-tool'
 import {
   AI_SEO_FIXES_MAX_TOKENS,
@@ -273,9 +275,13 @@ describe('a page’s listing', () => {
     ])
     // No image on this listing, so the tool asks for no image description.
     expect(Object.keys(request.tools[0].inputSchema.properties)).toEqual(['title', 'description', 'breadcrumb'])
-    const system = request.system as Array<{ text: string; cacheBreakpoint?: true }>
-    expect(system[0].text).toContain('Acceptable use')
+    const system = request.system as Array<{ text: string; cacheBreakpoint?: true; volatile?: true }>
+    // The doctrine's cached block first, carrying the acceptable-use rules once, then the listing rules, cached.
+    expect(system[0]).toEqual(AI_DOCTRINE_SYSTEM_BLOCK)
+    expect(system.filter((block) => block.text.includes('Acceptable use'))).toHaveLength(1)
     expect(system[system.length - 1].cacheBreakpoint).toBe(true)
+    // A listing is written from its page, so no site inventory rides with it.
+    expect(system.some((block) => block.volatile || block.text.startsWith('Site inventory'))).toBe(false)
     for (const block of system) {
       for (const siteByte of ['Acme', 'Austin', 'dimmable']) expect(block.text).not.toContain(siteByte)
     }
@@ -312,16 +318,26 @@ describe('a page’s listing', () => {
     expect(mockRunAiRequest).not.toHaveBeenCalled()
   })
 
-  it('asks again once, quoting only what broke, then gives up with the customer’s sentence and the whole spend', async () => {
+  it('asks again once in the doctrine’s shape, quoting only what broke, then gives up in its sentence with the whole spend', async () => {
     const tooLong = { ...listing, title: 'x'.repeat(SEO_LISTING_FIELDS.title.maxLength + 5) }
     mockRunAiRequest.mockResolvedValue(answer(AI_SEO_FIELDS_TOOL_NAME, tooLong))
     const outcome = await run({ inputs: { target: 'screen', screenId: 'lamps' } })
     expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
-    const reask = mockRunAiRequest.mock.calls[1][0].messages[0].content as string
-    expect(reask).toContain('broke these rules')
-    expect(reask).toContain(`"title":"${tooLong.title}"`)
-    expect(reask).not.toContain(`"description"`)
-    expect(outcome).toMatchObject({ outputs: [], failure: AI_SEO_NEEDS_INPUT_COPY, estCostUsd: 0.004 })
+    const first = mockRunAiRequest.mock.calls[0][0].messages as Array<{ role: string; content: string }>
+    const again = mockRunAiRequest.mock.calls[1][0].messages as Array<{ role: string; content: string }>
+    // The page's turn as it was sent, the answer that broke, then the rules it broke.
+    expect(again.map((message) => message.role)).toEqual(['user', 'assistant', 'user'])
+    expect(again[0]).toEqual(first[0])
+    expect(again[2].content).toContain('breaks these building rules')
+    expect(again[2].content).toContain(`"title":"${tooLong.title}"`)
+    expect(again[2].content).not.toContain(`"description"`)
+    const { violations } = checkAiSeoFields(tooLong, {
+      fields: ['title', 'description', 'breadcrumb'],
+      hasImage: false,
+      keywords: [],
+    })
+    expect(violations).toHaveLength(1)
+    expect(outcome).toMatchObject({ outputs: [], failure: aiDoctrineNeedsInputMessage(violations), estCostUsd: 0.004 })
     expect(outcome.usage).toEqual({ inputTokens: 2_000, outputTokens: 600, cacheReadTokens: 1_000, cacheWriteTokens: 0 })
   })
 
@@ -468,6 +484,22 @@ describe('the site audit', () => {
     const proposal = readAiSeoProposal(outcome.outputs[1].proposal)
     expect(proposal?.kind === 'site' ? proposal.site.notes : []).toEqual([
       'The AI declined to propose structured data for this site.',
+    ])
+  })
+
+  it('asks again once for a site answer the check refuses, then keeps the doctrine’s sentence as the unit’s note', async () => {
+    mockRunAiRequest.mockResolvedValue(answer(AI_SEO_SITE_TOOL_NAME, { ...site, entityDescription: 'x'.repeat(301) }))
+    const outcome = await run({ inputs: { target: 'site' } })
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
+    const again = mockRunAiRequest.mock.calls[1][0].messages as Array<{ role: string; content: string }>
+    expect(again.map((message) => message.role)).toEqual(['user', 'assistant', 'user'])
+    expect(again[2].content).toContain('The entity description is 301 characters; the limit is 300.')
+    expect(outcome.continue).toBe(true)
+    const proposal = readAiSeoProposal(outcome.outputs[1].proposal)
+    expect(proposal?.kind === 'site' ? proposal.site.notes : []).toEqual([
+      aiDoctrineNeedsInputMessage([
+        { rule: null, code: 'too-long', message: 'The entity description is 301 characters; the limit is 300.' },
+      ]),
     ])
   })
 

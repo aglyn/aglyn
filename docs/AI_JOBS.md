@@ -529,9 +529,14 @@ opened a version for keeps it. Audited `ai.job.apply`, logged `ai.seo.applied`,
 behind the jobs read gate, the site's content-write role and the site's
 lockdown verdict.
 
-**The doctrine.** Until AGL-2935 lands, `runValidatedGenerationStandIn` in
-`src/lib/runtime/seo-fields.ts` stands for `runValidatedGeneration`: the same
-input and result as its custom overload, so the swap is an import.
+**The doctrine.** Every generation the step makes, whether a listing, an
+audit's site proposal or a batch of fixes, runs through
+`runValidatedGeneration` (AGL-3009): the doctrine's cached block, which carries
+the acceptable-use rules, then the step's own cached rules, and no site
+inventory. An answer that breaks a check is asked for once more, with the
+broken rules named and the parts at fault quoted; one that still breaks one
+ends `needs_input` in the doctrine's sentence (`aiDoctrineNeedsInputMessage`),
+which fails a listing's job and becomes an audit unit's note.
 
 ## Indexes and retention
 
