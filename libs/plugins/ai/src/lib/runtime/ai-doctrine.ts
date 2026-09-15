@@ -25,7 +25,7 @@ import {
 } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
 import type { AiProvider } from '../providers/contract'
-import { aiModelForStep, type AiPluginSettings } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
   runAiRequest,
@@ -330,7 +330,7 @@ export type AiGenerationKind = AiOutputKind | 'plan'
  * names its own.
  */
 export const AI_GENERATION_MAX_TOKENS: Record<AiGenerationKind, number> = {
-  plan: 8_000,
+  plan: AI_ROUTING_TABLE['job.plan'].maxTokens,
   page: 32_000,
   template: 32_000,
   component: 8_000,

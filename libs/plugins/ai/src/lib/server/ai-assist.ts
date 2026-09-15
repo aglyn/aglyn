@@ -53,7 +53,7 @@ import { logAiAssistSection } from '../activity/ai-activity'
 // spec replaces the barrel with a closed-world factory, and nothing replaces
 // the entry point, so the spec exercises the real request shape and the real
 // error boundary rather than a stub that agrees with the handler.
-import { aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
   AiUpstreamError,
@@ -118,9 +118,9 @@ export function assistStepKindForMode(
 const ASSIST_RATE_LIMIT = 20
 const ASSIST_RATE_WINDOW_MS = 60_000
 
-const SECTION_MAX_TOKENS = 3000
-const BLOG_MAX_TOKENS = 2048
-const ELEMENT_MAX_TOKENS = 1024
+const SECTION_MAX_TOKENS = AI_ROUTING_TABLE['copy.section'].maxTokens
+const BLOG_MAX_TOKENS = AI_ROUTING_TABLE['copy.blog'].maxTokens
+const ELEMENT_MAX_TOKENS = AI_ROUTING_TABLE['copy.element'].maxTokens
 
 /**
  * What a `refusal` stop is answered with. The model declined the brief —

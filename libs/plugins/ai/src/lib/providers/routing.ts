@@ -22,7 +22,8 @@ import {
   aiDefaultModelFor,
   type AiStepKind,
 } from './catalog'
-import type { AiProvider } from './contract'
+import type { AiEvalKind } from '../runtime/ai-eval'
+import type { AiEffort, AiProvider, AiThinking } from './contract'
 import { aiProviderById, defaultAiProvider } from './registry'
 
 /**
@@ -90,6 +91,120 @@ export function resolveAiRoute(
     servedBy(process.env[AI_DEFAULT_MODEL_ENV]?.trim()) ??
     aiDefaultModelFor(provider.id, AI_STEP_TIERS[kind])
   return model ? { provider, model } : undefined
+}
+
+/**
+ * What one step kind asks of its model, beside the tier it is served from
+ * (`AI_STEP_TIERS` in the catalog): whether it thinks and how hard, its
+ * answer ceiling, and the eval score that tier holds on the step's golden
+ * briefs (AGL-2937).
+ */
+export interface AiRoutingRow {
+  /** `null` sends no setting: the model's own default, and all a fast-tier model accepts. */
+  thinking: AiThinking | null
+  effort: AiEffort | null
+  /** The answer ceiling, thinking included. */
+  maxTokens: number
+  /** What the ceiling is sized from. */
+  maxTokensBasis: string
+  eval: AiRoutingEval
+}
+
+export interface AiRoutingEval {
+  /** The golden-brief kinds the step answers. */
+  kinds: readonly AiEvalKind[]
+  /** `answers` scores the step's answers; `plans` scores the plans those kinds' answers carry. */
+  scores: 'answers' | 'plans'
+  /** `authored` while the score is the hand-written references'; `recorded` once a live run records answers. */
+  source: 'authored' | 'recorded'
+  passRate: number
+  /** The mean answer score; `null` for a plan score, which passes or fails. */
+  meanScore: number | null
+}
+
+/**
+ * THE ROUTING TABLE (AGL-2937): what each step kind asks of the model, in one
+ * place, with the evidence beside it.
+ *
+ * A step runs on the smallest tier that holds its eval floor. A row moves to a
+ * cheaper tier, or a lower effort, only when a recorded eval
+ * (`npm run eval:ai-live`) holds the floor there; while a row's score is the
+ * authored references', it says so, and the row stays where production has
+ * run it. `runtime/ai-eval.spec.ts` recomputes every row's score from the
+ * harness, so a row cannot claim a score its briefs do not hold.
+ *
+ * A ceiling is sized from the p95 output the staff signals page reports for
+ * the kind once production has served it; until then `maxTokensBasis` names
+ * what it is sized from. The same spec holds every reference answer under its
+ * row's ceiling at three characters a token, a reading that errs high for a
+ * tokenizer that splits finer than four.
+ */
+export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
+  'assist.chat': {
+    // A scoped, latency-sensitive chat turn: no thinking, the low effort rung.
+    thinking: 'off',
+    effort: 'low',
+    maxTokens: 1024,
+    maxTokensBasis:
+      'a docs-grounded answer of a few short paragraphs; the edit rung raises it for its tool call',
+    eval: { kinds: ['chat'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
+  'copy.element': {
+    thinking: null,
+    effort: null,
+    maxTokens: 1024,
+    maxTokensBasis: 'one element of copy, about the length of the text it replaces',
+    eval: { kinds: ['element'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
+  'copy.section': {
+    thinking: null,
+    effort: null,
+    maxTokens: 3000,
+    maxTokensBasis: 'a section of four to twelve nodes written as JSON',
+    eval: { kinds: ['section'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
+  'copy.blog': {
+    thinking: null,
+    effort: null,
+    maxTokens: 2048,
+    maxTokensBasis: 'one blog post body in markdown-lite',
+    eval: { kinds: ['blog'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
+  'generate.section': {
+    thinking: null,
+    effort: null,
+    maxTokens: 3000,
+    maxTokensBasis: 'a section of four to twelve nodes written as JSON',
+    eval: { kinds: ['section'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
+  'job.text': {
+    thinking: 'adaptive',
+    effort: null,
+    maxTokens: 1024,
+    maxTokensBasis: 'a few paragraphs of copy; a brief asking for more gets a draft to extend',
+    eval: { kinds: ['text'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
+  },
+  'job.theme': {
+    thinking: 'adaptive',
+    effort: null,
+    maxTokens: 8000,
+    maxTokensBasis:
+      'the largest answer the theme tool accepts, about 2,500 tokens of JSON as ai-job-theme-step.spec.ts measures it, with as much again to think in',
+    eval: { kinds: ['theme'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+  },
+  'job.plan': {
+    thinking: 'adaptive',
+    effort: null,
+    maxTokens: 8000,
+    maxTokensBasis: 'a plan of up to twelve screens with sixteen sections each, with room to think',
+    eval: {
+      kinds: ['page', 'template', 'component', 'layout', 'form'],
+      scores: 'plans',
+      source: 'authored',
+      passRate: 1,
+      meanScore: null,
+    },
+  },
 }
 
 /** The model id alone — what a door records on the meter and the job. */

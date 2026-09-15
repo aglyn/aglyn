@@ -23,6 +23,7 @@ import {
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
 import { runValidatedGeneration } from '../runtime/ai-doctrine'
+import { AI_ROUTING_TABLE } from '../providers/routing'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepRunner } from './ai-job-text-step'
@@ -124,6 +125,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // it, and Auto held to those same lists otherwise. Without a resolver the
     // doctrine asks the routing table itself.
     const model = modelFor?.('job.plan')
+    const route = AI_ROUTING_TABLE['job.plan']
     const result = await runValidatedGeneration('plan', {
       step: 'job.plan',
       ...(model ? { model } : {}),
@@ -131,7 +133,9 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       inventory,
       messages: [{ role: 'user', content: aiJobPlanPrompt(job) }],
       tool: AI_BUILD_PLAN_TOOL,
-      thinking: 'adaptive',
+      maxTokens: route.maxTokens,
+      ...(route.thinking ? { thinking: route.thinking } : {}),
+      ...(route.effort ? { effort: route.effort } : {}),
       ...(signal ? { signal } : {}),
     })
     const spent = {

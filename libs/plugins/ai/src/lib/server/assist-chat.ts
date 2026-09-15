@@ -103,7 +103,7 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
 // factory that does not list a symbol makes it `undefined` rather than
 // failing loudly. Nothing replaces the entry point, so the spec exercises
 // the real request shape, the real SSE parser and the real error boundary.
-import { aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
   AiUpstreamError,
@@ -277,9 +277,9 @@ const MAX_HISTORY_TURNS = 24
  * end and everything past the budget is dropped.
  */
 const MAX_HISTORY_CHARS = 8000
-const MAX_OUTPUT_TOKENS = 1024
-/** Scoped, latency-sensitive chat: the low rung, deliberately. */
-const ASSIST_EFFORT = 'low'
+/** The chat turn's routing: its ceiling, no thinking and the low effort rung — see the header. */
+const CHAT_ROUTE = AI_ROUTING_TABLE['assist.chat']
+const MAX_OUTPUT_TOKENS = CHAT_ROUTE.maxTokens
 /** Stored-answer cap — the data loop needs the gist, not an unbounded doc. */
 const MAX_STORED_ANSWER_CHARS = 20000
 
@@ -1231,8 +1231,8 @@ async function handler(request: Request): Promise<Response> {
         // See the header comment: omitting these is NOT the same as
         // sending them — the model-side defaults are adaptive thinking at
         // `high` effort, which this workload neither needs nor can afford.
-        thinking: 'off',
-        effort: ASSIST_EFFORT,
+        ...(CHAT_ROUTE.thinking ? { thinking: CHAT_ROUTE.thinking } : {}),
+        ...(CHAT_ROUTE.effort ? { effort: CHAT_ROUTE.effort } : {}),
         system,
         messages,
       })

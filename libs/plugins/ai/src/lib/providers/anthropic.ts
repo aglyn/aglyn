@@ -113,10 +113,11 @@ export function buildAnthropicRequestBody(
     strict: true,
   }))
   // A model that rejects an explicit thinking setting gets none, whatever
-  // the door asked for: the catalog says which.
-  const thinking = aiCatalogEntry(input.model)?.capabilities.thinking === false
-    ? undefined
-    : input.thinking
+  // the door asked for, and no effort either: effort rides the same rule
+  // (see the contract), and the catalog says which models those are.
+  const settable = aiCatalogEntry(input.model)?.capabilities.thinking !== false
+  const thinking = settable ? input.thinking : undefined
+  const effort = settable ? input.effort : undefined
   return {
     model: input.model,
     max_tokens: input.maxTokens,
@@ -126,7 +127,7 @@ export function buildAnthropicRequestBody(
       : thinking === 'adaptive'
         ? { thinking: { type: 'adaptive' } }
         : {}),
-    ...(input.effort ? { output_config: { effort: input.effort } } : {}),
+    ...(effort ? { output_config: { effort } } : {}),
     ...(system.length ? { system } : {}),
     messages: input.messages.map((message) => ({
       role: message.role,

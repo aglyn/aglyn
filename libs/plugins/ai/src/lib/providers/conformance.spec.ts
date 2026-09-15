@@ -362,6 +362,13 @@ describe('the two wire shapes, side by side', () => {
     const body = buildAnthropicRequestBody({ ...input, model: 'claude-haiku-4-5', thinking: 'adaptive' })
     expect(body).not.toHaveProperty('thinking')
   })
+
+  it('nor an effort, which rides the same rule, while a model that takes one is sent it', () => {
+    const haiku = buildAnthropicRequestBody({ ...input, model: 'claude-haiku-4-5', effort: 'low' as const })
+    expect(haiku).not.toHaveProperty('output_config')
+    const sonnet = buildAnthropicRequestBody({ ...input, model: 'claude-sonnet-5', effort: 'low' as const })
+    expect(sonnet['output_config']).toEqual({ effort: 'low' })
+  })
 })
 
 describe('the routing table (AGL-2937)', () => {

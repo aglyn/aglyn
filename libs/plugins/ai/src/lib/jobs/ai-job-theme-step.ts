@@ -44,7 +44,7 @@ import {
   type AiThemeProposal,
   type AiThemeProposalMode,
 } from '../model/ai-theme-proposal'
-import { aiModelForStep } from '../providers/routing'
+import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import {
   runValidatedGeneration,
   type AiCustomGenerationInput,
@@ -94,12 +94,13 @@ export function aiJobThemeModel(): string {
 }
 
 /**
- * The output budget. The largest answer the tool accepts — every color in
- * both schemes, the full run of component leaves, the longest summary — is
- * about 2,500 tokens of JSON (`ai-job-theme-step.spec.ts` measures it), and
- * the rest is room for the model to think before it answers.
+ * The output budget, from the routing table. The largest answer the tool
+ * accepts — every color in both schemes, the full run of component leaves,
+ * the longest summary — is about 2,500 tokens of JSON
+ * (`ai-job-theme-step.spec.ts` measures it), and the rest is room for the
+ * model to think before it answers.
  */
-export const AI_JOB_THEME_MAX_TOKENS = 8_000
+export const AI_JOB_THEME_MAX_TOKENS = AI_ROUTING_TABLE['job.theme'].maxTokens
 
 /** How many of a site's own component override leaves the prompt lists. */
 export const AI_JOB_THEME_INVENTORY_LEAVES = 40
@@ -301,7 +302,8 @@ export function aiJobThemeGeneration(
     messages: [{ role: 'user', content: aiJobThemePrompt(request) }],
     tool: aiThemeTool(),
     maxTokens: AI_JOB_THEME_MAX_TOKENS,
-    thinking: 'adaptive',
+    ...(AI_ROUTING_TABLE['job.theme'].thinking ? { thinking: AI_ROUTING_TABLE['job.theme'].thinking } : {}),
+    ...(AI_ROUTING_TABLE['job.theme'].effort ? { effort: AI_ROUTING_TABLE['job.theme'].effort } : {}),
     ...(request.signal ? { signal: request.signal } : {}),
     check: aiJobThemeCheck,
   }

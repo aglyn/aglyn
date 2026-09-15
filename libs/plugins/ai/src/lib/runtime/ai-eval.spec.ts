@@ -22,6 +22,8 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { AI_STEP_TIERS } from '../providers/catalog'
+import { AI_ROUTING_TABLE } from '../providers/routing'
 import {
   AI_EVAL_KINDS,
   readAiEvalCase,
@@ -127,5 +129,62 @@ describe('the floors', () => {
     )
     expect(plans.plans).toBeGreaterThan(0)
     expect(plans.passRate).toBe(1)
+  })
+})
+
+describe('the routing table (AGL-2937)', () => {
+  const scores = cases.flatMap((evalCase) =>
+    evalCase.candidates.map((candidate) => scoreAiEvalCandidate(evalCase, candidate)),
+  )
+
+  it.each(Object.entries(AI_ROUTING_TABLE))(
+    '%s carries the eval score its briefs hold, at or above the floor',
+    (_step, row) => {
+      const own = scores.filter((score) => row.eval.kinds.includes(score.kind))
+      expect(row.eval.source).toBe(own.some((score) => score.source === 'recorded') ? 'recorded' : 'authored')
+      if (row.eval.scores === 'plans') {
+        const plans = summarizeAiEvalPlans(own)
+        expect(plans.plans).toBeGreaterThan(0)
+        expect({ passRate: plans.passRate, meanScore: null }).toEqual({
+          passRate: row.eval.passRate,
+          meanScore: row.eval.meanScore,
+        })
+        expect(row.eval.passRate).toBe(1)
+        return
+      }
+      const answers = own.filter((score) => score.scope === 'full')
+      expect(answers.length).toBeGreaterThan(0)
+      const passRate = answers.filter((score) => score.pass).length / answers.length
+      const meanScore =
+        Math.round((answers.reduce((sum, score) => sum + score.score, 0) / answers.length) * 10_000) / 10_000
+      expect({ passRate, meanScore }).toEqual({ passRate: row.eval.passRate, meanScore: row.eval.meanScore })
+      for (const kind of summarizeAiEval(answers).filter((entry) => row.eval.kinds.includes(entry.kind))) {
+        expect([kind.kind, kind.belowFloor]).toEqual([kind.kind, false])
+      }
+    },
+  )
+
+  it.each(Object.entries(AI_ROUTING_TABLE))(
+    '%s holds every reference answer under its ceiling, at three characters a token',
+    (_step, row) => {
+      for (const evalCase of cases.filter((entry) => row.eval.kinds.includes(entry.kind))) {
+        for (const candidate of evalCase.candidates) {
+          const written = row.eval.scores === 'plans' ? candidate.plan : candidate.answer
+          if (written === null || written === undefined) continue
+          const chars = typeof written === 'string' ? written.length : JSON.stringify(written).length
+          expect({ id: evalCase.id, fits: Math.ceil(chars / 3) <= row.maxTokens }).toEqual({
+            id: evalCase.id,
+            fits: true,
+          })
+        }
+      }
+    },
+  )
+
+  it('asks no fast-tier step for thinking or effort, which that tier refuses', () => {
+    for (const [step, row] of Object.entries(AI_ROUTING_TABLE)) {
+      if (AI_STEP_TIERS[step as keyof typeof AI_STEP_TIERS] !== 'fast') continue
+      expect([step, row.thinking, row.effort]).toEqual([step, null, null])
+    }
   })
 })

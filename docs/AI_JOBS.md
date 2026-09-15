@@ -187,6 +187,30 @@ live answer.
   the chat door) has no recorder yet, and a door that gains one registers it
   with `registerAiEvalRecorder`.
 
+## The routing table
+
+What each step kind asks of its model lives in one table, `AI_ROUTING_TABLE`
+in `src/lib/providers/routing.ts` (AGL-2937): whether it thinks and at what
+effort, its `max_tokens` and what that ceiling is sized from, and the eval
+score its golden briefs hold, beside the tier `AI_STEP_TIERS` serves it from.
+Every door reads its row rather than a constant of its own.
+
+- **The smallest model that holds the floor.** A row moves to a cheaper tier
+  or a lower effort only when a recorded eval holds the floor there. While a
+  row's score comes from authored references it says `authored`, and the row
+  stays where production has run it.
+- **The scores are recomputed.** `src/lib/runtime/ai-eval.spec.ts` recomputes
+  each row's pass rate and mean score from the harness, and fails when they
+  differ from the row, when a row falls under its floor, or when a fast-tier
+  row asks for thinking or effort.
+- **The ceilings.** A ceiling is sized from the p95 output the *Tokens by
+  kind* panel reports for the kind once production has served it. Until then
+  `maxTokensBasis` names what it is sized from, and the same spec holds every
+  reference answer under it at three characters a token.
+- **A model that takes no setting gets none.** The Anthropic adapter sends
+  neither `thinking` nor `effort` to a catalog model whose
+  `capabilities.thinking` is false, whatever the door asked for.
+
 ## Planning, and a job that waits for a person
 
 A job whose kind builds site structure (`AI_PLANNED_JOB_KINDS`: page, site,
