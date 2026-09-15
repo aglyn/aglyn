@@ -120,9 +120,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'apps/console/constants/subprocessor-inventory.ts',
-    count: 1,
+    count: 3,
     reason:
-      "AGL-1577. PROSE, not a host. The single occurrence sits inside a `reason` string explaining why an unprovisioned @aglyn.com address cannot be verified by test send — the default routing rule accepts mail for a non-existent address and suppresses the bounce, so the operator has to confirm the Google Group exists instead. It is an English sentence in a documentation field; nothing parses, fetches or resolves it, and a self-hoster's deployment reaches nothing because of it.",
+      "AGL-1577 and AGL-2963. PROSE, not a host. One occurrence sits inside a `reason` string explaining why an unprovisioned @aglyn.com address cannot be verified by test send — the default routing rule accepts mail for a non-existent address and suppresses the bounce, so the operator has to confirm the Google Group exists instead. The other two sit in the Wistia row's `purpose`, which restates the published Subprocessors page: the platform's own films play on its marketing site, aglyn.com, and load with the page there only for a visitor whose privacy choices on aglyn.com permit analytics. All three are English sentences in documentation fields; nothing parses, fetches or resolves them, and a self-hoster's deployment reaches nothing because of them.",
   },
   {
     file: 'apps/console/utils/stripe-dunning-schedule.ts',
