@@ -9,6 +9,85 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.124 — 2026-09-15
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.123...v1.0.0-beta.124)
+
+### Added
+
+- **ai:** search listings, a site audit applied as drafts, structured data and llms.txt ([AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **legal:** v7 goes live, with Terms and Privacy pinned from the published pages ([AGL-2902](https://linear.app/aglyn/issue/AGL-2902))
+- **legal:** v7 manifest entry, Anthropic and Wistia rows, and the docs they move ([AGL-2902](https://linear.app/aglyn/issue/AGL-2902), [AGL-2963](https://linear.app/aglyn/issue/AGL-2963), [AGL-2971](https://linear.app/aglyn/issue/AGL-2971))
+- **ai:** layout and page template jobs build a draft from a brief, applied to nothing ([AGL-2909](https://linear.app/aglyn/issue/AGL-2909))
+- **ai:** the assistant proposes besigner edits and applies them as a draft on confirm ([AGL-2906](https://linear.app/aglyn/issue/AGL-2906))
+- **ai:** every generator builds under the doctrine: 17 validated rules and a plan step ([AGL-2935](https://linear.app/aglyn/issue/AGL-2935))
+- **ai:** allotments per member, collaborator and site, a usage strip and a model switch ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942))
+- **ai:** themes by AI, a proposal over every theme editor control saved in the editor ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938), [AGL-2935](https://linear.app/aglyn/issue/AGL-2935), [AGL-2987](https://linear.app/aglyn/issue/AGL-2987))
+- **outreach:** scaffold the Outreach plugin behind a flag, entitlement and permission ([AGL-2974](https://linear.app/aglyn/issue/AGL-2974))
+- **ai:** the usage meter, Free taste and per-user rollups move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **ai:** the Assist signal staff page, its route and its miner move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **plugins:** a plugin adds a page to the staff area, with its own tab at /admin/{id} ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **plugins:** account erasure runs each plugin's eraser, and AI usage erases through it ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **ai:** the staff org AI card and both staff AI doors move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2928](https://linear.app/aglyn/issue/AGL-2928), [AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **ai:** per-member AI usage surfaces and their read move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+- **ai:** the runtime, jobs, doors, panel and cards of Aglyn AI move into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+### Fixed
+
+- **ai:** price the SEO step's model choices from its measured listing exchange ([AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **ai:** a job step that stops before the provider hands its message back ([AGL-2909](https://linear.app/aglyn/issue/AGL-2909))
+- **ai:** the plan step runs on the model the switch resolves for it ([AGL-2935](https://linear.app/aglyn/issue/AGL-2935), [AGL-2942](https://linear.app/aglyn/issue/AGL-2942))
+- **ai:** the model switch prices a typical plan request ([AGL-2935](https://linear.app/aglyn/issue/AGL-2935))
+- **ai:** the theme brand reads defer a relative module, not the tenant-data-admin lib ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **console:** a staff browser stamps its first hit, not only the ones after its token ([AGL-3007](https://linear.app/aglyn/issue/AGL-3007))
+- **ai:** the AI allotments tables page on the shared footer ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **ai:** a theme job runs on the model the switch resolves for it ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942), [AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **ai:** the model switch prices a typical theme request ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942), [AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **ai:** the allotment alert reads the console origin in dot notation ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942))
+- **ai:** a metered exchange no longer wipes the org month's refusal counts ([AGL-2986](https://linear.app/aglyn/issue/AGL-2986))
+- **ai:** the theme logo read names the storage bucket in dot notation ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **console:** a plugin's staff page names itself by its label in the browser tab ([AGL-3005](https://linear.app/aglyn/issue/AGL-3005))
+- **console:** a plugin's staff page names itself in the tab title ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **billing:** the plan feature grid excludes Outreach while no plan carries it ([AGL-2974](https://linear.app/aglyn/issue/AGL-2974))
+- **crm:** the alias confirmation reads the member's name through resolveIdpDisplayName ([AGL-2975](https://linear.app/aglyn/issue/AGL-2975))
+- **console:** an account address confirmation link is built on the console's origin ([AGL-2983](https://linear.app/aglyn/issue/AGL-2983))
+- **crm:** a BCC sent from a member's verified alias is filed on the prospect ([AGL-2975](https://linear.app/aglyn/issue/AGL-2975))
+- **orgs:** a revoked or removed member loses their site role in the projection ([AGL-2985](https://linear.app/aglyn/issue/AGL-2985))
+- **ai:** the moved staff org AI door imports isLiveSubscriptionStatus once ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2930](https://linear.app/aglyn/issue/AGL-2930))
+- **ai:** the org AI usage read writes its key separator as an escape, not a raw NUL ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **tools:** the package map drops the six marketplace edges the AI plugin move removed ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **plugins:** the staff zones render on the staff pages, loaded through a staff surface ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+### Changed
+
+- **ai:** the generation job model moves from core foundation into the AI plugin ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+### Documentation
+
+- **decisions:** the AI model tiers by plan and who may set allotments are confirmed ([AGL-2942](https://linear.app/aglyn/issue/AGL-2942))
+- **outreach:** record that Outreach is on no plan until packaging is decided ([AGL-2974](https://linear.app/aglyn/issue/AGL-2974), [AGL-2976](https://linear.app/aglyn/issue/AGL-2976))
+- **firestore:** the aiJobs and months TTL policies are ACTIVE on aglyn-main ([AGL-2904](https://linear.app/aglyn/issue/AGL-2904), [AGL-2928](https://linear.app/aglyn/issue/AGL-2928))
+
+<details>
+<summary>Also in this release: 11 test, 3 chore</summary>
+
+- **tenant:** declare the SEO step and its listing request off-tenant ([AGL-2910](https://linear.app/aglyn/issue/AGL-2910), [AGL-2902](https://linear.app/aglyn/issue/AGL-2902))
+- **console:** mock the org hook the Setup SEO section now reads ([AGL-2910](https://linear.app/aglyn/issue/AGL-2910))
+- **aglyn:** the self-host ratchet records the Wistia row's two aglyn.com mentions ([AGL-2963](https://linear.app/aglyn/issue/AGL-2963))
+- **tools:** record the two brand names the v7 subprocessor rows carry ([AGL-2902](https://linear.app/aglyn/issue/AGL-2902))
+- **tools:** raise the Linear issue ceiling to 3009, read from the workspace ([AGL-2909](https://linear.app/aglyn/issue/AGL-2909), [AGL-3007](https://linear.app/aglyn/issue/AGL-3007), [AGL-3008](https://linear.app/aglyn/issue/AGL-3008), [AGL-3009](https://linear.app/aglyn/issue/AGL-3009))
+- **tenant:** the sink inventory declares the doctrine validators off-tenant ([AGL-2935](https://linear.app/aglyn/issue/AGL-2935))
+- **console:** count the theme proposal among the bounded readouts ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **console:** the stale-seed spec stubs what the Theme section's plugin zone reads ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **console:** the theme proposal table is a bounded readout, not a list ([AGL-2938](https://linear.app/aglyn/issue/AGL-2938))
+- **crm:** member-alias fixtures use a neutral persona instead of a real person ([AGL-2975](https://linear.app/aglyn/issue/AGL-2975))
+- **tools:** raise the Linear issue ceiling to the AGL-2983 Linear assigned ([AGL-2983](https://linear.app/aglyn/issue/AGL-2983), [AGL-2975](https://linear.app/aglyn/issue/AGL-2975), [AGL-2969](https://linear.app/aglyn/issue/AGL-2969))
+- **ai:** the Assist retention claim runs beside the meter, not from a console spec ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939), [AGL-2941](https://linear.app/aglyn/issue/AGL-2941))
+- **console:** the metered sweep drops the org AI route it no longer walks ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+- **console:** the subprocessor gate keeps main's adapter wording and names each move ([AGL-2939](https://linear.app/aglyn/issue/AGL-2939))
+
+</details>
+
 ## v1.0.0-beta.123 — 2026-09-14
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.122...v1.0.0-beta.123)
