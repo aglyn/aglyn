@@ -32,6 +32,25 @@ Returns exactly what `Timestamp.now().toJSON()` returns, and imports nothing.
 Use it when you only need to **stamp or serialise** — a log line, an emitted
 event, a JSON payload — and the value never reaches Firestore.
 
+## `@aglyn/shared-util-timestamp/zoned-time` — calendar math in a named zone
+
+```ts
+import {
+  addZonedBusinessDays,
+  nextWeeklyOpening,
+  zonedDateTime,
+} from '@aglyn/shared-util-timestamp/zoned-time'
+
+zonedDateTime(Date.now(), 'America/Chicago').weekday
+```
+
+The wall clock an IANA zone shows for an instant, the instant a wall time
+happens at (the spring gap moves forward, the autumn overlap takes the earlier
+pass), day boundaries, business days, and weekly schedules of open stretches.
+It is the one copy the booking slots, the CRM digest and Outreach's send
+windows read. Imports nothing, like `timestamp-json`, and
+`zoned-time.isolation.spec.ts` holds it to that.
+
 ## Why the split exists (AGL-1151)
 
 Every tenant site was shipping the Firestore client in its eagerly-loaded page
