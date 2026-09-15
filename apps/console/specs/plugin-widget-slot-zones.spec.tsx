@@ -47,10 +47,19 @@ let lastWidgetProps: Record<string, unknown> | undefined
 /** The SEO zones' proposal doors (AGL-2910), passed through by identity. */
 const mockProposeValues = jest.fn()
 const mockProposeDraft = jest.fn()
+/**
+ * Registrations the registry answers for `mockSlot` beside the demo card: a
+ * table column widget on a zone that also mounts cards (AGL-3008).
+ */
+let mockExtraRegistrations: Array<Record<string, unknown>> = []
 
 function MockWidget(props: Record<string, unknown>) {
   lastWidgetProps = props
   return <div>{`widget-for-${mockSlot}`}</div>
+}
+
+function MockColumnCell() {
+  return <div>{`column-cell-for-${mockSlot}`}</div>
 }
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -62,6 +71,7 @@ jest.mock('@aglyn/aglyn', () => ({
             extension: { pluginId: 'demo', displayName: 'Demo' },
             widget: { slot, widgetId: `demo-${slot}`, Component: MockWidget },
           },
+          ...mockExtraRegistrations,
         ]
       : [],
 }))
@@ -277,5 +287,31 @@ describe('AGL-2940 · a registered widget renders through each new zone', () => 
     mockSlot = 'somewhereElse'
     const { container } = render(<PluginWidgetSlot slot="staffOrg" orgId="org-1" />)
     expect(container.textContent).toBe('')
+  })
+})
+
+describe('AGL-3008 · a column widget belongs to its table, never to the slot', () => {
+  afterEach(() => {
+    mockExtraRegistrations = []
+  })
+
+  it('hostMembers: draws the card, and leaves the column widget to the collaborators table', async () => {
+    mockSlot = 'hostMembers'
+    mockExtraRegistrations = [
+      {
+        extension: { pluginId: 'demo', displayName: 'Demo' },
+        widget: {
+          slot: 'hostMembers',
+          widgetId: 'demo-hostMembers-column',
+          column: { header: 'AI' },
+          Component: MockColumnCell,
+        },
+      },
+    ]
+    render(<PluginWidgetSlot slot="hostMembers" {...MOUNTS.hostMembers.props} />)
+    await waitFor(() => expect(screen.getByText('widget-for-hostMembers')).toBeTruthy())
+    // The column's cell belongs to a row of the collaborators table. Drawn by
+    // the slot it would be a cell with no row, loose beneath the table.
+    expect(screen.queryByText('column-cell-for-hostMembers')).toBeNull()
   })
 })
