@@ -1682,7 +1682,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // member's two months with the sites beneath them, and the staff org
     // card's ten most recent jobs and ten dearest members, each capped by a
     // constant at the route.
-    expect(NOT_A_LIST).toHaveLength(57)
+    //
+    // 58 since themes by AI (AGL-2938): one proposal read back as the change
+    // it would make, a row per control it sets under the theme tool's own
+    // ceilings — a readout of one act, bounded by the editor's controls.
+    expect(NOT_A_LIST).toHaveLength(58)
   })
 })
 
