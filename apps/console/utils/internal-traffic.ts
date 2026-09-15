@@ -38,6 +38,8 @@ export {
   readInternalTrafficOverride,
 } from '@aglyn/aglyn/app-utils/internal-traffic'
 
+import { INTERNAL_TRAFFIC_VALUE } from '@aglyn/aglyn/app-utils/internal-traffic'
+
 /**
  * Whether a signed-in console session is OURS rather than a customer's
  * (AGL-1582), decided from the ID token's custom claims.
@@ -73,6 +75,91 @@ export function isInternalTrafficSession(
 ): boolean {
   if (!claims) return false
   return Boolean(claims['staff']) || Boolean(claims['impersonatedBy'])
+}
+
+/**
+ * Where the console remembers whether the last account this browser signed
+ * into was ours (AGL-3007).
+ *
+ * ## Why the console needs a memory at all
+ *
+ * `isInternalTrafficSession` is decided from a token read, and a token read is
+ * asynchronous while the tag is not. Measured on production (`docs/ANALYTICS.md`
+ * §8): the boot burst — both `config` calls, the cold-load `page_view`, the
+ * first web-vitals hit, and the `session_start` / `first_visit` they carry —
+ * ships before the claims stamp lands. GA4's data filter matches per EVENT, so
+ * a staff browser that was never opted in still reported one user and one
+ * session every time it loaded. A phone is always that browser.
+ *
+ * ## Why it is not the `?aglyn_internal` override
+ *
+ * The override is a deliberate, sticky declaration that a BROWSER is ours, and
+ * the release drills depend on it surviving a customer sign-in. Writing it from
+ * the claims would make it sticky for the wrong reason: a customer signing in on
+ * a browser staff once used would be erased from every report, permanently.
+ *
+ * This memory is the opposite shape. It is rewritten by EVERY token the browser
+ * reads, in both directions, so it only ever answers for the window before the
+ * current session's own token resolves — and a customer's first token clears it.
+ * The cost, stated: a customer signing in on a browser whose last account was
+ * staff has the hits sent before their token resolves stamped internal. Their
+ * later events are not, so the session itself still reports.
+ *
+ * Origin-scoped like the override, and never throws — refused storage reads as
+ * "not ours", which is the safe direction.
+ */
+export const INTERNAL_ACTOR_STORAGE_KEY = 'aglyn_internal_actor'
+
+/** The storage bits the actor memory needs, so a spec can supply them. */
+export type InternalActorStorage = Pick<
+  Storage,
+  'getItem' | 'setItem' | 'removeItem'
+> | null
+
+/** `window.localStorage` where reaching for it does not throw, else null. */
+function consoleLocalStorage(): InternalActorStorage {
+  try {
+    return typeof window === 'undefined' ? null : (window.localStorage ?? null)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether the last token this browser read was a staff or impersonation one.
+ * Synchronous, so it can stamp the boot burst the token read cannot reach.
+ */
+export function readRememberedInternalActor(
+  storage: InternalActorStorage = consoleLocalStorage(),
+): boolean {
+  if (!storage) return false
+  try {
+    return storage.getItem(INTERNAL_ACTOR_STORAGE_KEY) === INTERNAL_TRAFFIC_VALUE
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Record the verdict of the token just read. Called with `false` as well as
+ * `true`, because clearing on a customer token is what keeps this from becoming
+ * the sticky flag the override is.
+ */
+export function rememberInternalActor(
+  internal: boolean,
+  storage: InternalActorStorage = consoleLocalStorage(),
+): void {
+  if (!storage) return
+  try {
+    if (internal) {
+      storage.setItem(INTERNAL_ACTOR_STORAGE_KEY, INTERNAL_TRAFFIC_VALUE)
+    } else {
+      storage.removeItem(INTERNAL_ACTOR_STORAGE_KEY)
+    }
+  } catch {
+    // Storage can throw outright (Safari private mode). Nothing is remembered,
+    // and the claims stamp still covers the rest of the session.
+  }
 }
 
 export default isInternalTrafficSession

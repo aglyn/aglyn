@@ -1264,9 +1264,29 @@ redundant, and neither is sufficient alone.
 auto-marked because staff signed in there once stays marked after a customer
 signs in on the same browser — and clearing it on a non-staff session would
 wipe the deliberate opt-in the release drills depend on (§8b). Wrongly flagging
-a real customer erases them from every report, permanently. The GA-side IP rule
-(§8d) is the mechanism that closes the boot window without that risk, because
-GA applies it server-side at collection time, to hit zero, with no race at all.
+a real customer erases them from every report, permanently.
+
+**The boot window is closed by a SEPARATE memory instead (AGL-3007).** The gap
+above was still leaking on 2026-09-15 — the owner's staff session and a phone
+sign-in both showed in Realtime — because a phone is never opted in and a
+residential or cellular IP defeats the §8d IP rule. So the console keeps a
+second `localStorage` key, `aglyn_internal_actor`, with the opposite shape to
+the override:
+
+| | `aglyn_traffic_type` (override, §8b) | `aglyn_internal_actor` |
+| --- | --- | --- |
+| written by | a person visiting `?aglyn_internal=1` | every token the console reads |
+| cleared by | `?aglyn_internal=0` only | the next customer token |
+| answers | the whole session | only until this session's token resolves |
+
+The layout stamps `override || rememberedActor` before the token read, then
+rewrites the memory from the claims and stamps `override || claims`. A staff
+browser therefore stamps hit zero from its second load onward — sign-in page
+included — and the memory can never outlive a customer signing in, which is the
+failure the paragraph above forbids. Its one cost: a customer signing in on a
+browser whose last account was staff has the hits before their token resolves
+stamped internal; their later events are not, so the session still reports.
+The very first staff load in a brand-new browser still leaks its boot burst.
 
 ### 8b. Claims are not enough — the browser-pinned override (AGL-2064/AGL-2065)
 
