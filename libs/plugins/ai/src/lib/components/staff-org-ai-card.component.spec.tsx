@@ -117,7 +117,7 @@ function body(overrides: Partial<StaffOrgAiResponse> = {}): StaffOrgAiResponse {
       total: 12,
     },
     jobs: {
-      counts: { queued: 1, running: 0, needs_input: 0, done: 3, failed: 0, canceled: 0 },
+      counts: { queued: 1, running: 0, needs_input: 0, needs_review: 0, done: 3, failed: 0, canceled: 0 },
       recent: [
         {
           id: 'job-9',
@@ -233,7 +233,7 @@ describe('StaffOrgAiCard (AGL-2930)', () => {
   it('says "no generation jobs yet" for an org with none, and reports a failed read as one', async () => {
     mockAnswer.payload = body({
       jobs: {
-        counts: { queued: 0, running: 0, needs_input: 0, done: 0, failed: 0, canceled: 0 },
+        counts: { queued: 0, running: 0, needs_input: 0, needs_review: 0, done: 0, failed: 0, canceled: 0 },
         recent: [],
         truncated: false,
       },

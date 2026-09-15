@@ -18,6 +18,7 @@
 import { checkEntitlement } from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { formatBytes } from '@aglyn/aglyn/app-utils/measure-node-map'
 import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJobOutput,
@@ -39,6 +40,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AiJobPlan } from './ai-job-plan.component'
 
 /**
  * The AI jobs drawer inside the Assist panel (AGL-2904): the workspace's
@@ -67,6 +69,7 @@ const STATUS_LABEL: Record<AiJobStatus, string> = {
   queued: 'Queued',
   running: 'Running',
   needs_input: 'Needs attention',
+  needs_review: 'Needs review',
   done: 'Done',
   failed: 'Failed',
   canceled: 'Canceled',
@@ -79,6 +82,7 @@ const STATUS_COLOR: Record<
   queued: 'default',
   running: 'primary',
   needs_input: 'warning',
+  needs_review: 'warning',
   done: 'success',
   failed: 'error',
   canceled: 'default',
@@ -315,6 +319,41 @@ export function AssistJobsDrawer({
     [orgId, user, patchJob],
   )
 
+  /** The job whose resume is in flight, so its button cannot send twice. */
+  const [resuming, setResuming] = useState<string | null>(null)
+
+  // Confirms a plan, or tries again a step whose answer broke a building
+  // rule (AGL-2935). The door runs the next step inline and answers with the
+  // job, so the row moves on without waiting for the stream.
+  const resume = useCallback(
+    async (job: AiJobSummary) => {
+      if (!orgId) return
+      setResuming(job.id)
+      setNotice(null)
+      try {
+        const response = await authorizedFetch(
+          user,
+          `/api/ai/jobs/${encodeURIComponent(job.id)}/resume`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orgId, hostId: job.hostId }),
+          },
+        )
+        const payload = await response.json().catch(() => null)
+        if (payload?.job) patchJob(payload.job as AiJobSummary)
+        if (!response.ok) {
+          setNotice(String(payload?.error ?? 'The job could not be resumed — try again.'))
+        }
+      } catch {
+        setNotice('The job could not be resumed — try again.')
+      } finally {
+        setResuming(null)
+      }
+    },
+    [orgId, user, patchJob],
+  )
+
   if (!visible || !orgId || !entitled) return null
 
   const active = jobs.filter((job) => !AI_JOB_TERMINAL_STATUSES.includes(job.status)).length
@@ -410,9 +449,19 @@ export function AssistJobsDrawer({
                           {output.label}
                         </Typography>
                       )}
+                      {output.load ? (
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          About {formatBytes(output.load.totalBytes)} on a first visit
+                        </Typography>
+                      ) : null}
                     </Box>
                   )
                 })}
+                <AiJobPlan
+                  job={job}
+                  onResume={(target) => void resume(target)}
+                  busy={resuming === job.id}
+                />
               </Box>
             )
           })}

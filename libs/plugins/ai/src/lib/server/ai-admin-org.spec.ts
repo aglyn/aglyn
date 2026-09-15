@@ -301,6 +301,7 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
       queued: 0,
       running: 1,
       needs_input: 0,
+      needs_review: 0,
       done: 0,
       failed: 1,
       canceled: 0,
@@ -368,7 +369,7 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
     expect(body.pool.usedCredits).toBe(0)
     expect(body.refusals.total).toBe(0)
     expect(body.jobs).toEqual({
-      counts: { queued: 0, running: 0, needs_input: 0, done: 0, failed: 0, canceled: 0 },
+      counts: { queued: 0, running: 0, needs_input: 0, needs_review: 0, done: 0, failed: 0, canceled: 0 },
       recent: [],
       truncated: false,
     })

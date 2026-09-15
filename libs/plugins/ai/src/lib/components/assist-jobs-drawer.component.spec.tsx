@@ -333,3 +333,126 @@ describe('aiJobOutputHref', () => {
     )
   })
 })
+
+describe('a job waiting for a person (AGL-2935)', () => {
+  const PLAN = {
+    reuse: [{ kind: 'layout', id: 'lay-site', purpose: 'the site chrome' }],
+    create: [
+      { kind: 'component', name: 'Service card', why: 'Nothing lists a service.', duplicateOf: null, fields: [] },
+    ],
+    screens: [
+      {
+        title: 'Roof repair',
+        slug: '/services/roof-repair',
+        layout: 'lay-site',
+        template: null,
+        duplicateOf: null,
+        nav: true,
+        seoTitle: 'Roof repair',
+        seoDescription: 'Same-week repair.',
+        sections: [{ name: 'hero', uses: [], items: 0 }],
+      },
+    ],
+    status: 'proposed',
+    labels: { 'lay-site': 'Site layout' },
+    proposedAt: '2026-09-14T10:00:00.000Z',
+    confirmedAt: null,
+    confirmedBy: null,
+  }
+  const waiting = (patch: Record<string, unknown>) =>
+    job({
+      kind: 'site',
+      status: 'needs_review',
+      running: false,
+      steps: [
+        { name: 'plan', status: 'done', startedAt: null, endedAt: null, creditsSpent: 6, error: null },
+        { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+      ],
+      ...patch,
+    })
+
+  function armResume(
+    list: unknown,
+    answer: unknown,
+    posts: Array<[string, unknown]>,
+    status = 200,
+  ) {
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/ai/jobs?orgId=org-1')) return jsonResponse({ jobs: [list] })
+      if (url.includes('/events')) return sseResponse([])
+      if (url === '/api/ai/jobs/job-1/resume') {
+        posts.push([url, JSON.parse(String(init?.body))])
+        return jsonResponse(answer, status)
+      }
+      throw new Error(`unarmed request to ${url}`)
+    })
+  }
+
+  it('shows the proposed plan in the site’s own names, and confirms it through the resume route', async () => {
+    const posts: Array<[string, unknown]> = []
+    armResume(
+      waiting({ plan: PLAN, review: { reason: 'plan', message: 'The plan is ready.', findings: [] } }),
+      {
+        job: waiting({
+          status: 'queued',
+          plan: { ...PLAN, status: 'confirmed', confirmedAt: '2026-09-14T10:01:00.000Z', confirmedBy: 'viewer' },
+          review: null,
+        }),
+      },
+      posts,
+    )
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    expect(await screen.findByText('Needs review')).toBeTruthy()
+    expect(screen.getByText('Reuses the layout Site layout — the site chrome')).toBeTruthy()
+    expect(screen.getByText('Creates the component Service card — Nothing lists a service.')).toBeTruthy()
+    expect(
+      screen.getByText('Builds the screen Roof repair at /services/roof-repair in Site layout: hero'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByText('Confirm plan'))
+    expect(await screen.findByText('Confirmed plan')).toBeTruthy()
+    expect(posts).toEqual([['/api/ai/jobs/job-1/resume', { orgId: 'org-1', hostId: 'host-1' }]])
+    expect(screen.queryByText('Confirm plan')).toBeNull()
+  })
+
+  it('names the rules a refused answer broke, and tries the step again', async () => {
+    const posts: Array<[string, unknown]> = []
+    const message = 'This could not be built within the building rules.'
+    armResume(
+      waiting({
+        error: message,
+        review: {
+          reason: 'doctrine',
+          message,
+          findings: [{ rule: 2, code: 'plan-screen-without-layout', message: 'A screen names no layout.' }],
+        },
+      }),
+      { job: waiting({ status: 'queued', review: null, error: null }) },
+      posts,
+    )
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    expect(await screen.findByText('A screen names no layout.')).toBeTruthy()
+    expect(screen.getByText(message)).toBeTruthy()
+    fireEvent.click(screen.getByText('Try again'))
+    expect(await screen.findByText('Queued')).toBeTruthy()
+    expect(posts).toHaveLength(1)
+    expect(screen.queryByText('Try again')).toBeNull()
+  })
+
+  it('shows the route’s refusal when a resume is refused, and leaves the job waiting', async () => {
+    const posts: Array<[string, unknown]> = []
+    armResume(
+      waiting({ plan: PLAN, review: { reason: 'plan', message: 'The plan is ready.', findings: [] } }),
+      { error: 'Your role does not include ai.generate' },
+      posts,
+      403,
+    )
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    fireEvent.click(await screen.findByText('Confirm plan'))
+    expect(await screen.findByText('Your role does not include ai.generate')).toBeTruthy()
+    expect(screen.getByText('Needs review')).toBeTruthy()
+    expect(posts).toHaveLength(1)
+  })
+})

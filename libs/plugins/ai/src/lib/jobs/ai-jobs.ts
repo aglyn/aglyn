@@ -34,6 +34,8 @@ import {
   type AiJob,
   type AiJobKind,
   type AiJobOutput,
+  type AiJobPlan,
+  type AiJobReview,
   type AiJobStatus,
   type AiJobStep,
   type AiJobSummary,
@@ -170,14 +172,28 @@ export function isAiJobTerminal(status: AiJobStatus): boolean {
   return AI_JOB_TERMINAL_STATUSES.includes(status)
 }
 
-/** The step names a job of this kind carries, in order. */
-export function aiJobStepNames(kind: AiJobKind): string[] {
-  return kind === 'text' ? ['draft'] : ['generate']
-}
-
 // ── The step runner registry ──────────────────────────────────────────────
 
+/** The step a planned kind runs first (AGL-2935). */
+export const AI_JOB_PLAN_STEP = 'plan'
+
+/**
+ * The kinds that build site structure, and so plan before they generate
+ * (AGL-2935): the plan their first step proposes is what their generation
+ * step executes, once a person has confirmed it.
+ */
+export const AI_PLANNED_JOB_KINDS: readonly AiJobKind[] = [
+  'page',
+  'site',
+  'component',
+  'layout',
+  'template',
+  'form',
+  'email',
+]
+
 const stepRunners = new Map<AiJobKind, AiJobStepRunner>()
+let planStepRunner: AiJobStepRunner | null = null
 
 /** Idempotent per kind; last registration wins. */
 export function registerAiJobStep(kind: AiJobKind, runner: AiJobStepRunner): void {
@@ -186,6 +202,34 @@ export function registerAiJobStep(kind: AiJobKind, runner: AiJobStepRunner): voi
 
 export function aiJobStepRunnerFor(kind: AiJobKind): AiJobStepRunner | null {
   return stepRunners.get(kind) ?? null
+}
+
+/**
+ * The plan step every planned kind runs first. Registered by its own module
+ * (`ai-job-plan-step.ts`), which the plugin's server surface loads, so this
+ * machine — and every spec that drives it — never loads the inventory
+ * reader and the Admin SDK behind it. `null` unregisters it.
+ */
+export function registerAiJobPlanStep(runner: AiJobStepRunner | null): void {
+  planStepRunner = runner
+}
+
+/** The runner for one step of one job: the plan step by its name, else the kind's own. */
+export function aiJobRunnerForStep(kind: AiJobKind, stepName: string): AiJobStepRunner | null {
+  return stepName === AI_JOB_PLAN_STEP ? planStepRunner : aiJobStepRunnerFor(kind)
+}
+
+/**
+ * The step names a job of this kind carries, in order. A planned kind plans
+ * only once something can build the plan: until its generation runner is
+ * registered, its job fails fast and free, rather than spending on a plan
+ * nothing will execute.
+ */
+export function aiJobStepNames(kind: AiJobKind): string[] {
+  if (kind === 'text') return ['draft']
+  return AI_PLANNED_JOB_KINDS.includes(kind) && planStepRunner && stepRunners.has(kind)
+    ? [AI_JOB_PLAN_STEP, 'generate']
+    : ['generate']
 }
 
 /** The text step (AGL-2904). Every kind with no runner refuses until its issue lands. */
@@ -345,6 +389,16 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
       job.status === 'running' &&
       leaseUntil !== null &&
       leaseUntil > now.getTime(),
+    plan: job.plan
+      ? {
+          ...job.plan,
+          labels: job.plan.labels ?? {},
+          proposedAt: toIso(job.plan.proposedAt as Instant),
+          confirmedAt: toIso(job.plan.confirmedAt as Instant),
+          confirmedBy: job.plan.confirmedBy ?? null,
+        }
+      : null,
+    review: job.review ?? null,
   }
 }
 
@@ -460,6 +514,10 @@ export interface RecordStepInput {
   creditsSpent: number
   error?: string | null
   outputs?: AiJobOutput[]
+  /** The plan the step proposed, kept on the job (AGL-2935). */
+  plan?: AiJobPlan
+  /** The step stopped for a person: the job parks `needs_review` in this same write. */
+  review?: AiJobReview
 }
 
 export interface RecordedStep {
@@ -476,7 +534,9 @@ export interface RecordedStep {
  * tokens, and hiding that would make the bill disagree with the document.
  * The status transition is the caller's next call (`completeAiJob`,
  * `failAiJob`), except that a step handed back or a step with more steps
- * behind it re-queues here, so the beat sees it without another write.
+ * behind it re-queues here, so the beat sees it without another write —
+ * and a step that stopped for a person parks the job `needs_review` here,
+ * in the same transaction, so no beat can claim the next step in between.
  */
 export async function recordStep(
   firestore: Firestore,
@@ -507,15 +567,18 @@ export async function recordStep(
     ).length
     const settled = input.status !== 'pending'
     const ownsLease = job.lease?.owner === owner
+    const parksForReview = Boolean(input.review) && !isAiJobTerminal(job.status)
     const status: AiJobStatus = isAiJobTerminal(job.status)
       ? job.status
       : job.status === 'needs_input'
         ? job.status
-        : input.status === 'failed'
-          ? 'running'
-          : remaining > 0
-            ? 'queued'
-            : 'running'
+        : parksForReview
+          ? 'needs_review'
+          : input.status === 'failed'
+            ? 'running'
+            : remaining > 0
+              ? 'queued'
+              : 'running'
     const patch = {
       status,
       steps,
@@ -526,6 +589,17 @@ export async function recordStep(
         : (job.creditsReserved ?? 0),
       updatedAt: now,
       ...(ownsLease ? { lease: null } : {}),
+      // A plan the step produced is kept whatever the job's status is by
+      // now, for the reason its credits are.
+      ...(input.plan ? { plan: input.plan } : {}),
+      // A doctrine review's sentence is the job's customer-safe error, as a
+      // meter park's is; a plan waiting to be confirmed is not an error.
+      ...(parksForReview && input.review
+        ? {
+            review: input.review,
+            error: input.review.reason === 'doctrine' ? input.review.message : null,
+          }
+        : {}),
     }
     tx.set(ref, patch, { merge: true })
     return {
@@ -685,9 +759,53 @@ export async function cancelAiJob(
   return result
 }
 
+/**
+ * Resume a job that stopped for a person (AGL-2935): confirm its plan, or
+ * try again the step whose answer broke a building rule. One transaction,
+ * so two confirmations land once; anything but a `needs_review` job comes
+ * back unchanged. The pending step's attempts start over — a person asking
+ * again is not a provider failing again — and a confirmed plan with no step
+ * left behind it completes the job rather than queueing nothing.
+ */
+export async function resumeAiJob(
+  firestore: Firestore,
+  orgId: string,
+  jobId: string,
+  actor: { uid: string },
+  now = new Date(),
+): Promise<{ job: AiJob; changed: boolean }> {
+  return transition(firestore, orgId, jobId, (current) => {
+    if (current.status !== 'needs_review') return null
+    const steps = current.steps.map((step) =>
+      step.status === 'pending' ? { ...step, attempts: 0 } : step,
+    )
+    const pending = steps.some((step) => step.status === 'pending')
+    const confirmed =
+      current.review?.reason === 'plan' && current.plan
+        ? {
+            plan: {
+              ...current.plan,
+              status: 'confirmed',
+              confirmedAt: now,
+              confirmedBy: actor.uid,
+            },
+          }
+        : {}
+    return {
+      status: pending ? 'queued' : 'done',
+      steps,
+      review: null,
+      error: null,
+      ...confirmed,
+      ...(pending ? {} : { creditsReserved: 0 }),
+      updatedAt: now,
+    }
+  })
+}
+
 // ── Audit ─────────────────────────────────────────────────────────────────
 
-export type AiJobAuditAction = 'ai.job.output' | 'ai.job.cancel'
+export type AiJobAuditAction = 'ai.job.output' | 'ai.job.cancel' | 'ai.job.resume'
 
 export interface AiJobAuditEntry {
   action: AiJobAuditAction
@@ -793,6 +911,8 @@ export type AiJobStepRun =
   | { outcome: 'not-claimable' }
   /** The reservation was refused; the job is parked with the reason. */
   | { outcome: 'needs_input'; job: AiJob }
+  /** The step stopped for a person (AGL-2935): its plan waits, or its answer broke a rule twice. */
+  | { outcome: 'needs_review'; job: AiJob }
   /** The step ran and was recorded; `job.status` says whether more remain. */
   | { outcome: 'done'; job: AiJob }
   | { outcome: 'failed'; job: AiJob }
@@ -857,7 +977,7 @@ export async function runAiJobStep(
     )
   }
 
-  const runner = aiJobStepRunnerFor(job.kind)
+  const runner = aiJobRunnerForStep(job.kind, step.name)
   if (!runner) {
     await releaseHeld()
     return {
@@ -1048,9 +1168,20 @@ export async function runAiJobStep(
     }
   }
 
+  // A step that stopped for a person parks the job in the same write that
+  // records it (AGL-2935): a plan review completes the step, so confirming
+  // runs the next one; a doctrine review hands it back, so trying again runs
+  // the same one.
+  const review = outcome.review
   const recorded = await recordStep(
     firestore, orgId, jobId, options.owner, stepIndex,
-    { status: 'done', creditsSpent: credits, outputs: outcome.outputs },
+    {
+      status: review?.reason === 'doctrine' ? 'pending' : 'done',
+      creditsSpent: credits,
+      outputs: outcome.outputs,
+      ...(outcome.plan ? { plan: outcome.plan } : {}),
+      ...(review ? { review } : {}),
+    },
     now,
   )
   const actor: AiActivityActor = options.actor ?? { uid: job.createdBy }
@@ -1081,6 +1212,16 @@ export async function runAiJobStep(
         versionId: output.versionId ?? null,
       },
     })
+  }
+  if (review && recorded.job.status === 'needs_review') {
+    // Nobody parked the job but its own step, so the row names no actor, as
+    // the meter's park does.
+    await logAiJobNeedsInput(orgId, { uid: null }, {
+      jobId,
+      kind: job.kind,
+      reason: review.reason,
+    })
+    return { outcome: 'needs_review', job: recorded.job }
   }
   if (recorded.remaining > 0 || isAiJobTerminal(recorded.job.status)) {
     return { outcome: 'done', job: recorded.job }

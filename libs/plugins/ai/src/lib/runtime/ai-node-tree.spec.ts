@@ -1045,3 +1045,113 @@ describe('validateAiNodeTree required props (AGL-2905)', () => {
     })
   })
 })
+
+describe('validateAiNodeTree site references (AGL-2935)', () => {
+  const withInstance = () =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [
+            {
+              componentId: 'reusableInstance',
+              props: {
+                refId: 'cmp-card',
+                propValues: {
+                  title: 'Roofs',
+                  photo: 'https://example.com/roof.jpg',
+                  count: '3',
+                  stray: 'x',
+                  'bad.name': 'y',
+                },
+              },
+            },
+          ],
+        },
+      ],
+    })
+
+  const formPlaced = (props: Record<string, unknown>) =>
+    tree({
+      componentId: 'div',
+      children: [
+        {
+          componentId: 'section',
+          props: { element: 'section' },
+          children: [{ componentId: 'form', props }],
+        },
+      ],
+    })
+
+  it('refuses an instance nobody grounded, and one naming a component the site does not have', () => {
+    expect(validateAiNodeTree(withInstance(), 'screen')).toMatchObject({
+      ok: false,
+      code: 'component',
+    })
+    expect(
+      validateAiNodeTree(withInstance(), 'screen', { componentIds: ['cmp-other'] }),
+    ).toMatchObject({ ok: false, code: 'reference' })
+  })
+
+  it('admits an instance of a listed component, holding its values to the declared props', () => {
+    const result = validateAiNodeTree(withInstance(), 'screen', {
+      componentIds: ['cmp-card'],
+      componentProps: { 'cmp-card': { title: 'text', photo: 'image', count: 'number' } },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const instance = Object.values(result.nodes).find(
+      (node) => node.componentId === 'reusableInstance',
+    )
+    expect(instance?.props).toEqual({
+      refId: 'cmp-card',
+      propValues: { title: 'Roofs', photo: 'https://example.com/roof.jpg', count: 3 },
+    })
+    expect(result.repairs).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('propValues.stray is not a prop of that component'),
+        expect.stringContaining('propValues.bad.name is not a prop name'),
+      ]),
+    )
+  })
+
+  it('keeps a form bound to a form and a dataset the site has, and drops a binding it does not', () => {
+    const kept = validateAiNodeTree(
+      formPlaced({ formId: 'frm-contact', datasetId: 'ds-leads' }),
+      'screen',
+      { formIds: ['frm-contact'], datasetIds: ['ds-leads'] },
+    )
+    expect(kept.ok).toBe(true)
+    if (!kept.ok) return
+    expect(
+      Object.values(kept.nodes).find((node) => node.componentId === 'form')?.props,
+    ).toMatchObject({ formId: 'frm-contact', datasetId: 'ds-leads' })
+
+    const dropped = validateAiNodeTree(formPlaced({ formId: 'frm-unknown' }), 'screen', {
+      formIds: ['frm-contact'],
+    })
+    expect(dropped.ok).toBe(true)
+    if (!dropped.ok) return
+    expect(
+      Object.values(dropped.nodes).find((node) => node.componentId === 'form')?.props,
+    ).not.toHaveProperty('formId')
+    expect(dropped.repairs).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('formId names a form this site does not have'),
+      ]),
+    )
+  })
+
+  it('maps every minted id back to the id the model wrote for that node', () => {
+    const input = GOLDEN.screen()
+    const result = validateAiNodeTree(input, 'screen')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(Object.values(result.sourceIds).sort()).toEqual(Object.keys(input.nodes).sort())
+    for (const [minted, source] of Object.entries(result.sourceIds)) {
+      expect(result.nodes[minted].componentId).toBe(input.nodes[source].componentId)
+    }
+  })
+})

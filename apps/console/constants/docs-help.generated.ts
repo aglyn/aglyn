@@ -309,6 +309,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/analytics/google-analytics',
     title: 'Google Analytics events',
   },
+  howAglynAiBuilds: {
+    path: '/ai/how-aglyn-ai-builds',
+    title: 'How Aglyn AI builds',
+  },
   import: {
     path: '/content-and-data/crm/import',
     title: 'Import contacts from CSV',
@@ -712,6 +716,7 @@ export const DOCS_HELP_ANCHORS = {
   gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#switching-between-sites', '#next'],
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
   googleAnalytics: ['#setup', '#consent', '#automatic', '#engagement', '#commerce', '#web-vitals', '#authored-events', '#never-sent', '#related'],
+  howAglynAiBuilds: ['#the-plan-comes-first', '#the-building-rules', '#when-an-answer-breaks-a-rule', '#who-can-use-it', '#related'],
   import: ['#three-steps', '#what-each-column-can-hold', '#what-is-skipped-and-why', '#related'],
   importExport: ['#export', '#export-contents', '#large-exports', '#import', '#upsert-on-a-key-field', '#tips', '#related'],
   injectionZones: ['#staff-zones', '#column-zones', '#widgetid-is-a-persisted-identifier'],

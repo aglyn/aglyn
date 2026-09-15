@@ -16,6 +16,8 @@
  */
 
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
+import type { AiLoadEstimate } from '../runtime/ai-palette'
+import type { AiBuildPlan } from './ai-build-plan'
 
 /**
  * AI generation jobs (AGL-2904).
@@ -98,13 +100,17 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
 /**
  * `queued` — waiting for a runner; `running` — a step holds the lease;
  * `needs_input` — the job stopped for something only the workspace can
- * change (credits, a cap, a switch) and resumes when it does; the last
- * three are terminal.
+ * change (credits, a cap, a switch), and the beat tries it again once that
+ * may have changed; `needs_review` — the job stopped for a person's decision
+ * (AGL-2935): its plan is ready to confirm, or an answer broke a building
+ * rule on its re-ask. No timer can make that decision, so neither the beat
+ * nor anything but that person resumes it. The last three are terminal.
  */
 export type AiJobStatus =
   | 'queued'
   | 'running'
   | 'needs_input'
+  | 'needs_review'
   | 'done'
   | 'failed'
   | 'canceled'
@@ -118,7 +124,7 @@ export const AI_JOB_TERMINAL_STATUSES: readonly AiJobStatus[] = [
 export type AiJobStepStatus = 'pending' | 'running' | 'done' | 'failed'
 
 export interface AiJobStep {
-  /** Stable within the job (`draft`, `generate`), unique per job. */
+  /** Stable within the job (`plan`, `draft`, `generate`), unique per job. */
   name: string
   status: AiJobStepStatus
   startedAt?: ITimestamp | null
@@ -181,12 +187,54 @@ export interface AiJobOutput {
    * `theme` proposal — in the shape its job kind's runner defines.
    */
   proposal?: Record<string, unknown>
+  /**
+   * What a first visit is estimated to transfer, as the doctrine measured
+   * the generated document (AGL-2935) — the weight the proposal shows before
+   * anything is applied. Absent where the output is not a page's document.
+   */
+  load?: AiLoadEstimate | null
 }
 
 export interface AiJobLease {
   /** The process that holds the step: a route request id or a beat id. */
   owner: string
   until: ITimestamp
+}
+
+/** Why a job stopped for a person (AGL-2935). */
+export type AiJobReviewReason =
+  /** The plan step proposed a plan; generation waits for it to be confirmed. */
+  | 'plan'
+  /** An answer broke a building rule, and so did the answer to the re-ask. */
+  | 'doctrine'
+
+/** A building rule an answer broke, as the job keeps it: the number, the code, the sentence. */
+export interface AiJobRuleFinding {
+  rule: number | null
+  code: string
+  /** Customer-safe. */
+  message: string
+}
+
+export interface AiJobReview {
+  reason: AiJobReviewReason
+  /** Customer-safe: what the person is asked to decide. */
+  message: string
+  /** The rules the last answer broke; empty for a plan. */
+  findings: AiJobRuleFinding[]
+}
+
+export type AiJobPlanStatus = 'proposed' | 'confirmed'
+
+/** The plan a job builds from, as the job keeps it once its plan step proposed it. */
+export interface AiJobPlan extends AiBuildPlan {
+  status: AiJobPlanStatus
+  /** Names for the inventory ids the plan references, read when it was made. */
+  labels: Record<string, string>
+  proposedAt: ITimestamp
+  confirmedAt: ITimestamp | null
+  /** The member who confirmed it. */
+  confirmedBy: string | null
 }
 
 export interface AiJob {
@@ -223,6 +271,19 @@ export interface AiJob {
   /** Customer-safe only. */
   error?: string | null
   lease?: AiJobLease | null
+  /** The plan the job builds from, once its plan step proposed one. */
+  plan?: AiJobPlan | null
+  /** What the person is asked to decide while the job is `needs_review`. */
+  review?: AiJobReview | null
+}
+
+/** The plan on the wire: every instant an ISO string. */
+export interface AiJobPlanSummary extends AiBuildPlan {
+  status: AiJobPlanStatus
+  labels: Record<string, string>
+  proposedAt: string | null
+  confirmedAt: string | null
+  confirmedBy: string | null
 }
 
 /**
@@ -253,4 +314,6 @@ export interface AiJobSummary {
   updatedAt: string
   error: string | null
   running: boolean
+  plan: AiJobPlanSummary | null
+  review: AiJobReview | null
 }

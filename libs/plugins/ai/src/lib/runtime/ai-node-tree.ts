@@ -28,11 +28,20 @@ import {
   AI_SX_TOKENS,
 } from './ai-palette.generated'
 import { linealRelationshipPermits } from '@aglyn/aglyn/app-utils/lineal-order'
-import { NODE_MAP_MAX_BYTES } from '@aglyn/aglyn/app-utils/measure-node-map'
+import {
+  NODE_MAP_MAX_BYTES,
+  nodeMapBytes,
+} from '@aglyn/aglyn/app-utils/measure-node-map'
 import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
+import {
+  COMPONENT_PROP_NAME_PATTERN,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+  REUSABLE_INSTANCE_PROP_VALUES_KEY,
+} from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import { createIdUrlSafe } from '@aglyn/aglyn/foundation/constants/app'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
+import type { AiComponentPropTypes } from '../model/ai-site-inventory'
 
 import { sanitizeMarketplaceDefinition } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
 
@@ -60,12 +69,26 @@ import { sanitizeMarketplaceDefinition } from '@aglyn/aglyn/app-utils/node-defin
  * - copy length by role — a headline, a paragraph, a button label;
  * - links to a screen the host has, a root-relative path or an `https:` URL,
  *   and media to a DAM reference or an `https:` URL;
- * - the stored-node-map byte ceiling.
+ * - the stored-node-map byte ceiling, measured the way the save measures it.
+ *
+ * ## The site's own records, when the caller names them (AGL-2935)
+ *
+ * A reusable-component instance, a form picked on the Forms page and a
+ * dataset are each "a reference into another document", which is why the
+ * palette leaves them off: from a description alone a model can only invent
+ * an id. A generator that has read the site's inventory can name real ones,
+ * and the building doctrine requires it to — a repeat is placed as
+ * instances of one component, and a form is bound by id rather than drawn
+ * inline. So the three are admitted exactly as screen links are: only
+ * against the ids the caller supplies. With no `componentIds` an instance is
+ * still refused; with no `formIds` or `datasetIds` the binding is dropped.
  *
  * What comes out is the flat `NodesMap` `encodeStoredNodes` takes, with every
  * id minted fresh the way a preset graft mints them, so nothing the model
- * wrote can collide with a node already on the canvas. Every drop is listed
- * in `repairs`; every refusal names its `code`. The function never throws.
+ * wrote can collide with a node already on the canvas. `sourceIds` maps each
+ * minted id back to the id the model wrote, so a caller can quote a refused
+ * subtree in the model's own words. Every drop is listed in `repairs`; every
+ * refusal names its `code`. The function never throws.
  */
 
 export type AiNodeTreeRefusalCode =
@@ -83,9 +106,18 @@ export type AiNodeTreeRefusalCode =
   | 'required-prop'
   /** Over the sanitizer's or the stored-node-map's byte ceiling. */
   | 'too-large'
+  /** A component instance naming a component the site does not have. */
+  | 'reference'
 
 export type AiNodeTreeResult =
-  | { ok: true; rootId: string; nodes: NodesMap; repairs: string[] }
+  | {
+      ok: true
+      rootId: string
+      nodes: NodesMap
+      repairs: string[]
+      /** Each minted id → the id the model wrote for that node. */
+      sourceIds: Record<string, string>
+    }
   | { ok: false; error: string; code: AiNodeTreeRefusalCode }
 
 export interface AiNodeTreeContext {
@@ -93,6 +125,17 @@ export interface AiNodeTreeContext {
   screenIds?: Iterable<string>
   /** DAM media ids a `media` prop may reference. Absent: any well-formed reference. */
   assetIds?: Iterable<string>
+  /**
+   * Reusable components an instance may place. Absent: no instance is
+   * admitted, which is the palette's own rule for a tree nobody grounded.
+   */
+  componentIds?: Iterable<string>
+  /** Declared props per component id, which an instance's values are held to. */
+  componentProps?: Record<string, AiComponentPropTypes>
+  /** Forms on the Forms page a Form element may bind by `formId`. */
+  formIds?: Iterable<string>
+  /** Datasets a Form element may write to by `datasetId`. */
+  datasetIds?: Iterable<string>
 }
 
 /**
@@ -564,6 +607,164 @@ function sanitizeProps(
   return { props }
 }
 
+/** Surfaces that compose page elements, and so may place a component instance. */
+const INSTANCE_SURFACES: ReadonlySet<AiSurface> = new Set([
+  'screen',
+  'layout',
+  'component',
+])
+
+const FORM_COMPONENT_ID = 'form'
+
+/** The instance prop naming the component it places; stored on every instance node. */
+export const AI_INSTANCE_REF_PROP = 'refId'
+
+interface ReferenceSets {
+  componentIds: Set<string> | null
+  componentProps: Record<string, AiComponentPropTypes>
+  formIds: Set<string> | null
+  datasetIds: Set<string> | null
+  assetIds: Set<string> | null
+}
+
+/**
+ * One value an instance fills in for a declared prop, held to what the
+ * declaration's type can hold: a picture from the library, a link, a number,
+ * a switch, or copy.
+ */
+function instancePropValue(
+  nodeId: string,
+  name: string,
+  type: string,
+  raw: unknown,
+  assetIds: Set<string> | null,
+  repairs: string[],
+): unknown {
+  if (type === 'number') {
+    const parsed = typeof raw === 'number' ? raw : Number(raw)
+    if (raw === '' || !Number.isFinite(parsed)) {
+      repairs.push(`${nodeId}.propValues.${name} is not a number; dropped`)
+      return undefined
+    }
+    return parsed
+  }
+  if (type === 'boolean') {
+    const coerced = coerceBoolean(raw)
+    if (coerced === undefined) {
+      repairs.push(`${nodeId}.propValues.${name} is not a boolean; dropped`)
+    }
+    return coerced
+  }
+  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+    repairs.push(`${nodeId}.propValues.${name} is not a value; dropped`)
+    return undefined
+  }
+  const value = String(raw).trim()
+  if (HOSTILE_TEXT.test(value)) {
+    repairs.push(`${nodeId}.propValues.${name} carried markup or script; dropped`)
+    return undefined
+  }
+  if (type === 'image') {
+    if (isHttpsUrl(value)) return value
+    const ref = parseMediaRef(value)
+    if (!ref || (assetIds && !assetIds.has(ref.mediaId))) {
+      repairs.push(
+        `${nodeId}.propValues.${name} is neither a media reference this site holds nor an https: URL; dropped`,
+      )
+      return undefined
+    }
+    return value
+  }
+  if (type === 'href') {
+    if (isHttpsUrl(value) || isRootRelativePath(value)) return value
+    repairs.push(
+      `${nodeId}.propValues.${name} is neither an https: URL nor a path on this site; dropped`,
+    )
+    return undefined
+  }
+  if (value.length > AI_TEXT_LIMITS.body) {
+    repairs.push(
+      `${nodeId}.propValues.${name} was over ${AI_TEXT_LIMITS.body} characters; truncated`,
+    )
+    return value.slice(0, AI_TEXT_LIMITS.body).trimEnd()
+  }
+  return value
+}
+
+/**
+ * The site-record props of one node — an instance's `refId` and
+ * `propValues`, a Form's `formId` and `datasetId` — checked against the ids
+ * the caller supplied. They leave `props` before the palette pass, which
+ * would drop them as undeclared, and come back in `kept` once checked.
+ */
+function sanitizeReferenceProps(
+  nodeId: string,
+  componentId: string,
+  props: Record<string, unknown>,
+  refs: ReferenceSets,
+  repairs: string[],
+): { props: Record<string, unknown>; kept: Record<string, unknown> } | { refusal: string } {
+  const rest: Record<string, unknown> = { ...props }
+  const kept: Record<string, unknown> = {}
+  if (componentId === REUSABLE_INSTANCE_COMPONENT_ID) {
+    const refId = typeof rest[AI_INSTANCE_REF_PROP] === 'string' ? String(rest[AI_INSTANCE_REF_PROP]).trim() : ''
+    delete rest[AI_INSTANCE_REF_PROP]
+    if (!refId || !refs.componentIds?.has(refId)) {
+      return {
+        refusal: `Reusable Component (${nodeId}) names a component this site does not have`,
+      }
+    }
+    kept[AI_INSTANCE_REF_PROP] = refId
+    const rawValues = rest[REUSABLE_INSTANCE_PROP_VALUES_KEY]
+    delete rest[REUSABLE_INSTANCE_PROP_VALUES_KEY]
+    if (rawValues !== undefined && !isRecord(rawValues)) {
+      repairs.push(`${nodeId}.propValues is not an object; dropped`)
+    }
+    const declared = refs.componentProps[refId]
+    const values: Record<string, unknown> = {}
+    for (const [name, raw] of Object.entries(isRecord(rawValues) ? rawValues : {})) {
+      if (raw === undefined || raw === null) continue
+      if (!COMPONENT_PROP_NAME_PATTERN.test(name)) {
+        repairs.push(`${nodeId}.propValues.${name} is not a prop name; dropped`)
+        continue
+      }
+      if (declared && !(name in declared)) {
+        repairs.push(`${nodeId}.propValues.${name} is not a prop of that component; dropped`)
+        continue
+      }
+      const value = instancePropValue(
+        nodeId,
+        name,
+        declared?.[name] ?? 'text',
+        raw,
+        refs.assetIds,
+        repairs,
+      )
+      if (value !== undefined) values[name] = value
+    }
+    if (Object.keys(values).length) kept[REUSABLE_INSTANCE_PROP_VALUES_KEY] = values
+    return { props: rest, kept }
+  }
+  if (componentId === FORM_COMPONENT_ID) {
+    const bindings: Array<[prop: string, ids: Set<string> | null, record: string]> = [
+      ['formId', refs.formIds, 'form'],
+      ['datasetId', refs.datasetIds, 'dataset'],
+    ]
+    for (const [prop, ids, record] of bindings) {
+      const raw = rest[prop]
+      delete rest[prop]
+      if (raw === undefined || raw === null || raw === '') continue
+      const id = typeof raw === 'string' ? raw.trim() : ''
+      if (id && ids?.has(id)) {
+        kept[prop] = id
+      } else {
+        repairs.push(`${nodeId}.${prop} names a ${record} this site does not have; dropped`)
+      }
+    }
+  }
+  return { props: rest, kept }
+}
+
 function refusalCode(error: string): AiNodeTreeRefusalCode {
   if (/too large/i.test(error)) return 'too-large'
   if (/cannot be published/i.test(error)) return 'component'
@@ -687,9 +888,22 @@ function validate(
     forSanitizer[id] = { ...node, props }
   }
 
+  const refs: ReferenceSets = {
+    componentIds: context?.componentIds ? new Set(context.componentIds) : null,
+    componentProps: context?.componentProps ?? {},
+    formIds: context?.formIds ? new Set(context.formIds) : null,
+    datasetIds: context?.datasetIds ? new Set(context.datasetIds) : null,
+    assetIds: context?.assetIds ? new Set(context.assetIds) : null,
+  }
+  // An instance is admitted only where the caller grounded it in the site's
+  // components; the reference itself is checked on the node below.
+  const allow =
+    refs.componentIds && INSTANCE_SURFACES.has(surface)
+      ? [...definition.allow, REUSABLE_INSTANCE_COMPONENT_ID]
+      : definition.allow
   const sanitized = sanitizeMarketplaceDefinition(
     { rootId, nodes: forSanitizer },
-    { componentIds: definition.allow },
+    { componentIds: allow },
   )
   if (sanitized.ok === false) {
     return {
@@ -700,7 +914,7 @@ function validate(
   }
 
   const screenIds = context?.screenIds ? new Set(context.screenIds) : null
-  const assetIds = context?.assetIds ? new Set(context.assetIds) : null
+  const assetIds = refs.assetIds
   const repairs: string[] = []
   const output: NodesMap = {}
   const rootIsWrapper =
@@ -829,10 +1043,20 @@ function validate(
       queue.push({ id: childId, parentId: newId })
     }
 
+    const reference = sanitizeReferenceProps(
+      id,
+      node.componentId,
+      { ...node.props, ...mediaByNodeId.get(id) },
+      refs,
+      repairs,
+    )
+    if ('refusal' in reference) {
+      return { ok: false, code: 'reference', error: reference.refusal }
+    }
     const propsResult = sanitizeProps(
       id,
       entry,
-      { ...node.props, ...mediaByNodeId.get(id) },
+      reference.props,
       screenIds,
       assetIds,
       repairs,
@@ -852,13 +1076,16 @@ function validate(
       pluginId: entry.pluginId,
       parentId,
       nodes: children,
-      props: propsResult.props,
+      props: { ...propsResult.props, ...reference.kept },
       ...(sx ? { sx } : {}),
       ...(hiddenByNodeId.has(id) ? { hidden: true } : {}),
     }
   }
 
-  const bytes = JSON.stringify(output).length
+  // The save's own measurement (msgpack), not a JSON string length: the
+  // ceiling is stated in those bytes, and a UTF-16 length reads multi-byte
+  // copy as smaller than the document the save will refuse.
+  const bytes = nodeMapBytes(output)
   if (bytes > NODE_MAP_MAX_BYTES) {
     return {
       ok: false,
@@ -866,10 +1093,13 @@ function validate(
       error: `The tree is ${bytes} bytes; the stored ceiling is ${NODE_MAP_MAX_BYTES}`,
     }
   }
+  const sourceIds: Record<string, string> = {}
+  for (const [source, fresh] of minted) sourceIds[fresh] = source
   return {
     ok: true,
     rootId: minted.get(rootId) as string,
     nodes: output,
     repairs,
+    sourceIds,
   }
 }

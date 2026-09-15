@@ -104,6 +104,7 @@ export const DOCS_HELP_EXCERPTS = {
   gettingStarted: 'Sign in, create your first site, and understand what a site contains.',
   glossary: 'What organization, workspace, tenant, host, and site each mean — and which word to use where.',
   googleAnalytics: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',
+  howAglynAiBuilds: 'The building rules every AI build follows (reuse, components, layouts, forms, theme tokens, drafts only and a measured size) and what happens when an answer breaks one.',
   import: 'Bring a spreadsheet of people into the CRM — map its columns, preview the result, and import in batches with a report of what was added, updated and skipped.',
   importExport: 'Round-trip dataset records through CSV and JSON with validation on import.',
   injectionZones: 'Every named console zone a plugin widget can render into, and what each receives.',

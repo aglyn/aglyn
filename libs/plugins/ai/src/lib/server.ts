@@ -19,11 +19,14 @@ import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { registerAiDeclarations } from './declarations'
 // Registers the jobs beat at module scope (AGL-2904, AGL-435).
 import './jobs/ai-jobs-beat'
+// Registers the plan step every planned job kind runs first (AGL-2935).
+import './jobs/ai-job-plan-step'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
 import { POST as cancelAiJob } from './server/ai-jobs-cancel'
 import { GET as aiJobEvents } from './server/ai-jobs-events-route'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
+import { POST as resumeAiJob } from './server/ai-jobs-resume'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistFeedback } from './server/assist-feedback'
 import { GET as aiAdminOrg } from './server/ai-admin-org'
@@ -68,6 +71,10 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/jobs/:jobId/cancel', {
     web: (request, context) =>
       cancelAiJob(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
+  })
+  registerPluginApiRoute('ai/jobs/:jobId/resume', {
+    web: (request, context) =>
+      resumeAiJob(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
   })
   registerPluginApiRoute('ai/jobs/:jobId/events', {
     web: (request, context) =>

@@ -10,10 +10,14 @@ Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939):
 `src/lib/model/ai-jobs.types.ts` (the model),
 `src/lib/jobs/ai-jobs.ts` (the machine, the step registry, the sweep),
 `src/lib/jobs/ai-job-text-step.ts` and `src/lib/jobs/ai-job-theme-step.ts`
-(the two step kinds that run today),
-`src/lib/server/ai-jobs-route.ts`, `ai-jobs-events-route.ts` and
-`ai-jobs-cancel.ts` (the doors, registered on the console dispatcher by
-`src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` (the beat).
+(the `text` and `theme` steps),
+`src/lib/jobs/ai-job-plan-step.ts` (the plan step every planned kind runs first),
+`src/lib/server/ai-jobs-route.ts`, `ai-jobs-events-route.ts`,
+`ai-jobs-cancel.ts` and `ai-jobs-resume.ts` (the doors, registered on the
+console dispatcher by `src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` (the
+beat). The building doctrine every generator runs through is
+`src/lib/runtime/ai-doctrine.ts`, with its validators in
+`src/lib/runtime/ai-doctrine-validators.ts` (below).
 
 ## Outputs are drafts, never a publish
 
@@ -35,10 +39,12 @@ rules deny every client write). Fields:
 | field | meaning |
 | --- | --- |
 | `kind` | `AiJobKind` — what the job produces. `text` and `theme` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
-| `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` as the parked state (below). |
+| `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
-| `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. |
+| `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. |
+| `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens`, the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
+| `review` | While the job is `needs_review`: the `reason` (`plan` or `doctrine`), the customer-safe `message`, and the rules the last answer broke. |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step, and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
@@ -87,22 +93,89 @@ provider — its outcome carries no tokens and no cost, so nothing is metered.
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
 
+## Planning, and a job that waits for a person
+
+A job whose kind builds site structure (`AI_PLANNED_JOB_KINDS`: page, site,
+component, layout, template, form, email) runs a `plan` step first, once its
+generation runner is registered — until then the kind fails fast and free, as
+before. The plan step reads the site inventory and asks for a typed plan
+through `runValidatedGeneration('plan', …)`. What it returns is recorded like
+any step's result, and then the job stops for a person: it parks as
+`needs_review` with the plan on the document.
+
+`needs_review` is a different state from `needs_input` on purpose. The beat
+re-queues `needs_input` hourly, because the org's standing may have changed;
+nothing a timer does can confirm a plan, and re-running a step whose answer
+broke a building rule twice would spend again on the same refusal. So neither
+beat query matches `needs_review`, and only a member resumes it:
+
+- **reason `plan`** — the plan step completed; confirming marks the plan
+  `confirmed` and runs the generation step, which executes the plan;
+- **reason `doctrine`** — an answer broke a building rule on its re-ask; the
+  step went back to `pending` with its spend recorded, and trying again runs
+  it once more with its attempts started over.
+
+`resumeAiJob` is that transition, in one transaction, and cancel ends either.
+
+## The building doctrine
+
+Every generator — the plan step today, the page, component, layout, template,
+form and email generators after it — calls `runValidatedGeneration(kind, …)`
+from `src/lib/runtime/ai-doctrine.ts` rather than `runAiRequest` directly:
+
+```ts
+runValidatedGeneration('plan', input: AiPlanGenerationInput): Promise<AiValidatedGeneration<AiBuildPlan>>
+runValidatedGeneration(kind: AiOutputKind, input: AiTreeGenerationInput): Promise<AiValidatedGeneration<AiValidatedTree>>
+runValidatedGeneration<T>(kind: string, input: AiCustomGenerationInput<T>): Promise<AiValidatedGeneration<T>>
+```
+
+The input names the routing `step`, the door's static `instructions`, the
+site `inventory` (`readSiteInventory(orgId, hostId)`), the `messages`, the
+strict `tool`, and optionally `maxTokens`, `thinking`, `effort` and `signal`.
+A tree kind may add `context` (asset sizes, the brand, embeds, framing) and
+`otherPages`; the doctrine's own checks always run for `plan` and the six
+palette kinds, and a door can only `extend` them. A kind the doctrine has no
+reader for (a theme change, an edit) brings its own `check`, and rule 13 is
+still held on its answer.
+
+The loop sends, in cache order: the doctrine block (cached, identical for
+every org, with the acceptable-use rules), the door's instructions, the
+surface's palette catalog (cached), and the compact site inventory
+(volatile). It checks the answer; on a violation it asks once more with the
+broken rules named and only the offending parts quoted; when the second
+answer still breaks a rule it returns `needs_input` with a customer-safe
+message. Every attempt's tokens are summed on the result, and the job
+machine meters them. The result is `ok` with the value, `needs_input` with
+the violations, or `refused`.
+
+The validators hold the seventeen rules by construction: one detector per rule
+for trees and plans, each naming its rule number and a customer-safe sentence,
+and the rule-17 scorer, which measures nodes, stored bytes (`nodeMapBytes`),
+image bytes, embeds, font families and an email's rendered HTML against
+`AI_OUTPUT_BUDGETS` in `runtime/ai-palette.ts`. A page's estimated load starts
+from `ESTIMATED_PAGE_TRANSFER_BYTES`, the measured weight of a published page.
+
 ## The doors
 
 Registered under `/api/ai/jobs` by the plugin's console API surface:
 
 - `POST /api/ai/jobs` `{ orgId, hostId?, kind, brief, inputs? }` climbs the
   whole gate ladder (`aiGenerative`, `release_ai_generative`, the `ai-generate`
-  switch, a per-uid window, a reservation), creates the job and runs its first
-  step inline under a 25 s budget. A step that finishes in time answers with
-  the job `done`; one that does not is aborted, re-queued, and answers
-  `queued` for the beat. A `theme` job must name its site.
+  switch, the `ai.generate` permission, a per-uid window, a reservation),
+  creates the job and runs its first step inline under a 25 s budget. A step
+  that finishes in time answers with the job `done`; one that does not is
+  aborted, re-queued, and answers `queued` for the beat. A `theme` job must
+  name its site.
 - `GET /api/ai/jobs?orgId=` lists the org's jobs newest first.
 - `GET /api/ai/jobs/{jobId}/events?orgId=` is server-sent events: a `state`
   frame now, a re-read every 2 s that emits on change, `reconnect` at 55 s.
 - `POST /api/ai/jobs/{jobId}/cancel` `{ orgId }` — idempotent; a step in
   flight finishes, records its cost, and finds the job canceled. Audited
   (`ai.job.cancel`).
+- `POST /api/ai/jobs/{jobId}/resume` `{ orgId, hostId }` — confirms a plan or
+  tries a refused step again. It spends, so it climbs the whole ladder the
+  create door climbs, refuses a site that is not the job's, and runs the next
+  step inline on its reservation. Audited (`ai.job.resume`).
 
 The read and cancel doors climb the ladder's rungs up to the lockdown verdict
 and stop there — no rate window, no reservation — through
@@ -169,7 +242,8 @@ spent — checked between jobs, with the time left handed to the step in flight
 as its abort signal. The ordering is the cursor: a job the sweep touches has
 its `updatedAt` moved to the back; one it did not reach keeps its place. Two
 collection-group queries rather than one, so a workspace with many parked jobs
-cannot fill the candidate list and starve the queue.
+cannot fill the candidate list and starve the queue. A `needs_review` job is
+in neither query.
 
 The beat is platform-scoped for the coverage guard: it resolves no host and
 writes only unpublished drafts under the org. The lock that applies is the
@@ -229,13 +303,17 @@ envelope), and the doors `src/lib/server/ai-allotments.ts` and `ai-models.ts`.
 
 Register a runner with `registerAiJobStep(kind, async (ctx) => …)` beside the
 machine. The runner receives the job, the step index, an abort signal, the
-machine's Firestore handle (for what the step READS), the org document the
-reservation was read from, and `modelFor`. It calls `runAiRequest` (never the
-provider directly) on `ctx.modelFor?.(stepKind)`, which honors the creator's
-model pick within the plan and the allotments; writes its drafts; and returns
-`{ outputs, usage, estCostUsd, model, stopReason }` — with `refused` for a
-model decline, or `failure` (a customer-safe sentence) for an answer it could
-not use. It must not write the job document, take a reservation, or publish
-anything. Kinds with more than one step extend `aiJobStepNames`. A runner that
-loads heavy modules registers a lazy wrapper, as `theme` does, so the machine
-stays light to load.
+machine's Firestore handle (for what the step reads and the drafts it writes),
+the org document the reservation was read from, and `modelFor`. A building
+kind generates through `runValidatedGeneration` (never the provider directly,
+and never `runAiRequest` itself), handing it `ctx.modelFor?.(stepKind)` as the
+model, which honors the creator's model pick within the plan and the
+allotments. The runner writes its drafts and returns `{ outputs, usage,
+estCostUsd, model, stopReason }` — with `refused` for a model decline,
+`failure` (a customer-safe sentence) for an answer it could not use, or
+`review` when the doctrine gave up. It must not write the job document, take a
+reservation, or publish anything. Registering a runner for a planned kind is
+what turns on its plan step; a generation runner reads the confirmed plan from
+`job.plan`. Kinds with more than one step extend `aiJobStepNames`. A runner
+that loads heavy modules registers a lazy wrapper, as `theme` does, so the
+machine stays light to load.

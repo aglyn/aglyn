@@ -71,6 +71,7 @@ const AI_JOB_STATUSES: readonly AiJobStatus[] = [
   'queued',
   'running',
   'needs_input',
+  'needs_review',
   'done',
   'failed',
   'canceled',

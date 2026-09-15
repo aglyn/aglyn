@@ -42,6 +42,7 @@ export const AI_STEP_MODEL_SETTING: Record<AiStepKind, string> = {
   'generate.section': 'generateModel',
   'job.text': 'jobTextModel',
   'job.theme': 'jobThemeModel',
+  'job.plan': 'jobPlanModel',
 }
 
 const MODEL_OPTIONS = [
@@ -83,6 +84,7 @@ export const AI_CONFIG_SCHEMA: PluginConfigSchema = {
     modelField('generate.section', 'Section generation model', 'Generating a section’s structure.'),
     modelField('job.text', 'Generation job (text) model', 'The text step of a generation job.'),
     modelField('job.theme', 'Generation job (theme) model', 'Proposing a change to a site’s theme.'),
+    modelField('job.plan', 'Generation job (plan) model', 'The plan step of a generation job.'),
   ],
   defaults: {
     provider: AI_SETTING_PLATFORM,

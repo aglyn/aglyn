@@ -85,9 +85,11 @@ export const AI_ACTIVITY_FILTER_LABEL = 'AI'
  * band ran out, the org's own ceiling refused, the monthly message cap or
  * the job's own token budget did — or, on the Free taste (AGL-2925), one of
  * its own precautions: the account's credits, its daily request cap, a
- * pause after declined briefs, or the platform's day of free spend. The
- * union is the meter's `AssistRefusedBy` less its `null`, so a ceiling the
- * meter can name is one the feed can label.
+ * pause after declined briefs, or the platform's day of free spend. Those
+ * are the meter's `AssistRefusedBy` less its `null`, so a ceiling the meter
+ * can name is one the feed can label. The last two are the job's own
+ * (AGL-2935): its plan is ready for review, or an answer broke a building
+ * rule on its re-ask.
  */
 export type AiJobNeedsInputReason =
   | 'band'
@@ -99,11 +101,15 @@ export type AiJobNeedsInputReason =
   | 'requests'
   | 'refusals'
   | 'platform'
+  | 'plan'
+  | 'doctrine'
 
 export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
   AiJobNeedsInputReason,
   string
 > = {
+  plan: 'its plan is ready for review',
+  doctrine: 'its answer broke a building rule twice',
   band: 'the included AI band is used up',
   cap: 'the overage ceiling was reached',
   messages: 'the monthly message cap was reached',

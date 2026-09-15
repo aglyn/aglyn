@@ -96,6 +96,10 @@ const AI_DOORS = new Map<string, string>([
     'Besigner copy assistant (AGL-89/130/169) at /api/ai/assist: element copy, blog bodies with title/excerpt, and section briefs. NO release flag — a ready provider plus a Pro entitlement is the whole gate. The same URL, content and gate it had in the marketplace plugin before it moved into the AI plugin (AGL-2939): a move, not a new flow, so /legal/subprocessors still describes it.',
   ],
   [
+    'libs/plugins/ai/src/lib/runtime/ai-doctrine.ts',
+    'The building doctrine’s generation loop (AGL-2935), which every generator runs its request through. It sends what the calling door sends — today a generation job’s plan step (`jobs/ai-job-plan-step.ts`): the job’s brief, kind and scalar inputs — together with the site inventory: the names and ids of the site’s reusable components (with their prop names), layouts, templates, forms and datasets (with their field names), content collections and screens (with their slugs), and the theme’s summary, light-scheme colors and fonts. On its one re-ask it also sends the rules the first answer broke, with the offending parts of that answer. Behind `release_ai_generative`, the `aiGenerative` entitlement, the `ai-generate` lockdown key and the `ai.generate` permission. `/legal/subprocessors` describes Anthropic as generating the assistants’ responses from questions, site copy, blog bodies and section briefs; it does not yet name a generation job’s brief or the site structure this inventory sends, so the published row must say so before `release_ai_generative` is on for a customer.',
+  ],
+  [
     'libs/plugins/ai/src/lib/jobs/ai-job-text-step.ts',
     'A generation job’s text step (AGL-2904): the brief the job was created with. Behind `release_ai_generative`, the `aiGenerative` entitlement and the `ai-generate` lockdown key. It called the shared runtime before the AI plugin existed too; it is listed because the runtime’s callers are now the list that pins each flow, not because the flow is new.',
   ],

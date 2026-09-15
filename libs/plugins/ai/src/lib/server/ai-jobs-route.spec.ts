@@ -281,10 +281,15 @@ import '../declarations'
 import { GET as jobEvents } from './ai-jobs-events-route'
 import { POST as cancelJob } from './ai-jobs-cancel'
 import { aiJobEventStream } from './ai-jobs-events'
+import { POST as resumeJob } from './ai-jobs-resume'
 import {
   assistUsageMonth,
 } from '../usage/assist-usage'
-import { AI_JOB_NOT_AVAILABLE_COPY } from '../jobs/ai-jobs'
+import {
+  AI_JOB_NOT_AVAILABLE_COPY,
+  registerAiJobPlanStep,
+  registerAiJobStep,
+} from '../jobs/ai-jobs'
 
 const ORG = 'org-1'
 /** A Pro workspace with the AI add-on: `aiGenerative` is on. */
@@ -668,6 +673,8 @@ describe('aiJobEventStream — the poll', () => {
     updatedAt: '2026-09-14T10:00:00.000Z',
     error: null,
     running: true,
+    plan: null,
+    review: null,
     ...patch,
   })
 
@@ -788,5 +795,109 @@ describe('POST /api/ai/jobs/[jobId]/cancel', () => {
     )
     expect(response.status).toBe(404)
     expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('queued')
+  })
+})
+
+describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
+  const planRunner = jest.fn()
+  const siteRunner = jest.fn()
+  const spend = { usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+
+  // A planned kind no other test here creates, so its runner changes no
+  // other kind's path.
+  beforeAll(() => registerAiJobStep('site', (context) => siteRunner(context)))
+  beforeEach(() => {
+    planRunner.mockReset().mockImplementation(async ({ now }: { now: Date }) => ({
+      outputs: [],
+      ...spend,
+      plan: {
+        reuse: [],
+        create: [],
+        screens: [],
+        status: 'proposed',
+        labels: {},
+        proposedAt: now,
+        confirmedAt: null,
+        confirmedBy: null,
+      },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+    }))
+    siteRunner.mockReset().mockResolvedValue({
+      outputs: [{ resource: 'screen', id: 'scr-1', versionId: 'v-1', hostId: 'host-1', label: 'Home' }],
+      ...spend,
+    })
+    registerAiJobPlanStep((context) => planRunner(context))
+  })
+  afterEach(() => registerAiJobPlanStep(null))
+
+  const resume = (jobId: string, body: Record<string, unknown> = { orgId: ORG, hostId: 'host-1' }) =>
+    resumeJob(post(body, { path: `/api/ai/jobs/${jobId}/resume` }), params(jobId))
+  const messages = () =>
+    mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth()}`)?.['messages']
+  const auditRows = () =>
+    [...mockDocs.entries()]
+      .filter(([path]) => path.startsWith('adminAudit/'))
+      .map(([, row]) => row)
+
+  async function proposed(): Promise<{ id: string }> {
+    const { job } = await (await createJob(post({ ...VALID, kind: 'site' }))).json()
+    expect(job).toMatchObject({
+      status: 'needs_review',
+      plan: { status: 'proposed' },
+      review: { reason: 'plan' },
+    })
+    return job
+  }
+
+  it('confirms the plan and runs the next step inline on its own reservation, audited', async () => {
+    const job = await proposed()
+    expect(messages()).toBe(1)
+    const response = await resume(job.id)
+    expect(response.status).toBe(200)
+    expect((await response.json()).job).toMatchObject({
+      status: 'done',
+      plan: { status: 'confirmed', confirmedBy: 'uid-1' },
+      review: null,
+      outputs: [{ resource: 'screen', id: 'scr-1' }],
+    })
+    expect(siteRunner).toHaveBeenCalledTimes(1)
+    expect(messages()).toBe(2)
+    expect(auditRows().map((row) => row['action'])).toEqual(['ai.job.resume', 'ai.job.output'])
+    expect(auditRows()[0]).toMatchObject({
+      actorUid: 'uid-1',
+      actorEmail: 'member@example.com',
+      target: `orgs/${ORG}/aiJobs/${job.id}`,
+      after: { status: 'queued', reason: 'plan', kind: 'site' },
+    })
+  })
+
+  it('refuses another site, an unknown job and a job no longer waiting, handing the message back each time', async () => {
+    const job = await proposed()
+    expect((await resume(job.id, { orgId: ORG, hostId: 'host-2' })).status).toBe(400)
+    expect((await resume('job-missing')).status).toBe(404)
+    expect(messages()).toBe(1)
+    expect((await resume(job.id)).status).toBe(200)
+    expect(messages()).toBe(2)
+    const again = await resume(job.id)
+    expect(again.status).toBe(409)
+    expect(await again.json()).toMatchObject({
+      error: 'This job is not waiting for review',
+      job: { status: 'done' },
+    })
+    expect(messages()).toBe(2)
+    expect(siteRunner).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks for ai.generate on the job’s site, and spends nothing and moves nothing when refused', async () => {
+    const job = await proposed()
+    mockAiPermitted = false
+    mockAiPermissionAsks = []
+    const response = await resume(job.id)
+    expect(response.status).toBe(403)
+    expect(mockAiPermissionAsks[0][1]).toBe('host-1')
+    expect(mockAiPermissionAsks[0][3]).toBe('ai.generate')
+    expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('needs_review')
+    expect(messages()).toBe(1)
+    expect(siteRunner).not.toHaveBeenCalled()
   })
 })

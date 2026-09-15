@@ -224,6 +224,7 @@ export type AiStepKind =
   | 'generate.section'
   | 'job.text'
   | 'job.theme'
+  | 'job.plan'
 
 /** The tier each step kind is served from when no setting overrides it. */
 export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
@@ -236,6 +237,7 @@ export const AI_STEP_TIERS: Record<AiStepKind, AiCatalogEntry['tier']> = {
   // A theme is one structured answer over a small, fixed control set; the
   // judgment is in the color choices, which the fast tier makes worse.
   'job.theme': 'balanced',
+  'job.plan': 'balanced',
 }
 
 /** The first catalog model of a tier on a provider, or the provider's first model. */

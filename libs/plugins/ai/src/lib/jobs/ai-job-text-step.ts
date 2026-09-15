@@ -16,7 +16,12 @@
  */
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
-import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
+import type {
+  AiJob,
+  AiJobOutput,
+  AiJobPlan,
+  AiJobReview,
+} from '../model/ai-jobs.types'
 import type { AiStepKind } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import { runAiRequest, type AiSystemBlock } from '../runtime/ai-runtime'
@@ -68,6 +73,15 @@ export interface AiJobStepOutcome {
    * which is customer-safe and the only thing a customer reads.
    */
   failure?: string
+  /** The plan the plan step proposed, which the machine keeps on the job (AGL-2935). */
+  plan?: AiJobPlan
+  /**
+   * The step stopped for a person (AGL-2935). The machine records what it
+   * spent and parks the job `needs_review`: a `plan` review completes the
+   * step, so confirming runs the next one; a `doctrine` review hands the
+   * step back, so trying again runs the same one.
+   */
+  review?: AiJobReview
 }
 
 export interface AiJobStepContext {
@@ -77,11 +91,11 @@ export interface AiJobStepContext {
   /** Aborts the provider call when the runner's budget ends. */
   signal?: AbortSignal
   /**
-   * The Admin SDK handle the machine runs on, for a step that READS what it
-   * builds from — a site's theme, say. A step never writes the job document,
-   * the meter or the lease through it.
+   * The Admin SDK handle the machine runs on, for a step that reads what it
+   * builds from — a site's theme, say — or writes a draft. A step never
+   * writes the job document, the meter or the lease through it.
    */
-  firestore?: FirebaseFirestore.Firestore
+  firestore: FirebaseFirestore.Firestore
   /** The org document the machine read for the step's reservation. */
   org?: Partial<AglynOrgBilling> | null
   /**

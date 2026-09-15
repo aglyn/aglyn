@@ -324,6 +324,7 @@ export const STAFF_ORG_AI_JOB_STATUSES: readonly StaffOrgAiJobStatus[] = [
   'queued',
   'running',
   'needs_input',
+  'needs_review',
   'done',
   'failed',
   'canceled',

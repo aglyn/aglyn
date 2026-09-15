@@ -173,14 +173,15 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
   return (
     <Stack spacing={1}>
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        {(['queued', 'running', 'needs_input', 'failed'] as const).map((status) => (
+        {(['queued', 'running', 'needs_input', 'needs_review', 'failed'] as const).map((status) => (
           <Chip
             key={status}
             size="small"
             color={
               status === 'failed' && jobs.counts[status] > 0
                 ? 'error'
-                : status === 'needs_input' && jobs.counts[status] > 0
+                : (status === 'needs_input' || status === 'needs_review') &&
+                    jobs.counts[status] > 0
                   ? 'warning'
                   : 'default'
             }
