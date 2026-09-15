@@ -42,13 +42,17 @@ import {
   AI_BUILDING_DOCTRINE,
   AI_DOCTRINE_SYSTEM_BLOCK,
   AI_GENERATION_MAX_TOKENS,
+  aiDoctrineCatalog,
   aiDoctrineSystemBlocks,
   aiDoctrineTreeTool,
   aiNodeTreeContextFromInventory,
   aiSiteInventoryBlock,
   runValidatedGeneration,
+  validateStreamedGeneration,
+  type AiGenerationCheck,
 } from './ai-doctrine'
 import { AI_DOCTRINE_RULES } from './ai-doctrine-validators'
+import { AI_SURFACE_NAMES } from './ai-palette'
 import { AI_PALETTE_CATALOG } from './ai-palette.generated'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
@@ -477,5 +481,80 @@ describe('runValidatedGeneration — a kind the doctrine has no reader for', () 
       } as never),
     ).rejects.toThrow('pass check')
     expect(requests).toHaveLength(0)
+  })
+})
+
+describe('a kind built from no site structure, and an answer that streamed', () => {
+  const proposeTool: AiTool = {
+    name: 'propose_change',
+    description: 'Propose the change.',
+    strict: true,
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['change'],
+      properties: { change: { type: 'string' } },
+    },
+  }
+  const keepChange: AiGenerationCheck<string> = (answer) =>
+    typeof answer['change'] === 'string' && answer['change']
+      ? { value: answer['change'], violations: [] }
+      : { value: null, violations: [{ rule: null, code: 'door-empty', message: 'Nothing to change.' }] }
+
+  it('sends no inventory block for a kind that leaves the inventory out', async () => {
+    expect(aiDoctrineSystemBlocks(undefined, { instructions: [{ text: 'Change the theme.' }] })).toEqual([
+      AI_DOCTRINE_SYSTEM_BLOCK,
+      { text: 'Change the theme.', cacheBreakpoint: true },
+    ])
+    const { fake, requests } = provider([toolAnswer(proposeTool.name, { change: 'warmer' })])
+    const result = await runValidatedGeneration('theme', {
+      step: 'job.theme',
+      model: 'test-model',
+      provider: fake,
+      instructions: [{ text: 'Change the theme.' }],
+      messages: [{ role: 'user', content: 'Make it warmer.' }],
+      tool: proposeTool,
+      check: keepChange,
+    })
+    expect(result).toMatchObject({ status: 'ok', value: 'warmer', attempts: 1 })
+    expect(requests[0].system.some((block) => block.volatile)).toBe(false)
+    expect(requests[0].system[requests[0].system.length - 1].cacheBreakpoint).toBe(true)
+  })
+
+  it('shows a door that composes its own prompt the catalog the loop shows the surface', () => {
+    for (const surface of AI_SURFACE_NAMES) {
+      expect(aiDoctrineCatalog(surface)).toBe(AI_PALETTE_CATALOG[surface])
+    }
+  })
+
+  it('keeps a streamed value with the door’s findings beside it, and needs input without one', () => {
+    const leftOut = { rule: null, code: 'door-left-out', message: 'The font was left out.' }
+    expect(
+      validateStreamedGeneration('edit', {
+        answer: { change: 'warmer' },
+        check: (answer) => ({ value: String(answer['change']), violations: [leftOut] }),
+      }),
+    ).toEqual({ status: 'ok', value: 'warmer', violations: [leftOut] })
+    expect(validateStreamedGeneration('edit', { answer: { change: '' }, check: keepChange })).toMatchObject({
+      status: 'needs_input',
+      violations: [{ code: 'door-empty' }],
+    })
+  })
+
+  it('holds rule 13 on a streamed answer, whatever its value', () => {
+    const result = validateStreamedGeneration('edit', {
+      answer: { change: 'warmer', publish: true },
+      check: keepChange,
+    })
+    expect(result.status).toBe('needs_input')
+    expect(result.violations.map((violation) => violation.rule)).toEqual([13])
+  })
+
+  it('refuses a plan or a palette kind, which the loop reads and re-asks', () => {
+    for (const kind of ['plan', 'page', 'email']) {
+      expect(() => validateStreamedGeneration(kind, { answer: {}, check: keepChange })).toThrow(
+        'runValidatedGeneration',
+      )
+    }
   })
 })

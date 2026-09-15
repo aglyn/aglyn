@@ -27,6 +27,7 @@ import {
   type AssistEditInsertOp,
   type AssistEditTarget,
 } from '../model/assist-edit'
+import { validateStreamedGeneration } from '../runtime/ai-doctrine'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import {
   ASSIST_EDIT_MAX_INSERT_NODES,
@@ -37,7 +38,6 @@ import {
   editSelectionBlock,
   parseAssistEditContext,
   resolveAssistEdit,
-  runValidatedGenerationStandIn,
 } from './assist-edit'
 
 /**
@@ -467,10 +467,8 @@ describe('proposals — the validators', () => {
 })
 
 /**
- * The seam to AGL-2935: the edit's check answers in the shape the doctrine
- * runtime's custom-kind overload takes, so moving under
- * `runValidatedGeneration('edit', { …, check })` changes the caller, not the
- * check.
+ * The edit under the doctrine (AGL-2935): its check answers in the shape the
+ * doctrine's checks take, and the doctrine holds the streamed answer to it.
  */
 describe('the check, in the doctrine runtime’s custom-kind shape', () => {
   const scope = () => ({ context: context(), target: PAGE })
@@ -492,14 +490,14 @@ describe('the check, in the doctrine runtime’s custom-kind shape', () => {
     ])
   })
 
-  it('the stand-in is ok with a value, and needs input without one', () => {
-    const ok = runValidatedGenerationStandIn('edit', {
+  it('the doctrine keeps a streamed edit with a value, and needs input without one', () => {
+    const ok = validateStreamedGeneration('edit', {
       answer: { summary: 'x', ops: [op({ op: 'rename', nodeId: 'hero', name: 'Hero band' })] },
       check: (answer) => checkAssistEditAnswer(answer, scope()),
     })
     expect(ok.status).toBe('ok')
 
-    const refused = runValidatedGenerationStandIn('edit', {
+    const refused = validateStreamedGeneration('edit', {
       answer: { summary: 'x', ops: [op({ op: 'remove', nodeId: ROOT })] },
       check: (answer) => checkAssistEditAnswer(answer, scope()),
     })

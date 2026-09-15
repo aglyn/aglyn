@@ -84,6 +84,12 @@ import { AI_PALETTE_CATALOG } from './ai-palette.generated'
  *
  * Tokens from every attempt are summed on the result, so the caller meters
  * what was actually spent. Nothing here writes a document or publishes.
+ *
+ * A door whose answer streams to its reader as it arrives — the chat door's
+ * edit rung — has no turn left to re-ask in once the answer can be read, so
+ * it holds what arrived to the same check through
+ * `validateStreamedGeneration`, and composes its own prompt around
+ * `aiDoctrineCatalog`, the catalog this loop shows a surface.
  */
 
 // ── The doctrine block ───────────────────────────────────────────────────
@@ -265,19 +271,33 @@ export interface AiDoctrineSystemOptions {
 }
 
 /**
+ * The palette catalog a generation on this surface is shown: the elements the
+ * surface allows, the props each takes and the named blocks to imitate. The
+ * one reader of it, so a door that composes its own prompt shows the model
+ * the catalog the loop below shows it.
+ */
+export function aiDoctrineCatalog(surface: AiSurface): string {
+  return AI_PALETTE_CATALOG[surface]
+}
+
+/**
  * The system prompt every generator sends, in cache order: the doctrine
  * (cached), the door's instructions, the surface's palette catalog (cached),
  * then the site inventory (volatile). With no catalog behind them, the
  * instructions close the cached prefix themselves. The runtime refuses the
  * request if a door slips a volatile block inside the cached span.
+ *
+ * `null` is a site whose inventory was not read, and the model is told so;
+ * `undefined` is a kind that builds from no site structure at all — a theme
+ * builds from the theme — and sends no inventory block.
  */
 export function aiDoctrineSystemBlocks(
-  inventory: AiSiteInventory | null,
+  inventory: AiSiteInventory | null | undefined,
   options: AiDoctrineSystemOptions = {},
 ): AiSystemBlock[] {
   const instructions = [...(options.instructions ?? [])]
   const catalog: AiSystemBlock[] = options.surface
-    ? [{ text: AI_PALETTE_CATALOG[options.surface], cacheBreakpoint: true }]
+    ? [{ text: aiDoctrineCatalog(options.surface), cacheBreakpoint: true }]
     : []
   const last = instructions.length - 1
   if (
@@ -292,7 +312,9 @@ export function aiDoctrineSystemBlocks(
     AI_DOCTRINE_SYSTEM_BLOCK,
     ...instructions,
     ...catalog,
-    { text: aiSiteInventoryBlock(inventory), volatile: true },
+    ...(inventory === undefined
+      ? []
+      : [{ text: aiSiteInventoryBlock(inventory), volatile: true as const }]),
   ]
 }
 
@@ -621,7 +643,13 @@ export interface AiPlanGenerationInput extends AiGenerationInputBase {
   extend?: (plan: AiBuildPlan, answer: Record<string, unknown>) => AiDoctrineViolation[]
 }
 
-export interface AiCustomGenerationInput<T> extends AiGenerationInputBase {
+export interface AiCustomGenerationInput<T> extends Omit<AiGenerationInputBase, 'inventory'> {
+  /**
+   * The site the output is built for, `null` when none was read. A kind that
+   * builds from no site structure — a theme builds from the theme — leaves it
+   * out, and no inventory block is sent.
+   */
+  inventory?: AiSiteInventory | null
   /**
    * How a kind the doctrine has no reader for is read and checked — a theme
    * change, an edit. Rule 13 is held on every answer whatever it returns.
@@ -664,6 +692,14 @@ function withExtension<T>(
   }
 }
 
+/** A door's own check, with rule 13 held on every answer it reads. */
+function withDraftsOnly<T>(check: AiGenerationCheck<T>): AiGenerationCheck<T> {
+  return (answer) => {
+    const result = check(answer)
+    return { ...result, violations: [...detectPublishIntent(answer), ...result.violations] }
+  }
+}
+
 function checkFor(kind: string, input: object): AiGenerationCheck<unknown> {
   if (kind === 'plan') {
     const plan = input as AiPlanGenerationInput
@@ -687,10 +723,7 @@ function checkFor(kind: string, input: object): AiGenerationCheck<unknown> {
   if (!custom) {
     throw new Error(`runValidatedGeneration: the doctrine has no reader for "${kind}"; pass check`)
   }
-  return (answer) => {
-    const result = custom(answer)
-    return { ...result, violations: [...detectPublishIntent(answer), ...result.violations] }
-  }
+  return withDraftsOnly(custom)
 }
 
 /**
@@ -717,7 +750,7 @@ export function runValidatedGeneration<T>(
 ): Promise<AiValidatedGeneration<T>>
 export async function runValidatedGeneration(
   kind: string,
-  input: AiGenerationInputBase,
+  input: Omit<AiGenerationInputBase, 'inventory'> & { inventory?: AiSiteInventory | null },
 ): Promise<AiValidatedGeneration<unknown>> {
   const check = checkFor(kind, input)
   const model = input.model ?? aiModelForStep(input.step, input.settings)
@@ -788,4 +821,42 @@ export async function runValidatedGeneration(
     violations,
     message: aiDoctrineNeedsInputMessage(violations),
   }
+}
+
+// ── An answer that streamed ──────────────────────────────────────────────
+
+/** What a streamed answer came to: a value with what its check left out, or the reasons there is none. */
+export type AiStreamedGeneration<T> =
+  | { status: 'ok'; value: T; violations: AiDoctrineViolation[] }
+  /** No value, or a numbered rule broken. `message` is customer-safe. */
+  | { status: 'needs_input'; violations: AiDoctrineViolation[]; message: string }
+
+/**
+ * An answer a door has already received, held to the doctrine without a
+ * request. A door that streams its reply to the reader as it arrives — the
+ * chat door's edit rung — can read the answer only once it is on screen, with
+ * no turn left to re-ask in, so the loop above cannot carry it.
+ *
+ * The check is the loop's for a kind the doctrine has no reader for: the
+ * door's own, with rule 13 held on the answer. So are the verdicts, less the
+ * re-ask. No value, or a numbered rule broken, is `needs_input` with the
+ * reasons. A value is `ok` with the door's own findings beside it — what its
+ * check already left out of the value, such as the changes an edit could not
+ * make. A plan or a palette kind is refused here: the loop reads those, and a
+ * broken rule in one is asked for again, never kept.
+ */
+export function validateStreamedGeneration<T>(
+  kind: string,
+  input: { answer: Record<string, unknown>; check: AiGenerationCheck<T> },
+): AiStreamedGeneration<T> {
+  if (kind === 'plan' || isAiOutputKind(kind)) {
+    throw new Error(
+      `validateStreamedGeneration: a ${kind} is generated through runValidatedGeneration, which can re-ask`,
+    )
+  }
+  const { value, violations } = withDraftsOnly(input.check)(input.answer)
+  if (value === null || violations.some((violation) => violation.rule !== null)) {
+    return { status: 'needs_input', violations, message: aiDoctrineNeedsInputMessage(violations) }
+  }
+  return { status: 'ok', value, violations }
 }

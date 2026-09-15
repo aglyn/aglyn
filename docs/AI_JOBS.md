@@ -150,7 +150,18 @@ A tree kind may add `context` (asset sizes, the brand, embeds, framing) and
 `otherPages`; the doctrine's own checks always run for `plan` and the six
 palette kinds, and a door can only `extend` them. A kind the doctrine has no
 reader for (a theme change, an edit) brings its own `check`, and rule 13 is
-still held on its answer.
+still held on its answer. Such a kind may leave `inventory` out when it builds
+from no site structure — the theme step builds from the theme — and then no
+inventory block is sent; `null` still says an inventory was not read.
+
+A door whose answer streams to its reader cannot use the loop: by the time the
+tool call can be read the answer is on screen, and there is no turn left to
+re-ask in. It holds what arrived to the same custom-kind check with
+`validateStreamedGeneration(kind, { answer, check })` — rule 13 and the door's
+own check, `ok` with the door's findings beside a usable value, `needs_input`
+when there is no value or a numbered rule broke — and it shows the model the
+loop's catalog through `aiDoctrineCatalog(surface)`. The chat door's edit rung
+is that door.
 
 The loop sends, in cache order: the doctrine block (cached, identical for
 every org, with the acceptable-use rules), the door's instructions, the
@@ -319,15 +330,16 @@ the theme editor exposes, and nothing the editor does not.
   the logo is an asset of the site's or its org's media library, and colors
   read from a public https page the brief links to, fetched through the
   plugin-fetch SSRF guard. Only hex colors from those reach the prompt.
-- **What the model is asked.** One static, cached rules block and one strict
-  tool; the site's inventory — each control with the value the site set or the
-  default it inherits — the brand colors and the brief ride in the user turn.
-  The call sits in one local function, `runValidatedGenerationStandIn`, which
-  has the signature and the result of the building doctrine's custom overload
-  (AGL-2935): the theme's validation in `check`, one re-ask naming only what
-  was wrong (no tool call, or nothing usable), then `needs_input`. It becomes
-  `runValidatedGeneration('theme', …)` when the doctrine lands, and the
-  runtime caller named in the subprocessor gate's `AI_DOORS` moves with it.
+- **What the model is asked.** The call is
+  `runValidatedGeneration('theme', …)`: the doctrine's cached block, which
+  carries the acceptable-use rules, then the step's own cached rules block,
+  and one strict tool. The site's theme — each control with the value the site
+  set or the default it inherits — the brand colors and the brief ride in the
+  user turn, and no site inventory is sent. The theme's validation is the
+  `check`; the doctrine holds rule 13 beside it and re-asks once naming what
+  was refused (no tool call, or nothing usable), and a second refusal fails
+  the step with its own sentence. The subprocessor gate's `AI_DOORS` lists the
+  doctrine as the runtime caller, with what the theme step sends through it.
 - **What the proposal holds** (`src/lib/model/ai-theme-proposal.ts`): control
   changes with the value each had, component override leaves, corrections,
   and what was dropped and why. A `modify` brief reaches only the parts of the
@@ -506,12 +518,14 @@ published, and goes one step further — the server writes no document at all.
   `propose_canvas_edit` (`src/lib/server/assist-edit.ts`), whose ops are
   `insertSubtree`, `updateProps`, `updateSx`, `move`, `remove`, `rename` and,
   on a screen, `setSeo` — its field list is `SCREEN_SEO_TEXT_FIELDS`, the one
-  the Screen Properties form saves. The edit protocol and the palette catalog
-  ride a cached block per document kind; the outline rides a volatile one. The
-  tool call is held to the elements the outline described and to the palette
-  validators (`validateAiNodeTree`, `validateAiNodePatch`) in
-  `runValidatedGenerationStandIn`, a stand-in for the doctrine runtime's
-  `runValidatedGeneration`, and reaches the panel on `done` as `edit`
+  the Screen Properties form saves. The edit protocol and the doctrine's
+  palette catalog for the document's surface (`aiDoctrineCatalog`) ride one
+  cached block per document kind; the outline rides a volatile one. The reply
+  streams, so the tool call is held to the doctrine as a streamed answer
+  (`validateStreamedGeneration('edit', …)`): rule 13, and the edit's own
+  check (`checkAssistEditAnswer`), which holds it to the elements the outline
+  described and to the palette validators (`validateAiNodeTree`,
+  `validateAiNodePatch`). It reaches the panel on `done` as `edit`
   (`src/lib/model/assist-edit.ts`).
 - **The apply.** The card (`src/lib/components/assist-edit-card.component.tsx`)
   applies nothing until the author presses Apply. `applyAssistEdit`
