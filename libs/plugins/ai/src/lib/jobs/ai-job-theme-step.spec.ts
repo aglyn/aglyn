@@ -40,6 +40,7 @@ jest.mock('./ai-theme-brand-inputs', () => ({
 import type { HostTheme } from '@aglyn/shared-data-types'
 import type { AiJob } from '../model/ai-jobs.types'
 import { readAiThemeProposal } from '../model/ai-theme-proposal'
+import { AI_MODEL_CATALOG } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import {
   AI_THEME_COLOR_CONTROLS,
@@ -180,6 +181,25 @@ describe('the request', () => {
     expect(mockGatherBrand).toHaveBeenCalledWith(
       expect.objectContaining({ hostId: 'host-1', brief: 'Make it feel warmer.', host: hostDoc }),
     )
+  })
+
+  it('runs on the model the machine resolves for job.theme, and reports that model', async () => {
+    mockRunAiRequest.mockResolvedValue(answer(warmer))
+    const routed = aiModelForStep('job.theme')
+    const picked = AI_MODEL_CATALOG.find((entry) => entry.id !== routed)?.id
+    if (!picked) throw new Error('the catalog lists one model')
+    const modelFor = jest.fn(() => picked)
+    const outcome = await runAiJobThemeStep({
+      job: job(),
+      stepIndex: 0,
+      now: new Date('2026-09-15T12:00:00.000Z'),
+      firestore,
+      org: { plan: 'pro' } as never,
+      modelFor,
+    })
+    expect(modelFor).toHaveBeenCalledWith('job.theme')
+    expect(mockRunAiRequest.mock.calls[0][0].model).toBe(picked)
+    expect(outcome.model).toBe(picked)
   })
 
   it('reads create mode from the job’s inputs', async () => {

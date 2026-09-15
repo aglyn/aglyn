@@ -89,7 +89,10 @@ import {
  * contrast) before it becomes a proposal.
  */
 
-/** The model the theme step runs on: the routing table's answer for `job.theme`. */
+/**
+ * The routing table's answer for `job.theme`: the model the theme step runs on
+ * when the machine hands it no `modelFor`.
+ */
 export function aiJobThemeModel(): string {
   return aiModelForStep('job.theme')
 }
@@ -424,19 +427,30 @@ function proposalSize(proposal: AiThemeProposal): number {
   return proposal.changes.length + proposal.components.length + (proposal.resetComponents ? 1 : 0)
 }
 
-export const runAiJobThemeStep: AiJobStepRunner = async ({ job, signal, firestore, org }) => {
+export const runAiJobThemeStep: AiJobStepRunner = async ({
+  job,
+  signal,
+  firestore,
+  org,
+  modelFor,
+}) => {
   if (!firestore) {
     // The machine always hands one in; a runner called without it is a
     // wiring fault, not a customer path.
     throw new Error('the theme step reads the site it changes and was given no Firestore')
   }
+  // The model switch's answer for this job (AGL-2942): the creator's pick
+  // where the plan, the org restriction and the allotment allowlists allow
+  // it, and Auto held to those same lists otherwise. Only a runner called
+  // without a resolver asks the routing table directly.
+  const model = modelFor?.('job.theme') ?? aiJobThemeModel()
   const site = await loadThemeSite(firestore, job)
   if ('failure' in site) {
     return {
       outputs: [],
       usage: ZERO_USAGE,
       estCostUsd: 0,
-      model: aiJobThemeModel(),
+      model,
       stopReason: null,
       failure: site.failure,
     }
@@ -452,6 +466,7 @@ export const runAiJobThemeStep: AiJobStepRunner = async ({ job, signal, firestor
   })
   const generation = await runValidatedGenerationStandIn('theme', {
     step: 'job.theme',
+    model,
     instructions: AI_JOB_THEME_INSTRUCTIONS,
     inventory: null,
     messages: [
