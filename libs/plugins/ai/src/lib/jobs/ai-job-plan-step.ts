@@ -115,12 +115,18 @@ export interface AiJobPlanStepDeps {
 
 export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunner {
   const readInventory = deps.readInventory ?? readSiteInventory
-  return async ({ job, now, signal, firestore }) => {
+  return async ({ job, now, signal, firestore, modelFor }) => {
     const inventory = job.hostId
       ? await readInventory(job.orgId, job.hostId, { firestore })
       : null
+    // The model switch's answer for this job (AGL-2942): the creator's pick
+    // where the plan, the org restriction and the allotment allowlists allow
+    // it, and Auto held to those same lists otherwise. Without a resolver the
+    // doctrine asks the routing table itself.
+    const model = modelFor?.('job.plan')
     const result = await runValidatedGeneration('plan', {
       step: 'job.plan',
+      ...(model ? { model } : {}),
       instructions: AI_JOB_PLAN_INSTRUCTIONS,
       inventory,
       messages: [{ role: 'user', content: aiJobPlanPrompt(job) }],

@@ -191,6 +191,15 @@ describe('the plan step', () => {
     ])
   })
 
+  it('runs on the model the machine resolves for job.plan, and reports that model', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(planAnswer(PLAN))
+    const modelFor = jest.fn(() => 'picked-model')
+    const outcome = await createAiJobPlanStep()({ job: job(), stepIndex: 0, now: NOW, firestore, modelFor })
+    expect(modelFor).toHaveBeenCalledWith('job.plan')
+    expect(mockRunAiRequest.mock.calls[0][0]).toMatchObject({ model: 'picked-model' })
+    expect(outcome.model).toBe('picked-model')
+  })
+
   it('stops for review with the rules named when the re-ask still breaks one, and keeps no plan', async () => {
     const unlaid: AiBuildPlan = { ...PLAN, screens: [{ ...PLAN.screens[0], layout: null }] }
     mockRunAiRequest
