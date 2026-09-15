@@ -99,6 +99,11 @@ export const AI_STEP_NOMINAL_USAGE: Record<AiStepKind, AiUsage> = {
   'copy.blog': { inputTokens: 600, outputTokens: 1_100, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'generate.section': { inputTokens: 700, outputTokens: 1_400, cacheReadTokens: 0, cacheWriteTokens: 0 },
   'job.text': { inputTokens: 300, outputTokens: 500, cacheReadTokens: 150, cacheWriteTokens: 0 },
+  // The theme step: the tool's schema and both system blocks (about 7,500
+  // characters) are the cached prefix, the site's inventory and the brief ride
+  // uncached, and a full-palette answer is about 1,300 characters of JSON with
+  // as much again to think in.
+  'job.theme': { inputTokens: 500, outputTokens: 850, cacheReadTokens: 2_500, cacheWriteTokens: 0 },
 }
 
 /** The fewest measured exchanges a median is taken over. */
