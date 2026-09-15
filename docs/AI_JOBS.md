@@ -9,7 +9,8 @@ the whole state — no process holds anything the next beat cannot read back.
 Code, all in the AI plugin (`libs/plugins/ai`, AGL-2939):
 `src/lib/model/ai-jobs.types.ts` (the model),
 `src/lib/jobs/ai-jobs.ts` (the machine, the step registry, the sweep),
-`src/lib/jobs/ai-job-text-step.ts` (the one step kind that runs today),
+`src/lib/jobs/ai-job-text-step.ts` and `src/lib/jobs/ai-job-theme-step.ts`
+(the two step kinds that run today),
 `src/lib/server/ai-jobs-route.ts`, `ai-jobs-events-route.ts` and
 `ai-jobs-cancel.ts` (the doors, registered on the console dispatcher by
 `src/lib/server.ts`), `src/lib/jobs/ai-jobs-beat.ts` (the beat).
@@ -22,8 +23,9 @@ route and never sends anything; a person opens the draft the job names and
 publishes it through the door that already exists for that resource. That is
 what lets a job run with no visitor, no session and no confirm gate: the thing
 it writes cannot be seen by anyone but the workspace until a member chooses
-otherwise. The `text` kind, which ships first, has no document of its own and
-carries its copy on the output itself.
+otherwise. The `text` kind has no document of its own and carries its copy on
+the output itself. The `theme` kind writes nothing at all: its output carries
+a proposal, which a person puts in the theme editor and saves there.
 
 ## The document
 
@@ -32,11 +34,11 @@ rules deny every client write). Fields:
 
 | field | meaning |
 | --- | --- |
-| `kind` | `AiJobKind` — what the job produces. Only `text` has a runner today; every other kind fails fast with "not available yet" until its own issue lands. |
+| `kind` | `AiJobKind` — what the job produces. `text` and `theme` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` as the parked state (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`. |
-| `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`) so the console can build an "open draft" link without knowing what the runner did. |
+| `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step, and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
@@ -75,9 +77,12 @@ cap or has switched overage off — all things a member can change — so the jo
 parks as `needs_input` with the refusal in customer-safe words, and the beat
 re-queues it once it has rested an hour. `failed` is reserved for a step that
 cannot succeed by waiting: a kind with no runner, a provider failure that is
-not retryable, a model refusal (which is metered — tokens were spent), or a
-step that has exhausted its attempts. A retryable failure or a budget that
-ended first hands the message back and re-queues the step.
+not retryable, a model refusal (which is metered — tokens were spent), a step
+that got nothing usable out of the model's answer (metered too, with the
+step's own `failure` sentence), or a step that has exhausted its attempts. A
+retryable failure or a budget that ended first hands the message back and
+re-queues the step, and so does a step that fails before it reaches the
+provider — its outcome carries no tokens and no cost, so nothing is metered.
 
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
@@ -91,7 +96,7 @@ Registered under `/api/ai/jobs` by the plugin's console API surface:
   switch, a per-uid window, a reservation), creates the job and runs its first
   step inline under a 25 s budget. A step that finishes in time answers with
   the job `done`; one that does not is aborted, re-queued, and answers
-  `queued` for the beat.
+  `queued` for the beat. A `theme` job must name its site.
 - `GET /api/ai/jobs?orgId=` lists the org's jobs newest first.
 - `GET /api/ai/jobs/{jobId}/events?orgId=` is server-sent events: a `state`
   frame now, a re-read every 2 s that emits on change, `reconnect` at 55 s.
@@ -103,6 +108,55 @@ The read and cancel doors climb the ladder's rungs up to the lockdown verdict
 and stop there — no rate window, no reservation — through
 `libs/plugins/ai/src/lib/server/ai-jobs-gate.ts`. Every door requires the request
 to NAME the org (AGL-1934).
+
+## The theme kind
+
+`theme` (AGL-2938) proposes a change to one site's theme covering every control
+the theme editor exposes, and nothing the editor does not.
+
+- **The catalog is the editor's.** The editor's fields, bounds, token names and
+  writes live in `@aglyn/shared-ui-theme/util/theme-editor-fields` (what a site
+  inherits when it sets nothing is `theme-editor-defaults`), and the console's
+  `theme-editor.constants.ts` re-exports them. The tool the model answers
+  through, `src/lib/tools/ai-theme-tool.ts`, is derived from that catalog, and
+  its spec holds parity in both directions: every control has a tool field,
+  and every tool field is a control. The editor's own spec holds the other
+  half — every control it renders is in the catalog, and the catalog renders.
+- **What the step reads.** The job's site, checked against the job's org, with
+  its overrides resolved (`resolveSiteTheme`) and its source decided by
+  `hostThemeSource`; and brand colors (`src/lib/jobs/ai-theme-brand-inputs.ts`):
+  a white-label workspace's brand color, colors read from the site logo when
+  the logo is an asset of the site's or its org's media library, and colors
+  read from a public https page the brief links to, fetched through the
+  plugin-fetch SSRF guard. Only hex colors from those reach the prompt.
+- **What the model is asked.** One static, cached rules block and one strict
+  tool; the site's inventory — each control with the value the site set or the
+  default it inherits — the brand colors and the brief ride in the user turn.
+  The call sits in one local function, `runValidatedGenerationStandIn`, which
+  has the signature and the result of the building doctrine's custom overload
+  (AGL-2935): the theme's validation in `check`, one re-ask naming only what
+  was wrong (no tool call, or nothing usable), then `needs_input`. It becomes
+  `runValidatedGeneration('theme', …)` when the doctrine lands, and the
+  runtime caller named in the subprocessor gate's `AI_DOORS` moves with it.
+- **What the proposal holds** (`src/lib/model/ai-theme-proposal.ts`): control
+  changes with the value each had, component override leaves, corrections,
+  and what was dropped and why. A `modify` brief reaches only the parts of the
+  theme it names ("warmer" reaches colors); an accent changed for light gets a
+  dark value unless the site's dark scheme is off; every pair the proposal
+  touches clears the publish check's contrast bars (text on the page and the
+  paper at 4.5:1, the primary on the page at 3:1), moved to the nearest shade
+  that does and named.
+- **The output** is `{ resource: 'theme', id: 'proposal', hostId,
+  hostSubdomain, label, proposal }`, audited as `ai.job.output` and filed in
+  both activity feeds under the site's theme.
+- **Applying it** happens in the console, never in the job. The AI plugin's
+  `ai-theme-proposal` widget sits in the Theme section's `hostTheme` zone,
+  previews the proposal before and after with the editor's own preview,
+  re-checks contrast against the theme as it is now, and hands the result to
+  `proposeDraft`, which puts it in the editor as unsaved changes. The editor's
+  Save stores it the way every edit is stored: an installed theme's override
+  patch, the changed values only on a default theme, or the site's own theme
+  in place.
 
 ## The beat
 
@@ -134,8 +188,12 @@ TTL policy is manual gcloud configuration and is recorded as owed in
 ## Adding a step kind
 
 Register a runner with `registerAiJobStep(kind, async (ctx) => …)` beside the
-machine. The runner receives the job, the step index and an abort signal,
-calls `runAiRequest` (never the provider directly), writes its drafts, and
-returns `{ outputs, usage, estCostUsd, model, stopReason }`. It must not write
-the job document, take a reservation, or publish anything. Kinds with more
-than one step extend `aiJobStepNames`.
+machine. The runner receives the job, the step index, an abort signal, the
+machine's Firestore handle (for what the step READS) and the org document the
+reservation was read from; it calls `runAiRequest` (never the provider
+directly), writes its drafts, and returns `{ outputs, usage, estCostUsd,
+model, stopReason }` — with `refused` for a model decline, or `failure` (a
+customer-safe sentence) for an answer it could not use. It must not write the
+job document, take a reservation, or publish anything. Kinds with more than
+one step extend `aiJobStepNames`. A runner that loads heavy modules registers
+a lazy wrapper, as `theme` does, so the machine stays light to load.

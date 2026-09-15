@@ -210,8 +210,12 @@ export const AI_SX_ALLOWED_KEYS: ReadonlySet<string> = new Set([
   'placeContent',
 ])
 
-/** Substrings no string a model wrote may carry, in a prop or an `sx` value. */
-const HOSTILE_TEXT =
+/**
+ * Substrings no string a model wrote may carry, in a prop or an `sx` value.
+ * Exported for the theme tool's component style values (AGL-2938), which are
+ * the same kind of CSS value written into a theme instead of a node.
+ */
+export const HOSTILE_TEXT =
   /<\s*\/?\s*(script|iframe|object|embed|svg|style|link|meta|base|frame|form|input|img)\b|javascript:|vbscript:|data:text\/html|expression\s*\(|url\s*\(|@import|!important|\bon[a-z]+\s*=/i
 
 /**
@@ -221,7 +225,7 @@ const HOSTILE_TEXT =
  * semicolons, no braces, no angle brackets, no colons — which is what keeps
  * a `url(`, a selector or a second declaration out.
  */
-const SX_VALUE = /^[A-Za-z0-9#.,%()\s\-_/+*]{1,100}$/
+export const SX_VALUE = /^[A-Za-z0-9#.,%()\s\-_/+*]{1,100}$/
 
 /**
  * Node fields the sanitizer strips that a model has no business writing —

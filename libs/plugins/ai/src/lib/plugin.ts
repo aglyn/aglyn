@@ -29,6 +29,7 @@ import { AssistSignalsPage } from './components/assist-signals-page.component'
 import BillingAssistOverageCard from './components/billing-assist-overage-card.component'
 import { AiTopUsersCard } from './components/billing-ai-top-users.component'
 import MemberAiUsageCard from './components/member-ai-usage-card.component'
+import AiThemeProposalCard from './components/ai-theme-proposal-card.component'
 import StaffOrgAiCard from './components/staff-org-ai-card.component'
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import { AI_PLUGIN_ID } from './constants'
@@ -104,6 +105,20 @@ export function registerAiConsole(): void {
         widgetId: 'ai-member-usage',
         title: 'AI usage',
         Component: MemberAiUsageCard,
+      },
+      // Themes by AI (AGL-2938): a brief on the site's Theme section, a
+      // proposal previewed before and after, and the editor's own Save to
+      // keep it. Generation is sold as `aiGenerative` and held by
+      // `ai.generate`, so the shell withholds the card from a plan or a
+      // member without either; the card itself asks the route about the
+      // release flag before it shows anything.
+      {
+        slot: 'hostTheme',
+        widgetId: 'ai-theme-proposal',
+        title: 'Theme assistant',
+        featureFlag: 'aiGenerative',
+        permission: 'ai.generate',
+        Component: AiThemeProposalCard,
       },
       {
         slot: 'staffOrg',

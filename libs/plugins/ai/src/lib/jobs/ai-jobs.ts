@@ -185,8 +185,19 @@ export function aiJobStepRunnerFor(kind: AiJobKind): AiJobStepRunner | null {
   return stepRunners.get(kind) ?? null
 }
 
-/** The one real step this module ships. Every other kind refuses until its issue lands. */
+/** The text step (AGL-2904). Every kind with no runner refuses until its issue lands. */
 registerAiJobStep('text', runAiJobTextStep)
+
+/**
+ * The theme step (AGL-2938), loaded the first time a theme job runs rather
+ * than when this module does: it builds the brand themes it measures
+ * contrast against and may read a site's logo, and a process that never runs
+ * a theme job should pay for neither.
+ */
+registerAiJobStep('theme', async (context) => {
+  const { runAiJobThemeStep } = await import('./ai-job-theme-step')
+  return runAiJobThemeStep(context)
+})
 
 // ── Documents ─────────────────────────────────────────────────────────────
 
@@ -786,6 +797,20 @@ function isAbort(error: unknown): boolean {
   return name === 'AbortError' || name === 'TimeoutError'
 }
 
+/** A step outcome that carries no tokens and no cost: the provider was never reached. */
+export function aiJobStepSpentNothing(
+  outcome: Pick<AiJobStepOutcome, 'usage' | 'estCostUsd'>,
+): boolean {
+  const { usage } = outcome
+  return (
+    outcome.estCostUsd === 0 &&
+    usage.inputTokens === 0 &&
+    usage.outputTokens === 0 &&
+    usage.cacheReadTokens === 0 &&
+    usage.cacheWriteTokens === 0
+  )
+}
+
 /**
  * Claim, reserve, run, meter, record — one step of one job.
  *
@@ -892,7 +917,7 @@ export async function runAiJobStep(
 
   let outcome: AiJobStepOutcome
   try {
-    outcome = await runner({ job, stepIndex, now, signal: options.signal })
+    outcome = await runner({ job, stepIndex, now, signal: options.signal, firestore, org })
   } catch (error) {
     // The provider refused the request or the budget ended before it
     // answered: no usage came back, so nothing is metered and the message
@@ -916,6 +941,28 @@ export async function runAiJobStep(
       job: await failAiJob(firestore, orgId, jobId, AI_UPSTREAM_FAILURE_COPY, {
         stepIndex,
         error,
+      }, now),
+    }
+  }
+
+  // A step that failed before it reached the provider — the site it builds
+  // from could not be read, say (AGL-2938) — spent nothing: its message goes
+  // back and nothing is metered, exactly as for a request the provider
+  // refused.
+  if (outcome.failure && aiJobStepSpentNothing(outcome)) {
+    await releaseAssistMessage(firestore, orgId, reservation).catch((releaseError) =>
+      console.error('ai job release failed', { orgId, jobId, releaseError }),
+    )
+    await recordStep(
+      firestore, orgId, jobId, options.owner, stepIndex,
+      { status: 'failed', creditsSpent: 0, error: outcome.failure },
+      now,
+    )
+    return {
+      outcome: 'failed',
+      job: await failAiJob(firestore, orgId, jobId, outcome.failure, {
+        stepIndex,
+        error: `step failure before the provider: ${outcome.failure}`,
       }, now),
     }
   }
@@ -950,17 +997,21 @@ export async function runAiJobStep(
   }
   const credits = assistCreditsFromUsd(outcome.estCostUsd)
 
-  if (outcome.refused) {
+  // A model that declined, or a step that got nothing usable out of the
+  // model's answer (AGL-2938), fails the job with its own sentence. The
+  // tokens are already on the bill above.
+  if (outcome.refused || outcome.failure) {
+    const message = outcome.refused ? AI_JOB_REFUSED_COPY : (outcome.failure as string)
     await recordStep(
       firestore, orgId, jobId, options.owner, stepIndex,
-      { status: 'failed', creditsSpent: credits, error: AI_JOB_REFUSED_COPY },
+      { status: 'failed', creditsSpent: credits, error: message },
       now,
     )
     return {
       outcome: 'failed',
-      job: await failAiJob(firestore, orgId, jobId, AI_JOB_REFUSED_COPY, {
+      job: await failAiJob(firestore, orgId, jobId, message, {
         stepIndex,
-        error: 'stop_reason refusal',
+        error: outcome.refused ? 'stop_reason refusal' : `step failure: ${message}`,
       }, now),
     }
   }

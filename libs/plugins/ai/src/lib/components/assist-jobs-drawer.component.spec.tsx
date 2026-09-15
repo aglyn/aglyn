@@ -166,7 +166,14 @@ describe('the list', () => {
               steps: [{ name: 'draft', status: 'done', startedAt: null, endedAt: null, creditsSpent: 6, error: null }],
               outputs: [
                 { resource: 'text', id: 'draft', hostId: 'host-1', label: 'Draft copy', text: 'Fresh coffee.' },
-                { resource: 'screen', id: 'scr-1', versionId: 'v-1', hostId: 'host-1', label: 'Landing page' },
+                {
+                  resource: 'screen',
+                  id: 'scr-1',
+                  versionId: 'v-1',
+                  hostId: 'host-1',
+                  hostSubdomain: 'shop',
+                  label: 'Landing page',
+                },
               ],
             }),
           ],
@@ -181,7 +188,7 @@ describe('the list', () => {
     expect(screen.getByText('Done')).toBeTruthy()
     const link = screen.getByText('Open draft — Landing page') as HTMLAnchorElement
     expect(link.getAttribute('href')).toBe(
-      '/acme/hosts/host-1/screens/scr-1/versions/v-1/besigner',
+      '/acme/hosts/shop/screens/scr-1/versions/v-1/besigner',
     )
     // A job that arrived finished is not this session's outcome to count.
     expect(mockTrackEvent).not.toHaveBeenCalled()
@@ -284,31 +291,45 @@ describe('aiJobOutputHref', () => {
     resource: 'screen',
     id: 'scr-1',
     hostId: 'host-1',
+    hostSubdomain: 'shop',
     label: 'x',
     ...patch,
   })
 
   it('opens a versioned resource in the besigner on the version the job wrote', () => {
     expect(aiJobOutputHref(output({ versionId: 'v-1' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/screens/scr-1/versions/v-1/besigner',
+      '/acme/hosts/shop/screens/scr-1/versions/v-1/besigner',
     )
     expect(aiJobOutputHref(output({ resource: 'reusableComponent' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/components/scr-1',
+      '/acme/hosts/shop/components/scr-1',
     )
     expect(aiJobOutputHref(output({ resource: 'emailScreen', versionId: 'v-2' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/emails/scr-1/versions/v-2/besigner',
+      '/acme/hosts/shop/emails/scr-1/versions/v-2/besigner',
     )
   })
 
   it('has no page for text, no page without a host or a slug, and a list for products and workflows', () => {
     expect(aiJobOutputHref(output({ resource: 'text' }) as never, 'acme')).toBeNull()
-    expect(aiJobOutputHref(output({ hostId: null }) as never, 'acme')).toBeNull()
+    expect(aiJobOutputHref(output({ hostId: null, hostSubdomain: null }) as never, 'acme')).toBeNull()
     expect(aiJobOutputHref(output({}) as never, '')).toBeNull()
     expect(aiJobOutputHref(output({ resource: 'product' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/products',
+      '/acme/hosts/shop/products',
     )
     expect(aiJobOutputHref(output({ resource: 'workflow' }) as never, 'acme')).toBe(
-      '/acme/hosts/host-1/automation?tab=workflows',
+      '/acme/hosts/shop/automation?tab=workflows',
+    )
+  })
+
+  it('names the site by its subdomain, never by the document id the console cannot resolve', () => {
+    // `[host]` resolves by subdomain: a link built from the document id
+    // opened no site at all.
+    expect(aiJobOutputHref(output({ hostSubdomain: undefined }) as never, 'acme')).toBeNull()
+    expect(aiJobOutputHref(output({ versionId: 'v-1' }) as never, 'acme')).not.toContain('host-1')
+  })
+
+  it('opens a theme proposal on the site’s Theme section (AGL-2938)', () => {
+    expect(aiJobOutputHref(output({ resource: 'theme', id: 'proposal' }) as never, 'acme')).toBe(
+      '/acme/hosts/shop/setup/theme',
     )
   })
 })

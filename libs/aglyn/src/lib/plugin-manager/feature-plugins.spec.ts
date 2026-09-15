@@ -33,6 +33,7 @@ import {
   resolveConsoleStaffPage,
   unregisterConsoleExtension,
   type ComponentRegistrar,
+  type ConsoleHostThemeZoneProps,
 } from './feature-plugins'
 
 function fakeRegistrar() {
@@ -313,6 +314,78 @@ describe('console extension registry', () => {
       ).toEqual(['backups-user'])
       // A plugin the staff area did not load contributes nothing.
       expect(listConsoleWidgets('staffOrg', ['ai'])).toHaveLength(1)
+    })
+  })
+
+  /**
+   * AGL-2938: the Theme section's zone. A widget there proposes a change to
+   * the site's theme and never writes it; the zone hands it the theme, where
+   * that theme came from, the editor's own preview and `proposeDraft`. Two
+   * unrelated plugins — a brand kit importer and the AI plugin — each
+   * contribute one, written against the same typed props.
+   */
+  describe('the host theme zone', () => {
+    const proposals: Array<{ key: string; theme: unknown }> = []
+    const props: ConsoleHostThemeZoneProps = {
+      hostId: 'host-1',
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      host: 'shop',
+      theme: { spacing: 8 },
+      themeSource: 'custom',
+      ThemePreview: (): null => null,
+      proposeDraft: (theme, key) => proposals.push({ key, theme }),
+    }
+    const BrandKit = (zone: ConsoleHostThemeZoneProps): null => {
+      zone.proposeDraft(
+        { ...zone.theme, colorSchemes: { light: { primary: { main: '#0f766e' } } } },
+        `brand-kit:${zone.hostId}`,
+      )
+      return null
+    }
+    const Generator = (): null => null
+
+    beforeEach(() => {
+      proposals.length = 0
+      registerConsoleExtension({
+        pluginId: 'acme-brand-kit',
+        displayName: 'Brand kit',
+        widgets: [
+          { widgetId: 'brand-kit-import', slot: CONSOLE_WIDGET_SLOTS.hostTheme, Component: BrandKit },
+        ],
+      })
+      registerConsoleExtension({
+        pluginId: 'ai',
+        displayName: 'AI',
+        widgets: [
+          { widgetId: 'ai-theme-proposal', slot: CONSOLE_WIDGET_SLOTS.hostTheme, Component: Generator },
+        ],
+      })
+    })
+
+    it('is a workspace zone, listing only the plugins the site has enabled', () => {
+      expect(CONSOLE_WIDGET_SLOTS.hostTheme).toBe('hostTheme')
+      expect(isConsoleStaffWidgetSlot('hostTheme')).toBe(false)
+      expect(
+        listConsoleWidgets('hostTheme', ['acme-brand-kit', 'ai']).map(
+          (entry) => entry.widget.widgetId,
+        ),
+      ).toEqual(['brand-kit-import', 'ai-theme-proposal'])
+      expect(
+        listConsoleWidgets('hostTheme', ['acme-brand-kit']).map((entry) => entry.widget.widgetId),
+      ).toEqual(['brand-kit-import'])
+    })
+
+    it('hands a widget the theme and the one door it proposes through', () => {
+      const [entry] = listConsoleWidgets('hostTheme', ['acme-brand-kit'])
+      const Widget = entry.widget.Component as (zone: ConsoleHostThemeZoneProps) => null
+      Widget(props)
+      expect(proposals).toEqual([
+        {
+          key: 'brand-kit:host-1',
+          theme: { spacing: 8, colorSchemes: { light: { primary: { main: '#0f766e' } } } },
+        },
+      ])
     })
   })
 

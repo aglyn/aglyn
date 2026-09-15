@@ -123,6 +123,7 @@ export type AiOutputTargetType =
   | 'template'
   | 'workflow'
   | 'content'
+  | 'theme'
 
 /**
  * Where the feed files each resource kind a job can write (AGL-2904).
@@ -131,9 +132,11 @@ export type AiOutputTargetType =
  * know a narrower set of targets. The map is total, so a resource kind
  * added to the job document must say where the feed shows it before the
  * machine can log it. `reusableComponent` is the feed's `component`; a
- * `text` output is copy, which the feed files as `content`; the kinds whose
- * runners have not shipped are content of the site too, and are filed there
- * until a target of their own exists.
+ * `text` output is copy, which the feed files as `content`; a `theme`
+ * proposal is filed under the site's theme, which the host feed links to the
+ * Theme section (AGL-2938); the kinds whose runners have not shipped are
+ * content of the site too, and are filed there until a target of their own
+ * exists.
  */
 const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = {
   screen: 'screen',
@@ -147,6 +150,7 @@ const AI_OUTPUT_TARGET_TYPES: Record<AiJobOutputResource, AiOutputTargetType> = 
   experiment: 'content',
   workflow: 'workflow',
   text: 'content',
+  theme: 'theme',
 }
 
 export function aiOutputTargetType(resource: AiJobOutputResource): AiOutputTargetType {

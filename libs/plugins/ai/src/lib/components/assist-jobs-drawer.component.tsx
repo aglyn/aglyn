@@ -17,6 +17,7 @@
 
 import { checkEntitlement } from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import {
   AI_JOB_TERMINAL_STATUSES,
   type AiJobOutput,
@@ -96,27 +97,39 @@ const BESIGNER_SEGMENT: Partial<Record<AiJobOutput['resource'], string>> = {
  * Where "open draft" goes, or `null` when the output has no page of its
  * own — a `text` output carries its copy on the job and is shown inline.
  * A versioned resource opens in the besigner on the version the job wrote;
- * one the console lists without a detail page opens its list.
+ * one the console lists without a detail page opens its list; a `theme`
+ * proposal opens the site's Theme section, where it is put in the editor.
+ *
+ * A console URL names a site by its SUBDOMAIN: the `[host]` segment resolves
+ * through the member's host projection by subdomain, never by document id.
+ * So an output that carries no `hostSubdomain` gets no link rather than one
+ * that opens no site.
  */
 export function aiJobOutputHref(output: AiJobOutput, orgSlug: string): string | null {
-  if (!orgSlug) return null
+  const host = output.hostSubdomain
+  if (!orgSlug || !host) return null
   const segment = BESIGNER_SEGMENT[output.resource]
   if (segment) {
-    if (!output.hostId) return null
-    const base = `/${orgSlug}/hosts/${output.hostId}/${segment}/${output.id}`
+    const base = `/${orgSlug}/hosts/${host}/${segment}/${output.id}`
     return output.versionId ? `${base}/versions/${output.versionId}/besigner` : base
   }
-  if (output.resource === 'product' && output.hostId) {
-    return `/${orgSlug}/hosts/${output.hostId}/products`
+  if (output.resource === 'product') {
+    return `/${orgSlug}/hosts/${host}/products`
   }
-  if (output.resource === 'workflow' && output.hostId) {
-    return `/${orgSlug}/hosts/${output.hostId}/automation?tab=workflows`
+  if (output.resource === 'workflow') {
+    return `/${orgSlug}/hosts/${host}/automation?tab=workflows`
+  }
+  if (output.resource === 'theme') {
+    return buildRoute(Route.HOST_SETUP_THEME, { orgSlug, host })
   }
   return null
 }
 
-/** `data:` frames out of an SSE body, one parsed event per frame. */
-async function readEventFrames(
+/**
+ * `data:` frames out of an SSE body, one parsed event per frame. Shared with
+ * every panel that watches a job through the events route.
+ */
+export async function readEventFrames(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: Record<string, unknown>) => void,
 ): Promise<void> {

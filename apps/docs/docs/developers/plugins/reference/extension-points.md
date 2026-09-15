@@ -37,7 +37,9 @@ The surface matrix: what a plugin can extend, from which entry
 and the `assistPanel` dock; org = `orgData`/`orgSettings`/`orgAddons`/
 `orgBillingUsage`/`orgBillingOverview`/`orgMember`/`orgMembersListColumn`
 zones + org-scoped config, permissions and entitlement keys; hosts =
-host-area pages/widgets + `hostMembers` + host-scoped installs; besigner =
+host-area pages/widgets + the `hostMembers` zone + the `hostTheme` zone,
+where a widget proposes a theme and the editor's own Save keeps it +
+host-scoped installs; besigner =
 canvas components + `besignerFunctions`/`besignerInspector` zones + drawer
 presets; published sites = canvas components, runtimes, page hooks, APIs;
 admin (staff) = `adminOrgDetail`/`staffOrg`/`staffUser` zones, staff pages,

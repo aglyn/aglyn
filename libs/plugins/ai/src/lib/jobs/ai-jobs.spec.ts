@@ -219,6 +219,8 @@ import {
   AI_JOB_STEP_MAX_ATTEMPTS,
   AI_JOB_STEP_RESERVE_CREDITS,
   aiJobRefusalText,
+  aiJobStepRunnerFor,
+  aiJobStepSpentNothing,
   aiJobSummary,
   cancelAiJob,
   claimNextStep,
@@ -228,6 +230,7 @@ import {
   getAiJob,
   heartbeatStep,
   listAiJobs,
+  registerAiJobStep,
   runAiJobStep,
   sweepAiJobs,
   type AiJobStepRun,
@@ -611,6 +614,82 @@ describe('runAiJobStep — the text step end to end', () => {
     await running
     const stored = await getAiJob(firestore, ORG, job.$id)
     expect(stored).toMatchObject({ status: 'canceled', creditsSpent: 6 })
+  })
+})
+
+describe('a step’s own failure, and what a runner is handed (AGL-2938)', () => {
+  const ZERO = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+
+  const newInsightJob = () =>
+    createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'insight', brief: 'Anything at all.', createdBy: 'uid-1' },
+      NOW,
+    )
+
+  it('hands the runner the machine’s Firestore and the org it reserved against', async () => {
+    const contexts: Array<Record<string, unknown>> = []
+    registerAiJobStep('insight', async (context) => {
+      contexts.push(context as unknown as Record<string, unknown>)
+      return { outputs: [], usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'end_turn' }
+    })
+    const job = await newInsightJob()
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]['firestore']).toBe(firestore)
+    expect(contexts[0]['org']).toMatchObject({ plan: 'pro' })
+  })
+
+  it('fails before the provider: the message goes back, nothing is metered, and the job carries the step’s sentence', async () => {
+    registerAiJobStep('insight', async () => ({
+      outputs: [],
+      usage: ZERO,
+      estCostUsd: 0,
+      model: 'claude-sonnet-5',
+      stopReason: null,
+      failure: 'This site is not in this workspace.',
+    }))
+    const job = await newInsightJob()
+    const run = await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    expect(run.outcome).toBe('failed')
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    expect(stored).toMatchObject({
+      status: 'failed',
+      error: 'This site is not in this workspace.',
+      creditsSpent: 0,
+    })
+    expect(stored?.steps[0]).toMatchObject({ status: 'failed', creditsSpent: 0 })
+    const month = mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth(NOW)}`) ?? {}
+    expect(Number(month['messages'] ?? 0)).toBe(0)
+    expect(Number(month['estCostUsd'] ?? 0)).toBe(0)
+  })
+
+  it('fails after an unusable answer: metered first, then failed with the step’s sentence and no output', async () => {
+    registerAiJobStep('insight', async () => ({
+      outputs: [],
+      usage: USAGE,
+      estCostUsd: 0.006,
+      model: 'claude-sonnet-5',
+      stopReason: 'end_turn',
+      failure: 'Nothing usable came back.',
+    }))
+    const job = await newInsightJob()
+    const run = await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    expect(run.outcome).toBe('failed')
+    const stored = await getAiJob(firestore, ORG, job.$id)
+    expect(stored).toMatchObject({ status: 'failed', error: 'Nothing usable came back.', creditsSpent: 6 })
+    expect(mockDocs.get(`orgs/${ORG}/assistUsage/${assistUsageMonth(NOW)}`)).toMatchObject({
+      messages: 1,
+      estCostUsd: 0.006,
+    })
+    expect(mockAiActivity.logAiJobOutput).not.toHaveBeenCalled()
+  })
+
+  it('has a runner for theme jobs, and tells a step that spent nothing from one that did', () => {
+    expect(aiJobStepRunnerFor('theme')).not.toBeNull()
+    expect(aiJobStepSpentNothing({ usage: ZERO, estCostUsd: 0 })).toBe(true)
+    expect(aiJobStepSpentNothing({ usage: { ...ZERO, cacheReadTokens: 1 }, estCostUsd: 0 })).toBe(false)
+    expect(aiJobStepSpentNothing({ usage: ZERO, estCostUsd: 0.000001 })).toBe(false)
   })
 })
 

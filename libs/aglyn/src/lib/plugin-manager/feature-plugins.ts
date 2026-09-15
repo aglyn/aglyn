@@ -47,6 +47,8 @@ import type {
   PresetSchema,
 } from '../types/nodes'
 import type { Plugin, PluginId } from './plugin-manager'
+import type { HostThemeSource } from '../app-utils/marketplace-theme'
+import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import type { ComponentType } from 'react'
 
 /** The mui bundle id every UI feature bundle depends on. */
@@ -533,6 +535,20 @@ export const CONSOLE_WIDGET_SLOTS = {
   /** Host setup page, below the built-in cards. Props: hostId, org. */
   hostSettings: 'hostSettings',
   /**
+   * The host setup Theme section, between the "What you have changed" card
+   * and the editor (AGL-2938). Props: {@link ConsoleHostThemeZoneProps} — the
+   * site, the theme the editor shows, where that theme came from, the
+   * editor's own preview, and `proposeDraft`, which puts a theme in the
+   * editor as unsaved changes.
+   *
+   * A widget here proposes and never writes. The person saves what it
+   * proposed through the editor's own Save — the guarded write that stores
+   * an installed theme's edits as its override patch — or discards it. A
+   * palette importer, a brand kit and a generator are the same shape of
+   * widget.
+   */
+  hostTheme: 'hostTheme',
+  /**
    * Staff admin org detail (staff-only surfaces). Props: orgId. A staff
    * zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
    */
@@ -598,6 +614,29 @@ export const CONSOLE_WIDGET_SLOTS = {
 
 export type ConsoleWidgetSlot =
   (typeof CONSOLE_WIDGET_SLOTS)[keyof typeof CONSOLE_WIDGET_SLOTS]
+
+/** What the `hostTheme` zone hands each widget (AGL-2938). */
+export interface ConsoleHostThemeZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site's subdomain, which is what a console URL names a site by. */
+  host: string | null
+  /** The theme the editor shows: the site's theme with its overrides resolved. */
+  theme: HostTheme | undefined
+  /** Where that theme came from, which decides how an edit to it is stored. */
+  themeSource: HostThemeSource
+  /** The editor's own preview, which renders a theme over the brand base. */
+  ThemePreview: ComponentType<{ theme: HostTheme; scheme: HostThemeScheme }>
+  /**
+   * Puts `theme` in the editor as unsaved changes under `key`. A new key
+   * replaces the previous draft; the same key again changes nothing until
+   * the editor has saved or discarded it.
+   */
+  proposeDraft: (theme: HostTheme, key: string) => void
+}
 
 /**
  * The zones on the STAFF pages (AGL-2939): the staff org page, its detail

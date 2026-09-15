@@ -22,6 +22,7 @@ import {
   describeTheme,
   describeThemeOverride,
   describeThemePath,
+  hostThemeSource,
   isOverrideForCurrentTheme,
   parseColor,
   readThemeOverride,
@@ -549,5 +550,23 @@ describe('readThemeOverride', () => {
     expect(readThemeOverride({ themeOverride: 'x' } as any)).toBeUndefined()
     expect(readThemeOverride(null)).toBeUndefined()
     expect(readThemeOverride({})).toBeUndefined()
+  })
+})
+
+describe('hostThemeSource (AGL-2938)', () => {
+  it('names an installed theme by its install, whatever the site has changed in it', () => {
+    expect(
+      hostThemeSource({ theme: goodTheme(), themeInstalledFrom: { listingId: 'listing-1' } }),
+    ).toBe('installed')
+    expect(hostThemeSource({ theme: {}, themeInstalledFrom: { listingId: 'listing-1' } })).toBe(
+      'installed',
+    )
+  })
+
+  it('tells a site’s own theme from the default, which stores nothing until it changes something', () => {
+    expect(hostThemeSource({ theme: { spacing: 6 } })).toBe('custom')
+    expect(hostThemeSource({ theme: {} })).toBe('default')
+    expect(hostThemeSource({ theme: null, themeInstalledFrom: { listingId: '' } })).toBe('default')
+    expect(hostThemeSource(undefined)).toBe('default')
   })
 })

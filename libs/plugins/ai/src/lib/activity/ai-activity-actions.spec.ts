@@ -77,6 +77,9 @@ describe('where the feed files a job output', () => {
     expect(aiOutputTargetType('layout')).toBe('layout')
     expect(aiOutputTargetType('template')).toBe('template')
     expect(aiOutputTargetType('workflow')).toBe('workflow')
+    // A theme proposal is filed under the site's theme (AGL-2938), which the
+    // host feed links to the Theme section.
+    expect(aiOutputTargetType('theme')).toBe('theme')
     // Copy is content; so are the kinds whose runners have not shipped.
     expect(aiOutputTargetType('text')).toBe('content')
     for (const resource of ['form', 'emailScreen', 'campaign', 'product', 'experiment'] as const) {

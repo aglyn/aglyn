@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { overrideWriteValue } from '@aglyn/aglyn/app-utils/marketplace-overrides'
 import * as Aglyn from '@aglyn/aglyn'
+import type { HostTheme } from '@aglyn/shared-data-types'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import {
@@ -64,6 +65,7 @@ import AppIconCard from '../../../../../components/app-icon-card.component'
 import FaviconCard from '../../../../../components/favicon-card.component'
 import EntityLogoCard from '../../../../../components/entity-logo-card.component'
 import SocialImageCard from '../../../../../components/social-image-card.component'
+import type { ThemeEditorProposedDraft } from '../../../../../components/theme-editor/theme-editor.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -833,6 +835,18 @@ export interface HostSettingsScope {
   handleThemeSave: (theme: any) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handleWriteOverride: any
+  /**
+   * A theme handed to the editor from the Theme section's plugin zone
+   * (AGL-2938). Held here, above the route like the form drafts, so it is
+   * still the editor's draft after a move to another section and back. It is
+   * never written from here: the editor shows it unsaved, and its Save sends
+   * it through `handleThemeSave` like any other edit.
+   */
+  themeDraft: ThemeEditorProposedDraft | null
+  /** Hands the editor a draft under `key`; a new key replaces the last one. */
+  proposeThemeDraft: (theme: HostTheme, key: string) => void
+  /** Forgets the handed-in draft once the editor has saved or discarded it. */
+  settleThemeDraft: () => void
   forms: Array<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     schema: any
@@ -997,6 +1011,13 @@ export function HostSettingsScopeProvider({
     setDoc,
   } = useHost({ hostId })
   const [themeSaving, setThemeSaving] = useState(false)
+  const [themeDraft, setThemeDraft] = useState<ThemeEditorProposedDraft | null>(
+    null,
+  )
+  const proposeThemeDraft = useCallback((theme: HostTheme, key: string) => {
+    setThemeDraft({ key, theme })
+  }, [])
+  const settleThemeDraft = useCallback(() => setThemeDraft(null), [])
   const logActivity = useHostActivityLogger(hostId)
 
   /**
@@ -1443,6 +1464,9 @@ export function HostSettingsScopeProvider({
       themeSaving,
       handleThemeSave,
       handleWriteOverride,
+      themeDraft,
+      proposeThemeDraft,
+      settleThemeDraft,
       forms,
       SeoFormTemplate,
       draftsRef,
@@ -1455,6 +1479,9 @@ export function HostSettingsScopeProvider({
       themeSaving,
       handleThemeSave,
       handleWriteOverride,
+      themeDraft,
+      proposeThemeDraft,
+      settleThemeDraft,
       forms,
       SeoFormTemplate,
     ],

@@ -99,6 +99,10 @@ const AI_DOORS = new Map<string, string>([
     'libs/plugins/ai/src/lib/jobs/ai-job-text-step.ts',
     'A generation job’s text step (AGL-2904): the brief the job was created with. Behind `release_ai_generative`, the `aiGenerative` entitlement and the `ai-generate` lockdown key. It called the shared runtime before the AI plugin existed too; it is listed because the runtime’s callers are now the list that pins each flow, not because the flow is new.',
   ],
+  [
+    'libs/plugins/ai/src/lib/jobs/ai-job-theme-step.ts',
+    'A generation job’s theme step (AGL-2938): the brief, the site’s current theme settings — its colors, font, corner radius, spacing, navigation heights and component style overrides — and brand colors as hex values: a white-label workspace’s brand color, colors read from the site logo in its media library, and colors read from a public page the brief links to. Design settings of the customer’s own site; no visitor or personal data. Behind `release_ai_generative` (staff preview), the `aiGenerative` entitlement, the `ai.generate` permission and the `ai-generate` lockdown key, the same gates as the text step. A NEW flow to the same subprocessor: /legal/subprocessors names the assistant and the copy assistant, and its data description does not yet name generation jobs’ briefs or theme settings. AGL-2902 carries that description, with the Terms, before the flag is released.',
+  ],
 ])
 
 /**

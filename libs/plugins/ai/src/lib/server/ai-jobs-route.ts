@@ -107,6 +107,9 @@ export function parseCreateAiJobBody(payload: unknown): CreateAiJobBody | string
         ? rawHost
         : undefined
   if (hostId === undefined) return 'hostId is not a site id'
+  // A theme is fields on one site's document, so a theme job that names no
+  // site has nothing to propose a change to (AGL-2938).
+  if (kind === 'theme' && !hostId) return 'Open a site before changing its theme'
   const rawInputs = body.inputs
   const inputs: Record<string, string | number | boolean> = {}
   if (rawInputs !== undefined && rawInputs !== null) {

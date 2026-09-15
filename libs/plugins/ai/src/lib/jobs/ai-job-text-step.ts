@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { aiModelForStep } from '../providers/routing'
 import { runAiRequest, type AiSystemBlock } from '../runtime/ai-runtime'
@@ -59,6 +60,13 @@ export interface AiJobStepOutcome {
   stopReason: string | null
   /** The model declined the brief (`stop_reason: 'refusal'`). Tokens were spent. */
   refused?: boolean
+  /**
+   * The model answered and nothing usable came of it — no structured answer
+   * even after the step's own re-ask, say (AGL-2938). Tokens were spent, so
+   * the machine meters the step before it fails the job with this sentence,
+   * which is customer-safe and the only thing a customer reads.
+   */
+  failure?: string
 }
 
 export interface AiJobStepContext {
@@ -67,6 +75,14 @@ export interface AiJobStepContext {
   now: Date
   /** Aborts the provider call when the runner's budget ends. */
   signal?: AbortSignal
+  /**
+   * The Admin SDK handle the machine runs on, for a step that READS what it
+   * builds from — a site's theme, say. A step never writes the job document,
+   * the meter or the lease through it.
+   */
+  firestore?: FirebaseFirestore.Firestore
+  /** The org document the machine read for the step's reservation. */
+  org?: Partial<AglynOrgBilling> | null
 }
 
 export type AiJobStepRunner = (

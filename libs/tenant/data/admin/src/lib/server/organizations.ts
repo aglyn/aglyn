@@ -1196,6 +1196,9 @@ export interface OrgActivityTarget {
     // the host feed gets its own copy of the host-scoped ones.
     | 'aiJob' | 'role'
     | 'screen' | 'layout' | 'component' | 'template' | 'workflow' | 'content'
+    // A theme proposal a job produced (AGL-2938), filed under the site's
+    // theme the way the host feed files a saved theme.
+    | 'theme'
   id?: string
   name?: string
   /** Present on a generated screen output so the deep link can hit the exact version. */

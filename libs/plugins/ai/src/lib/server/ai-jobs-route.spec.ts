@@ -567,6 +567,14 @@ describe('parseCreateAiJobBody', () => {
       'Keep the brief under',
     )
     expect(parseCreateAiJobBody({ ...VALID, hostId: '' })).toMatchObject({ hostId: null })
+    // A theme is fields on one site (AGL-2938), so a theme job must name it.
+    expect(parseCreateAiJobBody({ ...VALID, kind: 'theme', hostId: null })).toBe(
+      'Open a site before changing its theme',
+    )
+    expect(parseCreateAiJobBody({ ...VALID, kind: 'theme' })).toMatchObject({
+      kind: 'theme',
+      hostId: 'host-1',
+    })
   })
 })
 

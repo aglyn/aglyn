@@ -48,10 +48,10 @@ import type { ITimestamp } from '@aglyn/shared-util-timestamp'
  */
 
 /**
- * What a job produces. `text` is the one kind this module ships end to end;
- * every other kind is registered and refuses with "not available yet" until
- * its own issue lands, so a kind's presence in the union says the job model
- * accepts it, not that a runner exists.
+ * What a job produces. `text` and `theme` have runners; every other kind is
+ * registered and refuses with "not available yet" until its own issue lands,
+ * so a kind's presence in the union says the job model accepts it, not that
+ * a runner exists.
  */
 export type AiJobKind =
   | 'page'
@@ -71,6 +71,7 @@ export type AiJobKind =
   | 'onboarding'
   | 'workflow'
   | 'text'
+  | 'theme'
 
 /** The union as a value, so a route can validate a body against it. */
 export const AI_JOB_KINDS: readonly AiJobKind[] = [
@@ -91,6 +92,7 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'onboarding',
   'workflow',
   'text',
+  'theme',
 ]
 
 /**
@@ -145,11 +147,18 @@ export type AiJobOutputResource =
   | 'experiment'
   | 'workflow'
   | 'text'
+  | 'theme'
 
 /**
  * One thing a job wrote. Addressed by resource and id so the console can
  * build the "open draft" link without knowing what the runner did; `text`
  * has no document of its own, so its body rides on the output itself.
+ *
+ * A `theme` output is a proposal rather than a document (AGL-2938). A site's
+ * theme is fields on its host document, and writing those fields is the save
+ * the Theme section's editor performs, which a job never does. So the change
+ * set rides on the output as `proposal`, and a person puts it in the editor
+ * and saves it there, or does not.
  */
 export interface AiJobOutput {
   resource: AiJobOutputResource
@@ -158,9 +167,20 @@ export interface AiJobOutput {
   versionId?: string | null
   /** `null` for an output that belongs to the org rather than one site. */
   hostId: string | null
+  /**
+   * The site's subdomain, which is what a console URL names a site by: the
+   * `[host]` segment resolves by subdomain, so a link built from `hostId`
+   * names no site the console can open.
+   */
+  hostSubdomain?: string | null
   label: string
   /** The body of a `text` output. Absent on every other resource. */
   text?: string
+  /**
+   * The change set of an output a person applies rather than opens — a
+   * `theme` proposal — in the shape its job kind's runner defines.
+   */
+  proposal?: Record<string, unknown>
 }
 
 export interface AiJobLease {
