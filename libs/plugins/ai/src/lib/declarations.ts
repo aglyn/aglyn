@@ -25,6 +25,7 @@ import {
   type PluginEntitlementRegistration,
 } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import { AI_PLUGIN_ID } from './constants'
+import { AI_ORG_PERMISSIONS } from './model/ai-permissions'
 import { AI_CONFIG_SCHEMA } from './plugin-config'
 // Registers the activity codes at module scope (AGL-2940).
 import './activity/ai-activity-actions'
@@ -32,7 +33,8 @@ import './activity/ai-activity-actions'
 /**
  * The plugin's DECLARATIONS (AGL-2939): what core must know about this
  * plugin before any of its surfaces load — its billing and access keys,
- * its activity codes, its settings schema. Loaded eagerly by both apps
+ * the AI permission keys it adds to the org catalog (AGL-2984), its
+ * activity codes, its settings schema. Loaded eagerly by both apps
  * through the generated declarations manifest, at boot on the server and
  * with the plugin loader on the client, so a core billing route folds the
  * add-on and the staff lockdown page lists the levers whether or not a
@@ -93,6 +95,7 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
       apiPaths: { prefixes: ['ai/generate', 'ai/jobs', 'ai/seo'] },
     },
   ],
+  orgPermissions: AI_ORG_PERMISSIONS,
 }
 
 let declared = false

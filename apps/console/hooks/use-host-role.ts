@@ -20,9 +20,8 @@ import {
   hostRoleCanPublish,
   hostRoleFor,
   isOrgWideMember,
-  resolveCollaboratorAiPermissions,
+  resolveCollaboratorHostPermissions,
   type AglynOrgMember,
-  type AiPermission,
   type HostAccessRole,
 } from '@aglyn/aglyn'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -47,12 +46,13 @@ export interface HostRoleState {
    */
   orgWide: boolean
   /**
-   * A COLLABORATOR's AI verdict on this site (AGL-2927): the host role's
-   * default refined by the per-site toggle. Null until read, on a failed
-   * read, and for an org-wide member — whose verdict is the org's, read
-   * by `useOrgPermissions`, and must not be answered from a host role.
+   * A COLLABORATOR's verdict on this site for every per-site key a plugin
+   * declared (AGL-2927, AGL-2984): the host role's default refined by the
+   * per-site toggle. Null until read, on a failed read, and for an org-wide
+   * member — whose verdict is the org's, read by `useOrgPermissions`, and
+   * must not be answered from a host role.
    */
-  aiPermissions: Record<AiPermission, boolean> | null
+  hostPermissions: Record<string, boolean> | null
 }
 
 /**
@@ -99,7 +99,7 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
     canPublish: false,
     loaded: false,
     orgWide: false,
-    aiPermissions: null,
+    hostPermissions: null,
   })
 
   useEffect(() => {
@@ -125,9 +125,9 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
           canPublish: hostRoleCanPublish(hostRole),
           loaded: true,
           orgWide,
-          aiPermissions: orgWide
+          hostPermissions: orgWide
             ? null
-            : resolveCollaboratorAiPermissions(member, hostId as never),
+            : resolveCollaboratorHostPermissions(member, hostId as never),
         })
       } catch {
         // Fail closed on the display gate: `loaded` stays true so the caller
@@ -139,7 +139,7 @@ export function useHostRole(hostId: string | undefined): HostRoleState {
             canPublish: false,
             loaded: true,
             orgWide: false,
-            aiPermissions: null,
+            hostPermissions: null,
           })
       }
     })()

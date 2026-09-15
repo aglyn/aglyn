@@ -169,6 +169,21 @@ const MOUNTS: Record<
       proposeDraft: mockProposeDraft,
     },
   },
+  besignerToolbar: {
+    file: 'apps/console/components/besigner-plugin-zones.component.tsx',
+    how: 'slot',
+    props: { hostId: 'host-1' },
+  },
+  staffOrgsListColumn: {
+    file: 'apps/console/app/(app)/admin/orgs/page.tsx',
+    how: 'columns',
+    props: {},
+  },
+  staffOrgUsageColumn: {
+    file: 'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx',
+    how: 'both',
+    props: { orgId: 'org-1', org: {} },
+  },
 }
 
 const NEW_ZONES = Object.keys(MOUNTS)

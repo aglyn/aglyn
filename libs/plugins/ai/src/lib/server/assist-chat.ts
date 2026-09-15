@@ -30,7 +30,7 @@ import { aiAllotmentRefusalText } from '../model/ai-allotments'
 import { AI_MODEL_AUTO, resolveAiModelChoice } from '../providers/model-choice'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import {
-  aiPermissionRefusal,
+  permissionRefusal,
   authForPool,
   checkRateLimit,
   emailUnverifiedResponse,
@@ -40,7 +40,7 @@ import {
   isImpersonationSession,
   isServerReleaseFlagOnForOrg,
   lockdownRefusal,
-  memberHasAiPermission,
+  memberHasPermissionOnHost,
   rateLimitHeaders,
 } from '@aglyn/tenant-data-admin'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
@@ -533,7 +533,7 @@ async function assistEditRung(input: {
   body: AssistRequestBody
   org: Record<string, unknown>
   staff: boolean
-  member: Parameters<typeof memberHasAiPermission>[2]
+  member: Parameters<typeof memberHasPermissionOnHost>[2]
 }): Promise<AssistEditRung | null> {
   const { body, org, staff } = input
   if (!body.context || body.canvas == null) return null
@@ -548,7 +548,7 @@ async function assistEditRung(input: {
   }
   if (
     !staff &&
-    !(await memberHasAiPermission(body.orgId, hostId, input.member, 'ai.generate'))
+    !(await memberHasPermissionOnHost(body.orgId, hostId, input.member, 'ai.generate'))
   ) {
     return null
   }
@@ -812,14 +812,14 @@ async function handler(request: Request): Promise<Response> {
     // every other org route.
     if (
       !staff &&
-      !(await memberHasAiPermission(
+      !(await memberHasPermissionOnHost(
         body.orgId,
         body.context?.hostId,
         resolved.member,
         'ai.use',
       ))
     ) {
-      return aiPermissionRefusal('ai.use')
+      return permissionRefusal('ai.use')
     }
 
     // Release flag (AGL-1653 rule: the flag closes the ROUTE, not just the

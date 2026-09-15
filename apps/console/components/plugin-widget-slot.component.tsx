@@ -204,7 +204,11 @@ export default function PluginWidgetSlot({
   slot,
   ...props
 }: { slot: string } & Record<string, unknown>) {
-  const { widgets } = useSlotWidgets([slot])
+  // A widget that declares a `column` is a table cell, drawn once per row by
+  // the table that reads the zone through `usePluginListColumns`. Rendered
+  // here it would be a cell with no row, loose beneath the table.
+  const { widgets: registered } = useSlotWidgets([slot])
+  const widgets = registered.filter((widget) => widget.column === undefined)
   const { prefs, ready: prefsReady, customizable } = useDashboardWidgetPrefs()
   const arranged = customizable
     ? orderDashboardWidgets(

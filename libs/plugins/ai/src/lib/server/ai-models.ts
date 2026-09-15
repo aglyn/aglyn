@@ -18,11 +18,11 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
-  aiPermissionRefusal,
+  permissionRefusal,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
-  memberHasAiPermission,
+  memberHasPermissionOnHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -87,9 +87,9 @@ async function handler(request: Request): Promise<Response> {
     if (!membership && !staff) return json({ error: 'Not found' }, 404)
     if (
       !staff &&
-      !(await memberHasAiPermission(orgId, hostId, membership?.member, 'ai.use'))
+      !(await memberHasPermissionOnHost(orgId, hostId, membership?.member, 'ai.use'))
     ) {
-      return aiPermissionRefusal('ai.use')
+      return permissionRefusal('ai.use')
     }
     if (!aiProviderReady()) {
       return json({ kind, auto: null, options: [], measured: false }, 200)

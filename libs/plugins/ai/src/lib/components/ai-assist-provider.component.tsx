@@ -23,6 +23,7 @@ import {
   parseLockdownRefusal,
 } from '@aglyn/aglyn'
 import { marketplaceDefinitionToNested } from '@aglyn/aglyn/app-utils/node-definition-sanitizer'
+import { AiAssistActionsContext } from './ai-assist-actions-context'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -386,8 +387,8 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     enqueueSnackbar,
   ])
 
-  // A REFUSED key publishes no callback (AGL-2927): the designer renders
-  // its AI controls only when the callback exists, so the refusal removes
+  // A REFUSED key publishes no callback (AGL-2927): the besigner controls
+  // render only when the callback exists, so the refusal removes
   // the button rather than dimming it. A PENDING answer keeps both
   // callbacks, and each holds with a notice when pressed — a control that
   // vanishes and reappears while the read lands is worse than one that is
@@ -404,7 +405,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
   )
 
   return (
-    <Aglyn.DesignerAssistContext.Provider value={contextValue}>
+    <AiAssistActionsContext.Provider value={contextValue}>
       {children}
       <Dialog
         open={Boolean(node)}
@@ -518,7 +519,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           </Button>
         </DialogActions>
       </Dialog>
-    </Aglyn.DesignerAssistContext.Provider>
+    </AiAssistActionsContext.Provider>
   )
 }
 AiAssistProvider.displayName = 'AiAssistProvider'

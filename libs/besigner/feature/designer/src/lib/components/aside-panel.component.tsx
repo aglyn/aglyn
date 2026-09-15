@@ -73,7 +73,10 @@ import ElementStylesForm from './element-styles-form.component'
 import NodeTreeView, { type NodeTreeViewProps } from './node-tree-view'
 import SiteThemeColorTokensProvider from './site-theme-color-tokens-provider.component'
 import { usePublishActiveHostTheme } from '../utils/active-host-theme'
-import { useBesignerInspectorExtras } from '../contexts/inspector-extras-context'
+import {
+  inspectorExtrasFor,
+  useBesignerInspectorExtras,
+} from '../contexts/inspector-extras-context'
 import { besignerDocsUrl } from '../utils/docs-help'
 import WorkspacePanelComponent, {
   type WorkspacePanelComponentProps,
@@ -237,10 +240,11 @@ const withTabPanelInner = (Component: ComponentType<any>) => (props: any) => {
 /**
  * The Attributes form with the host app's section beneath it (AGL-2940):
  * whatever `BesignerInspectorExtrasContext` carries, drawn under the
- * selected element's own fields and nothing when the host supplied nothing.
+ * selected element's own fields — for that element, when the host supplied
+ * a function — and nothing when the host supplied nothing.
  */
 const ElementPropsFormWithExtras = (props: any) => {
-  const extras = useBesignerInspectorExtras()
+  const extras = inspectorExtrasFor(useBesignerInspectorExtras(), { node: props.node })
   return (
     <>
       <ElementPropsForm {...props} />

@@ -175,9 +175,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockLockedFeatures.has(feature)
       ? Response.json({ error: 'locked', reason: 'lockdown' }, { status: 423 })
       : null,
-  memberHasAiPermission: async (_org: string, _host: unknown, _member: unknown, permission: string) =>
+  memberHasPermissionOnHost: async (_org: string, _host: unknown, _member: unknown, permission: string) =>
     !mockPermissionsDenied.has(permission),
-  aiPermissionRefusal: (permission: string) =>
+  permissionRefusal: (permission: string) =>
     Response.json({ error: `Your role does not include ${permission}`, reason: 'permission' }, { status: 403 }),
 }))
 

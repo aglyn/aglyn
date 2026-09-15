@@ -16,6 +16,10 @@
  */
 
 import type { AglynOrgMember, OrgRole } from '../foundation'
+import {
+  listPluginOrgPermissions,
+  subscribePluginEntitlements,
+} from '../plugin-manager/plugin-entitlements'
 import { ORG_ROLE_PERMISSION_KEYS } from './org-roles'
 
 /**
@@ -27,7 +31,7 @@ import { ORG_ROLE_PERMISSION_KEYS } from './org-roles'
  * The console hides unpermitted surfaces; the org API routes are the
  * enforcement point.
  */
-export type OrgPermission =
+export type CoreOrgPermission =
   | 'org.settings'
   | 'org.auditLog'
   | 'billing.view'
@@ -38,8 +42,14 @@ export type OrgPermission =
   | 'data.manage'
   | 'marketplace.publish'
   | 'plugins.install'
-  | 'ai.use'
-  | 'ai.generate'
+
+/**
+ * A key of the catalog: a core key above, or a key a plugin declares into
+ * the catalog through `registerPluginEntitlements` (AGL-2984). A declared key
+ * is stored on custom roles and member overrides, layered and resolved
+ * exactly like a core key.
+ */
+export type OrgPermission = CoreOrgPermission | (string & {})
 
 /**
  * Legacy boolean permission map derived from the granular `OrgPermission`
@@ -60,10 +70,12 @@ export interface OrgPermissionDefinition {
   key: OrgPermission
   label: string
   description: string
+  /** The plugin that declared the key; absent for a core key. */
+  pluginId?: string
 }
 
 /**
- * Every permission, in display order for role editors.
+ * The core keys, in display order for role editors.
  *
  * ⚠️ **EVERY KEY HERE MUST BE ENFORCED SERVER-SIDE.** A permission a customer
  * can tick that changes nothing is worse than its absence, because it implies
@@ -82,9 +94,9 @@ export interface OrgPermissionDefinition {
  * (AGL-435), scoped to a host — a product decision, not this repair.
  *
  * `apps/console/specs/org-permissions-are-enforced.spec.ts` fails the build if
- * a key here gains no server-side consumer.
+ * a key here, or a key a plugin declares, gains no server-side consumer.
  */
-export const ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = [
+const CORE_ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = [
   {
     key: 'org.settings',
     label: 'Organization settings',
@@ -135,60 +147,137 @@ export const ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = [
     label: 'Install plugins',
     description: 'Install or remove marketplace plugins.',
   },
-  // The two AI keys (AGL-2927). Both are enforced at the AI doors themselves
-  // — `/api/assist/chat` and `/api/ai/assist` through `memberHasAiPermission`,
-  // and every door built on `aiGateLadder` through its `permission` option —
-  // so a role that unticks one closes the door, not only the button. For a
-  // site collaborator the same two keys are decided per site, from the host
-  // role, by `resolveAiPermissions`.
-  {
-    key: 'ai.use',
-    label: 'Use AI assistance',
-    description:
-      'Ask the assistant, rewrite copy with AI, and generate a section.',
-  },
-  {
-    key: 'ai.generate',
-    label: 'Generate with AI',
-    description:
-      'Run AI generation jobs and AI edits: pages, components, emails, campaigns, products, CRM, insights, workflows.',
-  },
 ]
 
-export const ORG_PERMISSION_KEYS = ORG_PERMISSIONS.map(
-  (definition) => definition.key,
-) as readonly OrgPermission[]
+/** The core keys: a plugin may add keys beside them and never redefine one. */
+const CORE_ORG_PERMISSION_KEYS: ReadonlySet<string> = new Set(
+  CORE_ORG_PERMISSIONS.map((definition) => definition.key),
+)
 
-const ALL_PERMISSIONS = Object.fromEntries(
-  ORG_PERMISSION_KEYS.map((key) => [key, true]),
-) as Record<OrgPermission, boolean>
+/** The legacy camelCase projection's keys, which no declaration may take either. */
+const LEGACY_PERMISSION_KEYS: ReadonlySet<string> = new Set<string>(
+  ORG_ROLE_PERMISSION_KEYS,
+)
 
-const NO_PERMISSIONS = Object.fromEntries(
-  ORG_PERMISSION_KEYS.map((key) => [key, false]),
-) as Record<OrgPermission, boolean>
+/** The core keys each org role holds when nothing refines it. */
+const CORE_ROLE_GRANTS: Record<OrgRole, ReadonlySet<string>> = {
+  owner: CORE_ORG_PERMISSION_KEYS,
+  admin: CORE_ORG_PERMISSION_KEYS,
+  editor: new Set<CoreOrgPermission>([
+    'data.manage',
+    'marketplace.publish',
+    'plugins.install',
+  ]),
+  viewer: new Set<string>(),
+}
+
+const ORG_ROLES: readonly OrgRole[] = ['owner', 'admin', 'editor', 'viewer']
+
+/**
+ * Every permission, in display order for role editors: the core keys, then
+ * the keys plugins declare through `registerPluginEntitlements`, in the
+ * plugins' catalog order (AGL-2984).
+ *
+ * LIVE, and kept in step in place. A plugin's declarations register at
+ * module scope — at boot on the server, before the first paint in the
+ * console — which can be after a module holding this binding was evaluated.
+ * So this array, the key list, the role defaults and the empty map below are
+ * rewritten in place on every registration instead of being computed once
+ * when this module loads, and whoever holds the binding reads the declared
+ * keys with the core ones.
+ */
+export const ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = []
+
+export const ORG_PERMISSION_KEYS: readonly OrgPermission[] = []
+
+const NO_PERMISSIONS = {} as Record<OrgPermission, boolean>
 
 /**
  * Role → default permission set. Owner/admin hold everything (owner-only
  * actions like org deletion stay role-checked, not permission-checked);
- * editors work on content — the AI doors included — but see no money or
- * roster controls; viewers read only, and read-only includes asking the
- * assistant nothing: a viewer spends none of the workspace's AI credits.
+ * editors work on content but see no money or roster controls; viewers read
+ * only. A declared key's default for each role is the one its declaration
+ * names.
  */
 export const DEFAULT_ROLE_PERMISSIONS: Record<
   OrgRole,
   Record<OrgPermission, boolean>
 > = {
-  owner: ALL_PERMISSIONS,
-  admin: ALL_PERMISSIONS,
-  editor: {
-    ...NO_PERMISSIONS,
-    'data.manage': true,
-    'marketplace.publish': true,
-    'plugins.install': true,
-    'ai.use': true,
-    'ai.generate': true,
-  },
-  viewer: NO_PERMISSIONS,
+  owner: {} as Record<OrgPermission, boolean>,
+  admin: {} as Record<OrgPermission, boolean>,
+  editor: {} as Record<OrgPermission, boolean>,
+  viewer: {} as Record<OrgPermission, boolean>,
+}
+
+/** Refused declarations already logged, so a refusal is reported once. */
+const reportedRefusals = new Set<string>()
+
+function replaceItems<T>(target: readonly T[], items: readonly T[]): void {
+  const list = target as T[]
+  list.length = 0
+  list.push(...items)
+}
+
+function replaceEntries(
+  target: Record<string, boolean>,
+  entries: Record<string, boolean>,
+): void {
+  for (const key of Object.keys(target)) delete target[key]
+  Object.assign(target, entries)
+}
+
+/**
+ * Rebuilds the live catalog: the core keys, then every key a plugin declared.
+ * A declaration naming a core or legacy key is refused — that key keeps its
+ * own meaning and defaults — and logged once.
+ */
+function syncCatalog(): void {
+  const definitions: OrgPermissionDefinition[] = [...CORE_ORG_PERMISSIONS]
+  const declaredDefaults = new Map<string, Readonly<Record<OrgRole, boolean>>>()
+  for (const declared of listPluginOrgPermissions()) {
+    if (
+      CORE_ORG_PERMISSION_KEYS.has(declared.key) ||
+      LEGACY_PERMISSION_KEYS.has(declared.key)
+    ) {
+      const refusal = `${declared.pluginId} ${declared.key}`
+      if (!reportedRefusals.has(refusal)) {
+        reportedRefusals.add(refusal)
+        console.error(
+          `[plugins] refused catalog permission "${declared.key}" to ` +
+            `"${declared.pluginId}": the key belongs to the core catalog`,
+        )
+      }
+      continue
+    }
+    definitions.push({
+      key: declared.key,
+      label: declared.label,
+      description: declared.description,
+      pluginId: declared.pluginId,
+    })
+    declaredDefaults.set(declared.key, declared.roleDefaults)
+  }
+  const keys = definitions.map((definition) => definition.key)
+  replaceItems(ORG_PERMISSIONS, definitions)
+  replaceItems(ORG_PERMISSION_KEYS, keys)
+  replaceEntries(NO_PERMISSIONS, Object.fromEntries(keys.map((key) => [key, false])))
+  for (const role of ORG_ROLES) {
+    replaceEntries(
+      DEFAULT_ROLE_PERMISSIONS[role],
+      Object.fromEntries(
+        keys.map((key) => [
+          key,
+          declaredDefaults.has(key)
+            ? declaredDefaults.get(key)?.[role] === true
+            : CORE_ROLE_GRANTS[role].has(key),
+        ]),
+      ),
+    )
+  }
+  CATALOG_AND_LEGACY_KEYS.clear()
+  for (const key of [...keys, ...LEGACY_PERMISSION_KEYS]) {
+    CATALOG_AND_LEGACY_KEYS.add(key)
+  }
 }
 
 /** `orgs/{orgId}/roles/{roleId}` — a named custom permission set. */
@@ -281,11 +370,12 @@ export function explicitPluginPermissionValues(
   return values
 }
 
-/** Keys {@link explicitPluginPermissionValues} leaves to the catalog. */
-const CATALOG_AND_LEGACY_KEYS: ReadonlySet<string> = new Set<string>([
-  ...ORG_PERMISSION_KEYS,
-  ...ORG_ROLE_PERMISSION_KEYS,
-])
+/**
+ * Keys {@link explicitPluginPermissionValues} leaves to the catalog: every
+ * catalog key, declared ones included, and the legacy six. Kept in step by
+ * `syncCatalog`.
+ */
+const CATALOG_AND_LEGACY_KEYS = new Set<string>()
 
 /**
  * The `resolvedPermissions` map stamped on a member document for the
@@ -314,6 +404,54 @@ export function hasOrgPermission(
   customRole?: AglynOrgCustomRole | null,
 ): boolean {
   return resolveOrgPermissions(member, customRole)[permission]
+}
+
+/** The catalog label for a key — the words a refusal names — or the key itself. */
+export function orgPermissionLabel(permission: OrgPermission): string {
+  return (
+    ORG_PERMISSIONS.find((definition) => definition.key === permission)?.label ??
+    permission
+  )
+}
+
+/** The keys plugins declared into the catalog, in catalog order. */
+export function pluginOrgPermissionKeys(): OrgPermission[] {
+  return ORG_PERMISSIONS.filter((definition) => definition.pluginId).map(
+    (definition) => definition.key,
+  )
+}
+
+/** One declared catalog key that moved, and the direction it moved in. */
+export interface PluginPermissionChange {
+  permission: string
+  granted: boolean
+}
+
+/**
+ * The keys PLUGINS declared into the catalog whose value moved between two
+ * maps, in the new map's order — what a member, role or collaborator write
+ * raises `org.permissions.changed` for, once per key, so the plugin that owns
+ * a key can record who moved it.
+ *
+ * A key the new map leaves unset is not a change: on a role it defers to the
+ * base role, on a site toggle to the host role, and neither is a grant or a
+ * revocation of its own. A key set for the first time is a change, because
+ * the verdict it produces is no longer the default's. The core keys and the
+ * legacy six raise nothing; their writes are recorded by the routes' own
+ * activity sentences.
+ */
+export function pluginPermissionChanges(
+  before: Partial<Record<string, unknown>> | null | undefined,
+  after: Partial<Record<string, unknown>> | null | undefined,
+): PluginPermissionChange[] {
+  const changes: PluginPermissionChange[] = []
+  for (const [key, next] of Object.entries(after ?? {})) {
+    if (typeof next !== 'boolean') continue
+    if (CORE_ORG_PERMISSION_KEYS.has(key) || LEGACY_PERMISSION_KEYS.has(key)) continue
+    if (before?.[key] === next) continue
+    changes.push({ permission: key, granted: next })
+  }
+  return changes
 }
 
 /**
@@ -364,3 +502,6 @@ export function toLegacyPermissions(
     manageMembers: granted['members.manage'],
   }
 }
+
+syncCatalog()
+subscribePluginEntitlements(syncCatalog)

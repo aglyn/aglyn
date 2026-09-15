@@ -89,8 +89,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   getOrgForUser: async (uid: string, orgId: string) =>
     mockDocs.has(`orgs/${orgId}`) ? { orgId, org: mockDocs.get(`orgs/${orgId}`), member: { $id: uid } } : null,
-  memberHasAiPermission: async () => mockPermitted,
-  aiPermissionRefusal: (permission: string) =>
+  memberHasPermissionOnHost: async () => mockPermitted,
+  permissionRefusal: (permission: string) =>
     Response.json({ error: `Your role does not include ${permission}`, reason: 'permission' }, { status: 403 }),
   isServerReleaseFlagOnForOrg: async () => mockFlagOn,
   lockdownRefusal: async () => mockLocked,

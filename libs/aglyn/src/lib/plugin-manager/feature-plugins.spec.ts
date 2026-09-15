@@ -299,6 +299,8 @@ describe('console extension registry', () => {
       expect([...CONSOLE_STAFF_WIDGET_SLOTS].sort()).toEqual([
         'adminOrgDetail',
         'staffOrg',
+        'staffOrgUsageColumn',
+        'staffOrgsListColumn',
         'staffUser',
       ])
       expect(isConsoleStaffWidgetSlot('staffOrg')).toBe(true)

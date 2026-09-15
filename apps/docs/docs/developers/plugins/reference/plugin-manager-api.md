@@ -268,6 +268,38 @@ outlives the data. `null` in a field is a figure the eraser could not
 measure, and a `null` report says the plugin's data may remain — neither
 is zero.
 
+## Usage alerts — `plugin-manager/usage-alert-contributors`
+
+The usage-alerts sweep walks every org once, reads its usage, and sends core's
+own alerts: the plan quotas, the customer's budget and the free plan's
+bandwidth cap. A plugin that meters a cost or enforces a ceiling core knows
+nothing about adds staff alerts to the same sweep by registering a contributor
+from its `serverDeclarations` entry, importing the rule itself lazily. Import
+the registry by its subpath; it is not on a barrel.
+
+```ts
+registerUsageAlertContributor({
+  pluginId: 'acme-sms',
+  id: 'carrier-spend',
+  evaluate: async (context) => {
+    const { evaluateCarrierSpend } = await import('./usage/carrier-spend-alerts')
+    await evaluateCarrierSpend(context)
+  },
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerUsageAlertContributor(contributor)` | Idempotent per plugin and id: the same pair again replaces the earlier contributor in place. A contributor with no plugin id, no id or no `evaluate` throws. |
+| `listUsageAlertContributors()` | What the sweep runs for each org, after the budget alert and before the bandwidth cap: `FIRST_PARTY_PLUGINS` catalog order, then any other plugin id, then registration order within a plugin. |
+| `context.recordAlert(key, threshold)` | Records the dedupe guard and answers whether the alert may be sent. On an org's first, silent evaluation it records the guard and answers `false`. Guard keys share one map with core's checks, so name yours for what it measures. |
+| `context.alertStaff(alert)` | The sweep's own sender: the staff bell, the staff inbox with the same words, and a row in the run's report. It sends nothing on an org's first, silent evaluation. |
+| `context.org` / `spend` / `guards` / `month` | The org document, its spend this month, its guard map as read, and the month the run dedupes against. A contributor never writes a guard itself. |
+
+Contributors run one at a time and are isolated: a throw is logged against the
+contributor, a guard it recorded for an alert it never delivered is dropped so
+the next sweep tries again, and the next contributor runs.
+
 ## Activity actions — `plugin-activity-actions`
 
 A plugin whose activity rows are read by more than a person stores a CODE
@@ -321,12 +353,24 @@ registerPluginEntitlements({
     },
   ],
   permissions: [{ key: 'manageAi', label: 'Manage AI', defaults: { admin: true, editor: false, viewer: false } }],
+  orgPermissions: [
+    {
+      key: 'ai.use', // stored on custom roles and member overrides
+      label: 'Use AI assistance',
+      description: 'Ask the assistant, rewrite copy with AI, and generate a section.',
+      roleDefaults: { owner: true, admin: true, editor: true, viewer: false },
+      // Present: a site collaborator holds the key per site.
+      hostRoleDefaults: { admin: true, editor: true, author: true, viewer: false },
+    },
+  ],
 })
 ```
 
 | API | Semantics |
 | --- | --- |
-| `registerPluginEntitlements(registration)` | Idempotent per plugin. A seat add-on or lockdown key another plugin owns refuses the registration. Permissions are forwarded to `registerPluginPermissions` with the owner filled in. |
+| `registerPluginEntitlements(registration)` | Idempotent per plugin. A seat add-on, lockdown or catalog permission key another plugin owns refuses the registration. Permissions are forwarded to `registerPluginPermissions` with the owner filled in. |
+| `listPluginOrgPermissions()` | The keys plugins add to the org permission catalog, in catalog order, with their owner. `ORG_PERMISSIONS` and `ORG_PERMISSION_KEYS` list them after the core keys and are kept in step in place, so a module that imported them first still reads them. `resolveOrgPermissions` layers a declared key like a core one — role default, custom role, per-member override — the role editor lists it, and a member, role or collaborator write raises `org.permissions.changed` once per declared key it moved (`pluginPermissionChanges`). A declaration naming a core key is refused. |
+| `hostRoleDefaults` on a catalog key | Makes the key per-site for a site collaborator: `resolveCollaboratorHostPermissions` and `resolveMemberHostPermissions` decide it from the host role, refined by the per-site toggle on the member document, and `projectHostMemberPermissions` stamps the site's `memberPermissions` projection. On the server, `memberHasPermissionOnHost`, `permissionRefusal` and `setHostPermissions` are a door's rung, its 403 and the toggle write. |
 | `listPluginSeatAddons()` / `pluginSeatAddon(key)` | What `resolveOrgEntitlements` folds: the quota named gains `perUnitByPlan[plan] × units` and the features switch on, after the org's overrides and before nothing. `pluginSeatAddonUnits(org.seatAddons, key)` / `hasPluginSeatAddon(org, key)` in `plan-entitlements` are the readings every surface shares. |
 | `listPluginFeatures()` | A declared feature's `defaultByPlan` fills the plan tables where they are silent; a key the tables already carry keeps their answer. |
 | `listPluginLockdownFeatures()` / `pluginLockdownFeature(key)` | The staff lockdown checklist lists it, `lockdownFeatureLabel` / `lockdownFeatureStaffBypass` / the visitor notice read it, and `lockdownFeaturesForPluginApiPath` gates the declared paths (exact, or a prefix on a segment boundary) at the dispatcher — a door under a declared prefix is gated by existing. |

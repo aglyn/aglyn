@@ -38,7 +38,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { type GridColDef } from '@mui/x-data-grid'
+import { type GridColDef, type GridSortModel } from '@mui/x-data-grid'
 import {
   gridFilterRequest,
   hiddenFilterColumns,
@@ -66,16 +66,20 @@ import StaffOrgActions, {
 import StaffOrgUsageTable, {
   type StaffOrgUsageMonth,
 } from '../../../../components/staff-org-usage-table.component'
+import {
+  pluginGridColumns,
+  useStablePluginColumns,
+} from '../../../../components/plugin-grid-columns.component'
+import {
+  usePluginColumnSort,
+  usePluginListColumns,
+} from '../../../../components/plugin-list-columns.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
-import {
-  aiSpendCell,
-  aiSpendSortValue,
-} from '../../../../utils/staff-org-ai-spend'
 
 /**
  * Staff organization management (AGL-238, grown from the AGL-42 tenant
@@ -91,6 +95,12 @@ import {
  * `ORG_LIST_FILTER_FIELDS` still reaches the filter panel, as hidden columns.
  */
 const ORG_FILTER_COLUMNS = ['name', 'plan', 'subscription', 'createdAt']
+
+/** The grid's sort model with nothing sorted: one array, so a reset is a no-op. */
+const NO_GRID_SORT: GridSortModel = []
+
+/** What a plugin column's cell receives for its row: the row, and its org id. */
+const orgRowProps = (row: any) => ({ row, orgId: String(row.$id) })
 
 const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
@@ -190,12 +200,62 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
    */
   const orgs = orgDocs
 
+  /*
+   * Columns a plugin contributes to this list (AGL-2984), drawn after the
+   * limits and before Created. A column's figures are its plugin's own, so
+   * each is handed `orgIds` — every org id on the page, one array for as long
+   * as the page holds the same orgs — and reads once for the page rather
+   * than once per row.
+   */
+  const { columns: zoneColumns } = usePluginListColumns('staffOrgsListColumn')
+  const pluginColumns = useStablePluginColumns(zoneColumns)
+  const orgIdsKey = JSON.stringify(orgs.map((org: any) => String(org.$id)))
+  const orgIds = useMemo(() => JSON.parse(orgIdsKey) as string[], [orgIdsKey])
+  /*
+   * ONE sort at a time, across the grid's columns and the plugins'. A plugin
+   * column orders the rows by a comparator its header hands over, and taking
+   * the sort sets the grid's own aside; sorting on a grid column hands the
+   * order back from the plugin column.
+   */
+  const {
+    rows: sortedOrgs,
+    sortedBy: pluginSortedBy,
+    onSort: onPluginSort,
+  } = usePluginColumnSort(orgs)
+  const [gridSortModel, setGridSortModel] =
+    useState<GridSortModel>(NO_GRID_SORT)
+  const onPluginColumnSort = useCallback(
+    (widgetId: string, compare: ((a: any, b: any) => number) | null) => {
+      if (compare) setGridSortModel(NO_GRID_SORT)
+      onPluginSort(widgetId, compare)
+    },
+    [onPluginSort],
+  )
+  const onGridSortModelChange = useCallback(
+    (model: GridSortModel) => {
+      setGridSortModel(model)
+      if (model.length > 0 && pluginSortedBy) onPluginSort(pluginSortedBy, null)
+    },
+    [onPluginSort, pluginSortedBy],
+  )
+  const pluginGridCols = useMemo(
+    () =>
+      pluginGridColumns(pluginColumns, {
+        slotProps: { orgIds },
+        sortedBy: pluginSortedBy,
+        onSort: onPluginColumnSort,
+        rowProps: orgRowProps,
+      }),
+    [pluginColumns, orgIds, pluginSortedBy, onPluginColumnSort],
+  )
 
   // Usage drill-down (AGL-205): last 12 monthly org rollups with deltas.
   const [usage, setUsage] = useState<{
     orgId: string
     months: StaffOrgUsageMonth[]
   } | null>(null)
+  // Columns a plugin contributes to the usage table (AGL-2984).
+  const { columns: usageColumns } = usePluginListColumns('staffOrgUsageColumn')
   const router = useRouter()
   const [usageLoading, setUsageLoading] = useState<string | null>(null)
   const handleShowUsage = useCallback(
@@ -402,25 +462,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
           )
         },
       },
-      {
-        // This month's live AI spend (AGL-2930), served per row by the
-        // route. Sorted on the NUMBER — `aiSpendSortValue` — so `$10` does
-        // not land before `$9`; an unmeasured org sorts last either way.
-        field: 'aiSpendUsd',
-        headerName: 'AI spend (month)',
-        flex: 0.8,
-        minWidth: 140,
-        type: 'number',
-        // Live, not stored on the org — nothing for the route's filter to
-        // match, so the panel must not offer it.
-        filterable: false,
-        valueGetter: (_value, row: any) => aiSpendSortValue(row),
-        renderCell: ({ row }: any) => (
-          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-            {aiSpendCell(row)}
-          </Typography>
-        ),
-      },
+      // Columns a plugin contributes (AGL-2984), between the limits and
+      // Created — see `pluginGridCols` above.
+      ...pluginGridCols,
       {
         field: 'createdAt',
         headerName: 'Created',
@@ -487,7 +531,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         { width: 120 },
       ),
     ],
-    [refresh, handleShowUsage, usageLoading, filterColumn],
+    [refresh, handleShowUsage, usageLoading, filterColumn, pluginGridCols],
   )
 
   return (
@@ -536,9 +580,13 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               ) : (
                 <ListTable
-                  rows={orgs}
+                  rows={sortedOrgs}
                   columns={orgColumns}
                   loading={loading}
+                  // One sort at a time with the plugin columns — see
+                  // `onGridSortModelChange`.
+                  sortModel={gridSortModel}
+                  onSortModelChange={onGridSortModelChange}
                   /*
                    * The grid must NOT also filter. With the server answering
                    * the search, a second client-side pass over the returned
@@ -593,7 +641,11 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
       >
         <DialogTitle>{`Usage — ${usage?.orgId}`}</DialogTitle>
         <DialogContent>
-          <StaffOrgUsageTable months={usage?.months ?? []} />
+          <StaffOrgUsageTable
+            months={usage?.months ?? []}
+            columns={usageColumns}
+            orgId={usage?.orgId}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setUsage(null)}>{'Close'}</Button>

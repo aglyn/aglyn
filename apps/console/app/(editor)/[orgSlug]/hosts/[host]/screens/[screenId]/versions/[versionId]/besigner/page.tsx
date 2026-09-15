@@ -53,6 +53,7 @@ import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
   BesignerInspectorExtrasContext,
+  type BesignerInspected,
   besignerDocsUrl,
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
@@ -267,10 +268,13 @@ function BesignerPage(props) {
   // File ▸ New version drives the versions panel's own create flow (AGL-1218)
   // rather than re-implementing the entitlement gate and the save-first rule.
   const versionsActions = useRef<BesignerVersionsActions>(null)
-  // One element for the Attributes panel's plugin section (AGL-2940), so the
-  // context's consumers re-render with the site rather than with this page.
-  const inspectorExtras = useMemo(
-    () => <PluginWidgetSlot slot="besignerInspector" hostId={hostId} />,
+  // One section for the Attributes panel's plugin zone (AGL-2940), drawn for
+  // the selected element (AGL-2984), so the context's consumers re-render with
+  // the site rather than with this page.
+  const inspectorExtras = useCallback(
+    (inspected: BesignerInspected) => (
+      <PluginWidgetSlot slot="besignerInspector" hostId={hostId} node={inspected.node} />
+    ),
     [hostId],
   )
   // Installed plugins appear as named drawer entries (AGL-190).

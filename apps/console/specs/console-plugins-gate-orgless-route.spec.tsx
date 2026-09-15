@@ -57,12 +57,13 @@ jest.mock('next/navigation', () => ({
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ orgSlug: route.subdomainSlug }),
 }))
-// The gate resolves the reader's AI permissions for every provider
-// (AGL-2927); that read walks the org-permissions and host-role hooks, none
-// of which this suite is about. Held, as they answer before they know.
-jest.mock('../hooks/use-ai-permissions', () => {
-  const useAiPermissions = () => ({ loaded: false, use: false, generate: false })
-  return { __esModule: true, default: useAiPermissions, useAiPermissions }
+// The gate resolves the reader's plugin permissions on the site in view for
+// every provider (AGL-2927); that read walks the org-permissions and
+// host-role hooks, none of which this suite is about. Held, as they answer
+// before they know.
+jest.mock('../hooks/use-permissions-on-host', () => {
+  const usePermissionsOnHost = () => ({ loaded: false, granted: {} })
+  return { __esModule: true, default: usePermissionsOnHost, usePermissionsOnHost }
 })
 jest.mock('../constants/console-plugin-loader', () => ({
   consolePluginLoader: { ensure: (...args: unknown[]) => mockEnsure(...args) },
@@ -104,11 +105,11 @@ jest.mock('../hooks/use-current-org', () => ({
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlags: () => ({ ready: true, isStaff: false, flags: {} }),
 }))
-// The gate hands the reader's AI permissions to the AI doors; which plugins
-// load on an org-less route does not depend on them.
-jest.mock('../hooks/use-ai-permissions', () => ({
+// The gate hands the reader's plugin permissions to the providers; which
+// plugins load on an org-less route does not depend on them.
+jest.mock('../hooks/use-permissions-on-host', () => ({
   __esModule: true,
-  default: () => ({ loaded: false, use: false, generate: false }),
+  default: () => ({ loaded: false, granted: {} }),
 }))
 
 function SiteProbe() {

@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { foldPluginSubprocessors } from '@aglyn/aglyn/plugin-manager/plugin-subprocessors'
+import { PLUGIN_SUBPROCESSORS } from './plugins.subprocessors.generated'
+
 /**
  * Every third-party host this repo's own code names, and what it receives
  * (AGL-1648).
@@ -62,6 +65,13 @@
  * decoration: writing it is the moment someone has to go and look at the page.
  * `derivePublishedRows()` turns this file into the row set the page must
  * carry, so the comparison is mechanical for whoever next edits it.
+ *
+ * A recipient only a plugin's code reaches is declared by that plugin rather
+ * than written here. `plugins.subprocessors.generated.ts` carries every
+ * plugin's declarations as data, and `EGRESS_HOSTS` folds them in beside the
+ * entries below through `foldPluginSubprocessors`, which refuses a host
+ * declared twice. The plugin's declaration is the one place that row's
+ * wording lives, and it owes the same `publishedOn` date as every entry here.
  *
  * ## ⚠️ NO NOTICE-PERIOD ARITHMETIC LIVES HERE, AND THAT IS DELIBERATE
  *
@@ -236,13 +246,14 @@ const SUPERVISORY_AUTHORITY_ENTRY: EgressHost = {
 }
 
 /**
- * Every third-party host named in `apps/`, `libs/` and `tools/`, keyed by
- * host, checked in both directions by `subprocessor-inventory.spec.ts`.
+ * The third-party hosts this registry declares itself: every host named in
+ * `apps/`, `libs/` and `tools/` but those a plugin declares, which
+ * `EGRESS_HOSTS` below folds in.
  *
  * Adding an entry with `disposition: 'subprocessor'` is the point at which
  * someone must publish the row. Do not add one to make the suite pass.
  */
-export const EGRESS_HOSTS: Record<string, EgressHost> = {
+const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
   // MARK – Stripe
 
   'api.stripe.com': {
@@ -305,21 +316,6 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'The GraphQL endpoint the console files issue reports into, live on `LINEAR_API_KEY` in production. Undisclosed until 2026-08-24 while four separate green checks ran over it — see the header of this file.',
     dataReceived:
       "The report text the reporter writes, their email address and account identifier, their organization's name, identifier, plan and their role in it, the site the report was filed from, a correlation id, the application build identifiers, and the browser viewport and user-agent.",
-  },
-
-  // MARK – Anthropic
-
-  'api.anthropic.com': {
-    disposition: 'subprocessor',
-    entity: 'Anthropic, PBC',
-    region: 'United States',
-    purpose:
-      "AI-assisted features in the console and the site editor: the Aglyn Assist helper, including changes it proposes to a page, component, or layout open in the editor; editor assistance (rewriting element copy, drafting blog bodies, generating a section layout); and AI generation, which creates drafts and proposals for a customer's site from a brief, such as copy, layouts, templates, search titles and descriptions, and theme changes",
-    publishedOn: '2026-09-15',
-    reason:
-      "Reached through the AI plugin's Anthropic adapter (`libs/plugins/ai/src/lib/providers/anthropic.ts`) by the doors that call the AI runtime. `libs/plugins/ai/src/lib/server/assist-chat.ts` is gated by `release_assist` AND the key, and a generation job's text step by `release_ai_generative`; `libs/plugins/ai/src/lib/server/ai-assist.ts` carries NO release flag, so setting `ANTHROPIC_API_KEY` in production is by itself what starts this flow. `assist-anthropic-subprocessor-gate.spec.ts` holds the per-door detail and is the deeper guard for this one vendor.",
-    dataReceived:
-      "What the user submits — a question, instruction or brief, with the earlier messages of the same Assist conversation — and the content of the element, post, section or page being worked on, with the generated response. On Pro and above, the organization's name and the console route and host travel with an Assist question. For an edit the assistant proposes in the besigner, an outline of the open page, component or layout: element and component ids, layer names, shortened setting values and the selected element's styles. For a generation job, the site inventory: the names and addresses of its screens and collections, the names of its components, layouts, templates, forms and datasets with their prop and field names, and the theme's summary, colors and fonts. For a theme change, the site's current theme settings and brand colors as hex values, from the organization's brand settings, the site logo in the media library or a public page the brief links to. For features that review or write search information, the text and structure of the pages concerned. No account identifiers, email addresses or authentication tokens.",
   },
 
   // MARK – Google LLC
@@ -805,8 +801,31 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
 }
 
 for (const host of SUPERVISORY_AUTHORITY_HOSTS) {
-  EGRESS_HOSTS[host] = SUPERVISORY_AUTHORITY_ENTRY
+  DECLARED_EGRESS_HOSTS[host] = SUPERVISORY_AUTHORITY_ENTRY
 }
+
+/**
+ * Every third-party host named in `apps/`, `libs/` and `tools/`, keyed by
+ * host, checked in both directions by `subprocessor-inventory.spec.ts`: the
+ * declarations above, and every recipient a plugin declares. A plugin
+ * declares only what the published list carries, so each of its hosts is a
+ * `subprocessor`, and `foldPluginSubprocessors` throws when this module
+ * loads if a plugin claims a host this registry or another plugin already
+ * declares.
+ */
+export const EGRESS_HOSTS: Record<string, EgressHost> = foldPluginSubprocessors<EgressHost>(
+  DECLARED_EGRESS_HOSTS,
+  PLUGIN_SUBPROCESSORS,
+  (declaration) => ({
+    disposition: 'subprocessor',
+    entity: declaration.entity,
+    region: declaration.region,
+    purpose: declaration.purpose,
+    publishedOn: declaration.publishedOn,
+    reason: declaration.reason,
+    dataReceived: declaration.dataReceived,
+  }),
+)
 
 /**
  * Recipients reached through an SDK that builds its own host, which the URL

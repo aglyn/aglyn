@@ -35,7 +35,9 @@ import { POST as applyAiSeoAudit } from './server/ai-seo-apply'
 import { POST as assistChat } from './server/assist-chat'
 import { POST as assistEditApplied } from './server/assist-edit-applied'
 import { POST as assistFeedback } from './server/assist-feedback'
+import { PATCH as aiHostPermissions } from './server/ai-host-permissions'
 import { GET as aiAdminOrg } from './server/ai-admin-org'
+import { GET as aiAdminOrgsSpend } from './server/ai-admin-orgs-spend'
 import { GET as aiAdminSignals } from './server/ai-admin-signals'
 import { GET as aiAdminUser } from './server/ai-admin-user'
 import { GET as aiUsage } from './server/ai-usage'
@@ -73,6 +75,9 @@ export function registerAiConsoleApi(): void {
   // The applied-edit record (AGL-2906): counts of a proposal the author
   // applied in their editor, written to the site's activity log.
   registerPluginApiRoute('assist/edit-applied', { web: assistEditApplied })
+  // A collaborator's AI toggles on one site (AGL-2927), set from the site's
+  // collaborators card through this plugin's column there.
+  registerPluginApiRoute('ai/host-permissions', { web: aiHostPermissions })
   registerPluginApiRoute('ai/assist', aiAssistHandler)
   registerPluginApiRoute('ai/jobs', {
     web: (request) => (request.method === 'GET' ? listAiJobs(request) : createAiJob(request)),
@@ -103,6 +108,7 @@ export function registerAiConsoleApi(): void {
   // one account's usage across its workspaces, and the fleet's Assist
   // signals behind the Assist signal staff page.
   registerPluginApiRoute('ai/admin/org', { web: aiAdminOrg })
+  registerPluginApiRoute('ai/admin/orgs-spend', { web: aiAdminOrgsSpend })
   registerPluginApiRoute('ai/admin/user', { web: aiAdminUser })
   registerPluginApiRoute('ai/admin/signals', { web: aiAdminSignals })
 }

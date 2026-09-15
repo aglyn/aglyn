@@ -15,30 +15,40 @@
  * limitations under the License.
  */
 
-import type { AglynOrgMember } from '../foundation'
+import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import {
+  projectHostMemberPermissions,
+  resolveCollaboratorHostPermissions,
+  resolveMemberHostPermissions,
+} from '@aglyn/aglyn/app-utils/host-permissions'
+import {
+  DEFAULT_ROLE_PERMISSIONS,
+  ORG_PERMISSION_KEYS,
+  orgPermissionLabel,
+  pluginPermissionChanges,
+} from '@aglyn/aglyn/app-utils/org-permissions'
+// The plugin's declarations register at module scope, as both apps load them.
+import '../declarations'
+import {
+  AI_ORG_PERMISSIONS,
   AI_PERMISSION_KEYS,
-  aiPermissionChanges,
-  aiPermissionLabel,
+  aiPermissionsOf,
   HOST_ROLE_AI_PERMISSIONS,
-  projectHostMemberAiPermissions,
-  resolveAiPermissions,
-  resolveCollaboratorAiPermissions,
 } from './ai-permissions'
-import { DEFAULT_ROLE_PERMISSIONS, ORG_PERMISSION_KEYS } from './org-permissions'
 
 const HOST = 'host-1'
 const OTHER_HOST = 'host-2'
 
 /**
- * The AI keys on both membership axes (AGL-2927).
+ * The AI keys on both membership axes (AGL-2927), as this plugin declares
+ * them into the org catalog (AGL-2984).
  *
- * The load-bearing cases are the ones about documents that PREDATE the
- * change: an org created before `ai.use` existed carries members with no
- * explicit value for it, and a collaborator granted before `hostPermissions`
- * existed carries no map at all. Both must resolve exactly as their role
- * default says, or shipping the permission locks paying customers out of a
- * feature nobody switched off.
+ * The load-bearing cases are the ones about documents that PREDATE the keys:
+ * an org created before `ai.use` existed carries members with no explicit
+ * value for it, and a collaborator granted before `hostPermissions` existed
+ * carries no map at all. Both must resolve exactly as their role default
+ * says, or the permission locks paying customers out of a feature nobody
+ * switched off.
  */
 describe('AI permissions on the org axis', () => {
   it('the two keys are in the catalog, and the role defaults say who holds them', () => {
@@ -53,27 +63,35 @@ describe('AI permissions on the org axis', () => {
     expect(DEFAULT_ROLE_PERMISSIONS.viewer['ai.generate']).toBe(false)
   })
 
+  it('declares only the two keys, both per-site for a collaborator', () => {
+    expect(AI_ORG_PERMISSIONS.map((permission) => permission.key)).toEqual([
+      'ai.use',
+      'ai.generate',
+    ])
+    for (const permission of AI_ORG_PERMISSIONS) {
+      expect(permission.hostRoleDefaults).toBeDefined()
+    }
+  })
+
   it('a member document written BEFORE the keys existed resolves by role default', () => {
-    // Exactly the documents an org created before this change carries: a
-    // role, `allHosts`, and no `permissions` map naming either key.
     const legacyEditor = { role: 'editor', allHosts: true } as Partial<AglynOrgMember>
     const legacyAdmin = { role: 'admin' } as Partial<AglynOrgMember>
     const legacyViewer = { role: 'viewer', allHosts: true } as Partial<AglynOrgMember>
     // The pre-`allHosts` legacy shape: no flag, no host map — org-wide.
     const preAllHosts = { role: 'editor' } as Partial<AglynOrgMember>
-    expect(resolveAiPermissions({ member: legacyEditor })).toEqual({
+    expect(resolveMemberHostPermissions({ member: legacyEditor })).toEqual({
       'ai.use': true,
       'ai.generate': true,
     })
-    expect(resolveAiPermissions({ member: legacyAdmin })).toEqual({
+    expect(resolveMemberHostPermissions({ member: legacyAdmin })).toEqual({
       'ai.use': true,
       'ai.generate': true,
     })
-    expect(resolveAiPermissions({ member: legacyViewer })).toEqual({
+    expect(resolveMemberHostPermissions({ member: legacyViewer })).toEqual({
       'ai.use': false,
       'ai.generate': false,
     })
-    expect(resolveAiPermissions({ member: preAllHosts, hostId: HOST })).toEqual({
+    expect(resolveMemberHostPermissions({ member: preAllHosts, hostId: HOST })).toEqual({
       'ai.use': true,
       'ai.generate': true,
     })
@@ -86,18 +104,18 @@ describe('AI permissions on the org axis', () => {
       roleId: 'writers',
     } as Partial<AglynOrgMember>
     const writers = { name: 'Writers', permissions: { 'ai.generate': false } }
-    expect(resolveAiPermissions({ member, customRole: writers })).toEqual({
+    expect(resolveMemberHostPermissions({ member, customRole: writers })).toEqual({
       'ai.use': true,
       'ai.generate': false,
     })
     expect(
-      resolveAiPermissions({
+      resolveMemberHostPermissions({
         member: { ...member, permissions: { 'ai.generate': true } },
         customRole: writers,
       })['ai.generate'],
     ).toBe(true)
     expect(
-      resolveAiPermissions({
+      resolveMemberHostPermissions({
         member: { ...member, permissions: { 'ai.use': false } },
         customRole: writers,
       }),
@@ -106,8 +124,8 @@ describe('AI permissions on the org axis', () => {
 
   it('an org-wide member resolves the same on every site and with none named', () => {
     const admin = { role: 'admin' } as Partial<AglynOrgMember>
-    expect(resolveAiPermissions({ member: admin })).toEqual(
-      resolveAiPermissions({ member: admin, hostId: HOST }),
+    expect(resolveMemberHostPermissions({ member: admin })).toEqual(
+      resolveMemberHostPermissions({ member: admin, hostId: HOST }),
     )
     // A per-site override on an org-wide member's doc is inert: their org
     // standing decides, and nothing should be able to reach around it.
@@ -116,11 +134,11 @@ describe('AI permissions on the org axis', () => {
       allHosts: true,
       hostPermissions: { [HOST]: { 'ai.use': true } },
     } as Partial<AglynOrgMember>
-    expect(resolveAiPermissions({ member: viewer, hostId: HOST })['ai.use']).toBe(false)
+    expect(resolveMemberHostPermissions({ member: viewer, hostId: HOST })['ai.use']).toBe(false)
   })
 
   it('no member is no permission', () => {
-    expect(resolveAiPermissions({ member: null })).toEqual({
+    expect(resolveMemberHostPermissions({ member: null })).toEqual({
       'ai.use': false,
       'ai.generate': false,
     })
@@ -144,12 +162,12 @@ describe('AI permissions on the collaborator axis', () => {
   })
 
   it('a collaborator granted BEFORE `hostPermissions` existed resolves by host role', () => {
-    expect(resolveAiPermissions({ member: collaborator(), hostId: HOST })).toEqual({
+    expect(resolveMemberHostPermissions({ member: collaborator(), hostId: HOST })).toEqual({
       'ai.use': true,
       'ai.generate': true,
     })
     expect(
-      resolveAiPermissions({
+      resolveMemberHostPermissions({
         member: collaborator({ hostAccess: { [HOST]: 'viewer' } }),
         hostId: HOST,
       }),
@@ -161,17 +179,17 @@ describe('AI permissions on the collaborator axis', () => {
       hostAccess: { [HOST]: 'editor', [OTHER_HOST]: 'editor' },
       hostPermissions: { [HOST]: { 'ai.generate': false } },
     })
-    expect(resolveAiPermissions({ member, hostId: HOST })).toEqual({
+    expect(resolveMemberHostPermissions({ member, hostId: HOST })).toEqual({
       'ai.use': true,
       'ai.generate': false,
     })
-    expect(resolveAiPermissions({ member, hostId: OTHER_HOST })).toEqual({
+    expect(resolveMemberHostPermissions({ member, hostId: OTHER_HOST })).toEqual({
       'ai.use': true,
       'ai.generate': true,
     })
     // A viewer can be switched ON for one site, too.
     expect(
-      resolveAiPermissions({
+      resolveMemberHostPermissions({
         member: collaborator({
           hostAccess: { [HOST]: 'viewer' },
           hostPermissions: { [HOST]: { 'ai.use': true } },
@@ -191,7 +209,7 @@ describe('AI permissions on the collaborator axis', () => {
       permissions: { 'ai.use': true, 'ai.generate': true },
     })
     expect(
-      resolveAiPermissions({
+      resolveMemberHostPermissions({
         member,
         customRole: { permissions: { 'ai.use': true, 'ai.generate': true } },
         hostId: HOST,
@@ -200,17 +218,17 @@ describe('AI permissions on the collaborator axis', () => {
   })
 
   it('a request naming NO site, or a site the collaborator cannot reach, is nothing', () => {
-    expect(resolveAiPermissions({ member: collaborator() })).toEqual({
+    expect(resolveMemberHostPermissions({ member: collaborator() })).toEqual({
       'ai.use': false,
       'ai.generate': false,
     })
-    expect(resolveAiPermissions({ member: collaborator(), hostId: '' })).toEqual({
+    expect(resolveMemberHostPermissions({ member: collaborator(), hostId: '' })).toEqual({
       'ai.use': false,
       'ai.generate': false,
     })
-    expect(resolveCollaboratorAiPermissions(collaborator(), OTHER_HOST)).toBeNull()
+    expect(resolveCollaboratorHostPermissions(collaborator(), OTHER_HOST)).toBeNull()
     expect(
-      resolveAiPermissions({ member: collaborator(), hostId: OTHER_HOST }),
+      resolveMemberHostPermissions({ member: collaborator(), hostId: OTHER_HOST }),
     ).toEqual({ 'ai.use': false, 'ai.generate': false })
   })
 })
@@ -230,7 +248,7 @@ describe('the host projection', () => {
       { $id: 'elsewhere', role: 'editor', allHosts: false, hostAccess: { [OTHER_HOST]: 'editor' } },
     ] as Array<Partial<AglynOrgMember> & { $id: string }>
     const roles = new Map([['writers', { permissions: { 'ai.generate': false } }]])
-    expect(projectHostMemberAiPermissions(members, HOST, roles)).toEqual({
+    expect(projectHostMemberPermissions(members, HOST, roles)).toEqual({
       owner: { 'ai.use': true, 'ai.generate': true },
       writer: { 'ai.use': true, 'ai.generate': false },
       client: { 'ai.use': true, 'ai.generate': false },
@@ -241,7 +259,7 @@ describe('the host projection', () => {
     const members = [
       { $id: 'writer', role: 'editor', allHosts: true, roleId: 'deleted' },
     ] as Array<Partial<AglynOrgMember> & { $id: string }>
-    expect(projectHostMemberAiPermissions(members, HOST, new Map([['deleted', null]]))).toEqual({
+    expect(projectHostMemberPermissions(members, HOST, new Map([['deleted', null]]))).toEqual({
       writer: { 'ai.use': true, 'ai.generate': true },
     })
   })
@@ -249,15 +267,15 @@ describe('the host projection', () => {
 
 describe('the label a refusal names', () => {
   it('comes from the catalog, so the sentence and the role editor agree', () => {
-    expect(aiPermissionLabel('ai.use')).toBe('Use AI assistance')
-    expect(aiPermissionLabel('ai.generate')).toBe('Generate with AI')
+    expect(orgPermissionLabel('ai.use')).toBe('Use AI assistance')
+    expect(orgPermissionLabel('ai.generate')).toBe('Generate with AI')
   })
 })
 
-describe('the keys a write moved (what the activity log records, AGL-2929)', () => {
-  it('names each key whose value changed, in catalog order, and nothing when none did', () => {
+describe('the changes one activity row each is written for (AGL-2929)', () => {
+  it('names every AI key that moved, in catalog order, with its direction', () => {
     expect(
-      aiPermissionChanges(
+      pluginPermissionChanges(
         { 'ai.use': true, 'ai.generate': true },
         { 'ai.use': false, 'ai.generate': false },
       ),
@@ -266,18 +284,28 @@ describe('the keys a write moved (what the activity log records, AGL-2929)', () 
       { permission: 'ai.generate', granted: false },
     ])
     expect(
-      aiPermissionChanges(
+      pluginPermissionChanges(
         { 'ai.use': true, 'ai.generate': false },
         { 'ai.use': true, 'ai.generate': false },
       ),
     ).toEqual([])
   })
 
-  it('a key set for the first time is a change; a key left unset is not', () => {
-    expect(aiPermissionChanges(null, { 'ai.generate': false })).toEqual([
+  it('a key set for the first time is a change; an unset one is not', () => {
+    expect(pluginPermissionChanges(null, { 'ai.generate': false })).toEqual([
       { permission: 'ai.generate', granted: false },
     ])
-    expect(aiPermissionChanges({ 'ai.generate': false }, {})).toEqual([])
-    expect(aiPermissionChanges({ 'ai.generate': false }, null)).toEqual([])
+    expect(pluginPermissionChanges({ 'ai.generate': false }, {})).toEqual([])
+    expect(pluginPermissionChanges({ 'ai.generate': false }, null)).toEqual([])
+  })
+})
+
+describe('the AI half of a verdict the shell resolved', () => {
+  it('reads both keys and refuses an absent one', () => {
+    expect(aiPermissionsOf({ 'ai.use': true, 'reviews.reply': true })).toEqual({
+      'ai.use': true,
+      'ai.generate': false,
+    })
+    expect(aiPermissionsOf(null)).toEqual({ 'ai.use': false, 'ai.generate': false })
   })
 })

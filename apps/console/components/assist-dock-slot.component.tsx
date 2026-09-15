@@ -1,7 +1,7 @@
 'use client'
 
 import { useContext } from 'react'
-import useAiPermissions from '../hooks/use-ai-permissions'
+import usePermissionsOnHost from '../hooks/use-permissions-on-host'
 import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgScope, { useOrgSlug } from '../hooks/use-org-scope'
@@ -15,7 +15,7 @@ import PluginWidgetSlot from './plugin-widget-slot.component'
  * every route boundary in both shells, with the shell's own answers handed
  * down as props — which org the URL names and whether the membership
  * contradicts it, the site in view, the brand, the release verdicts and
- * the reader's AI permissions. A plugin widget here reads no console hook;
+ * the reader's plugin permissions on that site. A plugin widget here reads no console hook;
  * it renders what the shell resolved.
  *
  * `scopedOrgId` is the org a widget may speak for, act as, and be METERED
@@ -41,7 +41,7 @@ export default function AssistDockSlot() {
   const scopedOrgId = namesOrg && !wrongOrg ? orgId : undefined
   const orgSlug = useOrgSlug()
   const hostId = useContext(HostIdContext)
-  const aiPermissions = useAiPermissions(hostId)
+  const permissionsOnHost = usePermissionsOnHost(hostId)
   return (
     <PluginWidgetSlot
       slot="assistPanel"
@@ -56,7 +56,7 @@ export default function AssistDockSlot() {
       assistStaffPreview={assist.staffPreview}
       generativeVisible={generative.visible}
       isStaff={isStaff}
-      aiPermissions={aiPermissions}
+      permissionsOnHost={permissionsOnHost}
     />
   )
 }

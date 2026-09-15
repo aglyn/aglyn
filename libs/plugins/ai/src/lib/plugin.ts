@@ -16,7 +16,15 @@
  */
 
 import { PLATFORM_BRAND_NAME, registerConsoleExtension } from '@aglyn/aglyn'
-import { AiAssistProvider } from './components/ai-assist-provider.component'
+import { AiCollaboratorPermissionsCell } from './components/ai-collaborator-permissions-column.component'
+import {
+  AiGenerateSectionControl,
+  AiRewriteControl,
+} from './components/besigner-ai-controls.component'
+import {
+  AiAssistProviderOnHost,
+  AssistPanelOnHost,
+} from './components/ai-permissions-on-host.component'
 import AiCreditsCard from './components/ai-credits-card.component'
 import {
   AiCollaboratorCreditsCell,
@@ -24,7 +32,6 @@ import {
   AiMemberCreditsCell,
   AiMemberCreditsHeader,
 } from './components/ai-credits-columns.component'
-import { AssistPanelComponent } from './components/assist-panel.component'
 import { AssistSignalsPage } from './components/assist-signals-page.component'
 import BillingAssistOverageCard from './components/billing-assist-overage-card.component'
 import { AiTopUsersCard } from './components/billing-ai-top-users.component'
@@ -38,6 +45,16 @@ import MemberAiAllotmentCard from './components/member-ai-allotment-card.compone
 import MemberAiUsageCard from './components/member-ai-usage-card.component'
 import AiThemeProposalCard from './components/ai-theme-proposal-card.component'
 import StaffOrgAiCard from './components/staff-org-ai-card.component'
+import {
+  StaffOrgUsageAiCreditsCell,
+  StaffOrgUsageAiOverageCell,
+  StaffOrgUsageAiPool,
+  StaffOrgUsageAssistCell,
+} from './components/staff-org-usage-ai-columns.component'
+import {
+  StaffOrgsAiSpendCell,
+  StaffOrgsAiSpendHeader,
+} from './components/staff-orgs-ai-spend-column.component'
 import StaffUserAiUsageCard from './components/staff-user-ai-usage-card.component'
 import AiSeoAuditCard from './components/ai-seo-audit-card.component'
 import AiSeoFieldsCard from './components/ai-seo-fields-card.component'
@@ -63,8 +80,8 @@ export function registerAiConsole(): void {
     pluginId: AI_PLUGIN_ID,
     displayName: 'AI',
     // The besigner copy assistant (AGL-89/419): mounted by the shell around
-    // every console page; the designer reads core's `DesignerAssistContext`.
-    providers: [AiAssistProvider],
+    // every console page, and opened by this plugin's besigner controls.
+    providers: [AiAssistProviderOnHost],
     // The Assist docs-gap and cost board (AGL-1860, AGL-2252), at the staff
     // URL and under the tab it has always had.
     staffPages: [
@@ -85,7 +102,7 @@ export function registerAiConsole(): void {
         slot: 'assistPanel',
         widgetId: 'ai-assist-dock',
         title: 'Assistant',
-        Component: AssistPanelComponent,
+        Component: AssistPanelOnHost,
       },
       {
         slot: 'orgBillingUsage',
@@ -108,6 +125,32 @@ export function registerAiConsole(): void {
         title: 'Who is generating what',
         permission: 'billing.view',
         Component: AiTopUsersCard,
+      },
+      // The collaborators table's AI column (AGL-2927): whether each person
+      // may open the AI doors on the site, per site, ahead of the columns
+      // that report what they drew.
+      {
+        slot: 'hostMembers',
+        widgetId: 'ai-collaborator-permissions',
+        title: 'AI',
+        column: { header: 'AI' },
+        Component: AiCollaboratorPermissionsCell,
+      },
+      // The copy assistant's besigner controls (AGL-89, AGL-169): Generate a
+      // section on every editor's toolbar, and Rewrite with AI under the
+      // selected element's fields. Each opens the provider's dialog, and is
+      // drawn only while the reader holds the door's permission.
+      {
+        slot: 'besignerToolbar',
+        widgetId: 'ai-generate-section',
+        title: 'Generate a section with AI',
+        Component: AiGenerateSectionControl,
+      },
+      {
+        slot: 'besignerInspector',
+        widgetId: 'ai-rewrite-copy',
+        title: 'Rewrite with AI',
+        Component: AiRewriteControl,
       },
       {
         slot: 'orgMember',
@@ -174,6 +217,47 @@ export function registerAiConsole(): void {
         widgetId: 'ai-account-usage',
         title: 'AI usage across organizations',
         Component: StaffUserAiUsageCard,
+      },
+      // The staff tables' AI figures (AGL-2984): the Organizations list's
+      // spend column, and the usage table's three columns with the credit
+      // pool line the org page draws above it.
+      {
+        slot: 'staffOrgsListColumn',
+        widgetId: 'ai-orgs-spend',
+        title: 'AI spend (month)',
+        column: {
+          header: 'AI spend (month)',
+          align: 'right',
+          Header: StaffOrgsAiSpendHeader,
+        },
+        Component: StaffOrgsAiSpendCell,
+      },
+      {
+        slot: 'staffOrgUsageColumn',
+        widgetId: 'ai-usage-assist-cost',
+        title: 'Assist',
+        column: { header: 'Assist', align: 'right' },
+        Component: StaffOrgUsageAssistCell,
+      },
+      {
+        slot: 'staffOrgUsageColumn',
+        widgetId: 'ai-usage-credits',
+        title: 'AI credits used',
+        column: { header: 'AI credits used', align: 'right' },
+        Component: StaffOrgUsageAiCreditsCell,
+      },
+      {
+        slot: 'staffOrgUsageColumn',
+        widgetId: 'ai-usage-overage',
+        title: 'AI overage billed ($)',
+        column: { header: 'AI overage billed ($)', align: 'right' },
+        Component: StaffOrgUsageAiOverageCell,
+      },
+      {
+        slot: 'staffOrgUsageColumn',
+        widgetId: 'ai-usage-pool',
+        title: 'AI credit pool',
+        Component: StaffOrgUsageAiPool,
       },
       {
         slot: 'orgMembersListColumn',

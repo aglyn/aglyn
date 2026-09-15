@@ -578,6 +578,27 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   staffUser: 'staffUser',
   /**
+   * A COLUMN of the staff Organizations list (AGL-2984) — see
+   * {@link ConsoleWidget.column}. The list renders the widget's component
+   * once per row with `{ row, orgId, orgIds }`: the row as the list route
+   * serves it, that row's org id, and every org id on the page, so a column
+   * that reads figures of its own asks once for the page rather than once
+   * per row. Its `Header` receives `{ orgIds }` beside the sort props. A
+   * staff zone — see {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
+  staffOrgsListColumn: 'staffOrgsListColumn',
+  /**
+   * The staff org usage table (AGL-2984): the monthly rollups on the staff
+   * org page and in the Organizations list's usage dialog. A widget with a
+   * `column` is a column of the table, between Forms and Cost, rendered once
+   * per month with `{ month, orgId }` — `month` is the rollup row as
+   * `/api/admin/org-usage` serves it. A widget without one renders above
+   * the table with `{ orgId, org }`, where `org` is the org document when the
+   * surface holds one and `undefined` when it does not. A staff zone — see
+   * {@link CONSOLE_STAFF_WIDGET_SLOTS}.
+   */
+  staffOrgUsageColumn: 'staffOrgUsageColumn',
+  /**
    * The org's team member detail page, below the member's activity
    * (AGL-2940). Props: `orgId`, `orgSlug`, `uid`, `member` (the org member
    * document as the page loaded it), `hosts` (the org's sites, for naming
@@ -608,7 +629,9 @@ export const CONSOLE_WIDGET_SLOTS = {
   assistPanel: 'assistPanel',
   /**
    * A section at the bottom of the besigner's Attributes panel (AGL-2940),
-   * under the selected element's own fields. Props: `hostId`.
+   * under the selected element's own fields. Props: `hostId` (`null` on an
+   * editor that names no site), and `node`, the selected element (AGL-2984)
+   * — present wherever the designer draws the panel for a selection.
    */
   besignerInspector: 'besignerInspector',
   /**
@@ -633,6 +656,14 @@ export const CONSOLE_WIDGET_SLOTS = {
    * published site before that.
    */
   hostSeo: 'hostSeo',
+  /**
+   * The besigner's secondary toolbar, after the undo and redo controls
+   * (AGL-2984), on every editor the designer opens: screens, layouts,
+   * components, forms, templates and email designs. A control here acts on
+   * the document in the editor. Props: `hostId` (`null` on an editor that
+   * names no site).
+   */
+  besignerToolbar: 'besignerToolbar',
 } as const
 
 export type ConsoleWidgetSlot =
@@ -677,6 +708,8 @@ export const CONSOLE_STAFF_WIDGET_SLOTS: readonly ConsoleWidgetSlot[] = [
   CONSOLE_WIDGET_SLOTS.adminOrgDetail,
   CONSOLE_WIDGET_SLOTS.staffOrg,
   CONSOLE_WIDGET_SLOTS.staffUser,
+  CONSOLE_WIDGET_SLOTS.staffOrgsListColumn,
+  CONSOLE_WIDGET_SLOTS.staffOrgUsageColumn,
 ]
 
 /** Whether a slot is one of the {@link CONSOLE_STAFF_WIDGET_SLOTS}. */

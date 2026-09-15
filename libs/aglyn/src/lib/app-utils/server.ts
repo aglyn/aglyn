@@ -193,7 +193,7 @@ export * from './org-permissions'
 // The AI verdict on either membership axis (AGL-2927). After both modules it
 // composes: the org catalog for org-wide members, the host role for site
 // collaborators.
-export * from './ai-permissions'
+export * from './host-permissions'
 export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'

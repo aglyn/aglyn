@@ -233,11 +233,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isServerReleaseFlagOnForOrg: async () => mockFlagOn,
   lockdownRefusal: async () => mockLockdownResponse,
   featureLockdownRefusal: async () => mockFeatureLockdown,
-  memberHasAiPermission: async (...args: unknown[]) => {
+  memberHasPermissionOnHost: async (...args: unknown[]) => {
     mockAiPermissionAsks.push(args)
     return mockAiPermitted
   },
-  aiPermissionRefusal: (permission: string) =>
+  permissionRefusal: (permission: string) =>
     Response.json(
       {
         error: `Your role does not include ${permission}`,

@@ -29,7 +29,11 @@
  * - `lockdown` lists a registered lever on the staff page, carries its label,
  *   its staff-bypass rule and its visitor notice, and maps the API paths it
  *   names onto it for the plugin dispatcher;
- * - `plugin-permissions` receives the permissions with the owner filled in.
+ * - `plugin-permissions` receives the permissions with the owner filled in;
+ * - `org-permissions` folds every declared catalog key into the org
+ *   permission catalog — the role editor, custom roles, per-member overrides
+ *   and the rules stamp — and `host-permissions` decides the keys that
+ *   declare host-role defaults for a site collaborator, per site.
  *
  * The NUMBERS stay where they are checked. A seat add-on's price is a row in
  * `PLAN_PRICING`, read by the Stripe wiring and reconciled by
@@ -43,7 +47,7 @@
  * in a different order per session.
  */
 
-import type { OrgPlan } from '../foundation'
+import type { HostAccessRole, OrgPlan, OrgRole } from '../foundation'
 import { FIRST_PARTY_PLUGINS } from './enabled-plugins'
 import {
   registerPluginPermissions,
@@ -109,15 +113,67 @@ export interface PluginLockdownFeatureDeclaration {
   apiPaths?: { exact?: readonly string[]; prefixes?: readonly string[] }
 }
 
+/**
+ * A key a plugin adds to the org permission CATALOG (AGL-2984): the granular
+ * map custom roles and per-member overrides are stored in, that
+ * `resolveOrgPermissions` layers and the rules stamp carries, and that the
+ * role editor lists. A declared key is stored, layered and resolved exactly
+ * like a core key; the declaration supplies what a core key's catalog entry
+ * and role table supply.
+ */
+export interface PluginOrgPermissionDeclaration {
+  /** The dotted key a custom role and a per-member override store (`reviews.reply`). */
+  key: string
+  /** The role editor's line for the key, and the word a refusal names. */
+  label: string
+  /** What the key opens, under the label in the role editor. */
+  description: string
+  /** Each org role's verdict when no custom role or per-member override sets the key. */
+  roleDefaults: Readonly<Record<OrgRole, boolean>>
+  /**
+   * Each HOST role's verdict, for a key a site collaborator holds per site.
+   *
+   * A collaborator's membership carries no org standing to refine — it
+   * exists only to carry access to named sites — so a key with this field is
+   * decided for them on the site a request names: the host role they hold
+   * there, refined by the per-site toggle on their member document. A key
+   * without it is never held by a collaborator.
+   */
+  hostRoleDefaults?: Readonly<Record<HostAccessRole, boolean>>
+}
+
 export interface PluginEntitlementRegistration {
   pluginId: string
   seatAddons?: readonly PluginSeatAddonDeclaration[]
   features?: readonly PluginFeatureDeclaration[]
   lockdownFeatures?: readonly PluginLockdownFeatureDeclaration[]
+  /** Per-tier keys a plugin's own pages read (`registerPluginPermissions`). */
   permissions?: readonly Omit<PluginPermission, 'pluginId'>[]
+  /** Keys added to the org permission catalog — see {@link PluginOrgPermissionDeclaration}. */
+  orgPermissions?: readonly PluginOrgPermissionDeclaration[]
 }
 
 const registrations = new Map<string, PluginEntitlementRegistration>()
+
+/**
+ * Readers of the registrations that keep a derived view in step with them —
+ * the org permission catalog rebuilds itself on every registration and
+ * reset, because a plugin's declarations can register after a module that
+ * imported the catalog was evaluated.
+ */
+const listeners = new Set<() => void>()
+
+/** Calls `listener` after every registration and reset; answers the unsubscribe. */
+export function subscribePluginEntitlements(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function notifyListeners(): void {
+  for (const listener of [...listeners]) listener()
+}
 
 const CATALOG_ORDER = new Map(
   FIRST_PARTY_PLUGINS.map((plugin, index) => [plugin.id, index]),
@@ -137,7 +193,7 @@ function orderedRegistrations(): PluginEntitlementRegistration[] {
 
 function refuseStolenKeys(
   pluginId: string,
-  kind: 'seat add-on' | 'lockdown feature',
+  kind: 'seat add-on' | 'lockdown feature' | 'org permission',
   keys: readonly string[],
   ownerOf: (key: string) => string | undefined,
 ): void {
@@ -153,9 +209,9 @@ function refuseStolenKeys(
 
 /**
  * Idempotent per plugin — re-registration replaces that plugin's
- * declarations. A seat add-on or lockdown key another plugin already owns
- * refuses the whole registration: one key, one owner, or the two
- * declarations disagree about what the key means.
+ * declarations. A seat add-on, lockdown or catalog permission key another
+ * plugin already owns refuses the whole registration: one key, one owner,
+ * or the two declarations disagree about what the key means.
  */
 export function registerPluginEntitlements(
   registration: PluginEntitlementRegistration,
@@ -174,12 +230,19 @@ export function registerPluginEntitlements(
     (registration.lockdownFeatures ?? []).map((entry) => entry.key),
     (key) => pluginLockdownFeatureOwner(key),
   )
+  refuseStolenKeys(
+    pluginId,
+    'org permission',
+    (registration.orgPermissions ?? []).map((entry) => entry.key),
+    (key) => pluginOrgPermissionOwner(key),
+  )
   registrations.set(pluginId, { ...registration, pluginId })
   if (registration.permissions?.length) {
     registerPluginPermissions(
       registration.permissions.map((permission) => ({ ...permission, pluginId })),
     )
   }
+  notifyListeners()
 }
 
 function pluginSeatAddonOwner(key: string): string | undefined {
@@ -196,6 +259,27 @@ function pluginLockdownFeatureOwner(key: string): string | undefined {
     }
   }
   return undefined
+}
+
+function pluginOrgPermissionOwner(key: string): string | undefined {
+  for (const entry of registrations.values()) {
+    if (entry.orgPermissions?.some((permission) => permission.key === key)) {
+      return entry.pluginId
+    }
+  }
+  return undefined
+}
+
+/** Every declared catalog permission, in catalog order, with the plugin that declared it. */
+export function listPluginOrgPermissions(): Array<
+  PluginOrgPermissionDeclaration & { pluginId: string }
+> {
+  return orderedRegistrations().flatMap((entry) =>
+    (entry.orgPermissions ?? []).map((permission) => ({
+      ...permission,
+      pluginId: entry.pluginId,
+    })),
+  )
 }
 
 /** Every declared seat add-on, in catalog order. */
@@ -237,7 +321,11 @@ export function listPluginEntitlementRegistrations(): PluginEntitlementRegistrat
   return orderedRegistrations()
 }
 
-/** Test seam: forget every registration (permissions stay registered). */
+/**
+ * Test seam: forget every registration. The per-tier permissions stay
+ * registered; the catalog permissions go with their registrations.
+ */
 export function resetPluginEntitlementsForTests(): void {
   registrations.clear()
+  notifyListeners()
 }

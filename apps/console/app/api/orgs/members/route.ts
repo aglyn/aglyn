@@ -23,13 +23,13 @@ import {
 } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
-  aiPermissionChanges,
   countManagerSeats,
   type HostAccessRole,
   isOrgRole,
   isOrgWideMember,
   brandMergeTokens,
   resolveBrandingProfile,
+  pluginPermissionChanges,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
@@ -49,7 +49,7 @@ import {
   meterOrgEmail,
   notifyUsers,
   removeOrgMember,
-  resolveMemberAiPermissionsOnOrg,
+  resolveMemberPluginPermissionsOnOrg,
   resolveOrgMembership,
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
@@ -288,13 +288,14 @@ async function handler(request: Request): Promise<Response> {
           .doc(targetUid)
           .get()
       ).exists
-      // The AI verdict before the write, for an existing member only: a
-      // role or a custom-role assignment can move `ai.use` / `ai.generate`
-      // for them, and the feed records each key that moved (AGL-2929). A
-      // person added just now had no verdict to move; the add is its own
-      // row. `null` for a collaborator, whose AI is decided per site.
-      const aiBefore = existedAlready
-        ? await resolveMemberAiPermissionsOnOrg(orgId, targetUid)
+      // The plugin-declared verdicts before the write, for an existing member
+      // only: a role or a custom-role assignment can move a key a plugin
+      // declared into the catalog, and each key that moved is one platform
+      // event (AGL-2929). A person added just now had no verdict to move;
+      // the add is its own row. `null` for a collaborator, whose per-site
+      // keys are decided per site.
+      const pluginBefore = existedAlready
+        ? await resolveMemberPluginPermissionsOnOrg(orgId, targetUid)
         : null
       // Manager-seat quota (AGL-471): adding a NEW org member consumes a
       // seat; role changes don't. A plan-less org resolves as `free`
@@ -344,14 +345,14 @@ async function handler(request: Request): Promise<Response> {
           : `Added ${targetName} as ${role}`,
         { type: 'member', id: targetUid, name: targetName },
       )
-      if (aiBefore) {
+      if (pluginBefore) {
         // Re-resolved after the write rather than predicted from the body:
         // the verdict is the role, the custom role and the overrides
         // together, and only the resolver knows how they combine. A member
         // who became a collaborator has no org verdict any more, and the
         // comparison says nothing moved on this axis.
-        const aiAfter = await resolveMemberAiPermissionsOnOrg(orgId, targetUid)
-        for (const change of aiPermissionChanges(aiBefore, aiAfter)) {
+        const pluginAfter = await resolveMemberPluginPermissionsOnOrg(orgId, targetUid)
+        for (const change of pluginPermissionChanges(pluginBefore, pluginAfter)) {
           await runPluginEventHandlers('org.permissions.changed', {
             orgId,
             actor: { uid: decoded.uid, email: decoded.email ?? null },

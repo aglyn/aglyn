@@ -37,7 +37,7 @@ import {
   useHostEnabledPlugins,
   useHostId,
 } from './host-id-provider'
-import useAiPermissions from '../hooks/use-ai-permissions'
+import usePermissionsOnHost from '../hooks/use-permissions-on-host'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useReleaseFlags } from '../hooks/use-release-flags'
 import { useUrlNamedOrg, useUrlNamesOrg } from '../hooks/use-url-names-org'
@@ -154,12 +154,12 @@ export default function ConsolePluginsGate({
   const [readyForOrg, setReadyForOrg] = useState<string | null>(null)
   const { flagsReady, enabledKey } = useEffectiveEnabledPlugins()
   const enabledPluginIds = useEnabledPluginIds()
-  // The reader's AI permissions on the site in view (AGL-2927), resolved
-  // ONCE here for every provider rather than by each — a plugin package
-  // cannot reach the console's permission context, and the provider that
-  // opens the AI doors needs the answer to hold them closed.
+  // The reader's plugin permissions on the site in view (AGL-2927,
+  // AGL-2984), resolved ONCE here for every provider rather than by each — a
+  // plugin package cannot reach the console's permission context, and a
+  // provider whose doors spend needs the answer to hold them closed.
   const hostId = useHostId()
-  const aiPermissions = useAiPermissions(hostId)
+  const permissionsOnHost = usePermissionsOnHost(hostId)
   // Latches on the first completed load; from then on a workspace switch
   // renders through instead of blanking the tree (AGL-758).
   const hasLoadedOnce = useRef(false)
@@ -270,7 +270,7 @@ export default function ConsolePluginsGate({
         orgReady={orgReady}
         orgId={orgId}
         hostId={hostId}
-        aiPermissions={aiPermissions}
+        permissionsOnHost={permissionsOnHost}
       >
         {inner}
       </Provider>

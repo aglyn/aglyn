@@ -129,7 +129,19 @@ const MENTIONS_ONLY = new Map<string, string>([
   ],
   [
     'apps/console/constants/subprocessor-inventory.ts',
-    'The subprocessor registry (AGL-1648) — the declarative disclosure of who Aglyn shares data with. It names the key because DISCLOSING the Anthropic relationship is its entire purpose, which makes it the one file whose mention is the opposite of an undisclosed data flow. Note it is imported by nothing but its own spec, so it reads no key and reaches no runtime.',
+    "The subprocessor registry (AGL-1648) — the declarative disclosure of who Aglyn shares data with. It names the key once, in its header's table of the four checks that could not see the Linear flow, where this suite is the guard pinned to one env var name. The Anthropic row it discloses is not written in it: the registry folds that row in from the generated subprocessors manifest below, and the AI plugin's provider catalog declares the row's wording (AGL-2984). It is imported by nothing but specs, so it reads no key and reaches no runtime.",
+  ],
+  [
+    'apps/console/constants/plugins.subprocessors.generated.ts',
+    "The subprocessors manifest (AGL-2984), written by `generate-plugin-manifests.mjs`: the AI plugin's subprocessor declarations as data, which the subprocessor registry folds in. It names the key inside the Anthropic row's `reason`, where the adapter's `apiKeyEnv` fills the catalog wording's placeholder, so the mention is the disclosure itself. Data and a type import only: it reads no key and reaches no runtime.",
+  ],
+  [
+    'apps/console/constants/subprocessor-inventory-plugins.spec.ts',
+    'Pins the Anthropic row the subprocessor registry folds in from the generated manifest to the published text, field for field (AGL-2984), so the key appears inside the pinned `reason`. A test of the disclosure, not a flow.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/subprocessors.spec.ts',
+    'Pins the Anthropic row the AI plugin derives from its provider catalog to the published text, field for field (AGL-2984), so the key appears inside the pinned `reason`. A test of the disclosure, not a flow.',
   ],
   [
     'libs/aglyn/src/lib/app-utils/release-flags.ts',

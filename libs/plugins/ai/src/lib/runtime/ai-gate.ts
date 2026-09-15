@@ -54,9 +54,9 @@ import {
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { featureLockdownRefusal, lockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
 import {
-  aiPermissionRefusal,
+  permissionRefusal,
   getOrgForUser,
-  memberHasAiPermission,
+  memberHasPermissionOnHost,
 } from '@aglyn/tenant-data-admin/server/organizations'
 import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 
@@ -126,7 +126,7 @@ export interface AiGateConfig {
   /**
    * The org permission the door sells under (AGL-2927): `ai.use` for the
    * assistants, `ai.generate` for a generation job. Resolved by
-   * `memberHasAiPermission` on the org axis or, for a site collaborator, on
+   * `memberHasPermissionOnHost` on the org axis or, for a site collaborator, on
    * the host the body named (`AiGateInput.hostId`). Omitted, the rung is
    * skipped — which is the right reading for a door that has not decided
    * which key it sells under, and the wrong one for any door a customer
@@ -236,14 +236,14 @@ export async function aiGateLadder(
   if (
     config.permission &&
     !staff &&
-    !(await memberHasAiPermission(
+    !(await memberHasPermissionOnHost(
       orgId,
       input.hostId,
       resolved.member,
       config.permission,
     ))
   ) {
-    return aiPermissionRefusal(config.permission)
+    return permissionRefusal(config.permission)
   }
 
   // The flag closes the ROUTE, not just the UI (AGL-1653): a released-off

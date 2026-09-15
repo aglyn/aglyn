@@ -17,7 +17,7 @@
 
 import { FieldValue } from 'firebase-admin/firestore'
 import {
-  aiPermissionRefusal,
+  permissionRefusal,
   checkRateLimit,
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -25,7 +25,7 @@ import {
   isImpersonationSession,
   isServerReleaseFlagOnForOrg,
   lockdownRefusal,
-  memberHasAiPermission,
+  memberHasPermissionOnHost,
   rateLimitHeaders,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
@@ -127,9 +127,9 @@ async function handler(request: Request): Promise<Response> {
     }
     if (
       !staff &&
-      !(await memberHasAiPermission(report.orgId, report.hostId, resolved.member, 'ai.generate'))
+      !(await memberHasPermissionOnHost(report.orgId, report.hostId, resolved.member, 'ai.generate'))
     ) {
-      return aiPermissionRefusal('ai.generate')
+      return permissionRefusal('ai.generate')
     }
     if (!staff && !(await isServerReleaseFlagOnForOrg('release_ai_generative', report.orgId))) {
       return Response.json({ error: 'Not found' }, { status: 404 })

@@ -32,7 +32,6 @@ import {
   readListFilter,
 } from '../../../../utils/server/list-filter'
 import { ORG_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
-import { currentMonth } from '../../../../utils/billing-month'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -191,33 +190,6 @@ async function handler(request: Request): Promise<Response> {
     billingSnaps.forEach((snap, index) => {
       if (snap.exists) billingByOrgId.set(pageDocs[index].id, snap.data())
     })
-    /*
-     * This month's AI spend per row (AGL-2930), the live `assistUsage`
-     * read the margin route already makes — one `getAll` for the page, so
-     * the column costs one round trip rather than one per org. An org with
-     * no document for the month reads as `null`, never as `$0`: the list's
-     * purpose on this column is finding the org that IS spending, and a
-     * zero that means "not measured" would sort among the real zeros.
-     *
-     * Tolerant of a snapshot that cannot be read — the list must render
-     * with the column blank rather than fail because one read did.
-     */
-    const aiMonth = currentMonth()
-    const aiSnaps = pageDocs.length
-      ? await db
-          .getAll(
-            ...pageDocs.map((docSnap) =>
-              docSnap.ref.collection('assistUsage').doc(aiMonth),
-            ),
-          )
-          .catch(() => [] as FirebaseFirestore.DocumentSnapshot[])
-      : []
-    const aiSpendByOrgId = new Map<string, number>()
-    aiSnaps.forEach((snap, index) => {
-      if (!snap?.exists || typeof snap.get !== 'function') return
-      const cost = Number(snap.get('estCostUsd') ?? 0)
-      if (Number.isFinite(cost)) aiSpendByOrgId.set(pageDocs[index].id, cost)
-    })
     const orgs = pageDocs.map((docSnap) => {
       const data = docSnap.data()
       const subscription =
@@ -240,8 +212,6 @@ async function handler(request: Request): Promise<Response> {
             }
           : null,
         createdAt: ts(data['createdAt']),
-        // Null when there is no month document — see the read above.
-        aiSpendUsd: aiSpendByOrgId.get(docSnap.id) ?? null,
         suspendedAt: ts(data['suspendedAt']),
         suspendedReason: data['suspendedReason'] ?? null,
         // Lockdown-core fields (AGL-1501/1505): the suspend dialog prefills

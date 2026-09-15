@@ -71,8 +71,8 @@ jest.mock('@aglyn/tenant-data-admin/server/id-token-refusal', () => ({
 jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   __esModule: true,
   getOrgForUser: (...args: unknown[]) => mockGetOrgForUser(...args),
-  memberHasAiPermission: (...args: unknown[]) => mockHasAiPermission(...args),
-  aiPermissionRefusal: (permission: string) =>
+  memberHasPermissionOnHost: (...args: unknown[]) => mockHasAiPermission(...args),
+  permissionRefusal: (permission: string) =>
     Response.json(
       { error: `Your role does not include ${permission}`, reason: 'permission', permission },
       { status: 403 },

@@ -30,13 +30,13 @@ import { aiAllotmentRefusalText } from '../model/ai-allotments'
 import { resolveAiModelChoice } from '../providers/model-choice'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import {
-  aiPermissionRefusal,
+  permissionRefusal,
   checkRateLimit,
   featureLockdownRefusal,
   firebaseAdmin,
   getOrgForUser,
   lockdownRefusal,
-  memberHasAiPermission,
+  memberHasPermissionOnHost,
   rateLimitHeaders,
 } from '@aglyn/tenant-data-admin'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
@@ -280,9 +280,9 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     const permission = mode === 'section' ? 'ai.generate' : 'ai.use'
     if (
       !staff &&
-      !(await memberHasAiPermission(orgId, hostId, resolved.member, permission))
+      !(await memberHasPermissionOnHost(orgId, hostId, resolved.member, permission))
     ) {
-      return forwardRefusal(res, aiPermissionRefusal(permission))
+      return forwardRefusal(res, permissionRefusal(permission))
     }
 
     const entitled = checkEntitlement(org, 'aiAssist')

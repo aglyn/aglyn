@@ -61,6 +61,18 @@ abandoned by a frozen process is recovered — the stale lease is released by
 being taken, not by a sweep of its own. `heartbeatStep` extends a lease a long
 step still holds, and refuses once someone else has recovered it.
 
+## Tools a step may call
+
+A tool is a strict structured-output schema and the function that carries out
+the model's call, in `libs/plugins/ai/src/lib/tools/`. `duplicate_resource`
+(AGL-2984) copies a site resource through core's `duplicateResource` instead
+of rebuilding it: the same copy, band arithmetic and activity rows as the
+console's duplicate door, and a draft by construction. It calls no provider,
+so it is not a door of its own. It takes the calling door's `aiGateLadder`
+context as proof the ladder admitted the request — flag, entitlement,
+lockdown, rate, band and caps — and adds the two rungs a copy needs:
+`ai.generate`, and a host role that may write the site.
+
 ## Credits, per step
 
 `runAiJobStep` is the one place a step is claimed, metered, run and recorded,

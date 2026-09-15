@@ -36,12 +36,13 @@
 //
 // ## The allowlist, and why it may only shrink
 //
-// `ai-in-core-allowlist.json` names the files that still carry a vendor
-// literal while the last of the AI code moves (the subprocessor inventory
-// waits for a plugin-declared subprocessor seam). Each row names the file and the
-// reason; a row for a file that no longer trips the guard is itself a red,
-// so the list cannot outlive what it excuses, and a NEW file is refused
-// rather than recorded.
+// `ai-in-core-allowlist.json` names any file excused from the rule, with the
+// reason, and it is empty. The subprocessor inventory discloses a vendor's
+// host without writing it: the AI plugin declares that row through the
+// plugin-declared subprocessor seam, and the inventory folds in the generated
+// manifest, which this guard skips like every generated file. A row for a
+// file that no longer trips the guard is itself a red, so the list cannot
+// outlive what it excuses, and a NEW file is refused rather than recorded.
 //
 // Exit codes: 0 clean · 1 a literal or an import is where it may not be.
 
@@ -188,4 +189,4 @@ if (literals.length || imports.length || stale.length) {
   )
   process.exit(1)
 }
-console.log(`check:ai-in-core: clean (${corpus.length} source files, ${allowed.size} allowed while the move completes)`)
+console.log(`check:ai-in-core: clean (${corpus.length} source files, ${allowed.size} allowlisted)`)
