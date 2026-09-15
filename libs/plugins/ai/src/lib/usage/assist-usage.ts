@@ -59,7 +59,8 @@ import {
   type AssistMeteredOrg,
   type FreeAssistAccount,
 } from './assist-free-taste'
-import { recordUserAiUsage } from './ai-usage-by-user'
+import { aiTokenIncrements, recordUserAiUsage } from './ai-usage-by-user'
+import { AI_USAGE_MONTH_KINDS_FIELD, AI_USAGE_TOKENS_FIELD } from '../model/ai-tokens'
 import {
   aiUsageKindFromRoute,
   type AiUsageKind,
@@ -75,16 +76,17 @@ import {
  *   orgs/{orgId}/assistUsage/{YYYY-MM}     per-org monthly cost telemetry:
  *     { month, messages, inputTokens, outputTokens, cacheReadTokens,
  *       cacheWriteTokens, estCostUsd, byHost: { hostId: credits },
- *       updatedAt }
+ *       kinds: { kind: { requests, estCostUsd, tokens } }, updatedAt }
  *     (`byHost` is each site's credits, which a site's AI allotment is
- *     measured against — AGL-2942)
+ *     measured against — AGL-2942; `kinds` splits the tokens and the
+ *     measured spend by what each model request was for — AGL-2937)
  *   orgs/{orgId}/counters/assistMessagesDaily
  *     fields keyed YYYY-MM-DD → integer (the free-tier daily cap counter;
  *       same field-per-period shape as the other `counters/*` docs)
  *   orgs/{orgId}/assistExchanges/{id}      the VERBATIM half of one exchange:
  *     { uid, question, answer, hostId, createdAt, expiresAt }
  *   orgs/{orgId}/assistSignals/{id}        the DERIVED half, same id:
- *     { route, hostId, model, tier, inputTokens, outputTokens,
+ *     { route, hostId, model, tier, kind, inputTokens, outputTokens,
  *       cacheReadTokens, cacheWriteTokens, estCostUsd, docsPaths,
  *       stopReason, feedback: 'up'|'down'|null, createdAt }
  *
@@ -1017,6 +1019,8 @@ function writeSignalAndRollup(
   signalRef: FirebaseFirestore.DocumentReference,
   record: AssistSignalRecord,
   now: Date,
+  /** What the request was for, as the caller's own rollup names it. */
+  kind: AiUsageKind,
 ): void {
   const increment = FieldValue.increment
   const serverTimestamp = FieldValue.serverTimestamp
@@ -1044,6 +1048,7 @@ function writeSignalAndRollup(
     hostId: record.hostId,
     model: record.model,
     tier: record.tier,
+    kind,
     inputTokens: record.usage.inputTokens,
     outputTokens: record.usage.outputTokens,
     cacheReadTokens: record.usage.cacheReadTokens,
@@ -1089,6 +1094,21 @@ function writeSignalAndRollup(
       // over a map replaces the map with the operand.
       refusedTurns: increment(refusedFree ? 1 : 0),
       refusedCostUsd: increment(refusedFree ? estCostUsd : 0),
+      // What each model request was for, with its tokens (AGL-2937): cost
+      // per generation, tokens per kind and the cache hit rate are read off
+      // this map. A docs answer bought nothing and is left out, and the cost
+      // is the measured provider spend, a declined Free turn's included.
+      ...(deflected
+        ? {}
+        : {
+            [AI_USAGE_MONTH_KINDS_FIELD]: {
+              [kind]: {
+                requests: increment(1),
+                estCostUsd: increment(estCostUsd),
+                [AI_USAGE_TOKENS_FIELD]: aiTokenIncrements(record.usage),
+              },
+            },
+          }),
       ...(hostCredits > 0
         ? { [AI_HOST_CREDITS_FIELD]: { [hostId]: increment(hostCredits) } }
         : {}),
@@ -1153,7 +1173,8 @@ export async function recordAssistCost(
   const orgRef = firestore.collection('orgs').doc(orgId)
   const signalRef = orgRef.collection('assistSignals').doc()
   const batch = firestore.batch()
-  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now)
+  const kind = record.kind ?? aiUsageKindFromRoute(record.route)
+  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now, kind)
   // The person's month, on the SAME batch as the org's (AGL-2928), so the
   // two rollups commit together or not at all.
   recordUserAiUsage(batch, orgRef, {
@@ -1161,7 +1182,8 @@ export async function recordAssistCost(
     month: assistUsageMonth(now),
     estCostUsd: estimateAssistCostUsd(record.usage, record.model),
     hostId: record.hostId,
-    kind: record.kind ?? aiUsageKindFromRoute(record.route),
+    kind,
+    usage: record.usage,
   })
   await batch.commit()
   await announceFreeTurn(firestore, record, now)
@@ -1203,18 +1225,21 @@ export async function recordAssistExchange(
     createdAt: serverTimestamp(),
     expiresAt: assistExchangeExpiry(now),
   })
+  // A chat turn is an `assist` request whatever console route it was asked
+  // from — on the signal, the org's month and the asker's month alike.
+  const kind = record.kind ?? 'assist'
   // The analytic half plus the meters — the same writer `recordAssistCost`
   // uses, so the two assist entrypoints can never report different money for
   // the same tokens.
-  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now)
-  // And the asker's month, on the same batch (AGL-2928). A chat turn is an
-  // `assist` request whatever console route it was asked from.
+  writeSignalAndRollup(firestore, batch, orgRef, signalRef, record, now, kind)
+  // And the asker's month, on the same batch (AGL-2928).
   recordUserAiUsage(batch, orgRef, {
     uid: record.uid,
     month: assistUsageMonth(now),
     estCostUsd: estimateAssistCostUsd(record.usage, record.model),
     hostId: record.hostId,
-    kind: record.kind ?? 'assist',
+    kind,
+    usage: record.usage,
   })
   await batch.commit()
   await announceFreeTurn(firestore, record, now)

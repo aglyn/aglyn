@@ -666,6 +666,8 @@ export interface AiGenerationSpend {
   estCostUsd: number
   model: string
   stopReason: string | null
+  /** The thinking effort the requests asked for; `null` when they named none. */
+  effort: AiEffort | null
 }
 
 export type AiValidatedGeneration<T> =
@@ -768,6 +770,7 @@ export async function runValidatedGeneration(
     estCostUsd: 0,
     model,
     stopReason: null,
+    effort: input.effort ?? null,
   }
   let messages: AiMessage[] = [...input.messages]
   let violations: AiDoctrineViolation[] = []

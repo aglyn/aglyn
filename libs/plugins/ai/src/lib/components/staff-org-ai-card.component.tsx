@@ -41,6 +41,7 @@ import type {
   StaffOrgAiPool,
   StaffOrgAiRefusals,
   StaffOrgAiResponse,
+  StaffOrgAiTokens,
 } from '../usage/staff-org-ai'
 
 /**
@@ -63,6 +64,8 @@ import type {
  *  - **Refusals** — how often, and why, the gate said no this month.
  *  - **Jobs** and **Top users** — the generative and per-person halves,
  *    each of which says plainly when its rollup has nothing yet.
+ *  - **Tokens** — what each kind of request costs per request, what it
+ *    sends and generates, and how much of its prompt the cache served.
  *  - **Margin** — spend against what AI brings in, red when it is over.
  *  - **Actions** — where the override editor and the AI pause live.
  */
@@ -235,6 +238,62 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
   )
 }
 
+const tokenCount = (value: number): string => Math.round(value).toLocaleString()
+
+const rate = (value: number | null): string =>
+  value == null ? '—' : `${Math.round(value * 100)}%`
+
+/** The month's tokens, and what each kind of request spends of them (AGL-2937). */
+function TokensSection({ tokens }: { tokens: StaffOrgAiTokens }) {
+  const { total } = tokens
+  return (
+    <Stack spacing={1}>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <Typography variant="body2">
+          {`${tokenCount(total.input)} sent · ${tokenCount(total.cached)} read from cache · ${tokenCount(total.cacheWrite)} written to cache · ${tokenCount(total.output)} generated`}
+        </Typography>
+        <Chip
+          size="small"
+          color={tokens.cacheHitRate != null && tokens.cacheHitRate >= 0.5 ? 'success' : 'default'}
+          label={`cache hit rate ${rate(tokens.cacheHitRate)}`}
+        />
+      </Stack>
+      {tokens.kinds.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          {'No model requests recorded by kind this month.'}
+        </Typography>
+      ) : (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>{'Kind'}</TableCell>
+              <TableCell align="right">{'Requests'}</TableCell>
+              <TableCell align="right">{'Per request'}</TableCell>
+              <TableCell align="right">{'Sent'}</TableCell>
+              <TableCell align="right">{'From cache'}</TableCell>
+              <TableCell align="right">{'Generated'}</TableCell>
+              <TableCell align="right">{'Cache hit'}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {tokens.kinds.map((row) => (
+              <TableRow key={row.kind}>
+                <TableCell>{row.kind}</TableCell>
+                <TableCell align="right">{row.requests.toLocaleString()}</TableCell>
+                <TableCell align="right">{usd(row.costPerRequestUsd)}</TableCell>
+                <TableCell align="right">{tokenCount(row.tokens.input)}</TableCell>
+                <TableCell align="right">{tokenCount(row.tokens.cached)}</TableCell>
+                <TableCell align="right">{tokenCount(row.tokens.output)}</TableCell>
+                <TableCell align="right">{rate(row.cacheHitRate)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Stack>
+  )
+}
+
 const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
   const { data: user } = useUser()
   // Keyed on who is signed in, not on the user object's identity.
@@ -291,7 +350,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
       help={pluginDocsHelp('aiMonitoring', {
         anchor: '#the-ai-card',
         excerpt:
-          'The add-on, the credit pool and its parts, this month’s overage and refusals, generation jobs, the people spending the most, and the margin — for this organization.',
+          'The add-on, the credit pool and its parts, this month’s overage and refusals, generation jobs, tokens and the cache hit rate by kind, the people spending the most, and the margin — for this organization.',
       })}
       contentGutterX
       contentGutterY
@@ -391,6 +450,16 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
             </Typography>
             <JobsSection jobs={data.jobs} />
           </Stack>
+
+          {/* Tokens — absent from a route older than the card */}
+          {data.tokens ? (
+            <Stack spacing={0.5}>
+              <Typography variant="overline" color="text.secondary">
+                {`Tokens · ${data.month}`}
+              </Typography>
+              <TokensSection tokens={data.tokens} />
+            </Stack>
+          ) : null}
 
           {/* Top users */}
           <Stack spacing={0.5}>

@@ -44,7 +44,7 @@ export const DOCS_HELP_EXCERPTS = {
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
   aiAllotments: 'Give a member, a site collaborator or a whole site a monthly share of the workspace\'s AI credits, see your own usage while you work, and choose which model answers.',
   aiAssist: 'Generate and rewrite copy, and build whole sections, with AI inside the Besigner.',
-  aiMonitoring: 'How staff watch one organization\'s AI usage — the add-on, the credit pool, overage and refusals, generation jobs, the top spenders, the margin — and where those figures appear across the staff console.',
+  aiMonitoring: 'How staff watch one organization\'s AI usage — the add-on, credit pool, overage, refusals, jobs, tokens and cache hit rate, top spenders and margin — and where those figures appear across the staff console.',
   analytics: 'Built-in pageview analytics, the Traffic card and its growth figure, per-screen metrics, and average time on a screen.',
   animations: 'Add fade, slide and zoom motion to any element, stagger a row of cards, choose when it plays, and keep the page fast and accessible.',
   architectureMultiTenancy: 'How Aglyn organizes tenants — org workspaces, membership with per-site access, security rules, subdomains, and billing attribution.',

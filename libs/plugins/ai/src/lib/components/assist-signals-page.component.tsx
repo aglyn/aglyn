@@ -42,7 +42,11 @@ import type {
   AssistMiningReport,
   AssistSpendRow,
 } from '../usage/assist-signal-mining'
-import { costSplitRows, freeTasteRefusals } from '../usage/assist-signal-mining'
+import {
+  costSplitRows,
+  freeTasteRefusals,
+  kindTokenRows,
+} from '../usage/assist-signal-mining'
 
 /** The month leaderboard as the route serves it beside the report. */
 interface AssistSpendLeaderboard {
@@ -62,7 +66,7 @@ interface AssistSpendLeaderboard {
  * words that produced it". That is only true once something reads the corpus.
  * This is that something.
  *
- * Three panels, in the order the questions actually get asked:
+ * Four panels, in the order the questions actually get asked:
  *
  *  1. **Docs gaps** — cited pages ranked by thumbs-down, then volume. A page
  *     high on this list is being found and is not answering, which is a docs
@@ -77,6 +81,10 @@ interface AssistSpendLeaderboard {
  *     measures 1,030–1,190 tokens against Sonnet 5's 1,024-token minimum, so
  *     whether it caches is an empirical question the chat route could only
  *     pose, and this is the evidence.
+ *  4. **Tokens by kind** — what each kind of model request costs per
+ *     request, what it sends and generates, how much of its prompt the cache
+ *     served, and the p95 output its `max_tokens` is sized against
+ *     (AGL-2937).
  *
  * Read through `/api/ai/admin/signals` rather than Firestore directly.
  * `assistSignals` is absent from the rules file on purpose — default-deny for
@@ -264,6 +272,8 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
   // The month's spend leaderboard (AGL-2930), likewise served beside the
   // report: it reads the month documents, which the miner never sees.
   const spend = ((report as any)?.spend ?? null) as AssistSpendLeaderboard | null
+  // Absent from a route older than the page, which reads as no kinds.
+  const kindRows = totals?.byKind ? kindTokenRows(totals.byKind) : []
 
   return (
     <Stack spacing={3}>
@@ -537,6 +547,67 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
             />
           </Stack>
         )}
+      </CardDisplay>
+
+      {/*
+        * TOKENS BY KIND (AGL-2937): what a kind of request costs and weighs,
+        * and the p95 output its `max_tokens` is sized against. Model turns
+        * only — a docs answer has no tokens to split.
+        */}
+      <CardDisplay
+        header={'Tokens by kind'}
+        help={pluginDocsHelp('assistSignals', { anchor: '#tokens-by-kind' })}
+        contentGutterX
+        contentGutterY
+      >
+        <Typography variant="body2" color="text.secondary" gutterBottom>
+          What each kind of model request costs per request, what its prompts
+          and answers weigh, how much of its prompt the cache served, and the
+          answer size 95 of every 100 requests stayed within — the figure its
+          output ceiling is sized against.
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Kind</TableCell>
+              <TableCell align="right">Requests</TableCell>
+              <TableCell align="right">Per request</TableCell>
+              <TableCell align="right">In</TableCell>
+              <TableCell align="right">Cache reads</TableCell>
+              <TableCell align="right">Cache writes</TableCell>
+              <TableCell align="right">Out</TableCell>
+              <TableCell align="right">p95 out</TableCell>
+              <TableCell align="right">Cache hit</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {!kindRows.length ? (
+              <TableRow>
+                <TableCell colSpan={9}>
+                  <Typography variant="body2" color="text.secondary">
+                    No model turns in this sample.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              kindRows.map((row) => (
+                <TableRow key={row.kind}>
+                  <TableCell>{row.kind}</TableCell>
+                  <TableCell align="right">{row.messages.toLocaleString()}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
+                    {money(row.messages ? row.estCostUsd / row.messages : 0)}
+                  </TableCell>
+                  <TableCell align="right">{row.inputTokens.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.cacheReadTokens.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.cacheWriteTokens.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.outputTokens.toLocaleString()}</TableCell>
+                  <TableCell align="right">{row.outputP95.toLocaleString()}</TableCell>
+                  <TableCell align="right">{percent(row.cacheHitRate)}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </CardDisplay>
 
       <CardDisplay

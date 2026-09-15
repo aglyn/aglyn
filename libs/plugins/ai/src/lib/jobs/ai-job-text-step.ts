@@ -24,7 +24,7 @@ import type {
 } from '../model/ai-jobs.types'
 import type { AiStepKind } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
-import { runAiRequest, type AiSystemBlock } from '../runtime/ai-runtime'
+import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
 
 /**
@@ -72,6 +72,11 @@ export interface AiJobStepOutcome {
   estCostUsd: number
   model: string
   stopReason: string | null
+  /**
+   * The thinking effort the request asked for, recorded on the step
+   * (AGL-2937); absent or `null` when the request named none.
+   */
+  effort?: AiEffort | null
   /** The model declined the brief (`stop_reason: 'refusal'`). Tokens were spent. */
   refused?: boolean
   /**

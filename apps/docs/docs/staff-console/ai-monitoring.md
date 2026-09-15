@@ -1,7 +1,7 @@
 ---
 sidebar_position: 14
 title: AI monitoring
-description: How staff watch one organization's AI usage — the add-on, the credit pool, overage and refusals, generation jobs, the top spenders, the margin — and where those figures appear across the staff console.
+description: How staff watch one organization's AI usage — the add-on, credit pool, overage, refusals, jobs, tokens and cache hit rate, top spenders and margin — and where those figures appear across the staff console.
 ---
 
 # AI monitoring
@@ -59,6 +59,18 @@ month this shipped.
 this month, and the last ten with their kind, credits used against reserved,
 status and who started them. An organization that has never run a job reads
 as having none; a read that failed says so instead.
+
+**Tokens.** This month's tokens as the provider counts them — sent, read from
+the prompt cache, written to it, and generated — with the **cache hit rate**:
+the share of prompt tokens the cache served, out of everything the prompts
+were billed as. Cache writes count against it, because a prompt prefix that
+expires and is written again every other request costs more than one never
+cached. Below that, one row per kind of request — the assistant, a Besigner
+copy mode, each generation job kind — with its requests, the provider cost
+**per request**, its tokens and its own cache hit rate. A request is one
+metered model call, so a generation job that plans and then builds counts
+two, and a question answered from the docs counts none. A month recorded
+before kinds were kept shows its totals and no rows.
 
 **Top users this month.** The ten people who drew the most, by credits — named
 from the roster, with their share of the organization's spend, provider

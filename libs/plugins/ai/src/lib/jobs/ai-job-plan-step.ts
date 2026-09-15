@@ -140,6 +140,7 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       estCostUsd: result.estCostUsd,
       model: result.model,
       stopReason: result.stopReason,
+      ...(result.effort ? { effort: result.effort } : {}),
     }
     if (result.status === 'refused') return { ...spent, refused: true }
     if (result.status === 'needs_input') {

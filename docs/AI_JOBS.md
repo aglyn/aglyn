@@ -107,6 +107,37 @@ no room for its draft, hands its message back the same way.
 A step runner writes drafts and returns. It does not touch the job document,
 the meter or the lease.
 
+## Tokens, per step and per kind
+
+What generation costs in tokens is measured beside what it costs in credits
+(AGL-2937), in the four counts the meter prices, under one set of names
+(`src/lib/model/ai-tokens.ts`).
+
+- **On the step.** `steps[].tokens` holds `input`, `cachedRead`,
+  `cacheWrite` and `output`, the `model` and thinking `effort` of the last
+  run, `latencyMs` (time in the runner) and `runs`, summed over every run of
+  the step that reached the provider (`addAiJobStepTokens`). `runAiJobStep`
+  times the runner and hands the outcome's usage to `recordStep`; a runner
+  reports the `effort` it asked for, which `runValidatedGeneration` returns
+  on its spend. A step that failed before the provider records none.
+- **On the org month.** `assistUsage/{month}.kinds.{kind}` holds `requests`,
+  `estCostUsd` and `tokens.{input,cached,cacheWrite,output}` for every metered
+  model request, keyed by its `AiUsageKind` — a job step by its job's kind.
+  A docs answer is not a request. `estCostUsd` there is the measured provider
+  spend, a declined Free turn included, where the month's top-level
+  `estCostUsd` is the credited spend; the month's `inputTokens` …
+  `cacheWriteTokens` stay its totals.
+- **On the person's month.** `aiUsageByUser/{uid}/months/{month}.tokens`, the
+  same four counts beside `estCostUsd`, written on the org rollup's batch.
+- **On the signal.** `assistSignals/{id}.kind`, so the fleet board splits
+  tokens by kind. A signal written before it is read by its route.
+- **Where staff read them.** The staff AI card (`composeStaffOrgAiTokens` in
+  `src/lib/usage/staff-org-ai.ts`) and the Assist signal board's *Tokens by
+  kind* panel (`src/lib/usage/assist-signal-mining.ts`), which adds the
+  95th-percentile output a kind's `max_tokens` is sized against. The cache
+  hit rate is `aiCacheHitRate`: reads over everything the prompt was billed
+  as, cache writes included.
+
 ## Planning, and a job that waits for a person
 
 A job whose kind builds site structure (`AI_PLANNED_JOB_KINDS`: page, site,

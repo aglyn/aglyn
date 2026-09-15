@@ -45,7 +45,7 @@ export const PLUGIN_DOCS = {
   aiMonitoring: {
     path: '/staff-console/ai-monitoring',
     title: 'AI monitoring',
-    excerpt: 'How staff watch one organization\'s AI usage — the add-on, the credit pool, overage and refusals, generation jobs, the top spenders, the margin — and where those figures appear across the staff console.',
+    excerpt: 'How staff watch one organization\'s AI usage — the add-on, credit pool, overage, refusals, jobs, tokens and cache hit rate, top spenders and margin — and where those figures appear across the staff console.',
   },
   aiSeo: {
     path: '/building-sites/seo/seo-by-ai',
@@ -242,7 +242,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiMonitoring: ['#the-ai-card', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#audit-the-whole-site', '#target-keywords', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   aiThemes: ['#change-what-you-describe-or-design-a-new-theme', '#match-your-brand', '#review-the-proposal', '#save-it-or-dont', '#who-can-use-it', '#related'],
-  assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
+  assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#tokens-by-kind', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
   billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#billing-email', '#payment-methods', '#billing-address', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#site-details', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#booking-from-the-crm', '#canceling-and-refunding', '#related'],

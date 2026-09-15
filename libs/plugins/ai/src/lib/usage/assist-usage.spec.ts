@@ -2294,3 +2294,80 @@ describe('AI allotments sit inside the band (AGL-2942)', () => {
     })
   })
 })
+
+describe('tokens by kind on the month, on the signal and on the person’s month (AGL-2937)', () => {
+  const orgMonthPath = `orgs/${ORG}/assistUsage/2026-08`
+  const usage = { inputTokens: 1_200, outputTokens: 300, cacheReadTokens: 3_000, cacheWriteTokens: 400 }
+  const cost = estimateAssistCostUsd(usage, 'claude-sonnet-5')
+  const step = {
+    route: 'ai/jobs',
+    hostId: 'host-1',
+    model: 'claude-sonnet-5',
+    tier: 'entitled' as const,
+    usage,
+    docsPaths: [],
+    stopReason: 'tool_use',
+    uid: 'member-1',
+    kind: 'page' as const,
+  }
+
+  it('splits each model request’s tokens and measured cost by kind, and leaves a docs answer out', async () => {
+    await recordAssistCost(firestore(), ORG, step, NOW)
+    await recordAssistCost(firestore(), ORG, step, NOW)
+    await recordAssistExchange(
+      firestore(),
+      ORG,
+      {
+        route: '/acme/hosts',
+        hostId: null,
+        model: 'docs-retrieval',
+        tier: 'entitled',
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        docsPaths: ['/building-sites/publish'],
+        stopReason: null,
+        deflected: true,
+        uid: 'member-1',
+        question: 'How do I publish?',
+        answer: 'Press Publish.',
+      },
+      NOW,
+    )
+    const month = mockDocs.get(orgMonthPath)
+    expect(month?.['kinds']).toEqual({
+      page: {
+        requests: 2,
+        estCostUsd: cost * 2,
+        tokens: { input: 2_400, cached: 6_000, cacheWrite: 800, output: 600 },
+      },
+    })
+    // The month's own totals keep counting every request, as they always did.
+    expect(month).toMatchObject({
+      inputTokens: 2_400,
+      cacheReadTokens: 6_000,
+      cacheWriteTokens: 800,
+      outputTokens: 600,
+    })
+  })
+
+  it('names the kind on the signal, and adds the tokens to the person’s month', async () => {
+    await recordAssistCost(firestore(), ORG, step, NOW)
+    const signals = [...mockDocs.entries()]
+      .filter(([path]) => path.includes('/assistSignals/'))
+      .map(([, data]) => data)
+    expect(signals).toEqual([expect.objectContaining({ kind: 'page', route: 'ai/jobs' })])
+    expect(mockDocs.get(`orgs/${ORG}/aiUsageByUser/member-1/months/2026-08`)).toMatchObject({
+      estCostUsd: cost,
+      tokens: { input: 1_200, cached: 3_000, cacheWrite: 400, output: 300 },
+    })
+  })
+
+  it('reads a chat turn as assist, whatever route it was asked from', async () => {
+    await recordAssistExchange(
+      firestore(),
+      ORG,
+      { ...step, route: '/acme/hosts/host-1/besigner', kind: undefined, question: 'q', answer: 'a' },
+      NOW,
+    )
+    expect(mockDocs.get(orgMonthPath)?.['kinds']).toMatchObject({ assist: { requests: 1 } })
+  })
+})

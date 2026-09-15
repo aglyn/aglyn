@@ -39,6 +39,7 @@ import {
   type AiJobReview,
   type AiJobStatus,
   type AiJobStep,
+  type AiJobStepTokens,
   type AiJobSummary,
 } from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -53,7 +54,12 @@ import {
   logAiJobOutput,
   type AiActivityActor,
 } from '../activity/ai-activity'
-import { AI_UPSTREAM_FAILURE_COPY, AiUpstreamError } from '../runtime/ai-runtime'
+import {
+  AI_UPSTREAM_FAILURE_COPY,
+  AiUpstreamError,
+  type AiEffort,
+  type AiUsage,
+} from '../runtime/ai-runtime'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import {
   runAiJobTextStep,
@@ -550,6 +556,40 @@ export interface RecordStepInput {
    * attempts count again from zero and its passes by one.
    */
   continued?: boolean
+  /** What the run cost in tokens and time (AGL-2937), added to the step's totals. */
+  tokens?: AiJobStepTokenRun
+}
+
+/** One run of a step's runner, as the machine measured it (AGL-2937). */
+export interface AiJobStepTokenRun {
+  usage: AiUsage
+  model: string
+  effort: AiEffort | null
+  latencyMs: number
+}
+
+/**
+ * A step's measure with one more run added: the four counts and the time
+ * summed, the model and effort taken from the run.
+ */
+export function addAiJobStepTokens(
+  current: AiJobStepTokens | null | undefined,
+  run: AiJobStepTokenRun,
+): AiJobStepTokens {
+  const count = (value: unknown): number => {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
+  }
+  return {
+    input: count(current?.input) + count(run.usage.inputTokens),
+    cachedRead: count(current?.cachedRead) + count(run.usage.cacheReadTokens),
+    cacheWrite: count(current?.cacheWrite) + count(run.usage.cacheWriteTokens),
+    output: count(current?.output) + count(run.usage.outputTokens),
+    model: run.model || current?.model || null,
+    effort: run.effort ?? null,
+    latencyMs: count(current?.latencyMs) + count(run.latencyMs),
+    runs: count(current?.runs) + 1,
+  }
 }
 
 export interface RecordedStep {
@@ -594,6 +634,7 @@ export async function recordStep(
             ...(input.continued && input.status === 'pending'
               ? { attempts: 0, passes: (step.passes ?? 0) + 1 }
               : {}),
+            ...(input.tokens ? { tokens: addAiJobStepTokens(step.tokens, input.tokens) } : {}),
           }
         : step,
     )
@@ -1122,6 +1163,9 @@ export async function runAiJobStep(
     resolveAiModelChoice(kind, job.model ?? null, bounds)?.model
 
   let outcome: AiJobStepOutcome
+  // The runner's wall-clock time, recorded on the step beside its tokens
+  // (AGL-2937): measured here, around the call, rather than asked of it.
+  const runStarted = Date.now()
   try {
     outcome = await runner({
       job, stepIndex, now, signal: options.signal, firestore, org, modelFor,
@@ -1153,6 +1197,8 @@ export async function runAiJobStep(
     }
   }
 
+  const latencyMs = Math.max(0, Date.now() - runStarted)
+
   // A step that failed before it reached the provider — the site it builds
   // from could not be read, say (AGL-2938) — spent nothing: its message goes
   // back and nothing is metered, exactly as for a request the provider
@@ -1173,6 +1219,13 @@ export async function runAiJobStep(
         error: `step failure before the provider: ${outcome.failure}`,
       }, now),
     }
+  }
+
+  const tokens: AiJobStepTokenRun = {
+    usage: outcome.usage,
+    model: outcome.model,
+    effort: outcome.effort ?? null,
+    latencyMs,
   }
 
   // A step that stopped before the provider without failing — a site with no
@@ -1223,7 +1276,7 @@ export async function runAiJobStep(
     const message = outcome.refused ? AI_JOB_REFUSED_COPY : (outcome.failure as string)
     await recordStep(
       firestore, orgId, jobId, options.owner, stepIndex,
-      { status: 'failed', creditsSpent: credits, error: message },
+      { status: 'failed', creditsSpent: credits, error: message, tokens },
       now,
     )
     return {
@@ -1258,6 +1311,8 @@ export async function runAiJobStep(
       status: continuing || (review && review.reason !== 'plan') ? 'pending' : 'done',
       ...(continuing ? { continued: true } : {}),
       creditsSpent: credits,
+      // A step that spent nothing ran no model, so it adds no run to the measure.
+      ...(spentNothing ? {} : { tokens }),
       outputs: outcome.outputs,
       ...(outcome.plan ? { plan: outcome.plan } : {}),
       ...(review ? { review } : {}),

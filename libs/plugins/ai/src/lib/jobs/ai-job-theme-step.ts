@@ -357,11 +357,12 @@ export const runAiJobThemeStep: AiJobStepRunner = async ({
     ...(signal ? { signal } : {}),
     check: checkThemeAnswer,
   })
-  const spent: Pick<AiJobStepOutcome, 'usage' | 'estCostUsd' | 'model' | 'stopReason'> = {
+  const spent: Pick<AiJobStepOutcome, 'usage' | 'estCostUsd' | 'model' | 'stopReason' | 'effort'> = {
     usage: generation.usage,
     estCostUsd: generation.estCostUsd,
     model: generation.model,
     stopReason: generation.stopReason,
+    ...(generation.effort ? { effort: generation.effort } : {}),
   }
   if (generation.status === 'refused') return { outputs: [], ...spent, refused: true }
   if (generation.status === 'needs_input') {

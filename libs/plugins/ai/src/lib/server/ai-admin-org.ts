@@ -44,6 +44,7 @@ import {
   composeStaffOrgAiMargin,
   composeStaffOrgAiOverage,
   composeStaffOrgAiPool,
+  composeStaffOrgAiTokens,
   emptyJobCounts,
   STAFF_ORG_AI_JOB_STATUSES,
   type StaffOrgAiAddon,
@@ -402,6 +403,7 @@ async function handler(request: Request): Promise<Response> {
       jobs,
       users,
       margin,
+      tokens: composeStaffOrgAiTokens(monthDoc),
     }
     return Response.json(body, { status: 200 })
   } catch (error) {

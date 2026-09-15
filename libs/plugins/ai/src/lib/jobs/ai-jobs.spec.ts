@@ -220,6 +220,7 @@ import {
   AI_JOB_STEP_MAX_ATTEMPTS,
   AI_JOB_STEP_MAX_PASSES,
   AI_JOB_STEP_RESERVE_CREDITS,
+  addAiJobStepTokens,
   aiJobRefusalText,
   aiJobStepNames,
   aiJobStepRunnerFor,
@@ -1387,5 +1388,60 @@ describe('planned kinds, and a job that waits for a person (AGL-2935)', () => {
     const job = await newTextJob()
     expect((await resumeAiJob(firestore, ORG, job.$id, { uid: 'uid-1' }, NOW)).changed).toBe(false)
     expect((await getAiJob(firestore, ORG, job.$id))?.status).toBe('queued')
+  })
+})
+
+describe('a step’s tokens (AGL-2937)', () => {
+  it('records the four counts, the model, the effort and the runner’s time on the step it ran', async () => {
+    armCompletion()
+    const job = await newTextJob()
+    await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    const tokens = (await getAiJob(firestore, ORG, job.$id))?.steps[0].tokens
+    expect(tokens).toMatchObject({
+      input: 1_000,
+      cachedRead: 0,
+      cacheWrite: 0,
+      output: 200,
+      model: mockRunAiRequest.mock.calls[0][0].model,
+      // The text step names no thinking effort.
+      effort: null,
+      runs: 1,
+    })
+    expect(tokens?.latencyMs).toEqual(expect.any(Number))
+    expect(tokens?.latencyMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('records nothing for a run that never reached the provider', async () => {
+    mockRunAiRequest.mockRejectedValue(new AiUpstreamError(529, true, 'req-1'))
+    const job = await newTextJob()
+    const run = await runAiJobStep(firestore, ORG, job.$id, { owner: 'route-1', now: NOW })
+    expect(run.outcome).toBe('requeued')
+    expect((await getAiJob(firestore, ORG, job.$id))?.steps[0].tokens).toBeUndefined()
+  })
+
+  it('sums a second run into the first, and keeps the last run’s model and effort', () => {
+    const first = addAiJobStepTokens(undefined, {
+      usage: { inputTokens: 900, outputTokens: 400, cacheReadTokens: 3_000, cacheWriteTokens: 3_400 },
+      model: 'model-a',
+      effort: 'high',
+      latencyMs: 4_200,
+    })
+    expect(
+      addAiJobStepTokens(first, {
+        usage: { inputTokens: 1_000, outputTokens: 350, cacheReadTokens: 6_400, cacheWriteTokens: 0 },
+        model: 'model-b',
+        effort: null,
+        latencyMs: 3_800,
+      }),
+    ).toEqual({
+      input: 1_900,
+      cachedRead: 9_400,
+      cacheWrite: 3_400,
+      output: 750,
+      model: 'model-b',
+      effort: null,
+      latencyMs: 8_000,
+      runs: 2,
+    })
   })
 })

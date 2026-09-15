@@ -39,6 +39,13 @@ import {
   type DiscountMarginRating,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AssistRefusalCounts } from './assist-refusals'
+import {
+  AI_USAGE_MONTH_KINDS_FIELD,
+  aiCacheHitRate,
+  readAiKindMonths,
+  type AiKindMonth,
+  type AiTokenTotals,
+} from '../model/ai-tokens'
 
 /**
  * THE STAFF AI CARD'S FIGURES (AGL-2930), composed from the same helpers the
@@ -177,6 +184,23 @@ export interface StaffOrgAiUser {
   byHost: Record<string, number>
 }
 
+/** One kind of model request this month, as the card lists it (AGL-2937). */
+export interface StaffOrgAiKindTokens extends AiKindMonth {
+  /** Measured provider spend per request of this kind; `null` with none. */
+  costPerRequestUsd: number | null
+  /** The share of this kind's prompt tokens the cache served — `aiCacheHitRate`. */
+  cacheHitRate: number | null
+}
+
+/** The month's tokens (AGL-2937): its totals, its cache hit rate, and each kind. */
+export interface StaffOrgAiTokens {
+  /** The month document's own four totals. */
+  total: AiTokenTotals
+  cacheHitRate: number | null
+  /** Dearest first; empty for a month written before kinds were kept. */
+  kinds: StaffOrgAiKindTokens[]
+}
+
 export interface StaffOrgAiResponse {
   month: string
   addon: StaffOrgAiAddon
@@ -188,6 +212,8 @@ export interface StaffOrgAiResponse {
   /** The dearest people this month; empty when nobody's month is written. */
   users: StaffOrgAiUser[]
   margin: StaffOrgAiMargin
+  /** Tokens by kind (AGL-2937); absent from a route older than the card. */
+  tokens?: StaffOrgAiTokens
 }
 
 const finite = (value: unknown): number => {
@@ -255,6 +281,32 @@ export function composeStaffOrgAiPool(
     projectedUsd: assistUsdFromCredits(projectedCredits),
     messages: Math.floor(finite(monthDoc?.['messages'])),
     deflected: Math.floor(finite(monthDoc?.['deflected'])),
+  }
+}
+
+/**
+ * The month's tokens as the card reads them: the totals the month document
+ * has always kept, and its `kinds` map (`model/ai-tokens.ts`) with the cost
+ * per request and the cache hit rate worked out per kind.
+ */
+export function composeStaffOrgAiTokens(
+  monthDoc: Record<string, unknown> | null | undefined,
+): StaffOrgAiTokens {
+  const total: AiTokenTotals = {
+    input: Math.floor(finite(monthDoc?.['inputTokens'])),
+    cached: Math.floor(finite(monthDoc?.['cacheReadTokens'])),
+    cacheWrite: Math.floor(finite(monthDoc?.['cacheWriteTokens'])),
+    output: Math.floor(finite(monthDoc?.['outputTokens'])),
+  }
+  return {
+    total,
+    cacheHitRate: aiCacheHitRate(total),
+    kinds: readAiKindMonths(monthDoc?.[AI_USAGE_MONTH_KINDS_FIELD]).map((row) => ({
+      ...row,
+      costPerRequestUsd:
+        row.requests > 0 ? Math.round((row.estCostUsd / row.requests) * 1_000_000) / 1_000_000 : null,
+      cacheHitRate: aiCacheHitRate(row.tokens),
+    })),
   }
 }
 

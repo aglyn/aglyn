@@ -16,6 +16,7 @@
  */
 
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
+import type { AiEffort } from '../providers/contract'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiBuildPlan } from './ai-build-plan'
 
@@ -145,6 +146,36 @@ export interface AiJobStep {
    * from zero after a pass; this count is what bounds the step.
    */
   passes?: number
+  /**
+   * What the step's model calls cost in tokens and time (AGL-2937), summed
+   * over every run that reached the provider. Absent on a step none has.
+   */
+  tokens?: AiJobStepTokens
+}
+
+/**
+ * A step's measure (AGL-2937): the four token counts the meter prices, the
+ * time spent in the runner, and the model and thinking effort of the last
+ * run. The machine writes it beside `creditsSpent`, so what a kind of step
+ * costs in tokens is read off the job rather than inferred from the month.
+ */
+export interface AiJobStepTokens {
+  /** Prompt tokens sent uncached. */
+  input: number
+  /** Prompt tokens read from the prompt cache. */
+  cachedRead: number
+  /** Prompt tokens written to the prompt cache. */
+  cacheWrite: number
+  /** Tokens generated, thinking included. */
+  output: number
+  /** The model the last run was served by. */
+  model: string | null
+  /** The thinking effort the last run asked for; `null` when it named none. */
+  effort: AiEffort | null
+  /** Milliseconds spent in the runner, summed over runs. */
+  latencyMs: number
+  /** Runs that reached the provider. */
+  runs: number
 }
 
 export type AiJobOutputResource =

@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { aiCacheHitRate } from '../model/ai-tokens'
+import { aiUsageKindFromRoute } from '../model/ai-usage-by-user'
+
 /**
  * The read side of the Aglyn Assist data loop (AGL-1860, AGL-2252).
  *
@@ -64,6 +67,12 @@ export interface AssistSignalRow {
    */
   exchangeId: string
   route: string
+  /**
+   * What the turn was for, as the rollups name it (AGL-2937): `assist`, a
+   * besigner mode, or a job kind. A signal written before the field is read
+   * by its route, where a generation job's step reads as `job`.
+   */
+  kind?: string
   model: string
   tier: 'free' | 'entitled' | string
   inputTokens: number
@@ -148,6 +157,43 @@ export interface OrgCostRow {
 export interface CostSplit {
   messages: number
   estCostUsd: number
+}
+
+/** One kind of model turn, summed (AGL-2937) — see `totals.byKind`. */
+export interface KindTokenSplit {
+  messages: number
+  estCostUsd: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  /**
+   * The output 95 of every 100 turns of this kind stayed within, by nearest
+   * rank — the figure a kind's `max_tokens` is sized against.
+   */
+  outputP95: number
+  /** The share of this kind's prompt tokens the cache served — `aiCacheHitRate`. */
+  cacheHitRate: number | null
+}
+
+/** The kinds as the board lists them, dearest first. */
+export function kindTokenRows(
+  split: Record<string, KindTokenSplit>,
+): Array<KindTokenSplit & { kind: string }> {
+  return Object.entries(split)
+    .map(([kind, value]) => ({ kind, ...value }))
+    .sort(
+      (a, b) =>
+        b.estCostUsd - a.estCostUsd || b.messages - a.messages || a.kind.localeCompare(b.kind),
+    )
+}
+
+/** A sample's value at a percentile by nearest rank — always one that was seen; 0 for none. */
+export function nearestRankPercentile(values: readonly number[], percentile: number): number {
+  if (!values.length) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const rank = Math.min(sorted.length, Math.max(1, Math.ceil(percentile * sorted.length)))
+  return sorted[rank - 1]
 }
 
 /**
@@ -275,7 +321,11 @@ export interface AssistMiningReport {
      * and it must not be able to report a false alarm on an idle month.
      */
     deflectionRate: number | null
-    /** Share of billable prompt tokens served from cache, or null at zero. */
+    /**
+     * Share of prompt tokens served from cache — reads over everything the
+     * prompts were billed as, cache writes included (`aiCacheHitRate`) — or
+     * null at zero.
+     */
     cacheReadRate: number | null
     /**
      * Cost split by entitlement tier, then by model (AGL-2340).
@@ -291,6 +341,13 @@ export interface AssistMiningReport {
      */
     byTier: Record<string, CostSplit>
     byModel: Record<string, CostSplit>
+    /**
+     * Model turns split by what they were for (AGL-2937): cost, the four
+     * token counts, the p95 output and the cache hit rate of each kind. A
+     * turn answered with no model call has no tokens to split and is left
+     * out.
+     */
+    byKind: Record<string, KindTokenSplit>
     stopReasons: Record<string, number>
     feedback: { up: number; down: number; none: number }
   }
@@ -335,6 +392,14 @@ const number = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+/** A signal's kind: the field once it is written, else read off its route (AGL-2937). */
+function signalKind(data: Record<string, unknown>, route: string): string {
+  const kind = data['kind']
+  if (typeof kind === 'string' && kind) return kind
+  // A job step was metered under this route before its signal named the kind.
+  return route === 'ai/jobs' ? 'job' : aiUsageKindFromRoute(route)
+}
+
 /**
  * Normalize one raw signal document. Every field is defaulted, because a
  * signal written by an older build is still evidence and dropping it would
@@ -347,10 +412,12 @@ export function assistSignalRow(
 ): AssistSignalRow {
   const rawPaths = Array.isArray(data['docsPaths']) ? data['docsPaths'] : []
   const feedback = data['feedback']
+  const route = String(data['route'] ?? '')
   return {
     orgId,
     exchangeId,
-    route: String(data['route'] ?? ''),
+    route,
+    kind: signalKind(data, route),
     model: String(data['model'] ?? 'unknown'),
     tier: String(data['tier'] ?? 'unknown'),
     inputTokens: number(data['inputTokens']),
@@ -407,6 +474,7 @@ export function mineAssistSignals(
     cacheReadRate: null as number | null,
     byTier: {} as Record<string, CostSplit>,
     byModel: {} as Record<string, CostSplit>,
+    byKind: {} as Record<string, KindTokenSplit>,
     stopReasons: {} as Record<string, number>,
     feedback: { up: 0, down: 0, none: 0 },
   }
@@ -418,6 +486,10 @@ export function mineAssistSignals(
   const ungroundedRoutes = new Map<string, UngroundedRoute>()
   const orgs = new Map<string, OrgCostRow>()
   const proseCandidates: ProseCandidate[] = []
+  const kinds = new Map<
+    string,
+    Omit<KindTokenSplit, 'outputP95' | 'cacheHitRate'> & { outputs: number[] }
+  >()
   let ungroundedQuestions = 0
   let ungroundedDown = 0
 
@@ -431,6 +503,26 @@ export function mineAssistSignals(
     if (row.deflected) totals.deflected += 1
     addToSplit(totals.byTier, row.tier, row.estCostUsd)
     addToSplit(totals.byModel, row.model, row.estCostUsd)
+    if (!row.deflected) {
+      const kind = row.kind || 'unknown'
+      const bucket = kinds.get(kind) ?? {
+        messages: 0,
+        estCostUsd: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputs: [],
+      }
+      bucket.messages += 1
+      bucket.estCostUsd += row.estCostUsd
+      bucket.inputTokens += row.inputTokens
+      bucket.outputTokens += row.outputTokens
+      bucket.cacheReadTokens += row.cacheReadTokens
+      bucket.cacheWriteTokens += row.cacheWriteTokens
+      bucket.outputs.push(row.outputTokens)
+      kinds.set(kind, bucket)
+    }
     const stop = row.stopReason ?? 'none'
     totals.stopReasons[stop] = (totals.stopReasons[stop] ?? 0) + 1
     if (row.feedback === 'up') totals.feedback.up += 1
@@ -523,10 +615,22 @@ export function mineAssistSignals(
     return rank(a) - rank(b)
   })
 
-  const billablePrompt = totals.inputTokens + totals.cacheReadTokens
-  totals.cacheReadRate = billablePrompt
-    ? totals.cacheReadTokens / billablePrompt
-    : null
+  totals.cacheReadRate = aiCacheHitRate({
+    input: totals.inputTokens,
+    cached: totals.cacheReadTokens,
+    cacheWrite: totals.cacheWriteTokens,
+  })
+  for (const [kind, { outputs, ...bucket }] of kinds) {
+    totals.byKind[kind] = {
+      ...bucket,
+      outputP95: nearestRankPercentile(outputs, 0.95),
+      cacheHitRate: aiCacheHitRate({
+        input: bucket.inputTokens,
+        cached: bucket.cacheReadTokens,
+        cacheWrite: bucket.cacheWriteTokens,
+      }),
+    }
+  }
   totals.deflectionRate = totals.messages
     ? totals.deflected / totals.messages
     : null

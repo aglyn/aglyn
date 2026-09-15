@@ -29,6 +29,8 @@ import {
   type AiUsageByUserMonth,
   type AiUsageKind,
 } from '../model/ai-usage-by-user'
+import { AI_USAGE_TOKENS_FIELD } from '../model/ai-tokens'
+import type { AiUsage } from '../providers/contract'
 import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
 
 /**
@@ -38,6 +40,7 @@ import { assistCreditsFromUsd } from '@aglyn/aglyn/app-utils/assist-credits'
  *
  *   orgs/{orgId}/aiUsageByUser/{uid}/months/{YYYY-MM}
  *     { uid, month, credits, estCostUsd, requests, refusals,
+ *       tokens: { input, cached, cacheWrite, output },
  *       byKind: { kind: credits }, byHost: { hostId: credits },
  *       updatedAt, expiresAt }
  *
@@ -72,6 +75,22 @@ export interface RecordUserAiUsageInput {
   estCostUsd: number
   hostId: string | null | undefined
   kind: AiUsageKind
+  /** The request's four token counts (AGL-2937), added to the month's `tokens`. */
+  usage?: AiUsage
+}
+
+/**
+ * A request's four token counts as increments, under the names every rollup
+ * keeps them by (`model/ai-tokens.ts`).
+ */
+export function aiTokenIncrements(usage: AiUsage): Record<string, FirebaseFirestore.FieldValue> {
+  const increment = FieldValue.increment
+  return {
+    input: increment(usage.inputTokens),
+    cached: increment(usage.cacheReadTokens),
+    cacheWrite: increment(usage.cacheWriteTokens),
+    output: increment(usage.outputTokens),
+  }
 }
 
 export function userAiUsageMonthRef(
@@ -118,6 +137,7 @@ export function recordUserAiUsage(
       credits: increment(credits),
       estCostUsd: increment(estCostUsd),
       requests: increment(1),
+      ...(input.usage ? { [AI_USAGE_TOKENS_FIELD]: aiTokenIncrements(input.usage) } : {}),
       byKind: { [input.kind]: increment(credits) },
       ...(hostId ? { byHost: { [hostId]: increment(credits) } } : {}),
       updatedAt: FieldValue.serverTimestamp(),

@@ -122,7 +122,9 @@ import { GET } from '../server/ai-admin-signals'
 import {
   assistSignalRow,
   costSplitRows,
+  kindTokenRows,
   mineAssistSignals,
+  nearestRankPercentile,
   type AssistSignalRow,
 } from './assist-signal-mining'
 
@@ -254,8 +256,8 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
       cacheReadTokens: 1800,
     })
     expect(report.totals.estCostUsd).toBeCloseTo(0.071, 9)
-    // Cache-read rate over BILLABLE prompt tokens (fresh input + cache
-    // reads). This is the number that settles whether the assist system
+    // Cache-read rate over BILLABLE prompt tokens (fresh input, cache reads
+    // and cache writes; this fixture writes none). This is the number that settles whether the assist system
     // prefix is caching at all — it measures 1,030–1,190 tokens against
     // Sonnet 5's 1,024-token minimum, so a prefix under the line caches
     // silently not at all and the bill is the only evidence.
@@ -679,5 +681,51 @@ describe('the mined report states how tall each ranking was (AGL-2501)', () => {
     )
     expect(report.docsGaps).toHaveLength(4)
     expect(report.ranked.docsGaps).toBe(4)
+  })
+})
+
+describe('tokens by kind (AGL-2937)', () => {
+  it('splits model turns by kind with their cost, tokens, p95 output and cache hit rate, leaving docs answers out', () => {
+    const report = mineAssistSignals([
+      signal({ kind: 'page', estCostUsd: 0.2, inputTokens: 1_000, cacheReadTokens: 3_000, cacheWriteTokens: 1_000, outputTokens: 2_000 }),
+      signal({ kind: 'page', estCostUsd: 0.4, inputTokens: 1_000, cacheReadTokens: 3_000, cacheWriteTokens: 0, outputTokens: 6_000 }),
+      signal({ kind: 'assist', estCostUsd: 0.01, inputTokens: 100, cacheReadTokens: 900, outputTokens: 40 }),
+      signal({ kind: 'assist', deflected: true, model: 'docs-retrieval', estCostUsd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }),
+    ])
+    expect(report.totals.byKind['page']).toMatchObject({
+      messages: 2,
+      inputTokens: 2_000,
+      cacheReadTokens: 6_000,
+      cacheWriteTokens: 1_000,
+      outputTokens: 8_000,
+      outputP95: 6_000,
+    })
+    expect(report.totals.byKind['page'].estCostUsd).toBeCloseTo(0.6, 9)
+    expect(report.totals.byKind['page'].cacheHitRate).toBeCloseTo(6_000 / 9_000, 9)
+    // The docs answer bought nothing, so it has no tokens to split.
+    expect(report.totals.byKind['assist'].messages).toBe(1)
+    expect(kindTokenRows(report.totals.byKind).map((row) => row.kind)).toEqual(['page', 'assist'])
+  })
+
+  it('counts cache writes against the fleet cache-read rate', () => {
+    // A prefix written again as often as it is read: against fresh input and
+    // reads alone this reads as 67%, and it is the expensive month.
+    const report = mineAssistSignals([
+      signal({ inputTokens: 5_000, cacheReadTokens: 10_000, cacheWriteTokens: 10_000 }),
+    ])
+    expect(report.totals.cacheReadRate).toBeCloseTo(0.4, 9)
+  })
+
+  it('reads a signal written before the kind by its route', () => {
+    expect(assistSignalRow('org-1', 'ex-1', { route: '/api/ai/assist/element' }).kind).toBe('element')
+    expect(assistSignalRow('org-1', 'ex-1', { route: 'ai/jobs' }).kind).toBe('job')
+    expect(assistSignalRow('org-1', 'ex-1', { route: '/acme/hosts' }).kind).toBe('assist')
+    expect(assistSignalRow('org-1', 'ex-1', { route: 'ai/jobs', kind: 'theme' }).kind).toBe('theme')
+  })
+
+  it('takes the nearest rank, so a p95 is always a value that was seen', () => {
+    expect(nearestRankPercentile([], 0.95)).toBe(0)
+    expect(nearestRankPercentile([40], 0.95)).toBe(40)
+    expect(nearestRankPercentile(Array.from({ length: 20 }, (_, index) => (index + 1) * 100), 0.95)).toBe(1_900)
   })
 })

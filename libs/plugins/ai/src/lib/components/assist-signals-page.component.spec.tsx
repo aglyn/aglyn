@@ -475,3 +475,60 @@ describe('the board is the AI plugin\'s staff page, at the address it had (AGL-2
     )
   })
 })
+
+describe('tokens by kind (AGL-2937)', () => {
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('lists each kind with its cost per request, p95 output and cache hit rate, each in its own row', async () => {
+    serve(
+      report({
+        totals: {
+          byKind: {
+            assist: {
+              messages: 30,
+              estCostUsd: 0.3,
+              inputTokens: 1_000,
+              outputTokens: 500,
+              cacheReadTokens: 9_000,
+              cacheWriteTokens: 0,
+              outputP95: 40,
+              cacheHitRate: 0.9,
+            },
+            page: {
+              messages: 4,
+              estCostUsd: 2.2,
+              inputTokens: 2_000,
+              outputTokens: 9_000,
+              cacheReadTokens: 0,
+              cacheWriteTokens: 3_000,
+              outputP95: 4_100,
+              cacheHitRate: 0,
+            },
+          },
+        },
+      }),
+    )
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    const page = await rowFor('page')
+    expect(page.getByText('$0.5500')).toBeTruthy()
+    expect(page.getByText('4,100')).toBeTruthy()
+    expect(page.getByText('3,000')).toBeTruthy()
+    const assist = await rowFor('assist')
+    expect(assist.getByText('$0.0100')).toBeTruthy()
+    expect(assist.getByText('90%')).toBeTruthy()
+    // Dearest first.
+    const kinds = screen
+      .getAllByRole('row')
+      .map((row) => row.querySelector('td')?.textContent?.trim() ?? '')
+      .filter((label) => label === 'page' || label === 'assist')
+    expect(kinds).toEqual(['page', 'assist'])
+  })
+
+  it('says a sample with no kinds has no model turns, rather than drawing an empty grid', async () => {
+    serve(report())
+    render(<AssistSignalsPage basePath="/admin/assist-signals" />)
+    expect(await screen.findByText('No model turns in this sample.')).toBeTruthy()
+  })
+})
