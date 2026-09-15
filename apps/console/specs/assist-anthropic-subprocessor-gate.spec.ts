@@ -89,7 +89,7 @@ const KEY_READERS = new Map<string, string>([
 const AI_DOORS = new Map<string, string>([
   [
     'libs/plugins/ai/src/lib/server/assist-chat.ts',
-    'Aglyn Assist (AGL-1860) at /api/assist/chat: the customer question, a trailing window of the thread, and — on Pro+ — the current route, host and org name. Gated by `release_assist` AND a ready provider. The same URL, content and gates it had as the console route before it moved into the AI plugin (AGL-2939): a move, not a new flow, so /legal/subprocessors still describes it.',
+    'Aglyn Assist (AGL-1860) at /api/assist/chat: the customer question, a trailing window of the thread, and — on Pro+ — the current route, host and org name. Gated by `release_assist` AND a ready provider. The same URL, content and gates it had as the console route before it moved into the AI plugin (AGL-2939): a move, not a new flow, so /legal/subprocessors still describes it. Its edit rung (AGL-2906) sends one more kind of content, and only behind `release_ai_generative`, the `aiGenerative` entitlement, the caller’s `ai.generate` and the `ai-generate` lockdown key, on a versioned besigner route: an outline of the canvas the member has open — element ids, component ids, layer names, primitive setting values cut to 80 characters (400 for the selected element) and the selected element’s styles. That is site content of the document being edited, the kind the besigner copy assistant already sends; the flag’s own description says turning it on sends site content to Anthropic under the Assist disclosure, and restating the published row for generation is the decision AGL-2902 carries.',
   ],
   [
     'libs/plugins/ai/src/lib/server/ai-assist.ts',
@@ -146,6 +146,10 @@ const MENTIONS_ONLY = new Map<string, string>([
   [
     'libs/plugins/ai/src/lib/server/assist-chat.spec.ts',
     'Sets a fake key to exercise the 501 gate. It moved with the chat door into the AI plugin (AGL-2939); still a test double, not a flow.',
+  ],
+  [
+    'libs/plugins/ai/src/lib/server/assist-chat-edit-rung.spec.ts',
+    'Sets a fake key (`test-key`) so the chat door reaches its mocked provider on the edit rung (AGL-2906), and asserts on the request that fake receives — including that the canvas never reaches it below the rung. A test double, not a flow; the door it drives is the `assist-chat.ts` entry in `AI_DOORS`.',
   ],
   [
     'libs/plugins/ai/src/lib/server/ai-assist.spec.ts',

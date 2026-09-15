@@ -21,6 +21,12 @@ import {
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import {
+  SCREEN_SEO_TEXT_FIELDS,
+  SCREEN_SEO_TEXT_GUIDANCE,
+  screenSeoStageKey,
+  type ScreenSeoTextField,
+} from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   buildScreenRouteEntries,
@@ -179,6 +185,7 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -323,6 +330,34 @@ function BesignerPage(props) {
   const editingLiveVersion = Boolean(
     versionId && versionId === screenResult?.data?.versionId,
   )
+  /**
+   * The open screen as an editor session (AGL-2906): a plugin in a shell zone
+   * reads the selection and the live pointer, starts File ▸ New version's own
+   * flow, and stages the SEO text fields into Screen Properties — unsaved,
+   * and stored only by Save SEO. The record type is what keeps a field added
+   * to `SCREEN_SEO_TEXT_FIELDS` from shipping without a setter.
+   */
+  const seoFieldSetters = useMemo(() => {
+    const setters: Record<ScreenSeoTextField, (value: string) => void> = {
+      title: setSeoTitle,
+      description: setSeoDescription,
+    }
+    return Object.fromEntries(
+      SCREEN_SEO_TEXT_FIELDS.map((field) => [screenSeoStageKey(field), setters[field]]),
+    )
+  }, [])
+  useEditorSession({
+    documentKind: 'screen',
+    documentId: screenId,
+    versionId,
+    // Served, not merely pointed at: the pointer version of a screen the
+    // site routes. An unrouted screen's version reaches no visitor.
+    live: editingLiveVersion && Boolean(publishedPath),
+    selectedNodeId: () => Besigner.focus.getLastSelected()?.$id ?? null,
+    versionsActions,
+    fields: seoFieldSetters,
+    revealFields: () => setScreenDialog(true),
+  })
   const { doc: layoutResult } = useLayout({
     hostId,
     layoutId: layoutId ?? '-no-layout-',
@@ -2279,7 +2314,7 @@ function BesignerPage(props) {
                           ''
                         }
                         onChange={(e) => setSeoTitle(e.target.value)}
-                        helperText="The whole tab/search title, published verbatim (≤60 chars works best)"
+                        helperText={`The whole tab/search title, published verbatim (≤${SCREEN_SEO_TEXT_GUIDANCE.title} chars works best)`}
                       />
                       <TextField
                         size="small"
@@ -2292,7 +2327,7 @@ function BesignerPage(props) {
                           ''
                         }
                         onChange={(e) => setSeoDescription(e.target.value)}
-                        helperText="Search snippet / social share text (≤160 chars works best)"
+                        helperText={`Search snippet / social share text (≤${SCREEN_SEO_TEXT_GUIDANCE.description} chars works best)`}
                       />
                       {/* Social image (AGL-1337), shared with the screen detail page's
               SEO card so the two surfaces cannot drift (AGL-1368). */}

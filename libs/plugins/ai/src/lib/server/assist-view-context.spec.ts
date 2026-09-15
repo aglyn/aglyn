@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+import { ASSIST_EDIT_ACTION_ID, ASSIST_EDIT_TOOL_NAME } from '../model/assist-edit'
 import {
   ASSIST_ACTION_FENCE,
   ASSIST_VIEWS,
@@ -25,6 +26,7 @@ import {
   assertInertActions,
   describeView,
   extractAssistAction,
+  offeredActions,
   resolveAssistProposal,
   safeOrgFacts,
   sanitiseId,
@@ -153,8 +155,115 @@ describe('GUARD: page context never carries another org’s data or a secret', (
 })
 
 describe('GUARD: no write happens without an explicit confirm', () => {
-  it('every shipped action is inert — navigate-only, no write-capable field', () => {
+  it('every shipped action is inert below the edit rung — navigate-only, no write-capable field', () => {
     expect(assertInertActions()).toEqual([])
+    for (const view of ASSIST_VIEWS) {
+      expect(offeredActions(view, { edit: false }).some((action) => action.kind === 'edit')).toBe(false)
+    }
+  })
+
+  it('on the edit rung the one edit action is offered, on the besigner only, and it carries no destination', () => {
+    expect(assertInertActions(ASSIST_VIEWS, { edit: true })).toEqual([])
+    const besigner = describeView('/acme/hosts/h/screens/s/versions/v/besigner')
+    expect(offeredActions(besigner, { edit: true }).map((action) => action.id)).toEqual([
+      ASSIST_EDIT_ACTION_ID,
+    ])
+    expect(offeredActions(besigner, { edit: false })).toEqual([])
+    for (const view of ASSIST_VIEWS.filter((candidate) => candidate.key !== 'besigner')) {
+      expect(offeredActions(view, { edit: true }).some((action) => action.kind === 'edit')).toBe(false)
+    }
+  })
+
+  it('FORCED RED: an offer that forgets the rung hands a request below it an edit action', () => {
+    // The check reads the offer the doors decide with; a leaky one — every
+    // action to every request — is exactly the regression it exists for.
+    const leaky = (view: AssistView | null) => view?.actions ?? []
+    expect(assertInertActions(ASSIST_VIEWS, { edit: false }, leaky)).toEqual(
+      expect.arrayContaining([expect.stringContaining('did not clear the edit rung')]),
+    )
+  })
+
+  it('FORCED RED: an edit action carrying a destination or a write field is rejected, even on the rung', () => {
+    const rogue = [
+      {
+        key: 'rogue',
+        match: /^\/x$/,
+        screen: '',
+        plain: [],
+        technical: [],
+        actions: [
+          {
+            kind: 'edit',
+            id: 'rogue.edit',
+            label: 'x',
+            outcome: 'x',
+            documents: ['screen'],
+            route: '/[orgSlug]/billing',
+            endpoint: '/api/publish',
+          },
+        ],
+      },
+    ] as unknown as readonly AssistView[]
+    expect(assertInertActions(rogue, { edit: true })).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('carries "route"'),
+        expect.stringContaining('write-capable field "endpoint"'),
+      ]),
+    )
+  })
+
+  it('FORCED RED: a navigation carrying ops, or an edit on a document the rung does not open on, is rejected', () => {
+    const rogue = [
+      {
+        key: 'rogue',
+        match: /^\/x$/,
+        screen: '',
+        plain: [],
+        technical: [],
+        actions: [
+          {
+            id: 'rogue.nav',
+            label: 'x',
+            outcome: 'x',
+            route: '/[orgSlug]/team',
+            params: [],
+            prefill: false,
+            ops: [{ op: 'remove', nodeId: 'hero' }],
+          },
+          { kind: 'edit', id: 'rogue.email', label: 'x', outcome: 'x', documents: ['email'] },
+        ],
+      },
+    ] as unknown as readonly AssistView[]
+    expect(assertInertActions(rogue, { edit: true })).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('only an edit action carries ops'),
+        expect.stringContaining('does not open on'),
+      ]),
+    )
+  })
+
+  it('the edit action is never resolved as a navigation', () => {
+    const besigner = describeView('/acme/hosts/h/screens/s/versions/v/besigner')
+    expect(
+      resolveAssistProposal(JSON.stringify({ id: ASSIST_EDIT_ACTION_ID }), besigner, scope),
+    ).toBeNull()
+  })
+
+  it('the besigner screen block names the edit tool on the rung only, and stays tenant-agnostic', () => {
+    const below = viewScreenBlock(describeView('/acme/hosts/h1/screens/s/versions/v/besigner'))
+    expect(below).not.toContain(ASSIST_EDIT_TOOL_NAME)
+    expect(below).toContain('no proposable actions')
+    const onRung = viewScreenBlock(
+      describeView('/acme/hosts/h1/screens/s/versions/v/besigner'),
+      { edit: true },
+    )
+    expect(onRung).toContain(ASSIST_EDIT_TOOL_NAME)
+    expect(onRung).toContain(`id "${ASSIST_EDIT_ACTION_ID}"`)
+    expect(
+      viewScreenBlock(describeView('/beta-corp/hosts/h2/layouts/l/versions/w/besigner'), {
+        edit: true,
+      }),
+    ).toBe(onRung)
   })
 
   it('FORCED RED: an action carrying a write-capable field is rejected', () => {
@@ -457,9 +566,9 @@ describe('the registry stays honest', () => {
     }
   })
 
-  it('every action route is a template the registry itself can resolve', () => {
+  it('every navigation route is a template the registry itself can resolve', () => {
     for (const view of ASSIST_VIEWS) {
-      for (const action of view.actions) {
+      for (const action of view.actions.filter((candidate) => candidate.kind !== 'edit')) {
         const resolved = resolveAssistProposal(
           JSON.stringify({ id: action.id }),
           view,

@@ -317,3 +317,46 @@ what turns on its plan step; a generation runner reads the confirmed plan from
 `job.plan`. Kinds with more than one step extend `aiJobStepNames`. A runner
 that loads heavy modules registers a lazy wrapper, as `theme` does, so the
 machine stays light to load.
+
+## Assist edits in the Besigner
+
+Not a job, and deliberately so (AGL-2906): the chat door's edit rung proposes
+changes to the canvas a person has open, and that person applies them in
+their own editor. It keeps the jobs' rule that nothing generated is ever
+published, and goes one step further — the server writes no document at all.
+
+- **The rung.** `/api/assist/chat` opens it when the request carries a canvas
+  outline from a versioned besigner route (screen, component or layout), the
+  org has `aiGenerative`, `release_ai_generative` is on, the caller holds
+  `ai.generate` and the `ai-generate` switch is unlocked — `assistEditRung` in
+  `src/lib/server/assist-chat.ts`. Below it the request is answered as if no
+  canvas had been sent, and the outline is never parsed. On it, a question
+  that does not stand on its own is not answered from the docs, and no answer
+  is cached.
+- **The proposal.** The model is offered one strict tool,
+  `propose_canvas_edit` (`src/lib/server/assist-edit.ts`), whose ops are
+  `insertSubtree`, `updateProps`, `updateSx`, `move`, `remove`, `rename` and,
+  on a screen, `setSeo` — its field list is `SCREEN_SEO_TEXT_FIELDS`, the one
+  the Screen Properties form saves. The edit protocol and the palette catalog
+  ride a cached block per document kind; the outline rides a volatile one. The
+  tool call is held to the elements the outline described and to the palette
+  validators (`validateAiNodeTree`, `validateAiNodePatch`) in
+  `runValidatedGenerationStandIn`, a stand-in for the doctrine runtime's
+  `runValidatedGeneration`, and reaches the panel on `done` as `edit`
+  (`src/lib/model/assist-edit.ts`).
+- **The apply.** The card (`src/lib/components/assist-edit-card.component.tsx`)
+  applies nothing until the author presses Apply. `applyAssistEdit`
+  (`src/lib/components/assist-edit-canvas.ts`) re-checks every element against
+  the live canvas, then runs the ops through the canvas's own mutators inside
+  one `CanvasManager.batch` — one undo step, all or nothing — spreading the
+  props an element already has. A version the live site serves is refused, and
+  the card offers the editor's own new-version flow instead. The editor is
+  reached through the core editor-session seam
+  (`libs/aglyn/src/lib/plugin-manager/editor-sessions.ts`), which the screen,
+  component and layout besigner pages register with `useEditorSession`.
+- **The record.** After an apply the panel posts the op counts to
+  `POST /api/assist/edit-applied` (`src/lib/server/assist-edit-applied.ts`). It
+  writes one `ai.edit.applied` row to the site's activity log once it has
+  found the proposal on an exchange the same member had about the same
+  document — the signal's `editOps` count — and a second report for one
+  exchange writes nothing.

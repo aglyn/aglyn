@@ -24,10 +24,16 @@ the exact docs section and the console page where you do it.
 - **Offer to take you to the right page** (Pro plans and up) — when what you
   asked for starts somewhere else, it can show a card that opens that page for
   you. See [Offers to open a page](#offers-to-open-a-page).
+- **Propose edits in the Besigner** (with AI generation on your plan) — ask
+  for a change to the page, component or layout you have open, and it shows
+  exactly what would change before anything does. See
+  [Edits in the Besigner](#edits-in-the-besigner).
 
-Aglyn Assist answers and directs — it doesn't change anything in your
-workspace. It can't edit your site, publish, or update settings, so there's
-nothing it can do by accident; you stay in control of every change.
+Aglyn Assist answers and directs. It never saves, publishes or changes a
+setting on its own. The one thing it can change is the canvas you have open in
+the Besigner — and only when you apply a change it proposed, as unsaved edits
+you can undo — so there's nothing it can do by accident; you stay in control of
+every change.
 
 ![The Aglyn Assist panel header with its help tooltip open, linking to the documentation](/img/getting-started/assist-panel-help-tip.png)
 
@@ -56,10 +62,40 @@ normal screen, fill it in yourself, and press the button yourself — with all
 the usual permission checks in place. If you'd rather stay where you are,
 choose **No thanks** and the card goes away.
 
-This is deliberate. An assistant that could change your site by
-misunderstanding you would be a worse assistant, so it doesn't have that
-ability at all — not a setting that's switched off, but a capability it was
-never given.
+This is deliberate. A card that only opens a page cannot change your site by
+misunderstanding you, because it has no way to. The only changes the assistant
+can make are the [edits in the Besigner](#edits-in-the-besigner), and each of
+those waits for you to apply it.
+
+## Edits in the Besigner {#edits-in-the-besigner}
+
+With a page, a reusable component or a layout open in the Besigner, you can ask
+the assistant for a change: "make this hero darker", "add a testimonial band
+below", "point this button at the pricing page". When your plan includes AI
+generation — the
+[Aglyn AI add-on](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai),
+or the AI credits a Free workspace gets — it answers with a **Proposed change**
+card listing what would change: elements added, removed, moved or restyled,
+settings changed, and a page's search title or description filled in. Anything
+it could not match to your canvas is listed under **Left out**.
+
+- **Nothing changes until you apply.** **Apply as draft** puts the changes on
+  the open canvas as unsaved edits, all in one step, so a single **Undo** takes
+  the whole change back. Nothing is saved or published until you do that
+  yourself. A proposed search title or description is filled into
+  **Screen Properties**, where **Save SEO** stores it.
+- **The live version is never edited in place.** When the version open is the
+  one your live site shows, the card offers **Make a new version** instead —
+  the same **New version** you would use yourself. Once the new version opens,
+  the card offers **Apply as draft** there.
+- **Select the element you mean.** The assistant sees the element you have
+  selected, what surrounds it and the page's sections — not your whole site —
+  and it can only change elements it was shown. If the canvas changes before
+  you apply, the card says so and applies nothing.
+- **Who can use it.** Your role needs the **Generate with AI** permission (a
+  site collaborator needs it on that site). Asking uses AI credits like any
+  other assistant message; applying uses none. Each applied change is recorded
+  in the site's activity log under your name.
 
 ## Where an answer came from {#where-an-answer-came-from}
 

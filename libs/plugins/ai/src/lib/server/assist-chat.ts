@@ -64,10 +64,27 @@ import {
 import {
   composeDocsLinksAnswer,
   deflectToDocs,
+  questionStandsAlone,
   sectionLabel,
   sectionUrl,
 } from '@aglyn/aglyn/app-utils/docs-deflection'
 import {
+  ASSIST_EDIT_TOOL_NAME,
+  assistEditDocumentOf,
+  type AssistEditCanvasContext,
+  type AssistEditProposal,
+  type AssistEditTarget,
+} from '../model/assist-edit'
+import {
+  ASSIST_EDIT_MAX_OUTPUT_TOKENS,
+  assistEditTool,
+  editCanvasBlock,
+  editSelectionBlock,
+  parseAssistEditContext,
+  resolveAssistEdit,
+} from './assist-edit'
+import {
+  type AssistActionRung,
   describeView,
   extractAssistAction,
   finalAssistText,
@@ -147,6 +164,20 @@ import {
  * What "confident" means, and why a weak match escalates rather than hedges,
  * is in `docs-deflection.ts`; the measured share of realistic questions it
  * answers is asserted in `docs-deflection.spec.ts` rather than claimed here.
+ *
+ * ── The edit rung (AGL-2906) ──────────────────────────────────────────────
+ *
+ * On a versioned besigner route, a request that carries the canvas outline
+ * may also PROPOSE edits to it. `assistEditRung` opens the rung only for an
+ * org with `aiGenerative`, `release_ai_generative` on, a caller holding
+ * `ai.generate` and the `ai-generate` switch unlocked. On the rung the model
+ * is offered one strict tool, the edit protocol and the element catalog ride
+ * a third cached block, and the outline rides a volatile one; the tool call
+ * is validated into ops and sent on `done` as `edit`. An instruction there
+ * is not answered from the docs, and no answer is cached. The route still
+ * writes nothing but the exchange and the meters — the panel applies the ops
+ * in the author's editor, on confirm. Below the rung the request is answered
+ * exactly as it would be without a canvas, and the outline is never parsed.
  *
  * Capability tiers: entitled orgs (`aiAssist`, Pro+) get docs-grounded
  * answers PLUS page-context awareness (level 2 — the current route/host is
@@ -353,6 +384,12 @@ interface AssistRequestBody {
   context: { route: string; hostId: string; orgSlug: string } | null
   /** A catalog model the asker picked (AGL-2942), or `null` for Auto. */
   model: string | null
+  /**
+   * The canvas outline the panel sends from a besigner route (AGL-2906),
+   * unread until the edit rung is decided: `parseAssistEditContext` holds it
+   * to what may enter a prompt, and below the rung it is never parsed at all.
+   */
+  canvas: unknown
 }
 
 /** Validate + clamp the request body; null when structurally unusable. */
@@ -404,6 +441,7 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
     history,
     context,
     model: model && model !== AI_MODEL_AUTO ? model : null,
+    canvas: body.canvas ?? null,
   }
 }
 
@@ -470,6 +508,56 @@ export function assistScopeRefusal(
   return null
 }
 
+/** A request on the edit rung: the document it names and the canvas it described. */
+interface AssistEditRung {
+  target: AssistEditTarget
+  context: AssistEditCanvasContext
+}
+
+/**
+ * Whether this turn may PROPOSE edits to the open canvas (AGL-2906), and on
+ * what — or null, and the turn is answered exactly as it would be without a
+ * canvas.
+ *
+ * Every condition is the generation doors' own: the org's `aiGenerative`
+ * entitlement (the Free taste carries it until the wall, and the reservation
+ * below is still what refuses at the wall), `release_ai_generative` (a staff
+ * claim previews), the caller's `ai.generate` on the site the page named
+ * (staff pass), and the `ai-generate` switch — an incident that stops
+ * generation closes this rung and leaves the chat answering. Then the page
+ * must be a versioned besigner route and the canvas it sent must describe the
+ * document root. The local checks run first, so a question asked anywhere but
+ * the besigner costs no read.
+ */
+async function assistEditRung(input: {
+  body: AssistRequestBody
+  org: Record<string, unknown>
+  staff: boolean
+  member: Parameters<typeof memberHasAiPermission>[2]
+}): Promise<AssistEditRung | null> {
+  const { body, org, staff } = input
+  if (!body.context || body.canvas == null) return null
+  const document = assistEditDocumentOf(sanitiseRoute(body.context.route))
+  const hostId = sanitiseId(body.context.hostId)
+  if (!document || !hostId) return null
+  if (!checkEntitlement(org as never, 'aiGenerative')) return null
+  const context = parseAssistEditContext(body.canvas)
+  if (!context) return null
+  if (!staff && !(await isServerReleaseFlagOnForOrg('release_ai_generative', body.orgId))) {
+    return null
+  }
+  if (
+    !staff &&
+    !(await memberHasAiPermission(body.orgId, hostId, input.member, 'ai.generate'))
+  ) {
+    return null
+  }
+  if (await featureLockdownRefusal({ feature: 'ai-generate', staff, orgId: body.orgId })) {
+    return null
+  }
+  return { target: { ...document, hostId }, context }
+}
+
 /**
  * The level-2 view block (entitled orgs only) and the scope the proposal
  * channel resolves against.
@@ -484,6 +572,7 @@ export function assistScopeRefusal(
 function buildViewBlock(
   context: NonNullable<AssistRequestBody['context']>,
   org: Record<string, unknown>,
+  rung: AssistActionRung,
 ): {
   /** Cacheable, route-derived, tenant-agnostic. */
   screen: string
@@ -507,7 +596,7 @@ function buildViewBlock(
   const view = describeView(route)
   const { name, plan } = safeOrgFacts(org)
   return {
-    screen: viewScreenBlock(view),
+    screen: viewScreenBlock(view, rung),
     facts: viewFactsBlock({ route, hostId, orgSlug, name, plan }),
     view,
     scope: { orgSlug, hostId },
@@ -802,6 +891,14 @@ async function handler(request: Request): Promise<Response> {
     // which is a real answer (limited mode), not a denial.
     const entitled = checkEntitlement(org, 'aiAssist')
     const firestore = app.firestore()
+    // The edit rung (AGL-2906), decided before retrieval because it changes
+    // what a docs answer may stand in for. See `assistEditRung`.
+    const editRung = await assistEditRung({
+      body,
+      org: org as Record<string, unknown>,
+      staff,
+      member: resolved.member,
+    })
 
     // ── Retrieval FIRST (AGL-2486) ────────────────────────────────────────
     // Level-1 grounding for everyone. Hoisted above the reservation and the
@@ -817,8 +914,17 @@ async function handler(request: Request): Promise<Response> {
       url: sectionUrl(section),
     }))
 
-    const deflection = deflectToDocs(body.question, scored, body.history.length > 0)
-    if (deflection.answered) {
+    // On the edit rung a docs quote cannot carry the proposal the author may
+    // be asking for, so only a question that reads on its own — a how-to, not
+    // an instruction and not a question about "this" element — is answered
+    // from the docs there. `questionStandsAlone` is the deflector's own test
+    // for a question that needs nothing around it, and the open canvas is
+    // exactly what an edit request leans on.
+    const deflection =
+      editRung && !questionStandsAlone(body.question)
+        ? null
+        : deflectToDocs(body.question, scored, body.history.length > 0)
+    if (deflection?.answered) {
       // Costs no provider tokens, so it takes NO reservation: a docs answer
       // must not spend one of a free workspace's ten messages a day. The
       // per-uid rate limiter above is what bounds this path, and it is the
@@ -918,8 +1024,10 @@ async function handler(request: Request): Promise<Response> {
     //
     // A turn that PICKED a model (AGL-2942) neither reads nor writes the
     // cache: the pick is a request for that model's answer, and a cached one
-    // was written by whichever model Auto chose.
-    const cacheKey = body.history.length || body.model
+    // was written by whichever model Auto chose. Nor does a turn on the edit
+    // rung (AGL-2906): that answer is composed against the canvas the request
+    // described, which the key cannot describe either.
+    const cacheKey = body.history.length || body.model || editRung
       ? ''
       : assistAnswerCacheKey({
           question: body.question,
@@ -1065,7 +1173,10 @@ async function handler(request: Request): Promise<Response> {
     // deep links; the view block, and with it the proposal channel, is not
     // assembled at all — not assembled-then-withheld, so there is no path
     // where a free org's prompt carries it.
-    const guide = entitled && body.context ? buildViewBlock(body.context, org as Record<string, unknown>) : null
+    const guide =
+      entitled && body.context
+        ? buildViewBlock(body.context, org as Record<string, unknown>, { edit: Boolean(editRung) })
+        : null
 
     const messages = [
       ...body.history.map((turn) => ({
@@ -1088,11 +1199,21 @@ async function handler(request: Request): Promise<Response> {
       ...(guide?.screen
         ? [{ text: guide.screen, cacheBreakpoint: true as const }]
         : []),
+      // The edit protocol and the element catalog (AGL-2906): a pure function
+      // of the document kind, so its breakpoint caches one copy for every
+      // workspace editing that kind of document.
+      ...(editRung
+        ? [{ text: editCanvasBlock(editRung.target.kind), cacheBreakpoint: true as const }]
+        : []),
       // Per-org, and therefore AFTER every breakpoint — see
       // `assistBrandBlock`. Unconditional: a free workspace assembles no
       // view block, and it must still be told what the product is called.
       { text: assistBrandBlock(org as never), volatile: true },
       ...(guide ? [{ text: guide.facts, volatile: true as const }] : []),
+      // The canvas the author has open — their own content, so volatile.
+      ...(editRung
+        ? [{ text: editSelectionBlock(editRung.context), volatile: true as const }]
+        : []),
       ...(docsBlock ? [{ text: docsBlock, volatile: true as const }] : []),
     ]
 
@@ -1100,8 +1221,13 @@ async function handler(request: Request): Promise<Response> {
     try {
       upstream = await runAiRequest({
         model,
-        maxTokens: MAX_OUTPUT_TOKENS,
+        // An edit proposal writes its operations as a tool call, which needs
+        // room an answer does not.
+        maxTokens: editRung ? ASSIST_EDIT_MAX_OUTPUT_TOKENS : MAX_OUTPUT_TOKENS,
         stream: true,
+        // One strict tool, and only on the edit rung: below it the model has
+        // no way to act, only to answer.
+        ...(editRung ? { tools: [assistEditTool(editRung.target.kind)] } : {}),
         // See the header comment: omitting these is NOT the same as
         // sending them — the model-side defaults are adaptive thinking at
         // `high` effort, which this workload neither needs nor can afford.
@@ -1144,6 +1270,8 @@ async function handler(request: Request): Promise<Response> {
         let raw = ''
         let emitted = 0
         let stopReason: string | null = null
+        /** The first call of the edit tool, as the stream delivered it. */
+        let editInput: Record<string, unknown> | null = null
         let usage: AssistTokenUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -1163,6 +1291,12 @@ async function handler(request: Request): Promise<Response> {
               // The provider's own words stayed in the log (AGL-2815); the
               // reader gets the fixed sentence for the verdict.
               emit({ type: 'error', error: upstreamFailureCopy(event.retryable) })
+            } else if (event.type === 'tool') {
+              // The first call only: the tool is offered once per message,
+              // and a second call is the model repeating itself.
+              if (editRung && !editInput && event.name === ASSIST_EDIT_TOOL_NAME) {
+                editInput = event.input
+              }
             } else if (event.type === 'done') {
               usage = event.usage
               stopReason = event.stopReason
@@ -1187,6 +1321,26 @@ async function handler(request: Request): Promise<Response> {
           const proposal = guide
             ? resolveAssistProposal(extractAssistAction(raw), guide.view, guide.scope)
             : null
+
+          // The edit proposal, if the model called the tool — held to the
+          // canvas the request described and to the palette validators. Still
+          // nothing is written: a proposal is data for a card the author
+          // applies in their own editor.
+          let edit: AssistEditProposal | null = null
+          if (editRung && editInput) {
+            const resolvedEdit = resolveAssistEdit(editInput, {
+              context: editRung.context,
+              target: editRung.target,
+            })
+            edit = resolvedEdit.proposal
+            if (!edit && stopReason !== 'max_tokens') {
+              emit({
+                type: 'error',
+                error:
+                  'That change could not be matched to this canvas, so there is nothing to apply. Select the element and ask again.',
+              })
+            }
+          }
 
           // A refusal is an HTTP 200 with an empty or partial answer, not an
           // error — so without this the user watches the spinner stop and
@@ -1229,6 +1383,8 @@ async function handler(request: Request): Promise<Response> {
               // it (AGL-2925) — so a Free turn lands on the owner's
               // allowance and the platform's day, and a paid one on neither.
               free: quota.free,
+              // The proposal's size, for the applied-edit record to find.
+              ...(edit ? { editOps: edit.ops.length } : {}),
             })
           } catch (error) {
             console.error('assist exchange record failed', error)
@@ -1272,6 +1428,9 @@ async function handler(request: Request): Promise<Response> {
             // confirm, and confirming navigates — see the write boundary in
             // `assist-view-context.ts`.
             proposal,
+            // The edit proposal (AGL-2906): ops the panel applies in the
+            // author's editor when they press Apply, and never before.
+            edit,
             // The reservation VERBATIM (AGL-2238). It already describes the
             // standing after the message, because it is what moved the
             // counter — `reserveAssistMessage` returns `used + 1` and

@@ -226,8 +226,9 @@ describe('generation jobs (for AGL-2904)', () => {
 describe('besigner edits applied from a proposal (for AGL-2906)', () => {
   it('ai.edit.applied is a host row on the screen version, with the op counts in the name', async () => {
     await logAiEditApplied(HOST, PERSON, {
-      screenId: 'screen-1',
-      screenName: 'Home',
+      type: 'screen',
+      id: 'screen-1',
+      name: 'Home',
       versionId: 'v-2',
       opCounts: { set: 3, insert: 1, remove: 0 },
     })
@@ -239,6 +240,22 @@ describe('besigner edits applied from a proposal (for AGL-2906)', () => {
       },
     ])
     expect(orgRows()).toEqual([])
+  })
+
+  it('names the document kind the edits landed on, and carries the counts alone when no name is known', async () => {
+    await logAiEditApplied(HOST, PERSON, {
+      type: 'component',
+      id: 'component-1',
+      versionId: 'v-3',
+      opCounts: { restyle: 2 },
+    })
+    expect(hostRows()).toEqual([
+      {
+        ...shaped(PERSON),
+        action: 'ai.edit.applied',
+        target: { type: 'component', id: 'component-1', name: '2 restyle', versionId: 'v-3' },
+      },
+    ])
   })
 })
 

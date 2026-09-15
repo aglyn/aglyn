@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { SCREEN_SEO_TEXT_FIELDS } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+
 /**
  * How a screen's `seo` map is rebuilt from a partial edit (AGL-1437).
  *
@@ -90,8 +92,11 @@ export interface ScreenSeoEdits {
   image?: ScreenSocialImageDraft | null
 }
 
-/** The text fields, which share their emptied-means-removed rule. */
-const TEXT_FIELDS = ['title', 'description'] as const
+/**
+ * The text fields, which share their emptied-means-removed rule — the one
+ * list every editor and proposer of these fields reads.
+ */
+const TEXT_FIELDS = SCREEN_SEO_TEXT_FIELDS
 
 /** The social image, its dimensions and its alt: written and removed together. */
 const IMAGE_FIELDS = [

@@ -341,6 +341,8 @@ export class CanvasManager {
   private _history: HistoryManager<NodeId, NodeSchema<any>>
   /** The open {@link transact} burst, if any. See that method. */
   private _coalescing: { key: string; at: number } | undefined = undefined
+  /** How deep the running {@link batch} calls are nested; 0 outside one. */
+  private _batchDepth = 0
   /**
    * Monotonic counter, bumped once per node a REMOTE session changes. See
    * {@link markRemoteNode} and {@link restoreSnapshot} (AGL-1958).
@@ -373,6 +375,9 @@ export class CanvasManager {
       // transaction — otherwise `saveHistory` alone notifies observers, and
       // the canvas renders a frame between the two (AGL-1204).
       transact: action,
+      // Same reason: several guarded mutators composed into one change are
+      // one render, not one per mutator.
+      batch: action,
       clearHistory: action,
       clearNodes: action,
       reset: action,
@@ -616,6 +621,9 @@ export class CanvasManager {
     return this.restoreSnapshot(this._history.undo(this._epoch))
   }
   public saveHistory(): this {
+    // Inside a batch, the snapshot the batch took is the step every mutation
+    // folds into — see `batch`.
+    if (this._batchDepth > 0) return this
     this._history.saveHistory(this._epoch)
     return this
   }
@@ -812,6 +820,48 @@ export class CanvasManager {
     this._coalescing =
       coalesceKey === undefined ? undefined : { key: coalesceKey, at: now }
     return mutate()
+  }
+  /**
+   * Runs several mutations as ONE undoable step, all or nothing.
+   *
+   * `transact` records one snapshot and then runs code that assigns to nodes
+   * directly. That is right for a panel writing `node.sx`, and wrong for a
+   * caller that composes the guarded mutators — `addNodeFromNested`,
+   * `updateNodeProps`, `reparentNode`, `deleteNode` — because each of those
+   * records its own step. A change made of five of them would take five
+   * undos to take back, and an undo that stops part-way leaves the document
+   * in a state nobody authored.
+   *
+   * So inside a batch the mutators keep every guard and record nothing: the
+   * batch's own snapshot, taken before `mutate` runs, is the step. A nested
+   * batch folds into the outer one.
+   *
+   * A mutation that throws — a guard refusing a stale parent, a move into
+   * the node's own subtree — rolls the whole batch back to that snapshot
+   * and removes the snapshot from both stacks before the error propagates.
+   * Half a batch is not an edit anyone asked for, and a refused batch must
+   * not leave an undo step that restores a state identical to the present.
+   */
+  public batch<T>(mutate: () => T): T {
+    if (this._batchDepth > 0) return mutate()
+    this._history.saveHistory(this._epoch)
+    // Whatever burst was open described the state before this batch.
+    this._coalescing = undefined
+    this._batchDepth += 1
+    let completed = false
+    try {
+      const result = mutate()
+      completed = true
+      return result
+    } finally {
+      this._batchDepth -= 1
+      // `canUndo` is only false when `mutate` itself cleared the history,
+      // and then there is no snapshot left to roll back to.
+      if (!completed && this._history.canUndo) {
+        this.restoreSnapshot(this._history.undo(this._epoch))
+        this._history.clearFuture()
+      }
+    }
   }
   /**
    * Drops BOTH history stacks and any open {@link transact} burst.

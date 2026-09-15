@@ -248,10 +248,24 @@ export function aiTokenCount(value: unknown): number {
 /**
  * A tool call's `input` as an object. A provider sends an object or, for
  * the one shape a stream assembles by hand, a JSON string.
+ *
+ * A string that does not parse to an object is an EMPTY input, not a throw.
+ * The case that produces one is a stream cut off mid-call by the output
+ * ceiling, and a throw there would end the stream before its `done` event —
+ * the event that carries the usage a door must meter for tokens already
+ * spent. An empty input is one every door's own validation refuses.
  */
 export function aiToolInputOf(value: unknown): Record<string, unknown> {
   if (typeof value === 'string') {
-    return value.trim() ? (JSON.parse(value) as Record<string, unknown>) : {}
+    if (!value.trim()) return {}
+    try {
+      const parsed: unknown = JSON.parse(value)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {}
+    } catch {
+      return {}
+    }
   }
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
 }

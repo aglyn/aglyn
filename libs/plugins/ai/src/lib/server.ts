@@ -28,6 +28,7 @@ import { GET as aiJobEvents } from './server/ai-jobs-events-route'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { POST as resumeAiJob } from './server/ai-jobs-resume'
 import { POST as assistChat } from './server/assist-chat'
+import { POST as assistEditApplied } from './server/assist-edit-applied'
 import { POST as assistFeedback } from './server/assist-feedback'
 import { GET as aiAdminOrg } from './server/ai-admin-org'
 import { GET as aiAdminSignals } from './server/ai-admin-signals'
@@ -64,6 +65,9 @@ export function registerAiConsoleApi(): void {
   registerFirstPartyProviders()
   registerPluginApiRoute('assist/chat', { web: assistChat })
   registerPluginApiRoute('assist/feedback', { web: assistFeedback })
+  // The applied-edit record (AGL-2906): counts of a proposal the author
+  // applied in their editor, written to the site's activity log.
+  registerPluginApiRoute('assist/edit-applied', { web: assistEditApplied })
   registerPluginApiRoute('ai/assist', aiAssistHandler)
   registerPluginApiRoute('ai/jobs', {
     web: (request) => (request.method === 'GET' ? listAiJobs(request) : createAiJob(request)),

@@ -987,6 +987,13 @@ export interface AssistSignalRecord {
    * step names its job's kind; a meter without one is read off `route`.
    */
   kind?: AiUsageKind
+  /**
+   * How many canvas edits the answer proposed (AGL-2906), on a turn that
+   * proposed any. A count and nothing of the edits: the applied-edit door
+   * reads it back as the evidence that this turn issued a proposal, and a
+   * turn that proposed none carries no field at all.
+   */
+  editOps?: number
 }
 
 /** A signal PLUS the verbatim half — the question, the answer, the asker. */
@@ -1046,6 +1053,9 @@ function writeSignalAndRollup(
     stopReason: record.stopReason,
     deflected,
     feedback: null,
+    ...(record.editOps && record.editOps > 0
+      ? { editOps: Math.floor(record.editOps) }
+      : {}),
     createdAt: serverTimestamp(),
   })
   // NO message counting here (AGL-2057). Both message counters are moved by

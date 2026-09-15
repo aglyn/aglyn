@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+import {
+  ASSIST_EDIT_ACTION_ID,
+  ASSIST_EDIT_DOCUMENT_KINDS,
+  ASSIST_EDIT_TOOL_NAME,
+  type AssistEditDocumentKind,
+} from '../model/assist-edit'
+
 /**
  * Aglyn Assist level 2 — the GUIDE capability (AGL-1988, under AGL-1860).
  *
@@ -74,17 +81,32 @@
  * in for you" over a form that came up empty is worse than one that names the
  * values to type. The plumbing is here so switching a page on is a one-line
  * change, and `PREFILL_READY_ROUTES` is the allowlist that has to grow first.
+ *
+ * ## 4. The one action that edits, and where it opens (AGL-2906)
+ *
+ * Level 3 makes a single exception, on the besigner only: the `edit` action.
+ * The server still writes nothing. The model proposes typed canvas operations
+ * through a strict tool, the server validates them against the canvas the
+ * request described, and the panel shows the change and applies it in the
+ * author's own editor when they press Apply — an unsaved change, undone by
+ * the editor's own undo. The rung is closed unless the org carries
+ * `aiGenerative`, `release_ai_generative` is on for it and the caller holds
+ * `ai.generate`. `offeredActions` hands an edit action only to a request that
+ * cleared the rung, and `assertInertActions` fails any edit action offered
+ * without it, or one that carries a destination the way a navigation does.
  */
 
 /**
- * One thing the assistant may PROPOSE from a given view.
+ * One thing the assistant may PROPOSE from a given view, by navigating.
  *
  * Note what this interface cannot express. There is no `method`, no `body`,
  * no `endpoint`, no `submit` — a descriptor is a signpost, and the type is
  * the first line of the write boundary. Adding any of those fields would
  * break `assertInertActions()`, which is the point of writing it down.
  */
-export interface AssistViewAction {
+export interface AssistNavigateAction {
+  /** `navigate`, or absent. */
+  kind?: 'navigate'
   /** Stable id; the ONLY thing the model gets to choose from. */
   id: string
   /** Beginner-facing label on the confirm card. */
@@ -107,6 +129,35 @@ export interface AssistViewAction {
   prefill: boolean
 }
 
+/**
+ * The besigner's edit action (AGL-2906). Its proposal is typed canvas
+ * operations the panel applies on confirm — never a destination and never a
+ * server write — so it carries none of a navigation's `route`, `params` or
+ * `prefill`, and `assertInertActions` fails one that does.
+ */
+export interface AssistEditAction {
+  kind: 'edit'
+  /** Stable id; the ONLY thing the model gets to choose from. */
+  id: string
+  /** Beginner-facing label on the confirm button. */
+  label: string
+  /** What changes once the author confirms. */
+  outcome: string
+  /** The besigner documents the action opens on. */
+  documents: readonly AssistEditDocumentKind[]
+}
+
+export type AssistViewAction = AssistNavigateAction | AssistEditAction
+
+/** What a request cleared, which decides the actions a view offers it. */
+export interface AssistActionRung {
+  /**
+   * The edit rung: `aiGenerative`, `release_ai_generative` and `ai.generate`,
+   * on a versioned besigner route, with the canvas described.
+   */
+  edit: boolean
+}
+
 /** A console screen, described for the assistant rather than for a router. */
 export interface AssistView {
   /** Registry key; also the analytics/debug handle. */
@@ -119,7 +170,7 @@ export interface AssistView {
   plain: readonly string[]
   /** The developer layer — route template, path ids, API surface. */
   technical: readonly string[]
-  /** Navigate-only proposals available from this view. */
+  /** Proposals available from this view: navigations, and on the besigner the edit action. */
   actions: readonly AssistViewAction[]
 }
 
@@ -141,7 +192,10 @@ const orgAction = (
   outcome: string,
   route: string,
   params: readonly string[] = [],
-): AssistViewAction => ({ id, label, outcome, route, params, prefill: false })
+): AssistNavigateAction => ({ id, label, outcome, route, params, prefill: false })
+
+const isNavigateAction = (action: AssistViewAction): action is AssistNavigateAction =>
+  action.kind !== 'edit'
 
 /**
  * The registry. Ordered specific-first — `describeView` takes the first
@@ -170,7 +224,15 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
       'Editing writes to the version named in the path — versioning is the undo, so a save never overwrites what is live.',
       'The preview route is the same path with /preview in place of /besigner.',
     ],
-    actions: [],
+    actions: [
+      {
+        kind: 'edit',
+        id: ASSIST_EDIT_ACTION_ID,
+        label: 'Apply as draft',
+        outcome: 'the proposed changes on the open canvas, unsaved until the document is saved',
+        documents: ASSIST_EDIT_DOCUMENT_KINDS,
+      },
+    ],
   },
   {
     key: 'host-screens',
@@ -504,6 +566,18 @@ export function describeView(route: string): AssistView | null {
 }
 
 /**
+ * The actions a view offers a request: every navigation, and the edit action
+ * only to a request that cleared the edit rung.
+ */
+export function offeredActions(
+  view: AssistView | null,
+  rung: AssistActionRung,
+): readonly AssistViewAction[] {
+  if (!view) return []
+  return view.actions.filter((action) => action.kind !== 'edit' || rung.edit)
+}
+
+/**
  * Client-supplied strings that end up inside a SYSTEM block have to be
  * treated as hostile, not merely untidy. `route` is whatever the panel says
  * the pathname is, and an attacker who can shape it can otherwise write
@@ -569,10 +643,14 @@ export function safeOrgFacts(org: Record<string, unknown>): {
  * every workspace asking anything on that screen — which on a shared console
  * is the difference between a cache that pays and one that mostly writes.
  *
- * So this block is a pure function of the registry, and everything that
- * varies per request lives after the breakpoint.
+ * So this block is a pure function of the registry and the rung — two
+ * variants a route at most, neither carrying a tenant byte — and everything
+ * that varies per request lives after the breakpoint.
  */
-export function viewScreenBlock(view: AssistView | null): string {
+export function viewScreenBlock(
+  view: AssistView | null,
+  rung: AssistActionRung = { edit: false },
+): string {
   const lines: string[] = []
   if (view) {
     lines.push(`This screen: ${view.screen}`)
@@ -584,19 +662,29 @@ export function viewScreenBlock(view: AssistView | null): string {
       lines.push('Technical detail for the "Under the hood" line:')
       for (const line of view.technical) lines.push(`- ${line}`)
     }
-    if (view.actions.length) {
+    const offered = offeredActions(view, rung)
+    const navigations = offered.filter(isNavigateAction)
+    if (navigations.length) {
       lines.push(
         'Actions you may PROPOSE from this screen (ids are exact; propose at most one, and only when the user asked to get something done):',
       )
-      for (const action of view.actions) {
+      for (const action of navigations) {
         const params = action.params.length
           ? ` params: ${action.params.join(', ')}`
           : ' params: none'
         lines.push(`- id "${action.id}" — ${action.label}: opens ${action.outcome}.${params}`)
       }
+    } else if (offered.length) {
+      lines.push('This screen offers no page to open. Do not emit an action block here.')
     } else {
       lines.push(
         'This screen offers no proposable actions. Do not emit an action block here.',
+      )
+    }
+    for (const action of offered) {
+      if (action.kind !== 'edit') continue
+      lines.push(
+        `Edits you may PROPOSE on this screen (id "${action.id}"): through the ${ASSIST_EDIT_TOOL_NAME} tool described below, never an action block.`,
       )
     }
   } else {
@@ -706,9 +794,10 @@ const MAX_PARAM_VALUE_CHARS = 200
  * Turn a model-emitted action block into a proposal, or nothing.
  *
  * Everything here is a narrowing. The id must be one the CURRENT view
- * offers — not merely a real id somewhere in the registry, because "propose
- * the billing page from the besigner" is exactly the kind of plausible
- * wandering that makes an assistant feel unsafe. Param names must be ones
+ * offers as a navigation — not merely a real id somewhere in the registry,
+ * because "propose the billing page from the besigner" is exactly the kind
+ * of plausible wandering that makes an assistant feel unsafe, and not the
+ * edit action either, which is never a destination. Param names must be ones
  * that action declared. The href is composed from the registry template and
  * the caller's own server-resolved slug and host, so a completion cannot
  * steer the user anywhere the registry does not already point.
@@ -721,7 +810,9 @@ export function resolveAssistProposal(
   view: AssistView | null,
   scope: { orgSlug: string; hostId: string },
 ): AssistProposal | null {
-  if (!rawBlock || !view || !view.actions.length) return null
+  if (!rawBlock || !view) return null
+  const navigations = view.actions.filter(isNavigateAction)
+  if (!navigations.length) return null
 
   let parsed: Record<string, unknown>
   try {
@@ -732,7 +823,7 @@ export function resolveAssistProposal(
   if (!parsed || typeof parsed !== 'object') return null
 
   const id = String(parsed['id'] ?? '').trim()
-  const action = view.actions.find((candidate) => candidate.id === id)
+  const action = navigations.find((candidate) => candidate.id === id)
   if (!action) return null
 
   const supplied = (parsed['params'] ?? {}) as Record<string, unknown>
@@ -767,7 +858,7 @@ export function resolveAssistProposal(
  * a confirm button on it, which is worse than no button.
  */
 function buildActionHref(
-  action: AssistViewAction,
+  action: AssistNavigateAction,
   scope: { orgSlug: string; hostId: string },
   values: ReadonlyArray<{ name: string; value: string }>,
 ): string {
@@ -802,13 +893,24 @@ function buildActionHref(
  * a comment. Called by the spec; exported so the check travels with the data
  * it checks rather than living in a test file someone can delete.
  *
+ * Every action is inert UNLESS it is an edit action and the request cleared
+ * the edit rung: a navigation carries no write-capable field and no ops, an
+ * edit action carries no destination, and an edit action offered to a
+ * request below the rung is a violation. `offer` is the function the doors
+ * decide with; a spec passes a broken one to show this check can fail.
+ *
  * Returns the list of violations so a failure names the offending action.
  */
-export function assertInertActions(views: readonly AssistView[] = ASSIST_VIEWS): string[] {
+export function assertInertActions(
+  views: readonly AssistView[] = ASSIST_VIEWS,
+  rung: AssistActionRung = { edit: false },
+  offer: typeof offeredActions = offeredActions,
+): string[] {
   const problems: string[] = []
   const seen = new Set<string>()
   const forbidden = ['method', 'body', 'endpoint', 'submit', 'url', 'api', 'mutation']
   for (const view of views) {
+    const offered = offer(view, rung)
     for (const action of view.actions) {
       const where = `${view.key}/${action.id}`
       if (seen.has(action.id)) problems.push(`${where}: duplicate action id`)
@@ -817,6 +919,31 @@ export function assertInertActions(views: readonly AssistView[] = ASSIST_VIEWS):
         if (forbidden.includes(key.toLowerCase())) {
           problems.push(`${where}: action carries a write-capable field "${key}"`)
         }
+      }
+      if (action.kind === 'edit') {
+        if (!rung.edit && offered.includes(action)) {
+          problems.push(
+            `${where}: an edit action is offered to a request that did not clear the edit rung`,
+          )
+        }
+        for (const key of ['route', 'params', 'prefill']) {
+          if (key in action) {
+            problems.push(
+              `${where}: an edit action carries "${key}" — it applies ops on the open canvas and never navigates`,
+            )
+          }
+        }
+        const documents = action.documents ?? []
+        if (
+          !documents.length ||
+          documents.some((kind) => !ASSIST_EDIT_DOCUMENT_KINDS.includes(kind))
+        ) {
+          problems.push(`${where}: an edit action names a document the edit rung does not open on`)
+        }
+        continue
+      }
+      if ('ops' in action) {
+        problems.push(`${where}: only an edit action carries ops`)
       }
       if (!action.route.startsWith('/')) {
         problems.push(`${where}: route is not a root-relative console path`)

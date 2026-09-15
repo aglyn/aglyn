@@ -181,19 +181,25 @@ export async function logAiJobNeedsInput(
 }
 
 /**
- * `ai.edit.applied` — a proposal's edits landed on a screen (AGL-2906).
+ * `ai.edit.applied` — a proposal's edits landed on a besigner document
+ * (AGL-2906).
  *
- * Written by the route that applied them, never by the client, so the row
- * is evidence the edits happened rather than a claim that they did. Op
- * counts are folded into the name (`Home · 3 set, 1 insert`) — the edits
+ * The edits are applied in the author's own editor, as unsaved changes, so
+ * no server sees them land. The row is written by the door the editor
+ * reports the apply to, and only once that door has found the proposal on an
+ * exchange the same member had about the same document — so it stands on a
+ * proposal the server issued rather than on the client's word alone. Op
+ * counts are folded into the name (`Home · 3 set, 1 insert`); the edits
  * themselves are the site's content and are not logged.
  */
 export async function logAiEditApplied(
   hostId: string,
   actor: HostActivityActor,
   edit: {
-    screenId: string
-    screenName?: string | null
+    /** The kind of document the edits landed on. */
+    type: 'screen' | 'component' | 'layout'
+    id: string
+    name?: string | null
     versionId: string
     /** Edits applied, by operation — `{ set: 3, insert: 1 }`. */
     opCounts: Record<string, number>
@@ -204,9 +210,9 @@ export async function logAiEditApplied(
     .map(([op, count]) => `${Math.floor(count)} ${op}`)
     .join(', ')
   await logHostActivity(hostId, actor, AI_ACTIVITY_ACTIONS.editApplied, {
-    type: 'screen',
-    id: edit.screenId,
-    name: named(edit.screenName, counts),
+    type: edit.type,
+    id: edit.id,
+    name: named(edit.name, counts),
     versionId: edit.versionId,
   })
 }

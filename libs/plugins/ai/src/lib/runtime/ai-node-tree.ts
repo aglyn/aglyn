@@ -799,6 +799,58 @@ export function validateAiNodeTree(
   }
 }
 
+export type AiNodePatchResult =
+  | {
+      ok: true
+      props: Record<string, unknown>
+      sx: Record<string, unknown> | undefined
+      repairs: string[]
+    }
+  | { ok: false; error: string; code: AiNodeTreeRefusalCode }
+
+/**
+ * One element's prop and style patch, held to the rules `validateAiNodeTree`
+ * holds an element it places — for an edit to an element already on the
+ * canvas, where there is no tree to validate.
+ *
+ * The same passes run: unknown props dropped, enums coerced, every string
+ * held to its role and screened for markup, `sx` held to the key set and the
+ * value grammar. The one difference is `required`: a patch is merged over the
+ * props the element already has, so a required prop the patch does not name
+ * is not missing.
+ */
+export function validateAiNodePatch(
+  componentId: string,
+  patch: { props?: unknown; sx?: unknown },
+  context?: AiNodeTreeContext,
+): AiNodePatchResult {
+  const entry = AI_PALETTE[componentId]
+  if (!entry) {
+    return {
+      ok: false,
+      code: 'component',
+      error: `Component "${componentId}" is not in the palette`,
+    }
+  }
+  const repairs: string[] = []
+  const props = sanitizeProps(
+    componentId,
+    { ...entry, propsSchema: { ...entry.propsSchema, required: [] } },
+    patch.props,
+    context?.screenIds ? new Set(context.screenIds) : null,
+    context?.assetIds ? new Set(context.assetIds) : null,
+    repairs,
+  )
+  const sx =
+    patch.sx === undefined ? undefined : sanitizeSx(componentId, patch.sx, repairs)
+  return {
+    ok: true,
+    props: 'props' in props ? props.props : {},
+    sx,
+    repairs,
+  }
+}
+
 function validate(
   input: unknown,
   surface: AiSurface,

@@ -266,11 +266,13 @@ describe('GUARD: no write happens without an explicit confirm', () => {
     expect(screen.queryByText('Take me there')).toBeNull()
   })
 
-  it('the panel can reach exactly two endpoints, both read-only to the console', async () => {
+  it('the panel can reach exactly three endpoints, none of which writes a customer document', async () => {
     // A behavioural check cannot see an endpoint that no test happens to
-    // trigger. This one reads the source: the day someone adds a third
+    // trigger. This one reads the source: the day someone adds another
     // fetch — a publish, an invite, a "just do it for me" — this fails
-    // before it ships, whatever the UI does.
+    // before it ships, whatever the UI does. The third is the applied-edit
+    // record (AGL-2906): an activity row of counts, written after the author
+    // applied an edit in their own editor; it touches no document.
     const source = readFileSync(
       join(__dirname, 'assist-panel.component.tsx'),
       'utf8',
@@ -284,6 +286,7 @@ describe('GUARD: no write happens without an explicit confirm', () => {
     ].map((m) => m[1])
     expect([...new Set(urls)].sort()).toEqual([
       '/api/assist/chat',
+      '/api/assist/edit-applied',
       '/api/assist/feedback',
     ])
   })
