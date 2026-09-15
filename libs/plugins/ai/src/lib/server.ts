@@ -30,6 +30,8 @@ import { GET as aiAdminOrg } from './server/ai-admin-org'
 import { GET as aiAdminSignals } from './server/ai-admin-signals'
 import { GET as aiAdminUser } from './server/ai-admin-user'
 import { GET as aiUsage } from './server/ai-usage'
+import { GET as aiAllotments } from './server/ai-allotments'
+import { GET as aiModels } from './server/ai-models'
 import { GET as billingCredits } from './server/billing-credits'
 import { POST as billingOverage } from './server/billing-overage'
 
@@ -74,6 +76,10 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
   registerPluginApiRoute('ai/usage', { web: aiUsage })
+  // The allotments a manager sets, and the options the model switch lists
+  // (AGL-2942). One handler answers the allotments' GET and POST.
+  registerPluginApiRoute('ai/allotments', { web: aiAllotments })
+  registerPluginApiRoute('ai/models', { web: aiModels })
   // The staff doors (AGL-2928, AGL-2930, AGL-2252): one org's AI in full,
   // one account's usage across its workspaces, and the fleet's Assist
   // signals behind the Assist signal staff page.

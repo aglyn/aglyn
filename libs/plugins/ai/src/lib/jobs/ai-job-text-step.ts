@@ -17,6 +17,7 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
+import type { AiStepKind } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import { runAiRequest, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
@@ -83,6 +84,12 @@ export interface AiJobStepContext {
   firestore?: FirebaseFirestore.Firestore
   /** The org document the machine read for the step's reservation. */
   org?: Partial<AglynOrgBilling> | null
+  /**
+   * The model a step of this kind runs on for THIS job (AGL-2942): the
+   * creator's pick where the plan and the allotment allowlists allow it,
+   * the routing table otherwise. Absent, a runner asks the table itself.
+   */
+  modelFor?: (kind: AiStepKind) => string | undefined
 }
 
 export type AiJobStepRunner = (
@@ -120,8 +127,8 @@ export function aiJobTextPrompt(job: Pick<AiJob, 'brief' | 'inputs'>): string {
   return lines.join('\n')
 }
 
-export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal }) => {
-  const model = aiJobTextModel()
+export const runAiJobTextStep: AiJobStepRunner = async ({ job, signal, modelFor }) => {
+  const model = modelFor?.('job.text') ?? aiJobTextModel()
   const result = await runAiRequest({
     model,
     system: AI_JOB_TEXT_SYSTEM,

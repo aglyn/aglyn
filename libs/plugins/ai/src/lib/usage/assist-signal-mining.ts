@@ -192,6 +192,8 @@ export interface AssistSpendRow {
     cap: number
     messages: number
     budget: number
+    /** A hard AI allotment a manager set (AGL-2942). */
+    allotment: number
     /** The Free taste's rungs (AGL-2925); zero on every paid workspace. */
     account: number
     requests: number

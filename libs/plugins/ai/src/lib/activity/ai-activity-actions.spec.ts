@@ -35,7 +35,7 @@ import {
 } from './ai-activity-actions'
 
 describe('the catalog', () => {
-  it('holds the eleven actions the issue names, each as an ai.* code', () => {
+  it('holds the actions the issues name, each as an ai.* code', () => {
     expect(AI_ACTIVITY_ACTION_LIST).toEqual([
       'ai.job.created',
       'ai.job.output',
@@ -45,6 +45,8 @@ describe('the catalog', () => {
       'ai.assist.section',
       'ai.overage.hardCap',
       'ai.overage.cap',
+      // A manager set or removed an allotment (AGL-2942).
+      'ai.allotment.changed',
       'ai.permission.changed',
       'ai.addon.purchased',
       'ai.addon.removed',

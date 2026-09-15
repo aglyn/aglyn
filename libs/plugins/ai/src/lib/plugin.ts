@@ -28,6 +28,13 @@ import { AssistPanelComponent } from './components/assist-panel.component'
 import { AssistSignalsPage } from './components/assist-signals-page.component'
 import BillingAssistOverageCard from './components/billing-assist-overage-card.component'
 import { AiTopUsersCard } from './components/billing-ai-top-users.component'
+import { AiAllotmentsCard } from './components/billing-ai-allotments.component'
+import {
+  AiCollaboratorAllotmentCell,
+  AiCollaboratorAllotmentHeader,
+  AiSiteAllotmentCard,
+} from './components/host-ai-allotments.component'
+import MemberAiAllotmentCard from './components/member-ai-allotment-card.component'
 import MemberAiUsageCard from './components/member-ai-usage-card.component'
 import AiThemeProposalCard from './components/ai-theme-proposal-card.component'
 import StaffOrgAiCard from './components/staff-org-ai-card.component'
@@ -105,6 +112,40 @@ export function registerAiConsole(): void {
         widgetId: 'ai-member-usage',
         title: 'AI usage',
         Component: MemberAiUsageCard,
+      },
+      // The allotments (AGL-2942): a member's or a site's monthly share of
+      // the pool, set on Billing → Usage, on each member's page and on a
+      // site's collaborators card — each card asks the route what its
+      // reader may see and change.
+      {
+        slot: 'orgBillingUsage',
+        widgetId: 'ai-allotments',
+        title: 'AI allotments',
+        permission: 'billing.view',
+        Component: AiAllotmentsCard,
+      },
+      {
+        slot: 'orgMember',
+        widgetId: 'ai-member-allotment',
+        title: 'AI allotment',
+        Component: MemberAiAllotmentCard,
+      },
+      {
+        slot: 'hostMembers',
+        widgetId: 'ai-collaborator-allotment',
+        title: 'AI allotment',
+        column: {
+          header: 'AI allotment',
+          align: 'right',
+          Header: AiCollaboratorAllotmentHeader,
+        },
+        Component: AiCollaboratorAllotmentCell,
+      },
+      {
+        slot: 'hostMembers',
+        widgetId: 'ai-site-allotment',
+        title: 'Site AI allotment',
+        Component: AiSiteAllotmentCard,
       },
       // Themes by AI (AGL-2938): a brief on the site's Theme section, a
       // proposal previewed before and after, and the editor's own Save to

@@ -866,6 +866,49 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      /**
+       * AI allotments (AGL-2942): a monthly share of the workspace's AI
+       * credits, keyed by subject — `member:{uid}`, `collab:{hostId}:{uid}`,
+       * `host:{hostId}` — plus `org`, the org-wide model restriction.
+       *
+       * READ by the people the figure is about and the people who manage it:
+       *
+       *  - `org` by any member: it names models, not anyone's spend, and
+       *    every member's model switch is bounded by it;
+       *  - the subject reads their own — `member:` with their uid, or a
+       *    `collab:` whose third segment is their uid;
+       *  - an org-wide manager with `billing.view` or `billing.manage`, read
+       *    the way the per-user usage months are (`memberResolves` for an
+       *    owner or admin, `memberStamps` for anyone a custom role granted);
+       *  - a collaborator holding the ADMIN role on the site the subject
+       *    names reads that site's collaborator and site allotments — the
+       *    collaborators card is theirs. Nothing about another site, and
+       *    nobody's `member:` allotment.
+       *
+       * The subject is matched with a full-string regex BEFORE it is split,
+       * so a malformed id never reaches an index that does not exist.
+       *
+       * Server-written only: an allotment is a spend control, and a subject
+       * who could write their own could lift it.
+       */
+      match /aiAllotments/{subject} {
+        allow read: if isStaff() ||
+          (subject == 'org' && isOrgMember()) ||
+          (isOrgMember() &&
+            (subject == 'member:' + request.auth.uid ||
+             (subject.matches('collab:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+') &&
+              subject.split(':')[2] == request.auth.uid))) ||
+          (isOrgWideMember() &&
+            ((canManageOrg() &&
+              (memberResolves('billing.view') || memberResolves('billing.manage'))) ||
+             memberStamps('billing.view') ||
+             memberStamps('billing.manage'))) ||
+          (isOrgMember() &&
+            subject.matches('(collab|host):[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?') &&
+            orgMember().get('hostAccess', {}).get(subject.split(':')[1], '') == 'admin');
+        allow write: if false;
+      }
+
       // Monthly usage rollups (AGL-41) + the live API-request meter
       // (AGL-635): readable by the org so the Billing page usage meters show
       // real numbers — and org-wide only (AGL-1026), because how much the

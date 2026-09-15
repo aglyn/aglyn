@@ -38,6 +38,7 @@ import {
   runAiJobStep,
 } from '../jobs/ai-jobs'
 import { releaseAssistMessage } from '../usage/assist-usage'
+import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
 
 /**
@@ -81,9 +82,14 @@ export interface CreateAiJobBody {
   kind: AiJobKind
   brief: string
   inputs: Record<string, string | number | boolean>
+  /** A catalog model the creator picked (AGL-2942), or `null` for Auto. */
+  model: string | null
 }
 
 const ID_CHARS = /^[A-Za-z0-9_-]{1,100}$/
+
+/** The longest model id a body may carry; the catalog's ids are far shorter. */
+const MAX_MODEL_CHARS = 100
 
 /** Validate + clamp the request body; a string names what is wrong. */
 export function parseCreateAiJobBody(payload: unknown): CreateAiJobBody | string {
@@ -130,7 +136,12 @@ export function parseCreateAiJobBody(payload: unknown): CreateAiJobBody | string
       return 'inputs are too large'
     }
   }
-  return { orgId, hostId, kind: kind as AiJobKind, brief, inputs }
+  const rawModel = typeof body.model === 'string' ? body.model.trim() : ''
+  if (rawModel.length > MAX_MODEL_CHARS) return 'model is not a model id'
+  // Validated against the plan and the allotment allowlists when each step
+  // runs, not here: the allowlists are read inside the step's reservation.
+  const model = rawModel && rawModel !== 'auto' ? rawModel : null
+  return { orgId, hostId, kind: kind as AiJobKind, brief, inputs, model }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -180,6 +191,7 @@ export async function POST(request: Request): Promise<Response> {
         kind: parsed.kind,
         brief: parsed.brief,
         inputs: parsed.inputs,
+        model: parsed.model,
         createdBy: gate.uid,
         createdByEmail: gate.decoded.email ?? null,
       },
@@ -216,7 +228,17 @@ export async function POST(request: Request): Promise<Response> {
     console.error('ai job first step not claimable', { orgId: gate.orgId, jobId })
     return Response.json({ error: 'The AI job could not be started' }, { status: 500 })
   }
-  return Response.json({ job: aiJobSummary(run.job) }, { status: 200 })
+  return Response.json(
+    {
+      job: aiJobSummary(run.job),
+      // The usage strip's envelope (AGL-2942): the reservation the ladder
+      // took, with what the inline step spent.
+      meter: aiUsageMeter(gate.reservation, {
+        lastCredits: run.job.creditsSpent > 0 ? run.job.creditsSpent : null,
+      }),
+    },
+    { status: 200 },
+  )
 }
 
 export async function GET(request: Request): Promise<Response> {

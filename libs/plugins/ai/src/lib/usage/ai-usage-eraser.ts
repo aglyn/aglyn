@@ -19,15 +19,17 @@ import type {
   PluginUserErasureReport,
   PluginUserErasureRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-user-erasure'
+import { eraseAiAllotmentsForUser } from './ai-allotments'
 import { eraseUserAiUsage } from './ai-usage-by-user'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 
 /**
  * The AI plugin's share of an account erasure (AGL-2939): the person's
  * monthly usage documents, deleted from every org they belonged to and
- * swept from the ones they had left. The report is the meter's own — orgs
- * deleted by path, and months found by the cross-org sweep, `null` when
- * that sweep could not run.
+ * swept from the ones they had left, and the AI allotments set on them
+ * (AGL-2942) in the orgs the erasure names. The report is the meter's own —
+ * orgs deleted by path, months found by the cross-org sweep (`null` when
+ * that sweep could not run), and allotments removed.
  *
  * Its own module, imported by the server declarations when an erasure
  * runs, so the boot registers the eraser without loading the meter.
@@ -36,10 +38,8 @@ export async function eraseAiUsageForUser({
   uid,
   orgIds,
 }: PluginUserErasureRequest): Promise<PluginUserErasureReport> {
-  const { orgs, sweptMonths } = await eraseUserAiUsage(
-    firebaseAdmin.app().firestore(),
-    uid,
-    orgIds,
-  )
-  return { orgs, sweptMonths }
+  const firestore = firebaseAdmin.app().firestore()
+  const { orgs, sweptMonths } = await eraseUserAiUsage(firestore, uid, orgIds)
+  const allotments = await eraseAiAllotmentsForUser(firestore, uid, orgIds)
+  return { orgs, sweptMonths, allotments }
 }

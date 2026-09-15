@@ -19,7 +19,7 @@
 // gives at its head: the statics need no app, and the barrel would drag the
 // default-app initialization into every unit test that touches a counter.
 import { FieldValue } from 'firebase-admin/firestore'
-import type { AssistRefusedBy } from '@aglyn/aglyn/app-utils/assist-credits'
+import type { AiRefusedBy } from '../model/ai-allotments'
 
 /**
  * THE PER-ORG REFUSAL COUNTER (AGL-2930).
@@ -51,18 +51,20 @@ import type { AssistRefusedBy } from '@aglyn/aglyn/app-utils/assist-credits'
  */
 
 /** A reason that actually refused — the `null` (admitted) case has no count. */
-export type AssistRefusalReason = NonNullable<AssistRefusedBy>
+export type AssistRefusalReason = NonNullable<AiRefusedBy>
 
 /**
  * Every reason, in the order the card and the leaderboard list them: the
- * workspace's own four first, then the Free taste's (AGL-2925), which only a
- * Free workspace can be refused by.
+ * workspace's own four first, then an allotment a manager set (AGL-2942),
+ * then the Free taste's (AGL-2925), which only a Free workspace can be
+ * refused by.
  */
 export const ASSIST_REFUSAL_REASONS: readonly AssistRefusalReason[] = [
   'band',
   'cap',
   'messages',
   'budget',
+  'allotment',
   'account',
   'requests',
   'refusals',

@@ -26,13 +26,20 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   assistBandRefuses,
+  assistCreditsFromUsd,
   assistOverageCapReached,
   publicAssistCredits,
   resolveAssistBudgetUsd,
   resolveAssistOverageCapUsd,
-  type AssistRefusedBy,
   type PublicAssistCredits,
 } from '@aglyn/aglyn/app-utils/assist-credits'
+import type { AiRefusedBy } from '../model/ai-allotments'
+import {
+  AI_HOST_CREDITS_FIELD,
+  readAiAllotmentGate,
+  type AiAllotmentGate,
+  type AiAllotmentRequestSubject,
+} from './ai-allotments'
 import {
   assistOperatorCeilingUsd,
   assistOrgMonthlyCostLimitUsd,
@@ -67,7 +74,10 @@ import {
  *
  *   orgs/{orgId}/assistUsage/{YYYY-MM}     per-org monthly cost telemetry:
  *     { month, messages, inputTokens, outputTokens, cacheReadTokens,
- *       cacheWriteTokens, estCostUsd, updatedAt }
+ *       cacheWriteTokens, estCostUsd, byHost: { hostId: credits },
+ *       updatedAt }
+ *     (`byHost` is each site's credits, which a site's AI allotment is
+ *     measured against — AGL-2942)
  *   orgs/{orgId}/counters/assistMessagesDaily
  *     fields keyed YYYY-MM-DD → integer (the free-tier daily cap counter;
  *       same field-per-period shape as the other `counters/*` docs)
@@ -314,13 +324,22 @@ export interface AssistReservation extends AssistQuotaVerdict {
    * buys past the band — reachable only on a plan that sells past it.
    * `'requests'`, `'refusals'`, `'account'` and `'platform'` (AGL-2925) are
    * the Free taste's own precautions, and only a Free workspace can hear
-   * them.
+   * them. `'allotment'` (AGL-2942) is a hard allotment the person or the
+   * site has spent — see `allotment` for which.
    *
    * Only on the reservation, not on `AssistQuotaVerdict` — `checkAssistQuota`
    * is a reporting read that never consults the spend ceiling, and widening
    * the shared type would let a caller believe it had.
    */
-  refusedBy: AssistRefusedBy
+  refusedBy: AiRefusedBy
+  /**
+   * The allotments that applied to the person asking, measured (AGL-2942):
+   * which one refused, which one binds the usage strip, the caller's own
+   * credits this month, and the model allowlists. `null` when the request
+   * named nobody, and when a ceiling of the workspace's own refused before
+   * any allotment was read.
+   */
+  allotment?: AiAllotmentGate | null
   /**
    * The account the workspace's FREE spend is attributed to, or `null` for
    * a workspace that is not on the Free plan (AGL-2925).
@@ -443,6 +462,19 @@ export interface AssistReservation extends AssistQuotaVerdict {
  * see `assist-free-taste.ts` for each. An admitted free reservation counts
  * the request on the account beside the org's own counters, so the release
  * path hands both back together.
+ *
+ * ## Allotments sit inside the band (AGL-2942)
+ *
+ * `subject` names the person asking and the site the request named. Once
+ * the workspace's own ceilings — the message cap, the band or budget, the
+ * overage cap — have admitted the request, the SAME transaction reads the
+ * allotments that apply to that person and site and refuses as `allotment`
+ * when a hard one is spent. After the workspace's rungs, so a workspace at
+ * its band hears about its band and an allotment can never admit what the
+ * band refused; before the Free taste's, which are precautions about the
+ * account rather than decisions a manager made. Refusing moves no counter,
+ * like every refusal above it. A soft allotment at 80% or 100% admits the
+ * request and is announced once the transaction has committed.
  */
 export async function reserveAssistMessage(
   firestore: FirebaseFirestore.Firestore,
@@ -450,6 +482,57 @@ export async function reserveAssistMessage(
   entitled: boolean,
   now = new Date(),
   org: AssistMeteredOrg | null = null,
+  subject: AiAllotmentRequestSubject | null = null,
+): Promise<AssistReservation> {
+  const reservation = await reserveInTransaction(
+    firestore,
+    orgId,
+    entitled,
+    now,
+    org,
+    subject,
+  )
+  if (reservation.allotment?.alerts.length) {
+    announceAllotmentAlerts(firestore, orgId, org, reservation)
+  }
+  return reservation
+}
+
+/**
+ * A soft allotment's crossing, told through the alert pipeline — off the
+ * reservation's await path and never failing it: the request was admitted,
+ * and a notification is not a reason to take that back. Loaded when the
+ * first crossing arrives, so the modules that write notifications and send
+ * mail are not part of every metered request.
+ */
+function announceAllotmentAlerts(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  org: AssistMeteredOrg | null,
+  reservation: AssistReservation,
+): void {
+  const alerts = reservation.allotment?.alerts ?? []
+  void import('./ai-allotment-alerts')
+    .then(({ announceAiAllotmentAlerts }) =>
+      announceAiAllotmentAlerts(firestore, {
+        orgId,
+        orgSlug: typeof (org as { slug?: unknown } | null)?.slug === 'string'
+          ? String((org as { slug?: unknown }).slug)
+          : null,
+        month: reservation.monthKey,
+        alerts,
+      }),
+    )
+    .catch((error) => console.error('[ai-allotments] alert failed', orgId, error))
+}
+
+async function reserveInTransaction(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  entitled: boolean,
+  now: Date,
+  org: AssistMeteredOrg | null,
+  subject: AiAllotmentRequestSubject | null,
 ): Promise<AssistReservation> {
   const increment = FieldValue.increment
   const serverTimestamp = FieldValue.serverTimestamp
@@ -579,6 +662,37 @@ export async function reserveAssistMessage(
         free,
       }
     }
+    // The allotments that apply to the person asking (AGL-2942): read only
+    // now that the workspace's own ceilings admitted the request, so an
+    // allotment is decided inside the band and a refusal at the band costs
+    // no allotment read. Reads, still — every write waits below.
+    const allotment = subject
+      ? await readAiAllotmentGate(
+          (ref) => tx.get(ref),
+          orgRef,
+          subject,
+          month,
+          monthlySnapshot,
+        )
+      : null
+    if (allotment?.refusal) {
+      recordAssistRefusal(firestore, orgId, month, 'allotment')
+      return {
+        allowed: false,
+        refusedBy: 'allotment' as const,
+        period,
+        dayKey: day,
+        monthKey: month,
+        used,
+        limit,
+        remaining: Math.max(0, limit - used),
+        costUsd,
+        costLimitUsd,
+        budgetUsd,
+        free,
+        allotment,
+      }
+    }
     // The Free taste's own rungs (AGL-2925), AFTER the workspace's, so a
     // workspace at its own band is told about its own band. Same shape:
     // decided inside the transaction, against what it read, moving nothing.
@@ -600,6 +714,7 @@ export async function reserveAssistMessage(
         costLimitUsd,
         budgetUsd,
         free,
+        allotment,
       }
     }
     // `set(…, { merge: true })` and never `update()`: the counter document
@@ -630,6 +745,7 @@ export async function reserveAssistMessage(
       costLimitUsd,
       budgetUsd,
       free,
+      allotment,
     }
   })
 }
@@ -641,7 +757,7 @@ export interface PublicAssistQuota {
   used: number
   limit: number
   remaining: number
-  refusedBy: AssistRefusedBy
+  refusedBy: AiRefusedBy
   /**
    * The credit standing, or `null` when the org's plan sells no assist band.
    *
@@ -905,6 +1021,12 @@ function writeSignalAndRollup(
   // cost goes to the platform's day instead, where it is still our money.
   // Everywhere else the tokens are metered as they always were.
   const refusedFree = free !== null && record.stopReason === 'refusal'
+  // The site's credits for its allotment (AGL-2942), rounded as the person's
+  // own `byHost` rounds them, so a site's month equals the sum of its
+  // people's months on it. Not zeroed for a declined Free turn, for the same
+  // reason the person's month is not: the site did spend it.
+  const hostId = String(record.hostId ?? '').trim()
+  const hostCredits = hostId ? assistCreditsFromUsd(estCostUsd) : 0
   // The analytic half. No prose and NO uid — deliberately, because a signal
   // row that names the asker is just the exchange with the words removed,
   // and would re-create as an access-request obligation exactly what the
@@ -957,6 +1079,9 @@ function writeSignalAndRollup(
       // over a map replaces the map with the operand.
       refusedTurns: increment(refusedFree ? 1 : 0),
       refusedCostUsd: increment(refusedFree ? estCostUsd : 0),
+      ...(hostCredits > 0
+        ? { [AI_HOST_CREDITS_FIELD]: { [hostId]: increment(hostCredits) } }
+        : {}),
       updatedAt: serverTimestamp(),
     },
     { merge: true },

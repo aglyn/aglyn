@@ -21,9 +21,14 @@ import {
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import {
+  assistCreditsFromUsd,
   assistFreeTasteRefusalText,
   assistOwnControlRefusalText,
 } from '@aglyn/aglyn/app-utils/assist-credits'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiAllotmentRefusalText } from '../model/ai-allotments'
+import { AI_MODEL_AUTO, resolveAiModelChoice } from '../providers/model-choice'
+import { aiUsageMeter } from '../usage/ai-usage-meter'
 import {
   aiPermissionRefusal,
   authForPool,
@@ -40,6 +45,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import {
+  estimateAssistCostUsd,
   publicAssistQuota,
   recordAssistExchange,
   releaseAssistMessage,
@@ -150,7 +156,8 @@ import {
  *
  * Streaming: the route re-emits the provider's stream as simplified
  * `data: {type:'delta',text}` events, then one `{type:'done', exchangeId,
- * usage, quota, docs}` after the exchange + meters are recorded. The
+ * usage, quota, docs, meter}` after the exchange + meters are recorded —
+ * `meter` being the usage strip's envelope (AGL-2942). The
  * provider call itself — request shape, SSE parsing, usage and cost, the
  * error boundary — is `runAiRequest`, the runtime every AI door shares
  * (AGL-2903); this route owns the prompt, the fence handling, the ladder
@@ -344,6 +351,8 @@ interface AssistRequestBody {
   question: string
   history: AssistHistoryTurn[]
   context: { route: string; hostId: string; orgSlug: string } | null
+  /** A catalog model the asker picked (AGL-2942), or `null` for Auto. */
+  model: string | null
 }
 
 /** Validate + clamp the request body; null when structurally unusable. */
@@ -388,7 +397,14 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
         orgSlug: String(rawContext.orgSlug ?? '').slice(0, 100),
       }
     : null
-  return { orgId, question, history, context }
+  const model = typeof body.model === 'string' ? body.model.trim().slice(0, 100) : ''
+  return {
+    orgId,
+    question,
+    history,
+    context,
+    model: model && model !== AI_MODEL_AUTO ? model : null,
+  }
 }
 
 /**
@@ -899,7 +915,11 @@ async function handler(request: Request): Promise<Response> {
     // the question — see `assistAnswerCacheKey`. Cheap to get wrong and
     // expensive when it is: an entitled answer names the workspace's own plan
     // and screen.
-    const cacheKey = body.history.length
+    //
+    // A turn that PICKED a model (AGL-2942) neither reads nor writes the
+    // cache: the pick is a request for that model's answer, and a cached one
+    // was written by whichever model Auto chose.
+    const cacheKey = body.history.length || body.model
       ? ''
       : assistAnswerCacheKey({
           question: body.question,
@@ -960,6 +980,9 @@ async function handler(request: Request): Promise<Response> {
       entitled,
       new Date(),
       org,
+      // The allotments that apply (AGL-2942): the asker's own, theirs on the
+      // site the page named, and that site's.
+      { uid: decoded.uid, hostId: body.context?.hostId || null },
     )
     // A refusal is the asker's as well as the workspace's (AGL-2928): their
     // month counts it beside the org counter the reservation moved.
@@ -981,7 +1004,25 @@ async function handler(request: Request): Promise<Response> {
       // control that refused and where it lives. A band that refuses because
       // the plan sells no overage at all keeps the credits sentence and the
       // 429: there is no control to point at.
-      const ownControl = assistOwnControlRefusalText(org, quota.refusedBy)
+      //
+      // The sixth is an allotment (AGL-2942): a monthly line a manager drew
+      // for this person or this site inside the band — a 429 like the
+      // message cap, because it resets on the calendar, with the sentence
+      // naming who can raise it.
+      const refusedBy = quota.refusedBy
+      const meter = aiUsageMeter(quota)
+      if (refusedBy === 'allotment') {
+        return Response.json(
+          {
+            error: aiAllotmentRefusalText(quota.allotment?.refusal?.scope),
+            reason: 'quota',
+            quota: publicAssistQuota(quota),
+            meter,
+          },
+          { status: 429 },
+        )
+      }
+      const ownControl = assistOwnControlRefusalText(org, refusedBy)
       return Response.json(
         {
           error:
@@ -989,8 +1030,8 @@ async function handler(request: Request): Promise<Response> {
             // The Free taste's own precautions (AGL-2925): a clock or an
             // upgrade, in one sentence, from the same helper the other
             // doors read.
-            assistFreeTasteRefusalText(quota.refusedBy) ??
-            (quota.refusedBy === 'budget' || quota.refusedBy === 'band'
+            assistFreeTasteRefusalText(refusedBy) ??
+            (refusedBy === 'budget' || refusedBy === 'band'
               ? quota.budgetUsd === null
                 ? 'This workspace reached its assistant spending limit for the month'
                 : 'This workspace used its assistant credits for the month'
@@ -1002,10 +1043,22 @@ async function handler(request: Request): Promise<Response> {
           // `costLimitUsd` and `budgetUsd`, all three of which are our
           // provider bill at the serving model's rates.
           quota: publicAssistQuota(quota),
+          meter,
         },
         { status: ownControl ? 402 : 429 },
       )
     }
+
+    // The model this turn runs on (AGL-2942): the asker's pick when the
+    // plan, the org's restriction and the allotment allowlists allow it,
+    // the routing table otherwise. ONE resolution, read by the request, the
+    // meter and the cache — the rule `assistModel` states for the table.
+    const choice = resolveAiModelChoice('assist.chat', body.model, {
+      plan: resolveEffectivePlan(org),
+      allotmentModels: quota.allotment?.models ?? null,
+      orgModels: quota.allotment?.orgModels ?? null,
+    })
+    const model = choice?.model ?? assistModel()
 
     const docsBlock = docsGroundingBlock(scored)
     // Level 2 is the paid rung. A free workspace gets docs grounding and
@@ -1046,7 +1099,7 @@ async function handler(request: Request): Promise<Response> {
     let upstream: AsyncIterable<AiStreamEvent>
     try {
       upstream = await runAiRequest({
-        model: assistModel(),
+        model,
         maxTokens: MAX_OUTPUT_TOKENS,
         stream: true,
         // See the header comment: omitting these is NOT the same as
@@ -1167,7 +1220,7 @@ async function handler(request: Request): Promise<Response> {
               answer: answer.slice(0, MAX_STORED_ANSWER_CHARS),
               route: body.context?.route ?? '',
               hostId: body.context?.hostId || null,
-              model: assistModel(),
+              model,
               tier,
               usage,
               docsPaths,
@@ -1194,7 +1247,17 @@ async function handler(request: Request): Promise<Response> {
           //    and is resolved per request; a cached answer carries the prose
           //    without it, so caching one would silently drop the card.
           //  - an empty answer caches nothing.
-          if (cacheKey && answer && !proposal && stopReason !== 'refusal' && stopReason !== 'max_tokens') {
+          //  - an answer from a model other than the one the key names — an
+          //    allowlist moved Auto (AGL-2942) — would be served to readers
+          //    the list does not bind.
+          if (
+            cacheKey &&
+            answer &&
+            !proposal &&
+            stopReason !== 'refusal' &&
+            stopReason !== 'max_tokens' &&
+            model === assistModel()
+          ) {
             await writeAssistAnswerCache(firestore, body.orgId, cacheKey, {
               answer,
               docs,
@@ -1219,6 +1282,12 @@ async function handler(request: Request): Promise<Response> {
             // panel renders the result: a free workspace's first question
             // came back "8 of 10 free messages left today".
             quota: publicAssistQuota(quota),
+            // The usage strip's envelope (AGL-2942): this turn's credits
+            // added to the pool and the asker's month the reservation read.
+            meter: aiUsageMeter(quota, {
+              lastCredits: assistCreditsFromUsd(estimateAssistCostUsd(usage, model)),
+              model: { id: model, auto: choice?.auto ?? true },
+            }),
           })
         } catch (error) {
           console.error('assist stream failed', error)

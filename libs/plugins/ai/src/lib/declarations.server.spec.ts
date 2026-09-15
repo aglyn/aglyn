@@ -41,6 +41,12 @@ jest.mock('./usage/ai-usage-by-user', () => ({
   __esModule: true,
   eraseUserAiUsage: (...args: unknown[]) => mockEraseUserAiUsage(...(args as [])),
 }))
+/** The allotments set on the person (AGL-2942), erased beside their months. */
+const mockEraseAllotments = jest.fn(async () => 3)
+jest.mock('./usage/ai-allotments', () => ({
+  __esModule: true,
+  eraseAiAllotmentsForUser: (...args: unknown[]) => mockEraseAllotments(...(args as [])),
+}))
 jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => mockFirestore }) },
@@ -157,6 +163,7 @@ describe('the server declarations register the AI usage eraser', () => {
       'org-a',
       'org-b',
     ])
-    expect(reports).toEqual({ ai: { orgs: 2, sweptMonths: 1 } })
+    expect(mockEraseAllotments).toHaveBeenCalledWith(mockFirestore, 'person-1', ['org-a', 'org-b'])
+    expect(reports).toEqual({ ai: { orgs: 2, sweptMonths: 1, allotments: 3 } })
   })
 })

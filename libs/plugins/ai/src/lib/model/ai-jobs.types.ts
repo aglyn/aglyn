@@ -199,6 +199,12 @@ export interface AiJob {
   brief: string
   /** Kind-specific inputs the runner reads (a screen id to edit, a tone). */
   inputs: Record<string, unknown>
+  /**
+   * The model the creator picked for the job's steps (AGL-2942), or `null`
+   * for Auto. Each step honors it only where the plan and the allotment
+   * allowlists allow it, and runs on the routing table otherwise.
+   */
+  model?: string | null
   steps: AiJobStep[]
   outputs: AiJobOutput[]
   /**

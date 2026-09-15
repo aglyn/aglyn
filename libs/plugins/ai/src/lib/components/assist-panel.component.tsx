@@ -63,6 +63,10 @@ import {
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { AssistJobsDrawer } from './assist-jobs-drawer.component'
+import { AiModelSelector } from './ai-model-selector.component'
+import { AiUsageStrip } from './ai-usage-strip.component'
+import { useAiModelChoice } from './use-ai-model-choice'
+import { usePublishAiUsageMeter } from './use-ai-usage-meter'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 
@@ -483,6 +487,15 @@ export function AssistPanelComponent(props: AssistDockProps) {
   const [messages, setMessages] = useState<AssistMessage[]>([])
   const [quota, setQuota] = useState<AssistQuotaInfo | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // The model switch and the usage strip (AGL-2942): the pick rides the
+  // chat request, and each answer's `meter` moves every strip for the org.
+  const modelChoice = useAiModelChoice({
+    orgId: scopedOrgId,
+    hostId,
+    surface: 'assist',
+    kind: 'assist.chat',
+  })
+  const publishMeter = usePublishAiUsageMeter(scopedOrgId)
 
   // Thread is per-org, session-persisted; switching orgs swaps threads.
   // Keyed on the SCOPED org (AGL-1934): gating only the render would still
@@ -544,6 +557,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
           // (level 2 is Pro+). Sending it is not a grant — the capability
           // decision is server-side.
           context: { route: pathname ?? '', hostId: hostId ?? '', orgSlug },
+          // A pick, when the reader made one; the server decides again.
+          ...(modelChoice.model ? { model: modelChoice.model } : {}),
         }),
       })
       if (!response.ok || !response.body) {
@@ -580,6 +595,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
           // sentence names the switch, and the credit standing beside it is
           // as real as a 429's, so it lands on the same line.
           if (payload.quota) setQuota(payload.quota as AssistQuotaInfo)
+          publishMeter(payload?.meter)
           failAnswer(String(payload?.error ?? 'Message limit reached.'))
         } else {
           failAnswer(String(payload?.error ?? 'The assistant request failed — try again.'))
@@ -620,6 +636,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
               proposal,
             }))
             if (event.quota) setQuota(event.quota as AssistQuotaInfo)
+            publishMeter(event.meter)
             trackEvent('assistant_message_sent', {
               tier: entitled ? 'entitled' : 'free',
               grounded: docs.length > 0,
@@ -645,6 +662,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
     hostId,
     input,
     messages,
+    modelChoice.model,
+    publishMeter,
     scopedOrgId,
     orgSlug,
     pathname,
@@ -950,6 +969,9 @@ export function AssistPanelComponent(props: AssistDockProps) {
                   'organization admin to grant "Use AI assistance".'}
               </Typography>
             ) : null}
+            {/* The reader's credits while they work (AGL-2942), from the
+                envelope the last answer carried — no read of its own. */}
+            <AiUsageStrip orgId={scopedOrgId} orgSlug={billingSlug} />
             {quota && quota.period === 'day' && (
               <Typography variant="caption" color="text.secondary">
                 {quota.remaining} of {quota.limit} free messages left today
@@ -973,6 +995,16 @@ export function AssistPanelComponent(props: AssistDockProps) {
                 ) : null}
               </Typography>
             )}
+            {/* The model switch (AGL-2942), for a workspace whose plan
+                answers with a model at all; its options load when opened. */}
+            {entitled ? (
+              <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: -0.5 }}>
+                <AiModelSelector
+                  choice={modelChoice}
+                  disabled={busy || !ai.loaded || !ai.use}
+                />
+              </Stack>
+            ) : null}
             <Stack
               direction="row"
               spacing={1}

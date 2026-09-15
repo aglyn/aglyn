@@ -1350,6 +1350,17 @@ describe('the green path', () => {
     expect(done).toBeTruthy()
     expect(done?.exchangeId).toBeTruthy()
     expect(done?.usage).toMatchObject({ inputTokens: 900, outputTokens: 42 })
+    // The usage strip's envelope rides the same event (AGL-2942): this
+    // turn's credits, added to the asker's month the reservation read (none
+    // before it) and to the pool, and the model Auto chose — no read of its
+    // own on the client.
+    const meter = done?.meter as
+      | { last: number; refused: boolean; mine: { used: number; limit: null }; pool: { used: number }; model: { auto: boolean } }
+      | undefined
+    expect(meter).toMatchObject({ refused: false, mine: { limit: null }, model: { auto: true } })
+    expect(meter?.last).toBeGreaterThan(0)
+    expect(meter?.mine.used).toBe(meter?.last)
+    expect(meter?.pool.used).toBeGreaterThanOrEqual(meter?.last ?? 0)
 
     // AGL-2238: the standing the panel renders, pinned against the counter
     // that was actually moved. Nothing asserted this before, which is how

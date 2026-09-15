@@ -51,6 +51,10 @@ has one AI budget rather than a separate one per feature. Two limits apply:
 A request that fails before the model answers — an outage upstream — does not
 count against the allowance.
 
+Inside the workspace's credits, an organization can give a member, a site collaborator
+or a whole site its own monthly share, and anyone can see their usage and choose a model
+while they work — see [AI allotments, usage and model choice](ai-allotments.md).
+
 ## Related
 
 - [The Besigner](../../building-sites/besigner/overview.md)

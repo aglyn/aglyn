@@ -464,7 +464,7 @@ export function AssistSignalsPage(_props: ConsoleStaffPageProps) {
                         color="text.secondary"
                         sx={{ display: 'block' }}
                       >
-                        {`band ${row.refusals.band} · ceiling ${row.refusals.cap} · messages ${row.refusals.messages} · backstop ${row.refusals.budget}${freeTasteRefusals(row.refusals) > 0 ? ` · free taste ${freeTasteRefusals(row.refusals)}` : ''}`}
+                        {`band ${row.refusals.band} · ceiling ${row.refusals.cap} · messages ${row.refusals.messages} · backstop ${row.refusals.budget}${row.refusals.allotment > 0 ? ` · allotments ${row.refusals.allotment}` : ''}${freeTasteRefusals(row.refusals) > 0 ? ` · free taste ${freeTasteRefusals(row.refusals)}` : ''}`}
                       </Typography>
                     ) : null}
                   </TableCell>

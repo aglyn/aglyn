@@ -124,6 +124,9 @@ function RefusalsRow({ refusals }: { refusals: StaffOrgAiRefusals }) {
     cap: 'ceiling',
     messages: 'messages',
     budget: 'operator backstop',
+    // A hard allotment a manager set on a member, a collaborator or a site
+    // (AGL-2942).
+    allotment: 'allotments',
     // The Free taste's rungs (AGL-2925): only a Free workspace collects these.
     account: 'free account',
     requests: 'free requests/day',
@@ -132,15 +135,21 @@ function RefusalsRow({ refusals }: { refusals: StaffOrgAiRefusals }) {
   }
   return (
     <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-      {(Object.keys(labels) as Array<keyof typeof labels>).map((reason) => (
-        <Chip
-          key={reason}
-          size="small"
-          variant={refusals[reason] > 0 ? 'filled' : 'outlined'}
-          color={refusals[reason] > 0 ? 'warning' : 'default'}
-          label={`${labels[reason]} ${refusals[reason].toLocaleString()}`}
-        />
-      ))}
+      {(Object.keys(labels) as Array<keyof typeof labels>).map((reason) => {
+        // A reason the answering server does not yet count reads as zero,
+        // so a console newer than its route draws the row rather than
+        // failing the card.
+        const count = Number(refusals[reason] ?? 0)
+        return (
+          <Chip
+            key={reason}
+            size="small"
+            variant={count > 0 ? 'filled' : 'outlined'}
+            color={count > 0 ? 'warning' : 'default'}
+            label={`${labels[reason]} ${count.toLocaleString()}`}
+          />
+        )
+      })}
     </Stack>
   )
 }

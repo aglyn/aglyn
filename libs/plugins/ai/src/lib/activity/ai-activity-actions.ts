@@ -48,6 +48,7 @@ export const AI_ACTIVITY_ACTIONS = {
   assistSection: 'ai.assist.section',
   overageHardCap: 'ai.overage.hardCap',
   overageCap: 'ai.overage.cap',
+  allotmentChanged: 'ai.allotment.changed',
   permissionChanged: 'ai.permission.changed',
   addonPurchased: 'ai.addon.purchased',
   addonRemoved: 'ai.addon.removed',
@@ -66,6 +67,7 @@ export const AI_ACTIVITY_ACTION_LABELS: Record<AiActivityAction, string> = {
   'ai.assist.section': 'AI generated a section',
   'ai.overage.hardCap': 'AI stop-at-band switch',
   'ai.overage.cap': 'AI overage ceiling',
+  'ai.allotment.changed': 'AI allotment changed',
   'ai.permission.changed': 'AI permission changed',
   'ai.addon.purchased': 'Added the AI add-on',
   'ai.addon.removed': 'Removed the AI add-on',
@@ -92,6 +94,7 @@ export type AiJobNeedsInputReason =
   | 'cap'
   | 'messages'
   | 'budget'
+  | 'allotment'
   | 'account'
   | 'requests'
   | 'refusals'
@@ -105,6 +108,7 @@ export const AI_JOB_NEEDS_INPUT_REASON_LABELS: Record<
   cap: 'the overage ceiling was reached',
   messages: 'the monthly message cap was reached',
   budget: 'the job budget was reached',
+  allotment: 'the creator’s or the site’s AI allotment is used up',
   account: 'the account’s free AI credits are used up',
   requests: 'the daily free request cap was reached',
   refusals: 'free generation is paused for the day after declined briefs',
@@ -205,6 +209,7 @@ const AI_ACTIVITY_ACTION_SCOPES: Record<
   'ai.assist.section': ['org', 'host'],
   'ai.overage.hardCap': 'org',
   'ai.overage.cap': 'org',
+  'ai.allotment.changed': 'org',
   'ai.permission.changed': 'org',
   'ai.addon.purchased': 'org',
   'ai.addon.removed': 'org',

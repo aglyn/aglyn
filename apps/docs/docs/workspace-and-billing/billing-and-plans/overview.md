@@ -131,6 +131,21 @@ The table requires the **View billing** permission. It names who drew from the p
 how much; it makes no judgment about it, and it never shows a dollar figure — the
 share is of the workspace's own credits.
 
+### AI allotments {#ai-allotments}
+
+Beneath that table, **AI allotments** gives a team member, a site collaborator on one
+site, or a whole site a monthly share of the workspace's AI credits. A **hard** allotment
+stops AI requests at the line; a **soft** one keeps them working and notifies the person
+and the owners and admins at 80% and 100%. Select several members or sites to set one
+allotment for all of them, or use **Same for every client site** to give every site the
+same share. An allotment can also limit which models are used, and on Agency and
+Enterprise the organization can restrict models for everyone.
+
+An allotment is a share of the pool, never extra credits: the workspace's included credits
+and its own stops are checked first. Seeing allotments requires **View billing**; changing
+them requires **Manage billing**. See
+[AI allotments, usage and model choice](../../marketing-and-automation/ai-assist/ai-allotments.md).
+
 ## Storage overage
 
 Each site includes a fixed amount of storage. On a paid plan, going past it is **not** a

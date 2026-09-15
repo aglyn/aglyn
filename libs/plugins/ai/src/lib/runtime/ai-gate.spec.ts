@@ -107,6 +107,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 jest.mock('@aglyn/aglyn/app-utils/assist-credits', () => ({
   __esModule: true,
+  // The allotment sentence names where the control lives (AGL-2942).
+  ASSIST_HARD_CAP_CONTROL_LOCATION: 'Billing → Usage',
   assistRefusedByHardCap: (
     org: { assistOverage?: string },
     refusedBy: string | null,
@@ -533,6 +535,51 @@ describe('the ladder, one rung red at a time', () => {
       error: 'Overage is switched off for this workspace',
     })
   })
+
+  it('429 for a hard AI allotment, naming who can raise it, with the strip’s envelope (AGL-2942)', async () => {
+    const refusal = {
+      subject: 'collab:host-1:user-1',
+      scope: 'collab',
+      uid: 'user-1',
+      hostId: 'host-1',
+      credits: 500,
+      used: 500,
+      mode: 'hard',
+    }
+    mockReserve.mockResolvedValueOnce({
+      ...RESERVED,
+      allowed: false,
+      refusedBy: 'allotment',
+      allotment: {
+        refusal,
+        binding: refusal,
+        alerts: [],
+        standings: [refusal],
+        personalCredits: 500,
+        models: null,
+        orgModels: null,
+      },
+    })
+    const response = (await aiGateLadder(
+      { request: request(), orgId: 'org-1', hostId: 'host-1' },
+      CONFIG,
+    )) as Response
+    expect(response.status).toBe(429)
+    const body = await response.json()
+    expect(body).toMatchObject({
+      reason: 'quota',
+      refusedBy: 'allotment',
+      error: expect.stringMatching(/allotment on this site/),
+      meter: {
+        refused: true,
+        state: 'capped',
+        mine: { used: 500, limit: 500, mode: 'hard', scope: 'collab' },
+      },
+    })
+    // The sentence names who can raise it, and the strip carries the figures.
+    expect(body.error).toMatch(/site's admin/)
+    expect(body.error).not.toMatch(/\d/)
+  })
 })
 
 describe('the top of the ladder', () => {
@@ -548,13 +595,16 @@ describe('the top of the ladder', () => {
     })
     expect((context as { firestore: unknown }).firestore).toBe(mockFirestore)
     // The reservation was taken as ENTITLED against the org document, so
-    // the plan's own band binds rather than only the operator backstop.
+    // the plan's own band binds rather than only the operator backstop —
+    // and for the caller on the site the body named, so the allotments that
+    // apply to them are measured inside it (AGL-2942).
     expect(mockReserve).toHaveBeenCalledWith(
       mockFirestore,
       'org-1',
       true,
       expect.any(Date),
       ORG,
+      { uid: 'user-1', hostId: null },
     )
   })
 })

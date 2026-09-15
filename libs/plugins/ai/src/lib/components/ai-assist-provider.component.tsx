@@ -38,6 +38,10 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { AiModelSelector } from './ai-model-selector.component'
+import { AiUsageStrip } from './ai-usage-strip.component'
+import { useAiModelChoice } from './use-ai-model-choice'
+import { usePublishAiUsageMeter } from './use-ai-usage-meter'
 
 
 export interface AiAssistProviderProps {
@@ -107,6 +111,17 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
   // Generate section (AGL-169).
   const [sectionOpen, setSectionOpen] = useState(false)
   const [sectionPrompt, setSectionPrompt] = useState('')
+  // The model switch and the usage strip in both dialogs (AGL-2942). Each
+  // dialog remembers its own pick; one envelope store serves both strips
+  // and the assistant panel's.
+  const copyModel = useAiModelChoice({ orgId, hostId, surface: 'copy', kind: 'copy.element' })
+  const sectionModel = useAiModelChoice({
+    orgId,
+    hostId,
+    surface: 'section',
+    kind: 'copy.section',
+  })
+  const publishMeter = usePublishAiUsageMeter(orgId)
 
   const textTargets = useMemo(() => {
     const schema = node?.componentSchema
@@ -191,9 +206,11 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           hostId,
           text,
           instruction: instruction.trim(),
+          ...(copyModel.model ? { model: copyModel.model } : {}),
         }),
       })
       const payload = await response.json()
+      publishMeter(payload?.meter)
       // An ai-assist feature lockdown (AGL-1510/1532) reads as a pause, not
       // as "AI request failed" — a provider incident or a cost runaway is
       // something WE turned off, and saying so keeps the user's content out
@@ -238,7 +255,18 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     } finally {
       setBusy(false)
     }
-  }, [node, instruction, busy, user, effectiveTarget, orgId, hostId, enqueueSnackbar])
+  }, [
+    node,
+    instruction,
+    busy,
+    user,
+    effectiveTarget,
+    orgId,
+    hostId,
+    copyModel.model,
+    publishMeter,
+    enqueueSnackbar,
+  ])
 
   const handleGenerateSection = useCallback(() => {
     // The permission first (AGL-2927) — a section is a generation, so this
@@ -284,9 +312,11 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           hostId,
           mode: 'section',
           instruction: sectionPrompt.trim(),
+          ...(sectionModel.model ? { model: sectionModel.model } : {}),
         }),
       })
       const payload = await response.json()
+      publishMeter(payload?.meter)
       // Same pause notice on the section-generation door (AGL-1532).
       const locked = parseLockdownRefusal(response.status, payload)
       if (locked) {
@@ -345,7 +375,16 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     } finally {
       setBusy(false)
     }
-  }, [sectionPrompt, busy, user, orgId, hostId, enqueueSnackbar])
+  }, [
+    sectionPrompt,
+    busy,
+    user,
+    orgId,
+    hostId,
+    sectionModel.model,
+    publishMeter,
+    enqueueSnackbar,
+  ])
 
   // A REFUSED key publishes no callback (AGL-2927): the designer renders
   // its AI controls only when the callback exists, so the refusal removes
@@ -413,6 +452,8 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
               }
             }}
           />
+          <AiModelSelector choice={copyModel} disabled={busy} />
+          <AiUsageStrip orgId={orgId} />
         </DialogContent>
         <DialogActions>
           <Button disabled={busy} onClick={() => setNode(null)}>
@@ -459,6 +500,8 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
               }
             }}
           />
+          <AiModelSelector choice={sectionModel} disabled={busy} />
+          <AiUsageStrip orgId={orgId} />
         </DialogContent>
         <DialogActions>
           <Button disabled={busy} onClick={() => setSectionOpen(false)}>

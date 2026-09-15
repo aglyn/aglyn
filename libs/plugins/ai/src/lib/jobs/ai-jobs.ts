@@ -39,6 +39,9 @@ import {
   type AiJobSummary,
 } from '../model/ai-jobs.types'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiAllotmentRefusalText } from '../model/ai-allotments'
+import { resolveAiModelChoice } from '../providers/model-choice'
 import { aiOutputTargetType } from '../activity/ai-activity-actions'
 import {
   logAiJobCanceled,
@@ -219,6 +222,8 @@ export interface CreateAiJobInput {
   kind: AiJobKind
   brief: string
   inputs?: Record<string, unknown>
+  /** The model the creator picked (AGL-2942); absent or `null` for Auto. */
+  model?: string | null
   createdBy: string
   /** The creator's address, for the activity row; the document stores the uid only. */
   createdByEmail?: string | null
@@ -255,6 +260,7 @@ export async function createAiJob(
     status: 'queued' as AiJobStatus,
     brief,
     inputs: input.inputs ?? {},
+    model: input.model ?? null,
     steps,
     outputs: [] as AiJobOutput[],
     creditsReserved: steps.length * AI_JOB_STEP_RESERVE_CREDITS,
@@ -730,16 +736,23 @@ export async function writeAiJobAudit(
  */
 export function aiJobRefusalText(
   org: Partial<AglynOrgBilling> | null,
-  reservation: Pick<AssistReservation, 'refusedBy' | 'budgetUsd'>,
+  reservation: Pick<AssistReservation, 'refusedBy' | 'budgetUsd' | 'allotment'>,
 ): string {
-  if (assistRefusedByHardCap(org, reservation.refusedBy)) {
+  const refusedBy = reservation.refusedBy
+  // A hard allotment (AGL-2942) — the creator's, theirs on the job's site,
+  // or the site's — in the sentence every door gives, naming who can raise
+  // it. A member can change that, so the job parks rather than fails.
+  if (refusedBy === 'allotment') {
+    return aiAllotmentRefusalText(reservation.allotment?.refusal?.scope)
+  }
+  if (assistRefusedByHardCap(org, refusedBy)) {
     return assistHardCapRefusalText(org)
   }
   // The Free taste's own precautions (AGL-2925), in the sentences every
   // other door uses — each names a clock or an upgrade.
-  const taste = assistFreeTasteRefusalText(reservation.refusedBy)
+  const taste = assistFreeTasteRefusalText(refusedBy)
   if (taste) return taste
-  switch (reservation.refusedBy) {
+  switch (refusedBy) {
     case 'cap':
       return 'This workspace reached the AI spending cap it set for the month'
     case 'band':
@@ -878,7 +891,12 @@ export async function runAiJobStep(
     reservation = options.reservation
   } else {
     try {
-      reservation = await reserveAssistMessage(firestore, orgId, entitled, now, org)
+      // The creator's allotments on the job's site (AGL-2942): the step is
+      // their spend, as the meter below attributes it.
+      reservation = await reserveAssistMessage(firestore, orgId, entitled, now, org, {
+        uid: job.createdBy,
+        hostId: job.hostId ?? null,
+      })
     } catch (error) {
       // The meter is unreachable, not refusing. Hand the step back; the
       // next beat asks again.
@@ -915,9 +933,23 @@ export async function runAiJobStep(
     return { outcome: 'needs_input', job: parked }
   }
 
+  // The model each step runs on (AGL-2942): the creator's pick where the
+  // plan and the allotment allowlists the reservation read allow it, the
+  // routing table otherwise. Handed to the runner as a function of the step
+  // kind, because the runner — not the machine — knows what kind it runs.
+  const bounds = {
+    plan: resolveEffectivePlan(org),
+    allotmentModels: reservation.allotment?.models ?? null,
+    orgModels: reservation.allotment?.orgModels ?? null,
+  }
+  const modelFor = (kind: Parameters<typeof resolveAiModelChoice>[0]) =>
+    resolveAiModelChoice(kind, job.model ?? null, bounds)?.model
+
   let outcome: AiJobStepOutcome
   try {
-    outcome = await runner({ job, stepIndex, now, signal: options.signal, firestore, org })
+    outcome = await runner({
+      job, stepIndex, now, signal: options.signal, firestore, org, modelFor,
+    })
   } catch (error) {
     // The provider refused the request or the budget ended before it
     // answered: no usage came back, so nothing is metered and the message

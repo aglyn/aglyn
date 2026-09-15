@@ -43,6 +43,16 @@ import {
   assistOrgMonthlyCostLimitUsd,
 } from '@aglyn/aglyn/app-utils/usage-budget'
 import { aiRatesForModel } from '../providers/catalog'
+import type { AssistRefusedBy } from '@aglyn/aglyn/app-utils/assist-credits'
+import type { AiRefusedBy } from '../model/ai-allotments'
+
+/**
+ * A reservation's refusal as core's helpers take it. `allotment` is the
+ * plugin's own rung (AGL-2942) and none of core's controls, so it reads as
+ * no control at all.
+ */
+const coreRefusal = (refusedBy: AiRefusedBy): AssistRefusedBy =>
+  refusedBy === 'allotment' ? null : refusedBy
 
 let mockDocs = new Map<string, Record<string, unknown>>()
 
@@ -211,6 +221,23 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
     increment: (n: number) => ({ __inc: n }),
     serverTimestamp: () => '__now__',
+  },
+}))
+
+/**
+ * A soft allotment's crossings (AGL-2942), captured at the lazily loaded
+ * module the reservation hands them to — the notification and mail writers
+ * behind it are proven in their own suite.
+ */
+const mockAllotmentAlerts: Array<{ orgId: string; month: string; alerts: unknown[] }> = []
+jest.mock('./ai-allotment-alerts', () => ({
+  __esModule: true,
+  announceAiAllotmentAlerts: async (
+    _firestore: unknown,
+    input: { orgId: string; month: string; alerts: unknown[] },
+  ) => {
+    mockAllotmentAlerts.push(input)
+    return input.alerts.length
   },
 }))
 
@@ -1608,8 +1635,8 @@ describe('the org’s own ceiling on OVERAGE refuses inside the transaction (AGL
     expect(mockDocs.get(dailyPath)).toBeUndefined()
     // And the sentence for it is the org's own, telling the ceiling from
     // the switch.
-    expect(assistOwnControlRefusalText(proCapped, reservation.refusedBy)).toContain('$6.00')
-    expect(assistRefusedByHardCap(proCapped, reservation.refusedBy)).toBe(false)
+    expect(assistOwnControlRefusalText(proCapped, coreRefusal(reservation.refusedBy))).toContain('$6.00')
+    expect(assistRefusedByHardCap(proCapped, coreRefusal(reservation.refusedBy))).toBe(false)
   })
 
   it('THE NEGATIVE CONTROL: the same spend with NO ceiling reserves', async () => {
@@ -1711,8 +1738,8 @@ describe('Free is a WALL, even when given a band (AGL-2898)', () => {
     // And no control is named: the switch did not cause this, and neither
     // could a ceiling — so the doors answer the plain credits sentence and a
     // 429, never a 402 pointing at a control that does nothing.
-    expect(assistRefusedByHardCap(freeWithBand, reservation.refusedBy)).toBe(false)
-    expect(assistOwnControlRefusalText(freeWithBand, reservation.refusedBy)).toBeNull()
+    expect(assistRefusedByHardCap(freeWithBand, coreRefusal(reservation.refusedBy))).toBe(false)
+    expect(assistOwnControlRefusalText(freeWithBand, coreRefusal(reservation.refusedBy))).toBeNull()
   })
 
   it('reads the same with a switch or a ceiling written on it — both are inert', async () => {
@@ -1722,7 +1749,7 @@ describe('Free is a WALL, even when given a band (AGL-2898)', () => {
       const org = { ...freeWithBand, assistOverage }
       const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, org)
       expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
-      expect(assistOwnControlRefusalText(org, reservation.refusedBy)).toBeNull()
+      expect(assistOwnControlRefusalText(org, coreRefusal(reservation.refusedBy))).toBeNull()
       expect(assistMonthOverage(org, 0.9).overageMonthlyUsd).toBe(0)
     }
   })
@@ -1738,7 +1765,7 @@ describe('Free is a WALL, even when given a band (AGL-2898)', () => {
     const widened = { plan: 'free' as const, entitlements: { assistCreditsPerMonth: 900 } }
     const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, widened)
     expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band', budgetUsd: 0.9 })
-    expect(assistOwnControlRefusalText(widened, reservation.refusedBy)).toBeNull()
+    expect(assistOwnControlRefusalText(widened, coreRefusal(reservation.refusedBy))).toBeNull()
   })
 })
 
@@ -2122,5 +2149,148 @@ describe('the Free taste readout and knobs (AGL-2925)', () => {
       expect(aiFreeDailyRequests()).toBe(30)
       expect(aiFreeDailyPlatformCeilingUsd()).toBe(25)
     }
+  })
+})
+
+describe('AI allotments sit inside the band (AGL-2942)', () => {
+  const PRO = { plan: 'pro' as const }
+  const month = '2026-08'
+  const orgMonthPath = `orgs/${ORG}/assistUsage/${month}`
+  const allotment = (subject: string, data: Record<string, unknown>) =>
+    mockDocs.set(`orgs/${ORG}/aiAllotments/${subject}`, { subject, ...data })
+  const personMonth = (uid: string, data: Record<string, unknown>) =>
+    mockDocs.set(`orgs/${ORG}/aiUsageByUser/${uid}/months/${month}`, { uid, month, ...data })
+  /** $0.30 at the balanced tier's input rate: 300 credits, rounded as the meter rounds. */
+  const spend = (uid: string, hostId: string | null) =>
+    recordAssistCost(
+      firestore(),
+      ORG,
+      {
+        route: '/api/ai/assist/section',
+        hostId,
+        model: 'claude-sonnet-5',
+        tier: 'entitled',
+        usage: { inputTokens: 100_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        docsPaths: [],
+        stopReason: 'end_turn',
+        uid,
+      },
+      NOW,
+    )
+
+  beforeEach(() => {
+    mockAllotmentAlerts.length = 0
+  })
+
+  it('a HARD member allotment refuses at its line, as `allotment`, moving no counter', async () => {
+    // FORCED RED by deleting the rung: the reservation admits and counts.
+    allotment('member:u1', { credits: 300, mode: 'hard' })
+    personMonth('u1', { credits: 300 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u1' })
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'allotment' })
+    expect(reservation.allotment?.refusal).toMatchObject({ subject: 'member:u1', used: 300, credits: 300 })
+    expect(mockDocs.get(orgMonthPath)?.messages).toBeUndefined()
+    expect(mockDocs.get(`orgs/${ORG}/counters/assistMessagesDaily`)).toBeUndefined()
+    // Counted where every other refusal is, under its own reason.
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ refusals: { allotment: 1 } })
+    // One credit under the line is admitted.
+    personMonth('u1', { credits: 299 })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u1' }),
+    ).toMatchObject({ allowed: true, refusedBy: null })
+  })
+
+  it('the workspace’s own wall refuses FIRST, and no allotment is read behind it', async () => {
+    const walled = { plan: 'pro' as const, assistOverage: { hardCap: true } }
+    const band = assistUsdFromCredits(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth)
+    mockDocs.set(orgMonthPath, { month, estCostUsd: band, messages: 1 })
+    allotment('member:u1', { credits: 1, mode: 'hard' })
+    personMonth('u1', { credits: 5000 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, walled, { uid: 'u1' })
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
+    // The allotment was never consulted: the band is the outer wall.
+    expect(reservation.allotment).toBeUndefined()
+  })
+
+  it('an allotment never grants past the band: a roomy allotment on a workspace at its wall is still refused', async () => {
+    const walled = { plan: 'pro' as const, assistOverage: { hardCap: true } }
+    mockDocs.set(orgMonthPath, {
+      month,
+      estCostUsd: assistUsdFromCredits(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth),
+    })
+    allotment('member:u1', { credits: 10_000_000, mode: 'hard' })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, true, NOW, walled, { uid: 'u1' }),
+    ).toMatchObject({ allowed: false, refusedBy: 'band' })
+  })
+
+  it('a SOFT allotment admits past its line and hands the crossing to the alert pipeline', async () => {
+    allotment('member:u1', { credits: 300, mode: 'soft' })
+    personMonth('u1', { credits: 450 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u1' })
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockAllotmentAlerts).toEqual([
+      expect.objectContaining({
+        orgId: ORG,
+        month,
+        alerts: [expect.objectContaining({ threshold: 100 })],
+      }),
+    ])
+  })
+
+  it('a SITE allotment is a ceiling over everyone on the site, and touches no other site', async () => {
+    // Two collaborators spend 300 credits each on h1; the meter folds both
+    // into the site's month beside the org rollup.
+    await spend('u1', 'h1')
+    await spend('u2', 'h1')
+    expect(mockDocs.get(orgMonthPath)).toMatchObject({ byHost: { h1: 600 } })
+    allotment('host:h1', { credits: 600, mode: 'hard' })
+    // A third person, with nothing spent, is refused on the site…
+    const refused = await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u3', hostId: 'h1' })
+    expect(refused).toMatchObject({ allowed: false, refusedBy: 'allotment' })
+    expect(refused.allotment?.refusal).toMatchObject({ scope: 'host', used: 600 })
+    // …and admitted on another site, and where the request names no site.
+    expect(
+      await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u3', hostId: 'h2' }),
+    ).toMatchObject({ allowed: true })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u3' }),
+    ).toMatchObject({ allowed: true })
+  })
+
+  it('a collaborator’s allotment counts their credits on THAT site only', async () => {
+    await spend('u1', 'h2')
+    allotment('collab:h1:u1', { credits: 100, mode: 'hard' })
+    expect(
+      await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u1', hostId: 'h1' }),
+    ).toMatchObject({ allowed: true })
+    await spend('u1', 'h1')
+    expect(
+      await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u1', hostId: 'h1' }),
+    ).toMatchObject({ allowed: false, refusedBy: 'allotment' })
+  })
+
+  it('a request that names nobody meets no allotment', async () => {
+    allotment('member:u1', { credits: 1, mode: 'hard' })
+    personMonth('u1', { credits: 500 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, PRO)
+    expect(reservation).toMatchObject({ allowed: true })
+    expect(reservation.allotment).toBeNull()
+  })
+
+  it('carries the caller’s month, the binding allotment and the allowlists for the strip and the model switch', async () => {
+    allotment('member:u1', { credits: 5000, mode: 'hard', models: ['a', 'b'] })
+    allotment('host:h1', { credits: 700, mode: 'soft', models: ['b', 'c'] })
+    allotment('org', { models: ['b'] })
+    personMonth('u1', { credits: 120, byHost: { h1: 120 } })
+    mockDocs.set(orgMonthPath, { month, byHost: { h1: 650 } })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, PRO, { uid: 'u1', hostId: 'h1' })
+    expect(reservation.allotment).toMatchObject({
+      personalCredits: 120,
+      binding: { subject: 'host:h1', used: 650, credits: 700 },
+      models: ['b'],
+      orgModels: ['b'],
+    })
   })
 })

@@ -39,6 +39,7 @@ const row = (
     cap: 0,
     messages: 0,
     budget: 0,
+    allotment: 0,
     account: 0,
     requests: 0,
     refusals: 0,

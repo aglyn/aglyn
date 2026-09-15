@@ -42,6 +42,7 @@ export const DOCS_HELP_EXCERPTS = {
   addOns: 'Buy extra seats, sites, datasets, POS registers, the Event Calendar, and Aglyn AI from the Billing page — prorated, self-serve, no support ticket.',
   addSearch: 'Drop the Search Box element onto a screen and publish — the built-in search page does the rest.',
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
+  aiAllotments: 'Give a member, a site collaborator or a whole site a monthly share of the workspace\'s AI credits, see your own usage while you work, and choose which model answers.',
   aiAssist: 'Generate and rewrite copy, and build whole sections, with AI inside the Besigner.',
   aiMonitoring: 'How staff watch one organization\'s AI usage — the add-on, the credit pool, overage and refusals, generation jobs, the top spenders, the margin — and where those figures appear across the staff console.',
   analytics: 'Built-in pageview analytics, the Traffic card and its growth figure, per-screen metrics, and average time on a screen.',

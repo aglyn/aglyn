@@ -21,6 +21,11 @@ import {
   topAiUsageKinds,
   type AiUsageByUserMonth,
 } from '../model/ai-usage-by-user'
+import {
+  AI_ALLOTMENT_WARN_SHARE,
+  type AiAllotmentMode,
+  type AiCreditAllotmentScope,
+} from '../model/ai-allotments'
 import { csvCell } from '@aglyn/aglyn/app-utils/csv-import'
 
 /**
@@ -142,6 +147,112 @@ export function aiUsageCsvLine(row: OrgAiUsageRowWire): string {
   ]
     .map(csvCell)
     .join(',')
+}
+
+/**
+ * THE USAGE STRIP'S ENVELOPE (AGL-2942): what every AI door adds to the
+ * answer it already sends — the chat door's `done` event, the copy
+ * assistant's JSON, a job's create response, and each door's quota refusal —
+ * so the strip in the panel and the generation dialogs updates with no read
+ * of its own.
+ *
+ * Credits only. `pool` is the workspace's month against its band; `mine` is
+ * the caller's own month, measured against the allotment that binds them
+ * when one does — for a site allotment, the site's month, because that is
+ * the line the next request meets.
+ */
+export type AiUsageMeterState = 'ok' | 'warn' | 'capped'
+
+export interface AiUsageMeterWire {
+  month: string
+  pool: { used: number; limit: number | null }
+  mine: {
+    used: number
+    limit: number | null
+    mode: AiAllotmentMode | null
+    scope: AiCreditAllotmentScope | null
+  }
+  /** Credits the exchange this envelope answers cost; `null` when no model ran. */
+  last: number | null
+  /** True when the envelope rides a refusal. */
+  refused: boolean
+  state: AiUsageMeterState
+  /** The model that answered, as the catalog names it. */
+  model: { id: string; label: string; auto: boolean } | null
+}
+
+/**
+ * `capped` when a hard allotment is spent or the request was refused, `warn`
+ * from 80% of the allotment that binds or of the pool, `ok` otherwise.
+ */
+export function aiUsageMeterState(
+  meter: Pick<AiUsageMeterWire, 'pool' | 'mine' | 'refused'>,
+): AiUsageMeterState {
+  const { mine, pool } = meter
+  if (meter.refused) return 'capped'
+  if (mine.limit !== null && mine.mode === 'hard' && mine.used >= mine.limit) return 'capped'
+  const past = (used: number, limit: number | null) =>
+    limit !== null && limit > 0 && used >= limit * AI_ALLOTMENT_WARN_SHARE
+  return past(mine.used, mine.limit) || past(pool.used, pool.limit) ? 'warn' : 'ok'
+}
+
+/**
+ * What `/api/ai/allotments` answers (AGL-2942): the allotments a reader may
+ * see, each with what its subject drew this month, and the roster, sites
+ * and models the editors pick from. Credits only.
+ */
+export interface AiAllotmentRowWire {
+  subject: string
+  scope: 'member' | 'collab' | 'host' | 'org'
+  uid: string | null
+  hostId: string | null
+  credits: number | null
+  mode: AiAllotmentMode
+  models: string[] | null
+  /** Credits the subject drew this month — the figure the gate measures. */
+  used: number
+}
+
+export interface AiAllotmentsMemberWire {
+  uid: string
+  name: string
+  email: string | null
+  role: string | null
+  /** False for a site collaborator, whose allotments are per site. */
+  orgWide: boolean
+  /** Credits this month, every site. */
+  credits: number
+  /** Credits this month by site. */
+  byHost: Record<string, number>
+}
+
+export interface AiAllotmentsHostWire {
+  hostId: string
+  name: string
+  /** The site's credits this month, everyone on it. */
+  credits: number
+}
+
+export interface AiAllotmentsWire {
+  /** The org the answer is about — resolved from the site when only one was named. */
+  orgId: string
+  month: string
+  pool: { used: number; limit: number | null }
+  allotments: AiAllotmentRowWire[]
+  members: AiAllotmentsMemberWire[]
+  hosts: AiAllotmentsHostWire[]
+  /** The catalog models this deployment serves, for an allowlist. */
+  models: Array<{ id: string; label: string; tier: string }>
+  /** Whether the plan lets the workspace restrict models org-wide. */
+  restrictionAvailable: boolean
+  canEdit: {
+    /** Members, sites and the restriction: `billing.manage`. */
+    billing: boolean
+    /** Collaborators on the site asked about: `billing.manage`, or its admin. */
+    collaborators: boolean
+  }
+  /** Who is reading, so an editor can refuse to offer a self-raise. */
+  callerUid: string
 }
 
 /** `2026-09` as a reader says it, on the UTC calendar the key is cut from. */

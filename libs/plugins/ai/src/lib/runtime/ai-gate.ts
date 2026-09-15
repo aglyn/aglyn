@@ -44,6 +44,8 @@ import {
   reserveAssistMessage,
   type AssistReservation,
 } from '../usage/assist-usage'
+import { aiAllotmentRefusalText } from '../model/ai-allotments'
+import { aiUsageMeter } from '../usage/ai-usage-meter'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -96,6 +98,10 @@ import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/rel
  *        account's daily requests, its refusal pause, its monthly
  *        allowance across every workspace it owns, and the platform-wide
  *        daily ceiling — inside the same transaction
+ *   429  a hard AI allotment (AGL-2942) — the caller's, the caller's on the
+ *        named site, or the site's — decided inside the same transaction
+ *        once the workspace's own ceilings admitted the request, so it sits
+ *        inside the band and never admits what the band refused
  *
  * A door that gets a context back has a reservation in hand and owes the
  * meter a record — or `releaseAssistMessage` if the provider was never
@@ -322,6 +328,8 @@ export async function aiGateLadder(
       true,
       input.now ?? new Date(),
       org,
+      // Who is asking and on which site, for the allotments that apply.
+      { uid: decoded.uid, hostId: input.hostId ?? null },
     )
   } catch (error) {
     console.error('ai reservation failed', error)
@@ -334,19 +342,38 @@ export async function aiGateLadder(
   // per-person month counts it beside the org counter the reservation moved.
   recordUserAiRefusal(firestore, orgId, decoded.uid, reservation)
   if (!reservation.allowed) {
+    const refusedBy = reservation.refusedBy
+    // The usage strip's envelope (AGL-2942), on the refusal as on an answer,
+    // so the strip shows why the request stopped without a read of its own.
+    const meter = aiUsageMeter(reservation)
+    // A hard allotment is a monthly line a manager drew inside the band: a
+    // 429 like the message cap, because it resets on the calendar, with the
+    // sentence naming who can raise it.
+    if (refusedBy === 'allotment') {
+      return Response.json(
+        {
+          error: aiAllotmentRefusalText(reservation.allotment?.refusal?.scope),
+          reason: 'quota',
+          refusedBy,
+          quota: publicAssistQuota(reservation),
+          meter,
+        },
+        { status: 429 },
+      )
+    }
     // The org's own wall is a 402 (AGL-2653): credits past the band are for
     // sale and this workspace switched the sale off, so the sentence names
     // the switch. A spend ceiling and a message cap keep the 429, and are
     // told apart in words because one resets on a clock and one does not.
-    const hardCapped = assistRefusedByHardCap(org, reservation.refusedBy)
+    const hardCapped = assistRefusedByHardCap(org, refusedBy)
     return Response.json(
       {
         error: hardCapped
           ? assistHardCapRefusalText(org)
           : // The Free taste's own precautions (AGL-2925) have their own
             // sentences: each names a clock or an upgrade, never a figure.
-            (assistFreeTasteRefusalText(reservation.refusedBy) ??
-            (reservation.refusedBy === 'budget' || reservation.refusedBy === 'band'
+            (assistFreeTasteRefusalText(refusedBy) ??
+            (refusedBy === 'budget' || refusedBy === 'band'
               ? reservation.budgetUsd === null
                 ? 'This workspace reached its AI spending limit for the month'
                 : 'This workspace used its AI credits for the month'
@@ -355,6 +382,7 @@ export async function aiGateLadder(
         // CREDITS, never the reservation itself — its figures are our
         // provider bill and do not leave the server.
         quota: publicAssistQuota(reservation),
+        meter,
       },
       { status: hardCapped ? 402 : 429 },
     )

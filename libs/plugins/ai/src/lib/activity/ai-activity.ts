@@ -280,6 +280,45 @@ export async function logAiOverageControl(
 }
 
 /**
+ * `ai.allotment.changed` — a manager set, changed or removed an AI allotment
+ * (AGL-2942): a member's, a collaborator's on one site, a site's, or the
+ * org-wide model restriction. The subject is the row's target; what it was
+ * set to is the name, in credits, never dollars.
+ */
+export async function logAiAllotmentChanged(
+  orgId: string,
+  actor: AiActivityActor,
+  change: {
+    subject: {
+      type: 'org' | 'member' | 'host'
+      id?: string | null
+      name?: string | null
+    }
+    /** `null` when the allotment was removed. */
+    after: {
+      credits: number | null
+      mode: 'hard' | 'soft'
+      models: readonly string[] | null
+    } | null
+  },
+): Promise<void> {
+  const after = change.after
+  await logOrgActivity(orgId, actor, AI_ACTIVITY_ACTIONS.allotmentChanged, {
+    type: change.subject.type,
+    ...(change.subject.id ? { id: change.subject.id } : {}),
+    name: named(
+      change.subject.name,
+      after === null
+        ? 'removed'
+        : after.credits === null
+          ? null
+          : `${after.credits.toLocaleString('en-US')} credits a month (${after.mode})`,
+      after?.models?.length ? `${after.models.length} models allowed` : null,
+    ),
+  })
+}
+
+/**
  * `ai.permission.changed` — an AI permission moved on a role, a member's
  * override, a collaborator's site toggle or the org's default. The subject
  * is the row's target; the permission and its direction are the name.

@@ -566,6 +566,62 @@ describe('a refund credits the period it RESERVED (AGL-2073)', () => {
   })
 })
 
+// ── The usage strip and the model switch (AGL-2942) ─────────────────────────
+
+describe('the answer carries the strip, and a model pick is bounded (AGL-2942)', () => {
+  const { AI_MODEL_CATALOG } = jest.requireActual('../providers/catalog') as typeof import('../providers/catalog')
+  const { aiModelForStep } = jest.requireActual('../providers/routing') as typeof import('../providers/routing')
+  const onProvider = (tier: string) => {
+    const autoEntry = AI_MODEL_CATALOG.find((entry) => entry.id === aiModelForStep('copy.element'))
+    const found = AI_MODEL_CATALOG.find(
+      (entry) => entry.provider === autoEntry?.provider && entry.tier === tier,
+    )
+    if (!found) throw new Error(`no ${tier} model on the default provider`)
+    return found.id
+  }
+  const signalModels = () =>
+    [...mockDocs.entries()]
+      .filter(([path]) => path.startsWith(`orgs/${ORG}/assistSignals/`))
+      .map(([, data]) => data['model'])
+
+  beforeEach(() => {
+    mockFetch.mockImplementation(async () => anthropicOk('Snappier hello'))
+  })
+
+  it('answers with the strip’s envelope: this request’s credits, and the model Auto chose', async () => {
+    const result = await call(BODY, 'token-strip')
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({
+      text: 'Snappier hello',
+      meter: {
+        last: 1,
+        refused: false,
+        state: 'ok',
+        model: { id: aiModelForStep('copy.element'), auto: true },
+      },
+    })
+  })
+
+  it('a pick the plan offers runs, and is metered, on that model', async () => {
+    const balanced = onProvider('balanced')
+    const result = await call({ ...BODY, model: balanced }, 'token-pick')
+    expect(result.status).toBe(200)
+    expect(result.body.meter.model).toMatchObject({ id: balanced, auto: false })
+    expect(signalModels()).toEqual([balanced])
+  })
+
+  it('a pick the plan does not offer runs on Auto — the request and the meter agree', async () => {
+    const deep = onProvider('deep')
+    const result = await call({ ...BODY, model: deep }, 'token-deep')
+    expect(result.status).toBe(200)
+    expect(result.body.meter.model).toMatchObject({ id: aiModelForStep('copy.element'), auto: true })
+    expect(signalModels()).toEqual([aiModelForStep('copy.element')])
+    // What the provider was sent is what the meter priced.
+    const init = mockFetch.mock.calls[0][1] as { body: string }
+    expect(JSON.parse(init.body).model).toBe(aiModelForStep('copy.element'))
+  })
+})
+
 // ── Metering ────────────────────────────────────────────────────────────────
 
 describe('every answered call is metered per org (AGL-2073)', () => {

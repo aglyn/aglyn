@@ -21,9 +21,14 @@ import {
   type PluginApiResponse,
 } from '@aglyn/aglyn/server'
 import {
+  assistCreditsFromUsd,
   assistFreeTasteRefusalText,
   assistOwnControlRefusalText,
 } from '@aglyn/aglyn/app-utils/assist-credits'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { aiAllotmentRefusalText } from '../model/ai-allotments'
+import { resolveAiModelChoice } from '../providers/model-choice'
+import { aiUsageMeter } from '../usage/ai-usage-meter'
 import {
   aiPermissionRefusal,
   checkRateLimit,
@@ -36,6 +41,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { recordUserAiRefusal } from '../usage/ai-usage-by-user'
 import {
+  estimateAssistCostUsd,
   publicAssistQuota,
   recordAssistCost,
   releaseAssistMessage,
@@ -95,9 +101,14 @@ import {
  * exists to stop.
  */
 export function assistModelForMode(mode: 'element' | 'blog' | 'section'): string {
-  return aiModelForStep(
-    mode === 'element' ? 'copy.element' : mode === 'blog' ? 'copy.blog' : 'copy.section',
-  )
+  return aiModelForStep(assistStepKindForMode(mode))
+}
+
+/** The routing table's step kind for each mode. */
+export function assistStepKindForMode(
+  mode: 'element' | 'blog' | 'section',
+): 'copy.element' | 'copy.blog' | 'copy.section' {
+  return mode === 'element' ? 'copy.element' : mode === 'blog' ? 'copy.blog' : 'copy.section'
 }
 
 /**
@@ -330,6 +341,9 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         entitled,
         new Date(),
         org,
+        // The allotments that apply (AGL-2942): the asker's own, theirs on
+        // the canvas's site, and the site's.
+        { uid: decoded.uid, hostId: hostId || null },
       )
     } catch (error) {
       // FAIL CLOSED. The reservation is the only global bound on what this
@@ -344,29 +358,56 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     // month counts it beside the org counter the reservation moved.
     recordUserAiRefusal(firestore, orgId, decoded.uid, reservation)
     if (!reservation.allowed) {
+      const refusedBy = reservation.refusedBy
+      // A hard allotment (AGL-2942): the monthly line a manager drew for
+      // the asker or the site, with the sentence naming who can raise it.
+      if (refusedBy === 'allotment') {
+        return res.status(429).json({
+          error: aiAllotmentRefusalText(reservation.allotment?.refusal?.scope),
+          reason: 'quota',
+          quota: publicAssistQuota(reservation),
+          meter: aiUsageMeter(reservation),
+        })
+      }
       // The org's own controls are a 402, not a 429: credits past the band
       // are for sale and this workspace either switched the sale off
       // (AGL-2653) or capped what it would buy (AGL-2898), so the sentence
       // names the control that refused — the same sentence the console
       // assistant gives, from the same helper. Every other refusal keeps
       // the 429.
-      const ownControl = assistOwnControlRefusalText(org, reservation.refusedBy)
+      const ownControl = assistOwnControlRefusalText(org, refusedBy)
       return res.status(ownControl ? 402 : 429).json({
         error:
           ownControl ??
           // The Free taste's own precautions (AGL-2925), in the sentences
           // the console assistant uses.
-          assistFreeTasteRefusalText(reservation.refusedBy) ??
+          assistFreeTasteRefusalText(refusedBy) ??
           'This workspace reached its AI assist limit for the month — contact support if you need a higher cap',
         // CREDITS, never the reservation itself — see `publicAssistQuota`.
         quota: publicAssistQuota(reservation),
+        meter: aiUsageMeter(reservation),
       })
     }
 
     const tier: 'free' | 'entitled' = entitled ? 'entitled' : 'free'
     // ONE resolution, read by both the request and the meter — see
-    // `assistModelForMode`. Two call sites would let them drift.
-    const model = assistModelForMode(mode)
+    // `assistModelForMode`. Two call sites would let them drift. A model the
+    // asker picked (AGL-2942) replaces the routing table's answer only when
+    // the plan, the org's restriction and the allotment allowlists all allow
+    // it; anything else runs on Auto.
+    const held = reservation
+    const choice = resolveAiModelChoice(assistStepKindForMode(mode), body?.model, {
+      plan: resolveEffectivePlan(org),
+      allotmentModels: held.allotment?.models ?? null,
+      orgModels: held.allotment?.orgModels ?? null,
+    })
+    const model = choice?.model ?? assistModelForMode(mode)
+    /** The usage strip's envelope for an answered request (AGL-2942). */
+    const meterFor = (result: AiResult) =>
+      aiUsageMeter(held, {
+        lastCredits: assistCreditsFromUsd(estimateAssistCostUsd(result.usage, model)),
+        model: { id: model, auto: choice?.auto ?? true },
+      })
     /** Meter what the provider actually charged us for, per org. */
     // The account the reservation drew on (AGL-2925), read once here: the
     // closure below runs after `reservation` may have been cleared by a
@@ -444,7 +485,9 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         SECTION_MAX_TOKENS,
       )
       if (!result) return
-      if (result.kind === 'refusal') return res.status(502).json(REFUSED)
+      if (result.kind === 'refusal') {
+        return res.status(502).json({ ...REFUSED, meter: meterFor(result) })
+      }
       const raw = result.text
         .trim()
         .replace(/^```(?:json)?\s*/i, '')
@@ -468,9 +511,10 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         { uid: decoded.uid, email: decoded.email ?? null },
         { orgId, hostId: hostId || null, nodeCount: Object.keys(sanitized.nodes).length },
       )
-      return res
-        .status(200)
-        .json({ section: { rootId: sanitized.rootId, nodes: sanitized.nodes } })
+      return res.status(200).json({
+        section: { rootId: sanitized.rootId, nodes: sanitized.nodes },
+        meter: meterFor(result),
+      })
     }
 
     const result = await ask(
@@ -498,10 +542,14 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
       mode === 'blog' ? BLOG_MAX_TOKENS : ELEMENT_MAX_TOKENS,
     )
     if (!result) return
-    if (result.kind === 'refusal') return res.status(502).json(REFUSED)
+    if (result.kind === 'refusal') {
+      return res.status(502).json({ ...REFUSED, meter: meterFor(result) })
+    }
     const output = result.text.trim()
-    if (!output) return res.status(502).json({ error: 'Empty AI response' })
-    return res.status(200).json({ text: output })
+    if (!output) {
+      return res.status(502).json({ error: 'Empty AI response', meter: meterFor(result) })
+    }
+    return res.status(200).json({ text: output, meter: meterFor(result) })
   } catch (error) {
     console.error(error)
     // The provider was never reached — a token verification failure, a DNS

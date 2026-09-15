@@ -287,6 +287,7 @@ describe('/api/ai/admin/org (AGL-2930)', () => {
       band: 1,
       cap: 2,
       messages: 0,
+      allotment: 0,
       budget: 0,
       account: 0,
       requests: 0,

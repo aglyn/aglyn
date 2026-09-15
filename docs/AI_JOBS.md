@@ -185,15 +185,57 @@ collection-group scope for the sweep; and the `expiresAt` TTL override. The
 TTL policy is manual gcloud configuration and is recorded as owed in
 `docs/FIRESTORE_MANUAL_CONFIG.md` until it is run.
 
+## Allotments, the usage strip and the model switch
+
+AGL-2942 adds three things every door and every step goes through. Code:
+`src/lib/model/ai-allotments.ts` (subjects, standings, the verdict, the
+refusal and alert words), `src/lib/usage/ai-allotments.ts` (the gate's reads,
+the route's writes, erasure), `src/lib/usage/ai-allotment-alerts.ts` (soft
+crossings), `src/lib/providers/model-choice.ts` (Auto, the plan's tiers, the
+allowlists, the prices), `src/lib/usage/ai-usage-meter.ts` (the strip's
+envelope), and the doors `src/lib/server/ai-allotments.ts` and `ai-models.ts`.
+
+- **The documents.** `orgs/{orgId}/aiAllotments/{subject}`, where the subject
+  is `member:{uid}`, `collab:{hostId}:{uid}`, `host:{hostId}`, or `org` for the
+  org-wide model restriction: `{ subject, scope, uid, hostId, credits, mode,
+  models, setBy, updatedAt, alerted }`. Server-written only; the rules let the
+  subject, members holding `billing.view`/`billing.manage`, and a site's admin
+  collaborator (for that site) read them. Written by `POST /api/ai/allotments`
+  under `billing.manage`, or by a site's admin collaborator for the site's other
+  collaborators.
+- **The rung.** `reserveAssistMessage(…, org, { uid, hostId })` reads the
+  allotments that apply inside its transaction, AFTER the workspace's own
+  ceilings admitted the request, and refuses as `refusedBy: 'allotment'`
+  without moving a counter. A job step passes the job's creator and site, so a
+  refused step parks as `needs_input` with the allotment's sentence. A site's
+  figure is `assistUsage/{month}.byHost.{hostId}`, which the meter writes in the
+  org rollup's batch; the first site allotment of a month seeds the key from
+  the roster's own months.
+- **Soft crossings** at 80% and 100% are announced once the reservation has
+  committed, once per threshold per month (the `alerted` marker, claimed in a
+  transaction), as a `billing.usage` notification and an email to the owners and
+  admins and to the person the allotment is for.
+- **The envelope.** Every door adds `meter` (`AiUsageMeterWire`) to what it
+  already answers — the chat `done` event, the copy assistant's JSON, the job
+  create response and each quota refusal. The strip reads nothing itself.
+- **The model switch.** A door reads an optional `model` and resolves it with
+  `resolveAiModelChoice(stepKind, requested, { plan, allotmentModels, orgModels })`:
+  honored only when the plan's tiers, the org restriction and the allotment
+  allowlists allow it, and the routing table otherwise. A job stores the
+  creator's `model`, and the machine hands each runner `modelFor(stepKind)`,
+  built the same way from the reservation that step took.
+
 ## Adding a step kind
 
 Register a runner with `registerAiJobStep(kind, async (ctx) => …)` beside the
 machine. The runner receives the job, the step index, an abort signal, the
-machine's Firestore handle (for what the step READS) and the org document the
-reservation was read from; it calls `runAiRequest` (never the provider
-directly), writes its drafts, and returns `{ outputs, usage, estCostUsd,
-model, stopReason }` — with `refused` for a model decline, or `failure` (a
-customer-safe sentence) for an answer it could not use. It must not write the
-job document, take a reservation, or publish anything. Kinds with more than
-one step extend `aiJobStepNames`. A runner that loads heavy modules registers
-a lazy wrapper, as `theme` does, so the machine stays light to load.
+machine's Firestore handle (for what the step READS), the org document the
+reservation was read from, and `modelFor`. It calls `runAiRequest` (never the
+provider directly) on `ctx.modelFor?.(stepKind)`, which honors the creator's
+model pick within the plan and the allotments; writes its drafts; and returns
+`{ outputs, usage, estCostUsd, model, stopReason }` — with `refused` for a
+model decline, or `failure` (a customer-safe sentence) for an answer it could
+not use. It must not write the job document, take a reservation, or publish
+anything. Kinds with more than one step extend `aiJobStepNames`. A runner that
+loads heavy modules registers a lazy wrapper, as `theme` does, so the machine
+stays light to load.
