@@ -62,6 +62,12 @@ export interface OutreachApiRefusal {
 /** `GET outreach/mailboxes/availability` */
 export interface OutreachMailboxAvailability {
   configured: boolean
+  /**
+   * Whether the viewer is an organization owner or admin, who may change,
+   * pause and disconnect any member's mailbox. The routes decide this on
+   * every call; the panel reads it to offer only what will be allowed.
+   */
+  canManageAll: boolean
 }
 
 /** `POST outreach/mailboxes/connect` */

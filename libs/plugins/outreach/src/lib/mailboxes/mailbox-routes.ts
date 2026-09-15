@@ -40,6 +40,7 @@ import {
   buildConnectReturnFragment,
   type OutreachApiRefusalReason,
   type OutreachConnectReturn,
+  type OutreachMailboxAvailability,
   type OutreachMailboxDisconnectResponse,
 } from './mailbox-api'
 import {
@@ -235,7 +236,7 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     if (gate instanceof Response) return gate
     const configured =
       deps.readConfig().configured && deps.stateSigningConfigured() && Boolean(deps.redirectUri(request.url))
-    return ok({ configured })
+    return ok({ configured, canManageAll: gate.isOrgAdmin } satisfies OutreachMailboxAvailability)
   }
 
   const connect: PluginWebApiHandler = async (request) => {

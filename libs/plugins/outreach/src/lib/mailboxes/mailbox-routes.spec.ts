@@ -410,10 +410,20 @@ describe('the member gate every authenticated mailbox route climbs (AGL-2978)', 
     })
   })
 
-  it('answers whether the deployment is configured, and says so on connect', async () => {
-    expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`))).body).toEqual({ configured: true })
+  it('answers whether the deployment is configured and whether the viewer manages every mailbox', async () => {
+    expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`))).body).toEqual({
+      configured: true,
+      canManageAll: false,
+    })
+    expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`, 'token-admin'))).body).toEqual({
+      configured: true,
+      canManageAll: true,
+    })
     configured = false
-    expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`))).body).toEqual({ configured: false })
+    expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`))).body).toEqual({
+      configured: false,
+      canManageAll: false,
+    })
     const refused = await run('connect', post('outreach/mailboxes/connect', { orgId: ORG }))
     expect(refused.status).toBe(503)
     expect(refused.body).toEqual({

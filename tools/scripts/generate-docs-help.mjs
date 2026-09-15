@@ -157,6 +157,8 @@ const PLUGIN_TOPICS = {
   inviteTeammates: '/workspace-and-billing/teams-and-roles/invite-teammates',
   marketingOverlays: '/marketing-and-automation/marketing-overlays/overview',
   membersOnly: '/workspace-and-billing/teams-and-roles/members-only',
+  // Outreach → Mailboxes (AGL-2978): connecting a rep's own Google mailbox.
+  outreach: '/content-and-data/crm/outreach',
   plugins: '/developers/plugins/overview',
   pos: '/commerce-and-bookings/commerce/pos-and-reservations',
   publisherHandbook: '/developers/plugins/publishing/publisher-handbook',
